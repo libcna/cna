@@ -172,12 +172,29 @@ resource consumption, or a crashed process — not just XNA-fidelity gaps.
   mismatched-filter query); restored the fix and reran — passes. Full suite: **3238/3240 passing**
   (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 1.6** — Validate the discovery protocol version field is actually checked. Confirmed
-  (`NetDiscoveryProtocol.hpp`, `kDiscoveryProtocolVersion`): the version is written on the wire by
+- [x] **Task 1.6** — Validate the discovery protocol version field is actually checked. Confirmed
+  (`NetDiscoveryProtocol.hpp`, `kDiscoveryProtocolVersion`): the version was written on the wire by
   `DecodeQuery`/`DecodeAnnounce` but never compared against the expected value — entirely
-  decorative today. Add a check that rejects/logs a mismatched version instead of attempting to
-  parse a possibly-incompatible payload as if it were current-format. Add a test with a
-  mismatched version byte asserting the packet is rejected cleanly.
+  decorative.
+  **Fixed:** added a `ValidateProtocolVersion(uint8_t)` helper in `NetDiscoveryProtocol.cpp`
+  (throws `std::runtime_error` on a mismatch vs `kDiscoveryProtocolVersion`), called immediately
+  after reading `ProtocolVersion` in both `DecodeQuery` and `DecodeAnnounce`, before any
+  version-format-dependent field is parsed.
+  **Added** `NetDiscoveryProtocolTest.DecodeQueryRejectsMismatchedProtocolVersion` and
+  `NetDiscoveryProtocolTest.DecodeAnnounceRejectsMismatchedProtocolVersion`: since `Encode()` never
+  validates `ProtocolVersion` either, both tests just set `message.ProtocolVersion = kDiscoveryProtocolVersion + 1`
+  on an otherwise well-formed message and encode it normally — simulating a genuinely different
+  protocol version (e.g. a differently-built peer) rather than a hand-crafted malformed payload —
+  and assert `Decode*` throws.
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran both new tests —
+  both failed with "throws nothing" (the mismatched version was silently accepted and the rest of
+  the payload parsed as current-format); restored the fix and reran — both pass. Full suite:
+  **3240/3242 passing** (2 expected accelerometer/gyroscope skips), no regressions.
+
+---
+
+**Phase 1 complete** — all 6 critical Net security/memory-safety bugs (Tasks 1.1-1.6) fixed,
+tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net correctness bugs).
 
 ---
 

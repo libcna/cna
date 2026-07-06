@@ -44,6 +44,19 @@ namespace CNA::Internal::Net
             }
         }
 
+        // Task 1.6: the wire's ProtocolVersion byte was read but never compared against
+        // kDiscoveryProtocolVersion - purely decorative. Rejects a mismatched version up front
+        // instead of parsing the rest of a possibly-incompatible payload as if it were
+        // current-format (which, for any future format change, could misinterpret unrelated bytes
+        // as ConnectPort/property indices/etc. rather than failing cleanly).
+        void ValidateProtocolVersion(uint8_t version)
+        {
+            if (version != kDiscoveryProtocolVersion)
+            {
+                throw std::runtime_error("NetDiscoveryProtocol: unsupported protocol version");
+            }
+        }
+
         NetworkSessionProperties ReadProperties(Microsoft::Xna::Framework::Net::PacketReader& reader)
         {
             NetworkSessionProperties properties;
@@ -108,6 +121,7 @@ namespace CNA::Internal::Net
 
         DiscoveryQueryMessage message;
         message.ProtocolVersion = reader.ReadByte();
+        ValidateProtocolVersion(message.ProtocolVersion);
         message.SessionTypeFilter = static_cast<NetworkSessionType>(reader.ReadByte());
         return message;
     }
@@ -135,6 +149,7 @@ namespace CNA::Internal::Net
 
         DiscoveryAnnounceMessage message;
         message.ProtocolVersion = reader.ReadByte();
+        ValidateProtocolVersion(message.ProtocolVersion);
         message.ConnectPort = reader.ReadUInt16();
         message.CurrentGamerCount = reader.ReadInt32();
         message.MaxGamers = reader.ReadInt32();

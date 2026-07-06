@@ -116,3 +116,28 @@ TEST(NetDiscoveryProtocolTest, DecodeAnnounceRejectsHugePropertyIndex) {
     auto bytes = BuildAnnounceWithRawPropertyIndex(INT32_MAX - 1, 123);
     EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), std::runtime_error);
 }
+
+// Task 1.6: ProtocolVersion was written on the wire by Encode() and read back by Decode*, but
+// never actually compared against kDiscoveryProtocolVersion - purely decorative. Simulates a peer
+// running a genuinely different protocol version (e.g. an older/newer build with a different
+// kDiscoveryProtocolVersion constant) faithfully encoding its own real message, rather than a
+// malformed/adversarial payload — Encode() itself never validates ProtocolVersion, so setting it
+// directly on the message before encoding is sufficient.
+TEST(NetDiscoveryProtocolTest, DecodeQueryRejectsMismatchedProtocolVersion) {
+    DiscoveryQueryMessage message;
+    message.ProtocolVersion = kDiscoveryProtocolVersion + 1;
+    message.SessionTypeFilter = NetworkSessionType::SystemLink;
+
+    auto bytes = NetDiscoveryProtocol::Encode(message);
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeQuery(bytes), std::runtime_error);
+}
+
+TEST(NetDiscoveryProtocolTest, DecodeAnnounceRejectsMismatchedProtocolVersion) {
+    DiscoveryAnnounceMessage message;
+    message.ProtocolVersion = kDiscoveryProtocolVersion + 1;
+    message.ConnectPort = 12345;
+    message.HostGamertag = "hostplayer";
+
+    auto bytes = NetDiscoveryProtocol::Encode(message);
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), std::runtime_error);
+}
