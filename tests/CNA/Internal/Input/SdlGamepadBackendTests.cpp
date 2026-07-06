@@ -793,6 +793,68 @@ TEST_F(FakeGamepadTest, ConnectionStateIsUnknownForDisconnectedSlot)
               CNA::Input::GamePadConnectionStateEXT::Unknown);
 }
 
+// --- gamepad touchpad fingers extension (input_noxna.md N-008) via GamePad::GetTouchpad*EXT ---
+
+using CNA::Internal::Input::test_support::FakeTouchpadFinger;
+
+// N-008(a): touchpad + finger counts and a finger read forward through the seam.
+TEST_F(FakeGamepadTest, TouchpadFingerReportsCountsAndContact)
+{
+    FakeGamepadConfig cfg = FullyFeaturedGamepad();
+    cfg.numTouchpads = 1;
+    cfg.touchpadFingers = {{
+        FakeTouchpadFinger{true, 0.25f, 0.75f, 0.5f},   // finger 0 down
+        FakeTouchpadFinger{false, 0.0f, 0.0f, 0.0f},    // finger 1 up
+    }};
+    fake.Register(10, cfg);
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_EQ(GamePad::GetTouchpadCountEXT(PlayerIndex::One), 1);
+    EXPECT_EQ(GamePad::GetTouchpadFingerCountEXT(PlayerIndex::One, 0), 2);
+
+    bool down = false;
+    float x = -1.0f, y = -1.0f, pressure = -1.0f;
+    ASSERT_TRUE(GamePad::GetTouchpadFingerEXT(PlayerIndex::One, 0, 0, down, x, y, pressure));
+    EXPECT_TRUE(down);
+    EXPECT_FLOAT_EQ(x, 0.25f);
+    EXPECT_FLOAT_EQ(y, 0.75f);
+    EXPECT_FLOAT_EQ(pressure, 0.5f);
+
+    ASSERT_TRUE(GamePad::GetTouchpadFingerEXT(PlayerIndex::One, 0, 1, down, x, y, pressure));
+    EXPECT_FALSE(down);
+}
+
+// N-008(b): out-of-range touchpad/finger indices report no data (and reset the out-params).
+TEST_F(FakeGamepadTest, TouchpadFingerOutOfRangeReturnsFalse)
+{
+    FakeGamepadConfig cfg = FullyFeaturedGamepad();
+    cfg.numTouchpads = 1;
+    cfg.touchpadFingers = {{FakeTouchpadFinger{true, 0.1f, 0.2f, 0.3f}}};
+    fake.Register(10, cfg);
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_EQ(GamePad::GetTouchpadFingerCountEXT(PlayerIndex::One, 5), 0) << "no such touchpad";
+
+    bool down = true;
+    float x = 9.0f, y = 9.0f, pressure = 9.0f;
+    EXPECT_FALSE(GamePad::GetTouchpadFingerEXT(PlayerIndex::One, 0, 3, down, x, y, pressure)) << "no such finger";
+    EXPECT_FALSE(down);
+    EXPECT_FLOAT_EQ(x, 0.0f);
+    EXPECT_FLOAT_EQ(pressure, 0.0f);
+}
+
+// N-008(c): a disconnected slot reports zero counts and no finger data.
+TEST_F(FakeGamepadTest, TouchpadFingerIsEmptyForDisconnectedSlot)
+{
+    EXPECT_EQ(GamePad::GetTouchpadCountEXT(PlayerIndex::Three), 0);
+    EXPECT_EQ(GamePad::GetTouchpadFingerCountEXT(PlayerIndex::Three, 0), 0);
+
+    bool down = true;
+    float x = 1.0f, y = 1.0f, pressure = 1.0f;
+    EXPECT_FALSE(GamePad::GetTouchpadFingerEXT(PlayerIndex::Three, 0, 0, down, x, y, pressure));
+    EXPECT_FALSE(down);
+}
+
 // --- sensor enable/disable (P4-017) ---
 
 // P4-017(c): reading a sensor lazily enables it exactly once. The first GetGyroEXT enables SDL_SENSOR_GYRO;

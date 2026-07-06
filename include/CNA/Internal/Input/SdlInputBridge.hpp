@@ -152,6 +152,18 @@ namespace CNA::Internal::Input
         static CNA::Input::GamePadConnectionStateEXT GetConnectionState(
             Microsoft::Xna::Framework::PlayerIndex playerIndex);
 
+        /** @brief NOXNA/EXT: number of touchpads on the pad, or 0 if disconnected. */
+        static int GetTouchpadCount(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+
+        /** @brief NOXNA/EXT: fingers a touchpad can report, or 0 if disconnected/out of range. */
+        static int GetTouchpadFingerCount(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex, int touchpad);
+
+        /** @brief NOXNA/EXT: one touchpad finger's down/x/y/pressure. Returns false if unavailable. */
+        static bool GetTouchpadFinger(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex, int touchpad, int finger,
+            bool& down, float& x, float& y, float& pressure);
+
         /**
          * @brief Queries SDL for the actual hardware capabilities of the gamepad.
          */

@@ -41,6 +41,11 @@ namespace CNA::Internal::Input
         virtual bool GamepadHasAxis(SDL_Gamepad* gamepad, SDL_GamepadAxis axis) = 0;
         /** @brief Number of touchpads on the gamepad (SDL_GetNumGamepadTouchpads). */
         virtual int GetNumGamepadTouchpads(SDL_Gamepad* gamepad) = 0;
+        /** @brief NOXNA/EXT: number of simultaneous fingers a touchpad supports (SDL_GetNumGamepadTouchpadFingers). */
+        virtual int GetNumGamepadTouchpadFingers(SDL_Gamepad* gamepad, int touchpad) = 0;
+        /** @brief NOXNA/EXT: one touchpad finger's down/x/y/pressure (SDL_GetGamepadTouchpadFinger). Returns success. */
+        virtual bool GetGamepadTouchpadFinger(SDL_Gamepad* gamepad, int touchpad, int finger,
+                                              bool* down, float* x, float* y, float* pressure) = 0;
         /** @brief Whether the gamepad has the given sensor (SDL_GamepadHasSensor). */
         virtual bool GamepadHasSensor(SDL_Gamepad* gamepad, SDL_SensorType type) = 0;
         /** @brief Returns the gamepad's SDL property set id (SDL_GetGamepadProperties). */

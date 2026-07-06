@@ -41,6 +41,15 @@ namespace CNA::Internal::Input
             {
                 return SDL_GetNumGamepadTouchpads(gamepad);
             }
+            int GetNumGamepadTouchpadFingers(SDL_Gamepad* gamepad, int touchpad) override
+            {
+                return SDL_GetNumGamepadTouchpadFingers(gamepad, touchpad);
+            }
+            bool GetGamepadTouchpadFinger(SDL_Gamepad* gamepad, int touchpad, int finger,
+                                          bool* down, float* x, float* y, float* pressure) override
+            {
+                return SDL_GetGamepadTouchpadFinger(gamepad, touchpad, finger, down, x, y, pressure);
+            }
             bool GamepadHasSensor(SDL_Gamepad* gamepad, SDL_SensorType type) override
             {
                 return SDL_GamepadHasSensor(gamepad, type);

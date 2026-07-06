@@ -108,6 +108,10 @@ namespace
     [[maybe_unused]] constexpr auto z_GamePad_GetSteamHandleEXT = static_cast<std::uint64_t(*)(PlayerIndex)>(&GamePad::GetSteamHandleEXT);
     // NOXNA/EXT (input_noxna.md N-010b): SDL gamepad wired/wireless connection state.
     [[maybe_unused]] constexpr auto z_GamePad_GetConnectionStateEXT = static_cast<CNA::Input::GamePadConnectionStateEXT(*)(PlayerIndex)>(&GamePad::GetConnectionStateEXT);
+    // NOXNA/EXT (input_noxna.md N-008): SDL gamepad touchpad fingers.
+    [[maybe_unused]] constexpr auto z_GamePad_GetTouchpadCountEXT = static_cast<int(*)(PlayerIndex)>(&GamePad::GetTouchpadCountEXT);
+    [[maybe_unused]] constexpr auto z_GamePad_GetTouchpadFingerCountEXT = static_cast<int(*)(PlayerIndex, int)>(&GamePad::GetTouchpadFingerCountEXT);
+    [[maybe_unused]] constexpr auto z_GamePad_GetTouchpadFingerEXT = static_cast<bool(*)(PlayerIndex, int, int, bool&, float&, float&, float&)>(&GamePad::GetTouchpadFingerEXT);
     static_assert(std::is_same_v<decltype(GamePad::LeftDeadZone), const float>, "GamePad::LeftDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::RightDeadZone), const float>, "GamePad::RightDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::TriggerThreshold), const float>, "GamePad::TriggerThreshold : static constexpr float");

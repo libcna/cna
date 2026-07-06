@@ -173,6 +173,35 @@ namespace Microsoft::Xna::Framework::Input
          */
         NOXNA static CNA::Input::GamePadConnectionStateEXT GetConnectionStateEXT(PlayerIndex playerIndex);
 
+        /**
+         * @brief NOXNA/EXT: returns the number of touchpads on the controller.
+         * @param playerIndex The player index (slot) of the controller.
+         * @return The touchpad count, or 0 if disconnected or the controller has none.
+         */
+        NOXNA static int GetTouchpadCountEXT(PlayerIndex playerIndex);
+
+        /**
+         * @brief NOXNA/EXT: returns how many fingers a touchpad can report at once.
+         * @param playerIndex The player index (slot) of the controller.
+         * @param touchpad The touchpad index.
+         * @return The finger capacity, or 0 if disconnected or the index is out of range.
+         */
+        NOXNA static int GetTouchpadFingerCountEXT(PlayerIndex playerIndex, int touchpad);
+
+        /**
+         * @brief NOXNA/EXT: reads one touchpad finger's contact state and position.
+         * @param playerIndex The player index (slot) of the controller.
+         * @param touchpad The touchpad index.
+         * @param finger The finger index.
+         * @param down Output receiving whether the finger is touching.
+         * @param x Output receiving the normalized x position (0..1).
+         * @param y Output receiving the normalized y position (0..1).
+         * @param pressure Output receiving the finger pressure (0..1).
+         * @return True if the finger data was read; false if disconnected or out of range.
+         */
+        NOXNA static bool GetTouchpadFingerEXT(PlayerIndex playerIndex, int touchpad, int finger,
+                                               bool& down, float& x, float& y, float& pressure);
+
         /** @brief Left stick dead zone threshold (XInput-based). */
         NOXNA static constexpr float LeftDeadZone     = 7849.0f / 32768.0f;
         /** @brief Right stick dead zone threshold (XInput-based). */

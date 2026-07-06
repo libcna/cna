@@ -10,6 +10,7 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "CNA/Internal/Input/SdlGamepadBackend.hpp"
 
@@ -19,6 +20,15 @@
 // that are only ever handed back to this fake. NOT compiled into production.
 namespace CNA::Internal::Input::test_support
 {
+    // One touchpad finger's contact state, as reported by SDL_GetGamepadTouchpadFinger.
+    struct FakeTouchpadFinger
+    {
+        bool down = false;
+        float x = 0.0f;
+        float y = 0.0f;
+        float pressure = 0.0f;
+    };
+
     // Per-device fake description; register one per synthetic joystick instance id before delivering
     // an SDL_EVENT_GAMEPAD_ADDED for that id.
     struct FakeGamepadConfig
@@ -28,6 +38,7 @@ namespace CNA::Internal::Input::test_support
         std::set<SDL_GamepadAxis> axes;
         std::set<SDL_SensorType> sensors;
         int numTouchpads = 0;
+        std::vector<std::vector<FakeTouchpadFinger>> touchpadFingers; // [touchpad] -> its fingers
         bool rumble = false;
         bool triggerRumble = false;
         bool rgbLed = false;
@@ -138,6 +149,33 @@ namespace CNA::Internal::Input::test_support
         {
             FakeDevice* d = dev(gamepad);
             return d ? d->cfg.numTouchpads : 0;
+        }
+
+        int GetNumGamepadTouchpadFingers(SDL_Gamepad* gamepad, int touchpad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr || touchpad < 0 ||
+                touchpad >= static_cast<int>(d->cfg.touchpadFingers.size()))
+                return 0;
+            return static_cast<int>(d->cfg.touchpadFingers[touchpad].size());
+        }
+
+        bool GetGamepadTouchpadFinger(SDL_Gamepad* gamepad, int touchpad, int finger,
+                                      bool* down, float* x, float* y, float* pressure) override
+        {
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr || touchpad < 0 ||
+                touchpad >= static_cast<int>(d->cfg.touchpadFingers.size()))
+                return false;
+            const auto& fingers = d->cfg.touchpadFingers[touchpad];
+            if (finger < 0 || finger >= static_cast<int>(fingers.size()))
+                return false;
+            const FakeTouchpadFinger& f = fingers[finger];
+            if (down != nullptr)     *down = f.down;
+            if (x != nullptr)        *x = f.x;
+            if (y != nullptr)        *y = f.y;
+            if (pressure != nullptr) *pressure = f.pressure;
+            return true;
         }
 
         bool GamepadHasSensor(SDL_Gamepad* gamepad, SDL_SensorType type) override

@@ -137,4 +137,21 @@ namespace Microsoft::Xna::Framework::Input
     {
         return CNA::Internal::Input::SdlInputBridge::GetConnectionState(playerIndex);
     }
+
+    int GamePad::GetTouchpadCountEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetTouchpadCount(playerIndex);
+    }
+
+    int GamePad::GetTouchpadFingerCountEXT(PlayerIndex playerIndex, int touchpad)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetTouchpadFingerCount(playerIndex, touchpad);
+    }
+
+    bool GamePad::GetTouchpadFingerEXT(PlayerIndex playerIndex, int touchpad, int finger,
+                                       bool& down, float& x, float& y, float& pressure)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetTouchpadFinger(
+            playerIndex, touchpad, finger, down, x, y, pressure);
+    }
 }

@@ -1216,6 +1216,34 @@ namespace CNA::Internal::Input
         return sdl_connection_state_to_ext(sdl_gamepad_backend().GetGamepadConnectionState(gamepad));
     }
 
+    int SdlInputBridge::GetTouchpadCount(Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        return gamepad ? sdl_gamepad_backend().GetNumGamepadTouchpads(gamepad) : 0;
+    }
+
+    int SdlInputBridge::GetTouchpadFingerCount(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex, int touchpad)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        return gamepad ? sdl_gamepad_backend().GetNumGamepadTouchpadFingers(gamepad, touchpad) : 0;
+    }
+
+    bool SdlInputBridge::GetTouchpadFinger(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex, int touchpad, int finger,
+        bool& down, float& x, float& y, float& pressure)
+    {
+        down = false;
+        x = 0.0f;
+        y = 0.0f;
+        pressure = 0.0f;
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return false;
+        return sdl_gamepad_backend().GetGamepadTouchpadFinger(gamepad, touchpad, finger,
+                                                              &down, &x, &y, &pressure);
+    }
+
     static Microsoft::Xna::Framework::Input::GamePadType sdl_joystick_type_to_gamepad_type(SDL_JoystickType t)
     {
         using Microsoft::Xna::Framework::Input::GamePadType;

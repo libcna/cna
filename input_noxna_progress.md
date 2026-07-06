@@ -23,7 +23,7 @@
 
 ## Phase P2 — needs an injectable seam, desktop-strong
 - [ ] **N-007 `CNA::Input::Joystick`** — raw joystick (axes/buttons/hats/balls); test via virtual joystick.
-- [ ] **N-008 `GamePad` touchpad fingers EXT** — `GetTouchpadFingerEXT` + counts + touchpad events.
+- [x] **N-008 `GamePad` touchpad fingers EXT** — `GetTouchpadCountEXT`/`GetTouchpadFingerCountEXT`/`GetTouchpadFingerEXT` (poll-based).
 - [x] **N-009 `GamePad` player-index EXT** — `Get/SetPlayerIndexEXT` (SDL device player-number LED).
 - [x] **N-009b `GamePad` battery/power EXT** — `GetPowerInfoEXT` (`SDL_GetGamepadPowerInfo`) + shared `CNA::Input::PowerStateEXT`.
 - [x] **N-010 `GamePad` metadata EXT** — `Get{Name,Path,Serial,FirmwareVersion,SteamHandle}EXT`.
@@ -50,6 +50,15 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-008 done (2026-07-06):** `GamePad::GetTouchpadCountEXT` / `GetTouchpadFingerCountEXT(touchpad)`
+  / `GetTouchpadFingerEXT(touchpad, finger, out down,x,y,pressure)` — PS4/PS5-style touchpad finger
+  data, **poll-based** (like GetGyro/AccelEXT), NOT event-driven, so no InputManager changes.
+  Gamepad-seam pattern #1: added `GetNumGamepadTouchpadFingers` + `GetGamepadTouchpadFinger` to
+  `ISdlGamepadBackend` (real = the matching SDL fns; reused existing `GetNumGamepadTouchpads`); fake
+  gained `FakeTouchpadFinger` + `FakeGamepadConfig.touchpadFingers[[touchpad]][finger]`. Bridge
+  resolves the slot and returns 0/false (out-params reset) when disconnected/out of range. Pinned
+  all three in the freeze test + documented. Tests: counts + finger contact/pos read, out-of-range
+  touchpad/finger, disconnected slot. `ctest -L input` green; ASan-clean.
 - **N-015 done (2026-07-06):** `CNA::Input::Sensors` — host-device motion sensors (distinct from the
   gamepad gyro/accel EXT). `GetSensorsEXT() -> vector<SensorInfoEXT{id,name,SensorTypeEXT}>` +
   `GetAccelerometerEXT(out Vector3)`/`GetGyroscopeEXT(out Vector3)` (m/s² / rad/s), returning false
