@@ -182,7 +182,7 @@ independent task instead of guessing.
   the full existing filter plus all three new `CNA::Devices` suites together: 355
   tests, 353 passed, 2 pre-existing expected skips, zero regressions.
 
-### DEVICES-CNA-004 — `UrlLauncher`
+### DEVICES-CNA-004 — `UrlLauncher` — CLOSED (2026-07-07)
 
 - **Priority:** Low
 - **SDL3 API:** `SDL_misc.h`, `SDL_OpenURL(const char*)`.
@@ -197,6 +197,20 @@ independent task instead of guessing.
   and could not verify in this container (mirroring the `docs/devices-hardware-checklist.md`
   precedent of never overclaiming coverage).
 - **Suggested files:** new files only.
+- **Resolution:** Created `UrlLauncher.hpp`/`.cpp` — a single static `Open()` method,
+  the simplest class in this plan. Used `std::string` (same precedent as
+  `DEVICES-CNA-002`/`003`). Added `tests/CNA/Devices/UrlLauncherTests.cpp` (3 tests),
+  each explicitly documented as verifying only "does not crash/hang," never asserting a
+  specific return value for the well-formed-URL case — this container has no browser
+  or `xdg-open`-equivalent to observe, so any assumption about success/failure would be
+  environment-guessing, not a real check. Ran with an explicit `timeout 15` wrapper as
+  a safety net (a `SDL_OpenURL()` call shells out to an external process on desktop
+  platforms, and a hang there would otherwise stall the whole run) — completed in 10ms
+  total for all 3 tests, confirming SDL3's own call returns promptly even with no
+  handler available, not just in theory. Build: `cmake --build cmake-build-debug
+  --target CNA`/`--target CnaTests` (both clean). Full existing filter plus all four
+  new `CNA::Devices` suites together: 358 tests, 356 passed, 2 pre-existing expected
+  skips, zero regressions.
 
 ### DEVICES-CNA-005 — `SystemInfo`
 
@@ -322,6 +336,10 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — DEVICES-CNA-004 CLOSED.** `CNA::Devices::UrlLauncher` implemented, 3
+  tests (each honestly scoped to "does not crash/hang", no return-value assumption).
+  Full suite 358/358 (356 pass + 2 expected skips). Next: `DEVICES-CNA-005`
+  (`SystemInfo`).
 - **2026-07-07 — DEVICES-CNA-003 CLOSED.** `CNA::Devices::Clipboard` implemented, 5
   tests — this headless container's own lack of an SDL video subsystem serves as the
   real "no clipboard available" verification, not just a theoretical claim. Full suite
