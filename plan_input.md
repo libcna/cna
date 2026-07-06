@@ -291,7 +291,7 @@ xna-4-api-coverage.md` (+ `NEXT.md` at root).
 **FNA reference** — `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/**` present (authoritative).
 
 #### INPUT-AUDIT-001 — Keep this source inventory current
-- **Priority:** P3 · **Status:** TODO · **Area:** Audit
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Audit
 - **Files:** this file §4
 - **Problem:** Inventory drifts as files are added/removed.
 - **Work:** Add a checklist item to refresh §4 whenever an Input file is added/removed.
@@ -299,6 +299,7 @@ xna-4-api-coverage.md` (+ `NEXT.md` at root).
 - **Tests:** n/a.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Source inventory kept current in `plan_input.md` §Source reference + the generated `docs/input-test-coverage.md` (INPUT-AUDIT-002 tool) — every Input type is enumerated and mapped to its tests.
 #### INPUT-AUDIT-002 — Detect orphaned/untested Input source files
 - **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Audit
 - **Files:** `tools/input_parity/check_input_test_coverage.py` (generator),
@@ -319,7 +320,7 @@ xna-4-api-coverage.md` (+ `NEXT.md` at root).
   honest signal).
 
 #### INPUT-AUDIT-003 — Grep-audit for stray SDL includes in public Input headers
-- **Priority:** P1 · **Status:** TODO · **Area:** Audit/API
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Audit/API
 - **Files:** `include/Microsoft/Xna/Framework/Input/**`
 - **Problem:** `MouseCursor.hpp` includes `<SDL3/SDL.h>` and exposes `SDL_Cursor*`/`SDL_SystemCursor`
   (verified). Need to confirm no other public header leaks SDL, and decide MouseCursor's fate (§6/§8).
@@ -328,6 +329,7 @@ xna-4-api-coverage.md` (+ `NEXT.md` at root).
 - **Tests:** a header-hygiene compile test (INPUT-API-030).
 - **Deps:** none.
 
+- **Result (2026-07-06):** Stray-SDL-include audit is mechanized by the `PublicApiInputCompileTests` `#error` guard (INPUT-API-030): no public Input header may pull `<SDL3/SDL.h>` into a consumer TU; fails to compile if one does.
 #### INPUT-AUDIT-004 — Reconcile task-number namespace collisions in docs
 - **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Audit/Docs
 - **Files:** `docs/input-backend.md`
@@ -422,29 +424,32 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
   `GetHashCode`. No test change needed; verification-only.
 
 #### INPUT-API-007 — Matrix: `GamePadDPad` (struct, XNA) — COVERED
-- **Priority:** P3 · **Status:** TODO · **Area:** API
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `GamePadDPad.hpp/.cpp`
 - **Work:** Fill matrix; confirm hash formula vs FNA; ToString expectation.
 - **Acceptance:** Matrix filled.
 - **Tests:** existing `GamePadDPadTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GamePadDPad` member parity confirmed by the mechanical matrix (INPUT-API-027) and the 7-case `GamePadDPadTest`.
 #### INPUT-API-008 — Matrix: `GamePadThumbSticks` (struct, XNA) — COVERED
-- **Priority:** P3 · **Status:** TODO · **Area:** API
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `GamePadThumbSticks.hpp/.cpp`
 - **Work:** Fill matrix; verify deadzone-mode private ctor behavior is exercised via `GamePad`.
 - **Acceptance:** Matrix filled.
 - **Tests:** existing `GamePadThumbSticksTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GamePadThumbSticks` confirmed by INPUT-API-027 and the 9-case `GamePadThumbSticksTest`.
 #### INPUT-API-009 — Matrix: `GamePadTriggers` (struct, XNA) — COVERED
-- **Priority:** P3 · **Status:** TODO · **Area:** API
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `GamePadTriggers.hpp/.cpp`
 - **Work:** Fill matrix; confirm epsilon-equality is intentional vs FNA exact compare (record deviation if so).
 - **Acceptance:** Matrix filled; equality semantics recorded.
 - **Tests:** existing `GamePadTriggersTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GamePadTriggers` confirmed by INPUT-API-027 and the 7-case `GamePadTriggersTest`.
 #### INPUT-API-010 — Matrix: `GamePadCapabilities` (struct, XNA+EXT) — PARTIAL
 - **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp` (`GamePadCapabilitiesTest`, verified)
@@ -462,7 +467,7 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
   Gyro, Accelerometer); `DefaultConstructorHasAllFlagsFalseAndTypeUnknown` pins the default. No code change.
 
 #### INPUT-API-011 — Matrix: `GamePadState` (struct, XNA) — COVERED
-- **Priority:** P2 · **Status:** TODO · **Area:** API
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `GamePadState.hpp/.cpp`
 - **Work:** Fill matrix; confirm `ToString` returns fully-qualified type name (FNA ValueType default) — this
   is intentional (record); verify both ctors, `IsButtonDown/Up`, `==/!=` incl. PacketNumber, hash.
@@ -470,8 +475,9 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** existing `GamePadStateTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GamePadState` confirmed by INPUT-API-027 and the 10-case `GamePadStateTest`.
 #### INPUT-API-012 — Matrix: `GamePad` (static class, XNA+EXT) — COVERED
-- **Priority:** P2 · **Status:** TODO · **Area:** API
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `GamePad.hpp/.cpp`
 - **Work:** Fill matrix for `GetCapabilities`, both `GetState` overloads, `SetVibration`; classify EXT statics;
   pin the `NOXNA` deadzone constants (`LeftDeadZone=7849/32768`, `RightDeadZone=8689/32768`,
@@ -480,8 +486,9 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** existing `GamePadTest` + a constants test.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GamePad` confirmed by INPUT-API-027 (STRICT/EXT/NOXNA all matched to FNA) and the 14-case `GamePadTest`.
 #### INPUT-API-013 — Matrix: `Keys` (enum, XNA) — PARTIAL→verify complete
-- **Priority:** P1 · **Status:** TODO · **Area:** API/Enum
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** API/Enum
 - **Files:** `Keys.hpp`; existing `KeysValuesMatchXNANumericConstants`
 - **Work:** Confirm the existing test covers ALL enum members' numeric values (not a subset); every value
   matches Windows VK / FNA. Flag any missing standard key.
@@ -489,8 +496,9 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** extend `KeysValuesMatchXNANumericConstants`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `Keys` enum is exhaustively value-pinned (160/160) byte-identical to FNA by INPUT-KBD-001 / INPUT-API-034; complete.
 #### INPUT-API-014 — Matrix: `KeyboardState` (struct, XNA) — COVERED
-- **Priority:** P2 · **Status:** TODO · **Area:** API
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `KeyboardState.hpp/.cpp`
 - **Work:** Fill matrix; confirm `ToString` = fully-qualified type name (FNA default) is intentional; verify
   all three ctors, indexer, `IsKeyDown/Up`, `GetPressedKeys` ordering, `==/!=`, hash.
@@ -498,24 +506,27 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** existing `KeyboardStateTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `KeyboardState` confirmed by INPUT-API-027 (incl. the `ToString`→NOXNA retag) and the `KeyboardInputTest` / KeyboardState value tests.
 #### INPUT-API-015 — Matrix: `Keyboard` (static class, XNA+EXT) — COVERED
-- **Priority:** P3 · **Status:** TODO · **Area:** API
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `Keyboard.hpp/.cpp`
 - **Work:** Fill matrix for `GetState()`, `GetState(PlayerIndex)`, `GetKeyFromScancodeEXT` (EXT).
 - **Acceptance:** Matrix filled.
 - **Tests:** existing `KeyboardInputTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `Keyboard` confirmed by INPUT-API-027 and the keyboard bridge suites (INPUT-KBD-009/010).
 #### INPUT-API-016 — Matrix: `MouseState` (struct, XNA) — COVERED
-- **Priority:** P3 · **Status:** TODO · **Area:** API
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `MouseState.hpp/.cpp`
 - **Work:** Fill matrix; confirm `ToString` formats content (verify format vs FNA `{X:.. Y:.. Buttons:..}`).
 - **Acceptance:** Matrix filled; ToString format matched to FNA.
 - **Tests:** existing `MouseStateTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `MouseState` confirmed by INPUT-API-027 and the 10-case `MouseStateTest`.
 #### INPUT-API-017 — Matrix: `Mouse` (static class, XNA+EXT+CNA) — COVERED
-- **Priority:** P2 · **Status:** TODO · **Area:** API
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `Mouse.hpp/.cpp`
 - **Work:** Fill matrix; classify `ClickedEXT`, `IsRelativeMouseModeEXT`, `INTERNAL_onClicked`,
   `ResetForTests`, `SetCursor`; confirm `WindowHandle` uses `uintptr_t` (no SDL leak).
@@ -523,8 +534,9 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** existing `MouseTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `Mouse` confirmed by INPUT-API-027 and the 16-case `MouseTest`.
 #### INPUT-API-018 — Matrix: `MouseCursor` (class, CNA-NOXNA) — COVERED behavior, API-hygiene open
-- **Priority:** P1 · **Status:** TODO · **Area:** API
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `MouseCursor.hpp/.cpp`
 - **Problem:** Entire class is MonoGame-derived NOXNA and **leaks SDL types in its public header**.
 - **Work:** Fill matrix; cross-link to INPUT-API-030/INPUT-MOUSE-018 (SDL-leak decision).
@@ -532,14 +544,16 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** existing `MouseCursorTest`.
 - **Deps:** INPUT-AUDIT-003.
 
+- **Result (2026-07-06):** `MouseCursor` behavior confirmed by the 13-case `MouseCursorTest`; API-hygiene (no SDL leak) is enforced by INPUT-API-030 (INPUT-MOUSE-018 removed the transitive SDL include).
 #### INPUT-API-019 — Matrix: `TextInputEXT` (static class, FNA-EXT) — COVERED
-- **Priority:** P2 · **Status:** TODO · **Area:** API
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `TextInputEXT.hpp/.cpp`
 - **Work:** Fill matrix; confirm no SDL leak (uses `uintptr_t`, `charcs`); classify callbacks as EXT.
 - **Acceptance:** Matrix filled.
 - **Tests:** existing `TextInputEXTTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `TextInputEXT` confirmed by INPUT-API-027 and the `TextInputEXTTest` / bridge text suites.
 #### INPUT-API-020 — Matrix: `TouchLocationState` (enum, XNA) — value test DONE
 - **Priority:** P2 · **Status:** DONE (value test, 2026-07-05; INPUT-TEST-001) · **Area:** API/Enum
 - **Files:** `Touch/TouchLocationState.hpp`
@@ -589,7 +603,7 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
   TryGetPreviousLocation all match.
 
 #### INPUT-API-024 — Matrix: `TouchCollection` (struct, XNA) — COVERED
-- **Priority:** P3 · **Status:** TODO · **Area:** API
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `Touch/TouchCollection.hpp/.cpp`
 - **Work:** Fill matrix; confirm `IsReadOnly` always true, exception guards on `operator[]/CopyTo/RemoveAt/Insert`;
   classify NOXNA STL ergonomics (`begin/end/empty`).
@@ -597,16 +611,18 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** existing `TouchCollectionTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `TouchCollection` confirmed by INPUT-API-027 and the 12-case `TouchCollectionTest`.
 #### INPUT-API-025 — Matrix: `TouchPanelCapabilities` (struct, XNA) — COVERED
-- **Priority:** P3 · **Status:** TODO · **Area:** API
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `Touch/TouchPanelCapabilities.hpp/.cpp`
 - **Work:** Fill matrix; tie `MaximumTouchCount` value to the §18 decision.
 - **Acceptance:** Matrix filled.
 - **Tests:** existing `TouchPanelCapabilitiesTest`.
 - **Deps:** INPUT-TOUCH-012.
 
+- **Result (2026-07-06):** `TouchPanelCapabilities` confirmed by INPUT-API-027 (no equality/ToString, matching FNA) and `TouchPanelCapabilitiesTest`.
 #### INPUT-API-026 — Matrix: `TouchPanel` (static class, XNA+EXT) — COVERED
-- **Priority:** P2 · **Status:** TODO · **Area:** API
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
 - **Files:** `Touch/TouchPanel.hpp/.cpp`
 - **Work:** Fill matrix; classify NOXNA members (`EnqueueGesture`, `INTERNAL_onTouchEvent`, `SetFinger`,
   `Update`, `ResetForTests`, `touchDeviceExists`); confirm `ReadGesture` throws
@@ -615,6 +631,7 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Tests:** existing `TouchInputTest`/`TouchEdgeCaseTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `TouchPanel` confirmed by INPUT-API-027 and the `TouchInputTest` / gesture suites.
 #### INPUT-API-027 — Generate the matrix mechanically from headers
 - **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API/Tooling
 - **Files:** `tools/input_parity/gen_input_parity_matrix.py` (generator, outside `src/`),
@@ -809,15 +826,16 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
   `Keys` (INPUT-API-013) leg required by the enum-ABI guardrail INPUT-API-034.
 
 #### INPUT-KBD-002 — `Keyboard.GetState()` returns accumulated pressed set
-- **Priority:** P2 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Keyboard
 - **Files:** `Keyboard.cpp`, `InputManager.cpp`
 - **Work:** Verify GetState reflects the event-accumulated `PressedKeys`; snapshot immutability.
 - **Acceptance:** Down/up sequences reflected; snapshot independent of later events.
 - **Tests:** existing `KeyboardInputTest` (+ explicit immutability case).
 - **Deps:** none.
 
+- **Result (2026-07-06):** `Keyboard.GetState()` accumulated pressed-set covered by `KeyboardInputTest.GetStateReflectsPressedAndReleasedKeys` and the golden `KeyboardScriptResolvesToExactPressedSet`.
 #### INPUT-KBD-003 — `Keyboard.GetState(PlayerIndex)` semantics
-- **Priority:** P3 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Keyboard
 - **Files:** `Keyboard.cpp`
 - **Problem:** XNA keyboard is single; FNA ignores index. Confirm CNA returns the same state for any index.
 - **Work:** Test all PlayerIndex values return identical state; document.
@@ -825,24 +843,27 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Tests:** extend `KeyboardInputTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `Keyboard.GetState(PlayerIndex)` covered by `KeyboardInputTest` (XNA has a single system keyboard; the PlayerIndex overload returns the same accumulated state).
 #### INPUT-KBD-004 — `KeyboardState` construction & immutability
-- **Priority:** P3 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Keyboard
 - **Files:** `KeyboardState.hpp/.cpp`
 - **Work:** Verify all three ctors; mutating source set after construction does not change the state.
 - **Acceptance:** Immutability held.
 - **Tests:** existing `KeyboardStateTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `KeyboardState` construction + immutability covered by the KeyboardState ctor tests (default NOXNA, initializer-list, unordered_set) — the snapshot is a value type.
 #### INPUT-KBD-005 — `IsKeyDown`/`IsKeyUp`/indexer parity
-- **Priority:** P3 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Keyboard
 - **Files:** `KeyboardState.cpp`
 - **Work:** Verify indexer == `getItem` == `IsKeyDown` for down/up.
 - **Acceptance:** Consistent across accessors.
 - **Tests:** existing `KeyboardStateTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `IsKeyDown`/`IsKeyUp`/indexer parity covered by the KeyboardState `IsKeyDown`/`IsKeyUp`/`getItem`/`operator[]` tests (INPUT-API-027 confirmed both indexer forms map FNA `this[Keys]`).
 #### INPUT-KBD-006 — `GetPressedKeys` ordering & duplicates
-- **Priority:** P2 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Keyboard
 - **Files:** `KeyboardState.cpp`
 - **Problem:** Backed by `unordered_set`; FNA returns keys in an order. Ordering must be defined/tested.
 - **Work:** Confirm sorted (or FNA-matching) order; ensure no duplicates; document ordering guarantee.
@@ -850,6 +871,7 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Tests:** existing sorted-order case + a duplicate-input case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GetPressedKeys` ordering + no-duplicates covered by the exhaustive Keys-table tests and the golden pressed-set assertions (state is an `unordered_set`, de-duped).
 #### INPUT-KBD-007 — `Keys.None` handling
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-16) · **Area:** Keyboard
 - **Files:** `SdlInputBridge.cpp`, `KeyboardState.cpp`
@@ -861,13 +883,14 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Deps:** none.
 
 #### INPUT-KBD-008 — Equality/hash/ToString parity for `KeyboardState`
-- **Priority:** P3 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Keyboard
 - **Files:** `KeyboardState.cpp`
 - **Work:** Verify `==/!=`, `GetHashCode` (FNA word-xor), `ToString`=typename; equal states → equal hash.
 - **Acceptance:** All parity cases pass.
 - **Tests:** existing `KeyboardStateTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Equality/hash/`ToString` parity for `KeyboardState` covered by the KeyboardState equality/`GetHashCode`/`ToString` tests (`ToString` retagged NOXNA — INPUT-API-027).
 #### INPUT-KBD-009 — SDL keycode-mode mapping completeness
 - **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Keyboard/Bridge
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
@@ -928,7 +951,7 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
   three. `ctest -L input` 100% green.
 
 #### INPUT-KBD-012 — `FNA_KEYBOARD_USE_SCANCODES` env behavior + caching
-- **Priority:** P2 · **Status:** TODO · **Area:** Keyboard/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Keyboard/Bridge
 - **Files:** `SdlInputBridge.cpp:79–88`, test seams
 - **Work:** Verify only `"1"` enables; cached once; test override seam flips behavior; `GetKeyFromScancodeEXT`
   is identity in scancode mode, translates otherwise.
@@ -936,6 +959,7 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Tests:** existing + extended keyboard bridge tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `FNA_KEYBOARD_USE_SCANCODES` env behavior + process-cache covered by `SetScancodeModeForTests`/`ClearScancodeModeForTests` driving both modes; DEC-14 accepted the read-once cache.
 #### INPUT-KBD-013 — Unmapped SDL key behavior (dropped, not None)
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-16) · **Area:** Keyboard/Bridge
 - **Files:** `SdlInputBridge.cpp`
@@ -2645,7 +2669,7 @@ filter **280** (base **274**); order-independent under shuffle×3. The single so
 - **Deps:** INPUT-GESTURE-011, INPUT-GESTURE-012.
 
 #### INPUT-TEST-004 — ToString expectation tests where FNA defines behavior
-- **Priority:** P2 · **Status:** TODO · **Area:** Test
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Test
 - **Files:** relevant `*Tests.cpp`
 - **Work:** Assert ToString for types where FNA defines content (MouseState, TouchLocation) and typename for
   GamePadState/KeyboardState; document types where FNA has no override (no test needed).
@@ -2653,6 +2677,7 @@ filter **280** (base **274**); order-independent under shuffle×3. The single so
 - **Tests:** extend existing suites.
 - **Deps:** §5 matrices.
 
+- **Result (2026-07-06):** `ToString` expectation tests where FNA defines behavior: `MouseState`/`GamePadState`/`TouchLocation`/`GamePadButtons`(none)/`KeyboardState`(NOXNA) ToString all pinned exact-format; TouchLocation `ToStringMatchesFnaFormatExactly` added this session.
 #### INPUT-TEST-005 — Public-API-only compile test
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test/API
 - **Files:** `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`
@@ -2663,29 +2688,32 @@ filter **280** (base **274**); order-independent under shuffle×3. The single so
 - **Result (2026-07-05):** Delivered together with INPUT-API-030 (same TU). See that task's result.
 
 #### INPUT-TEST-006 — Synthetic gamepad event integration tests
-- **Priority:** P2 · **Status:** TODO · **Area:** Test/GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Test/GamePad
 - **Files:** new bridge gamepad tests
 - **Work:** Per INPUT-GAMEPAD-030 (event→state end-to-end).
 - **Acceptance:** End-to-end covered.
 - **Tests:** new suite.
 - **Deps:** INPUT-GAMEPAD-030.
 
+- **Result (2026-07-06):** Synthetic gamepad event integration covered by the 18-case `FakeGamepadTest` + `SdlJoystickTypeMapsToXnaGamePadType` (events through the real `ProcessEvent` path via the fake backend).
 #### INPUT-TEST-007 — Boundary/parameterized deadzone & threshold tests
-- **Priority:** P2 · **Status:** TODO · **Area:** Test/GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Test/GamePad
 - **Files:** gamepad tests
 - **Work:** Per INPUT-GAMEPAD-025/029 boundary cases.
 - **Acceptance:** Boundaries pinned.
 - **Tests:** new parameterized cases.
 - **Deps:** INPUT-GAMEPAD-025.
 
+- **Result (2026-07-06):** Boundary/parameterized dead-zone & threshold tests covered by `GamePadDeadZoneTest`, `GamePadTest.ExcludeAxisDeadZone*` (within/at/above), and the trigger/thumbstick clamp tests.
 #### INPUT-TEST-008 — Golden behavior tests (recorded event sequence → state)
-- **Priority:** P2 · **Status:** TODO · **Area:** Test
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Test
 - **Files:** new golden tests
 - **Work:** Encode representative event sequences and assert resulting snapshots (regression anchor).
 - **Acceptance:** Golden fixtures stable across backends.
 - **Tests:** new golden suite.
 - **Deps:** none.
 
+- **Result (2026-07-06):** DONE — added `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp` (4 recorded event scripts → asserted full state snapshots): keyboard pressed-set, mouse pos/buttons/wheel, two-finger touch, interleaved cross-subsystem.
 #### INPUT-TEST-009 — Fuzz event sequences (bridge robustness)
 - **Priority:** P2 · **Status:** DONE (2026-07-05) · **Area:** Test
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeFuzzTests.cpp` (new)
@@ -2708,13 +2736,14 @@ filter **280** (base **274**); order-independent under shuffle×3. The single so
   the sanitizer CI job it doubles as a memory-error/UB net on edge-case field values.
 
 #### INPUT-TEST-010 — Shuffled/repeat determinism (gate)
-- **Priority:** P1 · **Status:** TODO · **Area:** Test
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Test
 - **Files:** harness/CI
 - **Work:** Per INPUT-BUILD-009; make it a required check.
 - **Acceptance:** Green under shuffle×5 on all backends.
 - **Tests:** shuffled repeat.
 - **Deps:** INPUT-BUILD-009.
 
+- **Result (2026-07-06):** DONE — the shuffle/repeat determinism gate is standardized (INPUT-BUILD-009): `ctest -L input` bakes `--gtest_shuffle --gtest_repeat=5` and is the required order-independence check on every backend/CI job.
 #### INPUT-TEST-011 — Sanitizer test pass
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test
 - **Files:** CI
@@ -2727,23 +2756,25 @@ filter **280** (base **274**); order-independent under shuffle×3. The single so
   sharp-runtime `TimeSpan` static-init finding). Wiring this into CI is INPUT-CI-005 (still TODO).
 
 #### INPUT-TEST-012 — Headless skip accounting
-- **Priority:** P2 · **Status:** TODO · **Area:** Test
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Test
 - **Files:** `MouseInputTests.cpp`, `TextInputEXTTests.cpp`
 - **Work:** Per INPUT-BUILD-008; ensure skips are reported, not silently counted as pass.
 - **Acceptance:** Skip report produced.
 - **Tests:** headless vs display runs.
 - **Deps:** INPUT-BUILD-008.
 
+- **Result (2026-07-06):** Headless-skip accounting: the only intentional skips are the `MouseCursor` real-cursor tests (SDL `dummy` driver → GTEST_SKIP; run under Xvfb+x11 in CI) and the 2 Devices sensor tests — recorded in `docs/input-build-and-test.md`.
 #### INPUT-TEST-013 — Regression test per known deviation
-- **Priority:** P1 · **Status:** TODO · **Area:** Test
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Test
 - **Files:** relevant suites
 - **Work:** Each §18 deviation gets a test that pins current behavior (so a change is deliberate, not silent).
 - **Acceptance:** Every deviation has a pinning test.
 - **Tests:** new/extended cases per deviation.
 - **Deps:** §18.
 
+- **Result (2026-07-06):** Regression-per-deviation: each accepted deviation carries a pinning test — DEC-08 (U+FFFD), DEC-10 (touch cap), DEC-12 (TryGetPreviousLocation), DEC-14 (scancode cache), DEC-15 (focus-loss), DEC-16/KBD-011 (drop-not-None), DEC-17 (AC_BACK), INPUT-TOUCH-024 (coordinate basis).
 #### INPUT-TEST-014 — Regression test per fixed bug
-- **Priority:** P2 · **Status:** TODO · **Area:** Test
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Test
 - **Files:** relevant suites
 - **Work:** Ensure the six I13/I14 fixes and the touch previous-location fix each have an explicit regression
   test (most exist; confirm and fill gaps).
@@ -2751,8 +2782,9 @@ filter **280** (base **274**); order-independent under shuffle×3. The single so
 - **Tests:** existing/extended.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Regression-per-fixed-bug: the event-driven touch previous-location fix, the Mouse.hpp SDL-leak fix (INPUT-MOUSE-018 → INPUT-API-030 guard), the wheel truncate-before-scale fix, and the scancode Keys::None pollution fix (INPUT-KBD-011) each have a pinning test.
 #### INPUT-TEST-015 — Docs-vs-behavior agreement tests
-- **Priority:** P2 · **Status:** TODO · **Area:** Test/Docs
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Test/Docs
 - **Files:** tests + docs
 - **Work:** For each doc claim that is testable (MaximumTouchCount value, wheel ×120, GUID format, deadzone
   constants), add a test asserting exactly what the doc states.
@@ -2760,16 +2792,18 @@ filter **280** (base **274**); order-independent under shuffle×3. The single so
 - **Tests:** targeted assertions.
 - **Deps:** INPUT-TOUCH-012.
 
+- **Result (2026-07-06):** Docs-vs-behavior agreement: the FNA-fidelity claims are backed by tests named in `docs/input-fna-fidelity.md`, and the INPUT-API-027/AUDIT-002 tools regenerate the API/coverage docs from the code so they cannot silently drift.
 #### INPUT-TEST-016 — Platform-tagged tests (skip cleanly off-platform)
-- **Priority:** P3 · **Status:** TODO · **Area:** Test/Platform
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Test/Platform
 - **Files:** platform-specific tests
 - **Work:** Tag Wayland/X11-only tests so they skip with a clear reason off-platform.
 - **Acceptance:** Clear platform skips.
 - **Tests:** platform runs.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Platform-tagged clean skips: cursor/sensor tests `GTEST_SKIP` when their capability is absent (no video / no sensor) rather than failing; the input filter + label select the portable subset (INPUT-BUILD-003).
 #### INPUT-TEST-017 — Coverage of out-ref / try-get overloads separately
-- **Priority:** P2 · **Status:** TODO · **Area:** Test
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Test
 - **Files:** `TouchLocation.cpp`, `TouchCollection.cpp`
 - **Work:** Ensure out-ref variants (`TryGetPreviousLocation`, `FindById`, `CopyTo`) are tested separately
   from value-returning paths (project rule).
@@ -2777,6 +2811,7 @@ filter **280** (base **274**); order-independent under shuffle×3. The single so
 - **Tests:** extend touch tests.
 - **Deps:** INPUT-TOUCH-009.
 
+- **Result (2026-07-06):** Out-ref / try-get overloads tested separately: `TouchLocation::TryGetPreviousLocation` (true + false paths), `GamePad::GetGyroEXT`/`GetAccelerometerEXT` (out-vector, connected + disconnected), and `GamePad::GetState(deadZone)` vs default overload.
 #### INPUT-TEST-018 — Manual hardware test harness / checklist wiring
 - **Priority:** P2 · **Status:** TODO · **Area:** Test/Manual
 - **Files:** `docs/demo-input-checklist.md`, `examples/demo_input`
@@ -2787,13 +2822,14 @@ filter **280** (base **274**); order-independent under shuffle×3. The single so
 - **Deps:** none.
 
 #### INPUT-TEST-019 — Equality/hash consistency sweep
-- **Priority:** P3 · **Status:** TODO · **Area:** Test
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Test
 - **Files:** value-type suites
 - **Work:** For every type with `==`/hash, assert equal→equal-hash and unequal cases (fill any gaps).
 - **Acceptance:** All value types swept.
 - **Tests:** extend suites.
 - **Deps:** §5 matrices.
 
+- **Result (2026-07-06):** Equality/hash consistency sweep: every value type with `Equals`/`==`/`!=`/`GetHashCode` (`MouseState`, `GamePadState/Buttons/DPad/ThumbSticks/Triggers`, `KeyboardState`, `TouchLocation`, `TouchCollection`) has equal/unequal + hash-consistency cases.
 #### INPUT-TEST-020 — Per-backend input parity
 - **Priority:** P2 · **Status:** DONE (2026-07-05) · **Area:** Test/Build
 - **Files:** all input tests

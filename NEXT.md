@@ -51,6 +51,12 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-API matrix + KBD/AUDIT/TEST stragglers verified (36 tasks):** the per-type API-matrix tasks
+  (API-007..026) are confirmed by the mechanical parity matrix (INPUT-API-027) + each type's suite; KBD-002..012
+  behavior by the keyboard suites; AUDIT-001/003 by the inventory doc + the API-030 SDL-leak guard; and
+  TEST-004..019 (ToString, synthetic-gamepad, dead-zone boundaries, golden [TEST-008 done], determinism gate
+  [TEST-010 via BUILD-009], headless-skip accounting, regression-per-deviation/bug, docs-vs-behavior,
+  out-ref overloads, equality/hash sweep). Docs-only.
 - **INPUT-BRIDGE cluster verified (28 tasks):** mapped BRIDGE-001..018 + 101..112 to the SdlInputBridge*
   funnel suites, golden/fuzz/reset tests, and the fake-backend seam — snapshot consistency, event ordering,
   delta drain, touch lifecycle, slot isolation, packet-number, ResetAllForTests, focus/lifecycle decisions,
