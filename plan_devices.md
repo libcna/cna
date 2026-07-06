@@ -2906,7 +2906,7 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Sensors/Compass.cpp` (inspected, no change needed)
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (inspected, no change needed)
 
-### COMPASS-002 — Define correct `TrueHeading` behavior
+### COMPASS-002 — Define correct `TrueHeading` behavior — CLOSED (2026-07-06, existing fallback confirmed reasonable, no WP7 equivalent scenario exists; one major new finding split into `COMPASS-009`)
 
 - **Priority:** Critical
 - **Area:** Compass Math / Compatibility
@@ -2916,22 +2916,59 @@ not an alternate spelling to preserve.
   Whether this specific fallback (as opposed to, say, `NaN`, `0`, or an actual
   declination calculation) is the XNA/WP7-compatible choice for "declination unknown"
   has not been verified against an authoritative reference.
+- **Resolution (2026-07-06):** fetched `CompassReading.TrueHeading`'s own archived MSDN
+  page (`hh239326(v=vs.105)`) and cross-checked against the already-fetched `Compass`
+  class Remarks (`COMPASS-001`) and the Petzold article (`ACCEL-008`). Both sources
+  state the same thing: *"The Compass class performs these calculations for you based
+  on the phone's location"* — i.e. **the real WP7 `Compass` always has a location
+  source available** (every WP7 device has location services), so declination is always
+  computable in the real API. **There is no documented "declination unknown" fallback
+  in the real API at all, because the real API never encounters that situation** — this
+  isn't a case CNA can converge its behavior toward "the documented correct answer"
+  for, since no such documented answer exists; the situation itself (a compass backend
+  running with genuinely no location source) doesn't arise on real WP7 hardware.
+  - **Conclusion: the existing `TrueHeading == MagneticHeading` fallback remains a
+    reasonable, honestly-documented CNA workaround for a scenario the real API was never
+    designed to face** (this codebase's own deliberate choice, per
+    `docs/location-future-plan.md`, to keep `System.Device.Location`/GPS out of
+    `Microsoft::Devices::Sensors` entirely — see `COMPASS-003` for whether that
+    project-wide decision still holds). No change made; the existing code comment
+    already states this rationale correctly, now backed by a direct citation trail
+    rather than an unexamined assumption.
+  - Tests: already present and adequate — `CompassTests.cpp`'s existing coverage
+    (via the fake backend) already confirms `TrueHeading`/`MagneticHeading` equality in
+    the current (only) code path; there is no second "heading available" scenario to
+    add a test for, since real declination is never computed at all (see
+    `COMPASS-003`).
+  - **Major new finding, split out to its own task rather than folded in here (scope
+    mismatch — this task is specifically about the declination/`TrueHeading`-vs-
+    `MagneticHeading` question, not heading computation in general):** `COMPASS-001`
+    surfaced that the real `Compass` "uses a different axis to compute the heading,
+    depending on [physical, not screen] orientation of the device" — a distinct,
+    unimplemented behavior affecting both `MagneticHeading` and `TrueHeading`
+    identically (both derive from the same single azimuth extraction). See new task
+    `COMPASS-009` (added at the end of this section) for the full writeup.
 - **Required work:**
-  - Verify the expected XNA/WP7 behavior when true heading cannot be computed.
+  - Verify the expected XNA/WP7 behavior when true heading cannot be computed. Done —
+    no such documented behavior exists, because the real API assumes it can always be
+    computed.
   - Decide, with rationale, whether to keep the current "equals magnetic heading"
     fallback, switch to a different sentinel, or implement real declination (see
-    `COMPASS-003` for the latter).
+    `COMPASS-003` for the latter). Done — keep, with the rationale now citation-backed.
   - Add tests for both the "heading unavailable" and (if implemented) "heading
-    available" scenarios.
+    available" scenarios. N/A — only one scenario exists in this codebase's current
+    architecture (no declination source at all); already tested.
 - **Acceptance criteria:**
   - `TrueHeading` fallback behavior is explicitly documented as either
     verified-compatible or intentionally-chosen-CNA-behavior, not left as an unexamined
-    assumption.
-  - Tests cover both scenarios explicitly.
+    assumption. Done — intentionally-chosen, with citations.
+  - Tests cover both scenarios explicitly. N/A, see above — one real scenario, already
+    tested.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Compass.cpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
-  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Compass.cpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp` (inspected, no
+    change needed)
+  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (inspected, no change needed)
 
 ### COMPASS-003 — Add optional declination/location support plan
 
@@ -3107,6 +3144,87 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
   - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
+
+### COMPASS-009 — NEW (found 2026-07-06, while researching `COMPASS-001`/`COMPASS-002`): implement the real Compass's device-tilt-dependent axis switch — OPEN, not implemented
+
+- **Priority:** High
+- **Area:** Compass Math / Android Backend
+- **Problem:** `Compass`'s own archived MSDN Remarks (`hh220912(v=vs.105)`) state:
+  *"The compass uses a different axis to compute the heading, depending on the
+  orientation of the device."* The companion walkthrough page ("How to get data from
+  the compass sensor for Windows Phone 8", `hh202974(v=vs.105)`) confirms this means
+  the device's **physical tilt** — held upright like a traditional handheld compass
+  ("portrait mode" in the page's own terminology) vs. held flat like a map ("flat
+  mode") — not the screen-rotation/landscape-lock question `ACCEL-008` raised. The page
+  includes real, runnable sample code detecting which mode is active, driven by the
+  *accelerometer's* current reading:
+  ```csharp
+  void accelerometer_CurrentValueChanged(object sender, SensorReadingEventArgs<AccelerometerReading> e)
+  {
+    Vector3 v = e.SensorReading.Acceleration;
+    bool isCompassUsingNegativeZAxis = false;
+    if (Math.Abs(v.Z) < Math.Cos(Math.PI / 4) &&
+                  (v.Y < Math.Sin(7 * Math.PI / 4)))
+    {
+      isCompassUsingNegativeZAxis = true;
+    }
+    // isCompassUsingNegativeZAxis == true -> "portrait mode" (held upright)
+    // isCompassUsingNegativeZAxis == false -> "flat mode" (held flat)
+  }
+  ```
+  `Detail::AndroidCompassMath::ConvertRotationVectorToMagneticHeadingDegrees()` has
+  **no equivalent tilt-mode switch at all** — it always extracts the same single fixed
+  azimuth component (`atan2(R01, R11)`) regardless of how the phone is physically held.
+  This affects both `MagneticHeading` and `TrueHeading` identically, since both derive
+  from the same single azimuth extraction (`COMPASS-002`).
+- **Why this was not implemented in this pass:** same category of concern as
+  `ACCEL-008` — a real, well-evidenced (this time with actual runnable sample code, not
+  just prose) behavioral gap, but implementing it correctly requires:
+  - Deriving which specific rotation-matrix component(s) correspond to "azimuth using
+    the -Z axis" vs. "azimuth using the Y axis" for Android's rotation-vector sensor
+    specifically — the WP7 sample code's axis-selection logic is written against WP7's
+    own sensor/coordinate conventions, not Android's, so a direct port of the
+    `isCompassUsingNegativeZAxis` condition itself would be wrong; the *quaternion*
+    math that should replace `atan2(R01, R11)` in the "flat" case needs to be derived
+    fresh for Android's rotation-vector convention specifically.
+  - No Android hardware exists in this environment to verify a new implementation
+    against, and this is exactly the kind of subtle trigonometric derivation (like
+    `Detail::ConvertAndroidPortraitToXnaLandscape()`'s own history, Task P6-7) that has
+    previously produced a wrong first attempt when reasoned about without hardware to
+    check against.
+  - This is a genuine, real behavioral gap (not just an unverified sign), so it
+    deserves a dedicated implementation task with its own careful derivation and
+    testing — not a rushed addition alongside the unrelated `COMPASS-001`/`COMPASS-002`
+    verification work that discovered it.
+- **Required work (not yet started):**
+  - Derive the correct Android rotation-vector-to-heading formula for both tilt modes
+    (upright/"portrait" and flat), analogous to how
+    `ConvertRotationVectorToMagneticHeadingDegrees()` was originally derived "from
+    first-principles quaternion algebra" for the single fixed-axis case (per its own
+    doc comment).
+  - Add a tilt-mode detection step to `Detail::AndroidCompassBackend` (likely needs the
+    device's own accelerometer/gravity reading, already available via the Android
+    sensor bridge infrastructure `Compass`'s sibling `Motion` already uses).
+  - Add tests for both modes and the transition between them, at minimum
+    self-consistency tests (matching this codebase's existing standard for
+    unverified-on-hardware math, per `AndroidCompassMathTests.cpp`'s current style).
+  - Update `docs/devices-hardware-checklist.md`'s Compass section with manual test
+    steps for both "held upright" and "held flat" orientations.
+- **Acceptance criteria:**
+  - `Detail::AndroidCompassMath` (or a new sibling function) implements both tilt-mode
+    heading calculations, each citation-backed the same way the existing single-axis
+    formula is.
+  - Tests cover both modes' self-consistency (identity → known heading, monotonic
+    response to yaw) at minimum; real-hardware verification remains a separate,
+    tracked gap like every other Android sensor math question in this plan.
+  - The hardware checklist has explicit steps for verifying both tilt modes on a real
+    device.
+- **Suggested files to inspect or edit:**
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp`
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.hpp`
+  - `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp`
+  - `docs/devices-hardware-checklist.md`
 
 ---
 
