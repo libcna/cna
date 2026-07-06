@@ -29,7 +29,12 @@ namespace Microsoft::Devices::Sensors::Detail
 
 namespace Microsoft::Devices::Sensors
 {
-    /** @brief Provides access to the device accelerometer sensor. */
+    /**
+     * @brief Provides access to the device accelerometer sensor.
+     *
+     * See `docs/devices-thread-safety.md` for this class's full,
+     * consolidated thread-safety contract.
+     */
     class Accelerometer final : public SensorBase<AccelerometerReading>
     {
         friend class Detail::SdlSensorSubsystem<Accelerometer>;

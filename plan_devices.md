@@ -1083,7 +1083,7 @@ not an alternate spelling to preserve.
   - `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`
   - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
 
-### SENSORBASE-004 — Clarify thread-safety contract
+### SENSORBASE-004 — Clarify thread-safety contract — CLOSED (2026-07-06, real race found in Compass/Motion and fixed, contract written)
 
 - **Priority:** High
 - **Area:** Lifecycle / API
@@ -1091,6 +1091,38 @@ not an alternate spelling to preserve.
   the framework itself, but this codebase's `SensorBase<T>` and the SDL/Android backends
   use mutexes in several places — the exact boundary of what is and is not promised
   thread-safe has not been written down as a single explicit contract.
+- **What was found:** auditing all four sensor classes' locking found that
+  `Compass`/`Motion`'s `Start()`/`Stop()`/`getStateProperty()` had **no locking at all**
+  on `state_`/`started_` — unlike `Accelerometer`/`Gyroscope`, whose equivalent fields
+  are guarded by their shared `Detail::SdlSensorSubsystem<TSensor>::mutex_`. This was
+  confirmed as a real, reproducible data race (not just a theoretical audit finding) by
+  writing `CompassTests.ConcurrentStartStopFromMultipleThreadsDoesNotCrash` (mirroring
+  the existing `AccelerometerTests`/`GyroscopeTests` equivalent) and running it under
+  `devices-tsan`, which reported a race between `Start()`/`Stop()`'s writes and
+  `getStateProperty()`'s read at `Compass.cpp`. Added the identical test for `Motion`
+  (structurally identical class) to confirm the same race there too.
+- **Fix:** added a per-instance `mutable std::mutex mutex_` to both `Compass` and
+  `Motion`, locked for the entire body of `Start()`/`Stop()`/`getStateProperty()`/
+  `SetBackendForTesting()` (safe to hold across the `backend_->Start()`/`Stop()` call
+  itself, since neither Android backend ever synchronously re-enters the sensor object).
+  `Dispose(bool)` reads `started_` under a short-lived separate lock scope, then calls
+  `Stop()` outside that scope (since `Stop()` acquires the same non-recursive mutex) —
+  mirroring the exact pattern `Accelerometer::Dispose(bool)` already used.
+- **Contract written:** `docs/devices-thread-safety.md` — states the real WP7 API's own
+  documented baseline (fetched from the archived MSDN `Compass` class page,
+  `hh220912(v=vs.105)`: "Any public static... members... are thread safe. Any instance
+  members are not guaranteed to be thread safe."), then what CNA additionally
+  guarantees per class/mechanism, one known accepted gap (`Dispose()` racing a
+  concurrent `Start()` on the same instance — pre-existing, shared with
+  Accelerometer/Gyroscope, not fixed by this task since it's not a supported usage
+  pattern), and what remains just the WP7 floor. Cross-referenced from
+  `SensorBase.hpp`, `Accelerometer.hpp`, `Gyroscope.hpp`, `Compass.hpp`, and
+  `Motion.hpp`'s own class-level doc comments.
+- **Verified:** full Devices `--gtest_filter` list (304 tests, 302 passed + 2 expected
+  hardware skips) on plain `cmake-build-debug` and all three sanitizer presets. ASan: 0
+  issues. UBSan: 0 issues. TSan: 38 reports, all the same pre-existing, unrelated
+  `sharp-runtime` `TimeSpan::copy_count` race — none in `Compass.cpp`/`Motion.cpp`
+  anymore (confirmed by diffing report locations before/after the fix).
 - **Required work:**
   - Define CNA's thread-safety promise for sensor instances as an explicit, written
     contract (e.g. "getters/setters are safe from any thread; concurrent `Start()`/

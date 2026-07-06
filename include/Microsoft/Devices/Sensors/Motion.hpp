@@ -33,6 +33,9 @@ namespace Microsoft::Devices::Sensors
      * combining this codebase's own sensor objects). On every other
      * platform, getIsSupportedProperty() always returns false, and Start()
      * always fails with SensorFailedException, exactly as before.
+     *
+     * See `docs/devices-thread-safety.md` for this class's full,
+     * consolidated thread-safety contract.
      */
     class Motion final : public SensorBase<MotionReading>
     {
@@ -43,6 +46,27 @@ namespace Microsoft::Devices::Sensors
         static std::mutex instanceCountMutex_;
 
         static constexpr SharpRuntime::bytecs MaxSensorCount = 10;
+
+        /**
+         * @brief Guards state_/started_ (Task SENSORBASE-004).
+         *
+         * Motion is structurally identical to Compass, which a real
+         * ThreadSanitizer run confirmed had an unguarded data race on these
+         * same two fields — unlike Accelerometer/Gyroscope, whose
+         * equivalent fields are guarded by their shared
+         * `Detail::SdlSensorSubsystem<TSensor>::mutex_`. Held for each of
+         * `Start()`/`Stop()`/`getStateProperty()`'s entire body, including
+         * the actual `backend_->Start()`/`Stop()` call — safe to do so
+         * because neither ever synchronously re-enters `Motion` (the real
+         * `Detail::AndroidMotionBackend::Start()` only spawns worker
+         * threads and waits for a startup handshake; sample/calibration
+         * callbacks are only ever invoked later, asynchronously, from those
+         * threads — never during the `Start()`/`Stop()` call itself).
+         *
+         * See `docs/devices-thread-safety.md` for the full, consolidated
+         * thread-safety contract this member is part of.
+         */
+        mutable std::mutex mutex_;
 
         SensorState state_;
         bool started_;

@@ -28,6 +28,7 @@ namespace Microsoft::Devices::Sensors
     SensorState Compass::getStateProperty() const
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Compass");
+        std::lock_guard<std::mutex> lock(mutex_);
         return state_;
     }
 
@@ -92,6 +93,8 @@ namespace Microsoft::Devices::Sensors
         // level) and, on failure, incorrectly reset state_ to NotSupported
         // and threw a misleading "not supported" exception even though the
         // sensor was genuinely still running.
+        std::lock_guard<std::mutex> lock(mutex_);
+
         if (started_)
         {
             throw SensorFailedException(
@@ -133,6 +136,8 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Compass");
 
+        std::lock_guard<std::mutex> lock(mutex_);
+
         if (backend_)
         {
             backend_->Stop();
@@ -170,7 +175,13 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        if (started_)
+        bool wasStarted;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            wasStarted = started_;
+        }
+
+        if (wasStarted)
         {
             Stop();
         }
@@ -194,6 +205,8 @@ namespace Microsoft::Devices::Sensors
         // Stop() session would leave the old backend's own worker state
         // (e.g. AndroidSensorBridge's background threads) running
         // unmanaged, orphaned from anything that could still Stop() it.
+        std::lock_guard<std::mutex> lock(mutex_);
+
         if (started_)
         {
             throw SensorFailedException(

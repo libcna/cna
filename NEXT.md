@@ -99,6 +99,38 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `SENSORBASE-004` closed: found and fixed a real data race in
+`Compass`/`Motion`, wrote the consolidated thread-safety contract.** Auditing locking
+across all four sensor classes for this task's "clarify the contract" ask found that,
+unlike `Accelerometer`/`Gyroscope` (guarded by their shared
+`Detail::SdlSensorSubsystem<TSensor>::mutex_`), `Compass`/`Motion`'s `Start()`/`Stop()`/
+`getStateProperty()` had **no locking at all** on `state_`/`started_`. Confirmed as a
+real, reproducible race (not just a code-reading finding) by adding
+`CompassTests.ConcurrentStartStopFromMultipleThreadsDoesNotCrash` (mirroring the
+existing `AccelerometerTests`/`GyroscopeTests` equivalent) and running it under
+`devices-tsan`, which reported the race at `Compass.cpp`'s `Start()`/`Stop()` writes
+against `getStateProperty()`'s read. Added the identical test for `Motion` (structurally
+identical class) and confirmed the same race there. Fixed by adding a per-instance
+`mutable std::mutex mutex_` to both classes, held for the entire body of `Start()`/
+`Stop()`/`getStateProperty()`/`SetBackendForTesting()` (safe across the
+`backend_->Start()`/`Stop()` call itself — neither Android backend ever synchronously
+re-enters the sensor object); `Dispose(bool)` reads `started_` under a short-lived
+separate lock scope before calling `Stop()` outside it, mirroring
+`Accelerometer::Dispose(bool)`'s existing pattern (avoids self-deadlock on the
+non-recursive mutex). Wrote `docs/devices-thread-safety.md`: states the real WP7 API's
+own documented baseline (fetched from the archived MSDN `Compass` class page,
+`hh220912(v=vs.105)`: "Any public static... members... are thread safe. Any instance
+members are not guaranteed to be thread safe."), what CNA additionally guarantees per
+class/mechanism, one known accepted gap (`Dispose()` racing a concurrent `Start()` on
+the same instance — pre-existing, shared identically with `Accelerometer`/`Gyroscope`,
+not a supported usage pattern, not fixed by this task), and what remains just the WP7
+floor. Cross-referenced from `SensorBase.hpp`/`Accelerometer.hpp`/`Gyroscope.hpp`/
+`Compass.hpp`/`Motion.hpp`'s class-level doc comments. Verified: 304/304 tests (up from
+302) on plain `cmake-build-debug` and all three sanitizer presets. ASan: 0 issues.
+UBSan: 0 issues. TSan: 38 reports, all the same pre-existing, unrelated `sharp-runtime`
+`TimeSpan::copy_count` race — confirmed none remain at `Compass.cpp`/`Motion.cpp` by
+diffing report locations before/after the fix.
+
 **2026-07-06 — `SENSORBASE-003` closed: found and closed a real reentrancy-test gap
 for Compass/Motion; documented one deeper, unverified risk.** Re-audited by grepping
 existing test coverage first: `Accelerometer`/`Gyroscope` each have several
@@ -531,15 +563,16 @@ own priority labels.
 
 `DEV-API-003`, `DEV-BUILD-002`, `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`,
 `DEV-API-001`, `ANDROID-BRIDGE-002`, `READINGS-002`, `DEV-BUILD-004`, `MOTION-008`,
-`SENSORBASE-008`, and `DEV-BUILD-001` are now closed (12 of 72 total task headers) —
-see Section 3 and `plan_devices.md` itself (grep for `— CLOSED`).
+`SENSORBASE-008`, `DEV-BUILD-001`, `SENSORBASE-002`, `SENSORBASE-003`, and
+`SENSORBASE-004` are now closed (16 of 72 total task headers) — see Section 3 and
+`plan_devices.md` itself (grep for `— CLOSED`).
 
-60 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
+56 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
 `VIB-010`, deliberately untouched per explicit user instruction so far), most
 Accelerometer/Gyroscope/Compass/Motion API- and hardware-verification audits
 (`ACCEL-001`–`004`/`006`/`007`, `GYRO-001`–`003`/`005`, `COMPASS-001`–`008`,
 `MOTION-001`–`007`/`009`/`010`), `DEV-API-002` (`NOXNA` boundary enforcement),
-`DEV-API-004`/`005`, `DEV-BUILD-003` (CI), `SENSORBASE-002`–`007`,
+`DEV-API-004`/`005`, `DEV-BUILD-003` (CI), `SENSORBASE-005`–`007`,
 `ANDROID-BRIDGE-001`/`003`/`004`, `SDL-SENSOR-001`/`003`, `READINGS-001`/`003`,
 `DEMO-001`/`002`, and `VERIFY-001`–`003`. Pick the next smallest one, or ask the user to
 prioritize, per Section 9's existing rule. One concrete lead if a task is wanted: the
@@ -707,11 +740,15 @@ remaining)" to a plain "CLOSED" now that the one remaining gap is resolved; its
 edited, by `ANDROID-BRIDGE-002`, in a prior pass — another small stale-status fix found
 along the way, same category as `MOTION-008` earlier in this pass).
 
-**Next recommended task:** no further "next smallest task" is queued from a quick pass
-over `plan_devices.md` — the `cna_demo_input` Android build finding from `DEV-BUILD-004`
-remains open but unscoped (see Section 4) if Android example-app coverage beyond
-`cna_demo_devices` is ever wanted; otherwise, read `plan_devices.md` for its next open
-task (grep for section headers without a "— CLOSED" suffix) or ask the user to
+**Next recommended task (at the time this line was first written):** `SENSORBASE-004`
+— see Section 3's entry above; it was picked up autonomously and closed the same
+session (found and fixed a real `Compass`/`Motion` data race via `devices-tsan`). No
+further "next smallest task" is queued from a quick pass over `plan_devices.md` beyond
+that — the `cna_demo_input` Android build finding from `DEV-BUILD-004` remains open but
+unscoped (see Section 4) if Android example-app coverage beyond `cna_demo_devices` is
+ever wanted; otherwise, read `plan_devices.md` for its next open task (grep for section
+headers without a "— CLOSED" suffix; `SENSORBASE-005`/`006`/`007` are natural next
+candidates, adjacent to the work just closed) or ask the user to
 prioritize.
 
 ---

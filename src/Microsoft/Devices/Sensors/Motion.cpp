@@ -27,6 +27,7 @@ namespace Microsoft::Devices::Sensors
     SensorState Motion::getStateProperty() const
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
+        std::lock_guard<std::mutex> lock(mutex_);
         return state_;
     }
 
@@ -83,6 +84,8 @@ namespace Microsoft::Devices::Sensors
         // Repeated Start/Stop safety: see Compass::Start()'s identical fix
         // for the full rationale -- must run before touching backend_ at
         // all.
+        std::lock_guard<std::mutex> lock(mutex_);
+
         if (started_)
         {
             throw SensorFailedException("Motion is already started.");
@@ -114,6 +117,8 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
 
+        std::lock_guard<std::mutex> lock(mutex_);
+
         if (backend_)
         {
             backend_->Stop();
@@ -139,7 +144,13 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        if (started_)
+        bool wasStarted;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            wasStarted = started_;
+        }
+
+        if (wasStarted)
         {
             Stop();
         }
@@ -160,6 +171,8 @@ namespace Microsoft::Devices::Sensors
     {
         // Enforced, not just documented: see Compass::SetBackendForTesting()'s
         // identical fix for the full rationale.
+        std::lock_guard<std::mutex> lock(mutex_);
+
         if (started_)
         {
             throw SensorFailedException(

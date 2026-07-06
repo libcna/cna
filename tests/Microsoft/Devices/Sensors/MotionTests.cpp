@@ -508,3 +508,49 @@ TEST(MotionTests, SetBackendForTestingAfterStartThrowsAndDoesNotReplaceBackend)
     m.Stop();
     EXPECT_TRUE(first->StopCalled);
 }
+
+// ConcurrentStartStopFromMultipleThreadsDoesNotCrash -- Motion is
+// structurally identical to Compass, which a real devices-tsan run confirmed
+// had an unguarded data race between Start()/Stop() writing started_/state_
+// and getStateProperty() reading state_ (unlike Accelerometer/Gyroscope,
+// whose equivalent fields are guarded by their shared
+// Detail::SdlSensorSubsystem<TSensor>'s subsystem.mutex_). This test
+// empirically confirms the same race exists for Motion and that Motion's own
+// mutex_ (Task SENSORBASE-004) fixes it.
+TEST(MotionTests, ConcurrentStartStopFromMultipleThreadsDoesNotCrash)
+{
+    Motion m;
+    m.SetBackendForTesting(std::make_unique<FakeMotionBackend>());
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 20;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&m]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                try
+                {
+                    m.Start();
+                }
+                catch (const SensorFailedException&)
+                {
+                    // Expected: another thread already started it first.
+                }
+
+                m.Stop();
+                (void)m.getStateProperty();
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+}

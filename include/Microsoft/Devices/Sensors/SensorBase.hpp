@@ -26,7 +26,12 @@
 
 namespace Microsoft::Devices::Sensors
 {
-    /** @brief Abstract base class for device sensors; provides current-value and event-notification infrastructure. */
+    /**
+     * @brief Abstract base class for device sensors; provides current-value and event-notification infrastructure.
+     *
+     * See `docs/devices-thread-safety.md` for the full, consolidated
+     * thread-safety contract shared by every derived sensor class.
+     */
     template <typename TSensorReading>
     class SensorBase : public System::Object, public System::IDisposable
     {
@@ -83,6 +88,9 @@ namespace Microsoft::Devices::Sensors
          * subscriber's handler can legitimately call back into this sensor
          * (e.g. Dispose(), another getter), and raising under a lock risks
          * deadlock.
+         *
+         * See `docs/devices-thread-safety.md` for the full, consolidated
+         * thread-safety contract this member is part of.
          */
         mutable std::mutex mutex_;
 

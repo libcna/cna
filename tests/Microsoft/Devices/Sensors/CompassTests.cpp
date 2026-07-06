@@ -538,3 +538,51 @@ TEST(CompassTests, SetBackendForTestingAfterStartThrowsAndDoesNotReplaceBackend)
     c.Stop();
     EXPECT_TRUE(first->StopCalled);
 }
+
+// Task SENSORBASE-004: mirrors AccelerometerTests.
+// ConcurrentStartStopFromMultipleThreadsDoesNotCrash -- unlike Accelerometer/
+// Gyroscope (whose started_/state_ are guarded by their shared
+// Detail::SdlSensorSubsystem<TSensor>'s subsystem.mutex_), Compass has no
+// per-instance mutex guarding started_/state_ at all (confirmed by reading
+// Compass.hpp/.cpp directly -- only a *static* instanceCountMutex_ exists,
+// which guards the shared instance counter, not per-instance state). This
+// test exists specifically to let devices-tsan answer, empirically, whether
+// that's a real, exploitable data race or merely a theoretical one nothing
+// ever actually exercises concurrently.
+TEST(CompassTests, ConcurrentStartStopFromMultipleThreadsDoesNotCrash)
+{
+    Compass c;
+    c.SetBackendForTesting(std::make_unique<FakeCompassBackend>());
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 20;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&c]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                try
+                {
+                    c.Start();
+                }
+                catch (const SensorFailedException&)
+                {
+                    // Expected: another thread already started it first.
+                }
+
+                c.Stop();
+                (void)c.getStateProperty();
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+}

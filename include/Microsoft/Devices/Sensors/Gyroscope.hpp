@@ -23,7 +23,12 @@ namespace Microsoft::Devices::Sensors::Detail
 
 namespace Microsoft::Devices::Sensors
 {
-    /** @brief Provides access to the device gyroscope sensor. */
+    /**
+     * @brief Provides access to the device gyroscope sensor.
+     *
+     * See `docs/devices-thread-safety.md` for this class's full,
+     * consolidated thread-safety contract.
+     */
     class Gyroscope final : public SensorBase<GyroscopeReading>
     {
         friend class Detail::SdlSensorSubsystem<Gyroscope>;
