@@ -1470,16 +1470,17 @@ live in `../cna-samples/DEFERRED.md` items #19–21 and
 `../cna-samples/samples/ClientServerSample/missing.md`; ClientServerSample currently ports around
 all three at the sample level (documented deviations, not silent hacks).
 
-**Status: Tasks 12.1 and 12.2 are fixed, tested, and merged. Task 12.3 was investigated in depth
-and found to have no safe fix achievable within `cna_net` alone** — see its own write-up below for
-the full reasoning (traced against the real XNA reference source); it needs either a `sharp-runtime`
-change requiring the user's direct sign-off, or acceptance that the sample-level workaround is the
-correct, permanent pattern. Fixing 12.1/12.2 in `cna` removes two of the three workarounds
-`ClientServerSample`/`../cna-samples/DEFERRED.md` needed and unblocks NetworkPrediction (#100) and
-PeerToPeer (#103) using the (now smaller) remaining workaround set — all `cna-samples` networking
-samples call `NetworkSession::Create`/`Find`/`Join` the same way and construct a
-`GamerServicesComponent` in their original C# constructors. NetRumble (#062) remains separately
-blocked by item #11 (custom shaders), unrelated to this phase.
+**Status: all four tasks (12.1-12.4) are done.** Task 12.3 was investigated in depth and found to
+have no safe fix achievable within `cna_net` alone — needing either a `sharp-runtime` change
+requiring the user's direct sign-off, or acceptance that the sample-level workaround is permanent.
+The user reviewed that exact analysis and approved the `sharp-runtime` change; it was designed as a
+generic, opt-in mechanism (not a one-off hack), implemented, tested, and merged the same session —
+see Task 12.3's own entry below for the full write-up. Fixing 12.1/12.2/12.3 in `cna`+`sharp-runtime`
+removes all three workarounds `ClientServerSample`/`../cna-samples/DEFERRED.md` needed and unblocks
+NetworkPrediction (#100) and PeerToPeer (#103) with no networking-side workarounds needed at all —
+all `cna-samples` networking samples call `NetworkSession::Create`/`Find`/`Join` the same way and
+construct a `GamerServicesComponent` in their original C# constructors. NetRumble (#062) remains
+separately blocked by item #11 (custom shaders), unrelated to this phase.
 
 - [x] **Task 12.1** — Fix `GamerServicesDispatcher::Update()` no-op hanging
   `NetworkSession::Create`/`Find`/`Join` forever whenever a `GamerServicesComponent` exists
@@ -1610,9 +1611,9 @@ blocked by item #11 (custom shaders), unrelated to this phase.
   `tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp`,
   `tests/CNA/Internal/Net/ENetBackendTests.cpp`.
 
-- [ ] **Task 12.3** — **Investigated in depth; NOT implemented — both originally-planned fix
-  approaches were proven, via the real XNA reference source, to not solve the actual problem, and
-  the deeper real fix is blocked on a decision only the user can make.** Original ask: raise the
+- [x] **Task 12.3** — **FIXED, after being investigated in depth and found blocked pending a
+  `sharp-runtime` decision — the user approved that change, so it's now implemented for real.**
+  Original ask: raise the
   initial `GamerJoined` event(s) synchronously during `Create()`/`Join()` instead of queuing them
   for the next `Update()` (`DEFERRED.md` item #21). Root cause as originally diagnosed still
   stands: `NetworkSession`'s constructor (`NetworkSession.cpp:113-119`ish) queues a `GamerJoin`
@@ -1662,20 +1663,53 @@ blocked by item #11 (custom shaders), unrelated to this phase.
   `NetworkSession::GamerJoined` a different, CNA-invented event type instead of the uniform
   `System::EventHandler<TEventArgs>` — directly forbidden by this file's own conventions ("This is
   the project-wide pattern; do not invent a different event mechanism").
-  **Net effect: no code change made for this task.** `NetworkSession.cpp`'s constructor is
-  unchanged from before this investigation — correctly so, since the current deferred-queue design
-  is exactly what makes `ClientServerSample`'s own real, working, already-applied
-  `networkSession_->Update();`-after-`HookSessionEvents()` pattern function. That sample-level
-  pattern is not a stopgap to remove; given the `EventHandler<T>` constraint above, it is the
-  **correct, currently-necessary way** to call this API from C++, and should be documented as such
-  (e.g. a doc-comment note on `NetworkSession::GamerJoined`/`Create()`/`Join()`) rather than treated
-  as a gap to eliminate — future work only if the user decides to invest in a `sharp-runtime`
-  change (see below), coordinated directly with them first.
-  **If the user wants to pursue the real fix later:** the concrete `sharp-runtime` change would be
-  a generic, opt-in replay hook on `EventHandler<T>` (e.g. an optional `std::function<void(EventHandler&)>`
-  invoked once from `Add()`/`operator+=` for events that want backlog-replay semantics), *not* a
-  one-off special case — needs design discussion with whoever is driving `sharp-runtime`, not a
-  unilateral change from this session.
+  **Update — the user reviewed this exact analysis and approved the `sharp-runtime` change,
+  implemented and merged the same session:**
+  - `sharp-runtime`'s `include/System/EventHandler.hpp` (`develop`, commit `69661c2`) gained
+    `EventHandler<T>::SetReplayHook(ReplayHook hook)` — an opt-in, per-instance closure that
+    `Add()`/`operator+=` calls once with the newly-added handler, before storing it, letting the
+    owner replay whatever backlog it wants directly into that handler. Every `EventHandler<T>` that
+    never calls it (the overwhelming majority) behaves exactly as before — purely additive, not a
+    special-cased hack for this one event, matching the "generic, opt-in" design floated below
+    before the fix. 4 new `EventHandlerTests.cpp` cases; full sharp-runtime suite re-run clean
+    (9086/9086, no regressions — comfortably over `CLAUDE.md`'s 6626+ floor).
+  - `NetworkSession`'s constructor (`NetworkSession.cpp`) now calls
+    `GamerJoined.SetReplayHook(...)` with a closure that iterates `allGamers_` and calls the new
+    handler once per gamer already present — covering the initial local gamer(s) from
+    construction, and correctly extending to any late subscriber too (a handler subscribing well
+    after `Create()`/several `Update()` calls still gets caught up on the *current* roster, not
+    just the original one). The constructor's own former "queue a `GamerJoin` event per initial
+    gamer" loop was **removed** (not just left alongside) — keeping both would have double-fired
+    the same join once the queue was later drained, since the replay hook now already covers this
+    exact case. `AddRemoteGamer()`'s own queuing (mid-session joins arriving via `ENetBackend`,
+    already-subscribed handlers) is completely untouched — the replay hook only ever fires for
+    *new subscriptions*, not new gamers, so live joins still go through the normal
+    queue-then-`Update()` path exactly as before.
+  - **Tests updated to match the new, correct behavior, not just made to pass:**
+    `NetworkSessionTest.GamerJoinedRaisedOnUpdateAfterConstruction` (a name describing the old,
+    wrong, deferred-until-`Update()` behavior) was replaced with
+    `GamerJoinedReplaysImmediatelyOnSubscriptionForConstructionTimeGamers` (asserts the count is
+    already 1 right after `+=`, before any `Update()` call) and a new
+    `GamerJoinedReplaysForALateSubscriber` (subscribing after several `Update()` calls still
+    replays correctly). `AddRemoteGamerJoinsRostersAndRaisesGamerJoined` was corrected to track
+    gamertags across both firings instead of a single count, since subscribing now itself produces
+    one join (the pre-existing local gamer) before the real, queued remote join produces a second.
+    Two `ENetBackendTests.cpp` cases (extended in Task 12.2 with real wire-id assertions) needed a
+    one-line `joinCount = 0;` reset after subscribing, for the same reason.
+    **Verified the new tests actually catch the regression, not just pass vacuously**: reverted the
+    constructor's `SetReplayHook` call back to the old queuing loop and reran — both new tests
+    failed exactly as expected (`joinCount` stuck at 0 instead of 1, since no `Update()` had run
+    yet); restored the fix and reran clean. Full suite: 3232/3234 passing (2 expected skips),
+    unchanged from Task 12.2's count plus the 2 new/renamed cases.
+  - `ClientServerSample`'s `networkSession_->Update();`-right-after-`HookSessionEvents()` call is
+    now genuinely unnecessary (the replay hook already synchronously delivers the initial join
+    before that call would even run) — see Task 12.4's follow-up entry for removing it there too,
+    now that all three of its original workarounds are gone.
+  Files: `../sharp-runtime/include/System/EventHandler.hpp`,
+  `../sharp-runtime/tests/System/EventHandlerTests.cpp`,
+  `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp`,
+  `tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp`,
+  `tests/CNA/Internal/Net/ENetBackendTests.cpp`.
 
 - [x] **Task 12.4** — Removed the two now-real sample-level workarounds in
   `../cna-samples/samples/ClientServerSample/` that Tasks 12.1/12.2 actually fix (omitted

@@ -177,6 +177,9 @@ TEST(ENetBackendTest, HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGam
 
     int joinCount = 0;
     host.session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
+    // Task 12.3: subscribing just above already replayed once for the host's own pre-existing
+    // local gamer ("HostPlayer") - reset so this test isolates the real, queued join below.
+    joinCount = 0;
 
     ENetPacket* received = nullptr;
     for (int i = 0; i < 200 && !received; ++i, PollYield()) {
@@ -260,6 +263,9 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
 
     int joinCount = 0;
     client.session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
+    // Task 12.3: subscribing just above already replayed once for the client's own pre-existing
+    // local gamer ("ClientPlayer") - reset so this test isolates the real, queued join below.
+    joinCount = 0;
     for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
         client.session->Update();
     }

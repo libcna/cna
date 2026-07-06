@@ -138,13 +138,27 @@ namespace Microsoft::Xna::Framework::Net
             sessionState_ = NetworkSessionState::Lobby;
         }
 
-        for (NetworkGamer* gamer : allGamers_)
+        // Deviation from FNA (see DEFERRED.md item #21 in the sibling cna-samples repo, and
+        // plan_net.md's Task 12.3 for the full investigation): FNA's constructor queues a
+        // GamerJoin NetworkEvent per initial gamer here instead, only drained by the *next*
+        // Update() call. Real XNA's GamerJoined replays itself immediately for every gamer
+        // already in the session the instant a handler subscribes via += - impossible for any
+        // caller to observe before this point anyway, since the session pointer doesn't exist
+        // until this constructor returns. sharp-runtime's EventHandler<T>::SetReplayHook()
+        // (added specifically for this) reproduces that: the closure below fires once,
+        // synchronously, for every gamer in allGamers_ at the moment each new handler subscribes -
+        // covering these initial local gamers here, and any later ones too, without a separate
+        // queued event (which would otherwise double-fire this same join once the queue drained).
+        // Mid-session joins discovered while handlers already exist (AddRemoteGamer) are
+        // unaffected: those still queue a real NetworkEvent, delivered through the normal
+        // Update() pump, exactly as before.
+        GamerJoined.SetReplayHook([this](const System::EventHandler<GamerJoinedEventArgs>::HandlerType& handler)
         {
-            NetworkEvent evt;
-            evt.Type = NetworkEventType::GamerJoin;
-            evt.Gamer = gamer;
-            SendNetworkEvent(std::move(evt));
-        }
+            for (NetworkGamer* gamer : allGamers_)
+            {
+                handler(nullptr, GamerJoinedEventArgs(gamer));
+            }
+        });
 
         simulatedLatency_ = System::TimeSpan::Zero;
         simulatedPacketLoss_ = 0.0f;

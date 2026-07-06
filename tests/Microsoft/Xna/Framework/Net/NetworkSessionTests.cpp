@@ -271,7 +271,13 @@ TEST(NetworkSessionTest, StartAndEndGameAfterDisposeThrow) {
     EXPECT_THROW(session->EndGame(), System::ObjectDisposedException);
 }
 
-TEST(NetworkSessionTest, GamerJoinedRaisedOnUpdateAfterConstruction) {
+// Task 12.3 (DEFERRED.md item #21 in the sibling cna-samples repo): real XNA's GamerJoined
+// replays itself immediately for every gamer already in the session the instant a handler
+// subscribes via += - not deferred to the next Update() call, since no caller could possibly
+// have subscribed before Create()/Join() returned the session pointer in the first place.
+// sharp-runtime's EventHandler<T>::SetReplayHook() (set in NetworkSession's own constructor)
+// reproduces this; Update() afterward has nothing left to add for these construction-time gamers.
+TEST(NetworkSessionTest, GamerJoinedReplaysImmediatelyOnSubscriptionForConstructionTimeGamers) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
@@ -279,7 +285,30 @@ TEST(NetworkSessionTest, GamerJoinedRaisedOnUpdateAfterConstruction) {
 
     int joinCount = 0;
     session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
+    EXPECT_EQ(joinCount, 1); // fired synchronously by the += itself, before any Update() call
+
     session->Update();
+    EXPECT_EQ(joinCount, 1); // nothing left queued for Update() to drain
+
+    session->Dispose();
+}
+
+// A handler subscribing well after construction (and after other Update() calls already ran)
+// must still be caught up on every gamer currently in the session - not just gamers who join
+// after it subscribes.
+TEST(NetworkSessionTest, GamerJoinedReplaysForALateSubscriber) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    session->Update();
+    session->Update();
+
+    int joinCount = 0;
+    session->GamerJoined += [&joinCount, session](System::Object*, const GamerJoinedEventArgs& e) {
+        ++joinCount;
+        EXPECT_EQ(e.getGamerProperty(), session->getAllGamersProperty()[0]);
+    };
     EXPECT_EQ(joinCount, 1);
 
     session->Dispose();
@@ -625,21 +654,26 @@ TEST(NetworkSessionTest, AddRemoteGamerJoinsRostersAndRaisesGamerJoined) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
-    session->Update(); // drain the local gamer's own GamerJoin event first
+
+    // Subscribing here replays once for the local gamer that already joined during
+    // construction (Task 12.3) - tracked separately from the remote join below, which is a
+    // real, queued, Update()-driven event (AddRemoteGamer is unaffected by the replay hook,
+    // which only fires for gamers already present at *subscription* time).
+    std::vector<std::string> joinedGamertags;
+    session->GamerJoined += [&joinedGamertags](System::Object*, const GamerJoinedEventArgs& e) {
+        joinedGamertags.push_back(e.getGamerProperty()->getGamertagProperty());
+    };
+    ASSERT_EQ(joinedGamertags.size(), 1u);
+    EXPECT_EQ(joinedGamertags[0], "Stub Gamer"); // LocalNetworkGamer always reports this gamertag
 
     NetworkGamer remote = NetworkGamer::CreateInternal(session, "RemotePlayer");
-    int joinCount = 0;
-    session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs& e) {
-        ++joinCount;
-        EXPECT_EQ(e.getGamerProperty()->getGamertagProperty(), "RemotePlayer");
-    };
-
     session->AddRemoteGamer(&remote);
     EXPECT_EQ(session->getRemoteGamersProperty().getCountProperty(), 1);
     EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 2);
 
     session->Update();
-    EXPECT_EQ(joinCount, 1);
+    ASSERT_EQ(joinedGamertags.size(), 2u);
+    EXPECT_EQ(joinedGamertags[1], "RemotePlayer");
 
     session->Dispose();
 }
