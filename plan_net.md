@@ -895,14 +895,34 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   test-coverage addition (`Dispose()` itself is unchanged and already correct), no revert-verify
   applies.
 
-- [ ] **Task 5.8** — Add a test exercising `AvailableNetworkSession::operator==` through
+- [x] **Task 5.8** — Add a test exercising `AvailableNetworkSession::operator==` through
   `AvailableNetworkSessionCollection`'s `IndexOf`/`Contains` (the entire reason the operator was
-  added, per its own doc comment), not just as an ad hoc standalone equality check.
+  added, per its own doc comment), not just as an ad hoc standalone equality check. Confirmed no
+  existing test called `IndexOf`/`Contains` at all — every prior equality test called `operator==`
+  directly and standalone. Added `AvailableNetworkSessionCollectionTest.IndexOfAndContainsUseValueEquality`:
+  builds a 2-entry collection, then probes with a *separately-constructed* `AvailableNetworkSession`
+  that is value-equal to entry `[1]` (never stored in the collection) and asserts `IndexOf` returns
+  `1` and `Contains` returns `true` — proving `IndexOf`/`Contains` compare by value, not by
+  reference/pointer identity — plus a not-present probe asserting `IndexOf` returns `-1` and
+  `Contains` returns `false`. Pure test-coverage addition (`IndexOf`/`Contains`/`operator==` are all
+  pre-existing and already correct via `ReadOnlyCollection<T>`'s generic implementation), no
+  revert-verify applies.
 
-- [ ] **Task 5.9** — Add a test proving `QualityOfService`/`SessionProperties` are excluded from
+- [x] **Task 5.9** — Add a test proving `QualityOfService`/`SessionProperties` are excluded from
   `AvailableNetworkSession::operator==`, matching the header's own doc comment (which explicitly
   states this) — currently the only equality test varies `CurrentGamerCount`, never these two
-  fields.
+  fields. Added `AvailableNetworkSessionTest.EqualityExcludesQualityOfServiceAndSessionProperties`:
+  constructs two sessions with identical `CurrentGamerCount`/`HostGamertag`/slot counts/connect
+  address+port but deliberately *different* `NetworkSessionProperties` (one empty-then-`Add(1)`, the
+  other with two different values) and different `QualityOfService` (default vs. a measured
+  500 ms round trip), and asserts they still compare equal — confirming these two fields are
+  genuinely excluded from the comparison, not just untested. Pure test-coverage addition
+  (`operator==`'s field list is unchanged and already correct), no revert-verify applies.
+
+  Both Task 5.8 and 5.9 tests built clean and passed individually
+  (`AvailableNetworkSessionCollectionTest.IndexOfAndContainsUseValueEquality`,
+  `AvailableNetworkSessionTest.EqualityExcludesQualityOfServiceAndSessionProperties`). Full suite:
+  **3270/3272 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 5.10** — Add thorough `PacketReader`/`PacketWriter` round-trip tests beyond math types:
   `Byte`/`SByte`/`Int16`/`UInt16`/`UInt32`/`Int64`/`UInt64`/`String`, boundary values (`Int64`

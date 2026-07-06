@@ -91,12 +91,53 @@ TEST(AvailableNetworkSessionTest, EqualityConsidersConnectAddressAndPort) {
     EXPECT_NE(a, c);
 }
 
+// Task 5.9: the header's own doc comment on operator== explicitly states QualityOfService and
+// NetworkSessionProperties are excluded ("not themselves equatable, so they're excluded") - but
+// every existing equality test only ever varied CurrentGamerCount, never actually proving these
+// two fields don't affect the comparison either way.
+TEST(AvailableNetworkSessionTest, EqualityExcludesQualityOfServiceAndSessionProperties) {
+    NetworkSessionProperties propsA;
+    propsA.Add(1);
+    NetworkSessionProperties propsB;
+    propsB.Add(2);
+    propsB.Add(3);
+
+    auto qosA = QualityOfService::CreateInternal();
+    auto qosB = QualityOfService::CreateInternal(System::TimeSpan::FromMilliseconds(500.0));
+
+    auto a = AvailableNetworkSession::CreateInternal(2, "host1", 1, 3, propsA, qosA, "10.0.0.1", 1000);
+    auto b = AvailableNetworkSession::CreateInternal(2, "host1", 1, 3, propsB, qosB, "10.0.0.1", 1000);
+
+    // Different QualityOfService/SessionProperties, but every other field matches - still equal.
+    EXPECT_EQ(a, b);
+}
+
 // --- AvailableNetworkSessionCollection ---
 
 TEST(AvailableNetworkSessionCollectionTest, EmptyCollection) {
     auto col = AvailableNetworkSessionCollection::CreateInternal({});
     EXPECT_EQ(0, col.getCountProperty());
     EXPECT_FALSE(col.getIsDisposedProperty());
+}
+
+// Task 5.8: operator== was added specifically so ReadOnlyCollection<T>'s IndexOf/Contains (which
+// compare by value, not reference) actually work for this type - per the operator's own doc
+// comment ("required by ReadOnlyCollection<T>::IndexOf/Contains"). No existing test actually
+// exercised IndexOf/Contains at all, only ever calling operator== directly and standalone.
+TEST(AvailableNetworkSessionCollectionTest, IndexOfAndContainsUseValueEquality) {
+    std::vector<AvailableNetworkSession> sessions;
+    sessions.push_back(MakeSession(1, "hostA"));
+    sessions.push_back(MakeSession(2, "hostB"));
+    const auto col = AvailableNetworkSessionCollection::CreateInternal(std::move(sessions));
+
+    // A separately-constructed value, never stored in col, but equal by value to entry [1].
+    auto probeEqualToHostB = MakeSession(2, "hostB");
+    EXPECT_EQ(col.IndexOf(probeEqualToHostB), 1);
+    EXPECT_TRUE(col.Contains(probeEqualToHostB));
+
+    auto probeNotPresent = MakeSession(99, "hostZ");
+    EXPECT_EQ(col.IndexOf(probeNotPresent), -1);
+    EXPECT_FALSE(col.Contains(probeNotPresent));
 }
 
 TEST(AvailableNetworkSessionCollectionTest, IndexingAndCount) {
