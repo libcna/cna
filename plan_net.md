@@ -1711,46 +1711,48 @@ separately blocked by item #11 (custom shaders), unrelated to this phase.
   `tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp`,
   `tests/CNA/Internal/Net/ENetBackendTests.cpp`.
 
-- [x] **Task 12.4** — Removed the two now-real sample-level workarounds in
-  `../cna-samples/samples/ClientServerSample/` that Tasks 12.1/12.2 actually fix (omitted
-  `GamerServicesComponent`; local `isHost_` tracking instead of `NetworkSession.IsHost`).
-  **Kept** the third workaround (extra `networkSession_->Update()` call right after
-  `HookSessionEvents()`) — per Task 12.3's findings, that one is not a stopgap, it is the correct,
-  still-necessary pattern given `EventHandler<T>`'s current design.
+- [x] **Task 12.4** — Removed all three now-fixed sample-level workarounds in
+  `../cna-samples/samples/ClientServerSample/` (omitted `GamerServicesComponent`; local
+  `isHost_` tracking instead of `NetworkSession.IsHost`; extra `networkSession_->Update()` call
+  right after `HookSessionEvents()`) — **done in two rounds**, since Task 12.3's real fix (the
+  `sharp-runtime` change) landed after this task's first round.
   **Build dependency note:** `cna-samples`' `CMakeLists.txt` references `../cna` (a separate git
   checkout of this same repo, not this `cna_net` working copy) as its build dependency, and that
   checkout was on `develop` — several commits behind `feature/net`'s tip. Temporarily checked out
   `feature/net` there (`git checkout -b feature/net origin/feature/net`, purely local, not
-  merged/pushed to `develop`) to build/test against Tasks 12.1/12.2's real fixes. Left it on
-  `feature/net` rather than reverting to `develop`, since reverting would silently make
-  `cna-samples` build against the un-fixed code again; merging `feature/net` → `develop` and
-  pushing that is a separate decision for whoever manages `cna`'s `develop` branch, not done here.
-  **Verified live**, with real `xdotool` keypresses this time (the previous porting session's own
-  `missing.md` documented `xdotool` as unreliable and needing a debug auto-trigger workaround —
-  worked fine this time): built cleanly, launched from its own output directory (`Content/`
-  resolves relative to the executable — a real gotcha, fixed by `cd`-ing there first), sent a real
-  `a` keypress — `CreateSession()` completed with no hang (Task 12.1), tank spawned labeled
-  `"Stub Gamer (server)"` (the real `GamerServicesDispatcher`-populated identity replacing the old
-  manually-synthesized `"Player"`, and the `"(server)"` label now driven by real
-  `gamer->getIsHostProperty()`, Task 12.2) — screenshotted. Sent a real `Right` arrow keypress —
-  screenshotted the tank having moved, confirming input/rendering still work with the
-  `isHost_`-member removal.
-  **Attempted, not achieved:** a genuine two-instance host+client test (second window, `b` to
-  join) — the client's `Find()` returned "No network sessions found," a separate, pre-existing,
-  already-documented platform limitation (two independent processes both relying on
-  `ENetDiscoveryService`'s shared well-known port is fragile in this container — the same reason
-  `cna`'s own `TwoProcessLoopbackTest.cpp` hands the host's port to the client out-of-band instead
-  of through discovery). Not a regression from this session's changes. Genuine multi-gamer
-  `Id`-routing (Task 12.2's core fix) is therefore proven at the `cna_net` test-suite level instead
-  (already covered by Task 12.2's own tests), not re-verified live within `ClientServerSample`
-  itself this session.
+  merged/pushed to `develop`) and later fast-forwarded it twice more (through Task 12.3's fix) to
+  build/test against each round's real fixes. Left it on `feature/net` rather than reverting to
+  `develop`, since reverting would silently make `cna-samples` build against un-fixed code again;
+  merging `feature/net` → `develop` and pushing that is a separate decision for whoever manages
+  `cna`'s `develop` branch, not done here. `cna`'s own `add_subdirectory(../sharp-runtime ...)`
+  resolves to the same real `sharp-runtime` checkout used everywhere else, so Task 12.3's
+  `sharp-runtime` change needed no separate syncing step.
+  **Round 1 (Tasks 12.1/12.2's fixes):** removed the `GamerServicesComponent` omission and the
+  `isHost_` member. Verified live with real `xdotool` keypresses (the previous porting session's
+  own `missing.md` had documented `xdotool` as unreliable, needing a debug auto-trigger — worked
+  fine this round): session creation, tank spawn labeled `"Stub Gamer (server)"`, and movement all
+  confirmed via screenshot. A genuine two-instance host+client test hit a separate, pre-existing
+  `ENetDiscoveryService` two-process discovery limitation on this container (same reason `cna`'s
+  own `TwoProcessLoopbackTest.cpp` avoids relying on discovery for its cross-process test) — not a
+  regression; multi-gamer `Id`-routing is proven at the `cna_net` test-suite level instead.
+  **Round 2 (Task 12.3's fix, same day):** removed the last `networkSession_->Update();` calls.
+  `xdotool` was unreliable *this* round instead — confirmed genuinely environmental (not a
+  regression) via three separate approaches: real shared-desktop keypresses, a fully isolated
+  `Xvfb :77` display with no window manager (ruling out shared-desktop focus-stealing
+  specifically), both failed identically; fell back to `cna-samples`' own established
+  debug-auto-trigger pattern (temporary, removed before commit, diff-reviewed for a clean revert).
+  That run confirmed the fix live: session creation → `GamerJoined` fires immediately (no manual
+  `Update()`) → tank spawns and renders correctly, stable over a multi-second run, no
+  `std::bad_any_cast` (the exact failure mode the original bug caused).
+  `ClientServerSample` now has **zero** of its original three `DEFERRED.md` workarounds.
   Updated `../cna-samples/samples/ClientServerSample/missing.md` (per-item resolution write-ups,
-  new Verification section) and `../cna-samples/DEFERRED.md` (items #19/#20 marked ✅ RESOLVED,
-  item #21 marked "investigated, genuinely blocked," summary table updated). Committed
-  (`889ae1c`→amended to `3197b06`, `8a8300d`) and pushed to `cna-samples`' `develop`.
+  Verification section covering both rounds) and `../cna-samples/DEFERRED.md` (items #19/#20/#21
+  all marked ✅ RESOLVED, summary table updated). Committed
+  (`889ae1c`→amended to `3197b06`, `8a8300d`, `ef1e930`, `afb7cd0`) and pushed to `cna-samples`'
+  `develop`.
   **Not done this session** (separate, larger scope than "cleanup"): re-attempting to port
-  NetworkPrediction (#100)/PeerToPeer (#103) — both are now easier (2 of 3 workarounds no longer
-  needed) but porting two new samples from scratch is a distinct task, left for the user to
+  NetworkPrediction (#100)/PeerToPeer (#103) — both should now need **zero** networking-related
+  workarounds, but porting two new samples from scratch is a distinct task, left for the user to
   request explicitly; noted as the natural next step in `cna-samples`' own `NEXT.md`.
 
 ---

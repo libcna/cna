@@ -13,11 +13,11 @@ integration tests for graphics.
 done. Phase 10 (a CNA-original "Avatar real-rendering" NOXNA/EXT extension — real GPU-skinned-mesh
 rendering engine/pipeline) is also done and merged. Phase 11 (Procedural Avatar Asset Generator,
 a Blender-scripted pipeline) is done except two optional/deferred items (Task 11.16, Task 11.25) —
-see section 3/8 for detail. **Phase 12 (cna-samples-driven networking fixes) is the most recent
-work**: the sibling `../cna-samples` repo found three real `NetworkSession`/`GamerServices` bugs
-while porting a real sample; Tasks 12.1/12.2 are fixed and merged, Task 12.3 was investigated in
-depth and found genuinely blocked on a `sharp-runtime` decision only the user can make — see
-section 3's top entry for the full account.
+see section 3/8 for detail. **Phase 12 (cna-samples-driven networking fixes) is done in full (all four tasks)** —
+the sibling `../cna-samples` repo found three real `NetworkSession`/`GamerServices` bugs while
+porting a real sample; all three are now fixed (Task 12.3 needed a `sharp-runtime` change, which
+the user reviewed and approved), and `ClientServerSample` no longer needs any of its three original
+workarounds — see section 3's top entry for the full account.
 
 **Phase 11a (Tasks 11.1-11.9, "one male + one female avatar that draws") and Phase 11b
 (Tasks 11.10-11.12, real C++ engine integration) are both complete.** Real,
@@ -109,9 +109,9 @@ session — `cna_test_avatar_attach_part` (Task 11.21) and `cna_test_avatar_tint
 `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`, confirmed to be a
 pre-existing flaky statistical test (passes 4/5 repeats in isolation), not caused by any
 Avatar work.
-**Updated this session (Phase 12, Tasks 12.1/12.2):** native Linux `CnaTests` re-verified
-clean after each task — **3231/3233 passing**, same 2 expected skips, no regressions.
-Two new standalone (non-GTest) executables added:
+**Updated this session (Phase 12, Tasks 12.1-12.3, all fixed):** native Linux `CnaTests`
+re-verified clean after each task — **3232/3234 passing**, same 2 expected skips, no
+regressions. Two new standalone (non-GTest) executables added:
 `cna_net_gamerservices_dispatcher_harness` (Task 12.1's hang-regression reproduction) and
 the pre-existing `cna_net_two_process_harness`, both still building/passing. Windows/Web/
 Android numbers below were not re-verified this session (Phase 12 only touched
@@ -165,15 +165,14 @@ treat as "last known good, from an earlier session," not freshly confirmed:
 
 ## 3. Recent changes
 
-- **Phase 12 opened and mostly resolved (this session) — cna-samples-driven networking
-  fixes.** The sibling `../cna-samples` repo ported `ClientServerSample` (#091), the first
-  real caller of `NetworkSession`/`GamerServices` outside CNA's own unit tests, and found
-  three real bugs (`DEFERRED.md` items #19-21) that no existing test caught. Also did a
-  full retroactive audit of `plan_net.md`'s Phases 0-7: their checkboxes had been left
-  unchecked despite the underlying work being complete (same stale-checkbox issue already
-  fixed once for Phase 8) — confirmed via direct file inspection (all GamerServices/Net/
-  ENet-backend source+test files exist, CMake wired, sharp-runtime prerequisites present)
-  and checked off to match reality.
+- **Phase 12 fully resolved (this session) — cna-samples-driven networking fixes, all
+  four tasks done.** The sibling `../cna-samples` repo ported `ClientServerSample`
+  (#091), the first real caller of `NetworkSession`/`GamerServices` outside CNA's own
+  unit tests, and found three real bugs (`DEFERRED.md` items #19-21) that no existing
+  test caught. Also did a full retroactive audit of `plan_net.md`'s Phases 0-7: their
+  checkboxes had been left unchecked despite the underlying work being complete (same
+  stale-checkbox issue already fixed once for Phase 8) — confirmed via direct file
+  inspection and checked off to match reality.
   - **Task 12.1 (fixed):** `GamerServicesDispatcher::Update()` is a permanently empty
     no-op (confirmed true in real FNA too, not just CNA), so `NetworkSession::Create`/
     `Find`/`Join` spun forever (99% CPU) whenever a `GamerServicesComponent` existed —
@@ -196,40 +195,53 @@ treat as "last known good, from an earlier session," not freshly confirmed:
     reports `IsHost == false` from a non-host client's view (the wire roster carries no
     host flag) — a strict improvement over today (every gamer used to say `true`), not a
     full fix.
-  - **Task 12.3 (investigated, not implemented — genuinely blocked):** traced the
-    "initial `GamerJoined` fires a frame late" bug against the real
-    `ClientServerGame.cs` reference source and found BOTH of the plan's originally
-    proposed fixes (raise in the constructor; drain the queue before `Create()`/`Join()`
-    return) cannot work and one would actively regress the sample: subscription
-    (`HookSessionEvents()`) always happens strictly *after* `Create()`/`Join()` already
-    returned, so anything fired before that point fires into zero subscribers. Real
-    XNA's `GamerJoined` is documented to replay itself immediately upon `+=`
-    subscription for every already-present gamer — `System::EventHandler<T>`
-    (`sharp-runtime`) has no hook for that, and adding one needs a `sharp-runtime`
-    change requiring the user's direct sign-off (that repo's own rule: never modify
-    existing files there without asking first, every commit) or inventing a
-    project-forbidden custom event type. **No code behavior changed for this task** —
-    added a doc comment on `NetworkSession::GamerJoined` explaining the required
-    call-`Update()`-once-after-subscribing pattern is the permanent, correct way to use
-    this API in C++, not a stopgap. Full write-up in `plan_net.md`'s Task 12.3 entry.
-  - Full suite after 12.1+12.2: **3231/3233 passing**, 2 expected skips (unchanged
-    accelerometer/gyroscope). All commits pushed to `feature/net`.
-  - **Task 12.4 (DONE, same session):** in `../cna-samples`, removed the two workarounds
-    Tasks 12.1/12.2 actually fix (omitted `GamerServicesComponent`; local `isHost_`
-    tracking) from `ClientServerSample`. Kept the third workaround (extra `Update()` call
-    after `HookSessionEvents()`) — per Task 12.3, it's correct and permanent, not a gap.
-    `../cna-samples` builds against a *separate* checkout of this repo (`../cna` relative
-    to it, not this `cna_net` working copy) — that checkout was on stale `develop`, so
-    temporarily checked out `feature/net` there (local only, not merged/pushed to
-    `develop` — a separate decision for whoever manages that branch) to build/test
-    against these fixes. Live-verified with real `xdotool` keypresses (no hang, real
-    `"Stub Gamer (server)"` label, tank moves). A genuine two-instance host+client test
-    hit a separate, pre-existing `ENetDiscoveryService` two-process discovery limitation
-    on this container (not a regression). Updated `ClientServerSample/missing.md` and
-    `DEFERRED.md` (items #19/#20 ✅ resolved, #21 investigated/blocked) in `cna-samples`,
-    committed and pushed to its `develop` (`3197b06`, `8a8300d`). **Not done:**
-    re-attempting to port NetworkPrediction (#100)/PeerToPeer (#103) — a separate, larger
-    task than "cleanup," left for the user to request explicitly.
+  - **Task 12.3 (fixed, in two stages):** traced the "initial `GamerJoined` fires a
+    frame late" bug against the real `ClientServerGame.cs` reference source and first
+    found BOTH originally-proposed fixes (raise in the constructor; drain the queue
+    before `Create()`/`Join()` return) couldn't work, and either would have actively
+    regressed the sample — subscription (`HookSessionEvents()`) always happens strictly
+    *after* `Create()`/`Join()` already returned, so anything fired before that point
+    fires into zero subscribers. Real XNA's `GamerJoined` is documented to replay itself
+    immediately upon `+=` subscription for every already-present gamer —
+    `System::EventHandler<T>` (`sharp-runtime`) had no hook for that. **Presented this
+    exact analysis to the user, including a concrete proposed fix (a generic, opt-in
+    `SetReplayHook()` on `EventHandler<T>`); the user approved it.** Implemented in
+    `sharp-runtime` (`develop` commit `69661c2`, 4 new tests, full 9086-test suite
+    re-run clean) and wired into `NetworkSession`'s constructor (`feature/net` commit
+    `ab05395`) — its former "queue a GamerJoin event per initial gamer" loop was
+    removed (would have double-fired otherwise); `AddRemoteGamer`'s own queuing for
+    genuinely live, mid-session joins is untouched. Updated/added `NetworkSessionTests.cpp`
+    cases and fixed two `ENetBackendTests.cpp` cases that needed a `joinCount` reset
+    after subscribing; verified the new tests catch a real regression by reverting the
+    fix and confirming they fail, then restoring.
+  - Full suite after all of 12.1-12.3: **3232/3234 passing**, 2 expected skips
+    (unchanged accelerometer/gyroscope). All commits pushed to `feature/net`
+    (`08171ac`, `81f10b5`, `f0b0499`, `ab05395`).
+  - **Task 12.4 (DONE, in two rounds, same session):** in `../cna-samples`, removed all
+    three of `ClientServerSample`'s original workarounds — round 1 (omitted
+    `GamerServicesComponent`; local `isHost_` tracking) right after Tasks 12.1/12.2
+    landed, round 2 (the extra `Update()` call after `HookSessionEvents()`) right after
+    Task 12.3's real fix landed. `../cna-samples` builds against a *separate* checkout
+    of this repo (`../cna` relative to it, not this `cna_net` working copy) — that
+    checkout was on stale `develop`, so temporarily checked out `feature/net` there
+    (local only, not merged/pushed to `develop` — a separate decision for whoever
+    manages that branch) and fast-forwarded it as each fix landed; `cna`'s own
+    `../sharp-runtime` reference resolves to the same real `sharp-runtime` checkout, so
+    no separate syncing was needed for Task 12.3's library change.
+    Live-verified both rounds: round 1 with real `xdotool` keypresses (no hang, real
+    `"Stub Gamer (server)"` label, tank moves); round 2's `xdotool` was flaky instead
+    (confirmed environmental via a real-desktop retry *and* a fully isolated `Xvfb`
+    display with no window manager, both failing identically) — fell back to
+    `cna-samples`' own established debug-auto-trigger pattern (temporary, removed
+    before commit) and confirmed the fix live that way: no crash, no manual `Update()`
+    needed. A genuine two-instance host+client test hit a separate, pre-existing
+    `ENetDiscoveryService` two-process discovery limitation on this container (not a
+    regression, in either round). `ClientServerSample` now has **zero** of its original
+    three workarounds. Updated `ClientServerSample/missing.md` and `DEFERRED.md` (items
+    #19/#20/#21 all ✅ resolved) in `cna-samples`, committed and pushed to its `develop`
+    (`3197b06`, `8a8300d`, `ef1e930`, `afb7cd0`). **Not done:** re-attempting to port
+    NetworkPrediction (#100)/PeerToPeer (#103) — a separate, larger task than
+    "cleanup," left for the user to request explicitly.
 
 - **Tasks 11.17-11.18 done (this session) — Phase 11e opened.** A hands-on interactive
   test of `examples/demo_avatar` (actually running it under X11 and screenshotting, not
@@ -863,9 +875,10 @@ redoing). Only two Phase 11 items remain, BOTH optional/deferred, NOT a default 
 step: Task 11.16 (MakeHuman/CharMorph revisit, needs fresh explicit sign-off) and Task
 11.25 (speculative appearance-model work, not yet scoped).
 
-**Phase 12 (cna-samples-driven networking fixes) is the most recent work.** The sibling
-../cna-samples repo ported ClientServerSample and found three real NetworkSession/
-GamerServices bugs (DEFERRED.md items #19-21) no existing test caught:
+**Phase 12 (cna-samples-driven networking fixes) is DONE IN FULL - all four tasks.**
+The sibling ../cna-samples repo ported ClientServerSample and found three real
+NetworkSession/GamerServices bugs (DEFERRED.md items #19-21) no existing test caught;
+all three are now fixed:
 - Task 12.1 (FIXED): GamerServicesDispatcher::Update() no-op hung Create/Find/Join
   forever whenever a GamerServicesComponent existed (confirmed a real bug in FNA's own
   reference source too). Fixed by having NetworkSessionAction default to
@@ -875,44 +888,53 @@ GamerServices bugs (DEFERRED.md items #19-21) no existing test caught:
   through the public API - wired NetworkGamer::SetId/SetIsHost through it. Scoped
   limitation: a remote gamer representing the actual host still reports IsHost == false
   from a client's view (no host flag on the wire roster) - documented, not silently left.
-- Task 12.3 (INVESTIGATED, BLOCKED - do not re-attempt without reading the full write-up
-  in plan_net.md first): the "GamerJoined fires a frame late" issue cannot be fixed
-  inside cna_net alone. Traced against the real ClientServerGame.cs source: subscription
-  always happens strictly after Create()/Join() return, so raising the event any earlier
-  fires into zero subscribers, and the plan's two originally-proposed fixes would actively
-  regress ClientServerSample's own already-working call-Update()-once-after-subscribing
-  workaround. Real XNA's GamerJoined replays itself on subscribe; System::EventHandler<T>
-  (sharp-runtime) has no hook for that. Needs either a sharp-runtime change (ask the user
-  first, every commit, per that repo's own rule) or accepting the sample-level workaround
-  as permanent, not a gap. No code changed for this task; added a doc comment on
-  NetworkSession::GamerJoined explaining the required pattern instead.
+- Task 12.3 (FIXED, via an approved sharp-runtime change): the "GamerJoined fires a
+  frame late" issue first looked genuinely blocked inside cna_net alone - traced against
+  the real ClientServerGame.cs source and confirmed subscription always happens strictly
+  after Create()/Join() return, so the two originally-proposed fixes (raise in the
+  constructor; drain the queue early) would have fired into zero subscribers or actively
+  regressed the sample. Real XNA's GamerJoined replays itself on subscribe;
+  System::EventHandler<T> (sharp-runtime) had no hook for that. Presented this exact
+  analysis plus a concrete proposed fix to the user, who approved it: sharp-runtime's
+  EventHandler<T> gained a generic, opt-in SetReplayHook() (develop commit 69661c2,
+  every other EventHandler<T> unaffected), and NetworkSession's constructor now uses it
+  (feature/net commit ab05395) - its own former "queue GamerJoin for initial gamers"
+  loop was removed (would double-fire otherwise). Verified the fix and its tests by
+  reverting and confirming failure, then restoring.
 
-Full suite after 12.1+12.2: 3231/3233 passing (2 expected accelerometer/gyroscope
+Full suite after 12.1-12.3: 3232/3234 passing (2 expected accelerometer/gyroscope
 skips), including the real two-process ENet loopback test. All work committed and
-pushed to feature/net.
+pushed to feature/net (08171ac, 81f10b5, f0b0499, ab05395).
 
-**Task 12.4 is DONE (same session as 12.1-12.3):** removed the two workarounds Tasks
-12.1/12.2 actually fixed from ClientServerSample in ../cna-samples (omitted
-GamerServicesComponent; local isHost_ tracking) - kept the third (extra Update() call
-after HookSessionEvents()), since Task 12.3 found it's correct/permanent, not a gap.
+**Task 12.4 is DONE (same session, in two rounds):** removed ALL THREE of
+ClientServerSample's original workarounds in ../cna-samples - round 1 (omitted
+GamerServicesComponent; local isHost_ tracking) after Tasks 12.1/12.2 landed, round 2
+(the extra Update() call after HookSessionEvents()) after Task 12.3's real fix landed.
+ClientServerSample now needs ZERO of its original networking workarounds.
 Note: ../cna-samples builds against a SEPARATE checkout of this repo at ../cna
 (relative to cna-samples, not this cna_net working copy) - that checkout was stale
 (develop, missing feature/net's commits), so it was temporarily switched to
 feature/net locally (not merged/pushed to develop - that's a separate decision for
-whoever manages cna's develop branch). If you're resuming and ../cna-samples builds
-fail to find these fixes, check that ../cna (relative to cna-samples) is still on
-feature/net or has since been merged into develop. Live-verified with real xdotool
-keypresses; a genuine two-instance test hit a separate, pre-existing
-ENetDiscoveryService discovery limitation (not a regression). Committed/pushed to
-cna-samples' develop (3197b06, 8a8300d).
+whoever manages cna's develop branch) and fast-forwarded as each fix landed. If you're
+resuming and ../cna-samples builds fail to find these fixes, check that ../cna
+(relative to cna-samples) is still on feature/net (or has since been merged into
+develop) and that its own ../sharp-runtime is on a develop including commit 69661c2.
+Round 1 was live-verified with real xdotool keypresses; round 2's xdotool was flaky
+instead (confirmed environmental, not a regression, via both a real-desktop retry and
+a fully isolated Xvfb display with no window manager - both failed identically) - fell
+back to cna-samples' own established debug-auto-trigger pattern (temporary, removed
+before commit) to verify live instead. A genuine two-instance test hit a separate,
+pre-existing ENetDiscoveryService discovery limitation in both rounds (not a
+regression). Committed/pushed to cna-samples' develop (3197b06, 8a8300d, ef1e930,
+afb7cd0).
 
-Only remaining Phase 12 items: the sharp-runtime decision for Task 12.3 (needs the
-user), and optionally porting NetworkPrediction (#100)/PeerToPeer (#103) in
-cna-samples (a separate, larger task, not done this session - left for the user to
-request explicitly). If the user doesn't want either next, ask what they want instead
-- it may come from a different phase/track entirely (Task 11.16/11.25, or a different
-track like Graphics/Vulkan parity surveyed in a prior session). Do not assume; confirm
-first.
+Phase 12 has no remaining items. The only optional next step: porting
+NetworkPrediction (#100)/PeerToPeer (#103) in cna-samples (a separate, larger task,
+not done this session - left for the user to request explicitly; both should now need
+zero networking-related workarounds). If the user doesn't want that next, ask what
+they want instead - it may come from a different phase/track entirely (Task
+11.16/11.25, or a different track like Graphics/Vulkan parity surveyed in a prior
+session). Do not assume; confirm first.
 
 Build: cmake --build cmake-build-debug --target CnaTests
 Test:  cmake-build-debug/CnaTests
