@@ -70,6 +70,28 @@ namespace Microsoft::Xna::Framework::Input
         NOXNA static void setIsRelativeMouseModeEXTProperty(bool value);
 
         /**
+         * @brief NOXNA/EXT: enables or disables capturing mouse events outside the window.
+         * @param enabled True to capture the mouse; false to release it.
+         * @return True on success; false if the platform does not support capture.
+         */
+        NOXNA static bool SetCaptureEXT(bool enabled);
+
+        /**
+         * @brief NOXNA/EXT: reads the cursor position in desktop (global) coordinates.
+         * @param x Output receiving the global x coordinate.
+         * @param y Output receiving the global y coordinate.
+         */
+        NOXNA static void GetGlobalPositionEXT(int& x, int& y);
+
+        /**
+         * @brief NOXNA/EXT: moves the cursor to a desktop (global) coordinate.
+         * @param x The global x coordinate to warp to.
+         * @param y The global y coordinate to warp to.
+         * @return True on success; false if the platform does not support global warp.
+         */
+        NOXNA static bool WarpGlobalEXT(int x, int y);
+
+        /**
          * @brief Internal: dispatches the ClickedEXT event for the given button index.
          * @param button The button index that was clicked.
          */

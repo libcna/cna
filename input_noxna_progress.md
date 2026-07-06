@@ -35,7 +35,7 @@
 - [ ] **N-013 `CNA::Input::Haptics`** — SDL_haptic force-feedback (constant/periodic/ramp/condition/custom + gain/autocenter).
 - [ ] **N-014 `CNA::Input::TextComposition`** — IME candidate lists (`SDL_EVENT_TEXT_EDITING_CANDIDATES`) + input-type hints.
 - [ ] **N-015 `CNA::Input::Sensor`** — device-level accelerometer/gyro (`SDL_sensor`).
-- [ ] **N-016 `Mouse` capture / global-position EXT** — `SetCaptureEXT`, `GetGlobalPositionEXT`, `WarpGlobalEXT`.
+- [x] **N-016 `Mouse` capture / global-position EXT** — `SetCaptureEXT`, `GetGlobalPositionEXT`, `WarpGlobalEXT` via seam.
 - [x] **N-017 `CNA::Input::InputDevices`** — enumeration (mice/keyboards/touch id+name) via seam. Hot-plug events -> N-017b.
 - [ ] **N-017b `InputDevices` hot-plug events** — `SDL_EVENT_{MOUSE,KEYBOARD}_ADDED/REMOVED` multicast events (split off from N-017).
 - [x] **N-018 `CNA::Input::Power`** — system battery (`SDL_GetPowerInfo`) via injectable seam; reuses `PowerStateEXT`.
@@ -50,6 +50,15 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-016 done (2026-07-06):** `Mouse::SetCaptureEXT(bool)`, `GetGlobalPositionEXT(out x,y)`,
+  `WarpGlobalEXT(x,y)` — mouse capture + desktop-global cursor position/warp. New injectable
+  `ISystemMouseBackend` seam (real = `SDL_CaptureMouse`/`SDL_GetGlobalMouseState`/`SDL_WarpMouse
+  Global`) with `SetSystemMouseBackendForTests` — chosen over the Mouse class's usual direct-SDL +
+  real-window tests so the global ops are deterministically testable headless (no real desktop
+  cursor on CI). GetGlobalPositionEXT truncates SDL's float coords to int (XNA MouseState is int).
+  Pinned all three in the freeze test + documented. Tests `MouseGlobalEXTTest` (fake seam): capture
+  flag+result forwarding, global position read+truncation, warp coord forwarding+result. `ctest -L
+  input` green; ASan-clean.
 - **N-017 done (2026-07-06):** `CNA::Input::InputDevices::Get{Mice,Keyboards,TouchDevices}EXT() ->
   vector<InputDeviceInfoEXT{id,name}>` — device enumeration (metadata only; XNA state stays merged).
   New descriptor `include/CNA/Input/InputDeviceInfo.hpp` (id+name, with ==/!=) and public class

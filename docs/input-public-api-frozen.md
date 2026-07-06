@@ -232,6 +232,9 @@ override must be added.
 - `static void SetCursor(MouseCursor&);` — NOXNA
 - `static System::MulticastAction<int> ClickedEXT;` — EXT
 - `static bool getIsRelativeMouseModeEXTProperty();` / `static void setIsRelativeMouseModeEXTProperty(bool);` — EXT
+- `static bool SetCaptureEXT(bool);` — NOXNA/EXT (capture mouse outside window)
+- `static void GetGlobalPositionEXT(int& x, int& y);` — NOXNA/EXT (desktop-global cursor position)
+- `static bool WarpGlobalEXT(int x, int y);` — NOXNA/EXT (warp cursor in desktop-global coords)
 
 ### `MouseState` — struct (XNA)
 - Getters (STRICT): `getXProperty`, `getYProperty` → `int`; `getLeftButtonProperty`, `getRightButtonProperty`, `getMiddleButtonProperty`, `getXButton1Property`, `getXButton2Property` → `ButtonState`; `getScrollWheelValueProperty` → `int`

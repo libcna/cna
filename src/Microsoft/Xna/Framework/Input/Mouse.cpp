@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SystemMouseBackend.hpp"
 #include <SDL3/SDL.h>
 
 namespace
@@ -152,6 +153,26 @@ namespace Microsoft::Xna::Framework::Input
         }
         SDL_SetWindowRelativeMouseMode(window, value);
         CNA::Internal::Input::InputManager::SetMouseRelativeMode(value);
+    }
+
+    bool Mouse::SetCaptureEXT(const bool enabled)
+    {
+        return CNA::Internal::Input::system_mouse_backend().CaptureMouse(enabled);
+    }
+
+    void Mouse::GetGlobalPositionEXT(int& x, int& y)
+    {
+        float fx = 0.0f;
+        float fy = 0.0f;
+        CNA::Internal::Input::system_mouse_backend().GetGlobalMouseState(&fx, &fy);
+        x = static_cast<int>(fx);
+        y = static_cast<int>(fy);
+    }
+
+    bool Mouse::WarpGlobalEXT(const int x, const int y)
+    {
+        return CNA::Internal::Input::system_mouse_backend().WarpMouseGlobal(
+            static_cast<float>(x), static_cast<float>(y));
     }
 
     void Mouse::INTERNAL_onClicked(int button)

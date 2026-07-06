@@ -295,6 +295,10 @@ namespace
     [[maybe_unused]] constexpr auto z_Mouse_ClickedEXT = &Mouse::ClickedEXT; // static System::MulticastAction<int>
     [[maybe_unused]] constexpr auto z_Mouse_getIsRelativeMouseModeEXTProperty_6 = static_cast<bool(*)()>(&Mouse::getIsRelativeMouseModeEXTProperty);
     [[maybe_unused]] constexpr auto z_Mouse_setIsRelativeMouseModeEXTProperty_7 = static_cast<void(*)(bool)>(&Mouse::setIsRelativeMouseModeEXTProperty);
+    // NOXNA/EXT (input_noxna.md N-016): mouse capture + global position/warp.
+    [[maybe_unused]] constexpr auto z_Mouse_SetCaptureEXT = static_cast<bool(*)(bool)>(&Mouse::SetCaptureEXT);
+    [[maybe_unused]] constexpr auto z_Mouse_GetGlobalPositionEXT = static_cast<void(*)(int&, int&)>(&Mouse::GetGlobalPositionEXT);
+    [[maybe_unused]] constexpr auto z_Mouse_WarpGlobalEXT = static_cast<bool(*)(int, int)>(&Mouse::WarpGlobalEXT);
 
     // ----- MouseState (struct, XNA) -----
     [[maybe_unused]] constexpr auto z_MouseState_getXProperty_1 = static_cast<int(MouseState::*)() const>(&MouseState::getXProperty);
