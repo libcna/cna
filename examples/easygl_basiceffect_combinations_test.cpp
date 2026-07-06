@@ -168,11 +168,15 @@ protected:
 
         // ── (d) Vertex color × texture ────────────────────────────────────
         // VertexPositionColorTexture (stride 24), white tex × green vertex → green pixel.
+        // VertexColorEnabled must be true for the vertex color to apply (Task 367 finding: this
+        // case previously left the flag false and still passed, because EasyGL's stride-24 shader
+        // multiplied by vertex color unconditionally, ignoring the flag entirely — a real bug
+        // fixed in Task 367 alongside a missing DiffuseColor multiply on the same shader path).
         {
             dev.Clear(kBlack);
 
             BasicEffect fx(dev);
-            fx.VertexColorEnabled = false;
+            fx.VertexColorEnabled = true;
             fx.setTextureEnabledProperty(true);
             fx.setTextureProperty(&whiteTex);
             fx.Apply();

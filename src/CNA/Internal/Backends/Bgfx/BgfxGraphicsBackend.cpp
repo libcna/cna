@@ -1547,6 +1547,9 @@ namespace CNA::Internal::Backends::Bgfx
         else if (params.textureEnabled && params.vertexColorEnabled
                  && bgfx::isValid(coloredTextured3DProgram_))
         {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
             if (params.texture0 && bgfx::isValid(texColor3DSampler_))
             {
                 auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);

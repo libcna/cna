@@ -2359,11 +2359,14 @@ void main()
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
+"uniform vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
+"uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
-"    FragColor=texture(uTexture,vUV)*vColor;\n"
+"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
+"    FragColor=texture(uTexture,vUV)*vc*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -2372,11 +2375,13 @@ void main()
         CompileAndLink(prog_col_textured_.prog, vsrc, fsrc, "col+textured");
         prog_col_textured_.loc_wvp         = prog_col_textured_.prog.uniform_location("uWVP");
         prog_col_textured_.loc_texture     = prog_col_textured_.prog.uniform_location("uTexture");
+        prog_col_textured_.loc_diffuse     = prog_col_textured_.prog.uniform_location("uDiffuseColor");
         prog_col_textured_.loc_alphatest   = prog_col_textured_.prog.uniform_location("uAlphaTest");
         prog_col_textured_.loc_fog_enabled = prog_col_textured_.prog.uniform_location("uFogEnabled");
         prog_col_textured_.loc_fog_color   = prog_col_textured_.prog.uniform_location("uFogColor");
         prog_col_textured_.loc_fog_start   = prog_col_textured_.prog.uniform_location("uFogStart");
         prog_col_textured_.loc_fog_end     = prog_col_textured_.prog.uniform_location("uFogEnd");
+        prog_col_textured_.loc_vertexcolor = prog_col_textured_.prog.uniform_location("uVertexColorEnabled");
         prog_col_textured_.ready           = true;
         CNA_RENDER_LOG("col+textured3D ready loc_wvp=" << prog_col_textured_.loc_wvp);
     }
