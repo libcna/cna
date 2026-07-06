@@ -84,6 +84,106 @@ def add_joint_sphere(name, location, radius):
     return obj
 
 
+# Task 11.20: (parent, child) bone pairs whose cylinder segments are only visually
+# adjacent, not welded topology -- automatic (heat-map) weighting assigns most vertices
+# on each side rigidly to their own segment's bone, so bending tears the seam open (the
+# confirmed elbow/sleeve tear, Task 11.6/11.15/11.18). Shoulder/UpperArm is included
+# defensively even though no current animation rotates Shoulder relative to its parent.
+BEND_JOINTS = [
+    ("Shoulder.L", "UpperArm.L"), ("Shoulder.R", "UpperArm.R"),
+    ("UpperArm.L", "LowerArm.L"), ("UpperArm.R", "LowerArm.R"),
+    ("UpperLeg.L", "LowerLeg.L"), ("UpperLeg.R", "LowerLeg.R"),
+]
+
+
+def fix_automatic_weights(obj, bones, joint_pairs=None, blend_radius=0.08):
+    """Post-processes `obj`'s automatic (heat-map) vertex weights, already assigned by
+    a preceding `bpy.ops.object.parent_set(type="ARMATURE_AUTO")` call. Fixes three
+    confirmed, real defects (Task 11.20; see tools/avatar_builder/README.md's "Bend-
+    artifact check" and "Confirmed, not-fixed findings" for the original reports):
+
+    1. Zero-weight vertices: automatic weighting can leave a handful of vertices with no
+       weight in any group at all. Each is assigned to its nearest bone segment (by
+       point-to-segment distance in world space) at weight 1.0.
+    2. Over-4-influence vertices: glTF's hard 4-influence-per-vertex limit means the
+       exporter silently trims/renormalizes any vertex automatic weighting gave more
+       than 4 groups to. Explicitly capped here via `vertex_group_limit_total` instead,
+       so the trimmed result is deterministic and produced by this pipeline, not by
+       whatever the exporter's own trim heuristic happens to pick.
+    3. The elbow/sleeve tear itself: for each (parent, child) pair in `joint_pairs`,
+       every vertex within `blend_radius` of the joint (the child bone's head) gets its
+       parent/child weights forced to a smoothstep blend by signed distance along the
+       parent bone's axis, instead of automatic weighting's near-binary per-vertex
+       assignment. This does not weld the segments into one continuous surface (they
+       remain topologically separate cylinders) — it makes both sides rotate partway
+       toward each other's transform near the joint, which shrinks the visible gap at
+       the bend angles this rig's animations actually use, rather than eliminating the
+       underlying topology gap outright.
+
+    `bones` must be the same (name, parent, head, tail, connected) table passed to
+    generate_skeleton.build_skeleton() for this object's armature, needed for #1/#3's
+    positions. Returns (zero_weight_fixed, joint_blended) vertex counts, for callers'
+    own verification/reporting.
+    """
+    if joint_pairs is None:
+        joint_pairs = BEND_JOINTS
+    bone_segments = {name: (mathutils.Vector(head), mathutils.Vector(tail))
+                      for name, _parent, head, tail, _connected in bones}
+    mesh = obj.data
+
+    def _closest_point_on_segment(p, a, b):
+        ab = b - a
+        denom = ab.length_squared
+        t = 0.0 if denom == 0.0 else max(0.0, min(1.0, (p - a).dot(ab) / denom))
+        return a + ab * t
+
+    # --- 1: zero-weight vertices -> nearest bone segment, weight 1.0 ---
+    zero_fixed = 0
+    for v in mesh.vertices:
+        if sum(g.weight for g in v.groups) > 1e-6:
+            continue
+        world_co = obj.matrix_world @ v.co
+        best_name, best_dist_sq = None, None
+        for name, (head, tail) in bone_segments.items():
+            closest = _closest_point_on_segment(world_co, head, tail)
+            dist_sq = (world_co - closest).length_squared
+            if best_dist_sq is None or dist_sq < best_dist_sq:
+                best_name, best_dist_sq = name, dist_sq
+        group = obj.vertex_groups.get(best_name) or obj.vertex_groups.new(name=best_name)
+        group.add([v.index], 1.0, "REPLACE")
+        zero_fixed += 1
+
+    # --- 3: smooth parent/child weight blend across each bend joint ---
+    # (done before the influence cap below, since blending can add a group to a vertex
+    # that didn't already have one)
+    blended = 0
+    for parent_name, child_name in joint_pairs:
+        parent_group = obj.vertex_groups.get(parent_name)
+        child_group = obj.vertex_groups.get(child_name)
+        if parent_group is None or child_group is None:
+            continue
+        joint_pos, child_tail = bone_segments[child_name]
+        axis = (child_tail - joint_pos).normalized()
+        for v in mesh.vertices:
+            signed_dist = (obj.matrix_world @ v.co - joint_pos).dot(axis)
+            if abs(signed_dist) > blend_radius:
+                continue
+            t = max(0.0, min(1.0, (signed_dist / blend_radius + 1.0) * 0.5))
+            t = t * t * (3.0 - 2.0 * t)  # smoothstep
+            parent_group.add([v.index], 1.0 - t, "REPLACE")
+            child_group.add([v.index], t, "REPLACE")
+            blended += 1
+
+    # --- 2: cap every vertex to <=4 influences (glTF's hard limit) ---
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
+    bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
+
+    return zero_fixed, blended
+
+
 def build_body(armature_obj, bones=None, height_scale=1.0, head_scale=1.0):
     """Builds the procedural low-poly body mesh, joins every part into a single mesh
     object, and parents it to `armature_obj` with automatic (heat-map) vertex weights.
@@ -131,6 +231,7 @@ def build_body(armature_obj, bones=None, height_scale=1.0, head_scale=1.0):
     armature_obj.select_set(True)
     bpy.context.view_layer.objects.active = armature_obj
     bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    fix_automatic_weights(body_obj, bones)
 
     return body_obj
 
@@ -149,3 +250,12 @@ if __name__ == "__main__":
         print(f"WARNING: no vertex group for bones: {sorted(missing)}")
     assert not missing, f"automatic weights produced no vertex group for: {sorted(missing)}"
     print("OK: every skeleton bone has a corresponding vertex group on the body mesh.")
+
+    # Task 11.20: independently re-check fix_automatic_weights' two hard guarantees by
+    # direct per-vertex inspection, rather than trusting its own return value.
+    zero_weight = [v.index for v in body_obj.data.vertices if sum(g.weight for g in v.groups) < 1e-6]
+    over_limit = [v.index for v in body_obj.data.vertices if len(v.groups) > 4]
+    print(f"Zero-weight vertices: {len(zero_weight)}. Over-4-influence vertices: {len(over_limit)}.")
+    assert not zero_weight, f"zero-weight vertices remain: {zero_weight[:10]}"
+    assert not over_limit, f"over-4-influence vertices remain: {over_limit[:10]}"
+    print("OK: no zero-weight or over-4-influence vertices remain on the body mesh.")

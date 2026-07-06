@@ -146,6 +146,7 @@ def build_clothes(armature_obj, materials, bones=None, height_scale=1.0, styles=
         armature_obj.select_set(True)
         bpy.context.view_layer.objects.active = armature_obj
         bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+        generate_body.fix_automatic_weights(obj, bones)
 
         garment_objs[garment_slot] = obj
 
@@ -172,5 +173,11 @@ if __name__ == "__main__":
         assert not missing, f"{slot}: automatic weights missing groups for {sorted(missing)}"
         assert obj.data.materials and obj.data.materials[0].name == materials[material_part].name
 
+        # Task 11.20: independently re-check fix_automatic_weights' guarantees.
+        zero_weight = [v.index for v in obj.data.vertices if sum(g.weight for g in v.groups) < 1e-6]
+        over_limit = [v.index for v in obj.data.vertices if len(v.groups) > 4]
+        assert not zero_weight, f"{slot}: zero-weight vertices remain: {zero_weight[:10]}"
+        assert not over_limit, f"{slot}: over-4-influence vertices remain: {over_limit[:10]}"
+
     print(f"OK: {', '.join(garments)} exist, each vertex-grouped to its covered bones "
-          f"with the correct material assigned.")
+          f"with the correct material assigned, no zero-weight or over-4-influence vertices.")

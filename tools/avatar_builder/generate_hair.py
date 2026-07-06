@@ -145,6 +145,7 @@ def build_hair(armature_obj, materials, bones=None, head_scale=1.0, style="Cap")
     armature_obj.select_set(True)
     bpy.context.view_layer.objects.active = armature_obj
     bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    generate_body.fix_automatic_weights(obj, bones)
 
     return obj
 
