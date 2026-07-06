@@ -690,9 +690,16 @@ unchanged (this audit's new tests — IsKeyUp, capabilities isolation, IsButtonU
 round-trip — live in test files that already referenced those types, so the type→test-file mapping is
 unchanged). **Files changed:** none (regenerated identically). **Remaining risk:** none.
 
-## A8-003 — Re-verify signature + enum freeze `[ ]`
-- [ ] Confirm `PublicApiInputSignatureFreezeTests` + `PublicApiInputCompileTests` + enum-value suites still
+## A8-003 — Re-verify signature + enum freeze `[x]`
+- [x] Confirm `PublicApiInputSignatureFreezeTests` + `PublicApiInputCompileTests` + enum-value suites still
   green; confirm no public API drift from the audit.
+
+**Result (2026-07-06):** `PublicApiInputSignatureFreezeTests` + `PublicApiInputCompileTests` + the enum-value
+suites (ButtonState/KeyState/Keys/Buttons/GamePadDeadZone/GamePadType/GestureType/TouchLocationState) run
+**green** — no public-XNA signature or enum-value drift from the audit. This is expected: the audit only
+**added tests** and removed one *internal* method (`InputManager::GetGamePadState`), touching **no public
+XNA signature or enum**. The frozen golden `docs/input-public-api-frozen.md` is unchanged. **Files changed:**
+none (verification). **Remaining risk:** none.
 
 ## A8-004 — Full input suite + backends + sanitizer `[ ]`
 - [ ] `ctest -L input` green on EasyGL/Vulkan/bgfx/SDL_RENDERER; ASan+UBSan-clean; record counts.
