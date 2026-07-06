@@ -1345,12 +1345,22 @@ truncated (`TruncatedMultiByteSequenceBecomesReplacementChar`); overlong C0 80
 (`OverlongEncodingBecomesReplacementChar`). **Files changed:** none (coverage confirmed). **Behavior
 verified:** full UTF-8→UTF-16 decode incl. every error mode. **Remaining risk:** none.
 
-## P7-003 — Verify text input events
-- [ ] Test SDL text input event conversion.
-- [ ] Test empty text.
-- [ ] Test multiple code units.
-- [ ] Test event callback ordering.
-- [ ] Add tests.
+## P7-003 — Verify text input events `[x]`
+- [x] Test SDL text input event conversion.
+- [x] Test empty text.
+- [x] Test multiple code units.
+- [x] Test event callback ordering.
+- [x] Add tests.
+
+**Result (2026-07-06):** Conversion (`TextInputEventForwardsAsciiAsCodeUnits`), multiple code units
+(`...MixedWidthStringInOrder`, 5 units in order), and multicast-delivery-to-every-subscriber
+(`TextInputIsMulticastAndDeliversToEverySubscriber`) already covered. **Added two gap tests:**
+`EmptyTextInputEventDeliversNoCodeUnits` (an empty `SDL_EVENT_TEXT_INPUT` yields zero calls) and
+`TextInputSubscribersFireInRegistrationOrder` (three `+=` handlers fire 1→2→3, confirming .NET-faithful
+multicast invocation order). **Files changed:**
+`tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp` (+2 tests, +`<vector>`). **Tests:** pass.
+**Behavior verified:** event conversion + empty-safe + multi-unit + registration-order dispatch.
+**Remaining risk:** none.
 
 ## P7-004 — Verify synthesized control characters
 - [ ] Test Backspace.

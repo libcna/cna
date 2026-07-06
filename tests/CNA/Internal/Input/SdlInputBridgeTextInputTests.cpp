@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 
 #include <string>
+#include <vector>
 
 using CNA::Internal::Input::InputManager;
 using CNA::Internal::Input::SdlInputBridge;
@@ -77,6 +78,30 @@ TEST_F(SdlInputBridgeTextInputTest, TextInputEventForwardsAsciiAsCodeUnits)
     SdlInputBridge::ProcessEvent(textInputEvent("abc"));
 
     EXPECT_EQ(captured, u"abc");
+}
+
+// P7-003(b): an empty SDL_EVENT_TEXT_INPUT has nothing to decode, so it delivers zero TextInput calls.
+TEST_F(SdlInputBridgeTextInputTest, EmptyTextInputEventDeliversNoCodeUnits)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent(""));
+
+    EXPECT_TRUE(captured.empty());
+}
+
+// P7-003(d): multiple TextInput subscribers fire in REGISTRATION order (multicast delegate semantics).
+TEST_F(SdlInputBridgeTextInputTest, TextInputSubscribersFireInRegistrationOrder)
+{
+    std::vector<int> order;
+    TextInputEXT::TextInput += [&order](charcs) { order.push_back(1); };
+    TextInputEXT::TextInput += [&order](charcs) { order.push_back(2); };
+    TextInputEXT::TextInput += [&order](charcs) { order.push_back(3); };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("a")); // single code unit -> one round of dispatch
+
+    EXPECT_EQ(order, (std::vector<int>{1, 2, 3}));
 }
 
 TEST_F(SdlInputBridgeTextInputTest, TextInputEventDecodesTwoByteUtf8ToSingleCodeUnit)
