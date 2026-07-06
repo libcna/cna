@@ -214,9 +214,28 @@ namespace Microsoft::Devices::Sensors::Detail
             }
 
             callback = onReading_;
+
+            // Task MOTION-006 (2026-07-06): the fused MotionReading's own
+            // Timestamp is deliberately set to the *same* value as its
+            // nested Attitude.Timestamp, not a fresh getUtcNowProperty()
+            // call -- PublishReading() only runs once all four sources
+            // have delivered at least one sample, which can be strictly
+            // later than when the attitude sample itself arrived (each
+            // source has its own independent sample rate). Calling
+            // getUtcNowProperty() here previously produced two different
+            // values both claiming to represent "now" for the same fused
+            // reading: MotionReading.Timestamp (publish time) vs.
+            // MotionReading.Attitude.Timestamp (attitude sample's own
+            // arrival time, set in HandleAttitudeSample() from
+            // AndroidSensorSample::Timestamp, itself already wall-clock --
+            // see that struct's own doc comment). Anchoring both to the
+            // attitude sample's timestamp keeps the fused reading
+            // internally consistent by construction, and treats Attitude
+            // -- the class's own headline value, per Motion's class
+            // remarks -- as the reading's canonical "as of" time.
             reading = MotionReading(
                 attitude_, deviceAcceleration_, deviceRotationRate_, gravity_,
-                System::DateTimeOffset::getUtcNowProperty());
+                attitude_.getTimestampProperty());
         }
 
         if (callback)

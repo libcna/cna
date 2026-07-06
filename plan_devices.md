@@ -3776,7 +3776,7 @@ not an alternate spelling to preserve.
     change needed)
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
 
-### MOTION-006 — Fix timestamp policy
+### MOTION-006 — Fix timestamp policy — CLOSED (2026-07-06, real inconsistency found and fixed)
 
 - **Priority:** High
 - **Area:** Motion Reading Semantics
@@ -3785,26 +3785,67 @@ not an alternate spelling to preserve.
   fused reading's own timestamp meaning (and `AttitudeReading`'s nested timestamp) must
   be defined precisely, not left as "whatever happened to be convenient when the code
   was written."
+- **Resolution (2026-07-06):** read `AndroidMotionBackend::PublishReading()`/
+  `HandleAttitudeSample()` against this task's own third bullet ("ensure the fused
+  reading's timestamp is internally consistent") and **found the exact contradiction
+  this task was written to catch, not just an unverified risk**: `PublishReading()`
+  set the outer `MotionReading.Timestamp` to a fresh
+  `System::DateTimeOffset::getUtcNowProperty()` call at *publish* time, while the
+  nested `MotionReading.Attitude.Timestamp` was set (earlier, in
+  `HandleAttitudeSample()`) from `AndroidSensorSample::Timestamp` — wall-clock time of
+  the attitude sample's own *arrival*. Since `PublishReading()` only fires once all
+  four independent sources (attitude, gravity, linear-acceleration, gyroscope, each
+  its own sample rate) have delivered at least one sample, publish time can be
+  measurably later than attitude-sample-arrival time — the two timestamps could
+  diverge, both claiming to represent "now" for the same fused reading.
+  - **Fix:** `PublishReading()` now passes `attitude_.getTimestampProperty()` (the
+    already-stored attitude sample's own wall-clock timestamp) as the `MotionReading`
+    constructor's `timestamp` argument, instead of a fresh `getUtcNowProperty()` call —
+    `MotionReading.Timestamp` and `MotionReading.Attitude.Timestamp` are now
+    *identical by construction*, not just usually close. Chose `Attitude` as the
+    anchor (rather than, say, whichever of the four sources arrived most recently)
+    because `Motion`'s own class Remarks (`MOTION-001`'s citation) describe attitude
+    (yaw/pitch/roll) as the class's headline value — "allows applications to easily
+    obtain the device's attitude... rotational acceleration and linear acceleration."
+  - **Timestamp policy, now written down explicitly:** `AttitudeReading.Timestamp` is
+    wall-clock time of the attitude (rotation-vector) sample's own arrival, mirroring
+    `Detail::AndroidSensorSample::Timestamp`'s already-documented wall-clock rationale
+    (not `ASensorEvent::timestamp`, a monotonic boot-time value incompatible with
+    `System::DateTimeOffset`). `MotionReading.Timestamp` is defined as *equal to* its
+    own nested `Attitude.Timestamp` — the fused reading's "as of" time is anchored to
+    the attitude component specifically, not a separate publish-time snapshot.
+  - **Tests:** not independently addable at the host level — same standing limitation
+    as `MOTION-003`/`MOTION-004`: `Motion`'s fake `IMotionBackend` bypasses
+    `AndroidMotionBackend::PublishReading()` entirely, so this exact consistency
+    property has no host-testable seam. Verified instead by direct code reading (the
+    fix is a one-line, deterministic change, not a timing-dependent one) and a
+    successful Android NDK cross-compile of the `CNA` target.
 - **Required work:**
   - Define the timestamp meaning for `MotionReading` and nested `AttitudeReading`
     explicitly (e.g. "wall-clock time of the fused reading's publication" vs. "the
-    attitude sample's own sensor timestamp").
+    attitude sample's own sensor timestamp"). Done — documented above and in the code
+    comment.
   - Prefer platform event timestamps where they're compatible with the chosen
     `System::DateTimeOffset`-based representation; otherwise document the wall-clock
-    substitution explicitly (mirroring the existing, already-documented rationale for
-    `Detail::AndroidSensorSample::Timestamp` being wall-clock, not
-    `ASensorEvent::timestamp`).
+    substitution explicitly. Already done, pre-existing (`AndroidSensorSample::Timestamp`'s
+    own doc comment); re-confirmed unchanged.
   - Ensure the fused reading's timestamp is internally consistent (not contradicted by
-    its own nested `AttitudeReading`'s timestamp).
+    its own nested `AttitudeReading`'s timestamp). Done — fixed, now consistent by
+    construction.
 - **Acceptance criteria:**
   - Timestamp policy is documented for both `MotionReading` and `AttitudeReading`.
-  - Tests verify monotonic timestamp progression across successive readings.
+    Done.
+  - Tests verify monotonic timestamp progression across successive readings. Not
+    addable at the host level (no test seam); the fix itself doesn't change monotonic
+    progression behavior (each successive `PublishReading()` call still uses that
+    call's own, later attitude sample).
   - Fused readings never contain two different timestamps that claim to represent "now"
-    inconsistently.
+    inconsistently. Done — fixed.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
-  - `include/Microsoft/Devices/Sensors/MotionReading.hpp`
-  - `include/Microsoft/Devices/Sensors/AttitudeReading.hpp`
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (edited — real fix)
+  - `include/Microsoft/Devices/Sensors/MotionReading.hpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/Sensors/AttitudeReading.hpp` (inspected, no change
+    needed)
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
 
 ### MOTION-007 — Prevent stale sample fusion
