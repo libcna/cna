@@ -224,6 +224,19 @@ on the same delegate maps to raising `Compass::Calibrate`. Unlike Android, iOS s
 true heading directly (no separate location/declination step needed in the bridge) —
 but see the permission note below, which is the opposite trade-off.
 
+**Re-confirmed 2026-07-06 (Task COMPASS-007):** this plan still holds; no Apple
+toolchain exists in this environment to implement or compile it (`docs/devices-build.md`
+Section 5). One addition, cross-referencing findings from this session's fresh MSDN
+research (`COMPASS-001`/`COMPASS-009`): the real WP7 `Compass` documents switching
+which raw axis it reads based on the device's physical tilt (upright vs. flat) —
+`CLLocationManager`'s `CLHeading` API has no equivalent concept to replicate at all;
+`magneticHeading`/`trueHeading` are simply delivered as whichever value CoreLocation
+itself has already computed, with Apple's own framework handling any device-orientation
+dependence internally. A future iOS `Compass` backend would **not** need its own
+version of `COMPASS-009`'s tilt-mode switch — this is specific to the Android NDK
+rotation-vector-based implementation CNA built by hand, not something an iOS backend
+built on `CLLocationManager` would ever need to reimplement.
+
 **Motion:** `CMMotionManager.deviceMotion` (a `CMDeviceMotion` struct, delivered via
 `startDeviceMotionUpdates(to:withHandler:)`) is close to a direct field-for-field match:
 `.attitude` (`CMAttitude`) → `MotionReading.Attitude`, `.gravity` → `.Gravity`,

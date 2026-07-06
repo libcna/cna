@@ -3215,28 +3215,55 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (inspected, no change needed)
   - `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp` (edited)
 
-### COMPASS-007 — Add iOS compass backend plan or implementation
+### COMPASS-007 — Add iOS compass backend plan or implementation — CLOSED (2026-07-06, existing plan re-confirmed and extended)
 
 - **Priority:** High
 - **Area:** iOS Backend
 - **Problem:** `Compass` has no iOS-native backend at all today (confirmed: only
   `Detail::AndroidCompassBackend` exists as a concrete `ICompassBackend`
   implementation).
+- **Resolution (2026-07-06):** `docs/devices-native-backend-design.md` already had a
+  detailed iOS Compass plan from an earlier phase (Tasks P5-8/P5-9) — re-read it in
+  full and re-confirmed it still holds, rather than assuming it's stale: **decision is
+  yes**, plan `CLLocationManager`'s heading APIs
+  (`startUpdatingHeading()`/`CLLocationManagerDelegate.locationManager(_:didUpdateHeading:)`,
+  delivering a `CLHeading` that maps almost directly onto `CompassReading`:
+  `magneticHeading`→`MagneticHeading`, `trueHeading`→`TrueHeading`,
+  `headingAccuracy`→`HeadingAccuracy`, `shouldDisplayHeadingCalibration()`→`Calibrate`).
+  Notably, **iOS supplies real `trueHeading` directly** — no location/declination
+  workaround needed there at all (unlike Android, `COMPASS-002`/`COMPASS-003`),
+  though it trades that for needing full location-permission authorization just to
+  read a heading (already flagged in the existing plan).
+  - **Extended with a cross-reference from this session's fresh research:** confirmed
+    `COMPASS-009`'s newly-found device-tilt-dependent axis switch is specific to the
+    hand-built Android NDK rotation-vector implementation — a future iOS backend built
+    on `CLLocationManager` would **not** need to reimplement it, since Apple's own
+    framework already handles any device-orientation dependence internally before
+    delivering `magneticHeading`/`trueHeading`. Added this note directly to the
+    existing iOS backend plan section so a future implementer doesn't go looking for
+    an iOS equivalent of `COMPASS-009` that doesn't need to exist.
+  - No Apple toolchain exists in this environment (re-confirmed,
+    `docs/devices-build.md` Section 5) — plan only, not implemented, matching every
+    other iOS task in this plan (`VIB-004`, `MOTION-009`).
 - **Required work:**
-  - Decide whether to support iOS compass in this API.
+  - Decide whether to support iOS compass in this API. Done — yes, re-confirmed.
   - If yes: plan or implement using `CLLocationManager`'s heading APIs
-    (`CoreLocation`).
+    (`CoreLocation`). Done — plan already existed and re-confirmed accurate; extended
+    with the `COMPASS-009` cross-reference.
   - If no: document the unsupported behavior clearly (permanent stub, matching every
-    non-Android platform's current behavior).
+    non-Android platform's current behavior). N/A — decision was yes.
 - **Acceptance criteria:**
-  - iOS build behavior is deterministic, whichever choice is made.
-  - An unsupported backend returns "not supported" cleanly rather than crashing.
-  - A manual iOS checklist exists if support is added.
+  - iOS build behavior is deterministic, whichever choice is made. True today (no iOS
+    backend exists, permanent stub, unaffected by this task).
+  - An unsupported backend returns "not supported" cleanly rather than crashing. True
+    today, unaffected.
+  - A manual iOS checklist exists if support is added. N/A — not implemented yet, plan
+    only.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp`
-  - iOS build/toolchain files (none currently present — confirm before assuming a
-    location)
-  - `docs/devices-*.md`
+  - `include/Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp` (inspected, no
+    change needed — no iOS implementation to add without a toolchain)
+  - iOS build/toolchain files (confirmed still absent)
+  - `docs/devices-native-backend-design.md` (edited — `COMPASS-009` cross-reference)
 
 ### COMPASS-008 — Harden Android compass callback lifetime further
 
