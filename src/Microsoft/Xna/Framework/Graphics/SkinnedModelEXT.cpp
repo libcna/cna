@@ -152,7 +152,7 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int i = 0; i < BoneCount; ++i)
         {
             outWorldBones[static_cast<std::size_t>(i)] =
-                worldTransforms[static_cast<std::size_t>(i)] * InverseBindPoseGlobal[static_cast<std::size_t>(i)];
+                InverseBindPoseGlobal[static_cast<std::size_t>(i)] * worldTransforms[static_cast<std::size_t>(i)];
         }
     }
 }
