@@ -176,7 +176,7 @@ guard INPUT-API-034 covers the enum layer.
 - `std::vector<Keys> GetPressedKeys() const;` — STRICT
 - `bool Equals(const KeyboardState&) const;` — STRICT
 - `int GetHashCode() const;` — STRICT
-- `std::string ToString() const;` — STRICT
+- `std::string ToString() const;` — NOXNA (FNA `KeyboardState` has no `ToString`; CNA convenience — INPUT-API-027)
 - `friend bool operator==` / `operator!=(const KeyboardState&, const KeyboardState&);` — STRICT
 
 ### `Mouse` — static class (XNA + EXT + NOXNA)

@@ -12,9 +12,9 @@ The `In FNA` column: `yes` = a `public` FNA member matches by name; `internal` =
 
 ## Review summary
 
-- STRICT/EXT CNA members with **no FNA counterpart**: **1**
-  - `KeyboardState::ToString` (STRICT) — `std::string ToString() const`
-- FNA public members with **no CNA counterpart**: **0**
+No STRICT/EXT member is missing an FNA counterpart, and no FNA public member is
+missing a CNA counterpart (by the heuristic name mapping, after accounting for the
+documented collection-interface deviations below). Full per-type tables follow.
 
 - FNA `IList<T>`/`IEnumerator`/`IDisposable` plumbing intentionally **not** mirrored by CNA's value-type collections (by design, not a gap): **4** — `TouchCollection.Current`, `TouchCollection.GetEnumerator`, `TouchCollection.MoveNext`, `TouchCollection.Dispose`
 
@@ -334,7 +334,7 @@ The `In FNA` column: `yes` = a `public` FNA member matches by name; `internal` =
 | `std::vector<Keys> GetPressedKeys() const` | STRICT | yes | matched |
 | `bool Equals(const KeyboardState& other) const` | STRICT | yes | matched |
 | `int GetHashCode() const` | STRICT | yes | matched |
-| `std::string ToString() const` | STRICT | no | NO FNA COUNTERPART |
+| `NOXNA std::string ToString() const` | NOXNA | no | CNA-only |
 | `friend bool operator==(const KeyboardState& a, const KeyboardState& b)` | STRICT | yes | matched |
 | `friend bool operator!=(const KeyboardState& a, const KeyboardState& b)` | STRICT | yes | matched |
 

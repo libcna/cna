@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-API-027 finding fixed — `KeyboardState::ToString()` retagged `NOXNA`:** FNA `KeyboardState.cs`
+  has no `ToString` (unlike `MouseState`/`GamePadState`/`TouchLocation`), so per CLAUDE.md the CNA
+  convenience is now `NOXNA` in `KeyboardState.hpp` + `docs/input-public-api-frozen.md`. Signature-invariant
+  (freeze test INPUT-API-031 still green); the regenerated matrix now reports **0 STRICT/EXT gaps**.
 - **INPUT-API-027 — mechanical member-parity matrix:** `tools/input_parity/gen_input_parity_matrix.py`
   parses the 26 public Input headers (member + STRICT/EXT/NOXNA tag) and the FNA `.cs`, emitting
   `docs/input-member-parity-matrix.md` — one table per type with an FNA cross-check column. It reproduces
@@ -186,15 +190,9 @@ input item is a CI-change to confirm, not a failure. Graphics bugs (§4) reprodu
    - Done locally: `ctest -N -L input` selects exactly 1 entry (`CnaInputTests`); it runs **100% green**
      under `xvfb-run` on EasyGL (incl. MouseCursor). Remaining: confirm the Actions run for `f0a185ca`
      is `success`; if not, read the failing job's "Run input tests" step and fix the run cmd / `add_test`.
-2. **Retag `KeyboardState::ToString()` as `NOXNA`** (surfaced by INPUT-API-027).
-   - Why: FNA `KeyboardState.cs` has no `ToString` (unlike `MouseState`/`GamePadState`/`TouchLocation`),
-     so per CLAUDE.md this CNA convenience must carry `NOXNA`. A `NOXNA` marker is signature-invariant, so
-     `PublicApiInputSignatureFreezeTests.cpp` still passes; update `docs/input-public-api-frozen.md`
-     (KeyboardState entry STRICT→NOXNA) in the same commit, then re-run
-     `python3 tools/input_parity/gen_input_parity_matrix.py --out docs/input-member-parity-matrix.md`
-     (review summary should then read 0 STRICT/EXT gaps).
-   - Files: `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp` (+ `CNA/CNAHelper.hpp` include if
-     not already present), `docs/input-public-api-frozen.md`, regenerated `docs/input-member-parity-matrix.md`.
+2. **Broader input backlog** — the immediate small tasks are cleared; remaining input work is the
+   exhaustive list in `plan_input.md` (e.g. the gesture-matrix coverage gaps §5, INPUT-API-028/029
+   namespace + `GetTypeName` audits). Pick from there, or hold for the merge-vs-switch-area decision (§0/§4).
 
 ## 9. Do not do yet
 
