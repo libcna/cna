@@ -1594,7 +1594,8 @@ namespace CNA::Internal::Input
                 InputManager::SetTouchState(
                     touchId,
                     TouchLocationState::Pressed,
-                    to_touch_pixel_position(event.tfinger)
+                    to_touch_pixel_position(event.tfinger),
+                    event.tfinger.pressure
                 );
                 Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
                     touchId,
@@ -1612,7 +1613,8 @@ namespace CNA::Internal::Input
                 InputManager::SetTouchState(
                     touchId,
                     TouchLocationState::Moved,
-                    to_touch_pixel_position(event.tfinger)
+                    to_touch_pixel_position(event.tfinger),
+                    event.tfinger.pressure
                 );
                 Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
                     touchId,
@@ -1639,7 +1641,8 @@ namespace CNA::Internal::Input
                 InputManager::SetTouchState(
                     touchId,
                     TouchLocationState::Released,
-                    to_touch_pixel_position(event.tfinger)
+                    to_touch_pixel_position(event.tfinger),
+                    event.tfinger.pressure
                 );
                 Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
                     touchId,

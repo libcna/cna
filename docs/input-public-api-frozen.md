@@ -305,9 +305,12 @@ override must be added.
 - `int getIdProperty() const;` — STRICT
 - `TouchLocationState getStateProperty() const;` — STRICT
 - `const Vector2& getPositionProperty() const;` — STRICT
+- `float getPressureEXT() const;` — NOXNA/EXT (SDL finger pressure 0..1; excluded from Equals/GetHashCode/ToString)
 - `TouchLocation();` — NOXNA
 - `TouchLocation(int, TouchLocationState, const Vector2&);` — STRICT
 - `TouchLocation(int, TouchLocationState, const Vector2&, TouchLocationState, const Vector2&);` — STRICT
+- `TouchLocation(int, TouchLocationState, const Vector2&, float);` — NOXNA/EXT (pressure)
+- `TouchLocation(int, TouchLocationState, const Vector2&, TouchLocationState, const Vector2&, float);` — NOXNA/EXT (pressure)
 - `bool TryGetPreviousLocation(TouchLocation&) const;` — STRICT
 - `bool Equals(const TouchLocation&) const;` — STRICT
 - `int GetHashCode() const;` — STRICT

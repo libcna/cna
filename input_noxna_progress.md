@@ -18,7 +18,7 @@
   and desync Game's cache. `Game.IsMouseVisible` is the XNA-idiomatic API — do not duplicate. (Engineering
   decision, not an owner question.)
 - [x] **N-005 Mouse horizontal scroll wheel EXT** — surface SDL `wheel.x` (currently dropped, DEC-18).
-- [ ] **N-006 `TouchLocation::getPressureEXT`** — expose SDL finger pressure (XNA dropped Pressure).
+- [x] **N-006 `TouchLocation::getPressureEXT`** — expose SDL finger pressure (XNA dropped Pressure).
 
 ## Phase P2 — needs an injectable seam, desktop-strong
 - [ ] **N-007 `CNA::Input::Joystick`** — raw joystick (axes/buttons/hats/balls); test via virtual joystick.
@@ -48,6 +48,18 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-006 done (2026-07-06):** `TouchLocation::getPressureEXT()` restores SDL finger pressure (0..1)
+  that XNA 4.0 dropped. Added a NOXNA `pressure_` field (default 0) + two NOXNA pressure-carrying
+  ctors (4-arg and 6-arg); the XNA ctors leave it 0. **Excluded from Equals/GetHashCode/ToString**
+  (kept FNA-frozen — `has_frozen_equality` still holds). Event path: `InternalTouchLocationState`
+  gained a `Pressure` field; `InputManager::SetTouchState` takes a defaulted `float pressure` and
+  `GetTouchState` builds the snapshot via the pressure ctors; the bridge's 3 FINGER_DOWN/MOTION/UP
+  handlers forward `event.tfinger.pressure`. Pinned the getter + both ctors in the freeze test +
+  documented in `docs/input-public-api-frozen.md`. Tests: TouchLocation ctor/default + Equals/hash/
+  ToString-ignore-pressure (TouchInputTests), and end-to-end pressure through GetState with a
+  MOTION update (SdlInputBridgeTouchGestureTests, synthetic finger events). `ctest -L input` green;
+  ASan-clean. Files: TouchLocation.hpp/.cpp, InputManager.hpp/.cpp, SdlInputBridge.cpp, freeze
+  test, frozen-API doc, TouchInputTests.cpp, SdlInputBridgeTouchGestureTests.cpp.
 - **N-018 done (2026-07-06):** `CNA::Input::Power::GetInfoEXT(out secondsLeft, out percent) ->
   PowerStateEXT` — host system battery/charge, reusing the shared `PowerStateEXT` from N-009b.
   Established the "standalone CNA::Input type + injectable *system* seam" pattern (reusable for

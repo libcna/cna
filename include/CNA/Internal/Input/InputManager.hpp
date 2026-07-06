@@ -148,11 +148,16 @@ namespace CNA::Internal::Input
 
         /**
          * @brief Updates one touch point in the internal touch state.
+         * @param touchId The touch id.
+         * @param state The touch location state.
+         * @param position The touch position in pixels.
+         * @param pressure NOXNA/EXT: SDL finger pressure (0..1); surfaced via TouchLocation::getPressureEXT.
          */
         static void SetTouchState(
             int touchId,
             Microsoft::Xna::Framework::Input::Touch::TouchLocationState state,
-            const Microsoft::Xna::Framework::Vector2& position
+            const Microsoft::Xna::Framework::Vector2& position,
+            float pressure = 0.0f
         );
 
         /**

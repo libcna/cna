@@ -80,6 +80,8 @@ namespace CNA::Internal::Input
             // touch exposes TryGetPreviousLocation() (task 868–870). Invalid = no previous yet.
             TouchLocationState PreviousState = TouchLocationState::Invalid;
             Microsoft::Xna::Framework::Vector2 PreviousPosition = Microsoft::Xna::Framework::Vector2();
+            // NOXNA/EXT: SDL finger pressure (0..1), surfaced via TouchLocation::getPressureEXT.
+            float Pressure = 0.0f;
         };
 
         struct InternalInputState
@@ -218,7 +220,8 @@ namespace CNA::Internal::Input
     void InputManager::SetTouchState(
         const int touchId,
         const TouchLocationState state,
-        const Microsoft::Xna::Framework::Vector2& position
+        const Microsoft::Xna::Framework::Vector2& position,
+        const float pressure
     )
     {
         auto& touchLocations = getInternalInputState().TouchLocations;
@@ -226,6 +229,7 @@ namespace CNA::Internal::Input
         touchLocation.Id = touchId;
         touchLocation.State = state;
         touchLocation.Position = position;
+        touchLocation.Pressure = pressure;
         touchLocation.RemoveAfterSnapshot = state == TouchLocationState::Released;
     }
 
@@ -428,11 +432,13 @@ namespace CNA::Internal::Input
             if (touchLocation.PreviousState != TouchLocationState::Invalid)
             {
                 snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position,
-                                      touchLocation.PreviousState, touchLocation.PreviousPosition);
+                                      touchLocation.PreviousState, touchLocation.PreviousPosition,
+                                      touchLocation.Pressure);
             }
             else
             {
-                snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position);
+                snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position,
+                                      touchLocation.Pressure);
             }
 
             // Record the location just reported as "previous" for the next snapshot — done before

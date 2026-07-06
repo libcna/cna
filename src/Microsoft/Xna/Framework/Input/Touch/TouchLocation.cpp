@@ -36,9 +36,36 @@ namespace Microsoft::Xna::Framework::Input::Touch
     {
     }
 
+    TouchLocation::TouchLocation(int id, TouchLocationState state,
+                                 const Microsoft::Xna::Framework::Vector2& position,
+                                 float pressure)
+        : id_(id),
+          state_(state),
+          position_(position),
+          prevState_(TouchLocationState::Invalid),
+          prevPosition_(),
+          pressure_(pressure)
+    {
+    }
+
+    TouchLocation::TouchLocation(int id, TouchLocationState state,
+                                 const Microsoft::Xna::Framework::Vector2& position,
+                                 TouchLocationState previousState,
+                                 const Microsoft::Xna::Framework::Vector2& previousPosition,
+                                 float pressure)
+        : id_(id),
+          state_(state),
+          position_(position),
+          prevState_(previousState),
+          prevPosition_(previousPosition),
+          pressure_(pressure)
+    {
+    }
+
     int              TouchLocation::getIdProperty()       const { return id_; }
     TouchLocationState TouchLocation::getStateProperty()  const { return state_; }
     const Microsoft::Xna::Framework::Vector2& TouchLocation::getPositionProperty() const { return position_; }
+    float            TouchLocation::getPressureEXT()      const { return pressure_; }
 
     bool TouchLocation::TryGetPreviousLocation(TouchLocation& previousLocation) const
     {

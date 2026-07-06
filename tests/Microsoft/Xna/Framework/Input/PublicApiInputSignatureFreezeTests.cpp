@@ -398,6 +398,10 @@ namespace
     [[maybe_unused]] constexpr auto z_TouchLocation_getIdProperty_1 = static_cast<int(TouchLocation::*)() const>(&TouchLocation::getIdProperty);
     [[maybe_unused]] constexpr auto z_TouchLocation_getStateProperty_2 = static_cast<TouchLocationState(TouchLocation::*)() const>(&TouchLocation::getStateProperty);
     [[maybe_unused]] constexpr auto z_TouchLocation_getPositionProperty_3 = static_cast<const Vector2&(TouchLocation::*)() const>(&TouchLocation::getPositionProperty);
+    // NOXNA/EXT (input_noxna.md N-006): SDL finger pressure getter + pressure-carrying constructors.
+    [[maybe_unused]] constexpr auto z_TouchLocation_getPressureEXT = static_cast<float(TouchLocation::*)() const>(&TouchLocation::getPressureEXT);
+    static_assert(std::is_constructible_v<TouchLocation, int, TouchLocationState, const Vector2&, float>, "TouchLocation(id, state, position, pressure)");
+    static_assert(std::is_constructible_v<TouchLocation, int, TouchLocationState, const Vector2&, TouchLocationState, const Vector2&, float>, "TouchLocation(id, state, position, previousState, previousPosition, pressure)");
     static_assert(std::is_default_constructible_v<TouchLocation>, "TouchLocation()");
     static_assert(std::is_constructible_v<TouchLocation, int, TouchLocationState, const Vector2&>, "TouchLocation(id, state, position)");
     static_assert(std::is_constructible_v<TouchLocation, int, TouchLocationState, const Vector2&, TouchLocationState, const Vector2&>, "TouchLocation(id, state, position, previousState, previousPosition)");

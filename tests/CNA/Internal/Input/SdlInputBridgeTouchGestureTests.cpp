@@ -24,7 +24,8 @@ namespace
 
     SDL_Event fingerEvent(const Uint32 type, const SDL_FingerID fingerId,
                           const float x, const float y,
-                          const float dx = 0.0f, const float dy = 0.0f)
+                          const float dx = 0.0f, const float dy = 0.0f,
+                          const float pressure = 0.0f)
     {
         SDL_Event e{};
         e.type = type;
@@ -33,6 +34,7 @@ namespace
         e.tfinger.y = y;
         e.tfinger.dx = dx;
         e.tfinger.dy = dy;
+        e.tfinger.pressure = pressure;
         return e;
     }
 
@@ -264,4 +266,21 @@ TEST_F(SdlInputBridgeTouchGestureTest, FingerCanceledMidDragRecoversAndAllowsAFr
 
     ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
     EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::Tap);
+}
+
+// N-006: SDL finger pressure flows end-to-end (ProcessEvent -> InputManager -> TouchPanel::GetState)
+// and is exposed via TouchLocation::getPressureEXT; a later MOTION event updates it.
+TEST_F(SdlInputBridgeTouchGestureTest, FingerPressureIsSurfacedThroughGetStateGetPressureEXT)
+{
+    SdlInputBridge::ProcessEvent(
+        fingerEvent(SDL_EVENT_FINGER_DOWN, 7001, 0.5f, 0.5f, 0.0f, 0.0f, 0.75f));
+    const TouchCollection down = TouchPanel::GetState();
+    ASSERT_EQ(down.getCountProperty(), 1);
+    EXPECT_FLOAT_EQ(down[0].getPressureEXT(), 0.75f);
+
+    SdlInputBridge::ProcessEvent(
+        fingerEvent(SDL_EVENT_FINGER_MOTION, 7001, 0.6f, 0.5f, 0.1f, 0.0f, 0.30f));
+    const TouchCollection moved = TouchPanel::GetState();
+    ASSERT_EQ(moved.getCountProperty(), 1);
+    EXPECT_FLOAT_EQ(moved[0].getPressureEXT(), 0.30f);
 }

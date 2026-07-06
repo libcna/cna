@@ -683,6 +683,43 @@ TEST(TouchLocationTest, ToStringMatchesFnaFormatExactly)
     EXPECT_EQ(location.ToString(), "{Position:{X:7 Y:8}}");
 }
 
+// N-006: the XNA constructors leave getPressureEXT at 0 (XNA 4.0 dropped Pressure); the NOXNA
+// pressure-carrying constructors set it.
+TEST(TouchLocationTest, PressureDefaultsToZeroForXnaConstructorsAndIsSetByEXTConstructors)
+{
+    EXPECT_FLOAT_EQ(TouchLocation().getPressureEXT(), 0.0f);
+    EXPECT_FLOAT_EQ(TouchLocation(1, TouchLocationState::Pressed, Vector2(1.0f, 2.0f)).getPressureEXT(), 0.0f);
+    EXPECT_FLOAT_EQ(TouchLocation(1, TouchLocationState::Moved, Vector2(1.0f, 2.0f),
+                                  TouchLocationState::Pressed, Vector2(3.0f, 4.0f)).getPressureEXT(), 0.0f);
+
+    // 4-arg pressure ctor.
+    const TouchLocation p(1, TouchLocationState::Pressed, Vector2(1.0f, 2.0f), 0.5f);
+    EXPECT_FLOAT_EQ(p.getPressureEXT(), 0.5f);
+    EXPECT_EQ(p.getPositionProperty(), Vector2(1.0f, 2.0f));
+
+    // 6-arg pressure ctor (with previous location).
+    const TouchLocation pPrev(1, TouchLocationState::Moved, Vector2(1.0f, 2.0f),
+                              TouchLocationState::Pressed, Vector2(3.0f, 4.0f), 0.9f);
+    EXPECT_FLOAT_EQ(pPrev.getPressureEXT(), 0.9f);
+    TouchLocation previous;
+    ASSERT_TRUE(pPrev.TryGetPreviousLocation(previous));
+    EXPECT_EQ(previous.getPositionProperty(), Vector2(3.0f, 4.0f));
+}
+
+// N-006: pressure is deliberately excluded from Equals/GetHashCode/ToString so those stay
+// FNA-frozen — two locations that differ only in pressure remain equal.
+TEST(TouchLocationTest, PressureIsExcludedFromEqualityHashAndToString)
+{
+    const TouchLocation lo(1, TouchLocationState::Pressed, Vector2(7.0f, 8.0f), 0.1f);
+    const TouchLocation hi(1, TouchLocationState::Pressed, Vector2(7.0f, 8.0f), 0.9f);
+
+    EXPECT_TRUE(lo.Equals(hi));
+    EXPECT_TRUE(lo == hi);
+    EXPECT_FALSE(lo != hi);
+    EXPECT_EQ(lo.GetHashCode(), hi.GetHashCode());
+    EXPECT_EQ(lo.ToString(), hi.ToString());
+}
+
 // --- GestureSample ---
 
 TEST(GestureSampleTest, DefaultConstructorProducesZeroedNoneSample)
