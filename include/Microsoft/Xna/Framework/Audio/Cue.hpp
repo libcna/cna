@@ -79,7 +79,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Gets the value of a per-cue XACT variable.
          *
          * @param name Variable name as defined in the SoundBank, or one of the built-in
-         *        3D variables ("Distance", "DopplerPitchScalar", "OrientationAngle").
+         *        cue variables ("Distance", "DopplerPitchScalar", "OrientationAngle",
+         *        "AttackTime", "ReleaseTime").
          * @return Current value of the variable.
          * @throws System::ObjectDisposedException if the cue has been disposed.
          * @throws System::ArgumentNullException if @p name is empty.
@@ -91,7 +92,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets the value of a per-cue XACT variable.
          *
          * @param name  Variable name as defined in the SoundBank, or one of the built-in
-         *        3D variables ("Distance", "DopplerPitchScalar", "OrientationAngle").
+         *        cue variables ("Distance", "DopplerPitchScalar", "OrientationAngle",
+         *        "AttackTime", "ReleaseTime").
          * @param value New value.
          * @throws System::ObjectDisposedException if the cue has been disposed.
          * @throws System::ArgumentNullException if @p name is empty.
@@ -166,6 +168,14 @@ namespace Microsoft::Xna::Framework::Audio
         std::chrono::steady_clock::time_point fadeInStart_{};
         uint16_t    fadeInMS_   = 0;
         uint8_t     priority_   = 0;
+
+        // P10-RPC-003: real elapsed-time tracking for the built-in "AttackTime" RPC variable,
+        // matching FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c), which feeds the elapsed
+        // milliseconds since the cue started playing directly as an "AttackTime"-bound RPC
+        // curve's x-domain value. Captured once in Play(), right before every path that
+        // transitions to State::Playing. Not pause-adjusted, matching fadeStart_/fadeInStart_'s
+        // same existing simplification.
+        std::chrono::steady_clock::time_point playStart_{};
 
         // P9-XACT-016: retained (captured once, at Play() time, from the resolved XsbSound) so
         // ReconcileState() can continuously re-evaluate bound RPC (Runtime Parameter Control)

@@ -90,7 +90,12 @@ namespace Microsoft::Xna::Framework::Audio
         // includes, unlike the real XACT Auditioning Tool which adds these by default.
         bool IsBuiltInCueVariable(const std::string& name)
         {
-            return name == "Distance" || name == "DopplerPitchScalar" || name == "OrientationAngle";
+            // P10-RPC-003: "AttackTime"/"ReleaseTime" are the same kind of always-present default
+            // XACT project variable as the three 3D ones above -- recognized here for the same
+            // reason (a hand-authored test fixture's .xgs/.xsb won't declare them the way the real
+            // XACT Auditioning Tool does).
+            return name == "Distance" || name == "DopplerPitchScalar" || name == "OrientationAngle"
+                || name == "AttackTime" || name == "ReleaseTime";
         }
 
         // P10-RPC-002: the three values FAudio's FACT3DApply (FACT3D.c) writes into a cue's
@@ -221,7 +226,34 @@ namespace Microsoft::Xna::Framework::Audio
                     eng->GetVariableNameByIndex(static_cast<int16_t>(rpc->variable));
                 if (!varName || varName->empty()) continue;
 
-                const float value  = GetVariable(*varName);
+                // P10-RPC-003: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c), which
+                // substitutes a live-computed value for an RPC curve bound to these two specific
+                // variable names -- NOT persisted back into variables_/observable via
+                // GetVariable() the way P10-RPC-002's three 3D variables are (FACTCue_GetVariable,
+                // FACT.c, reads variableValues[] directly with no such special case; only RPC
+                // curve evaluation itself ever sees these live values).
+                float value;
+                if (*varName == "AttackTime")
+                {
+                    const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - playStart_).count();
+                    value = static_cast<float>(elapsedMs);
+                }
+                else if (*varName == "ReleaseTime")
+                {
+                    // Real FAudio only substitutes a nonzero live value here while the wave is in
+                    // its dedicated SOUND_STATE_RELEASE_RPC phase (an RPC-only release timed by
+                    // maxRpcReleaseTime, distinct from an authored fadeOutMS_ fade) -- 0.0f
+                    // otherwise. CNA has no RPC-only release phase yet (P10-RPC-004, a separate,
+                    // not-yet-implemented follow-up), so this always evaluates to 0.0f for now,
+                    // which is the exact real value for every state CNA can currently reach.
+                    value = 0.0f;
+                }
+                else
+                {
+                    value = GetVariable(*varName);
+                }
+
                 const float result = EvaluateRpcCurve(*rpc, value);
 
                 if (rpc->parameter == 0)      rpcVolumeCentibels += result; // RPC_PARAMETER_VOLUME
@@ -461,6 +493,12 @@ namespace Microsoft::Xna::Framework::Audio
         ReconcileState();
         if (state_ == State::Playing || state_ == State::Stopping || state_ == State::Stopped)
             return;
+
+        // P10-RPC-003: captured once here, before every path below that ends in
+        // state_ = State::Playing (including the "no parsed XSB data"/"no sound resolved" early
+        // returns further down) -- matches FAudio's own per-cue start timestamp
+        // (FACT_internal.c's cue->start, set in FACTCue_Play).
+        playStart_ = std::chrono::steady_clock::now();
 
         // Resolve waves to play
         using namespace CNA::Internal::Audio;

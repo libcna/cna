@@ -1410,6 +1410,187 @@ namespace
         return bank;
     }
 
+    // ── P10-RPC-003: dedicated "AttackTime"-bound RPC fixture ─────────────────────────────────
+    //
+    // A separate engine/xgs (not SharedEngine()/BuildXgsFixtureBytes(), whose "Volume" variable
+    // and two RPC curves have carefully laid-out, widely-shared byte offsets) with a single
+    // variable literally named "AttackTime" and one VOLUME-parameter RPC curve bound to it, x
+    // values in raw milliseconds (0ms -> 0 centibels/unity gain, 150ms -> -2000 centibels/0.1x
+    // amplitude, linear) -- matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c), which
+    // feeds elapsed milliseconds directly as an "AttackTime"-bound curve's x-domain value.
+    constexpr uint32_t kAttackXgsHeaderSize       = 69;
+    constexpr uint32_t kAttackXgsCategoryDataSize = 10;
+    constexpr uint32_t kAttackXgsVariableDataSize = 13;
+    constexpr uint32_t kAttackXgsCategoryNameSize = 8;  // "Default\0"
+    constexpr uint32_t kAttackXgsVariableNameSize = 11; // "AttackTime\0"
+    constexpr uint32_t kAttackXgsRpcOffset = kAttackXgsHeaderSize + kAttackXgsCategoryDataSize
+        + kAttackXgsVariableDataSize + kAttackXgsCategoryNameSize + kAttackXgsVariableNameSize;
+    constexpr uint32_t kAttackVolumeRpcCode = kAttackXgsRpcOffset;
+
+    std::vector<uint8_t> BuildAttackTimeXgsFixtureBytes()
+    {
+        const uint32_t categoryOffset     = kAttackXgsHeaderSize;
+        const uint32_t variableOffset     = categoryOffset + kAttackXgsCategoryDataSize;
+        const uint32_t categoryNameOffset = variableOffset + kAttackXgsVariableDataSize;
+        const std::string categoryName    = "Default";
+        const uint32_t variableNameOffset =
+            categoryNameOffset + static_cast<uint32_t>(categoryName.size()) + 1;
+        const std::string variableName    = "AttackTime";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'X', 'G', 'S', 'F' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // unknown
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 3);   // platform
+
+        AppendU16(data, 1); // categoryCount
+        AppendU16(data, 1); // variableCount
+        AppendU16(data, 0); // blob1Count
+        AppendU16(data, 0); // blob2Count
+        AppendU16(data, 1); // rpcCount
+        AppendU16(data, 0); // dspPresetCount
+        AppendU16(data, 0); // dspParameterCount
+
+        AppendU32(data, categoryOffset);
+        AppendU32(data, variableOffset);
+        AppendU32(data, 0); // blob1Offset
+        AppendU32(data, 0); // categoryNameIndexOffset
+        AppendU32(data, 0); // blob2Offset
+        AppendU32(data, 0); // variableNameIndexOffset
+        AppendU32(data, categoryNameOffset);
+        AppendU32(data, variableNameOffset);
+        AppendU32(data, kAttackXgsRpcOffset);
+
+        // Category: instanceLimit, fadeInMS, fadeOutMS, maxInstanceBehavior(skip), parentIndex, volume, visibility
+        AppendU8(data, 0xFF);
+        AppendU16(data, 0);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+        AppendU16(data, 0xFFFF);
+        AppendU8(data, 0xFF);
+        AppendU8(data, 0);
+
+        // Variable: accessibility, initialValue, minValue, maxValue
+        AppendU8(data, 0x03);
+        AppendF32(data, 0.0f);
+        AppendF32(data, 0.0f);
+        AppendF32(data, 100000.0f);
+
+        AppendCStr(data, categoryName);
+        AppendCStr(data, variableName);
+
+        // RPC 0 (VOLUME): variable=0 ("AttackTime"), 2 points, linear, x in milliseconds.
+        AppendU16(data, 0); // variable
+        AppendU8(data, 2);  // pointCount
+        AppendU16(data, 0); // parameter = VOLUME
+        AppendF32(data, 0.0f);   AppendF32(data, 0.0f);     AppendU8(data, 0); // point 0: linear
+        AppendF32(data, 150.0f); AppendF32(data, -2000.0f); AppendU8(data, 0); // point 1: linear
+
+        return data;
+    }
+
+    // .xsb with one simple cue ("AttackTimeCue") referencing LongWaveBank (real 1-second audio,
+    // so a real SoundEffectInstance is spawned), SOUND_FLAG_HAS_RPC set with a single sound-level
+    // RPC code (kAttackVolumeRpcCode).
+    std::vector<uint8_t> BuildAttackTimeXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize; // 138
+        constexpr uint32_t soundSize    = 12 + 7; // simple wave ref (12) + RPC block (2+1+4=7)
+
+        const uint32_t wavebankNameOffset = baseOffset;              // 138
+        const uint32_t soundOffset        = wavebankNameOffset + 64; // 202
+        const uint32_t soundCode          = soundOffset;             // 202
+        const uint32_t cueSimpleOffset    = soundOffset + soundSize;     // 221
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;         // 226 (1 entry, 5 bytes)
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;      // 232 (1 entry, 6 bytes)
+        const std::string cueName         = "AttackTimeCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "AttackTimeSoundBank", bankNameSize);
+        AppendPadded(data, kLongWaveBankName, 64);
+
+        // Sound 0: HAS_RPC, bound to the AttackTime-driven VOLUME curve. Volume raw byte 0x64
+        // (~0.31x amplitude) so the curve's unity-gain (t=0ms) end doesn't saturate the final
+        // [0,1] clamp, same reasoning as BuildRpcXsbFixtureBytes's sound 0.
+        AppendU8(data, 0x02); // flags: SOUND_FLAG_HAS_RPC
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0x64); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+        AppendU16(data, 7);   // rpcDataLength (informational, unused): 2+1(count)+4(code)
+        AppendU8(data, 1);    // rpc code count
+        AppendU32(data, kAttackVolumeRpcCode);
+
+        // Simple cue.
+        AppendU8(data, 0);
+        AppendU32(data, soundCode);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    AudioEngine& AttackTimeEngine()
+    {
+        static AudioEngine engine(WriteFixture(
+            "cna_cue_test", "attacktime.xgs", BuildAttackTimeXgsFixtureBytes()));
+        return engine;
+    }
+
+    WaveBank& AttackTimeWaveBank()
+    {
+        static WaveBank wb(&AttackTimeEngine(), WriteFixture(
+            "cna_cue_test", "attacktime_long.xwb", BuildLongXwbFixtureBytes()));
+        return wb;
+    }
+
+    SoundBank& AttackTimeBank()
+    {
+        (void)AttackTimeWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&AttackTimeEngine(), WriteFixture(
+            "cna_cue_test", "attacktime.xsb", BuildAttackTimeXsbFixtureBytes()));
+        return bank;
+    }
+
     SoundBank& SharedFilterBank()
     {
         (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
@@ -2532,6 +2713,65 @@ TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesPitch)
     EXPECT_NEAR(inst->getPitchProperty(), 0.5f, 0.001f); // +600/1200
 
     cue->Stop(AudioStopOptions::Immediate);
+}
+
+// ===================== AttackTime/ReleaseTime built-in RPC variables (P10-RPC-003) =====================
+//
+// AttackTimeBank()'s "AttackTimeCue" (its own dedicated engine/xgs, see BuildAttackTimeXgsFixtureBytes)
+// has a single VOLUME-parameter RPC curve bound to the built-in "AttackTime" variable: 0ms -> 0
+// centibels (unity gain), 150ms -> -2000 centibels (0.1x amplitude), linear, clamped beyond 150ms.
+
+TEST(CueTest, PlayAttackTimeRpcCurveTracksElapsedTimeSincePlay)
+{
+    auto cue = std::unique_ptr<Cue>(AttackTimeBank().GetCue("AttackTimeCue"));
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+    const float initialVolume = inst->getVolumeProperty(); // t≈0ms -> curve's unity-gain end
+    ASSERT_GT(initialVolume, 0.0f);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(250)); // past the curve's 150ms domain
+    ASSERT_TRUE(cue->getIsPlayingProperty()); // ticks ReconcileState()'s continuous RPC re-eval
+    const float laterVolume = inst->getVolumeProperty();
+
+    // -2000 vs 0 centibels is a 20dB (10x amplitude) difference, same ratio check
+    // PlayScalesVolumeByRpcCurveEvaluatedAtCurrentVariableValue uses for an explicitly-set
+    // variable -- here the "variable" is real elapsed wall-clock time instead.
+    EXPECT_NEAR(initialVolume / laterVolume, 10.0f, 1.5f);
+
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
+// P10-RPC-003: matches real FACTCue_GetVariable (FACT.c), which reads variableValues[] directly
+// and has no "AttackTime"/"ReleaseTime" special case at all -- only RPC curve evaluation
+// (FACT_INTERNAL_UpdateRPCs) ever substitutes the live value. A direct GetVariable() call (with
+// no prior SetVariable()) always reads back the built-in default, never live elapsed time, unlike
+// P10-RPC-002's three 3D variables (which Apply3D() explicitly writes into variables_).
+TEST(CueTest, GetVariableAttackTimeDoesNotReflectLiveElapsedTime)
+{
+    auto cue = std::unique_ptr<Cue>(AttackTimeBank().GetCue("AttackTimeCue"));
+    EXPECT_FLOAT_EQ(cue->GetVariable("AttackTime"), 0.0f);
+
+    cue->Play();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    ASSERT_TRUE(cue->getIsPlayingProperty());
+    EXPECT_FLOAT_EQ(cue->GetVariable("AttackTime"), 0.0f); // still the default, not the live value
+
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
+// "ReleaseTime" is recognized as a valid built-in variable name (matching XACT's always-present
+// default variable set) and behaves like an ordinary variable through GetVariable/SetVariable;
+// only RPC curve evaluation substitutes a live value for it, and only while a real RPC-only
+// release phase is active -- CNA has no such phase yet (P10-RPC-004, a separate follow-up not
+// implemented here), so that live substitution always currently evaluates to 0.0f, not tested
+// further here since there is no way yet to observe a nonzero live value.
+TEST(CueTest, ReleaseTimeIsRecognizedAsBuiltInVariable)
+{
+    auto cue = MakeCue();
+    EXPECT_FLOAT_EQ(cue->GetVariable("ReleaseTime"), 0.0f);
+    EXPECT_NO_THROW(cue->SetVariable("ReleaseTime", 42.0f));
+    EXPECT_FLOAT_EQ(cue->GetVariable("ReleaseTime"), 42.0f);
 }
 
 // ===================== Built-in 3D cue variables (P10-RPC-002) =====================

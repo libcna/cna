@@ -3297,15 +3297,65 @@ restoration can be reverted.
   pre-fix `Cue.cpp` (reading back the stale `0.0f` default), pass after. Full suite: 3324/3326 pass
   (was 3321/3323; exactly the 3 new tests, no regressions), same 2 pre-existing hardware-only
   skips.
-* [ ] P10-RPC-003: Implement `AttackTime`/`ReleaseTime` tracking per Cue/PlaybackInstance.
-  *Status:* Open. Would need real elapsed-play-time and elapsed-release-time tracking (a
-  `std::chrono` timestamp captured at `Play()`/`StopInternal()` respectively), then wiring those
-  into `EvaluateRpc()`'s variable-value resolution alongside the `Distance`/`OrientationAngle`/
-  `DopplerPitchScalar` gap just above -- natural to do together, since both are "compute a live
-  value instead of trusting a stale/manual one" in the same function.
+* [x] P10-RPC-003: Implement `AttackTime`/`ReleaseTime` tracking per Cue/PlaybackInstance.
+  *Note:* Read FAudio's real `FACT_INTERNAL_UpdateRPCs` (`FACT_internal.c:1010-1103`) line-by-line
+  to get the exact semantics, which turned out subtler than the plan assumed:
+  - **`AttackTime`**: `variableValue = (float) elapsedTrack;` -- raw elapsed milliseconds since the
+    cue started playing (FAudio's `elapsedCue`, `FACT_internal.c:1456-1459`, itself pause-adjusted
+    and offset by the first track's first event's authored start-delay timestamp -- CNA has no
+    per-track/per-event model at all, only whole-sound `waveRef`s, so neither the pause-adjustment
+    nor the event-offset term has an equivalent here; implemented as plain, non-pause-adjusted
+    elapsed wall-clock time since `Play()`, matching this class's existing `fadeStart_`/
+    `fadeInStart_` timers' identical simplification). Added `Cue::playStart_`
+    (`std::chrono::steady_clock::time_point`, captured once in `Play()`, covering every path that
+    transitions to `State::Playing`).
+  - **`ReleaseTime`**: `FACT_internal.c:1042-1053` -- only ever nonzero
+    (`timestamp - cue->playingSound->fadeStart`) while `cue->playingSound->state ==
+    SOUND_STATE_RELEASE_RPC`, a *distinct* sound state from `SOUND_STATE_FADE_OUT` (CNA's existing
+    `State::Stopping`+`fadeOutMS_` models FADE_OUT only), entered via `FACT_INTERNAL_BeginReleaseRPC`
+    when a cue's Stop() has no authored fade but does have a nonzero `maxRpcReleaseTime`
+    (`FACT.c:2414-2450`) -- otherwise `0.0f`. **This means the plan's "P10-RPC-004 blocked on
+    P10-RPC-003" dependency direction was backwards**: a real, nonzero, live `ReleaseTime` value is
+    impossible without `maxRpcReleaseTime`/a `SOUND_STATE_RELEASE_RPC`-equivalent phase existing
+    first (P10-RPC-004's actual job), not the other way around. Implemented honestly for what CNA
+    can do today: `"ReleaseTime"` evaluates to `0.0f` unconditionally (the exact real value for
+    every state CNA can currently reach, since no RPC-release phase exists yet) rather than
+    fabricating a duration or a fake phase.
+  - **A third, important, previously-undocumented subtlety**: real `FACTCue_GetVariable`
+    (`FACT.c:2589-2618`) reads `pCue->variableValues[]` directly and has **no** `AttackTime`/
+    `ReleaseTime` special case at all -- the live substitution exists *only* inside
+    `FACT_INTERNAL_UpdateRPCs`'s local `variableValue`, never written back to the persistent
+    variable store. This is the opposite of P10-RPC-002's three 3D variables, which
+    `FACT3DApply` writes via a real `FACTCue_SetVariable` call every `Apply3D()` (so `GetVariable`
+    picks them up). So `Cue::GetVariable("AttackTime")`/`"ReleaseTime")` deliberately still return
+    whatever's in `variables_` (the built-in `0.0f` default, or a manually-`SetVariable()`-d value)
+    -- only an RPC curve *actually bound* to one of these two names sees the live value, exactly
+    matching real FACT's asymmetry.
+  - Added `"AttackTime"`/`"ReleaseTime"` to `IsBuiltInCueVariable()` (same always-present-default-
+    variable rationale as the existing three) and special-cased both names in
+    `EvaluateRpc()`'s per-RPC variable-value resolution (falling through to the normal
+    `GetVariable()` path for every other name, unchanged).
+  *Verify:* Three new `CueTests.cpp` tests against a dedicated fixture pair (own `AudioEngine`/
+  `.xgs`/`.xsb`, not `SharedEngine()`/`BuildXgsFixtureBytes()`, to avoid touching those functions'
+  carefully laid-out shared byte offsets): `PlayAttackTimeRpcCurveTracksElapsedTimeSincePlay`
+  (real ~250ms sleep, confirms a VOLUME curve bound to `"AttackTime"` tracks real elapsed time --
+  10x amplitude ratio, matching the existing RPC ratio-check style),
+  `GetVariableAttackTimeDoesNotReflectLiveElapsedTime` (locks down the `GetVariable`/
+  `EvaluateRpc` asymmetry above), `ReleaseTimeIsRecognizedAsBuiltInVariable` (confirms
+  `GetVariable`/`SetVariable` accept it as an ordinary variable name). `git stash`-verified: 2 of
+  the 3 fail against pre-fix `Cue.cpp`/`Cue.hpp` (the third passes in both states by construction,
+  since it only documents behavior this fix didn't change). Full suite: 3327/3329 pass (was
+  3324/3326; exactly the 3 new tests, no regressions), same 2 pre-existing hardware-only skips.
 * [ ] P10-RPC-004: Implement `maxRpcReleaseTime` / RPC-only release timing.
-  *Status:* Open, blocked on P10-RPC-003 (`"ReleaseTime"` specifically) -- already documented as
-  such in `CHECKLIST.md` and `P9-STOP-010`'s note.
+  *Status:* Open. **Corrected dependency direction (see P10-RPC-003's note): this is NOT blocked
+  on P10-RPC-003 -- P10-RPC-003 is done, but `"ReleaseTime"` still can't produce a real nonzero
+  live value until THIS task adds the `maxRpcReleaseTime` computation (`FACT_internal.c:790-815`,
+  scan a sound's tracks' RPC codes for one bound to `"ReleaseTime"` with `RPC_PARAMETER_VOLUME`,
+  take the max curve-point x value, captured at `Play()` time) and a genuine RPC-only release
+  phase distinct from the existing authored-`fadeOutMS_` `State::Stopping` path (mirroring
+  FAudio's separate `SOUND_STATE_RELEASE_RPC`, entered from `StopInternal()` when there's no
+  authored fade but `maxRpcReleaseTime > 0`, `FACT.c:2414-2450`).** Already documented in
+  `CHECKLIST.md`/`P9-STOP-010`'s note as an accepted current gap.
 * [x] P10-RPC-005: Tests for volume RPC curves over update time.
   *Note:* Already existed (`PlayScalesVolumeByRpcCurveEvaluatedAtCurrentVariableValue`,
   `P9-XACT-008`) plus new this branch
