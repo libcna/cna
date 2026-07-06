@@ -5,31 +5,36 @@
       "name": "CNAAvatarBody",
       "vertices": "CNAAvatarBody.verts.bin",
       "indices": "CNAAvatarBody.idx.bin",
-      "vertexStride": 52
+      "vertexStride": 52,
+      "texture": "CNAAvatarBody.png"
     },
     {
       "name": "CNAAvatarHair",
       "vertices": "CNAAvatarHair.verts.bin",
       "indices": "CNAAvatarHair.idx.bin",
-      "vertexStride": 52
+      "vertexStride": 52,
+      "texture": "CNAAvatarHair.png"
     },
     {
       "name": "CNAAvatarPants",
       "vertices": "CNAAvatarPants.verts.bin",
       "indices": "CNAAvatarPants.idx.bin",
-      "vertexStride": 52
+      "vertexStride": 52,
+      "texture": "CNAAvatarPants.png"
     },
     {
       "name": "CNAAvatarShirt",
       "vertices": "CNAAvatarShirt.verts.bin",
       "indices": "CNAAvatarShirt.idx.bin",
-      "vertexStride": 52
+      "vertexStride": 52,
+      "texture": "CNAAvatarShirt.png"
     },
     {
       "name": "CNAAvatarShoes",
       "vertices": "CNAAvatarShoes.verts.bin",
       "indices": "CNAAvatarShoes.idx.bin",
-      "vertexStride": 52
+      "vertexStride": 52,
+      "texture": "CNAAvatarShoes.png"
     }
   ],
   "animations": [

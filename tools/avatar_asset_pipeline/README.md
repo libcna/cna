@@ -86,7 +86,8 @@ evaluation order across multiple side-effecting reads) — see
    assimp export Wave.fbx Wave.glb -f gltf2
    # ... one per clip
    ```
-5. Run the converter (requires `pip install pygltflib`):
+5. Run the converter (requires `pip install pygltflib Pillow` — Pillow writes each part's
+   placeholder texture, Task 11.19):
    ```
    python3 convert_avatar.py --body male_body.glb --out content/avatar/male \
        --clip Wave.glb Wave --clip Clap.glb Clap --clip Idle.glb Stand0 ...

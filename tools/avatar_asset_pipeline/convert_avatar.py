@@ -17,9 +17,10 @@ Pipeline (see README.md for the manual steps this depends on):
        python3 convert_avatar.py --body body.glb --out content/avatar/male \\
            --clip Wave.glb Wave --clip Clap.glb Clap ...
 
-Requires: pygltflib (pip install pygltflib). Does NOT require assimp's Python bindings —
-glTF2 parsing is done directly via pygltflib, which has better animation/skin support than
-assimp's own Python wrapper.
+Requires: pygltflib (pip install pygltflib) and Pillow (pip install Pillow, Task 11.19's
+placeholder texture output). Does NOT require assimp's Python bindings — glTF2 parsing is
+done directly via pygltflib, which has better animation/skin support than assimp's own
+Python wrapper.
 """
 
 import argparse
@@ -31,6 +32,11 @@ try:
     import pygltflib
 except ImportError:
     sys.exit("This script requires pygltflib: pip install pygltflib")
+
+try:
+    from PIL import Image
+except ImportError:
+    sys.exit("This script requires Pillow: pip install Pillow")
 
 # glTF accessor componentType -> (struct format char, byte size)
 _COMPONENT_TYPES = {
@@ -136,6 +142,23 @@ def write_clip_bin(path, duration_seconds, tracks):
                 f.write(struct.pack("<d10f", *key))
 
 
+def _write_placeholder_texture(out_dir, part_name, size=4):
+    """Writes a tiny neutral-white RGBA PNG for `part_name` and returns its Path.
+
+    Task 11.19: before this, ContentManager could already load a per-part texture (see
+    ContentManager.cpp's "texture" JSON field handling) but nothing ever emitted one, so
+    AvatarRenderer.PartTintEXT's per-part tint (Task 11.17) was the only color signal
+    that ever reached the GPU. This texture is intentionally neutral (white), not a
+    painted per-material color: AvatarAppearanceEXT remains the sole color-customization
+    authority (texture * tint == tint, no double-application of color). Painted surface
+    detail is future work (see plan_net.md Task 11.25), not this task — this task makes
+    the texture *pipeline* itself real, end-to-end.
+    """
+    tex_path = out_dir / f"{part_name}.png"
+    Image.new("RGBA", (size, size), (255, 255, 255, 255)).save(tex_path)
+    return tex_path
+
+
 def convert_body(body_path, out_dir):
     """Converts the base MakeHuman body glTF into a .skinnedmodel.json + .skeleton.bin +
     per-part vertex/index binary blobs. Returns bone_names (list, index = bone index) for
@@ -209,11 +232,13 @@ def convert_body(body_path, out_dir):
             idx_path = out_dir / f"{part_name}.idx.bin"
             _write_skinned_vertex_buffer(gltf, blob, prim, verts_path, joint_index_remap)
             _write_index_buffer(gltf, blob, prim, idx_path)
+            tex_path = _write_placeholder_texture(out_dir, part_name)
             parts.append({
                 "name": part_name,
                 "vertices": verts_path.name,
                 "indices": idx_path.name,
                 "vertexStride": 52,
+                "texture": tex_path.name,
             })
 
     manifest = {
