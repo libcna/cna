@@ -72,6 +72,13 @@ namespace Microsoft::Xna::Framework::Audio
         {
             instance.INTERNAL_applyXactTrackFilter(filterType, frequencyHz, qfactorRaw);
         }
+
+        // P10-FILTER-002/003 wrapper.
+        static void ApplyRpcFilterOverride(SoundEffectInstance& instance,
+                                            float rpcFrequencyHz, float rpcQFactor)
+        {
+            instance.INTERNAL_applyRpcFilterOverride(rpcFrequencyHz, rpcQFactor);
+        }
         static float CalculateFilterCutoff(float frequencyHz, float sampleRate)
         {
             return SoundEffectInstance::INTERNAL_calculateFilterCutoff(frequencyHz, sampleRate);

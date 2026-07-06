@@ -243,11 +243,21 @@ namespace Microsoft::Xna::Framework::Audio
         // StopInternal() (explicit Stop()/Dispose(), or SoundBank's fire-and-forget sweep).
         void ReconcileState() const;
 
-        // P9-XACT-016: result of evaluating every curve in rpcCodes_ against each curve's bound
-        // variable's *current* value -- volumeMultiplier is an amplitude ratio (1.0f == no-op),
-        // pitch is already in XNA's [-1,1] range (CentsToPitch already applied). Called once at
-        // Play() time and continuously thereafter from ReconcileState().
-        struct RpcResult { float volumeMultiplier; float pitch; };
+        // P9-XACT-016/P10-FILTER-002/003: result of evaluating every curve in rpcCodes_ against
+        // each curve's bound variable's *current* value -- volumeMultiplier is an amplitude ratio
+        // (1.0f == no-op), pitch is already in XNA's [-1,1] range (CentsToPitch already applied).
+        // filterFrequencyHz/filterQFactor default to -1.0f (matching FAudio's own sentinel,
+        // FACT_internal.c) meaning "no RPC curve targets this axis" -- unlike volume/pitch, a
+        // filter-targeting RPC's result is a plain overwrite (last curve evaluated wins), never
+        // summed across multiple bound curves, matching FAudio's own "Yes, just overwrite..."
+        // comment. Called once at Play() time and continuously thereafter from ReconcileState().
+        struct RpcResult
+        {
+            float volumeMultiplier;
+            float pitch;
+            float filterFrequencyHz = -1.0f;
+            float filterQFactor     = -1.0f;
+        };
         [[nodiscard]] RpcResult EvaluateRpc() const;
 
         // Re-applies a new category volume to all currently active instances, recombining it

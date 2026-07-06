@@ -3420,30 +3420,62 @@ restoration can be reverted.
   (`T-4C`). Wired from XACT per-track filter data at `Cue::Play()` time
   (`INTERNAL_applyXactTrackFilter`, `P9-XACT-011`) -- one-shot, not continuously re-evaluated
   (unlike RPC volume/pitch since `P9-XACT-016`).
-* [ ] P10-FILTER-002/003: RPC targets for filter frequency/Q.
-  *Status:* Open, accepted-for-now gap (`CHECKLIST.md`). `EvaluateRpc()` already parses
-  `RPC_PARAMETER_FILTERFREQUENCY`/`FILTERQFACTOR` as recognized parameter values (P10-RPC-001) but
-  discards the result. Implementing this would need `Cue::ReconcileState()`'s continuous-tick
-  infrastructure (already built for volume/pitch, `P9-XACT-016`) extended to also call
-  `SoundEffectInstance::INTERNAL_apply*Filter` every tick when a filter-targeting RPC is bound --
-  architecturally similar to the volume/pitch work, but touches `SoundEffectInstance` instead of
-  just `Cue`, and interacts with P10-FILTER-004's click/pop concern below.
-* [ ] P10-FILTER-004: Ensure live filter updates preserve filter history / don't click/pop.
-  *Status:* Open, and moot until P10-FILTER-002/003 land (today's filter is one-shot at `Play()`,
-  never live-updated, so there's no live-update click/pop risk yet). `FilterState::yl`/`yb`
-  (the recursive state) already persist correctly across a *coefficient* change today (only
-  `kind`/`frequency`/`oneOverQ` are written by the setters, `yl`/`yb` are untouched, per
-  `SoundEffectInstance.cpp`'s own comments) -- so the moment P10-FILTER-002/003 starts calling
-  `INTERNAL_apply*Filter` repeatedly, the existing coefficient-only-write design should already
-  avoid a hard discontinuity in the recursive state; this would need verifying with a real test
-  once that work lands, not before.
+* [x] P10-FILTER-002/003: RPC targets for filter frequency/Q.
+  *Note:* Closed this pass (autonomous Phase 10 continuation, 2026-07-06/07). Extended
+  `Cue::RpcResult` with `filterFrequencyHz`/`filterQFactor` (both default `-1.0f`, matching
+  FAudio's own sentinel, `FACT_internal.c`, meaning "no RPC curve targets this axis").
+  `EvaluateRpc()`'s per-curve loop now handles `RPC_PARAMETER_FILTERFREQUENCY`(3)/
+  `FILTERQFACTOR`(4) with a plain overwrite (not the volume/pitch `+=` accumulation) --
+  matches FAudio's own `/* Yes, just overwrite... */` comment exactly, since only the LAST
+  curve evaluated for each axis wins if multiple are bound. Added
+  `SoundEffectInstance::INTERNAL_applyRpcFilterOverride(rpcFrequencyHz, rpcQFactor)`: a no-op if
+  the instance has no active filter at all (matches FAudio's `if (... filter != 0xFF)` guard);
+  otherwise converts a real (non-sentinel) `rpcFrequencyHz` via the same
+  `INTERNAL_calculateFilterCutoff` the base filter uses, and a real `rpcQFactor` via a plain
+  `1.0f / rpcQFactor` (matches FAudio's `data->rpcFilterQFactor = 1.0f / rpcResult;` exactly --
+  no clamp, unlike the raw-byte XACT-authored `INTERNAL_calculateFilterOneOverQ` conversion);
+  each sentinel axis instead falls back to a new `FilterState::baseFrequency`/`baseOneOverQ`
+  pair (matches FAudio's `activeWave.baseFrequency`/`baseQFactor` fallback), set once by whichever
+  `INTERNAL_apply*Filter` first establishes the filter. Wired into `Cue::Play()` (once, right
+  after the base filter is established) and every `Cue::ReconcileState()` tick where `hasRpc` is
+  true (five call sites: the authored-fade, RPC-release, both fade-in sub-branches, and the
+  steady-state branch), same continuous-tick pattern `P9-XACT-016` already established for
+  volume/pitch.
+* [x] P10-FILTER-004: Ensure live filter updates preserve filter history / don't click/pop.
+  *Note:* Closed alongside P10-FILTER-002/003. `INTERNAL_applyRpcFilterOverride` never touches
+  `kind` and never re-calls `MIX_SetTrackCookedCallback` (already registered by
+  `INTERNAL_applyXactTrackFilter`) -- only the two coefficient floats (`frequency`/`oneOverQ`)
+  change, the exact same coefficient-only-write pattern the pre-existing `INTERNAL_apply*Filter`
+  setters already used (confirmed by inspection, not a new mechanism), so `yl`/`yb`'s recursive
+  filter state is never disturbed by a live update. No new dedicated click/pop regression test
+  added (there is no way to observe a discontinuity black-box without decoding real mixed audio
+  output, the same limitation this file's other filter tests already work around via the direct
+  `ProcessFilterSamplesForTest` hook) -- the existing `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`
+  (ThreadSanitizer-verified) and the state-variable-filter math tests were re-run and remain green
+  after this change, confirming no regression in the recursive-state-preserving design.
 * [x] P10-FILTER-005: Unit tests for low-pass/high-pass/band-pass behavior.
   *Note:* Already exist and are extensive: exact single-sample state-variable-filter math
   (`LowPassFilterFirstSampleMatchesStateVariableFilterMath` etc.), convergence tests, a real
   ThreadSanitizer-verified concurrency stress test (`T-4C` follow-up,
   `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`).
-* [ ] P10-FILTER-006: XACT tests where RPC changes filter frequency over time.
-  *Status:* Open, blocked on P10-FILTER-002/003 (nothing to test until the RPC target is wired).
+* [x] P10-FILTER-006: XACT tests where RPC changes filter frequency over time.
+  *Note:* Closed alongside P10-FILTER-002/003. Five new `SoundEffectInstanceTests.cpp` unit tests
+  directly exercising `INTERNAL_applyRpcFilterOverride` (frequency-only override, Q-only override,
+  both axes, both-sentinel falls back to base, no-op with no active filter). Two new
+  `CueTests.cpp` end-to-end tests against a dedicated `FilterFreqRpcBank()` fixture (own engine/
+  xgs/xsb, not `SharedEngine()`, same precedent as `AttackTimeBank()`): a real per-track filter
+  authored at 500Hz, plus a `RPC_PARAMETER_FILTERFREQUENCY` curve bound to `"FilterFreq"` (0.0 ->
+  2000Hz, 1.0 -> 12000Hz) -- `PlayAppliesInitialFilterFrequencyRpcEvaluationOverridingTrackBaseValue`
+  (Play()'s initial evaluation overrides the track's own authored base, compared against the
+  exact same Hz->cutoff conversion the production code uses, queried from the real mixer format
+  rather than a hardcoded sample rate) and
+  `ChangingBoundVariableAfterPlayContinuouslyUpdatesFilterFrequency` (the continuous-tick infra
+  keeps re-evaluating after `Play()`, same "change the variable, tick, observe" shape as the
+  existing volume/pitch continuity tests). `git stash`-verified: both fail against pre-fix
+  `Cue.cpp`/`SoundEffectInstance.cpp` (the frequency stays pinned to the pre-fix one-shot base
+  value in both cases). Full suite: 3338/3340 pass (was 3331/3333; the 7 new tests -- 5
+  `SoundEffectInstanceTests.cpp` + 2 `CueTests.cpp` -- no regressions), same 2 pre-existing
+  hardware-only skips.
 * [x] P10-DSP-001: Audit DSP preset parsing and current behavior.
   *Note:* Already done (`P9-XACT-010`) -- confirmed sound-level `SOUND_FLAG_HAS_DSP` is FACT's
   reverb-send-enable flag, not a filter selector; no DSP preset *system* (parameter curves that
@@ -3988,7 +4020,7 @@ restoration can be reverted.
   | HRTF/elevation | `SoundEffectInstance::Apply3D` | Pan is a single-axis (listener-right) linear projection; no vertical/elevation channel | Full multi-speaker HRTF with elevation | SDL3_mixer has no positional-audio DSP graph | Direct, `ComposedPanIsCenteredWhenEmitterDirectlyAbove`/`...Below` (P10-3D-003) | Permanent unless backend changes (RFC-2) |
   | Stereo crossfeed | `SoundEffectInstance::Pan`/`Apply3D` | Hard-pan (eliminates the opposite channel at the extremes) | 4-coefficient crossfeed matrix | `MIX_SetTrackStereo` is a 2-value gain pair; sharing the single cooked-callback slot with the shipped filter is a real regression risk (P10-PAN-002) | Indirect, via pan unit tests | Design task recorded (RFC-1); not started |
   | Loop region approximation | `SoundEffect`/`SoundEffectInstance` loop playback | A bounded loop region truncates the ENTIRE track (including the first playthrough), not just later iterations | `LoopBegin` plays once, then only the loop segment repeats | `MIX_PROP_PLAY_MAX_FRAME_NUMBER` has no per-iteration distinction | Full, for the propagation/no-crash surface (P10-LOOP-005); the underlying truncation behavior itself remains unfixed | Open (P10-LOOP-003/004 investigate a fix) |
-  | XACT RPC unsupported targets | `Cue::EvaluateRpc` | `AttackTime`/`ReleaseTime` always read as manually-set-or-0; filter-frequency/Q and DSP-preset RPC targets parsed but discarded | Live elapsed-time-driven envelopes; live filter/DSP parameter modulation | No elapsed-playback-time tracking; no DSP preset system; filter RPC needs the continuous-tick infra extended into `SoundEffectInstance` (P10-RPC-002/003, P10-FILTER-002/003) | Volume/pitch RPC targets ARE tested and continuous (`P9-XACT-016`) | Open (recorded as concrete future tasks, not permanent) |
+  | XACT RPC unsupported targets | `Cue::EvaluateRpc` | DSP-preset RPC targets (`parameter >= RPC_PARAMETER_COUNT`) parsed but discarded -- no DSP preset system exists. (`AttackTime`/`ReleaseTime` and filter-frequency/Q RPC targets are now live/continuous as of P10-RPC-002/003/004 and P10-FILTER-002/003 -- this row is narrower than when first written; full per-member re-audit is P10-AUDIT-002/003) | Live DSP parameter modulation | No DSP preset system exists at all | n/a | Open (recorded as a concrete future task, not permanent) |
   | `Distance`/`OrientationAngle`/`DopplerPitchScalar` RPC variables | `Cue::GetVariable`/`Apply3D` | Recognized as valid variable names but never auto-updated from `Apply3D`'s real computed values | Live values reflecting the last `Apply3D` call | `Apply3D()` never writes back into `variables_` (P10-RPC-002, newly documented this pass) | None | Open |
   | Constructor validation differences | `SoundEffect`, `DynamicSoundEffectInstance` | Offset/count validated (unsigned-arithmetic, overflow-safe) where C++ has no array-bounds safety net FNA relies on; sample rate/channel count NOT validated (matches FNA exactly, diverges from MSDN docs) | MSDN documents range checks FNA itself never enforces | Practical-compatibility policy: match real FNA runtime behavior over stricter, unenforced XNA docs (P9-VALIDATION-001, P10-DYN-001/002) | `ConstructorAcceptsSampleRateBelowXnaDocumentedMinimum` etc. (P10-DYN-003) | Permanent (deliberate FNA-matching choice) |
   | No-hardware behavior | `AudioEngine` constructor | Can never throw `NoAudioHardwareException` (always reports exactly one renderer) | Throws when the platform reports zero audio renderers | CNA has exactly one backend (SDL3_mixer) with no renderer-enumeration API to report zero of | N/A (structurally unreachable) | Permanent |

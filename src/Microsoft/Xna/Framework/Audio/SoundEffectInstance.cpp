@@ -37,6 +37,15 @@ namespace Microsoft::Xna::Framework::Audio
         Kind  kind        = Kind::None;
         float frequency   = 0.0f;
         float oneOverQ    = 1.0f;
+        // P10-FILTER-002/003: the filter's own base (XACT-authored, or explicitly-set) frequency/
+        // oneOverQ, distinct from the two fields above (the CURRENTLY effective, possibly RPC-
+        // overridden values the mixing thread actually reads) -- matches FAudio's
+        // `activeWave.baseFrequency`/`baseQFactor` fallback (FACT_internal.c) for whichever axis
+        // has no RPC curve targeting it on a given tick. Set once, alongside `frequency`/
+        // `oneOverQ`, by whichever INTERNAL_apply*Filter first establishes this filter; never
+        // written by INTERNAL_applyRpcFilterOverride.
+        float baseFrequency = 0.0f;
+        float baseOneOverQ  = 1.0f;
         float yl[2]       = {0.0f, 0.0f};
         float yb[2]       = {0.0f, 0.0f};
     };
@@ -504,9 +513,11 @@ namespace Microsoft::Xna::Framework::Audio
 
         MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
-        filterState_->kind      = FilterState::Kind::LowPass;
-        filterState_->frequency = cutoff;
-        filterState_->oneOverQ  = oneOverQ;
+        filterState_->kind         = FilterState::Kind::LowPass;
+        filterState_->frequency    = cutoff;
+        filterState_->oneOverQ     = oneOverQ;
+        filterState_->baseFrequency = cutoff;
+        filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
         MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
@@ -523,9 +534,11 @@ namespace Microsoft::Xna::Framework::Audio
 
         MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
-        filterState_->kind      = FilterState::Kind::HighPass;
-        filterState_->frequency = cutoff;
-        filterState_->oneOverQ  = oneOverQ;
+        filterState_->kind         = FilterState::Kind::HighPass;
+        filterState_->frequency    = cutoff;
+        filterState_->oneOverQ     = oneOverQ;
+        filterState_->baseFrequency = cutoff;
+        filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
         MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
@@ -542,9 +555,11 @@ namespace Microsoft::Xna::Framework::Audio
 
         MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
-        filterState_->kind      = FilterState::Kind::BandPass;
-        filterState_->frequency = center;
-        filterState_->oneOverQ  = oneOverQ;
+        filterState_->kind         = FilterState::Kind::BandPass;
+        filterState_->frequency    = center;
+        filterState_->oneOverQ     = oneOverQ;
+        filterState_->baseFrequency = center;
+        filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
         MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
@@ -626,6 +641,44 @@ namespace Microsoft::Xna::Framework::Audio
         }
 #else
         (void)filterType; (void)frequencyHz; (void)qfactorRaw;
+#endif
+    }
+
+    void SoundEffectInstance::INTERNAL_applyRpcFilterOverride(float rpcFrequencyHz, float rpcQFactor)
+    {
+#ifdef SOUND_ENABLED
+        // Matches FAudio's own guard (FACT_internal.c: `if (sound->sound->tracks[i].filter !=
+        // 0xFF)`) -- an RPC targeting filter frequency/Q is a no-op for a track with no filter
+        // at all, same as this method's caller (Cue::ReconcileState()) applying it uniformly to
+        // every active wave reference regardless of whether that particular one has a filter.
+        if (!track_ || !filterState_ || filterState_->kind == FilterState::Kind::None) return;
+
+        // rpcFrequencyHz needs the real device sample rate to convert Hz -> SDL3_mixer's
+        // normalized cutoff domain (same conversion INTERNAL_applyXactTrackFilter uses); if the
+        // mixer format can't be read, fall back to the base frequency for this tick rather than
+        // silently misinterpreting a raw Hz value as an already-normalized one.
+        float frequency = filterState_->baseFrequency;
+        if (rpcFrequencyHz >= 0.0f)
+        {
+            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+            SDL_AudioSpec spec{};
+            if (MIX_GetMixerFormat(mixer, &spec) && spec.freq > 0)
+                frequency = INTERNAL_calculateFilterCutoff(rpcFrequencyHz, static_cast<float>(spec.freq));
+        }
+
+        // Matches FAudio's `data->rpcFilterQFactor = 1.0f / rpcResult;` (FACT_internal.c) --
+        // direct reciprocal, no clamp (unlike INTERNAL_calculateFilterOneOverQ's raw-byte-decode
+        // clamp, which only applies to XACT-authored per-track filter data, not an RPC curve's
+        // own already-in-Q-units output).
+        const float oneOverQ = (rpcQFactor >= 0.0f) ? (1.0f / rpcQFactor) : filterState_->baseOneOverQ;
+
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        MIX_LockMixer(mixer);
+        filterState_->frequency = frequency;
+        filterState_->oneOverQ  = oneOverQ;
+        MIX_UnlockMixer(mixer);
+#else
+        (void)rpcFrequencyHz; (void)rpcQFactor;
 #endif
     }
 

@@ -1136,6 +1136,95 @@ TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterBeforePlayIsNoOp)
     EXPECT_EQ(kind, 0); // FilterState::Kind::None
 }
 
+// ===================== INTERNAL_applyRpcFilterOverride (P10-FILTER-002/003) =====================
+//
+// Base filter established via ApplyXactTrackFilter(filterType=0/LowPass, 4000Hz, qfactorRaw=3 ->
+// oneOverQ=1.0f), matching ApplyXactTrackFilterDispatchesLowPassType's own fixture values above.
+
+TEST_F(SoundEffectInstanceTest, ApplyRpcFilterOverrideOverridesFrequencyOnlyWhenQFactorSentinelIsNegative)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/0, 4000.0f, /*qfactorRaw=*/3);
+    int kind = -1; float baseFrequency = -1.0f, baseOneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, baseFrequency, baseOneOverQ);
+
+    SoundEffectInstanceTestAccess::ApplyRpcFilterOverride(inst, /*rpcFrequencyHz=*/8000.0f, /*rpcQFactor=*/-1.0f);
+
+    int kind2 = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind2, frequency, oneOverQ);
+    EXPECT_EQ(kind2, kind); // never changes the filter's kind
+    EXPECT_NE(frequency, baseFrequency); // a higher RPC-targeted Hz value converts to a different cutoff
+    EXPECT_NEAR(oneOverQ, baseOneOverQ, 1e-6f); // Q axis untouched -- falls back to the base value
+}
+
+TEST_F(SoundEffectInstanceTest, ApplyRpcFilterOverrideOverridesQFactorOnlyWhenFrequencySentinelIsNegative)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/0, 4000.0f, /*qfactorRaw=*/3);
+    int kind = -1; float baseFrequency = -1.0f, baseOneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, baseFrequency, baseOneOverQ);
+
+    SoundEffectInstanceTestAccess::ApplyRpcFilterOverride(inst, /*rpcFrequencyHz=*/-1.0f, /*rpcQFactor=*/2.0f);
+
+    int kind2 = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind2, frequency, oneOverQ);
+    EXPECT_NEAR(frequency, baseFrequency, 1e-6f); // frequency axis untouched -- falls back to base
+    EXPECT_NEAR(oneOverQ, 0.5f, 1e-6f); // matches FAudio's plain `1.0f / rpcResult` (FACT_internal.c)
+}
+
+TEST_F(SoundEffectInstanceTest, ApplyRpcFilterOverrideOverridesBothAxesWhenBothProvided)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/0, 4000.0f, /*qfactorRaw=*/3);
+
+    SoundEffectInstanceTestAccess::ApplyRpcFilterOverride(inst, /*rpcFrequencyHz=*/8000.0f, /*rpcQFactor=*/4.0f);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_NEAR(oneOverQ, 0.25f, 1e-6f);
+    EXPECT_GT(frequency, 0.0f);
+}
+
+// Both axes at the "no override" sentinel must reproduce exactly the base frequency/Q -- a
+// steady-state cue whose RPC bindings don't currently target either filter axis this tick.
+TEST_F(SoundEffectInstanceTest, ApplyRpcFilterOverrideWithBothSentinelsReproducesBaseValues)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/0, 4000.0f, /*qfactorRaw=*/3);
+    int kind = -1; float baseFrequency = -1.0f, baseOneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, baseFrequency, baseOneOverQ);
+
+    SoundEffectInstanceTestAccess::ApplyRpcFilterOverride(inst, -1.0f, -1.0f);
+
+    int kind2 = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind2, frequency, oneOverQ);
+    EXPECT_NEAR(frequency, baseFrequency, 1e-6f);
+    EXPECT_NEAR(oneOverQ, baseOneOverQ, 1e-6f);
+}
+
+// Matches FAudio's own guard (`if (sound->sound->tracks[i].filter != 0xFF)`) -- a track with no
+// filter at all must not have one spuriously created by an RPC filter-targeting curve.
+TEST_F(SoundEffectInstanceTest, ApplyRpcFilterOverrideIsNoOpWhenNoFilterIsActive)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    SoundEffectInstanceTestAccess::ApplyRpcFilterOverride(inst, 8000.0f, 2.0f);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 0); // FilterState::Kind::None -- still no filter was ever created
+}
+
 // A constant (DC) signal repeatedly fed through the low-pass filter must converge to unity gain
 // -- verifies the recursive state (yl/yb) persists correctly across multiple calls, not just a
 // single-sample transient.

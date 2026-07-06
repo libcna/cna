@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
+#include "CNA/Internal/Audio/AudioMixer.hpp"
 #include "CueTestAccess.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -1884,6 +1885,218 @@ namespace
         return bank;
     }
 
+    // ── P10-FILTER-002/003/006: dedicated FILTERFREQUENCY-bound RPC fixture ──────────────────
+    //
+    // Own dedicated engine/xgs (not SharedEngine(), same precedent as AttackTimeBank()) with a
+    // single variable literally named "FilterFreq" and one RPC_PARAMETER_FILTERFREQUENCY-
+    // targeting curve bound to it: variable value 0.0 -> 2000Hz, 1.0 -> 12000Hz, linear -- the
+    // curve's y-axis is itself the desired frequency in Hz, matching FAudio's
+    // FACT_INTERNAL_UpdateRPCs feeding the raw curve result straight into
+    // FACT_INTERNAL_CalculateFilterFrequency (FACT_internal.c).
+    constexpr uint32_t kFilterFreqXgsHeaderSize       = 69;
+    constexpr uint32_t kFilterFreqXgsCategoryDataSize = 10;
+    constexpr uint32_t kFilterFreqXgsVariableDataSize = 13;
+    constexpr uint32_t kFilterFreqXgsCategoryNameSize = 8;  // "Default\0"
+    constexpr uint32_t kFilterFreqXgsVariableNameSize = 11; // "FilterFreq\0"
+    constexpr uint32_t kFilterFreqXgsRpcOffset = kFilterFreqXgsHeaderSize + kFilterFreqXgsCategoryDataSize
+        + kFilterFreqXgsVariableDataSize + kFilterFreqXgsCategoryNameSize + kFilterFreqXgsVariableNameSize;
+    constexpr uint32_t kFilterFreqRpcCode = kFilterFreqXgsRpcOffset;
+    // The track's own authored (base) filter frequency -- deliberately far from both curve
+    // endpoints above, so a test can tell "the RPC override took effect" apart from "the base
+    // value is still in play" unambiguously.
+    constexpr uint16_t kFilterFreqTrackBaseHz = 500;
+
+    std::vector<uint8_t> BuildFilterFreqRpcXgsFixtureBytes()
+    {
+        const uint32_t categoryOffset     = kFilterFreqXgsHeaderSize;
+        const uint32_t variableOffset     = categoryOffset + kFilterFreqXgsCategoryDataSize;
+        const uint32_t categoryNameOffset = variableOffset + kFilterFreqXgsVariableDataSize;
+        const std::string categoryName    = "Default";
+        const uint32_t variableNameOffset =
+            categoryNameOffset + static_cast<uint32_t>(categoryName.size()) + 1;
+        const std::string variableName    = "FilterFreq";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'X', 'G', 'S', 'F' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // unknown
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 3);   // platform
+
+        AppendU16(data, 1); // categoryCount
+        AppendU16(data, 1); // variableCount
+        AppendU16(data, 0); // blob1Count
+        AppendU16(data, 0); // blob2Count
+        AppendU16(data, 1); // rpcCount
+        AppendU16(data, 0); // dspPresetCount
+        AppendU16(data, 0); // dspParameterCount
+
+        AppendU32(data, categoryOffset);
+        AppendU32(data, variableOffset);
+        AppendU32(data, 0); // blob1Offset
+        AppendU32(data, 0); // categoryNameIndexOffset
+        AppendU32(data, 0); // blob2Offset
+        AppendU32(data, 0); // variableNameIndexOffset
+        AppendU32(data, categoryNameOffset);
+        AppendU32(data, variableNameOffset);
+        AppendU32(data, kFilterFreqXgsRpcOffset);
+
+        // Category: instanceLimit, fadeInMS, fadeOutMS, maxInstanceBehavior(skip), parentIndex, volume, visibility
+        AppendU8(data, 0xFF);
+        AppendU16(data, 0);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+        AppendU16(data, 0xFFFF);
+        AppendU8(data, 0xFF);
+        AppendU8(data, 0);
+
+        // Variable: accessibility, initialValue, minValue, maxValue
+        AppendU8(data, 0x03);
+        AppendF32(data, 0.0f);
+        AppendF32(data, 0.0f);
+        AppendF32(data, 1.0f);
+
+        AppendCStr(data, categoryName);
+        AppendCStr(data, variableName);
+
+        // RPC 0 (FILTERFREQUENCY): variable=0 ("FilterFreq"), 2 points, linear.
+        AppendU16(data, 0); // variable
+        AppendU8(data, 2);  // pointCount
+        AppendU16(data, 3); // parameter = FILTERFREQUENCY
+        AppendF32(data, 0.0f); AppendF32(data, 2000.0f);  AppendU8(data, 0); // point 0: linear
+        AppendF32(data, 1.0f); AppendF32(data, 12000.0f); AppendU8(data, 0); // point 1: linear
+
+        return data;
+    }
+
+    // .xsb with one simple cue ("FilterFreqRpcCue") pointing at a COMPLEX sound with a single
+    // track (referencing LongWaveBank), SOUND_FLAG_HAS_RPC set with a sound-level RPC code
+    // (kFilterFreqRpcCode) alongside the track's own real, authored base filter (same
+    // filterData=0x0605 high-pass/qfactor=6 encoding as BuildFilterXsbFixtureBytes, but
+    // kFilterFreqTrackBaseHz instead of 8000Hz) -- same layout as BuildFilterXsbFixtureBytes with
+    // the RPC block (parsed right after trackCount, before per-track metadata, per
+    // XactParser.cpp's IN-8-fixed ordering) inserted.
+    std::vector<uint8_t> BuildFilterFreqRpcXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        // flags+cat+vol+pitch+prio+len(9) + trackCount(1) + RPC block(2+1+4=7)
+        // + track-meta vol+code+filterData+freq(9)
+        constexpr uint32_t soundPrefixSize = 9 + 1 + 7 + 9;
+        constexpr uint32_t eventSize       = 16; // one PlayWave event, see BuildPlayWaveEventBytes
+        constexpr uint32_t soundSize       = soundPrefixSize + 1 /*eventCount*/ + eventSize;
+        const uint32_t trackEventsOffset  = soundOffset + soundPrefixSize;
+        const uint32_t cueSimpleOffset    = soundOffset + soundSize;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "FilterFreqRpcCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "FilterFreqRpcSoundBank", bankNameSize);
+        AppendPadded(data, kLongWaveBankName, 64);
+
+        // Sound: COMPLEX | HAS_RPC, one track.
+        AppendU8(data, 0x03); // SOUND_FLAG_COMPLEX | SOUND_FLAG_HAS_RPC
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU8(data, 1);    // trackCount
+
+        // Sound-level RPC block (parsed before per-track metadata, XactParser.cpp's IN-8 order).
+        AppendU16(data, 7);   // rpcDataLength (informational, unused): 2+1(count)+4(code)
+        AppendU8(data, 1);    // rpc code count
+        AppendU32(data, kFilterFreqRpcCode);
+
+        // Track metadata: volume byte, code (absolute offset to event array), filterData,
+        // frequency. filterData = 0x0605: qfactor=6 (upper byte), bit0=1 (has filter),
+        // (filterData>>1)&0x02==2 (high-pass, FAudio's own bit-decode -- P9-XACT-010).
+        AppendU8(data, 0xFF); // track volume raw byte
+        AppendU32(data, trackEventsOffset);
+        AppendU16(data, 0x0605);            // filterData
+        AppendU16(data, kFilterFreqTrackBaseHz); // frequency (Hz), the fallback base value
+
+        // Track event array: one PlayWave event referencing LongWaveBank entry 0.
+        AppendU8(data, 1); // eventCount
+        AppendU32(data, 1u); // evtInfo: type=FACTEVENT_PLAYWAVE (1), timestamp=0
+        AppendU16(data, 0);  // randomOffset
+        AppendU8(data, 0xFF); // separator
+        AppendU8(data, 0);   // flags
+        AppendU16(data, 0);  // waveIdx
+        AppendU8(data, 0);   // wbIdx
+        AppendU8(data, 0);   // loopCount
+        AppendU16(data, 0);  // position
+        AppendU16(data, 0);  // angle
+
+        // Simple cue.
+        AppendU8(data, 0);
+        AppendU32(data, soundOffset);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    AudioEngine& FilterFreqRpcEngine()
+    {
+        static AudioEngine engine(WriteFixture(
+            "cna_cue_test", "filterfreqrpc.xgs", BuildFilterFreqRpcXgsFixtureBytes()));
+        return engine;
+    }
+
+    WaveBank& FilterFreqRpcWaveBank()
+    {
+        static WaveBank wb(&FilterFreqRpcEngine(), WriteFixture(
+            "cna_cue_test", "filterfreqrpc_long.xwb", BuildLongXwbFixtureBytes()));
+        return wb;
+    }
+
+    SoundBank& FilterFreqRpcBank()
+    {
+        (void)FilterFreqRpcWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&FilterFreqRpcEngine(), WriteFixture(
+            "cna_cue_test", "filterfreqrpc.xsb", BuildFilterFreqRpcXsbFixtureBytes()));
+        return bank;
+    }
+
     SoundBank& SharedUnresolvableSoundBank()
     {
         (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
@@ -3248,6 +3461,75 @@ TEST(CueTest, PlayWiresRealXactTrackFilterIntoSpawnedInstance)
     EXPECT_NEAR(oneOverQ, 0.5f, 1e-6f); // qfactor=6 -> min(3/6,1)
     EXPECT_GT(frequency, 0.0f);
 }
+
+// ===================== RPC-driven live filter frequency (P10-FILTER-002/003/006) =====================
+//
+// FilterFreqRpcBank()'s "FilterFreqRpcCue" (its own dedicated engine/xgs/xsb, see
+// BuildFilterFreqRpcXgsFixtureBytes/BuildFilterFreqRpcXsbFixtureBytes) has a real per-track
+// high-pass filter authored at kFilterFreqTrackBaseHz (500Hz) AND a RPC_PARAMETER_FILTERFREQUENCY
+// curve bound to the "FilterFreq" variable: 0.0 -> 2000Hz, 1.0 -> 12000Hz, linear.
+
+// Play() must apply the RPC's initial evaluation (variable defaults to 0.0 -> curve's 2000Hz
+// endpoint) on top of the track's own authored base filter -- proving the wiring reaches all the
+// way from Cue::Play()'s new INTERNAL_applyRpcFilterOverride() call into the spawned instance's
+// real filter state, not just the one-shot XACT-authored value.
+TEST(CueTest, PlayAppliesInitialFilterFrequencyRpcEvaluationOverridingTrackBaseValue)
+{
+    auto cue = std::unique_ptr<Cue>(FilterFreqRpcBank().GetCue("FilterFreqRpcCue"));
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(*inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 2); // FilterState::Kind::HighPass, unchanged by the RPC override
+
+    // The RPC curve's 2000Hz endpoint (variable == 0.0 by default) must win over the track's own
+    // authored 500Hz base -- compare against the exact same Hz->cutoff conversion the production
+    // code uses (against the real mixer's own sample rate, not a hardcoded assumption), rather
+    // than a bare "greater than" check.
+    SDL_AudioSpec spec{};
+    ASSERT_TRUE(MIX_GetMixerFormat(CNA::Internal::Audio::GetMixer(), &spec));
+    const float expectedCutoff =
+        SoundEffectInstanceTestAccess::CalculateFilterCutoff(2000.0f, static_cast<float>(spec.freq));
+    EXPECT_NEAR(frequency, expectedCutoff, 1e-4f);
+
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
+// The continuous-tick infra (P9-XACT-016's pattern, now extended to filter frequency) must keep
+// re-evaluating the bound curve as the variable changes after Play(), not just once at Play()
+// time -- same "change the variable, tick, observe the new value" shape as
+// ChangingBoundVariableAfterPlayContinuouslyUpdatesVolume/Pitch.
+TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesFilterFrequency)
+{
+    auto cue = std::unique_ptr<Cue>(FilterFreqRpcBank().GetCue("FilterFreqRpcCue"));
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+
+    int kind = -1; float lowFrequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(*inst, kind, lowFrequency, oneOverQ);
+
+    cue->SetVariable("FilterFreq", 1.0f); // curve -> 12000Hz
+    ASSERT_TRUE(cue->getIsPlayingProperty()); // ticks ReconcileState()'s continuous RPC re-eval
+
+    float highFrequency = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(*inst, kind, highFrequency, oneOverQ);
+
+    // Cutoff is monotonically increasing with the desired Hz over this range (INTERNAL_calculateFilterCutoff
+    // is 2*sin(pi*min(hz/sampleRate,0.5))) -- a strictly higher live-evaluated frequency must
+    // produce a strictly higher cutoff, not just "some different value".
+    EXPECT_GT(highFrequency, lowFrequency);
+
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
+// Q-factor RPC targeting is a distinct axis from frequency -- verified independently by directly
+// wiring an RPC curve override at the SoundEffectInstance level in
+// ApplyRpcFilterOverrideOverridesQFactorOnlyWhenFrequencySentinelIsNegative
+// (SoundEffectInstanceTests.cpp); this Cue-level pass only needs to confirm the frequency-axis
+// wiring reaches Cue::ReconcileState() correctly, which the two tests above already do.
 
 // A cue with no filter data at all ("LongCue") must not spuriously end up with an active filter.
 TEST(CueTest, PlaySoundWithNoFilterDataHasNoActiveFilter)

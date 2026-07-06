@@ -107,10 +107,29 @@ namespace Microsoft::Xna::Framework::Audio
         // normalized cutoff via the real device sample rate (INTERNAL_calculateFilterCutoff);
         // `qfactorRaw` is the raw XACT Q-factor byte, converted via
         // INTERNAL_calculateFilterOneOverQ. No-op for an unrecognized filterType (defensive only
-        // -- XactParser.cpp's bit-decode never actually produces one). Not continuously
-        // re-evaluated while playing (no per-frame Cue update tick exists, same one-shot-at-
-        // Play() narrowing as P9-XACT-006/007's RPC volume/pitch -- see CHECKLIST.md).
+        // -- XactParser.cpp's bit-decode never actually produces one). Establishes this filter's
+        // base frequency/Q; itself only ever called once, at Play() time -- live RPC-driven
+        // frequency/Q targeting on top of this base is a separate, continuously-reapplied concern
+        // (P10-FILTER-002/003, see INTERNAL_applyRpcFilterOverride below).
         NOXNA void INTERNAL_applyXactTrackFilter(uint8_t filterType, float frequencyHz, uint8_t qfactorRaw);
+
+        // P10-FILTER-002/003: continuous per-tick RPC targeting for filter frequency/Q, called
+        // every tick from Cue::ReconcileState() (the same continuous-tick infra P9-XACT-016
+        // already built for volume/pitch) whenever this cue has RPC bindings, plus once more at
+        // Play() right after the base filter is established. `rpcFrequencyHz`/`rpcQFactor` use a
+        // negative sentinel (matching FAudio's own `>= 0.0f` checks, FACT_internal.c) meaning "no
+        // RPC curve targets this axis this tick" -- that axis falls back to the filter's base
+        // (XACT-authored) value instead, exactly like real FAudio's per-tick fallback between
+        // `rpcData.rpcFilterFreq`/`rpcFilterQFactor` and `activeWave.baseFrequency`/`baseQFactor`.
+        // A no-op if this instance has no active filter at all (`waveRef.filterType == 0xFF`) --
+        // matches FAudio's own `if (sound->sound->tracks[i].filter != 0xFF)` guard around the
+        // whole filter-update block. Never touches `kind` or re-registers the cooked callback
+        // (already registered by INTERNAL_applyXactTrackFilter) -- only the two coefficient
+        // floats change, the same coefficient-only-write pattern the existing INTERNAL_apply*
+        // setters already use, so `yl`/`yb`'s recursive filter state is never disturbed
+        // (P10-FILTER-004: no click/pop from a live update, since nothing about the callback
+        // registration or recursive state changes, only the coefficients it reads).
+        NOXNA void INTERNAL_applyRpcFilterOverride(float rpcFrequencyHz, float rpcQFactor);
 
         // Pure conversion helpers (P9-XACT-011), split out of INTERNAL_applyXactTrackFilter so
         // they're independently unit-testable without a real SDL3_mixer device driving the

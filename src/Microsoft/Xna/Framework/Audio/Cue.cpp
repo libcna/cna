@@ -213,6 +213,10 @@ namespace Microsoft::Xna::Framework::Audio
         // Play()-time snapshot.
         float rpcVolumeCentibels = 0.0f;
         float rpcPitchCents      = 0.0f;
+        // P10-FILTER-002/003: -1.0f sentinel ("no RPC curve targets this axis"), matching
+        // FAudio's own convention (FACT_internal.c) -- see RpcResult's declaration.
+        float rpcFilterFreqHz  = -1.0f;
+        float rpcFilterQFactor = -1.0f;
 
         AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
         if (eng)
@@ -268,15 +272,24 @@ namespace Microsoft::Xna::Framework::Audio
 
                 if (rpc->parameter == 0)      rpcVolumeCentibels += result; // RPC_PARAMETER_VOLUME
                 else if (rpc->parameter == 1) rpcPitchCents += result;      // RPC_PARAMETER_PITCH
-                // REVERBSEND/FILTERFREQUENCY/FILTERQFACTOR/DSP-preset (>=5): unsupported, see
-                // CHECKLIST.md.
+                // P10-FILTER-002/003: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c)
+                // exactly -- "Yes, just overwrite...": unlike volume/pitch above, a filter-
+                // targeting RPC's result plainly overwrites (last curve evaluated wins), never
+                // accumulates across multiple bound curves. `result` here is the curve's own
+                // authored-domain output (desired frequency in Hz for FILTERFREQUENCY, a plain Q
+                // value for FILTERQFACTOR) -- SoundEffectInstance::INTERNAL_applyRpcFilterOverride
+                // does the Hz->normalized-cutoff and Q->oneOverQ conversions, matching how
+                // FACT_INTERNAL_UpdateRPCs itself defers those same conversions to its own callers.
+                else if (rpc->parameter == 3) rpcFilterFreqHz  = result; // RPC_PARAMETER_FILTERFREQUENCY
+                else if (rpc->parameter == 4) rpcFilterQFactor = result; // RPC_PARAMETER_FILTERQFACTOR
+                // REVERBSEND/DSP-preset (>=5): unsupported, see CHECKLIST.md.
             }
         }
 
         const float volumeMultiplier =
             static_cast<float>(std::pow(10.0, rpcVolumeCentibels / 2000.0));
         const float pitch = CentsToPitch(static_cast<float>(basePitchCents_) + rpcPitchCents);
-        return {volumeMultiplier, pitch};
+        return {volumeMultiplier, pitch, rpcFilterFreqHz, rpcFilterQFactor};
     }
 
     void Cue::ReconcileState() const
@@ -338,7 +351,12 @@ namespace Microsoft::Xna::Framework::Audio
                     // 1.0f when hasRpc is false, so this is a no-op for the common non-RPC case.
                     pi.instance->setVolumeProperty(std::clamp(
                         pi.baseVolume * catVol * rpc.volumeMultiplier * fadeMultiplier, 0.0f, 1.0f));
-                    if (hasRpc) pi.instance->setPitchProperty(rpc.pitch);
+                    if (hasRpc)
+                    {
+                        pi.instance->setPitchProperty(rpc.pitch);
+                        // P10-FILTER-002/003
+                        pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
+                    }
                 }
             return;
         }
@@ -374,7 +392,12 @@ namespace Microsoft::Xna::Framework::Audio
                 {
                     pi.instance->setVolumeProperty(std::clamp(
                         pi.baseVolume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f));
-                    if (hasRpc) pi.instance->setPitchProperty(rpc.pitch);
+                    if (hasRpc)
+                    {
+                        pi.instance->setPitchProperty(rpc.pitch);
+                        // P10-FILTER-002/003
+                        pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
+                    }
                 }
             return;
         }
@@ -404,7 +427,12 @@ namespace Microsoft::Xna::Framework::Audio
                     {
                         pi.instance->setVolumeProperty(
                             std::clamp(pi.baseVolume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f));
-                        if (hasRpc) pi.instance->setPitchProperty(rpc.pitch);
+                        if (hasRpc)
+                        {
+                            pi.instance->setPitchProperty(rpc.pitch);
+                            // P10-FILTER-002/003
+                            pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
+                        }
                     }
             }
             else
@@ -416,7 +444,12 @@ namespace Microsoft::Xna::Framework::Audio
                     {
                         pi.instance->setVolumeProperty(std::clamp(
                             pi.baseVolume * catVol * rpc.volumeMultiplier * fadeMultiplier, 0.0f, 1.0f));
-                        if (hasRpc) pi.instance->setPitchProperty(rpc.pitch);
+                        if (hasRpc)
+                        {
+                            pi.instance->setPitchProperty(rpc.pitch);
+                            // P10-FILTER-002/003
+                            pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
+                        }
                     }
             }
         }
@@ -436,6 +469,8 @@ namespace Microsoft::Xna::Framework::Audio
                     pi.instance->setVolumeProperty(
                         std::clamp(pi.baseVolume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f));
                     pi.instance->setPitchProperty(rpc.pitch);
+                    // P10-FILTER-002/003
+                    pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                 }
         }
 
@@ -761,9 +796,7 @@ namespace Microsoft::Xna::Framework::Audio
             inst->Play();
 
             // P9-XACT-011: wire the track's real parsed XACT filter (if any) into the real
-            // SDL3_mixer filter callback. One-shot at Play() time, not continuously re-evaluated
-            // (unlike RPC volume/pitch since P9-XACT-016) -- filter-frequency/Q RPC targeting
-            // remains unsupported outright, see CHECKLIST.md.
+            // SDL3_mixer filter callback.
             if (waveRef.filterType != 0xFF)
             {
                 inst->INTERNAL_applyXactTrackFilter(
@@ -771,6 +804,15 @@ namespace Microsoft::Xna::Framework::Audio
                     static_cast<float>(waveRef.filterFrequencyHz),
                     waveRef.filterQFactorRaw);
             }
+
+            // P10-FILTER-002/003: apply this cue's initial RPC filter frequency/Q evaluation
+            // (`rpc`, computed above) right after the base filter is established -- continuously
+            // re-evaluated thereafter from ReconcileState() every tick, same continuous-tick
+            // pattern P9-XACT-016 already established for volume/pitch. A no-op (see
+            // INTERNAL_applyRpcFilterOverride's own guard) for a wave reference with no filter at
+            // all, or when this cue has no RPC codes bound (rpc.filterFrequencyHz/filterQFactor
+            // are both -1.0f in that case).
+            inst->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
 
             active_.push_back({std::move(inst), waveRef.volume});
 
