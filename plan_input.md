@@ -1362,20 +1362,38 @@ multicast invocation order). **Files changed:**
 **Behavior verified:** event conversion + empty-safe + multi-unit + registration-order dispatch.
 **Remaining risk:** none.
 
-## P7-004 — Verify synthesized control characters
-- [ ] Test Backspace.
-- [ ] Test Tab.
-- [ ] Test Enter.
-- [ ] Test Delete.
-- [ ] Test Home/End if currently synthesized.
-- [ ] Verify behavior against FNA/MonoGame policy.
-- [ ] Add tests.
+## P7-004 — Verify synthesized control characters `[x]`
+- [x] Test Backspace.
+- [x] Test Tab.
+- [x] Test Enter.
+- [x] Test Delete.
+- [x] Test Home/End if currently synthesized.
+- [x] Verify behavior against FNA/MonoGame policy.
+- [x] Add tests.
 
-## P7-005 — Verify clipboard paste behavior
-- [ ] Audit Ctrl+V handling.
-- [ ] Ensure text is not double-inserted if SDL also emits text input.
-- [ ] Add tests for Ctrl+V keydown and text input sequence.
-- [ ] Document platform behavior.
+**Result (2026-07-06):** CNA synthesizes exactly the FNA set into `TextInput` on KEY_DOWN (`kTextInputCharacters`,
+SdlInputBridge.cpp:95-103): **Home=2, End=3, Backspace=8, Tab=9, Enter=13, Delete=127** (+ Ctrl+V=22, see
+P7-005). Verified **byte-for-byte identical to FNA** `FNAPlatform.TextInputCharacters` /
+`TextInputBindings` — no CNA-only additions or omissions. All six control keys pinned by
+`ControlKeysSynthesizeTextInputCharacters` (asserts each key→its char). **Files changed:** none (coverage
+confirmed). **Behavior verified:** the six synthesized control chars match FNA exactly. **Remaining risk:**
+none.
+
+## P7-005 — Verify clipboard paste behavior `[x]`
+- [x] Audit Ctrl+V handling.
+- [x] Ensure text is not double-inserted if SDL also emits text input.
+- [x] Add tests for Ctrl+V keydown and text input sequence.
+- [x] Document platform behavior.
+
+**Result (2026-07-06):** Fully covered and FNA-faithful (`SDL3_FNAPlatform.cs:915-921`: Ctrl+V emits char 22
+and sets `textInputSuppress`). `CtrlVEmitsPasteCharAndSuppressesLiteralText` drives keydown(LCtrl),
+keydown(V), textInput("v") → emits **charcs 22** once and **suppresses the literal 'v' echo** (no
+double-insert), then confirms text flows again after release. `PlainVWithoutCtrlIsNotSuppressed` is the
+negative control, and `CtrlVSuppressionDoesNotStickWhenCtrlReleasedWithoutVKeyUp` proves the suppression
+gate clears on either V-up or Ctrl-up (never swallows text indefinitely). Platform behavior documented in
+the source (`handle_text_input_key_up`) and `docs/input-fna-fidelity.md`. **Files changed:** none (coverage
+confirmed). **Behavior verified:** paste char emitted once, literal echo suppressed, suppression self-clears.
+**Remaining risk:** none.
 
 ## P7-006 — Verify key repeat and text repeat
 - [ ] Ensure repeated keydown does not corrupt keyboard state.
