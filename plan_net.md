@@ -837,12 +837,19 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   and `SendDataToRecipientThrowsWhenOffsetPlusCountExceedsBuffer` both feed an out-of-range
   `offset+count` combination.
 
-- [ ] **Task 5.4** — Add ordinal-value assertions to `NetEnumsTests.cpp` for `SendDataOptions` and
+- [x] **Task 5.4** — Add ordinal-value assertions to `NetEnumsTests.cpp` for `SendDataOptions` and
   `NetworkSessionType` specifically (not just tautological self-equality checks). Confirmed both
   enums are serialized as raw bytes on the wire (`static_cast<SendDataOptions>(reader.ReadByte())` /
   `static_cast<NetworkSessionType>(reader.ReadByte())` in `NetPacketCodec.cpp`/`NetDiscoveryProtocol.cpp`)
   — a silent enum reordering would desync wire compatibility with nothing in the test suite to catch
   it.
+  **Fixed:** added `NetworkSessionTypeTest.OrdinalValuesMatchFNAAndAreWireStable` and
+  `SendDataOptionsTest.OrdinalValuesMatchFNAAndAreWireStable`, asserting each enumerator's
+  `static_cast<int>` value against both the real FNA reference source's declaration order and the
+  wire format's own implicit ordinal dependency. Full suite: **3266/3268 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions. Pure test-coverage addition (no existing behavior
+  changed), so no revert-verify applies — the assertions themselves are the direct proof (would
+  fail immediately on any future reordering).
 
 - [ ] **Task 5.5** — Add a test for `NetworkSessionJoinException`'s protected serialization
   constructor (`SerializationInfo&`, `StreamingContext&`), currently uncovered.
