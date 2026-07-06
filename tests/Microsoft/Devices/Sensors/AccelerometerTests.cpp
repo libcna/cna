@@ -678,6 +678,32 @@ TEST(AccelerometerTests, InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarke
     EXPECT_EQ(a.getCurrentValueProperty().getAccelerationProperty(), expectedAcceleration);
 }
 
+// Task SENSORBASE-005: Stop() only clears started_/state_ bookkeeping
+// (confirmed by reading Accelerometer::Stop() directly) -- the real WP7 API
+// documents no Stop()-time reset for CurrentValue/IsDataValid at all, so the
+// last known reading and its validity are expected to persist. This is the
+// real, existing behavior already shared identically by all four sensor
+// classes; this test just locks it in for Accelerometer with an explicit
+// assertion, since nothing previously did.
+TEST(AccelerometerTests, CurrentValueAndIsDataValidRetainLastReadingAfterStop)
+{
+    Accelerometer a;
+    a.SetSupportedForTesting(true);
+    a.SetStartedForTesting(true);
+
+    constexpr float StandardGravity = 9.80665f;
+    a.InjectSyntheticSensorUpdate(0.0f, StandardGravity, 0.0f);
+
+    ASSERT_TRUE(a.getIsDataValidProperty());
+    const Vector3 expectedAcceleration(0.0f, 1.0f, 0.0f);
+    ASSERT_EQ(a.getCurrentValueProperty().getAccelerationProperty(), expectedAcceleration);
+
+    a.Stop();
+
+    EXPECT_TRUE(a.getIsDataValidProperty());
+    EXPECT_EQ(a.getCurrentValueProperty().getAccelerationProperty(), expectedAcceleration);
+}
+
 // Task P5-6: without SetSupportedForTesting(), getCurrentValueProperty()
 // must still throw on unsupported hardware — confirming
 // SetStartedForTesting()+InjectSyntheticSensorUpdate() alone never bypass

@@ -364,6 +364,35 @@ TEST(MotionTests, CurrentValueChangedFiresFromBackendReading)
     EXPECT_TRUE(m.getIsDataValidProperty());
 }
 
+// Task SENSORBASE-005: mirrors AccelerometerTests.
+// CurrentValueAndIsDataValidRetainLastReadingAfterStop -- see that test for
+// the full rationale. Motion::Stop() only clears started_/state_ (confirmed
+// by reading Motion::Stop() directly), so the last known reading and its
+// validity are expected to persist.
+TEST(MotionTests, CurrentValueAndIsDataValidRetainLastReadingAfterStop)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        System::DateTimeOffset::getUtcNowProperty());
+    const MotionReading synthetic(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        System::DateTimeOffset::getUtcNowProperty());
+    fake->CapturedOnReading(synthetic);
+    ASSERT_TRUE(m.getIsDataValidProperty());
+
+    m.Stop();
+
+    EXPECT_TRUE(m.getIsDataValidProperty());
+    EXPECT_EQ(m.getCurrentValueProperty().getDeviceRotationRateProperty(), Vector3(0.01f, 0.02f, 0.03f));
+}
+
 // Task SENSORBASE-003: see CompassTests.cpp's identical test for the full
 // rationale -- unlike Accelerometer/Gyroscope, this exact reentrancy
 // scenario had never been tested for Motion at all before this task.

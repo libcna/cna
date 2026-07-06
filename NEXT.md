@@ -99,6 +99,32 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `SENSORBASE-005` closed: `CurrentValue`/`IsDataValid` behavior verified
+consistent across all four sensor classes, no code change.** Found that both getters
+are defined exactly once, on `SensorBase<T>` itself — none of `Accelerometer`/
+`Gyroscope`/`Compass`/`Motion` override either one — so identical behavior across all
+four is guaranteed by construction, not something that needed a per-class audit.
+Verified each state against the shared code and the official archived MSDN property
+pages (`CurrentValue`, `hh239261(v=vs.105)`; `IsDataValid`, `hh220799(v=vs.110)`):
+unsupported (`CurrentValue` throws `InvalidOperationException`, matching MSDN's Remarks
+exactly; `IsDataValid` never throws, matching MSDN's silence on the subject),
+before-`Start()` (default reading + `false`, already tested at the `SensorBase<T>`
+level), after a failed `Start()` (the only failure path is "unsupported," already
+covered by the unsupported-state tests — no distinct scenario exists). Found two gaps
+that were previously untested: **after `Stop()`**, confirmed by reading all four `Stop()`
+implementations that none touch `currentValue_`/`isDataValid_` at all — the last known
+reading and its validity persist, consistent but never actually asserted; added one new
+`CurrentValueAndIsDataValidRetainLastReadingAfterStop` test per class. **Disposed**,
+confirmed neither getter checks `disposed_` at all (unlike `Start()`/`Stop()`, each of
+which has its own explicit `ObjectDisposedException::ThrowIf(...)`) — deliberately left
+unchanged and just locked in with
+`SensorBaseTests.CurrentValueAndIsDataValidDoNotThrowAfterDispose`, since whether these
+getters *should* instead throw is `SENSORBASE-006`'s question ("Verify Dispose
+semantics"), not this task's. Verified: 309/309 tests (up from 304) on plain
+`cmake-build-debug` and all three sanitizer presets. ASan/UBSan: 0 issues. TSan: 44
+reports, all the same pre-existing, unrelated `sharp-runtime` `TimeSpan::copy_count`
+race.
+
 **2026-07-06 — `SENSORBASE-004` closed: found and fixed a real data race in
 `Compass`/`Motion`, wrote the consolidated thread-safety contract.** Auditing locking
 across all four sensor classes for this task's "clarify the contract" ask found that,
@@ -563,21 +589,24 @@ own priority labels.
 
 `DEV-API-003`, `DEV-BUILD-002`, `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`,
 `DEV-API-001`, `ANDROID-BRIDGE-002`, `READINGS-002`, `DEV-BUILD-004`, `MOTION-008`,
-`SENSORBASE-008`, `DEV-BUILD-001`, `SENSORBASE-002`, `SENSORBASE-003`, and
-`SENSORBASE-004` are now closed (16 of 72 total task headers) — see Section 3 and
-`plan_devices.md` itself (grep for `— CLOSED`).
+`SENSORBASE-008`, `DEV-BUILD-001`, `SENSORBASE-002`, `SENSORBASE-003`,
+`SENSORBASE-004`, and `SENSORBASE-005` are now closed (17 of 72 total task headers) —
+see Section 3 and `plan_devices.md` itself (grep for `— CLOSED`).
 
-56 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
+55 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
 `VIB-010`, deliberately untouched per explicit user instruction so far), most
 Accelerometer/Gyroscope/Compass/Motion API- and hardware-verification audits
 (`ACCEL-001`–`004`/`006`/`007`, `GYRO-001`–`003`/`005`, `COMPASS-001`–`008`,
 `MOTION-001`–`007`/`009`/`010`), `DEV-API-002` (`NOXNA` boundary enforcement),
-`DEV-API-004`/`005`, `DEV-BUILD-003` (CI), `SENSORBASE-005`–`007`,
+`DEV-API-004`/`005`, `DEV-BUILD-003` (CI), `SENSORBASE-006`/`007`,
 `ANDROID-BRIDGE-001`/`003`/`004`, `SDL-SENSOR-001`/`003`, `READINGS-001`/`003`,
 `DEMO-001`/`002`, and `VERIFY-001`–`003`. Pick the next smallest one, or ask the user to
 prioritize, per Section 9's existing rule. One concrete lead if a task is wanted: the
 `cna_demo_input` Android build failure found during `DEV-BUILD-004` (Section 4) — not
-yet scoped as its own plan task.
+yet scoped as its own plan task. `SENSORBASE-006` (Dispose semantics) is a natural next
+pick — `SENSORBASE-005`'s closing note found that `getCurrentValueProperty()`/
+`getIsDataValidProperty()` don't check `disposed_` at all, unlike `Start()`/`Stop()`,
+and deliberately left that question for `SENSORBASE-006` to answer.
 
 ---
 
@@ -742,14 +771,17 @@ along the way, same category as `MOTION-008` earlier in this pass).
 
 **Next recommended task (at the time this line was first written):** `SENSORBASE-004`
 — see Section 3's entry above; it was picked up autonomously and closed the same
-session (found and fixed a real `Compass`/`Motion` data race via `devices-tsan`). No
-further "next smallest task" is queued from a quick pass over `plan_devices.md` beyond
-that — the `cna_demo_input` Android build finding from `DEV-BUILD-004` remains open but
+session (found and fixed a real `Compass`/`Motion` data race via `devices-tsan`), then
+`SENSORBASE-005` was picked up immediately after and closed the same session too
+(`CurrentValue`/`IsDataValid` behavior verified consistent, no code change). No further
+"next smallest task" is queued from a quick pass over `plan_devices.md` beyond that —
+the `cna_demo_input` Android build finding from `DEV-BUILD-004` remains open but
 unscoped (see Section 4) if Android example-app coverage beyond `cna_demo_devices` is
 ever wanted; otherwise, read `plan_devices.md` for its next open task (grep for section
-headers without a "— CLOSED" suffix; `SENSORBASE-005`/`006`/`007` are natural next
-candidates, adjacent to the work just closed) or ask the user to
-prioritize.
+headers without a "— CLOSED" suffix; `SENSORBASE-006` — Dispose semantics — is a
+natural next pick, since `SENSORBASE-005`'s closing note explicitly left the
+"should `CurrentValue`/`IsDataValid` throw `ObjectDisposedException`?" question for it)
+or ask the user to prioritize.
 
 ---
 

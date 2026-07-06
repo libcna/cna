@@ -364,6 +364,31 @@ TEST(CompassTests, CurrentValueChangedFiresFromBackendReading)
     EXPECT_EQ(c.getCurrentValueProperty().getMagneticHeadingProperty(), 42.0);
 }
 
+// Task SENSORBASE-005: mirrors AccelerometerTests.
+// CurrentValueAndIsDataValidRetainLastReadingAfterStop -- see that test for
+// the full rationale. Compass::Stop() only clears started_/state_
+// (confirmed by reading Compass::Stop() directly), so the last known
+// reading and its validity are expected to persist.
+TEST(CompassTests, CurrentValueAndIsDataValidRetainLastReadingAfterStop)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const CompassReading synthetic(
+        5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 42.0);
+    fake->CapturedOnReading(synthetic);
+    ASSERT_TRUE(c.getIsDataValidProperty());
+
+    c.Stop();
+
+    EXPECT_TRUE(c.getIsDataValidProperty());
+    EXPECT_EQ(c.getCurrentValueProperty().getMagneticHeadingProperty(), 42.0);
+}
+
 // Confirms Calibrate actually fires when the backend invokes its
 // calibration-needed callback — proves the second delegation path
 // (ICompassBackend's CalibrationCallback -> Compass::Calibrate.Raise()).

@@ -497,6 +497,27 @@ TEST(GyroscopeTests, InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSup
     EXPECT_EQ(g.getCurrentValueProperty().getRotationRateProperty(), expectedRotationRate);
 }
 
+// Task SENSORBASE-005: mirrors AccelerometerTests.
+// CurrentValueAndIsDataValidRetainLastReadingAfterStop -- see that test for
+// the full rationale.
+TEST(GyroscopeTests, CurrentValueAndIsDataValidRetainLastReadingAfterStop)
+{
+    Gyroscope g;
+    g.SetSupportedForTesting(true);
+    g.SetStartedForTesting(true);
+
+    const Vector3 expectedRotationRate(0.5f, -1.25f, 2.0f);
+    g.InjectSyntheticSensorUpdate(0.5f, -1.25f, 2.0f);
+
+    ASSERT_TRUE(g.getIsDataValidProperty());
+    ASSERT_EQ(g.getCurrentValueProperty().getRotationRateProperty(), expectedRotationRate);
+
+    g.Stop();
+
+    EXPECT_TRUE(g.getIsDataValidProperty());
+    EXPECT_EQ(g.getCurrentValueProperty().getRotationRateProperty(), expectedRotationRate);
+}
+
 // Task P5-6: mirrors AccelerometerTests.GetCurrentValuePropertyStillThrowsAfterSyntheticUpdateWhenNotMarkedSupported
 // — see that test for the full rationale (this is the real, intentional
 // contract, Task P3-1, not a gap).

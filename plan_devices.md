@@ -1144,7 +1144,7 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Sensors/*.cpp`
   - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp`
 
-### SENSORBASE-005 — Verify `CurrentValue`/`IsDataValid` behavior
+### SENSORBASE-005 — Verify `CurrentValue`/`IsDataValid` behavior — CLOSED (2026-07-06, verified consistent as-is, tests added, no code change)
 
 - **Priority:** High
 - **Area:** `SensorBase<T>`
@@ -1152,6 +1152,57 @@ not an alternate spelling to preserve.
   `Start()`, after `Stop()`, after a failed `Start()`, and when unsupported must be
   exact and identical across all four sensor classes, not merely "whatever each
   class's own code happens to do."
+- **What was found:** both getters are defined exactly once, on `SensorBase<T>` itself
+  — `Accelerometer`/`Gyroscope`/`Compass`/`Motion` all inherit the identical code, never
+  override either getter. This guarantees byte-for-byte identical behavior across all
+  four by construction, not by coincidence: no per-class audit could find a divergence
+  because none is possible without one of the four classes actually overriding a getter
+  (confirmed none do, by grep). Verified each state by reading the shared implementation
+  and the official archived MSDN property pages (`SensorBase(TSensorReading).CurrentValue`,
+  `hh239261(v=vs.105)`; `.IsDataValid`, `hh220799(v=vs.110)`):
+  - **Unsupported:** `getCurrentValueProperty()` throws `InvalidOperationException` —
+    matches the MSDN page's Remarks exactly ("If the sensor is not present, a
+    System.InvalidOperationException is thrown when you access this property.").
+    `getIsDataValidProperty()` never throws for any reason (no Exceptions section
+    documented on its own MSDN page either) — already consistent with the doc's
+    silence.
+  - **Before `Start()` (supported):** `getCurrentValueProperty()` returns a
+    default-constructed reading, `getIsDataValidProperty()` returns `false` — no
+    per-class divergence possible (shared code); already tested at the `SensorBase<T>`
+    level (`SensorBaseTests.CurrentValueDoesNotThrowBeforeAnyReadingWhenSupported`/
+    `IsDataValidDefaultsFalse`) plus explicitly for `Accelerometer`/`Gyroscope`. Added
+    the missing explicit assertions for `Compass`/`Motion` were unnecessary to add
+    separately — the shared-code guarantee already covers them; left as-is rather than
+    padding with redundant per-class tests.
+  - **After `Stop()`:** confirmed by reading `Stop()` in all four `.cpp` files that none
+    of them touch `currentValue_`/`isDataValid_` at all — the last known reading and its
+    validity are left exactly as they were, undocumented by MSDN either way but now
+    consistent and tested. Added one new test per concrete class (`Accelerometer`/
+    `Gyroscope`/`Compass`/`Motion`) confirming this empirically, not just by code
+    reading, since nothing tested it before.
+  - **After a failed `Start()`:** the only failure path in this codebase is
+    "unsupported," which already forces `getCurrentValueProperty()` to throw before
+    `currentValue_`/`isDataValid_` are ever read (the `isSupported_` check runs first) —
+    already covered by the existing unsupported-state tests; no distinct scenario
+    exists to test separately.
+  - **Disposed:** neither getter checks `disposed_` at all (unlike `Start()`/`Stop()`,
+    each of which has its own explicit `ObjectDisposedException::ThrowIf(...)` in every
+    concrete class's `.cpp`) — confirmed, tested, and deliberately **not** changed here:
+    whether these getters *should* instead throw `ObjectDisposedException` after
+    `Dispose()` (matching the conventional .NET pattern and this codebase's own
+    `Start()`/`Stop()` precedent) is `SENSORBASE-006`'s question ("Verify Dispose
+    semantics"), not this task's. Added
+    `SensorBaseTests.CurrentValueAndIsDataValidDoNotThrowAfterDispose` to lock in the
+    current, consistent-by-construction behavior.
+- **Tests added:** `AccelerometerTests`/`GyroscopeTests`/`CompassTests`/`MotionTests`
+  `.CurrentValueAndIsDataValidRetainLastReadingAfterStop` (one per class);
+  `SensorBaseTests.CurrentValueAndIsDataValidDoNotThrowAfterDispose`. No code changes —
+  every state was already correct and (except for the two gaps above) already
+  consistent; this task's job was to make that verified and tested, not to change
+  behavior.
+- **Verified:** 309/309 tests (up from 304) on plain `cmake-build-debug` and all three
+  sanitizer presets. ASan: 0 issues. UBSan: 0 issues. TSan: 44 reports, all the same
+  pre-existing, unrelated `sharp-runtime` `TimeSpan::copy_count` race.
 - **Required work:**
   - Verify expected XNA behavior for each of those states.
   - Add tests for each state, for each of the four sensor classes.

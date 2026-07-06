@@ -92,6 +92,11 @@ namespace
             setCurrentValueProperty(value);
         }
 
+        void SetIsDataValidForTesting(bool value)
+        {
+            setIsDataValidProperty(value);
+        }
+
         void SetTimeBetweenUpdatesForTesting(const TimeSpan& value)
         {
             setTimeBetweenUpdatesProperty(value);
@@ -144,6 +149,34 @@ TEST(SensorBaseTests, CurrentValueDoesNotThrowBeforeAnyReadingWhenSupported)
     TestSensorReading value;
     EXPECT_NO_THROW(value = sensor.getCurrentValueProperty());
     EXPECT_EQ(value.getValue(), 0);
+}
+
+// Task SENSORBASE-005: getCurrentValueProperty()/getIsDataValidProperty() are
+// defined once, here on SensorBase<T> itself, and neither checks disposed_ —
+// unlike Start()/Stop() (implemented separately per concrete class, each with
+// its own explicit ObjectDisposedException::ThrowIf(getIsDisposedProperty(),
+// ...) check). This is therefore already guaranteed byte-for-byte identical
+// across Accelerometer/Gyroscope/Compass/Motion (all four inherit this same
+// template code, none override these two getters), satisfying this task's
+// "same base contract across all four" requirement by construction rather
+// than by separately verifying each class. Locking in the current behavior
+// here, not changing it: whether these getters *should* instead throw
+// ObjectDisposedException after Dispose() (matching the conventional .NET
+// IDisposable pattern, and this codebase's own Start()/Stop() precedent) is
+// SENSORBASE-006's question ("Verify Dispose semantics"), not this task's.
+TEST(SensorBaseTests, CurrentValueAndIsDataValidDoNotThrowAfterDispose)
+{
+    TestSensorBase sensor;
+    sensor.SetSupportedForTesting(true);
+    sensor.SetCurrentValueForTesting(TestSensorReading(7));
+    sensor.SetIsDataValidForTesting(true);
+
+    sensor.Dispose();
+
+    TestSensorReading value;
+    EXPECT_NO_THROW(value = sensor.getCurrentValueProperty());
+    EXPECT_EQ(value.getValue(), 7);
+    EXPECT_TRUE(sensor.getIsDataValidProperty());
 }
 
 TEST(SensorBaseTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
