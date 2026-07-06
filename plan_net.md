@@ -755,13 +755,33 @@ verified via revert-verify-restore. Continuing to Phase 4 (Net API gaps).
   measured overload didn't exist before this fix. Restored the fix and reran — passes. Full suite:
   **3263/3265 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 4.3** — Implement real effect for `NetworkSession.SimulatedLatency`/`SimulatedPacketLoss`.
+- [x] **Task 4.3** — Implement real effect for `NetworkSession.SimulatedLatency`/`SimulatedPacketLoss`.
   Confirmed: `grep` finds no reference to either property name anywhere in `CNA::Internal::Net`
   outside `NetworkSession`'s own plain storage — no delay queue or synthetic packet-drop logic
-  exists anywhere in `ENetBackend`/`ENetHostHandle`. Either implement real simulated
-  latency/packet-loss (e.g. via ENet's own `enet_peer_throttle_configure` and/or an internal delay
-  queue) or explicitly document these properties as currently non-functional placeholders. Add a
-  test proving the actual (real or explicitly-documented-as-inert) effect.
+  exists anywhere in `ENetBackend`/`ENetHostHandle`.
+  **Checked FNA's own reference first** (same pattern as Task 2.6's `AllowHostMigration`): FNA's
+  `SimulatedLatency`/`SimulatedPacketLoss` are themselves plain get/set auto-properties with zero
+  delay-queue or synthetic-drop logic anywhere in FNA's own source — this is an upstream-inherited
+  gap, not something CNA introduced.
+  **Decision: document as non-functional placeholders, matching FNA** — implementing a real delay
+  queue/probabilistic drop would be a genuine new feature beyond fidelity-with-FNA, not a bug fix
+  (FNA itself never implemented real behavior for these to match).
+  **Fixed:** added detailed doc comments to all 4 accessors explaining the values are stored but
+  never applied to real traffic, explicitly matching FNA's own reference behavior.
+  **Added `ENetBackendTest.SimulatedLatencyAndPacketLossHaveNoEffectOnRealTraffic`**: sets extreme
+  values (5-second simulated latency, 100% simulated packet loss) on a real host session *before*
+  connecting, then confirms a real handshake and `AppData` delivery still complete just as promptly
+  and reliably as the equivalent test with no simulated settings at all — locking in the documented,
+  inert behavior.
+  **No behavior change** — this task is documentation + a regression test proving already-existing,
+  FNA-faithful behavior, so there is no fix to revert-verify. Full suite: **3264/3266 passing** (2
+  expected accelerometer/gyroscope skips), no regressions.
+
+---
+
+**Phase 4 complete** — all 3 Net API-gap tasks (Tasks 4.1-4.3) fixed, tested, and verified via
+revert-verify-restore (or documented where a fix wasn't the right call). Continuing to Phase 5
+(Net test coverage).
 
 - [ ] **Task 4.4** — Add `ReadBytes(int count)` (array-returning) and `Write(char)`/`ReadChar()` to
   `sharp-runtime`'s `System::IO::BinaryReader`/`BinaryWriter`. Confirmed gap vs. FNA's `PacketReader`

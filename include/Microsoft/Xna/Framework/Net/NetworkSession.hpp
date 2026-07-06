@@ -275,12 +275,20 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the artificially simulated network latency.
          *
+         * Implementation note (Task 4.3): this value is stored but has no effect on actual
+         * traffic timing, matching FNA's own reference implementation - FNA's `SimulatedLatency`
+         * is itself a plain auto-property with no delay queue or throttling logic anywhere in its
+         * source. No custom delay queue exists anywhere in `ENetBackend`/`ENetHostHandle` either.
+         *
          * @return The simulated latency.
          */
         [[nodiscard]] System::TimeSpan getSimulatedLatencyProperty() const;
 
         /**
          * @brief Sets the artificially simulated network latency.
+         *
+         * Implementation note: see getSimulatedLatencyProperty()'s doc comment - stored, not
+         * applied to real traffic.
          *
          * @param value The new simulated latency.
          */
@@ -289,12 +297,20 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the artificially simulated packet loss fraction.
          *
+         * Implementation note (Task 4.3): this value is stored but has no effect on actual packet
+         * delivery, matching FNA's own reference implementation - FNA's `SimulatedPacketLoss` is
+         * itself a plain auto-property with no synthetic-drop logic anywhere in its source. No
+         * such logic exists anywhere in `ENetBackend`/`ENetHostHandle` either.
+         *
          * @return The simulated packet loss, from 0.0 to 1.0.
          */
         [[nodiscard]] float getSimulatedPacketLossProperty() const;
 
         /**
          * @brief Sets the artificially simulated packet loss fraction.
+         *
+         * Implementation note: see getSimulatedPacketLossProperty()'s doc comment - stored, not
+         * applied to real traffic.
          *
          * @param value The new simulated packet loss, from 0.0 to 1.0.
          */
