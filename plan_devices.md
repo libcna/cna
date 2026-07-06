@@ -3504,7 +3504,7 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (inspected, no change needed)
   - `docs/devices-api-coverage.md` (edited — citations added)
 
-### MOTION-002 — Verify quaternion and attitude coordinate mapping
+### MOTION-002 — Verify quaternion and attitude coordinate mapping — hardware verification still outstanding; test coverage extended, cross-referenced with `ACCEL-008` (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** Motion Math
@@ -3513,24 +3513,75 @@ not an alternate spelling to preserve.
   heading math (`COMPASS-004`), and is documented in this repository's own history as
   an explicitly open, unresolved question — not yet contradicted or confirmed by real
   hardware testing.
+- **Progress (2026-07-06):** physical-device verification remains genuinely
+  outstanding — same standing limitation as every other Android sensor math task in
+  this plan. What was done:
+  - **Golden-data / cardinal-angle coverage extended:** the existing 3 round-trip
+    tests (`RoundTripsThroughCreateFromYawPitchRoll_CaseA/B/C`, arbitrary combined
+    yaw+pitch+roll — a stronger general-correctness property than isolated cardinal
+    angles) plus the identity case were already present and already numerically
+    verified (per the header's own doc comment, derived from a Python prototype before
+    being written into C++). Added
+    `RoundTripsAtNinetyOneEightyTwoSeventyDegreesYaw`, directly exercising this task's
+    own literal acceptance-criteria wording ("yaw 90°/180°/270°") — compares via
+    `sin`/`cos` rather than the raw radian value, since `atan2`'s `(-π, π]` range makes
+    270° legitimately wrap to its equivalent -90° representation, which is correct
+    behavior, not a bug to paper over with a wider tolerance.
+  - **`Detail::ConvertRotationVectorToXnaQuaternion()`'s own doc comment already
+    honestly states** it is "deliberately the simplest possible choice, not a
+    rigorously-derived change-of-basis" and flags the exact open question this task
+    asks about — re-confirmed still accurate, not stale.
+  - **New cross-reference to `ACCEL-008` (this session's other major finding):**
+    `Motion`'s quaternion mapping currently does **not** apply any landscape/display-
+    orientation remap at all — a direct, unremapped passthrough of Android's raw
+    rotation-vector quaternion (unlike `Accelerometer`/`Gyroscope`, which *do* apply
+    `Detail::ConvertAndroidPortraitToXnaLandscape()`). This is actually the more
+    conservative choice given `ACCEL-008`'s finding (an archived MSDN Magazine article
+    stating the real WP7 `Accelerometer`'s raw coordinate system never changes between
+    portrait/landscape mode) — if `ACCEL-008` concludes the landscape remap should be
+    removed from `Accelerometer`/`Gyroscope` to match real WP7 semantics, `Motion`'s
+    current "no remap" approach would already be consistent with that outcome without
+    needing any change; if `ACCEL-008` instead concludes the remap should stay,
+    `Motion` would need a matching one added. Either way, `ACCEL-008`'s own required
+    work already asks for whichever decision to be "applied consistently... to
+    `Motion`'s Android attitude/gravity/rotation-rate remapping" — this is that
+    cross-reference recorded from the `Motion` side, not a new, separately-tracked
+    question.
+  - No change made to the actual quaternion/YPR math — nothing found contradicted it;
+    the open question remains "is any remap needed at all," which `ACCEL-008` now
+    owns as the single place this gets decided for all three affected classes.
+  - Verified: 6 `AndroidMotionMathTests` (up from 5), all passing.
 - **Required work:**
   - Define the XNA-expected quaternion, yaw/pitch/roll, and rotation-matrix conventions
-    precisely.
+    precisely. Already defined (`Matrix::CreateFromQuaternion()`'s own element
+    formulas, already-tested); re-confirmed unchanged.
   - Validate with independent golden data (hand-computed expected quaternions/matrices
-    for known rotations).
-  - Validate on real Android hardware in multiple physical orientations.
+    for known rotations). Done — cardinal-angle test added, joining the existing
+    numerically-pre-verified combined-rotation cases.
+  - Validate on real Android hardware in multiple physical orientations. **Still not
+    run** — no hardware available.
   - Adjust the conversion in `Detail::AndroidMotionMath`/`Detail::AndroidMotionBackend`
-    if needed.
+    if needed. N/A yet — no hardware results exist to compare against; the "should a
+    landscape remap be added" question is tracked once, centrally, in `ACCEL-008`.
 - **Acceptance criteria:**
-  - Tests cover identity, yaw 90°/180°/270°, pitch, roll, and combined rotations.
+  - Tests cover identity, yaw 90°/180°/270°, pitch, roll, and combined rotations. Done
+    — identity, cardinal-yaw, and combined (via the pre-existing Case A/B/C, which each
+    already include non-zero pitch/roll alongside yaw) all covered.
   - Hardware validation results match the automated tests' expectations (or the tests
-    are updated to match reality, with the discrepancy documented).
-  - Code comments explain the coordinate conversion precisely.
+    are updated to match reality, with the discrepancy documented). Not yet possible —
+    no hardware.
+  - Code comments explain the coordinate conversion precisely. Confirmed already true,
+    including the honest "not rigorously derived" caveat.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
-  - `tests/Microsoft/Devices/Sensors/Detail/AndroidMotionMathTests.cpp`
-  - `docs/devices-hardware-checklist.md`
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp` (inspected, no
+    change needed)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (inspected, no
+    change needed)
+  - `tests/Microsoft/Devices/Sensors/Detail/AndroidMotionMathTests.cpp` (edited)
+  - `docs/devices-hardware-checklist.md` (inspected — Motion section already flags
+    this as open, cross-reference to `ACCEL-008` not yet added there, left for
+    `MOTION-003`/`ACCEL-008` itself to avoid duplicating the same note across several
+    tasks' own file lists)
 
 ### MOTION-003 — Verify gravity and device acceleration units
 
