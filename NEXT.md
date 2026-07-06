@@ -35,10 +35,12 @@ framework/runtime, not a game.
   closed, found zero real behavioral bugs -- three justified C++ adaptations documented as
   non-issues, plus two small convention nits fixed as `P11-SIG-006`). Of the original 6 follow-up
   task groups (11.4-11.9), `CHECKLIST.md` full re-verification (`P11-CHECKLIST-001`),
-  test-assertion precision sweep (`P11-TEST-001`), and the XactParser deep re-audit
-  (`P11-XACT-001`, which found 2 real gaps and spawned `P11-XACT-002`/`P11-XACT-003` as concrete
-  implementation follow-ups) are done; `FrameworkDispatcher` pump parity, TODO/FIXME sweep, and
-  the RFC-1 crossfeed attempt remain open, being worked through **one at a time, not batched**,
+  test-assertion precision sweep (`P11-TEST-001`), the XactParser deep re-audit (`P11-XACT-001`,
+  which found 2 real gaps and spawned `P11-XACT-002`/`P11-XACT-003` as concrete implementation
+  follow-ups), and `FrameworkDispatcher` pump parity (`P11-DISPATCH-001`, which found and fixed a
+  real self-deadlock -- see §3) are done; the TODO/FIXME sweep and the RFC-1 crossfeed attempt
+  remain open, plus the two new XACT implementation tasks, being worked through **one at a time,
+  not batched**,
   autonomously, per the user's explicit instruction -- the user is away again and any
   task needing to ask a question gets skipped (with a note) in favor of the next one, same as
   Phase 10's continuation. **See §4 for an important process note about how this phase started.**
@@ -58,15 +60,17 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P10-AUDIT-002/003`, on top of
-  `P10-LOOP-003/004`, `P10-FILTER-002/003/004/006`, and `P10-RPC-004`/`P10-RPC-007`). EasyGL
+- **Build:** clean, rebuilt and reverified this pass (`P11-DISPATCH-001`, on top of
+  `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`, and everything in Phase 10). EasyGL
   backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d`
   example targets not rebuilt this pass (no Audio public API surface touched beyond internals/
-  comments/one Doxygen wording fix, not signatures).
-- **Tests:** `CnaTests` whole-suite count is **3340 / 3342 pass** (2 skipped:
+  comments, not signatures).
+- **Tests:** `CnaTests` whole-suite count is **3341 / 3343 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected — not Audio; the 1-test increase since the last sync is
-  `P10-AUDIT-002/003`'s new `AudioEngineTest.RendererDetailsReportsExactlyOneSdlMixerEntry`, plus
+  `P11-DISPATCH-001`'s new `FrameworkDispatcherTest.UpdateDoesNotDeadlockWhenBufferNeededDisposesTheInstance`).
+  Prior sync's 1-test increase was `P10-AUDIT-002/003`'s new
+  `AudioEngineTest.RendererDetailsReportsExactlyOneSdlMixerEntry`, plus
   one renamed-in-place `CueTest` and one tightened `SoundEffectTest` assertion, both net-zero on
   count). The audio-scoped subset (§7's `--gtest_filter` list, now 466 tests) was reverified this
   pass under a **fresh dedicated ASan+UBSan build**: 466/466 pass, zero leaks/errors -- the first
@@ -114,6 +118,20 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11" sections.
 
+- **`P11-DISPATCH-001`** — compared FNA's real `FrameworkDispatcher.Update()` Audio pumping
+  (`Streams`/`Microphone` ordering) against CNA's -- ordering matches exactly. **Found and fixed a
+  real self-deadlock**: `DynamicSoundEffectInstance::Update()` synchronously raises
+  `BufferNeeded` (disposing the instance from that handler once no more data is available is a
+  realistic XNA pattern), and `Dispose()` re-locks the same `FrameworkDispatcher::StreamsMutex`
+  `Update()`'s own loop was still holding. FNA's C# `lock` is re-entrant on the same thread
+  (`Monitor`); `std::mutex` is not -- a genuine C#-to-C++ semantics gap in the original port, not
+  a ported FNA bug. Fixed by snapshotting `Streams` under the lock, then calling every instance's
+  `Update()` with the lock released. New
+  `FrameworkDispatcherTest.UpdateDoesNotDeadlockWhenBufferNeededDisposesTheInstance` (bounded
+  `future::wait_for`, since a regression hangs forever rather than throwing);
+  `git stash`-verified the pre-fix code actually deadlocks (confirmed under an external `timeout`
+  guard, not just reasoned about). Full suite 3341/3343 pass (was 3340/3342), no regressions. See
+  `plan_audio.md`.
 - **`P11-XACT-001`** — deep re-audit of `XactParser.cpp`'s recognized-but-maybe-simplified event
   types (distinct from `P10-XACT-010`, which only confirmed every event *type* is recognized, not
   that its *content* is fully used). Found 2 real, previously-undocumented gaps, both in the

@@ -4499,12 +4499,55 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
 
 ## Phase 11.8 — `FrameworkDispatcher` Audio-pump parity
 
-* [ ] P11-DISPATCH-001: Compare FNA's `FrameworkDispatcher.cs` `Update()` Audio-related pumping
+* [x] P11-DISPATCH-001: Compare FNA's `FrameworkDispatcher.cs` `Update()` Audio-related pumping
   (`SoundEffectInstance`/`DynamicSoundEffectInstance`/`Microphone` polling) against CNA's
   `FrameworkDispatcher.cpp` for exact behavioral parity (ordering, what gets pumped every frame vs
   lazily).
-  *Status:* Open. Not covered by any prior Audio-scoped audit in this file (this file's Phase
-  9/10 audits never touched `FrameworkDispatcher` itself, only the Audio classes it pumps).
+  *Note:* Closed this pass. FNA's real `FrameworkDispatcher.cs` (recovered via
+  `git show HEAD:src/FrameworkDispatcher.cs` in the local `FNA-XNA/FNA` checkout, since the file
+  had been deleted from that checkout's working tree by an unrelated process outside this
+  session's control -- not touched or restored, purely read via git history) pumps, in order:
+  every registered `DynamicSoundEffectInstance` in `Streams` (`dsfi.Update()`), then every
+  registered `Microphone` (`CheckBuffer()`), then `MediaPlayer`/`TouchPanel` (out of scope for this
+  branch). CNA's ordering matches exactly (`Streams` pump -> `Microphone::CheckAllBuffers()` ->
+  `MediaPlayer::Update()` -> `TouchPanel::Update()`), and `Microphone::CheckAllBuffers()`'s
+  null-checked iterate-and-`CheckBuffer()` loop is a faithful match to FNA's own inline
+  `micList[i].CheckBuffer()` loop.
+
+  **Found and fixed one real, previously-undocumented bug: a genuine self-deadlock.** FNA's
+  `Update()` wraps its entire `Streams` loop (including the `dsfi.Update()` call) in
+  `lock (Streams)`. CNA's original port mirrored this shape with `std::lock_guard<std::mutex>
+  lock(StreamsMutex)` wrapping the equivalent loop -- but C#'s `lock` (built on `Monitor`) is
+  **re-entrant on the same thread**, while `std::mutex` is **not**. `DynamicSoundEffectInstance::
+  Update()` synchronously raises `BufferNeeded`
+  (a realistic, XNA-idiomatic pattern is disposing the instance from inside that very handler once
+  no more data will be provided), and `Dispose()` -> `Stop()` -> `StopInternal()` locks that exact
+  same `StreamsMutex` again to remove itself from `Streams` -- in real FNA this is a harmless
+  re-entrant `Monitor.Enter`, but in CNA's port it was a hard self-deadlock the very first time
+  real game code disposed a stream from its own `BufferNeeded` handler while
+  `FrameworkDispatcher::Update()` was pumping it. Not a port of an FNA bug -- FNA has no equivalent
+  bug, because C#'s `lock` and C++'s `std::mutex` have different reentrancy semantics despite
+  looking like a direct syntactic translation of each other.
+
+  **Fix:** `FrameworkDispatcher::Update()` now snapshots `Streams` under the lock, releases the
+  lock, then calls every instance's `Update()` without holding `StreamsMutex` (a disposed instance
+  still safely self-removes from `Streams` via its own `StopInternal()`'s independent lock/erase);
+  a final defensive cleanup pass under the lock removes anything left disposed, matching the
+  original code's own belt-and-suspenders erase-if-disposed check. `src/.../FrameworkDispatcher.cpp`.
+
+  *Verify:* new `FrameworkDispatcherTest.UpdateDoesNotDeadlockWhenBufferNeededDisposesTheInstance`
+  -- registers a real `DynamicSoundEffectInstance` with `Streams` via `Play()`, subscribes
+  `BufferNeeded` to `Dispose()` the same instance, then runs `FrameworkDispatcher::Update()` on a
+  detached background thread with a `std::promise`/`future::wait_for(2s)` bounded check (a
+  deadlock hangs forever, not throws/asserts, so a bare call would hang the whole test binary; a
+  detached thread + bounded future avoids that even if the regression reappears -- verified this
+  itself doesn't hang by running the reproduction under an external `timeout` guard during
+  development). `git stash`-verified against the pre-fix code under `timeout 15`: the test
+  correctly fails (`future_status::timeout`, not `ready`) and the process still exits cleanly
+  (the leaked deadlocked thread doesn't block process exit). Full suite: 3341/3343 pass (was
+  3340/3342; the 1 new test, no regressions), same 2 pre-existing hardware-only skips;
+  `FrameworkDispatcherTest`/`DynamicSoundEffectInstanceTest` also repeat-stressed (5x) for
+  stability, no flakes.
 
 ## Phase 11.9 — Remaining TODO/FIXME/HACK sweep
 
