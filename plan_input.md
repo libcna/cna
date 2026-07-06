@@ -1046,11 +1046,20 @@ zero-display startup); +10 tests added this phase; no public API change; `ctest 
 
 # Phase 6 — Gesture correctness
 
-## P6-001 — Audit `GestureType` enum
-- [ ] Verify XNA numeric flags.
-- [ ] Test bitwise combinations.
-- [ ] Test extension values if any.
-- [ ] Add numeric freeze tests.
+## P6-001 — Audit `GestureType` enum `[x]`
+- [x] Verify XNA numeric flags.
+- [x] Test bitwise combinations.
+- [x] Test extension values if any.
+- [x] Add numeric freeze tests.
+
+**Result (2026-07-06):** `GestureType` verified **byte-identical to FNA `GestureType.cs`**: a `[Flags]`
+enum with `None=0, Tap=0x1, DoubleTap=0x2, Hold=0x4, HorizontalDrag=0x8, VerticalDrag=0x10, FreeDrag=0x20,
+Pinch=0x40, Flick=0x80, DragComplete=0x100, PinchComplete=0x200` — all 11 members present, correct powers
+of two, **no CNA-specific extension values**. Fully covered by existing tests:
+`GestureTypeTest.ValuesMatchXnaFlagConstants` (all 11 values byte-pinned = the numeric freeze; a renumber
+fails the test) and `GestureTypeTest.BitwiseOperatorsCombineAndMaskFlags` (`|`, `&`, `|=`, `&=`
+combine/mask). **Files changed:** none (freeze + bitwise coverage already complete). **Behavior verified:**
+enum value + flag-operator parity with FNA. **Remaining risk:** none.
 
 ## P6-002 — Verify enabled gestures behavior
 - [ ] Test default enabled gestures.
