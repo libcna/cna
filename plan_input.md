@@ -1189,12 +1189,20 @@ starts no drag). **Files changed:** `tests/CNA/Internal/Input/GestureDetectorTes
 **Tests:** pass. **Behavior verified:** VerticalDrag fires only for `ay > ax` movement and completes on
 release. **Remaining risk:** none.
 
-## P6-010 — Verify free drag
-- [ ] Test drag start.
-- [ ] Test drag delta.
-- [ ] Test drag complete.
-- [ ] Test disabled free drag.
-- [ ] Add tests.
+## P6-010 — Verify free drag `[x]`
+- [x] Test drag start.
+- [x] Test drag delta.
+- [x] Test drag complete.
+- [x] Test disabled free drag.
+- [x] Add tests.
+
+**Result (2026-07-06):** Start + delta + complete already covered
+(`FreeDragFiresForDiagonalMovementWhenOnlyFreeDragIsEnabled` → `Delta==(100,100)`;
+`DragCompleteFiresWhenAFreeDragEndsWithRelease`, which also asserts DragComplete carries zero Position/Delta
+and `FingerId2EXT==NO_FINGER`). **Added the disabled-path gap test**
+`FreeDragDoesNotFireWhenFreeDragGestureIsDisabled` (no drag enabled → a diagonal move past 35px emits
+nothing). **Files changed:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+1 test). **Tests:** pass.
+**Behavior verified:** FreeDrag fires only when enabled and past the move threshold. **Remaining risk:** none.
 
 ## P6-011 — Verify flick detection
 - [ ] Test flick velocity calculation.

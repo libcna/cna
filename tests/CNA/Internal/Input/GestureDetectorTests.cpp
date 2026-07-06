@@ -364,6 +364,20 @@ TEST_F(GestureDetectorTest, FreeDragFiresForDiagonalMovementWhenOnlyFreeDragIsEn
     DrainGestures();
 }
 
+// P6-010(d): with FreeDrag disabled (and no other drag enabled), a diagonal move past the threshold starts
+// no drag and emits nothing.
+TEST_F(GestureDetectorTest, FreeDragDoesNotFireWhenFreeDragGestureIsDisabled)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap); // no drag gesture enabled
+
+    Press(63, 0.5f, 0.5f);
+    Move(63, 0.6f, 0.6f, 0.1f, 0.1f); // diagonal, above MOVE_THRESHOLD (35)
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+
+    Release(63, 0.6f, 0.6f);
+    DrainGestures();
+}
+
 TEST_F(GestureDetectorTest, DragDoesNotStartBelowMoveThreshold)
 {
     TouchPanel::setEnabledGesturesProperty(GestureType::HorizontalDrag);
