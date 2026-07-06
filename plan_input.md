@@ -158,9 +158,18 @@ changed:** none (perfect, no gap). **Behavior verified:** bit values + no-collis
 `GamePad::GetState` dead-zone overloads. **Members reviewed:** 3/3. **Files changed:** none (perfect, no
 gap). **Behavior verified:** value parity + dead-zone usage. **Remaining risk:** none.
 
-## A1-006 — `GamePadType` `[ ]`
-- [ ] FNA `Input/GamePadType.cs`; CNA `GamePadType.hpp`; test `GamePadTypeTests.cpp`.
-- [ ] Verify every member value; SDL→XNA type mapping (incl. `Unknown` fallback) covered.
+## A1-006 — `GamePadType` `[x]`
+- [x] FNA `Input/GamePadType.cs`; CNA `GamePadType.hpp`; test `GamePadTypeTests.cpp`.
+- [x] Verify every member value; SDL→XNA type mapping (incl. `Unknown` fallback) covered.
+
+**Result (2026-07-06):** **10 members byte-identical to FNA** in the same order:
+`Unknown=0, GamePad=1, Wheel=2, ArcadeStick=3, FlightStick=4, DancePad=5, Guitar=6, AlternateGuitar=7,
+DrumKit=8, BigButtonPad=9` (FNA `GamePadType.cs:20-56`). Enum + all 10 members carry Doxygen `@brief`.
+**Test:** `GamePadTypeTest.ValuesMatchXnaSequentialConstants` pins all 10. The SDL joystick-type→XNA mapping
+(with the safe `Unknown` fallback for SDL3-only/unknown types) is covered by
+`SdlJoystickTypeMapsToXnaGamePadType` + `ExtendedSdlJoystickTypesMapToXnaGamePadType`. **Members reviewed:**
+10/10. **Files changed:** none (perfect, no gap). **Behavior verified:** value parity + SDL mapping.
+**Remaining risk:** none.
 
 ## A1-007 — `GestureType` `[ ]`
 - [ ] FNA `Input/Touch/GestureType.cs`; CNA `Touch/GestureType.hpp`; test `Touch/GestureTypeTests.cpp`.
