@@ -57,6 +57,20 @@ namespace Microsoft::Devices::Sensors
         const bool supported = backend_ ? backend_->IsSupported() : getIsSupportedProperty();
         state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
         setIsSupportedProperty(supported);
+
+        // Task ANDROID-BRIDGE-002: forwards a TimeBetweenUpdates change to
+        // the live backend (if any) without requiring Stop()/Start(). Reads
+        // backend_ fresh each time this fires, not a captured copy, so it
+        // still reaches a backend swapped in later via
+        // SetBackendForTesting(). A safe no-op if not currently started —
+        // ICompassBackend::SetSampleInterval()'s own contract.
+        TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
+        {
+            if (backend_)
+            {
+                backend_->SetSampleInterval(getTimeBetweenUpdatesProperty());
+            }
+        };
     }
 
     Compass::~Compass()

@@ -43,6 +43,8 @@ namespace
         bool StartResult = true;
         bool StopCalled = false;
         int StartCallCount = 0;
+        int SetSampleIntervalCallCount = 0;
+        System::TimeSpan LastSetSampleInterval;
         ReadingCallback CapturedOnReading;
 
         [[nodiscard]] bool IsSupported() override
@@ -64,6 +66,12 @@ namespace
         void Stop() override
         {
             StopCalled = true;
+        }
+
+        void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override
+        {
+            ++SetSampleIntervalCallCount;
+            LastSetSampleInterval = timeBetweenUpdates;
         }
     };
 } // namespace
@@ -358,6 +366,36 @@ TEST(MotionTests, StopCallsBackendStop)
 
     EXPECT_TRUE(fake->StopCalled);
     EXPECT_EQ(m.getStateProperty(), SensorState::Disabled);
+}
+
+// Task ANDROID-BRIDGE-002: see CompassTests.cpp's identical pair of tests
+// for the full rationale — SensorBase<T>::TimeBetweenUpdatesChanged is wired
+// (Motion::Motion()) to forward the new value to the live backend.
+TEST(MotionTests, SetTimeBetweenUpdatesPropertyForwardsToBackend)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    m.setTimeBetweenUpdatesProperty(System::TimeSpan::FromMilliseconds(50.0));
+
+    EXPECT_EQ(fake->SetSampleIntervalCallCount, 1);
+    EXPECT_EQ(fake->LastSetSampleInterval, System::TimeSpan::FromMilliseconds(50.0));
+}
+
+TEST(MotionTests, SetTimeBetweenUpdatesPropertyToSameValueDoesNotForwardToBackend)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+
+    const System::TimeSpan current = m.getTimeBetweenUpdatesProperty();
+    m.setTimeBetweenUpdatesProperty(current);
+
+    EXPECT_EQ(fake->SetSampleIntervalCallCount, 0);
 }
 
 // Task DEVICES-0114: confirms Motion does not require constructing a live

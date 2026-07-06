@@ -37,6 +37,8 @@ namespace
         bool StartResult = true;
         bool StopCalled = false;
         int StartCallCount = 0;
+        int SetSampleIntervalCallCount = 0;
+        System::TimeSpan LastSetSampleInterval;
         ReadingCallback CapturedOnReading;
         CalibrationCallback CapturedOnCalibrationNeeded;
 
@@ -60,6 +62,12 @@ namespace
         void Stop() override
         {
             StopCalled = true;
+        }
+
+        void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override
+        {
+            ++SetSampleIntervalCallCount;
+            LastSetSampleInterval = timeBetweenUpdates;
         }
     };
 } // namespace
@@ -379,6 +387,39 @@ TEST(CompassTests, StopCallsBackendStop)
 
     EXPECT_TRUE(fake->StopCalled);
     EXPECT_EQ(c.getStateProperty(), SensorState::Disabled);
+}
+
+// Task ANDROID-BRIDGE-002: SensorBase<T>::TimeBetweenUpdatesChanged is wired
+// (Compass::Compass()) to forward the new value to the live backend, so
+// Compass/Motion's Android bridge can honor a TimeBetweenUpdates change
+// while already running, without requiring Stop()/Start().
+TEST(CompassTests, SetTimeBetweenUpdatesPropertyForwardsToBackend)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    c.setTimeBetweenUpdatesProperty(System::TimeSpan::FromMilliseconds(50.0));
+
+    EXPECT_EQ(fake->SetSampleIntervalCallCount, 1);
+    EXPECT_EQ(fake->LastSetSampleInterval, System::TimeSpan::FromMilliseconds(50.0));
+}
+
+// setTimeBetweenUpdatesProperty()'s own contract (SensorBase.hpp) only
+// raises TimeBetweenUpdatesChanged when the value actually changes.
+TEST(CompassTests, SetTimeBetweenUpdatesPropertyToSameValueDoesNotForwardToBackend)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+
+    const System::TimeSpan current = c.getTimeBetweenUpdatesProperty();
+    c.setTimeBetweenUpdatesProperty(current);
+
+    EXPECT_EQ(fake->SetSampleIntervalCallCount, 0);
 }
 
 // Stabilization pass, Task 1 (repeated Start/Stop safety): calling Start()

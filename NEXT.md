@@ -93,6 +93,30 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `ANDROID-BRIDGE-002` closed: Android-backed `TimeBetweenUpdates` now
+changes live.** `Detail::AndroidSensorBridge::Start()` used to convert
+`timeBetweenUpdates` to `ASensorEventQueue_setEventRate()`'s microsecond parameter only
+once, at `Start()` time. Added `AndroidSensorBridge::SetSampleInterval(TimeSpan)`: stores
+the new value and sets an atomic flag, waking the looper (`ALooper_wake()`, same
+technique `Stop()` already uses); `Run()`'s own poll loop — the only code that touches
+`queue_`/`sensor_` — picks it up once per iteration and re-applies
+`ASensorEventQueue_setEventRate()` on the live queue from its own thread. Added
+`SetSampleInterval()` to `ICompassBackend`/`IMotionBackend` (pure virtual — updated both
+real implementers, `AndroidCompassBackend`/`AndroidMotionBackend`, forwarding to every
+bridge they own, plus the two test-only fakes in `CompassTests.cpp`/`MotionTests.cpp`,
+the only other implementers in the codebase). Wired `Compass`/`Motion`'s constructors to
+subscribe to the inherited `SensorBase<T>::TimeBetweenUpdatesChanged` event and forward
+to `backend_`. Added 6 new tests (2 `AndroidSensorBridgeTests.cpp` safe-no-op-on-this-host
+tests, 2 `CompassTests.cpp` + 2 `MotionTests.cpp` forwards-to-fake-backend tests).
+Verified: 296/296 tests (up from 290) on plain `cmake-build-debug` and all three
+sanitizer presets (0 ASan; TSan/UBSan findings unchanged from previously known); also
+cross-compiled `CNA` for Android (arm64-v8a, NDK r30, API 24) and confirmed via
+`llvm-nm` that all three new `SetSampleInterval()` symbols are real, compiled-in Android
+code — **not runtime-verified**, no Android device/emulator run this session. This
+closes `SENSORBASE-001`'s remaining gap for all four sensor classes except
+minimum/maximum `TimeBetweenUpdates` value validation, which is still open (no
+dedicated task exists for it yet).
+
 **2026-07-06 — `DEV-API-001` closed: public API matrix re-verified.** Read every public
 header under `include/Microsoft/Devices/` end-to-end and cross-checked every public
 member against `docs/devices-api-coverage.md`'s existing content. Result: **0 Missing,
@@ -235,12 +259,17 @@ prior plan generations, not repeated here):
   `Gyroscope`/`Compass`/`Motion`'s equivalents correctly have it (no real `State` on
   those three, MSDN `hh239201`/`hh220912`/`hh239189`) — the four classes were already
   consistent with the authoritative reference; no code change made.
-- **Fixed 2026-07-06 (`SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`):**
-  `TimeBetweenUpdates` now actually throttles `Accelerometer`/`Gyroscope`'s event rate
-  (a new per-instance `SensorBase<T>::ShouldAcceptUpdateAt()`, wired into each class's
-  `ProcessSensorUpdateEvent()`). **Still open:** Android-backed sensors
-  (`Compass`/`Motion`) still only apply it once, at `Start()` time, not while running
-  (`ANDROID-BRIDGE-002`) — not touched by this fix.
+- **Fixed 2026-07-06 (`SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`/
+  `ANDROID-BRIDGE-002`):** `TimeBetweenUpdates` now actually affects event rate for all
+  four sensor classes: `Accelerometer`/`Gyroscope` via a new per-instance
+  `SensorBase<T>::ShouldAcceptUpdateAt()` software throttle in `ProcessSensorUpdateEvent()`;
+  `Compass`/`Motion` via `Detail::AndroidSensorBridge::SetSampleInterval()` re-applying
+  `ASensorEventQueue_setEventRate()` on the live queue. The Android side was only
+  confirmed to compile (cross-compile + `llvm-nm`), not runtime-verified — no Android
+  device/emulator run this session. **Still open (not this fix's scope, no dedicated
+  task yet):** `TimeBetweenUpdates` minimum/maximum value validation —
+  `setTimeBetweenUpdatesProperty()` still accepts any value, including negative,
+  unchanged.
 - **By design, not a bug:** `Compass.TrueHeading` always equals `MagneticHeading` — real
   declination needs a location source, out of scope for `Microsoft::Devices::Sensors`
   (see `docs/location-future-plan.md`). `Motion.Calibrate` is never raised by any
@@ -394,20 +423,11 @@ own priority labels.
 
 `DEV-API-003` (the `getStateProperty()` `NOXNA` question), `DEV-BUILD-002` (the
 Devices-only test filter), `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`
-(SDL-backed `TimeBetweenUpdates` throttling), and `DEV-API-001` (the public API matrix)
-are now closed — see Section 3. Next smallest remaining tasks:
+(SDL-backed `TimeBetweenUpdates` throttling), `DEV-API-001` (the public API matrix), and
+`ANDROID-BRIDGE-002` (Android-backed `TimeBetweenUpdates` while running) are now closed
+— see Section 3. Next smallest remaining tasks:
 
-1. **Apply `TimeBetweenUpdates` to the Android-backed sensors while running**
-   (plan task `ANDROID-BRIDGE-002`). Goal: `Compass`/`Motion`'s
-   `Detail::AndroidSensorBridge` currently only applies the requested interval once, at
-   `Start()` time (via `ASensorEventQueue_setEventRate()`) — changing
-   `TimeBetweenUpdates` on an already-running bridge has no effect, unlike the SDL-backed
-   sensors as of 2026-07-06. Files:
-   `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`,
-   `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`. Verify with
-   `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` (the existing
-   fake/non-Android-path tests) plus the corrected Devices-only `ctest` filter (Section 7).
-2. **Resolve the two `DEV-API-001` wrong-visibility findings** (plan task
+1. **Resolve the two `DEV-API-001` wrong-visibility findings** (plan task
    `READINGS-002`, already existed before `DEV-API-001`). Goal: check an authoritative
    WP7 7.0 reference for whether `AccelerometerReadingEventArgs`'s and
    `SensorReadingEventArgs<T>`'s setters are genuinely public in the real API, or should
@@ -415,7 +435,7 @@ are now closed — see Section 3. Next smallest remaining tasks:
    `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp`,
    `include/Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp`,
    `docs/devices-api-coverage.md` (update the "Flagged findings" section once resolved).
-3. **Investigate the `cna_demo_devices` Android `SDL3/SDL_main.h` build gap**
+2. **Investigate the `cna_demo_devices` Android `SDL3/SDL_main.h` build gap**
    (Section 4 above; not yet a plan task — scope it as one first). Goal: find why this
    specific target's Android include paths lack an Android-arch SDL3 header set the
    `CNA` library target itself doesn't need. Files: whichever `CMakeLists.txt` defines

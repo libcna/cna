@@ -94,11 +94,15 @@ stated as unverified rather than assumed.
   to `getTimeBetweenUpdatesProperty()`. Both now call the new
   `SensorBase<T>::ShouldAcceptUpdateAt()` from their `ProcessSensorUpdateEvent()`, a
   per-instance, mutex-guarded software throttle (SDL3 has no polling-rate control API
-  for these sensor types) — see those tasks' closing notes for full detail. **Still
-  open, not touched by this fix:** on Android, `Detail::AndroidCompassBackend`/
-  `Detail::AndroidMotionBackend` still only forward `timeBetweenUpdates` into
-  `Detail::AndroidSensorBridge::Start()` once, at `Start()` time — no code path changes
-  the requested rate on an already-running bridge. See `ANDROID-BRIDGE-002`.
+  for these sensor types) — see those tasks' closing notes for full detail.
+- **Fixed 2026-07-06 (`ANDROID-BRIDGE-002`):** `Detail::AndroidCompassBackend`/
+  `Detail::AndroidMotionBackend` previously only forwarded `timeBetweenUpdates` into
+  `Detail::AndroidSensorBridge::Start()` once, at `Start()` time. `AndroidSensorBridge`
+  now has `SetSampleInterval()`, which re-applies `ASensorEventQueue_setEventRate()` on
+  the live queue from the worker thread that owns it; `Compass`/`Motion` forward their
+  own `TimeBetweenUpdatesChanged` event to it. See that task's closing note for full
+  detail, including the Android cross-compile + `llvm-nm` symbol check (no real
+  hardware/emulator run this session).
 - **Verified: two different "sensor failed" exception types are in use.** `Accelerometer`
   throws its own dedicated `AccelerometerFailedException`
   (`include/Microsoft/Devices/Sensors/AccelerometerFailedException.hpp`), while
@@ -711,7 +715,7 @@ not an alternate spelling to preserve.
 
 ## 5. `SensorBase<T>` tasks
 
-### SENSORBASE-001 — Implement real `TimeBetweenUpdates` semantics — PARTIALLY CLOSED (2026-07-06)
+### SENSORBASE-001 — Implement real `TimeBetweenUpdates` semantics — PARTIALLY CLOSED (2026-07-06, min/max validation only remaining)
 
 - **Priority:** Critical
 - **Area:** `SensorBase<T>`
@@ -719,8 +723,9 @@ not an alternate spelling to preserve.
   change-notified generically in `SensorBase<T>`, but the SDL backends
   (`Accelerometer`, `Gyroscope`) never read it back at all — zero references in either
   `.cpp` file. The Android backends only apply it once, at `Start()` time.
-- **Resolution (2026-07-06) — SDL-backed classes only, see `ACCEL-005`/`GYRO-004`/
-  `SDL-SENSOR-002` for full detail:**
+- **Resolution (2026-07-06) — all four sensor classes now honor
+  `TimeBetweenUpdates`, see `ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002` (SDL-backed) and
+  `ANDROID-BRIDGE-002` (Android-backed) for full detail:**
   - Added `SensorBase<T>::ShouldAcceptUpdateAt(now)`/`ResetUpdateThrottle()` — a
     per-instance, mutex-guarded throttle decision. `now` is passed in by the caller
     (real wall-clock time in production, synthetic `DateTimeOffset` values in tests) so
@@ -737,32 +742,38 @@ not an alternate spelling to preserve.
     class — those exist specifically so tests can exercise dispatch behavior without
     depending on real elapsed time; throttling them would have broken the existing
     283-test baseline's assumption that every injected update dispatches immediately.
-  - **Not done by this pass, still open:** `Compass`/`Motion`'s Android backend still
-    only applies `TimeBetweenUpdates` once, at `Start()` time (`ANDROID-BRIDGE-002`).
-    Minimum/maximum value validation (negative/zero `TimeBetweenUpdates`) was not
-    addressed — `setTimeBetweenUpdatesProperty()` still accepts any value unchanged;
-    this acceptance criterion needs its own separately-scoped task if a concrete need is
-    found, per this project's one-task-one-commit convention.
+  - **`Compass`/`Motion`'s Android backend (`ANDROID-BRIDGE-002`, 2026-07-06):**
+    `Detail::AndroidSensorBridge::SetSampleInterval()` re-applies
+    `ASensorEventQueue_setEventRate()` on the live queue; `Compass`/`Motion` forward
+    their own `TimeBetweenUpdatesChanged` event to the active backend.
+  - **Still not done, the one remaining gap:** minimum/maximum value validation
+    (negative/zero `TimeBetweenUpdates`) — `setTimeBetweenUpdatesProperty()` still
+    accepts any value unchanged; this acceptance criterion needs its own
+    separately-scoped task if a concrete need is found, per this project's
+    one-task-one-commit convention.
 - **Required work:**
   - Define exact minimum, maximum, and default behavior for `TimeBetweenUpdates` (the
     current default, `TimeSpan.FromMilliseconds(2.0)`, is commented as matching ".NET
     source" — verify that comment against an authoritative reference rather than
     trusting it at face value). **Not done — still open.**
-  - Apply the value to every backend (SDL done 2026-07-06; Android still open, see
+  - Apply the value to every backend (SDL done 2026-07-06; Android done 2026-07-06,
     `ANDROID-BRIDGE-002`).
   - Support changing the value while the sensor is already running, for every backend
-    (SDL done; Android still open).
+    (SDL done; Android done, `ANDROID-BRIDGE-002`).
   - Add tests proving the callback rate is actually throttled, or the backend's own
     sample rate is actually updated — not just that the property getter/setter
-    round-trips. **Done for SDL** (`SensorBaseTests.cpp`'s 7 new `ShouldAcceptUpdateAt`/
-    `ResetUpdateThrottle` tests).
+    round-trips. Done — `SensorBaseTests.cpp`'s 7 new `ShouldAcceptUpdateAt`/
+    `ResetUpdateThrottle` tests (SDL) plus `CompassTests.cpp`/`MotionTests.cpp`'s new
+    `SetTimeBetweenUpdatesPropertyForwardsToBackend` tests (Android, via the fake
+    backends — the real NDK path itself was only confirmed to compile, not
+    runtime-verified; see `ANDROID-BRIDGE-002`'s closing note).
 - **Acceptance criteria:**
   - `Accelerometer`, `Gyroscope`, `Compass`, and `Motion` all honor
-    `TimeBetweenUpdates` in their actual event delivery rate. **Accelerometer/Gyroscope
-    done; Compass/Motion still open (`ANDROID-BRIDGE-002`).**
+    `TimeBetweenUpdates` in their actual event delivery rate. Done for all four (SDL
+    software-throttled; Android real hardware-rate-adjusted, host-verified only, see
+    `ANDROID-BRIDGE-002`).
   - Setting `TimeBetweenUpdates` while a sensor is started changes behavior without
-    requiring `Stop()`/`Start()` or object recreation. **Done for Accelerometer/
-    Gyroscope.**
+    requiring `Stop()`/`Start()` or object recreation. Done for all four.
   - Tests cover invalid values (negative, zero if disallowed) and valid updates, for
     every sensor class. **Zero covered (see `ShouldAcceptUpdateAtWithZeroTimeBetweenUpdatesAlwaysAccepts`);
     negative-value validation not addressed — still open.**
@@ -1756,7 +1767,7 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp`
 
-### ANDROID-BRIDGE-002 — Support update-interval changes while running
+### ANDROID-BRIDGE-002 — Support update-interval changes while running — CLOSED (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** Android Bridge
@@ -1766,25 +1777,72 @@ not an alternate spelling to preserve.
   bridge's sample rate today. This is the root cause underlying `ACCEL-005`,
   `GYRO-004`, `COMPASS`'s and `MOTION-008`'s `TimeBetweenUpdates` gaps for the Android
   side specifically.
+- **Resolution (2026-07-06):** added `AndroidSensorBridge::SetSampleInterval(TimeSpan)` —
+  stores the new interval (guarded by the existing `stateMutex_`) and sets an atomic
+  `rateChangeRequested_` flag, waking the looper (`ALooper_wake()`, same technique
+  `Stop()` already used). `Run()`'s own poll loop — the only code that ever touches
+  `queue_`/`sensor_` — checks that flag once per iteration and calls
+  `ASensorEventQueue_setEventRate()` again on the live queue from its own thread, with
+  the same non-fatal-rejection handling the initial `Start()`-time call already had. A
+  safe no-op if the bridge isn't currently started (nothing live to update; the next
+  `Start()` call takes its own explicit parameter anyway). Added
+  `SetSampleInterval()` to `ICompassBackend`/`IMotionBackend` (pure virtual — updated
+  both interface implementers, `AndroidCompassBackend`/`AndroidMotionBackend`, which
+  forward to every bridge they own — 2 for Compass, 5 for Motion, calling it
+  unconditionally on all of them since a never-started bridge's own `SetSampleInterval()`
+  already no-ops safely) and to the two test-only fakes in `CompassTests.cpp`/
+  `MotionTests.cpp` (`FakeCompassBackend`/`FakeMotionBackend`, which were the only other
+  implementers of these interfaces in the whole codebase, confirmed by grep). Wired
+  `Compass`/`Motion`'s own constructors to subscribe to the inherited (protected)
+  `SensorBase<T>::TimeBetweenUpdatesChanged` event and forward the new value to
+  `backend_` (read fresh at invocation time, so it still reaches a backend swapped in
+  later via `SetBackendForTesting()`) — mirrors `ACCEL-005`/`GYRO-004`'s SDL-side fix in
+  spirit (both now honor a running `TimeBetweenUpdates` change without `Stop()`/`Start()`),
+  though the actual mechanism differs (real hardware rate change here vs. software
+  dispatch throttling there, since the NDK exposes a real per-sensor rate control SDL3
+  does not). Added 6 new tests: 2 `AndroidSensorBridgeTests.cpp` (confirm
+  `SetSampleInterval()` is a safe no-op on this non-Android host, matching every other
+  method's existing convention), 2 `CompassTests.cpp` + 2 `MotionTests.cpp` (confirm the
+  `TimeBetweenUpdatesChanged` wiring forwards to the fake backend on a real change, and
+  does *not* forward when the value is unchanged, matching
+  `setTimeBetweenUpdatesProperty()`'s own "only raise on actual change" contract).
+  Verified: 296/296 tests (up from 290) on plain `cmake-build-debug` and all three
+  sanitizer presets — 0 ASan, TSan/UBSan findings unchanged from previously known. Also
+  cross-compiled the `CNA` library target for Android (`arm64-v8a`, NDK r30, API 24) and
+  confirmed via `llvm-nm` that `AndroidSensorBridge::SetSampleInterval()`,
+  `AndroidCompassBackend::SetSampleInterval()`, and
+  `AndroidMotionBackend::SetSampleInterval()` are all present as real (not just
+  `#ifdef`-stubbed) symbols in the cross-compiled object files — the real
+  `#ifdef __ANDROID__` code path was never exercised at runtime (no Android
+  device/emulator run this session), only confirmed to compile.
 - **Required work:**
   - Add an API to `Detail::AndroidSensorBridge` (e.g. `SetSampleInterval(TimeSpan)`)
     that calls `ASensorEventQueue_setEventRate()` again on the live queue, from the
-    correct thread.
+    correct thread. Done.
   - Wire `Compass`/`Motion`'s `TimeBetweenUpdates` setter through to every active
-    underlying bridge.
+    underlying bridge. Done.
   - Add tests, using whatever host-testable seam is available (the real NDK path can't
-    run in this development container — see Section 14).
+    run in this development container — see Section 14). Done — 6 new tests, plus a
+    non-runtime Android cross-compile + `llvm-nm` symbol check.
 - **Acceptance criteria:**
   - Active Android-backed sensors update their sampling delay without requiring
-    `Stop()`/`Start()` or object recreation.
-  - Tests cover the new delay-update code path to the extent host-testable.
+    `Stop()`/`Start()` or object recreation. Done, to the extent host-verifiable — real
+    hardware/emulator behavior still unverified (no Android device in this session).
+  - Tests cover the new delay-update code path to the extent host-testable. Done.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp` (edited)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.hpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp` (edited)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (edited)
+  - `include/Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp` (edited)
+  - `include/Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Compass.cpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Motion.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (edited)
 
 ### ANDROID-BRIDGE-003 — Improve Start/Stop lifecycle guarantees further
 

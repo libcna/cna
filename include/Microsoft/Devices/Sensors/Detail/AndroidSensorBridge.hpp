@@ -159,8 +159,9 @@ namespace Microsoft::Devices::Sensors::Detail
          *
          * @param timeBetweenUpdates Requested sample interval, mapped to
          * ASensorEventQueue_setEventRate()'s microsecond parameter. Applied
-         * once at Start() time — changing it later has no effect until the
-         * next Start() call. Note: Android 12+ (API 31+) restricts
+         * at Start() time; call SetSampleInterval() (Task ANDROID-BRIDGE-002)
+         * to change it again on an already-running bridge without a
+         * Stop()/Start() cycle. Note: Android 12+ (API 31+) restricts
          * high-frequency sensor sampling (rates faster than ~200Hz) unless
          * the app declares the `HIGH_SAMPLING_RATE_SENSORS` permission —
          * requesting a very small `timeBetweenUpdates` on such a device may
@@ -242,6 +243,32 @@ namespace Microsoft::Devices::Sensors::Detail
          * your own callback" limitation.
          */
         void Stop();
+
+        /**
+         * @brief Changes the sample interval on an already-running bridge, without requiring Stop()/Start().
+         *
+         * A safe no-op if this bridge is not currently started — the next
+         * Start() call already takes its own explicit interval parameter,
+         * so there is nothing useful to stash for later (Task
+         * ANDROID-BRIDGE-002). If started, the new interval is handed to
+         * the worker thread, which calls `ASensorEventQueue_setEventRate()`
+         * again on the live queue from its own thread — the only thread
+         * that ever touches the queue, matching `Run()`'s existing
+         * single-owner-thread discipline for `queue_`/`sensor_`. Applied
+         * on the worker's own next loop iteration (bounded by the same
+         * ~100ms `ALooper_pollOnce()` cadence `Stop()`'s signal already
+         * relies on), not synchronously with this call returning — this
+         * method never blocks.
+         *
+         * Same non-fatal-rejection handling as the interval passed to
+         * Start(): if the platform rejects the new rate,
+         * `ASensorEventQueue_setEventRate()`'s negative return is ignored
+         * and delivery continues at whatever rate was already in effect,
+         * rather than stopping delivery over a rate mismatch alone.
+         *
+         * @param timeBetweenUpdates New requested sample interval.
+         */
+        void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates);
 
     private:
         struct Impl;

@@ -95,6 +95,21 @@ namespace Microsoft::Devices::Sensors::Detail
         gyroscopeBridge_.Stop();
     }
 
+    void AndroidMotionBackend::SetSampleInterval(const System::TimeSpan& timeBetweenUpdates)
+    {
+        // All five bridges — AndroidSensorBridge::SetSampleInterval() itself
+        // is a safe no-op on whichever ones, if any, are not currently
+        // started (Task ANDROID-BRIDGE-002). Simpler and equally correct to
+        // call it on both attitude bridges unconditionally rather than
+        // checking usingGameRotationVector_ first — only the one Start()
+        // actually started will do anything.
+        rotationVectorBridge_.SetSampleInterval(timeBetweenUpdates);
+        gameRotationVectorBridge_.SetSampleInterval(timeBetweenUpdates);
+        gravityBridge_.SetSampleInterval(timeBetweenUpdates);
+        linearAccelerationBridge_.SetSampleInterval(timeBetweenUpdates);
+        gyroscopeBridge_.SetSampleInterval(timeBetweenUpdates);
+    }
+
     void AndroidMotionBackend::HandleAttitudeSample(const AndroidSensorSample& sample)
     {
         // Always the OS-fused rotation vector / game rotation vector output

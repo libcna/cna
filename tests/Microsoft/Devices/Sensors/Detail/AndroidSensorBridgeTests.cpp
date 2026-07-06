@@ -110,3 +110,20 @@ TEST(AndroidSensorBridgeTests, StartTwiceInARowNeverCrashesOnNonAndroidPlatform)
     EXPECT_FALSE(bridge.Start(TimeSpan::FromMilliseconds(2.0), [](const auto&) {}));
     EXPECT_FALSE(bridge.Start(TimeSpan::FromMilliseconds(2.0), [](const auto&) {}));
 }
+
+// Task ANDROID-BRIDGE-002: SetSampleInterval() on this (non-Android) host
+// must be a safe, inert no-op, same discipline as every other method above
+// — whether called before Start() (never started at all) or after a
+// Start() call that itself always returns false on this platform.
+TEST(AndroidSensorBridgeTests, SetSampleIntervalDoesNotCrashWhenNeverStarted)
+{
+    AndroidSensorBridge bridge(1);
+    EXPECT_NO_THROW(bridge.SetSampleInterval(TimeSpan::FromMilliseconds(50.0)));
+}
+
+TEST(AndroidSensorBridgeTests, SetSampleIntervalDoesNotCrashAfterFailedStart)
+{
+    AndroidSensorBridge bridge(1);
+    EXPECT_FALSE(bridge.Start(TimeSpan::FromMilliseconds(2.0), [](const auto&) {}));
+    EXPECT_NO_THROW(bridge.SetSampleInterval(TimeSpan::FromMilliseconds(50.0)));
+}

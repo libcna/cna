@@ -56,6 +56,8 @@ namespace Microsoft::Devices::Sensors::Detail
 
         void Stop() override;
 
+        void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override;
+
     private:
         void HandleRotationVectorSample(const AndroidSensorSample& sample);
         void HandleMagneticFieldSample(const AndroidSensorSample& sample);

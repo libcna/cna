@@ -57,6 +57,8 @@ namespace Microsoft::Devices::Sensors::Detail
 
         void Stop() override;
 
+        void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override;
+
     private:
         void HandleAttitudeSample(const AndroidSensorSample& sample);
         void HandleGravitySample(const AndroidSensorSample& sample);

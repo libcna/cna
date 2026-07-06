@@ -95,6 +95,19 @@ namespace Microsoft::Devices::Sensors::Detail
         SampleCallback callback_;
         System::TimeSpan timeBetweenUpdates_;
 
+        // Task ANDROID-BRIDGE-002: SetSampleInterval()'s pending value,
+        // guarded by stateMutex_ (same field access discipline as
+        // timeBetweenUpdates_ above) -- separate from timeBetweenUpdates_
+        // itself, which remains "the interval Start() was last called
+        // with" and is otherwise unused after startup. rateChangeRequested_
+        // is checked (and atomically cleared) by Run() every poll
+        // iteration; true means pendingTimeBetweenUpdates_ holds a value
+        // Run() has not yet applied via ASensorEventQueue_setEventRate()
+        // on this bridge's own worker thread -- the only thread that ever
+        // touches queue_/sensor_.
+        std::atomic<bool> rateChangeRequested_{false};
+        System::TimeSpan pendingTimeBetweenUpdates_;
+
         // Startup handshake (Task: async startup reporting): Run() signals
         // one of these exactly once, early in its own execution, so
         // Start() can block (briefly, bounded) until real success/failure
@@ -237,6 +250,28 @@ namespace Microsoft::Devices::Sensors::Detail
             while (!stopRequested_.load(std::memory_order_acquire))
             {
                 ALooper_pollOnce(100, nullptr, nullptr, nullptr);
+
+                // Task ANDROID-BRIDGE-002: pick up a pending SetSampleInterval()
+                // request, if any, before processing this iteration's events.
+                // exchange(false) atomically clears the flag so a request that
+                // arrives while this branch is running is not lost -- it will
+                // simply be seen (and applied) on the next iteration instead.
+                if (rateChangeRequested_.exchange(false, std::memory_order_acq_rel))
+                {
+                    System::TimeSpan newInterval;
+                    {
+                        std::lock_guard<std::mutex> lock(stateMutex_);
+                        newInterval = pendingTimeBetweenUpdates_;
+                    }
+
+                    // Same non-fatal-rejection handling as the initial
+                    // Start()-time call above: a negative return means the
+                    // platform rejected the new rate, not that delivery
+                    // failed -- the sensor keeps delivering at whatever rate
+                    // was already in effect.
+                    ASensorEventQueue_setEventRate(
+                        queue_, sensor_, ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(newInterval));
+                }
 
                 ASensorEvent event;
                 // Re-checks stopRequested_ before every callback invocation,
@@ -468,6 +503,36 @@ namespace Microsoft::Devices::Sensors::Detail
         {
             impl_->worker_.join();
         }
+#endif
+    }
+
+    void AndroidSensorBridge::SetSampleInterval(const System::TimeSpan& timeBetweenUpdates)
+    {
+#ifdef __ANDROID__
+        std::lock_guard<std::mutex> lock(impl_->stateMutex_);
+
+        if (!impl_->worker_.joinable())
+        {
+            // Not currently started -- nothing live to update. The next
+            // Start() call already takes its own explicit interval
+            // parameter, so there is nothing useful to stash here either.
+            return;
+        }
+
+        impl_->pendingTimeBetweenUpdates_ = timeBetweenUpdates;
+        impl_->rateChangeRequested_.store(true, std::memory_order_release);
+
+        // Wakes the looper so Run()'s ALooper_pollOnce(100, ...) picks up
+        // the pending request promptly rather than waiting out up to
+        // ~100ms of its own poll timeout -- same technique Stop() already
+        // uses to wake a possibly-blocked poll.
+        ALooper* looper = impl_->looper_.load(std::memory_order_acquire);
+        if (looper != nullptr)
+        {
+            ALooper_wake(looper);
+        }
+#else
+        (void)timeBetweenUpdates;
 #endif
     }
 } // namespace Microsoft::Devices::Sensors::Detail

@@ -59,5 +59,14 @@ namespace Microsoft::Devices::Sensors::Detail
 
         /** @brief Stops delivery. Safe to call even if never started. */
         virtual void Stop() = 0;
+
+        /**
+         * @brief Changes the sample interval on an already-started backend, without requiring Stop()/Start() (Task ANDROID-BRIDGE-002).
+         *
+         * A safe no-op if this backend is not currently started.
+         *
+         * @param timeBetweenUpdates New requested sample interval.
+         */
+        virtual void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) = 0;
     };
 } // namespace Microsoft::Devices::Sensors::Detail

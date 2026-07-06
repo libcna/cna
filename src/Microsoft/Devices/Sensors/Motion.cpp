@@ -56,6 +56,16 @@ namespace Microsoft::Devices::Sensors
         const bool supported = backend_ ? backend_->IsSupported() : getIsSupportedProperty();
         state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
         setIsSupportedProperty(supported);
+
+        // Task ANDROID-BRIDGE-002: see Compass::Compass()'s identical fix
+        // for the full rationale.
+        TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
+        {
+            if (backend_)
+            {
+                backend_->SetSampleInterval(getTimeBetweenUpdatesProperty());
+            }
+        };
     }
 
     Motion::~Motion()

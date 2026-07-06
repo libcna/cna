@@ -68,6 +68,15 @@ namespace Microsoft::Devices::Sensors::Detail
         magneticFieldBridge_.Stop();
     }
 
+    void AndroidCompassBackend::SetSampleInterval(const System::TimeSpan& timeBetweenUpdates)
+    {
+        // Both bridges — AndroidSensorBridge::SetSampleInterval() itself is
+        // a safe no-op on whichever one, if either, is not currently
+        // started (Task ANDROID-BRIDGE-002).
+        rotationVectorBridge_.SetSampleInterval(timeBetweenUpdates);
+        magneticFieldBridge_.SetSampleInterval(timeBetweenUpdates);
+    }
+
     void AndroidCompassBackend::HandleRotationVectorSample(const AndroidSensorSample& sample)
     {
         // Heading comes from the OS-fused rotation vector quaternion, never
