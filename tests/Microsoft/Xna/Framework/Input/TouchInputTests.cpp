@@ -561,6 +561,23 @@ TEST(TouchLocationTest, GetHashCodeIsConsistentForEqualInstances)
     EXPECT_EQ(a.GetHashCode(), sameAsA.GetHashCode());
 }
 
+// P5-004: FNA's GetHashCode is exactly `Id.GetHashCode() + Position.GetHashCode()`
+// (TouchLocation.cs:94-97) — it deliberately excludes State and the previous location. So two
+// locations sharing id+position but differing only in State collide in hash yet are unequal; pin that.
+TEST(TouchLocationTest, GetHashCodeMatchesFnaIdPlusPositionFormula)
+{
+    const Vector2 position(5.0f, 6.0f);
+    const TouchLocation pressed(1, TouchLocationState::Pressed, position);
+    const TouchLocation moved(1, TouchLocationState::Moved, position);
+
+    const int expected = 1 + position.GetHashCode();
+    EXPECT_EQ(pressed.GetHashCode(), expected);
+    // State is not part of the hash (FNA), so these collide...
+    EXPECT_EQ(pressed.GetHashCode(), moved.GetHashCode());
+    // ...but they are NOT equal, because Equals compares State.
+    EXPECT_FALSE(pressed.Equals(moved));
+}
+
 TEST(TouchLocationTest, ToStringContainsPositionValues)
 {
     const TouchLocation location(1, TouchLocationState::Pressed, Vector2(7.0f, 8.0f));

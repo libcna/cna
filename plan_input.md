@@ -816,11 +816,23 @@ order and matches indexed access element-for-element), `MutableIterationVisitsEv
 **Tests:** `TouchCollectionTest.*` 17/17 pass; `ctest -L input` 100% green (shuffle×5). **Behavior verified:**
 range iteration is deterministic insertion order, matching FNA's indexed enumerator. **Remaining risk:** none.
 
-## P5-004 — Verify `TouchLocation`
-- [ ] Test constructors.
-- [ ] Test id, state, position, pressure.
-- [ ] Test previous location behavior.
-- [ ] Test equality/hash if implemented.
+## P5-004 — Verify `TouchLocation` `[x]`
+- [x] Test constructors.
+- [x] Test id, state, position, pressure.
+- [x] Test previous location behavior.
+- [x] Test equality/hash if implemented.
+
+**Result (2026-07-06):** Constructors (default→Invalid, 3-arg, 5-arg-with-previous), id/state/position,
+TryGetPreviousLocation (true + FNA false-path writing the Invalid previous), and equality across all five
+compared fields were already covered. **`pressure` is intentionally N/A:** verified against FNA
+`TouchLocation.cs` — XNA 4.0's `TouchLocation` has **no `Pressure` field** (only `Id`, `Position`, `State`
++ private `prevPosition`/`prevState`), so CNA correctly omits it (documented here). Also verified
+`GetHashCode` is faithful: FNA computes `Id.GetHashCode() + Position.GetHashCode()` (excludes State/prev);
+CNA's `id_ + position_.GetHashCode()` matches line-for-line. **Added test**
+`GetHashCodeMatchesFnaIdPlusPositionFormula` pinning the exact formula and the FNA weak-hash property (two
+locations differing only in State collide in hash but are unequal). **Files changed:**
+`tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` (+1 test). **Tests:** `TouchLocationTest.*` 10/10
+pass. **Behavior verified:** ctor/field/previous/equality/hash parity with FNA. **Remaining risk:** none.
 
 ## P5-005 — Verify `TouchLocationState`
 - [ ] Freeze numeric values.
