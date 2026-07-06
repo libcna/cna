@@ -451,10 +451,23 @@ hash, IsButtonDown/Up bit semantics, ctor arg orders, out→ref sensor conventio
 
 # Phase 5 — Touch types
 
-## A5-001 — `TouchLocation` (struct) `[ ]`
-- [ ] FNA `Input/Touch/TouchLocation.cs`; CNA `Touch/TouchLocation.hpp`/`.cpp`; test `TouchInputTests.cpp`.
-- [ ] Members: ctors (3-arg/5-arg/default), Id/State/Position, `TryGetPreviousLocation`, `Equals`/`==`/`!=`,
+## A5-001 — `TouchLocation` (struct) `[x]`
+- [x] FNA `Input/Touch/TouchLocation.cs`; CNA `Touch/TouchLocation.hpp`/`.cpp`; test `TouchInputTests.cpp`.
+- [x] Members: ctors (3-arg/5-arg/default), Id/State/Position, `TryGetPreviousLocation`, `Equals`/`==`/`!=`,
   `GetHashCode`, `ToString`. Per-member.
+
+**Result (2026-07-06):** **Members match FNA `TouchLocation.cs`** (no `Pressure` — XNA 4.0 dropped it, CNA
+correctly omits it): Id/State/Position props, default (NOXNA)/3-arg/5-arg ctors, `TryGetPreviousLocation`,
+`Equals`/`==`/`!=`, `GetHashCode`, `ToString`. All Doxygen'd. **Test map** (each named): default →
+`DefaultConstructorProducesInvalidLocation`; 3-arg → `ThreeArgConstructorSetsIdStateAndPosition`; 5-arg →
+`FiveArgConstructorTracksPreviousStateAndPosition`; `TryGetPreviousLocation` (true+false paths) →
+`TryGetPreviousLocationFalsePathWritesInvalidPreviousLocationLikeFna` + the 5-arg test; equality (incl.
+previous fields) → `EqualityOperatorsForEqualAndDifferingInstances` + `EqualityDistinguishesPreviousStateAnd
+Position`; `GetHashCode` → `GetHashCodeMatchesFnaIdPlusPositionFormula` (FNA `Id+Position`) +
+`...IsConsistentForEqualInstances`; `ToString` → `ToStringMatchesFnaFormatExactly` +
+`ToStringContainsPositionValues`. **Members reviewed:** all. **Files changed:** none (perfect, no gap;
+thoroughly covered — GetHashCode-formula test added in the earlier P5-004). **Behavior verified:** ctors +
+previous-location + equality/hash/ToString FNA parity. **Remaining risk:** none.
 
 ## A5-002 — `TouchCollection` (struct) `[ ]`
 - [ ] FNA `Input/Touch/TouchCollection.cs`; CNA `Touch/TouchCollection.hpp`/`.cpp`; test `TouchInputTests.cpp`.
