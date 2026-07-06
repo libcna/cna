@@ -40,6 +40,24 @@ framework/runtime, not a game.
   timing, category `instanceLimit`/fade scope+approach, and four successive rounds of "which
   follow-up area next" — cue-level `instanceLimit`, the ThreadSanitizer stress test, `Apply3D` pan
   orientation, then continuous RPC re-evaluation) — none remain open.
+- **Phase 10** (started 2026-07-06, `plan_audio.md`'s "Phase 10 — Audio correctness hardening and
+  XNA/XACT parity" section) is a large, mostly-open forward-looking task list (12 groups,
+  `P10-AUDIT`/`P10-VAR`/`P10-RPC`/`P10-FILTER`/`P10-DSP`/`P10-REVERB`/`P10-3D`/`P10-PAN`/
+  `P10-HRTF`/`P10-LOOP`/`P10-DYN`/`P10-SE`/`P10-SEI`/`P10-XACT`/`P10-MIC`/`P10-HW`/`P10-CI`/
+  `P10-SAN`/`P10-DOC`), NOT a fixed closed set like Phase 9 was. Its kickoff pass investigated the
+  reported "weighted variation lottery double-subtraction bug" and found the algorithm itself
+  correct (byte-for-byte FAudio port, `P10-VAR-002`) — the real, previously-undiagnosed bug was in
+  the *pre-existing statistical test*, which reused one `Cue` across 200 loop iterations and (due
+  to a Cue modeling exactly one playthrough) was silently only ever running 1 real trial, not 200
+  — now fixed, plus new deterministic (seed-hook-based and construction-guaranteed) tests added
+  (`P10-VAR-004/005`). Also fixed one stale doc claim (interactive variation selection was still
+  described as "uniform pick" despite being variable-range-driven since `P9-XACT-002/003/004`,
+  `P10-AUDIT-004`), and resolved+locked-down two open XNA-docs-vs-FNA-behavior decisions for
+  `DynamicSoundEffectInstance`'s constructor and post-dispose accessors (match FNA's permissive/
+  no-throw behavior, `P10-DYN-001/002/004/005`). See `plan_audio.md`'s Phase 10 section for the
+  full per-task breakdown, the "Known accepted deviations" table, and two recorded (not started)
+  design proposals (RFC-1: internal crossfeed-capable mixing layer; RFC-2: optional FAudio/FACT
+  backend for exact XACT 3D/reverb parity).
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -56,18 +74,22 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean as of commit `76b71b07` (last verified). EasyGL backend (Linux default),
+- **Build:** clean as of commit `b2f234fe` (last verified). EasyGL backend (Linux default),
   `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets also
   rebuild clean as of their last touch.
-- **Tests:** `CnaTests` whole-suite count was **3275 / 3277 pass** as of the last full run (2
+- **Tests:** `CnaTests` whole-suite count was **3283 / 3285 pass** as of the last full run (2
   skipped: `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected). The audio-scoped subset (§7's `--gtest_filter` audio suite list)
-  was **401 / 401 pass** under ASan+UBSan, with no audio-related leaks or errors, and also clean
-  (zero races) under a dedicated one-off ThreadSanitizer build (see §5's `T-4C` row). Two unrelated,
-  pre-existing, full-suite-load-only flakes have been observed and confirmed non-reproducing in
-  isolation (not regressions): `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`
-  (un-seeded RNG) and `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`
-  (a short ~1.13ms fixture occasionally racing full-suite scheduling load). A third, also
+  was **409 / 409 pass** under ASan+UBSan, with no audio-related leaks or errors, and also clean
+  (zero races) under a dedicated one-off ThreadSanitizer build (see §5's `T-4C` row).
+  `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`'s prior "un-seeded RNG" flake
+  is now understood and fixed (Phase 10 kickoff, `P10-VAR-002`): it reused one `Cue` across all 200
+  loop iterations, which (since a `Cue` models exactly one playthrough) meant only the first
+  iteration ever actually ran -- fixed to create a fresh `Cue` per iteration, matching real usage.
+  One remaining pre-existing, full-suite-load-only flake:
+  `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`
+  (a short ~1.13ms fixture occasionally racing full-suite scheduling load), confirmed
+  non-reproducing in isolation (not a regression). A third, also
   unrelated to Audio, was observed once under a full-suite ASan+UBSan run:
   `TwoProcessLoopbackTest.HostAndClientJoinAndExchangeAppDataAcrossRealProcesses` (Net module,
   two-process integration test, likely ASan-timing-sensitive) — not reproduced in the audio-scoped
@@ -104,8 +126,23 @@ framework/runtime, not a game.
 ## 3. Recent changes
 
 Newest first. One line each; full rationale, FNA/FAudio citations, and `git stash` verification
-notes for every item are in `plan_audio.md`'s "Phase 9" section.
+notes for every item are in `plan_audio.md`'s "Phase 9"/"Phase 10" sections.
 
+- `b2f234fe` — **Phase 10 kickoff** (`plan_audio.md`): investigated the reported weighted-
+  variation-lottery "double-subtraction" bug and found the algorithm correct (byte-for-byte FAudio
+  port, `P10-VAR-002`) -- the real bug was in the *pre-existing statistical test*, which reused one
+  `Cue` across 200 loop iterations and silently only ran 1 real trial (a `Cue` models exactly one
+  playthrough); fixed to use a fresh `Cue` per iteration. Added a deterministic RNG seed hook
+  (`Cue::INTERNAL_seedRngForTest`/`CueTestAccess::SeedRng`) plus new construction-guaranteed and
+  seed-replica-verified weighted-variation tests (`P10-VAR-004/005`). Fixed one stale doc claim
+  (interactive variation selection still described as "uniform pick" despite being variable-range-
+  driven since `P9-XACT-002/003/004`, `P10-AUDIT-004`). Resolved and locked down (via new tests)
+  two open XNA-docs-vs-FNA-behavior decisions for `DynamicSoundEffectInstance`: its constructor
+  and `GetSampleDuration`/`GetSampleSizeInBytes` intentionally match FNA's permissive/no-throw
+  behavior rather than MSDN's stricter documented contract (`P10-DYN-001/002/004/005`). Appended
+  the full Phase 10 task list (~90 items across 12 groups, mostly still open) to `plan_audio.md`,
+  which had been deleted from the working tree in a prior commit (`14f1f9cd`) and was restored
+  from git history before appending (see Phase 10's own "Housekeeping note").
 - `76b71b07` — **`P9-XACT-016`** (user-directed follow-up, the candidate parked at `P9-XACT-005`,
   and the last remaining item from this branch's "which follow-up area next" rounds): XACT RPC
   volume/pitch curves are now re-evaluated continuously, every `AudioEngine::Update()` tick (via
@@ -190,7 +227,8 @@ notes for every item are in `plan_audio.md`'s "Phase 9" section.
 
 **No build- or test-breaking blocker exists, and Phase 9 is now fully closed** (all 11 groups,
 including `P9-CATEGORY`'s last 6 sub-items, `d3b66dea`). As of the last full run, the build was
-clean and all tests passed (§2). There is no confirmed next task recorded — see §8.
+clean and all tests passed (§2). Phase 10 (`plan_audio.md`) is a large, intentionally-open task
+list, not a single confirmed next task — see §8 for the smallest concrete candidates.
 
 **Known recurring hazard (not currently active):** this branch's build depends on
 `../sharp-runtime`, under separate, active, concurrent development by another session. A build
@@ -354,21 +392,32 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**No confirmed next task is recorded.** Phase 9's fixed, user-specified task list (`plan_audio.md`)
-is now fully closed (§1/§4) — every group, including `P9-CATEGORY`'s previously-deferred
-`instanceLimit`/fade sub-items — and its four user-directed follow-ups, `P9-CATEGORY-011`
-(cue-level instanceLimit), the `T-4C` ThreadSanitizer stress test, `P9-3D-010`
-(listener-orientation-aware pan), and `P9-XACT-016` (continuous RPC volume/pitch) (§5), are also
-closed. There is no Phase 10 defined anywhere in `plan_audio.md`, and every candidate raised across
-this branch's several "which follow-up area next" rounds has now been picked and closed.
+Phase 9 (§1/§4) and its four user-directed follow-ups are all closed. **Phase 10**
+(`plan_audio.md`'s "Phase 10 — Audio correctness hardening and XNA/XACT parity") is now the
+active task list — unlike Phase 9, it is NOT a fixed closed set; it has ~90 individual task IDs
+across 12 groups, most still genuinely open (`[ ]`) after its kickoff pass. Read
+`plan_audio.md`'s Phase 10 section in full before picking anything — every task there already has
+a concrete, cited current-status note (done / partially done / open-with-a-reason), not a vague
+placeholder. Concretely smallest next candidates, roughly in increasing order of scope:
 
-If asked "what's next" with no further user direction, there is no known candidate list left to
-offer — the remaining `CHECKLIST.md` **accepted deviations** (§5) are all backend-architecture
-trade-offs (no reverb bus, no per-source 3D graph, stereo hard-pan instead of crossfeed, no
-`AttackTime`/`ReleaseTime` envelope tracking, etc. — see §1's "Key architectural decision") that
-would each need the user to explicitly decide to revisit the SDL3_mixer backend choice itself, not
-small contained fixes like the four follow-ups above. Ask the user directly what they want next
-rather than assuming any of these, or inventing new scope.
+1. **`P10-3D-003`** — add an explicit "emitter above/below listener" pan test (expected: centered,
+   no pan effect). Small, contained, no design decision needed.
+2. **`P10-LOOP-005`** — fill the remaining loop-region test gaps (start+length==full length exact
+   boundary, invalid region, dispose-while-looping, stop-while-looping as dedicated cases).
+3. **`P10-RPC-002`** (real feature work, confirm scope first) — wire `Cue::Apply3D()`'s
+   already-computed distance/angle/Doppler values back into `variables_` so RPC curves bound to
+   `"Distance"`/`"OrientationAngle"`/`"DopplerPitchScalar"` see live values instead of whatever was
+   last manually `SetVariable()`-d.
+4. **`P10-XACT-004/005/007/010`, `P10-MIC-004`, `P10-HW-004`, `P10-SAN-002`** — verification-only
+   sweeps (no code change expected unless something's actually found), similar in spirit to this
+   branch's `T-4C` ThreadSanitizer follow-up.
+5. **`P10-PAN-002`/RFC-1** and **`P10-HRTF-002`/RFC-2** — the two largest, most invasive items
+   (crossfeed stereo mixing layer; optional FAudio/FACT backend). Explicit design proposals only
+   so far, not started; would need their own confirm-scope round the same way `P9-XACT-016` did.
+
+As before on this branch: ask the user to confirm scope/approach before starting any item that's
+real feature work (not a small test addition or read-only verification sweep), the same way every
+prior real decision on this branch was confirmed first.
 
 ---
 
@@ -376,9 +425,10 @@ rather than assuming any of these, or inventing new scope.
 
 - **No re-running a fresh full "line-by-line vs FNA" audit.** Phase 7 and Phase 8 already did two
   rounds of that.
-- **No inventing a "Phase 10".** Phase 9 is now fully closed (§1/§4/§8) — don't start new feature
-  work without the user asking for it first (§8 lists the only candidates, and even those need to
-  be asked about before starting).
+- **No picking a Phase 10 task and just starting it.** Phase 10 (`plan_audio.md`) now exists and is
+  intentionally a large, open task list (§8) -- don't silently pick one and implement it; confirm
+  with the user first, same as every real decision on this branch so far, especially for the two
+  explicit design-only RFCs (`P10-PAN-002`, `P10-HRTF-002`) which are proposals, not approved work.
 - **No re-litigating a resolved open decision without the user asking first.** All eight that ever
   came up on this branch are resolved: XACT filter `OneOverQ` fidelity vs. narrowing
   (`P9-XACT-011`); `Cue::IsPlaying`/`IsPaused` coexistence (`P9-LIFECYCLE-013`);
@@ -411,12 +461,12 @@ rather than assuming any of these, or inventing new scope.
 
 ```
 Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state -- Phase 9
-is now fully closed (all 11 groups, including P9-CATEGORY's last 6 sub-items, d3b66dea), and its
-four user-directed follow-ups (P9-CATEGORY-011 cue-level instanceLimit; T-4C's ThreadSanitizer
-stress test; P9-3D-010 listener-orientation-aware Apply3D pan; P9-XACT-016 continuous RPC
-volume/pitch) are also closed -- every candidate raised across this branch's "which follow-up area
-next" rounds has now been picked. There is no confirmed next task recorded (see §8) -- ask the
-user what they want done next rather than inventing new feature work.
+is fully closed (all 11 groups plus 4 user-directed follow-ups). Phase 10 (plan_audio.md) now
+exists and is a large, intentionally-open task list (~90 items, 12 groups) -- read its Phase 10
+section before picking anything; every task there already has a concrete, cited status, not a
+placeholder. See NEXT.md §8 for a short list of the smallest genuinely-open candidates. Do not
+silently start implementing a Phase 10 item -- confirm scope with the user first, same as every
+prior real decision on this branch.
 
 1. If the user names a specific task, inspect only the files needed for it -- do not refactor
    unrelated code. Confirm scope/approach with the user first if it's real feature work rather
