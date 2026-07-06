@@ -36,7 +36,8 @@
 - [ ] **N-014 `CNA::Input::TextComposition`** — IME candidate lists (`SDL_EVENT_TEXT_EDITING_CANDIDATES`) + input-type hints.
 - [ ] **N-015 `CNA::Input::Sensor`** — device-level accelerometer/gyro (`SDL_sensor`).
 - [ ] **N-016 `Mouse` capture / global-position EXT** — `SetCaptureEXT`, `GetGlobalPositionEXT`, `WarpGlobalEXT`.
-- [ ] **N-017 `CNA::Input::InputDevices`** — enumeration + hot-plug (mice/keyboards/touch devices).
+- [x] **N-017 `CNA::Input::InputDevices`** — enumeration (mice/keyboards/touch id+name) via seam. Hot-plug events -> N-017b.
+- [ ] **N-017b `InputDevices` hot-plug events** — `SDL_EVENT_{MOUSE,KEYBOARD}_ADDED/REMOVED` multicast events (split off from N-017).
 - [x] **N-018 `CNA::Input::Power`** — system battery (`SDL_GetPowerInfo`) via injectable seam; reuses `PowerStateEXT`.
 
 ## Notes
@@ -49,6 +50,15 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-017 done (2026-07-06):** `CNA::Input::InputDevices::Get{Mice,Keyboards,TouchDevices}EXT() ->
+  vector<InputDeviceInfoEXT{id,name}>` — device enumeration (metadata only; XNA state stays merged).
+  New descriptor `include/CNA/Input/InputDeviceInfo.hpp` (id+name, with ==/!=) and public class
+  `include/CNA/Input/InputDevices.hpp`. New injectable `ISystemDeviceBackend` seam (real =
+  `SDL_GetMice`/`SDL_GetKeyboards`/`SDL_GetTouchDevices` + the *NameForID getters, NULL->"", arrays
+  SDL_free'd) with `SetSystemDeviceBackendForTests`. Whole types NOXNA/additive (like Clipboard/
+  Power — no freeze pin). Tests `CnaInputDevicesTest` + `CnaInputDeviceInfoEXTTest` drive a fake:
+  per-category forwarding, empty lists, and descriptor equality. `ctest -L input` green; ASan-clean.
+  Scoped to enumeration; hot-plug ADDED/REMOVED events deferred to N-017b.
 - **N-002b done (2026-07-06):** `Keyboard::GetKeyNameEXT(Keys) -> std::string` +
   `GetKeyFromNameEXT(std::string) -> Keys` — the layout-dependent (virtual-key) name and its inverse,
   completing the N-002 name helpers. Bridge resolves Keys -> SDL_Scancode -> (keymap)
