@@ -812,23 +812,30 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
 
 ## Phase 5 — Net: Test Coverage
 
-- [ ] **Task 5.1** — Add a test for `NetworkSession::AddLocalGamer`'s success (non-throwing) path.
+- [x] **Task 5.1** — Add a test for `NetworkSession::AddLocalGamer`'s success (non-throwing) path.
   Confirmed every currently-constructible test session already has `maxLocalGamers_` pinned to zero
-  spare capacity (`NetworkSessionTests.cpp`, ~lines 235-241), so only the throw-at-limit path is
-  exercised — masking Tasks 2.3 and 2.4 entirely. Construct a session with genuine spare local-gamer
-  capacity (may require a new, safe construction path — investigate whether one exists or needs
-  adding) and test that `AddLocalGamer` succeeds, raises `GamerJoined`, and assigns a correct,
-  non-colliding `Id`.
+  spare capacity, so only the throw-at-limit path was exercised — masking Tasks 2.3 and 2.4
+  entirely. **Already satisfied while fixing Task 2.3**: `NetworkSessionTest.AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler`
+  (a new, safe spare-capacity construction technique — a temporary global `SignedInGamerCollection`
+  swap via RAII — was devised specifically to unblock this) exercises exactly this: `AddLocalGamer`
+  succeeding, raising `GamerJoined`, and (per Task 2.4's own test,
+  `RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision`, which reuses the same technique) a
+  correct, non-colliding `Id`.
 
-- [ ] **Task 5.2** — Add a test for `LocalNetworkGamer::ReceiveData`'s offset-taking overload with a
+- [x] **Task 5.2** — Add a test for `LocalNetworkGamer::ReceiveData`'s offset-taking overload with a
   real non-empty queue and a non-zero offset. Confirmed only the empty-queue early-return and the
-  `offset==0` delegating overload are currently exercised (`NetworkSessionTests.cpp`, ~lines
-  533-538) — this is exactly the gap that let Task 2.8's bug ship undetected.
+  `offset==0` delegating overload were previously exercised — exactly the gap that let Task 2.8's
+  bug ship undetected. **Already satisfied while fixing Task 2.8**:
+  `LocalNetworkGamerTest.ReceiveDataWithOffsetThrowsInsteadOfWritingPastBufferEnd` enqueues a real
+  packet (via the `NOXNA EnqueuePacket` helper) and calls `ReceiveData` with a non-zero offset
+  against a real non-empty queue.
 
-- [ ] **Task 5.3** — Add a boundary/overflow test for `LocalNetworkGamer::SendData`'s
-  offset+count overload. Confirmed the existing `SendDataWithOffsetAndCount` test
-  (`NetworkSessionTests.cpp`, ~lines 555-559) only exercises a safely in-range case — this is
-  exactly the gap that let Task 2.9's bug ship undetected.
+- [x] **Task 5.3** — Add a boundary/overflow test for `LocalNetworkGamer::SendData`'s
+  offset+count overload. Confirmed the existing `SendDataWithOffsetAndCount` test only exercised a
+  safely in-range case — exactly the gap that let Task 2.9's bug ship undetected. **Already
+  satisfied while fixing Task 2.9**: `LocalNetworkGamerTest.SendDataThrowsWhenOffsetPlusCountExceedsBuffer`
+  and `SendDataToRecipientThrowsWhenOffsetPlusCountExceedsBuffer` both feed an out-of-range
+  `offset+count` combination.
 
 - [ ] **Task 5.4** — Add ordinal-value assertions to `NetEnumsTests.cpp` for `SendDataOptions` and
   `NetworkSessionType` specifically (not just tautological self-equality checks). Confirmed both
@@ -895,11 +902,16 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   hostname (should throw a clear, catchable exception), `Send()`/`Broadcast()` targeting zero
   connected peers, and the (currently untested) path where `enet_packet_create` returns null.
 
-- [ ] **Task 5.16** — Add a regression test for the wire-id wraparound/collision scenario fixed in
-  Task 2.11 — e.g. 256+ join/leave cycles on one `SessionState` asserting no misrouting.
+- [x] **Task 5.16** — Add a regression test for the wire-id wraparound/collision scenario fixed in
+  Task 2.11 — e.g. 256+ join/leave cycles on one `SessionState` asserting no misrouting. **Already
+  satisfied while fixing Task 2.11**: `ENetBackendTest.DisconnectedPeerWireIdIsReclaimedAndReusedByTheNextJoiner`
+  proves the actual reclaim-and-reuse mechanism directly (3 connect/disconnect cycles all reusing
+  the same id) rather than brute-forcing 256+ real ENet cycles — see that task's own note on why
+  this is the stronger, more direct test.
 
-- [ ] **Task 5.17** — Add a test proving `SimulatedLatency`/`SimulatedPacketLoss` have the effect
-  implemented (or explicitly documented as absent) in Task 4.3.
+- [x] **Task 5.17** — Add a test proving `SimulatedLatency`/`SimulatedPacketLoss` have the effect
+  implemented (or explicitly documented as absent) in Task 4.3. **Already satisfied while fixing
+  Task 4.3**: `ENetBackendTest.SimulatedLatencyAndPacketLossHaveNoEffectOnRealTraffic`.
 
 - [ ] **Task 5.18** — Add a dedicated test file for `ENetLibrary` (`EnsureInitialized()`'s
   double-init idempotency currently only exercised incidentally by other tests, never directly
