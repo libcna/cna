@@ -3676,7 +3676,7 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (inspected, no change possible —
     no host-testable seam)
 
-### MOTION-004 — Verify rotation rate units
+### MOTION-004 — Verify rotation rate units — CLOSED (2026-07-06, confirmed correct via direct citation, no code change)
 
 - **Priority:** High
 - **Area:** Motion Math
@@ -3684,17 +3684,34 @@ not an alternate spelling to preserve.
   Android's `TYPE_GYROSCOPE` reports radians/second, which this codebase currently
   passes through unconverted for `Motion` (distinct from the accelerometer/gravity
   conversion) — confirm this pass-through is actually correct rather than an oversight.
+- **Resolution (2026-07-06):** fetched `MotionReading.DeviceRotationRate`'s own archived
+  MSDN page directly (`hh312728(v=vs.105)`, `ms:assetid` confirmed
+  `P:Microsoft.Devices.Sensors.MotionReading.DeviceRotationRate`): *"Gets the
+  rotational velocity of the device, in radians per second."* Matches Android's
+  `ASENSOR_TYPE_GYROSCOPE` unit (radians/second, already confirmed `GYRO-002`) exactly
+  — CNA's existing unconverted pass-through was already correct. Added the citation
+  directly to a new comment above `HandleGyroscopeSample()`. No code change.
+  - **Tests:** same standing limitation as `MOTION-003`'s identical conclusion — no
+    host-testable seam exists for this Android-only conversion (`Motion`'s fake
+    `IMotionBackend` bypasses `AndroidMotionBackend`'s real code entirely); not a new
+    gap, consistent with every other Android-only math question in this plan.
 - **Required work:**
   - Verify whether XNA expects radians/second or degrees/second for this specific
-    property.
-  - Verify Android's actual gyroscope unit (`ASENSOR_TYPE_GYROSCOPE`, NDK docs).
-  - Convert if the two units don't already match; add tests either way.
+    property. Done — radians/second, direct citation.
+  - Verify Android's actual gyroscope unit (`ASENSOR_TYPE_GYROSCOPE`, NDK docs). Done
+    — already confirmed radians/second via `GYRO-002`'s identical finding for the
+    plain `Gyroscope` class (same NDK sensor type).
+  - Convert if the two units don't already match; add tests either way. N/A — units
+    already match; no host-testable seam exists to add a test to (see above).
 - **Acceptance criteria:**
-  - Rotation-rate units are documented explicitly.
-  - Tests use known sample values with a pinned expected output.
+  - Rotation-rate units are documented explicitly. Done — citation comment added.
+  - Tests use known sample values with a pinned expected output. Not possible at the
+    host level for this Android-only code; documented as such rather than silently
+    claimed done.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
-  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (edited — citation
+    comment)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (inspected, no change possible)
 
 ### MOTION-005 — Define Motion support policy
 

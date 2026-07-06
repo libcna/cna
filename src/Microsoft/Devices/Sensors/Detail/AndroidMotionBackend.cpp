@@ -180,6 +180,13 @@ namespace Microsoft::Devices::Sensors::Detail
         PublishReading();
     }
 
+    // Task MOTION-004 (re-verified 2026-07-06): no unit conversion here,
+    // deliberately -- Android's ASENSOR_TYPE_GYROSCOPE reports radians/second
+    // (same NDK convention already confirmed for the plain Gyroscope class,
+    // GYRO-002), and the real WP7 MotionReading.DeviceRotationRate is
+    // documented identically: "Gets the rotational velocity of the device,
+    // in radians per second" (archived MSDN hh312728(v=vs.105)). Both sides
+    // already agree, so a straight pass-through is correct.
     void AndroidMotionBackend::HandleGyroscopeSample(const AndroidSensorSample& sample)
     {
         {
