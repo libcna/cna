@@ -318,6 +318,14 @@ namespace Microsoft::Xna::Framework::Graphics
         p.diffuseColor[2] = diffuseColor_.Z * alpha_;
         p.diffuseColor[3] = alpha_;
 
+        const Vector3 fogColor = getFogColorProperty();
+        p.fogEnabled  = fogEnabled_;
+        p.fogColor[0] = fogColor.X;
+        p.fogColor[1] = fogColor.Y;
+        p.fogColor[2] = fogColor.Z;
+        p.fogStart    = fogStart_;
+        p.fogEnd      = fogEnd_;
+
         world_.ToColumnMajor(p.worldColMajor);
 
         // Compute alphaTest vec4 from alphaFunction + referenceAlpha.
