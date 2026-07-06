@@ -410,8 +410,45 @@ TEST_F(GestureDetectorTest, FlickFiresWhenReleaseVelocityExceedsMinimumThreshold
     const GestureSample sample = TouchPanel::ReadGesture();
     EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Flick);
     EXPECT_GE(sample.getDeltaProperty().Length(), MIN_FLICK_VELOCITY);
+    // P6-011(c): the Flick sample's Delta is the velocity vector — it carries direction, not just
+    // magnitude. The swipe was purely +X, so velocity points +X with no vertical component.
+    EXPECT_GT(sample.getDeltaProperty().X, 0.0f);
+    EXPECT_FLOAT_EQ(sample.getDeltaProperty().Y, 0.0f);
 
     DrainGestures();
+}
+
+// P6-011(b): moving far enough but too SLOWLY yields no flick — the flick has BOTH a distance gate
+// (distFromPress > MOVE_THRESHOLD) and a velocity gate (velocity.Length() >= MIN_FLICK_VELOCITY). Here the
+// distance is sufficient (40px) but the finger sat still for 1s so the velocity decays to ~0.
+TEST_F(GestureDetectorTest, FlickDoesNotFireWhenReleaseVelocityIsBelowThreshold)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Flick);
+
+    Press(70, 0.5f, 0.5f);
+    Move(70, 0.54f, 0.5f, 0.04f, 0.0f); // pixel (540,500): 40px from press, above MOVE_THRESHOLD
+    TouchPanel::Update();               // baseline: records position/time, no velocity yet
+    GestureDetector::AdvanceTestClockMilliseconds(1000);
+    TouchPanel::Update();               // 1s elapsed with no further movement -> velocity ~0
+    Release(70, 0.54f, 0.5f);
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+// P6-011(d): with Flick disabled, a fast swipe emits nothing (velocity is not even computed).
+TEST_F(GestureDetectorTest, FlickDoesNotFireWhenFlickGestureIsDisabled)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap); // Flick NOT enabled
+
+    Press(71, 0.0f, 0.0f);
+    Move(71, 0.5f, 0.0f, 0.5f, 0.0f);
+    TouchPanel::Update();
+    GestureDetector::AdvanceTestClockMilliseconds(10);
+    Move(71, 1.0f, 0.0f, 0.5f, 0.0f); // fast 500px in 10ms
+    TouchPanel::Update();
+    Release(71, 1.0f, 0.0f);
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 }
 
 TEST_F(GestureDetectorTest, FlickDoesNotFireWithoutSufficientMovementFromPressPosition)

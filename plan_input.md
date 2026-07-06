@@ -1204,12 +1204,24 @@ and `FingerId2EXT==NO_FINGER`). **Added the disabled-path gap test**
 nothing). **Files changed:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+1 test). **Tests:** pass.
 **Behavior verified:** FreeDrag fires only when enabled and past the move threshold. **Remaining risk:** none.
 
-## P6-011 — Verify flick detection
-- [ ] Test flick velocity calculation.
-- [ ] Test too-slow movement.
-- [ ] Test direction data.
-- [ ] Test disabled flick.
-- [ ] Add tests.
+## P6-011 — Verify flick detection `[x]`
+- [x] Test flick velocity calculation.
+- [x] Test too-slow movement.
+- [x] Test direction data.
+- [x] Test disabled flick.
+- [x] Add tests.
+
+**Result (2026-07-06):** Velocity-calc/fires already covered by
+`FlickFiresWhenReleaseVelocityExceedsMinimumThreshold` (500px in 10ms → velocity ≫ MIN_FLICK_VELOCITY=100),
+and the distance gate by `FlickDoesNotFireWithoutSufficientMovementFromPressPosition`. **Closed three gaps:**
+strengthened the fires test with **direction** assertions (`Delta.X > 0`, `Delta.Y == 0` for a +X swipe —
+the sample's Delta is the velocity vector, so it carries direction not just magnitude);
+`FlickDoesNotFireWhenReleaseVelocityIsBelowThreshold` (far enough — 40px > 35 — but held still 1s so
+velocity ~0 → the **velocity gate** blocks it, isolated from the distance gate); and
+`FlickDoesNotFireWhenFlickGestureIsDisabled` (Flick off → a fast swipe emits nothing; velocity isn't even
+computed). **Files changed:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+2 tests, 1 strengthened).
+**Tests:** pass. **Behavior verified:** flick needs distance AND velocity AND enablement; Delta encodes
+direction. **Remaining risk:** none.
 
 ## P6-012 — Verify pinch detection
 - [ ] Test two-finger pinch start.
