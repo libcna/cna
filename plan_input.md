@@ -701,8 +701,16 @@ suites (ButtonState/KeyState/Keys/Buttons/GamePadDeadZone/GamePadType/GestureTyp
 XNA signature or enum**. The frozen golden `docs/input-public-api-frozen.md` is unchanged. **Files changed:**
 none (verification). **Remaining risk:** none.
 
-## A8-004 — Full input suite + backends + sanitizer `[ ]`
-- [ ] `ctest -L input` green on EasyGL/Vulkan/bgfx/SDL_RENDERER; ASan+UBSan-clean; record counts.
+## A8-004 — Full input suite + backends + sanitizer `[x]`
+- [x] `ctest -L input` green on EasyGL/Vulkan/bgfx/SDL_RENDERER; ASan+UBSan-clean; record counts.
+
+**Result (2026-07-06):** Rebuilt all four backends after the dead-code removal and re-ran the gate:
+**`ctest -L input` = 100% on EasyGL, Vulkan, bgfx, and SDL_RENDERER**. A single pass reports **382 input
+tests / 45 suites** (was 378 — **+4** this audit: `IsKeyUpIsTheComplementOfIsKeyDown`,
+`EachBoolCapabilitySetterAffectsOnlyItsOwnGetter`, `IsButtonUpIsTrueUnlessAllRequestedButtonsAreDown`,
+`WindowHandleGetterAndSetterRoundTrip`). **ASan+UBSan-clean:** the sanitizer build ran the full input filter
+→ **381 PASSED, zero sanitizer reports** (halt_on_error=1). **Files changed:** none (build + run + record).
+**Remaining risk:** none.
 
 ## A8-005 — Final perfection statement `[ ]`
 - [ ] Write a final status: per-type member coverage, tests-per-member confirmation, deviations, manual-HW
