@@ -14,13 +14,35 @@ and `VibrateController` to verified XNA 4.0 / Windows Phone 7 compatibility — 
 strict-XNA-vs-`NOXNA` boundary.
 
 **Current development phase:** working through `plan_devices.md`, a 72-task audit/
-implementation plan rewritten from scratch on 2026-07-05. **40 of 72 tasks are closed
-as of 2026-07-06** (all of Section 2 `DEV-BUILD-*`, Section 4 `VIB-*`, Section 6
-`ACCEL-*`, and Section 7 `GYRO-*` now done, plus most of Section 3 `DEV-API-*`), the
-rest open. Tasks are picked up one at a time, each with its own build+test+sanitizer
-verification and its own commit. Working autonomously through the remaining tasks in
-plan order (Sections 8-14: Compass/Motion/Android bridge/SDL sensor/reading
-structs/demo/final verification).
+implementation plan rewritten from scratch on 2026-07-05, now grown to 74 tasks (2 new
+ones found during this session's own research — `ACCEL-008`, `COMPASS-009` — see
+below). **47 of 74 tasks are closed as of 2026-07-06** (all of Section 2 `DEV-BUILD-*`,
+Section 4 `VIB-*`, Section 6 `ACCEL-*`, Section 7 `GYRO-*`, and Section 8 `COMPASS-*`
+now done, plus most of Section 3 `DEV-API-*`), the rest open. Tasks are picked up one
+at a time, each with its own build+test+sanitizer verification and its own commit.
+Working autonomously through the remaining tasks in plan order (Sections 9-14:
+Motion/Android bridge/SDL sensor/reading structs/demo/final verification).
+
+**Two new open questions found this session, not yet resolved, requiring careful
+follow-up (not urgent bugs, but real architectural questions):**
+- `ACCEL-008` (Section 6): an archived MSDN Magazine article states the real WP7
+  `Accelerometer`'s raw coordinate system never changes between portrait and landscape
+  mode — directly contradicting the premise behind this codebase's own Android
+  landscape-remap step (`Detail::ConvertAndroidPortraitToXnaLandscape()`) used by both
+  `Accelerometer`/`Gyroscope`. Single-source finding, not corroborated against a second
+  authoritative source yet, and not acted on — would be a significant behavior change
+  across two already-tested sensor classes with no hardware available to verify either
+  direction.
+- `COMPASS-009` (Section 8): the real WP7 `Compass` documents switching which axis it
+  reads based on the phone's physical tilt (upright vs. flat) — real WP7 sample code
+  exists for this. `Detail::AndroidCompassMath` has no equivalent tilt-mode switch at
+  all yet. Not implemented — needs a careful, Android-specific quaternion derivation
+  with no hardware to check the result against.
+
+A real, concrete bug was also found and fixed this session in
+`Detail::AndroidCompassBackend::HandleMagneticFieldSample()` (`COMPASS-008`): calling
+`PublishReading()` after `calibrationCallback()` instead of before could use-after-free
+if a `Calibrate` handler destroys the owning `Compass` — fixed by reordering.
 
 **Important architectural decisions:**
 - Public API names/signatures match XNA 4.0 (or, for `Microsoft::Devices`, the archived
