@@ -101,6 +101,20 @@ namespace
             setIsSupportedProperty(value);
         }
 
+        // ShouldAcceptUpdateAt()/ResetUpdateThrottle() are protected (Task
+        // SENSORBASE-001/ACCEL-005/GYRO-004), same reasoning as
+        // TimeBetweenUpdatesChanged above — exercised here via a thin public
+        // wrapper rather than a new NOXNA hook on Accelerometer/Gyroscope.
+        bool ShouldAcceptUpdateForTesting(const DateTimeOffset& now)
+        {
+            return ShouldAcceptUpdateAt(now);
+        }
+
+        void ResetUpdateThrottleForTesting()
+        {
+            ResetUpdateThrottle();
+        }
+
         std::atomic<int> timeBetweenUpdatesChangedCount{0};
     };
 } // namespace
@@ -217,6 +231,105 @@ TEST(SensorBaseTests, CurrentValueChangedEventArgsCarryTheNewValue)
 // race, not a specific assertion failure — this test's value is in running clean
 // under real concurrent contention, same as this project's other Start()/Stop()/
 // Dispose() concurrency tests.
+// Task SENSORBASE-001/ACCEL-005/GYRO-004/SDL-SENSOR-002: ShouldAcceptUpdateAt()
+// is the shared throttle decision Accelerometer/Gyroscope now call from their
+// real SDL dispatch path (ProcessSensorUpdateEvent()) to honor
+// TimeBetweenUpdates. Tested here directly, at the SensorBase<T> level, with
+// synthetic DateTimeOffset values — no real-time sleeps, so these tests are
+// fast and cannot flake under machine load, matching this codebase's existing
+// convention for platform-independent pure math (Detail::
+// ConvertAndroidPortraitToXnaLandscape(), Detail::ExtractYawPitchRollFromQuaternion()).
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtAcceptsTheVeryFirstCall)
+{
+    TestSensorBase sensor;
+    const DateTimeOffset now = DateTimeOffset::getUtcNowProperty();
+
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(now));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtRejectsASecondCallTooSoonAfterTheFirst)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10.0));
+
+    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+
+    const DateTimeOffset tooSoon = first + TimeSpan::FromMilliseconds(5.0);
+    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(tooSoon));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtAcceptsOnceTheIntervalHasFullyElapsed)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10.0));
+
+    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+
+    const DateTimeOffset exactlyAtInterval = first + TimeSpan::FromMilliseconds(10.0);
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(exactlyAtInterval));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtThrottlesIndependentlyPerInstance)
+{
+    TestSensorBase fast;
+    TestSensorBase slow;
+    fast.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(1.0));
+    slow.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(100.0));
+
+    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    ASSERT_TRUE(fast.ShouldAcceptUpdateForTesting(first));
+    ASSERT_TRUE(slow.ShouldAcceptUpdateForTesting(first));
+
+    const DateTimeOffset tenMillisecondsLater = first + TimeSpan::FromMilliseconds(10.0);
+    EXPECT_TRUE(fast.ShouldAcceptUpdateForTesting(tenMillisecondsLater));
+    EXPECT_FALSE(slow.ShouldAcceptUpdateForTesting(tenMillisecondsLater));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtMeasuresFromTheLastAcceptedCallNotTheLastAttempt)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10.0));
+
+    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+
+    // Rejected attempt at +5ms must not reset the throttle's reference point.
+    ASSERT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(5.0)));
+
+    // +9ms from the original accepted call is still too soon...
+    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(9.0)));
+    // ...but +10ms from the original accepted call is not.
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(10.0)));
+}
+
+TEST(SensorBaseTests, ResetUpdateThrottleForTestingMakesTheNextCallAlwaysAccept)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(1000.0));
+
+    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    ASSERT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(1.0)));
+
+    sensor.ResetUpdateThrottleForTesting();
+
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(1.0)));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtWithZeroTimeBetweenUpdatesAlwaysAccepts)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::Zero);
+
+    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(1.0)));
+}
+
 TEST(SensorBaseTests, ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash)
 {
     TestSensorBase sensor;

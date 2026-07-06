@@ -221,6 +221,11 @@ namespace Microsoft::Devices::Sensors
         started_ = true;
         state_ = SensorState::Ready;
 
+        // Task ACCEL-005: a fresh Start() must always deliver an immediate
+        // first sample, not stay throttled by a stale last-accepted-update
+        // timestamp left over from a previous Start()/Stop() cycle.
+        ResetUpdateThrottle();
+
         subsystem.RegisterStartedInstanceLocked(this);
         subsystem.RegisterEventWatchIfNeededLocked();
     }
@@ -470,6 +475,16 @@ namespace Microsoft::Devices::Sensors
         }
 
         if (sensorId != currentSensorId)
+        {
+            return;
+        }
+
+        // Task ACCEL-005/SDL-SENSOR-002: honor TimeBetweenUpdates by
+        // dropping events that arrive too soon after the last accepted one.
+        // Scoped to this instance alone (ShouldAcceptUpdateAt() reads/writes
+        // only this object's own fields), so two Accelerometer instances
+        // with different TimeBetweenUpdates values throttle independently.
+        if (!ShouldAcceptUpdateAt(System::DateTimeOffset::getUtcNowProperty()))
         {
             return;
         }

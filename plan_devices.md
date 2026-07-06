@@ -88,19 +88,17 @@ stated as unverified rather than assumed.
   (`hh239201`), `Compass.State` (`hh220912`), and `Motion.State` (`hh239189`) do not exist
   on the real classes — so their `getStateProperty()` is correctly a CNA symmetry
   extension. No code change needed; see `DEV-API-003`'s closing note.
-- **Verified: `TimeBetweenUpdates` is not enforced by the SDL backends at all.**
-  `src/Microsoft/Devices/Sensors/Accelerometer.cpp` and
-  `src/Microsoft/Devices/Sensors/Gyroscope.cpp` contain **zero** references to
-  `getTimeBetweenUpdatesProperty()` — the value is stored and
-  `TimeBetweenUpdatesChanged` fires on change (both handled generically in
-  `SensorBase<T>`), but nothing reads it back to throttle dispatch or configure SDL's
-  sensor polling rate. On Android, `Detail::AndroidCompassBackend`/
-  `Detail::AndroidMotionBackend` do forward `timeBetweenUpdates` into
-  `Detail::AndroidSensorBridge::Start()`, which converts it to
-  `ASensorEventQueue_setEventRate()`'s microsecond parameter — but only at `Start()`
-  time; there is no code path today that changes the requested rate on an
-  already-running bridge. See `SENSORBASE-001`, `ACCEL-005`, `GYRO-004`,
-  `ANDROID-BRIDGE-002`, `SDL-SENSOR-002`.
+- **Fixed 2026-07-06 (`SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`):**
+  `TimeBetweenUpdates` was not enforced by the SDL backends at all —
+  `src/Microsoft/Devices/Sensors/Accelerometer.cpp`/`Gyroscope.cpp` had zero references
+  to `getTimeBetweenUpdatesProperty()`. Both now call the new
+  `SensorBase<T>::ShouldAcceptUpdateAt()` from their `ProcessSensorUpdateEvent()`, a
+  per-instance, mutex-guarded software throttle (SDL3 has no polling-rate control API
+  for these sensor types) — see those tasks' closing notes for full detail. **Still
+  open, not touched by this fix:** on Android, `Detail::AndroidCompassBackend`/
+  `Detail::AndroidMotionBackend` still only forward `timeBetweenUpdates` into
+  `Detail::AndroidSensorBridge::Start()` once, at `Start()` time — no code path changes
+  the requested rate on an already-running bridge. See `ANDROID-BRIDGE-002`.
 - **Verified: two different "sensor failed" exception types are in use.** `Accelerometer`
   throws its own dedicated `AccelerometerFailedException`
   (`include/Microsoft/Devices/Sensors/AccelerometerFailedException.hpp`), while
@@ -692,7 +690,7 @@ not an alternate spelling to preserve.
 
 ## 5. `SensorBase<T>` tasks
 
-### SENSORBASE-001 — Implement real `TimeBetweenUpdates` semantics
+### SENSORBASE-001 — Implement real `TimeBetweenUpdates` semantics — PARTIALLY CLOSED (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** `SensorBase<T>`
@@ -700,28 +698,59 @@ not an alternate spelling to preserve.
   change-notified generically in `SensorBase<T>`, but the SDL backends
   (`Accelerometer`, `Gyroscope`) never read it back at all — zero references in either
   `.cpp` file. The Android backends only apply it once, at `Start()` time.
+- **Resolution (2026-07-06) — SDL-backed classes only, see `ACCEL-005`/`GYRO-004`/
+  `SDL-SENSOR-002` for full detail:**
+  - Added `SensorBase<T>::ShouldAcceptUpdateAt(now)`/`ResetUpdateThrottle()` — a
+    per-instance, mutex-guarded throttle decision. `now` is passed in by the caller
+    (real wall-clock time in production, synthetic `DateTimeOffset` values in tests) so
+    the decision is a pure function of its inputs, unit-tested with zero real-time
+    sleeps.
+  - Wired into `Accelerometer`/`Gyroscope`'s `ProcessSensorUpdateEvent()` (the real SDL
+    event path only) and reset from each class's `Start()`, so a fresh `Start()` always
+    delivers an immediate first sample.
+  - `getTimeBetweenUpdatesProperty()` is read fresh on every incoming event, so a change
+    while the sensor is running takes effect on the very next event, no
+    `Stop()`/`Start()` needed.
+  - Deliberately **not** applied to the `NOXNA` synthetic-injection test hooks
+    (`InjectSyntheticSensorUpdate()`, `DispatchToInstancesForTesting()`) on either
+    class — those exist specifically so tests can exercise dispatch behavior without
+    depending on real elapsed time; throttling them would have broken the existing
+    283-test baseline's assumption that every injected update dispatches immediately.
+  - **Not done by this pass, still open:** `Compass`/`Motion`'s Android backend still
+    only applies `TimeBetweenUpdates` once, at `Start()` time (`ANDROID-BRIDGE-002`).
+    Minimum/maximum value validation (negative/zero `TimeBetweenUpdates`) was not
+    addressed — `setTimeBetweenUpdatesProperty()` still accepts any value unchanged;
+    this acceptance criterion needs its own separately-scoped task if a concrete need is
+    found, per this project's one-task-one-commit convention.
 - **Required work:**
   - Define exact minimum, maximum, and default behavior for `TimeBetweenUpdates` (the
     current default, `TimeSpan.FromMilliseconds(2.0)`, is commented as matching ".NET
     source" — verify that comment against an authoritative reference rather than
-    trusting it at face value).
-  - Apply the value to every backend (SDL and Android).
-  - Support changing the value while the sensor is already running, for every backend.
+    trusting it at face value). **Not done — still open.**
+  - Apply the value to every backend (SDL done 2026-07-06; Android still open, see
+    `ANDROID-BRIDGE-002`).
+  - Support changing the value while the sensor is already running, for every backend
+    (SDL done; Android still open).
   - Add tests proving the callback rate is actually throttled, or the backend's own
-    sample rate is actually updated — not just that the property getter/setter round-trips.
+    sample rate is actually updated — not just that the property getter/setter
+    round-trips. **Done for SDL** (`SensorBaseTests.cpp`'s 7 new `ShouldAcceptUpdateAt`/
+    `ResetUpdateThrottle` tests).
 - **Acceptance criteria:**
   - `Accelerometer`, `Gyroscope`, `Compass`, and `Motion` all honor
-    `TimeBetweenUpdates` in their actual event delivery rate.
+    `TimeBetweenUpdates` in their actual event delivery rate. **Accelerometer/Gyroscope
+    done; Compass/Motion still open (`ANDROID-BRIDGE-002`).**
   - Setting `TimeBetweenUpdates` while a sensor is started changes behavior without
-    requiring `Stop()`/`Start()` or object recreation.
+    requiring `Stop()`/`Start()` or object recreation. **Done for Accelerometer/
+    Gyroscope.**
   - Tests cover invalid values (negative, zero if disallowed) and valid updates, for
-    every sensor class.
+    every sensor class. **Zero covered (see `ShouldAcceptUpdateAtWithZeroTimeBetweenUpdatesAlwaysAccepts`);
+    negative-value validation not addressed — still open.**
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/SensorBase.hpp`
-  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
-  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp`
-  - `src/Microsoft/Devices/Sensors/Compass.cpp`
-  - `src/Microsoft/Devices/Sensors/Motion.cpp`
+  - `include/Microsoft/Devices/Sensors/SensorBase.hpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Compass.cpp` (not edited — still open)
+  - `src/Microsoft/Devices/Sensors/Motion.cpp` (not edited — still open)
   - `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`
   - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp`
@@ -996,26 +1025,48 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp`
   - `docs/devices-hardware-checklist.md`
 
-### ACCEL-005 — Apply `TimeBetweenUpdates`
+### ACCEL-005 — Apply `TimeBetweenUpdates` — CLOSED (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** Accelerometer Backend
 - **Problem:** Confirmed (Section 1): `Accelerometer.cpp` never reads
   `getTimeBetweenUpdatesProperty()` at all — the requested update interval has no effect
   on the actual SDL-backed event rate today.
+- **Resolution (2026-07-06):** SDL3 exposes no per-sensor polling-rate control for
+  `SDL_SENSOR_ACCEL` (confirmed: no such API in `<SDL3/SDL_sensor.h>`), so software
+  throttling was added instead, at the dispatch point —
+  `Accelerometer::ProcessSensorUpdateEvent()` now calls the new
+  `SensorBase<T>::ShouldAcceptUpdateAt(System::DateTimeOffset::getUtcNowProperty())`
+  before `DispatchSensorReading()`, dropping events that arrive too soon after the last
+  accepted one. `Start()` calls the new `ResetUpdateThrottle()` so a fresh start always
+  delivers an immediate first sample. Changing `TimeBetweenUpdates` while running takes
+  effect on the very next event (the interval is read fresh every call), no
+  `Stop()`/`Start()` needed. Tests: 7 new `SensorBaseTests.cpp` cases exercise the
+  underlying `ShouldAcceptUpdateAt()` decision directly with synthetic
+  `DateTimeOffset` values (no real-time sleeps) — see `SENSORBASE-001`'s closing note
+  for the full list and the rationale for testing at that level rather than through
+  `Accelerometer` itself (`ProcessSensorUpdateEvent()` is only reachable via a real SDL
+  hardware event in this environment, same limitation as every other
+  `ProcessSensorUpdateEvent()`-only behavior in this codebase). Verified: 290/290 tests
+  (up from 283) on plain `cmake-build-debug` and all three sanitizer presets, 40/40
+  clean on a `AccelerometerTests.*:GyroscopeTests.*` loop. **Not done:** the manual demo
+  was not run to visually confirm a lower event rate (no display in this environment
+  this session) — deferred, not claimed.
 - **Required work:**
   - Apply the requested update interval to the SDL backend if SDL3 exposes a sensor
-    polling-rate control; otherwise add software throttling in the dispatch path.
+    polling-rate control; otherwise add software throttling in the dispatch path. Done.
   - Ensure changing `TimeBetweenUpdates` while the sensor is running takes effect
-    without requiring `Stop()`/`Start()`.
+    without requiring `Stop()`/`Start()`. Done.
 - **Acceptance criteria:**
   - Tests using a fake clock/backend prove throttling actually happens (avoid real-time
-    sleeps in automated tests to prevent flakiness).
+    sleeps in automated tests to prevent flakiness). Done.
   - The manual demo visibly shows a lower event rate when the interval is increased.
+    **Not verified — no display available this session.**
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`
-  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp` (edited)
+  - `include/Microsoft/Devices/Sensors/SensorBase.hpp` (edited — throttle lives here,
+    shared with `Gyroscope`, not in `SdlSensorSubsystem.hpp`)
+  - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` (edited)
 
 ### ACCEL-006 — Add fake accelerometer backend for tests
 
@@ -1130,24 +1181,35 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp`
   - `docs/devices-hardware-checklist.md`
 
-### GYRO-004 — Apply `TimeBetweenUpdates`
+### GYRO-004 — Apply `TimeBetweenUpdates` — CLOSED (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** Gyroscope Backend
 - **Problem:** Confirmed (Section 1): `Gyroscope.cpp` never reads
   `getTimeBetweenUpdatesProperty()`, identical to the confirmed `Accelerometer` gap in
   `ACCEL-005`.
+- **Resolution (2026-07-06):** identical fix to `ACCEL-005` — see that task's closing
+  note for the full detail (SDL3 has no per-sensor polling-rate control for
+  `SDL_SENSOR_GYRO` either; `Gyroscope::ProcessSensorUpdateEvent()` now calls the same
+  shared `SensorBase<T>::ShouldAcceptUpdateAt()`/`ResetUpdateThrottle()`,
+  `SENSORBASE-001`). Not a separate implementation — `Accelerometer` and `Gyroscope`
+  share this logic via their common `SensorBase<T>` base, exactly as `ACCEL-005`'s fix
+  did. Verified together with `ACCEL-005` (290/290, all sanitizers, 40-iteration loop).
+  **Not done:** demo visual confirmation — same standing gap as `ACCEL-005`.
 - **Required work:**
   - Apply the backend sample rate if SDL3 supports it; add software throttling
-    otherwise.
-  - Support changing the interval while the sensor is actively running.
+    otherwise. Done.
+  - Support changing the interval while the sensor is actively running. Done.
 - **Acceptance criteria:**
   - Fake-backend tests prove throttling with deterministic (non-sleep-based) timing.
+    Done — see `SensorBaseTests.cpp`.
   - The demo can visibly show a reduced update frequency when the interval increases.
+    **Not verified — no display available this session.**
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`
-  - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp` (edited)
+  - `include/Microsoft/Devices/Sensors/SensorBase.hpp` (edited, shared with
+    `Accelerometer`)
+  - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` (edited)
 
 ### GYRO-005 — Add fake gyroscope backend for tests
 
@@ -1784,29 +1846,42 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Sensors/Gyroscope.cpp`
   - `third_party/SDL/src/sensor/` (read-only research — vendored, do not edit)
 
-### SDL-SENSOR-002 — Implement update-rate throttling
+### SDL-SENSOR-002 — Implement update-rate throttling — CLOSED (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** SDL Backend
 - **Problem:** Confirmed (Section 1): SDL sensor callbacks currently ignore
   `TimeBetweenUpdates` entirely — this is the SDL-side counterpart to
   `ANDROID-BRIDGE-002`.
+- **Resolution (2026-07-06):** see `ACCEL-005`/`GYRO-004`/`SENSORBASE-001` for the full
+  implementation detail. Placed the throttle in `SensorBase<T>` itself
+  (`ShouldAcceptUpdateAt()`), not in `Detail::SdlSensorSubsystem<TSensor>` as originally
+  suggested — `SdlSensorSubsystem<TSensor>` is per-*sensor-type* shared state
+  (`sensor_`/`instanceCount_`/`startedInstances_`/...), while the throttle needs to be
+  genuinely per-*instance*; keeping it on `SensorBase<T>` (each instance's own base
+  subobject) makes the per-instance scoping structural rather than something a future
+  reader has to re-verify by inspection. Confirmed independent throttling via
+  `SensorBaseTests.ShouldAcceptUpdateAtThrottlesIndependentlyPerInstance` (two
+  `TestSensorBase` instances with different `TimeBetweenUpdates` values, one accepts an
+  update the other still rejects at the same synthetic timestamp).
 - **Required work:**
   - Use SDL3's own sensor update-rate APIs if they exist for the sensor types in use;
     otherwise add software throttling in
     `Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances()` (or equivalent
-    dispatch point).
-  - Ensure throttling is scoped per sensor *instance*, not global — two
-    `Accelerometer` instances with different `TimeBetweenUpdates` values must behave
-    independently.
+    dispatch point). Done — SDL3 has no such API for these sensor types; throttling
+    added in `SensorBase<T>`, called from each class's `ProcessSensorUpdateEvent()`
+    (not `DispatchToInstances()` itself, which is shared dispatch-batch bookkeeping, not
+    a natural per-instance-decision point).
+  - Ensure throttling is scoped per sensor *instance*, not global. Done, verified by
+    test above.
 - **Acceptance criteria:**
   - `Accelerometer` and `Gyroscope` event rates follow their own instance's
-    `TimeBetweenUpdates`.
-  - Tests use fake/injected timestamps to avoid real-time-based test flakiness.
+    `TimeBetweenUpdates`. Done.
+  - Tests use fake/injected timestamps to avoid real-time-based test flakiness. Done.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`
-  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`
-  - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`
+  - `include/Microsoft/Devices/Sensors/SensorBase.hpp` (edited — not
+    `SdlSensorSubsystem.hpp`, see Resolution above)
+  - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` (edited)
 
 ### SDL-SENSOR-003 — Strengthen SDL event lifetime tests
 

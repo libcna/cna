@@ -93,6 +93,30 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002` closed
+(Accelerometer/Gyroscope only): `TimeBetweenUpdates` now really throttles.** SDL3 has no
+per-sensor polling-rate control API for `SDL_SENSOR_ACCEL`/`SDL_SENSOR_GYRO`, so added
+software throttling instead: `SensorBase<T>` gained
+`ShouldAcceptUpdateAt(now)`/`ResetUpdateThrottle()` — a per-instance, `mutex_`-guarded
+decision that takes the current wall-clock time as an explicit parameter (kept as a pure
+function of its inputs specifically so it's unit-testable with synthetic
+`DateTimeOffset` values, no real-time sleeps). `Accelerometer`/`Gyroscope`'s
+`ProcessSensorUpdateEvent()` (the real SDL event path only, **not** the `NOXNA`
+synthetic-injection test hooks, which deliberately keep bypassing it) now call it before
+`DispatchSensorReading()`; `Start()` calls `ResetUpdateThrottle()` so a fresh start
+always delivers an immediate first sample. Changing `TimeBetweenUpdates` while running
+takes effect on the very next event — no `Stop()`/`Start()` needed. Added 7 new
+`SensorBaseTests.cpp` cases proving the throttle decision (independent per-instance
+throttling, measuring from the last *accepted* call not the last *attempted* one, zero
+interval never throttling, reset-on-restart). Verified: 290/290 tests (up from 283) on
+plain `cmake-build-debug` and all three sanitizer presets, 40-iteration
+`AccelerometerTests.*:GyroscopeTests.*` loop clean, no new TSan/UBSan findings beyond
+the previously-known ones. **Still open, not touched by this pass:** `Compass`/`Motion`'s
+Android backend (`ANDROID-BRIDGE-002`, only applies the interval once at `Start()`);
+`TimeBetweenUpdates` minimum/maximum/negative-value validation (`setTimeBetweenUpdatesProperty()`
+still accepts any value unchanged); the manual demo was not run to visually confirm a
+reduced event rate (no display in this environment this session).
+
 **2026-07-06 — `DEV-BUILD-002` closed: Devices-only test filter corrected.** Extracted
 every `TEST(...)` suite name directly from `tests/Microsoft/Devices/` (21 suites, 283
 cases, no `TEST_F`/`TEST_P` in this scope) and diffed that ground truth against the
@@ -196,10 +220,12 @@ prior plan generations, not repeated here):
   `Gyroscope`/`Compass`/`Motion`'s equivalents correctly have it (no real `State` on
   those three, MSDN `hh239201`/`hh220912`/`hh239189`) — the four classes were already
   consistent with the authoritative reference; no code change made.
-- **Confirmed gap (queued, `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`):**
-  `TimeBetweenUpdates` has no effect on `Accelerometer`/`Gyroscope`'s actual event
-  rate; Android-backed sensors only apply it once, at `Start()` time, not while
-  running (`ANDROID-BRIDGE-002`).
+- **Fixed 2026-07-06 (`SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`):**
+  `TimeBetweenUpdates` now actually throttles `Accelerometer`/`Gyroscope`'s event rate
+  (a new per-instance `SensorBase<T>::ShouldAcceptUpdateAt()`, wired into each class's
+  `ProcessSensorUpdateEvent()`). **Still open:** Android-backed sensors
+  (`Compass`/`Motion`) still only apply it once, at `Start()` time, not while running
+  (`ANDROID-BRIDGE-002`) — not touched by this fix.
 - **By design, not a bug:** `Compass.TrueHeading` always equals `MagneticHeading` — real
   declination needs a location source, out of scope for `Microsoft::Devices::Sensors`
   (see `docs/location-future-plan.md`). `Motion.Calibrate` is never raised by any
@@ -351,19 +377,21 @@ These are pulled directly from the newly-rewritten `plan_devices.md` — read th
 for full context on each. Ordered smallest/cheapest first, not strictly by the plan's
 own priority labels.
 
-`DEV-API-003` (the `getStateProperty()` `NOXNA` question) and `DEV-BUILD-002` (the
-Devices-only test filter) are now closed — see Section 3. Next smallest remaining
-tasks:
+`DEV-API-003` (the `getStateProperty()` `NOXNA` question), `DEV-BUILD-002` (the
+Devices-only test filter), and `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`
+(SDL-backed `TimeBetweenUpdates` throttling) are now closed — see Section 3. Next
+smallest remaining tasks:
 
-1. **Apply `TimeBetweenUpdates` to the SDL-backed sensors** (plan tasks
-   `SENSORBASE-001`, `ACCEL-005`, `GYRO-004`, `SDL-SENSOR-002`). Goal: make
-   `Accelerometer`/`Gyroscope` actually throttle their event rate to the requested
-   interval — currently a confirmed no-op. Files:
-   `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
-   `src/Microsoft/Devices/Sensors/Gyroscope.cpp`,
-   `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`. Verify with a new
-   fake-clock/fake-backend test proving throttling, plus
-   `ctest -R "Accelerometer|Gyroscope"`.
+1. **Apply `TimeBetweenUpdates` to the Android-backed sensors while running**
+   (plan task `ANDROID-BRIDGE-002`). Goal: `Compass`/`Motion`'s
+   `Detail::AndroidSensorBridge` currently only applies the requested interval once, at
+   `Start()` time (via `ASensorEventQueue_setEventRate()`) — changing
+   `TimeBetweenUpdates` on an already-running bridge has no effect, unlike the SDL-backed
+   sensors as of 2026-07-06. Files:
+   `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`,
+   `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`. Verify with
+   `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` (the existing
+   fake/non-Android-path tests) plus the corrected Devices-only `ctest` filter (Section 7).
 2. **Start the public API matrix** (plan task `DEV-API-001`). Goal: one table row per
    public class/method/property/event/exception in scope, marked strict-XNA/WP7-legacy/
    `NOXNA`/internal-only. Files: `docs/devices-api-coverage.md` (extend/verify, don't

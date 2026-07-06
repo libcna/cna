@@ -173,6 +173,11 @@ namespace Microsoft::Devices::Sensors
         started_ = true;
         state_ = SensorState::Ready;
 
+        // Task GYRO-004: see Accelerometer::Start()'s identical fix for the
+        // full rationale — a fresh Start() must always deliver an immediate
+        // first sample.
+        ResetUpdateThrottle();
+
         subsystem.RegisterStartedInstanceLocked(this);
         subsystem.RegisterEventWatchIfNeededLocked();
     }
@@ -353,6 +358,13 @@ namespace Microsoft::Devices::Sensors
         }
 
         if (sensorId != currentSensorId)
+        {
+            return;
+        }
+
+        // Task GYRO-004/SDL-SENSOR-002: see Accelerometer::ProcessSensorUpdateEvent()'s
+        // identical fix for the full rationale.
+        if (!ShouldAcceptUpdateAt(System::DateTimeOffset::getUtcNowProperty()))
         {
             return;
         }

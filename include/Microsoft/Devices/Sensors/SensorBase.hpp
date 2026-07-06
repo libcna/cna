@@ -16,6 +16,7 @@
 #include "System/IDisposable.hpp"
 #include "System/EventHandler.hpp"
 #include "System/EventArgs.hpp"
+#include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
@@ -36,6 +37,17 @@ namespace Microsoft::Devices::Sensors
         bool isSupported_;
         System::TimeSpan timeBetweenUpdates_;
         TSensorReading currentValue_;
+
+        /**
+         * True once ShouldAcceptUpdateAt() has accepted at least one update
+         * since construction or the last ResetUpdateThrottle() call (Task
+         * SENSORBASE-001/ACCEL-005/GYRO-004). Guarded by mutex_, same as
+         * lastAcceptedUpdateTime_ below.
+         */
+        bool hasAcceptedUpdate_;
+
+        /** @brief Wall-clock time of the last update ShouldAcceptUpdateAt() accepted. Guarded by mutex_. */
+        System::DateTimeOffset lastAcceptedUpdateTime_;
 
         /**
          * Guards currentValue_/isDataValid_ (Task P5-2): for real,
@@ -247,6 +259,76 @@ namespace Microsoft::Devices::Sensors
         }
 
         /**
+         * @brief Decides whether an incoming update at wall-clock time `now`
+         * should actually be accepted (dispatched), given the current
+         * TimeBetweenUpdates interval and the last accepted update's time
+         * (Task SENSORBASE-001/ACCEL-005/GYRO-004/SDL-SENSOR-002).
+         *
+         * The very first call after construction, or after
+         * ResetUpdateThrottle(), always accepts (there is no prior update to
+         * measure an interval against — matches Start() always delivering an
+         * immediate first sample). A subsequent call accepts only if at
+         * least `getTimeBetweenUpdatesProperty()` has elapsed since the last
+         * accepted call's `now`; the current TimeBetweenUpdates value is read
+         * fresh on every call, so a change while the sensor is running takes
+         * effect on the very next incoming update without requiring
+         * Stop()/Start(). A call that accepts records `now` as the new
+         * last-accepted time; a call that does not accept leaves it
+         * unchanged, so throttling is measured against the last
+         * *dispatched* update, not the last *attempted* one.
+         *
+         * Deliberately takes `now` as a parameter rather than calling
+         * System::DateTimeOffset::getUtcNowProperty() internally: this keeps
+         * the decision a pure function of its inputs, so it can be unit
+         * tested with synthetic timestamps (no real-time sleeps, no test
+         * flakiness) — the same technique this codebase already uses for
+         * Android sensor math (Detail::ConvertAndroidPortraitToXnaLandscape(),
+         * Detail::ExtractYawPitchRollFromQuaternion()). Production call
+         * sites (Accelerometer::ProcessSensorUpdateEvent(),
+         * Gyroscope::ProcessSensorUpdateEvent()) pass the real wall-clock
+         * time. Scoped per sensor *instance* (this method reads/writes only
+         * this instance's own fields) — two instances with different
+         * TimeBetweenUpdates values throttle independently, as required.
+         *
+         * Not applied to the NOXNA synthetic-injection test hooks
+         * (InjectSyntheticSensorUpdate(), DispatchToInstancesForTesting())
+         * on either class — those deliberately bypass ProcessSensorUpdateEvent()
+         * entirely (see its own doc comment) so tests can exercise dispatch
+         * behavior without depending on real elapsed time between calls.
+         *
+         * @param now Wall-clock time of the incoming update.
+         * @return true if this update should be dispatched; false if it
+         * should be silently dropped (too soon after the last accepted one).
+         */
+        bool ShouldAcceptUpdateAt(const System::DateTimeOffset& now)
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+
+            if (!hasAcceptedUpdate_ || (now - lastAcceptedUpdateTime_) >= timeBetweenUpdates_)
+            {
+                hasAcceptedUpdate_ = true;
+                lastAcceptedUpdateTime_ = now;
+                return true;
+            }
+
+            return false;
+        }
+
+        /**
+         * @brief Forgets the last accepted-update time, so the next
+         * ShouldAcceptUpdateAt() call always accepts.
+         *
+         * Derived classes call this from Start(), so a fresh Start() always
+         * delivers an immediate first sample rather than staying throttled
+         * by a stale timestamp from a previous Start()/Stop() cycle.
+         */
+        void ResetUpdateThrottle()
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            hasAcceptedUpdate_ = false;
+        }
+
+        /**
          * @brief Derived classes override this method to dispose managed-like
          * and unmanaged/native resources.
          *
@@ -292,7 +374,9 @@ namespace Microsoft::Devices::Sensors
               isDataValid_(false),
               isSupported_(false),
               timeBetweenUpdates_(System::TimeSpan::Zero),
-              currentValue_()
+              currentValue_(),
+              hasAcceptedUpdate_(false),
+              lastAcceptedUpdateTime_()
         {
             setTimeBetweenUpdatesProperty(System::TimeSpan::FromMilliseconds(2.0));
         }
@@ -369,14 +453,18 @@ namespace Microsoft::Devices::Sensors
          * real WP7 `TimeSpan` property is a value type in C# anyway, so
          * this is a more faithful match, not a breaking API change.
          *
-         * @note Task DEVICES-0066: this value is stored and observable only
-         * — no derived sensor class currently enforces it as an actual
-         * dispatch-rate throttle. `Accelerometer`/`Gyroscope` dispatch every
-         * SDL sensor event they receive regardless of this value; SDL's own
-         * event rate is not adjusted based on it either. This is an honest,
-         * accepted deviation from a strict reading of the WP7 contract, not
-         * a bug — implementing real throttling is a larger, separately-
-         * scoped feature if a concrete need for it is ever found.
+         * @note Task SENSORBASE-001/ACCEL-005/GYRO-004: `Accelerometer` and
+         * `Gyroscope` now honor this value as a real dispatch-rate throttle
+         * via `ShouldAcceptUpdateAt()`, called from each class's own
+         * `ProcessSensorUpdateEvent()` (the real SDL event path only — the
+         * NOXNA synthetic-injection test hooks deliberately bypass it, see
+         * `ShouldAcceptUpdateAt()`'s doc comment). SDL's own underlying
+         * sensor polling rate is not adjusted based on this value — SDL3 has
+         * no public API to do so for `SDL_SENSOR_ACCEL`/`SDL_SENSOR_GYRO` —
+         * so throttling is software-side, dropping events that arrive too
+         * soon after the last accepted one. `Compass`/`Motion`'s Android
+         * backend still only applies this value once, at `Start()` time
+         * (`ANDROID-BRIDGE-002`, not fixed by this task).
          *
          * @return Time between updates.
          */
