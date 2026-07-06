@@ -271,19 +271,28 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   cross-test pollution from the temporary global swap (full `NetworkSessionTest.*` suite — 39 tests
   — reruns clean).
 
-- [ ] **Task 2.4** — Fix the local-gamer `Id`-collision bug after remove-then-add churn. Confirmed:
-  `NetworkSession`'s constructor assigns sequential local-placeholder ids (`nextLocalId` starting at
-  0), but `AddLocalGamer` derives its new gamer's id from the *live* `allGamers_.getCountProperty()`
-  at the time of the call. Since `RemoveGamer` shrinks that count with no separate monotonic
-  counter, a remove-then-add sequence can hand out a colliding `Id` — e.g. 3 gamers join with ids
-  0,1,2; gamer 1 leaves (count now 2); calling `AddLocalGamer` again assigns the new gamer id
-  `2` too, colliding with the still-present gamer that already owns id 2 — corrupting
-  `FindGamerById`. Fix: track a real monotonic per-session id counter (separate from any live
-  collection's size) for locally-assigned placeholder ids, used consistently by both the
-  constructor and `AddLocalGamer`. Add a test: add 3 gamers, remove the middle one, add a new one,
-  assert `FindGamerById` resolves every remaining/new gamer to a distinct, correct instance (no
-  collision) — this test should fail without the fix (currently masked; see Task 6.1's related
-  test-gap task).
+- [x] **Task 2.4** — Fix the local-gamer `Id`-collision bug after remove-then-add churn. Confirmed:
+  `NetworkSession`'s constructor assigned sequential local-placeholder ids (a local `nextLocalId`
+  starting at 0), but `AddLocalGamer` derived its new gamer's id from the *live*
+  `allGamers_.getCountProperty()` at the time of the call. Since `RemoveGamer` shrinks that count
+  (once Task 2.2 fixed it to prune `localGamers_` too — before that fix this bug was actually
+  unreachable, since `localGamers_`'s count never shrank either), a remove-then-add sequence could
+  hand out a colliding `Id` — e.g. 3 gamers join with ids 0,1,2; gamer 1 leaves (count now 2);
+  calling `AddLocalGamer` again assigned the new gamer id `2` too, colliding with the still-present
+  gamer that already owns id 2 — corrupting `FindGamerById`.
+  **Fixed:** added a `NOXNA SharpRuntime::bytecs nextLocalGamerId_{0};` member — a real monotonic
+  counter, never derived from any live collection's size — used consistently by both the
+  constructor's initial-gamer loop and `AddLocalGamer`.
+  **Added `NetworkSessionTest.RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision`**: 3 initial
+  local gamers (ids 0,1,2, via a temporary global `SignedInGamerCollection` swap, same RAII
+  technique as Task 2.3's test), remove the middle one (id 1), add a new one, and assert the new
+  gamer gets id 3 (not a collision with id 2) and `FindGamerById` resolves every remaining/new
+  gamer to the correct, distinct instance.
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed exactly
+  as predicted: `newGamer->getIdProperty()` was `2` (colliding with `local2`), and
+  `FindGamerById(3)` returned `nullptr` instead of the new gamer. Restored the fix and reran —
+  passes. Full suite: **3242/3244 passing** (2 expected accelerometer/gyroscope skips), no
+  regressions.
 
 - [ ] **Task 2.5** — Add capacity enforcement to `NetworkSession::AddRemoteGamer` against
   `MaxGamers`/`PrivateGamerSlots`. Confirmed (`NetworkSession.cpp`, ~lines 396-405):

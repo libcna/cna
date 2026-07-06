@@ -289,6 +289,53 @@ TEST(NetworkSessionTest, AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHan
     session->Dispose();
 }
 
+// Task 2.4: AddLocalGamer used to derive its new gamer's id from allGamers_.getCountProperty() at
+// call time, rather than a separate monotonic counter. Since RemoveGamer shrinks that live count
+// (once Task 2.2 fixed it to prune localGamers_ too), a remove-then-add sequence could hand a new
+// gamer the same id already owned by a still-present gamer, corrupting FindGamerById.
+TEST(NetworkSessionTest, RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision) {
+    SignedInGamerCollection* previousGlobal = Gamer::getSignedInGamersProperty();
+    SignedInGamer gamerA = MakeSignedInGamer("A");
+    SignedInGamer gamerB = MakeSignedInGamer("B");
+    SignedInGamer gamerC = MakeSignedInGamer("C");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&gamerA, &gamerB, &gamerC})
+    ));
+    struct RestoreGlobalGuard {
+        SignedInGamerCollection* previous;
+        ~RestoreGlobalGuard() { Gamer::setSignedInGamersProperty(previous); }
+    } restoreGuard{previousGlobal};
+
+    NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 3, 8);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 3);
+    LocalNetworkGamer* local0 = session->getLocalGamersProperty()[0];
+    LocalNetworkGamer* local1 = session->getLocalGamersProperty()[1];
+    LocalNetworkGamer* local2 = session->getLocalGamersProperty()[2];
+    ASSERT_EQ(local0->getIdProperty(), 0);
+    ASSERT_EQ(local1->getIdProperty(), 1);
+    ASSERT_EQ(local2->getIdProperty(), 2);
+
+    // Remove the middle gamer (id 1): allGamers_/localGamers_ counts both drop to 2.
+    session->RemoveGamer(local1, NetworkSessionEndReason::Disconnected);
+    ASSERT_EQ(session->getAllGamersProperty().getCountProperty(), 2);
+
+    // Without Task 2.4's fix, this would derive the new id from allGamers_.getCountProperty()
+    // (now 2) - colliding with local2, which already owns id 2.
+    auto newSignedIn = MakeSignedInGamer("D");
+    session->AddLocalGamer(&newSignedIn);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 3); // local0, local2, newGamer
+    NetworkGamer* newGamer = session->getLocalGamersProperty()[2];
+    EXPECT_EQ(newGamer->getIdProperty(), 3);
+    EXPECT_NE(newGamer->getIdProperty(), local2->getIdProperty());
+
+    EXPECT_EQ(session->FindGamerById(0), local0);
+    EXPECT_EQ(session->FindGamerById(1), nullptr); // removed, and never reissued
+    EXPECT_EQ(session->FindGamerById(2), local2);
+    EXPECT_EQ(session->FindGamerById(3), newGamer);
+
+    session->Dispose();
+}
+
 TEST(NetworkSessionTest, UpdateAfterDisposeThrows) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(

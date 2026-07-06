@@ -759,6 +759,12 @@ namespace Microsoft::Xna::Framework::Net
         float simulatedPacketLoss_{0.0f};
 
         int maxLocalGamers_{0};
+        // Task 2.4: a real monotonic counter for locally-assigned placeholder ids, separate from
+        // any live collection's size. AddLocalGamer used to derive its new gamer's id from
+        // allGamers_.getCountProperty() at call time - since RemoveGamer shrinks that count with
+        // no separate counter, a remove-then-add sequence could hand out a colliding id already
+        // owned by a still-present gamer, corrupting FindGamerById.
+        NOXNA SharpRuntime::bytecs nextLocalGamerId_{0};
         std::queue<NetworkEvent> networkEvents_;
 
         static NetworkSessionAction* activeAction_;

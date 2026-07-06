@@ -122,11 +122,10 @@ namespace Microsoft::Xna::Framework::Net
         // non-SystemLink sessions - ENetBackend overwrites it with the wire-negotiated id once a
         // real SystemLink session actually joins/hosts (see ENetBackend.cpp's AssignWireId/
         // HandleServerWelcome/HandleGamerJoinBroadcast).
-        SharpRuntime::bytecs nextLocalId = 0;
         for (LocalNetworkGamer* l : locals)
         {
             l->SetIsHost(isHost_);
-            l->SetId(nextLocalId++);
+            l->SetId(nextLocalGamerId_++);
         }
 
         host_ = localGamers_[0];
@@ -335,7 +334,11 @@ namespace Microsoft::Xna::Framework::Net
         }
         auto* adding = new LocalNetworkGamer(LocalNetworkGamer::CreateInternal(gamer, this));
         adding->SetIsHost(isHost_);
-        adding->SetId(static_cast<SharpRuntime::bytecs>(allGamers_.getCountProperty()));
+        // Task 2.4: nextLocalGamerId_ is a real monotonic counter, never derived from any live
+        // collection's size (allGamers_.getCountProperty() shrinks on RemoveGamer, so a
+        // remove-then-add sequence used to hand out a colliding id already owned by a
+        // still-present gamer, corrupting FindGamerById).
+        adding->SetId(nextLocalGamerId_++);
         localGamers_.Add(adding);
         allGamers_.Add(adding);
 
