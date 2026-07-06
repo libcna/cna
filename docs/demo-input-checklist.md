@@ -2,7 +2,7 @@
 
 `examples/demo_input` (`cna_demo_input`) is the interactive input demo. The unit suite
 (`CnaTests`) exercises the input pipeline headlessly, but some behavior can only be confirmed with
-real hardware and a real window — that's what this checklist is for (task 836). Work through it on
+real hardware and a real window — that's what this checklist is for (INPUT-TEST-018 / the manual-verification tasks in plan_input.md). Work through it on
 each platform you care about; pair it with the platform-specific caveats in
 [`docs/platform-input-notes.md`](platform-input-notes.md).
 
@@ -72,14 +72,16 @@ These input features are implemented and unit-tested where possible, but the dem
 surface them. Verifying them needs a small demo enhancement or a separate harness:
 
 - **Relative mouse mode** (`Mouse::IsRelativeMouseModeEXT`) — not toggled by the demo. Covered by
-  `MouseInputTests` (real-window round-trip) and the manual check in `plan_input.md` task 783.
+  `MouseInputTests` (real-window round-trip) and the manual check INPUT-MOUSE-023 in `plan_input.md`.
 - **Mouse cursor warp** (`Mouse::SetPosition`) — not called by the demo. Manually verified in
-  task 783 (pixel-exact under X11); the scaled/letterboxed logical→window conversion is now
+  INPUT-MOUSE-023 (pixel-exact under X11); the scaled/letterboxed logical→window conversion is now
   implemented (INPUT-MOUSE-002 (decision a-0001)) and unit-tested (`SetPositionConvertsLogicalToWindowFor
   LetterboxedRenderer`).
 - **Gamepad sensors** (`GetGyroEXT` / `GetAccelerometerEXT`) — not read by the demo. Only the
-  disconnected/zeroed fallback is unit-tested (task 740); live values need real sensor hardware.
+  disconnected/zeroed fallback is unit-tested (INPUT-GAMEPAD-017/018); live values need real sensor hardware.
 - **Gamepad light bar** (`SetLightBarEXT`) — not driven by the demo.
-- **Touch *gestures*** (Tap/DoubleTap/Hold/Flick/Drag/Pinch via `TouchPanel::ReadGesture`) — the
-  demo shows raw touch points, not recognized gestures. Gesture recognition is covered by
-  `GestureDetectorTests` (deterministic) and `SdlInputBridgeTouchGestureTests` (end-to-end).
+- **Touch *gestures*** (Tap/DoubleTap/Hold/Flick/Drag/Pinch via `TouchPanel::ReadGesture`) — the demo
+  **enables** `Tap | FreeDrag | Flick` (`setEnabledGesturesProperty`) and pumps `TouchPanel::Update()`
+  each frame, but shows raw touch points only and never calls `ReadGesture`, so recognized gestures are
+  not surfaced. A future enhancement only needs to drain + display the gesture queue. Gesture recognition
+  itself is covered by `GestureDetectorTests` (deterministic) and `SdlInputBridgeTouchGestureTests`.

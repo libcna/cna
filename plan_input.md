@@ -2929,13 +2929,14 @@ automated from manual verification, and stamp manual results with exact date/har
 
 - **Result (2026-07-06):** `docs/platform-input-notes.md` updated this session — the cursor/warp platform matrix marking verified (X11) vs manual-only cells, the macOS section, non-US keyboard layouts, and the gamepad backend/mapping section (verified-vs-documented split).
 #### INPUT-DOC-008 — Rework `demo-input-checklist.md` to match demo capability
-- **Priority:** P3 · **Status:** TODO · **Area:** Docs
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** `docs/demo-input-checklist.md`
 - **Work:** After INPUT-TEST-018 expands the demo, update the checklist; keep unchecked items honest.
 - **Acceptance:** Checklist == demo capability.
 - **Tests:** manual.
 - **Deps:** INPUT-TEST-018.
 
+- **Result (2026-07-06):** Cross-checked `docs/demo-input-checklist.md` line-by-line against `examples/demo_input/src/InputDemo.cpp` — every checklist item is actually surfaced by the demo (keyboard highlight via `IsKeyDown`; text buffer + IME composition draft + 8 bit-LEDs + blinking caret + F1 toggle; mouse position + L/M/R + X1/X2 + scroll; touch markers; gamepad connection/buttons/triggers/thumbsticks/rumble across 4 slots), and the "Not exercised" section correctly lists relative-mode / cursor-warp / sensors / light-bar / gestures. Fixes applied: replaced the 4 remaining legacy numeric task refs (836/783/783/740) with INPUT-* IDs, and clarified that the demo *enables* `Tap|FreeDrag|Flick` + pumps `TouchPanel::Update()` but never calls `ReadGesture` (so a gesture readout is the only missing piece). No stale/false checklist items remained.
 #### INPUT-DOC-009 — Refresh the manual verification log (new dated entry)
 - **Priority:** P1 · **Status:** TODO · **Area:** Docs/Manual
 - **Files:** `docs/input-manual-verification-results.md`
