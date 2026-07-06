@@ -1324,14 +1324,26 @@ in **P0-005** and pinned outside the strict surface by `PublicApiInputSignatureF
 TextEditing byte-offset caveat (relevant to P7-007). **Files changed:** none (audit-only). **Behavior
 verified:** naming/marking/docs all designate it an extension. **Remaining risk:** none.
 
-## P7-002 — Verify UTF-8 to UTF-16 decoding
-- [ ] Test ASCII.
-- [ ] Test multi-byte BMP characters.
-- [ ] Test astral characters requiring surrogate pairs.
-- [ ] Test invalid UTF-8.
-- [ ] Test truncated UTF-8.
-- [ ] Test overlong sequences if decoder handles them.
-- [ ] Add regression tests.
+## P7-002 — Verify UTF-8 to UTF-16 decoding `[x]`
+- [x] Test ASCII.
+- [x] Test multi-byte BMP characters.
+- [x] Test astral characters requiring surrogate pairs.
+- [x] Test invalid UTF-8.
+- [x] Test truncated UTF-8.
+- [x] Test overlong sequences if decoder handles them.
+- [x] Add regression tests.
+
+**Result (2026-07-06):** `decode_utf8_to_utf16` (SdlInputBridge.cpp:118-175) is exhaustively covered and
+matches `Encoding.UTF8` (bad input → U+FFFD, valid astral → surrogate pair): ASCII
+(`TextInputEventForwardsAsciiAsCodeUnits`); BMP 2-byte é / 3-byte € / Czech diacritics / combining
+(`TextInputEventDecodesTwoByteUtf8ToSingleCodeUnit`, `...ThreeByteUtf8...`, `...CzechDiacritics`,
+`...CombiningCharactersAsSeparateCodeUnits`); astral emoji U+1F600 → 0xD83D 0xDE00
+(`TextInputEventDecodesAstralEmojiToSurrogatePair`, `...MixedWidthStringInOrder`); invalid lead / bad
+continuation / lone-surrogate-in-UTF-8 (`InvalidLeadByteBecomesReplacementChar...`,
+`BadContinuationEmitsReplacementCharThenResyncsToValidText`, `SurrogateCodePointEncodedInUtf8Becomes...`);
+truncated (`TruncatedMultiByteSequenceBecomesReplacementChar`); overlong C0 80
+(`OverlongEncodingBecomesReplacementChar`). **Files changed:** none (coverage confirmed). **Behavior
+verified:** full UTF-8→UTF-16 decode incl. every error mode. **Remaining risk:** none.
 
 ## P7-003 — Verify text input events
 - [ ] Test SDL text input event conversion.
