@@ -1080,11 +1080,19 @@ available). **Files changed:** `tests/Microsoft/Xna/Framework/Input/TouchInputTe
 **Tests:** pass. **Behavior verified:** default None + enable/disable flag semantics + queue preservation.
 **Remaining risk:** none.
 
-## P6-003 — Verify `IsGestureAvailable`
-- [ ] Test false when queue is empty.
-- [ ] Test true when queue has entries.
-- [ ] Test behavior after `ReadGesture`.
-- [ ] Add tests.
+## P6-003 — Verify `IsGestureAvailable` `[x]`
+- [x] Test false when queue is empty.
+- [x] Test true when queue has entries.
+- [x] Test behavior after `ReadGesture`.
+- [x] Add tests.
+
+**Result (2026-07-06):** `getIsGestureAvailableProperty()` is exactly `!gestures_.empty()`
+(TouchPanel.cpp:68-71), matching FNA's `IsGestureAvailable => gestures.Count > 0`. All three sub-items were
+covered incidentally (across `EnqueueGestureAndReadGestureFollowFifoOrder`, `TapFires...`, the *-DoesNotFire
+tests); **added a single focused regression guard** `IsGestureAvailableReflectsQueueState` (empty→false,
+enqueue→true, read→false). **Files changed:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+(+1 test). **Tests:** pass. **Behavior verified:** availability mirrors queue non-emptiness. **Remaining
+risk:** none.
 
 ## P6-004 — Verify `ReadGesture`
 - [ ] Test FIFO order.

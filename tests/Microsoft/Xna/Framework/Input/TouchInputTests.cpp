@@ -140,6 +140,24 @@ TEST(TouchInputTest, EnqueueGestureAndReadGestureFollowFifoOrder)
     EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 }
 
+// P6-003: IsGestureAvailable exactly mirrors "queue is non-empty" — false when empty, true once a gesture
+// is enqueued, and false again after the last one is read (FNA: `IsGestureAvailable => gestures.Count > 0`).
+TEST(TouchInputTest, IsGestureAvailableReflectsQueueState)
+{
+    while (TouchPanel::getIsGestureAvailableProperty())
+    {
+        (void)TouchPanel::ReadGesture();
+    }
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());   // empty queue
+
+    TouchPanel::EnqueueGesture(GestureSample(GestureType::Tap, System::TimeSpan::Zero,
+                                             Vector2::Zero, Vector2::Zero, Vector2::Zero, Vector2::Zero));
+    EXPECT_TRUE(TouchPanel::getIsGestureAvailableProperty());    // has an entry
+
+    (void)TouchPanel::ReadGesture();
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());   // drained again
+}
+
 TEST(TouchInputTest, ReadGestureThrowsInvalidOperationExceptionWhenQueueIsEmpty)
 {
     while (TouchPanel::getIsGestureAvailableProperty())
