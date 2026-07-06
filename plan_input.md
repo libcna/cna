@@ -945,13 +945,19 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Deps:** none.
 
 #### INPUT-KBD-019 — Key repeat behavior
-- **Priority:** P2 · **Status:** TODO · **Area:** Keyboard/Bridge
-- **Files:** `SdlInputBridge.cpp` (repeat skip)
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Keyboard/Bridge
+- **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Work:** Confirm repeats keep key down without spurious transitions; confirm text synthesis still fires
   on repeat (see §12 repeat gate).
 - **Acceptance:** Repeat holds key; no extra down/up.
 - **Tests:** existing key-repeat text case + a state case.
 - **Deps:** none.
+- **Result (2026-07-06):** The bridge computes `isRepeat = pressed && event.key.repeat` and skips the
+  `SetKeyState` update on repeats (state already set), while still re-emitting text. The text half was
+  already covered (`SdlInputBridgeTextInputTest.KeyRepeatReemitsControlCharacter`); added the state half —
+  `KeyRepeatKeepsKeyDownWithoutSpuriousTransitions` presses A, fires 5 auto-repeats, and asserts the key
+  stays down with the pressed set exactly `{A}` (no duplicate/spurious keys), then a single KEY_UP releases
+  it (empty set). `ctest -L input` 100% green. Verification + one added test; no code change.
 
 #### INPUT-KBD-020 — Focus lost / gained key behavior (decision)
 - **Priority:** P1 · **Status:** DONE (2026-07-05; DEC-15 accepted — match FNA) · **Area:** Keyboard/Bridge

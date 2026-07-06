@@ -56,6 +56,20 @@ namespace
         e.key.repeat = false;
         return e;
     }
+
+    SDL_Event keyDownRepeat(const SDL_Keycode key)
+    {
+        SDL_Event e = keyDownWithKeycode(key);
+        e.key.repeat = true;
+        return e;
+    }
+
+    SDL_Event keyUpWithKeycode(const SDL_Keycode key)
+    {
+        SDL_Event e = keyDownWithKeycode(key);
+        e.type = SDL_EVENT_KEY_UP;
+        return e;
+    }
 }
 
 // DEC-15 / INPUT-KBD-020 / INPUT-BRIDGE-109: CNA matches FNA — a window focus-loss does NOT clear
@@ -178,6 +192,28 @@ TEST_F(SdlInputBridgeKeyboardTest, ScancodeModeIgnoresTheLayoutDependentKeycode)
 
     EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::A));
     EXPECT_FALSE(Keyboard::GetState().IsKeyDown(Keys::Z));
+}
+
+// INPUT-KBD-019: a repeated KEY_DOWN (SDL sets event.key.repeat) must keep the key down without any
+// spurious transition — the bridge skips the pressed-state update on repeats (state is already set), so
+// the pressed set stays exactly {key} across any number of repeats, and only a real KEY_UP releases it.
+// (The text-synthesis half of the repeat gate is covered by SdlInputBridgeTextInputTest.
+// KeyRepeatReemitsControlCharacter; this is the state half.)
+TEST_F(SdlInputBridgeKeyboardTest, KeyRepeatKeepsKeyDownWithoutSpuriousTransitions)
+{
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDLK_A)); // initial press
+    ASSERT_TRUE(Keyboard::GetState().IsKeyDown(Keys::A));
+
+    for (int i = 0; i < 5; ++i)
+        SdlInputBridge::ProcessEvent(keyDownRepeat(SDLK_A)); // auto-repeat fires
+
+    const auto held = Keyboard::GetState();
+    EXPECT_TRUE(held.IsKeyDown(Keys::A));
+    EXPECT_EQ(held.GetPressedKeys().size(), 1u) << "repeats must not add duplicate or spurious keys";
+
+    SdlInputBridge::ProcessEvent(keyUpWithKeycode(SDLK_A)); // the only event that releases it
+    EXPECT_TRUE(Keyboard::GetState().IsKeyUp(Keys::A));
+    EXPECT_EQ(Keyboard::GetState().GetPressedKeys().size(), 0u);
 }
 
 // INPUT-KBD-011: the two ISO-layout extra scancodes (NONUSHASH, NONUSBACKSLASH) have no XNA Keys
