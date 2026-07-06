@@ -4146,3 +4146,215 @@ dirs deleted after use, matching this file's own documented one-off recipe above
 No new "Phase 11" was opened -- deciding what, if anything, comes after a hardening phase that has
 run its course is a product decision for the user, not something this pass invents for itself
 (see `NEXT.md` §8/§9 for the specific open items deferred to the user's return).
+
+**Update (2026-07-07):** the user has since confirmed a Phase 11 will happen. See below.
+
+---
+
+# Phase 11 — Structural/signature audit and further Audio hardening
+
+**Started 2026-07-07.** Scope: same as Phase 10 -- `Microsoft::Xna::Framework::Audio` +
+`CNA::Internal::Audio` only, `Microsoft::Xna::Framework::Media` remains explicitly out of scope.
+Trigger: the user asked for a rigorous, fresh audit of CNA's Audio API against FNA (the practical
+XNA 4.0 reference) at the *structural* level -- every class/struct/enum/exception CNA is supposed
+to have, and every method's signature -- on top of the *behavioral* per-member audit Phase 10's
+`P10-AUDIT-002/003` already did. Plus real fixes/improvements found along the way or otherwise
+still open. Same status legend as Phase 10 (`[x]` = genuinely done with a concrete, cited
+investigation or change; `[ ]` = genuinely open).
+
+**Method note:** this phase's audit sub-tasks (11.1-11.3) were done by direct inspection (reading
+FNA's real `.cs` source and CNA's real `.hpp`/`.cpp` side by side), not delegated to sub-agents --
+the multi-agent fork tooling used for Phase 10's `P10-AUDIT-002/003` was unavailable in this
+session's context when this phase started. This is noted because it changes the verification
+method, not the rigor: every finding below cites an exact file:line on both sides.
+
+## Phase 11.1 — Structural completeness (classes, structs, enums, exceptions)
+
+* [x] P11-STRUCT-001: Confirm every FNA `Audio` source file has a corresponding CNA header (no
+  missing top-level types).
+  *Note:* `diff <(ls FNA .../Audio/*.cs) <(ls CNA include/.../Audio/*.hpp)` (names only) --
+  **zero differences, 19/19 exact match**: `AudioCategory`, `AudioChannels`, `AudioEmitter`,
+  `AudioEngine`, `AudioListener`, `AudioStopOptions`, `Cue`, `DynamicSoundEffectInstance`,
+  `InstancePlayLimitException`, `Microphone`, `MicrophoneState`, `NoAudioHardwareException`,
+  `NoMicrophoneConnectedException`, `RendererDetail`, `SoundBank`, `SoundEffect`,
+  `SoundEffectInstance`, `SoundState`, `WaveBank`. No FNA Audio type is missing from CNA; no CNA
+  Audio type exists with no FNA counterpart.
+* [x] P11-STRUCT-002: Confirm no FNA `Audio` `.cs` file declares an extra public nested type
+  (struct/enum/delegate) that CNA's corresponding header is missing.
+  *Note:* Grepped every FNA `Audio/*.cs` file for `class|struct|enum|delegate|interface`
+  declarations at any nesting level. Every file declares exactly one public type, **except**
+  `AudioEngine.cs`, which also declares a `private class IntPtrComparer : IEqualityComparer<IntPtr>`
+  (line 65) -- a pure implementation detail (a dictionary key comparer for `IntPtr`), not part of
+  the public API surface, needing no CNA equivalent (CNA doesn't use an `IntPtr`-keyed dictionary
+  at all). `SoundEffect.cs` similarly declares an `internal class FAudioContext` (line 538) --
+  also purely internal, FAudio-specific device/context bookkeeping with no public-API-visible
+  shape, not applicable to CNA's SDL3_mixer backend. No genuinely missing public type found.
+
+## Phase 11.2 — Per-member signature audit (constructors, methods, properties, operators)
+
+Strict comparison of parameter count/order/types (via the established SharpRuntime alias
+convention) and overload sets, not just presence/testedness (which `P10-AUDIT-002/003` already
+covered). All confirmed by direct side-by-side reading, cited by file:line.
+
+* [x] P11-SIG-001: Enums, exceptions, `AudioListener`/`AudioEmitter`, `AudioCategory`,
+  `RendererDetail`.
+  *Note:* All exact matches. `AudioChannels`(`Mono=1,Stereo=2`)/`AudioStopOptions`/
+  `MicrophoneState`/`SoundState` -- exact names, order, and (implicit or explicit) values
+  (`AudioChannels.cs`/`AudioStopOptions.cs`/`MicrophoneState.cs`/`SoundState.cs` vs the matching
+  CNA `.hpp`). `NoMicrophoneConnectedException`(`:Exception`)/`InstancePlayLimitException`/
+  `NoAudioHardwareException`(both `:ExternalException`) -- exact base-class chain and the same
+  3-constructor pattern (default/message/message+innerException) on both sides
+  (`{Name}.cs:19-32` vs `{Name}.hpp`). `AudioListener`/`AudioEmitter` -- exact property list
+  (`Forward`/`Position`/`Up`/`Velocity`, plus `AudioEmitter`'s `DopplerScale`), exact `Vector3`
+  types, exact parameterless-constructor defaults (`Forward=Vector3.Forward`,
+  `Up=Vector3.Up`, others zero; `DopplerScale=1.0f`) matching FNA's real field initializers
+  (`AudioListener.cs:87-96`, `AudioEmitter.cs:118-137`) byte-for-byte against CNA's ctors.
+  `AudioCategory`(`Name` get-only, `Pause`/`Resume`/`SetVolume(float)`/`Stop(AudioStopOptions)`,
+  `Equals`/`GetHashCode`/`operator==`/`!=`, internal-only 3-arg ctor) and `RendererDetail`
+  (`FriendlyName`/`RendererId` get-only, `Equals`/`GetHashCode`/`ToString`/`operator==`/`!=`,
+  internal-only 2-arg ctor) -- exact member lists and signatures
+  (`AudioCategory.cs`/`RendererDetail.cs` vs the matching CNA `.hpp`).
+* [x] P11-SIG-002: `WaveBank`, `SoundBank`, `Microphone`.
+  *Note:* All exact matches. `WaveBank`'s streaming constructor's 4th parameter is `short
+  packetsize` in FNA (`WaveBank.cs:104-107`) -- confirmed CNA uses `SharpRuntime::shortcs`, not
+  `intcs`, for this exact parameter (a real, easy-to-miss detail this pass specifically checked
+  for). `SoundBank::PlayCue(name, listener, emitter)` parameter order matches
+  (`SoundBank.cs:218-221`). `Microphone::GetSampleDuration(int)`/`GetSampleSizeInBytes(TimeSpan)`
+  are each a **single** overload in FNA (using the internal `SAMPLERATE` constant implicitly, no
+  separate sample-rate parameter, `Microphone.cs:172-189`) -- confirmed CNA also has exactly one
+  overload each, not two; both `GetData` overloads' parameter lists and `int` return type
+  (bytes copied) match (`Microphone.cs:144-171`).
+* [x] P11-SIG-003: `DynamicSoundEffectInstance`, `AudioEngine`.
+  *Note:* All exact matches. `DynamicSoundEffectInstance` ctor `(int sampleRate, AudioChannels
+  channels)`, both `SubmitBuffer`/`SubmitFloatBufferEXT` overload pairs, instance-level (not
+  static) `GetSampleDuration`/`GetSampleSizeInBytes` -- all match FNA exactly
+  (`DynamicSoundEffectInstance.cs:75-97,148-200`). One notable, deliberate, non-buggy difference:
+  CNA's `DynamicSoundEffectInstance` overrides `Stop()`/`Stop(bool)`/`Pause()`/`Resume()`, which
+  FNA's C# version does **not** override at all (only `Play()` and `IsLooped` are overridden,
+  `DynamicSoundEffectInstance.cs:31,132`) -- because FNA's base and derived classes share the
+  exact same native FAudio voice `handle` field, so the base class's `Pause`/`Resume`/`Stop`
+  already work unmodified; CNA's SDL3_mixer port stores a *separate* `dynamicTrack_` field the
+  base class's methods can't reach, so the override is a necessary adaptation to make the
+  *externally observable* behavior match FNA, not a real signature/behavior deviation (already
+  documented in-source via `CP-15`/`P9-DYNAMIC-001` comments). `AudioEngine`'s two constructors
+  (`(settingsFile)` and `(settingsFile, TimeSpan lookAheadTime, string rendererId)`, exact param
+  order), `ContentVersion=46`, `GetCategory(string)->AudioCategory`,
+  `GetGlobalVariable(string)->float`, `SetGlobalVariable(string,float)`, `Update()` -- all match
+  (`AudioEngine.cs:24,30,100-115,259-334`).
+* [x] P11-SIG-004: `Cue`.
+  *Note:* All exact matches. Every `Is*` getter returns `bool`, `Name` returns `string`/
+  `std::string`, `Apply3D(listener, emitter)` parameter order (listener first) matches
+  (`Cue.cs:166`), `GetVariable(string)->float`/`SetVariable(string,float)` parameter
+  order matches, `Stop(AudioStopOptions)` takes the enum not a raw flag, `Dispose()`/`IDisposable`
+  mapped correctly. FNA's internal ctor `(IntPtr cue, string name, SoundBank soundBank)`
+  (`Cue.cs:122`) vs CNA's private ctor `(std::string name, SoundBank*, uint16_t cueIndex)` differ
+  in shape, but both are equally non-public/friend-only (matching `internal`) and the exact
+  parameter shape is implementation-internal on both sides (CNA has no FACT-style opaque native
+  cue handle to mirror 1:1, since it doesn't use FACT at all) -- not part of the public API
+  surface this task audits.
+* [x] P11-SIG-005: `SoundEffect`, `SoundEffectInstance`.
+  *Note:* All exact matches. `SoundEffect`'s two public constructors (`(buffer,sampleRate,
+  channels)`, `(buffer,offset,count,sampleRate,channels,loopStart,loopLength)`,
+  `SoundEffect.cs:138-182`) match exactly; both `Play()`/`Play(volume,pitch,pan)` return **`bool`**
+  in FNA (`SoundEffect.cs:333-338`) -- confirmed CNA's both return `bool` too, not `void` (a
+  specific, easy-to-miss detail this pass checked directly rather than assumed); static
+  `GetSampleDuration(sizeInBytes,sampleRate,channels)`/`GetSampleSizeInBytes(duration,sampleRate,
+  channels)` parameter order matches (`SoundEffect.cs:363-386`); static `MasterVolume`/
+  `DistanceScale`/`DopplerScale`/`SpeedOfSound` all present with matching types.
+  `SoundEffectInstance`'s `Apply3D(AudioListener[] listeners, AudioEmitter emitter)` overload
+  (`SoundEffectInstance.cs:266-277`) checks `listeners.Length == 1`, else throws
+  `NotSupportedException("Only one listener is supported.")` -- CNA's equivalent
+  `Apply3D(const AudioListener* listeners, int listenerCount, const AudioEmitter& emitter)` adds
+  an explicit `listenerCount` parameter *only* because a raw C++ pointer has no `.Length`
+  equivalent to query; behavior (null-check throws `ArgumentNullException`, count==1 delegates,
+  else throws the identical `NotSupportedException` with the identical message) matches exactly --
+  confirmed by reading both implementations side by side, not just the declarations. `Pan`/
+  `Pitch`/`Volume`/`State`/`IsLooped` (virtual)/`Stop()`/`Stop(bool)`/`Pause()`/`Resume()` all
+  match.
+
+## Phase 11.3 — Exception message-text parity
+
+* [x] P11-EXC-001: Audit whether CNA's exception throw sites use the same message text FNA
+  hardcodes, not just the same exception type.
+  *Note:* Extracted every FNA Audio hardcoded exception-message string
+  (`grep -rhoE '"[A-Za-z][^"]{10,}"' FNA/.../Audio/*.cs`) and searched for each verbatim in CNA's
+  Audio sources. Exact verbatim matches: `"Invalid cue name!"`, `"Invalid category name!"`,
+  `"Invalid variable name!"`, `"Only one listener is supported."`,
+  `"Submit a float buffer before Playing!"`, `"AudioEmitter.DopplerScale must be greater than or
+  equal to 0.0f"`. **Two do not match verbatim**: FNA's `SoundEffect.FromStream`'s
+  `"Specified stream is not a wave file."`/`"Specified wave file is not supported."` become CNA's
+  own backend-specific diagnostic messages (e.g. `"SoundEffect::FromStream: MIX_LoadAudio_IO
+  failed: " + SDL_GetError()`) -- a deliberate, reasonable difference, not a bug: FNA's WAV
+  parsing is its own hand-rolled reader with two fixed failure reasons, while CNA delegates to
+  SDL3_mixer's `MIX_LoadAudio_IO`, whose real failure modes don't map 1:1 onto FNA's two fixed
+  strings, and a real SDL error string is strictly more diagnostic than reproducing FNA's generic
+  wording would be. `System::Exception::Message`/C#'s `Exception.Message` is not a documented or
+  tested part of the XNA API contract in either FNA or real XNA -- the exception **type** thrown
+  for a given invalid input is the actual contract (already verified in `P10-AUDIT-002/003`), not
+  its message text. No fix needed; recorded as a confirmed, deliberate, already-reasonable
+  difference.
+
+## Phase 11.4 — `CHECKLIST.md` full line-by-line re-verification
+
+* [ ] P11-CHECKLIST-001: Re-verify every `CHECKLIST.md` "Audio:" deviation row against the current
+  code, one row at a time, not spot-checked.
+  *Status:* Open. `P10-AUDIT-004` (Phase 10) explicitly said its own pass was "not an exhaustive
+  re-audit of the whole document -- only this one specific, confirmed-wrong claim was found and
+  fixed; other rows were spot-checked... but not re-verified line-by-line." This task closes that
+  gap for real: read every `Audio:` row in `CHECKLIST.md`'s "Known acceptable C++ deviations"
+  table, find the cited source location, confirm the row's claim is still accurate against
+  *current* code (not what it said when written), and fix/update any row found stale (matching
+  the precedent `P10-AUDIT-004`/this phase's own `P10-LOOP-003/004` finding already set for
+  correcting a disproven claim rather than leaving it).
+
+## Phase 11.5 — Test assertion precision sweep
+
+* [ ] P11-TEST-001: Scan all Audio test files for remaining loose (non-exact) assertions where an
+  exact expected value is actually knowable, and tighten them.
+  *Status:* Open. Continuation of the theme `P10-AUDIT-002/003` started (which tightened exactly
+  2 instances, `SoundEffect::Duration` and `AudioEngine::RendererDetails`, as examples found along
+  the way, not from an exhaustive sweep). Grep every Audio test file for
+  `EXPECT_GT`/`EXPECT_TRUE.*>.*0`/`EXPECT_NE.*nullptr`-style loose patterns, then for each one
+  actually check whether the test fixture's inputs make an *exact* value computable -- only
+  tighten those; leave genuinely-approximate assertions (e.g. real-time/threading-dependent
+  values) as they are.
+
+## Phase 11.6 — RFC-1: stereo crossfeed pan matrix
+
+* [ ] P11-PAN-001: Attempt RFC-1 (internal post-SDL3_mixer float-PCM mixing layer for real
+  4-coefficient stereo crossfeed), the design already sketched in Phase 10's `P10-PAN-003`.
+  *Status:* Open. Real feature work with real regression risk to the already-shipped,
+  ThreadSanitizer-verified `T-4C` DSP filter (both would need to share the single SDL3_mixer
+  cooked-callback slot). Attempt only with a full dedicated regression/concurrency test pass
+  *before* touching the shipped filter tests, per RFC-1's own risk note -- if the risk proves
+  concrete during implementation (not just theoretical), stop, revert, and document why rather
+  than force it through. This is exactly the kind of task this autonomous pass's own standing
+  instruction says to skip (not force through) if it turns out to need the user's judgment call
+  partway through.
+
+## Phase 11.7 — XactParser deep re-audit for uncommon/unhandled XACT features
+
+* [ ] P11-XACT-001: Re-read FAudio's real `FACT_internal.c` sound-bank/track parsing once more,
+  specifically hunting for XACT flags/features `XactParser.cpp` doesn't recognize *at all* (parsed
+  as zero/ignored, not just simplified) -- as opposed to the already-documented, deliberate
+  simplifications (whole-sound-level RPC instead of per-track, "first PlayWave event each" track
+  simplification, etc.).
+  *Status:* Open. Different lens from every prior XACT audit in this file: those focused on
+  behavior CNA already implements being correct; this one hunts for XACT file content CNA might
+  silently misparse or skip because the parser has no case for it at all.
+
+## Phase 11.8 — `FrameworkDispatcher` Audio-pump parity
+
+* [ ] P11-DISPATCH-001: Compare FNA's `FrameworkDispatcher.cs` `Update()` Audio-related pumping
+  (`SoundEffectInstance`/`DynamicSoundEffectInstance`/`Microphone` polling) against CNA's
+  `FrameworkDispatcher.cpp` for exact behavioral parity (ordering, what gets pumped every frame vs
+  lazily).
+  *Status:* Open. Not covered by any prior Audio-scoped audit in this file (this file's Phase
+  9/10 audits never touched `FrameworkDispatcher` itself, only the Audio classes it pumps).
+
+## Phase 11.9 — Remaining TODO/FIXME/HACK sweep
+
+* [ ] P11-TODO-001: Grep every Audio `src`/`include` file for `TODO`/`FIXME`/`HACK`/`XXX` comments
+  not yet resolved into either a real fix or a documented `CHECKLIST.md` accepted-deviation row.
+  *Status:* Open. Mechanical, but genuinely useful -- a leftover `TODO` is either forgotten work
+  or an undocumented deviation, and this file's own convention is "no silent stubs."

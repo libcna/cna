@@ -28,8 +28,16 @@ framework/runtime, not a game.
   working straight through Phase 10's list without stopping to ask; every item either landed for
   real or was closed with a corrected finding/reaffirmed decision instead of a code change (see §3
   for each). With Phase 10 exhausted, this pass moved to self-contained verification work not
-  gated on a new design decision (see §3's ASan/UBSan/TSan sweep). **The user has since confirmed
-  (2026-07-06) that a Phase 11 will happen** -- concrete scope/task list not yet defined; see §8.
+  gated on a new design decision (see §3's ASan/UBSan/TSan sweep). **Phase 11** (`plan_audio.md`'s
+  "Phase 11 — Structural/signature audit and further Audio hardening") is now open, started
+  2026-07-07 at the user's explicit request: a fresh structural (every class/struct/enum/exception
+  present) + per-member signature audit against FNA, done by direct inspection (11.1-11.3, closed,
+  found zero real bugs -- three justified C++ adaptations documented as non-issues), plus 6 real
+  open follow-up task groups (11.4-11.9: `CHECKLIST.md` full re-verification, test-assertion
+  precision sweep, RFC-1 crossfeed attempt, XactParser deep re-audit, `FrameworkDispatcher` pump
+  parity, TODO/FIXME sweep) being worked through **one at a time, not batched**, autonomously,
+  per the user's explicit instruction -- the user is away again and any task needing to ask a
+  question gets skipped (with a note) in favor of the next one, same as Phase 10's continuation.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -379,20 +387,45 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**Phase 10 is fully closed (89/89 task IDs), and the follow-up ASan+UBSan+ThreadSanitizer sweep
-came back clean (§2/§3).** **The user has confirmed (2026-07-06) that a Phase 11 will happen** --
-this branch's Audio work continues past the Phase 10 hardening/parity list.
+**Phase 11 is open** (`plan_audio.md`, started 2026-07-07 at the user's explicit request: a fresh
+structural + signature audit of CNA's Audio API vs FNA, plus real follow-up fixes/improvements).
+`11.1`-`11.3` (structural census, per-member signature audit, exception-message parity) are
+**closed** -- found zero real structural/signature bugs; three justified C++ adaptations
+documented as non-issues (see `plan_audio.md` for citations). Six real, open task groups remain,
+being worked through **one at a time, not batched**, per the user's explicit instruction, in this
+order (roughly increasing scope/risk):
 
-**Phase 11 scope is not yet defined.** No task list, theme, or starting point has been given yet;
-none should be invented speculatively. When the user gives concrete direction for Phase 11 (a
-specific bug, feature, or area to focus on), start a new "Phase 11" major section in
-`plan_audio.md` (same structure as Phase 9/10: numbered sub-groups, `[ ]`/`[x]` task IDs,
-git-stash-verified fixes) and update this file's "Current phase" (§1) accordingly.
+1. **`P11-CHECKLIST-001`** (11.4) -- re-verify every `CHECKLIST.md` "Audio:" deviation row against
+   current code, line by line (not spot-checked, closing the gap `P10-AUDIT-004` admitted it left).
+   *Files:* `CHECKLIST.md`.
+2. **`P11-TEST-001`** (11.5) -- sweep all Audio test files for loose (`EXPECT_GT`-style)
+   assertions where an exact value is actually computable from the fixture, tighten them.
+   *Files:* `tests/Microsoft/Xna/Framework/Audio/*.cpp`.
+3. **`P11-XACT-001`** (11.7) -- re-read FAudio's real `FACT_internal.c` sound-bank/track parsing
+   hunting for XACT flags/features `XactParser.cpp` doesn't recognize *at all* (silently
+   ignored/zeroed), as opposed to the already-documented deliberate simplifications.
+   *Files:* `src/CNA/Internal/Audio/XactParser.cpp`, possibly `XactTypes.hpp`.
+4. **`P11-DISPATCH-001`** (11.8) -- compare `FrameworkDispatcher.cs`'s Audio-related pumping
+   against CNA's `FrameworkDispatcher.cpp` for exact parity; not covered by any prior audit in
+   this file.
+   *Files:* `src/Microsoft/Xna/Framework/FrameworkDispatcher.cpp`.
+5. **`P11-TODO-001`** (11.9) -- grep every Audio `src`/`include` file for unresolved
+   `TODO`/`FIXME`/`HACK`/`XXX` comments, resolve each into a real fix or a documented
+   `CHECKLIST.md` row.
+   *Files:* potentially many; mechanical sweep.
+6. **`P11-PAN-001`** (11.6) -- attempt RFC-1's stereo crossfeed pan matrix. Real feature work with
+   real regression risk to the shipped `T-4C` DSP filter (both would share the single SDL3_mixer
+   cooked-callback slot) -- attempt last, with a full dedicated regression/concurrency pass before
+   touching the existing filter tests; if the risk proves concrete mid-implementation, stop,
+   revert, and document why rather than force it through (this is exactly the kind of task this
+   autonomous pass's own standing instruction says to skip, not force, if it turns out to need a
+   judgment call only the user should make).
+   *Files:* `SoundEffectInstance.{hpp,cpp}` (the `FilterMixCallback`/cooked-callback machinery).
 
 Other items still open, unrelated to Phase 11's scope itself:
-- The two explicit design-only RFCs recorded in `plan_audio.md` (`P10-PAN-002`'s RFC-1: internal
-  post-SDL3_mixer crossfeed mixing layer; `P10-HRTF-002`'s RFC-2: optional FAudio/FACT backend) --
-  proposals only, never approved as work; could become Phase 11 candidates if the user picks them.
+- `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) -- a design-only proposal, never approved
+  as work, explicitly out of scope for autonomous self-direction (a full second backend
+  implementation, not something to start without the user picking it).
 
 ---
 
