@@ -2430,6 +2430,57 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   compile-time dependency. Full suite: 3230/3232 passing (2 expected hardware-skip), up from
   3228/3230; audio-scoped subset 324/324, up from 322. Verified clean under a full ASan+UBSan
   build of the audio suite.
+* [x] P9-XACT-016 Make RPC volume/pitch continuously re-evaluated (the narrowing documented at
+  `P9-XACT-005/006/007`), instead of only once at `Cue::Play()` time.
+  User-directed follow-up (2026-07-06), the last remaining candidate from a series of "which area
+  next" rounds; confirmed scope with the user first (volume/pitch only, explicitly NOT
+  `AttackTime`/`ReleaseTime`, filter-frequency/Q RPC targeting, or DSP-preset RPC targeting --
+  all three stay exactly as unsupported as before).
+  *Note:* Read `FACT_INTERNAL_UpdateRPCs`/`FACT_INTERNAL_UpdateSound` (`FACT_internal.c`) line-by-
+  line first: real FACT recomputes rpcVolume/rpcPitch fully fresh every engine tick (not a diff)
+  and unconditionally calls `FACTWave_SetVolume`/`SetPitch` every tick regardless of fade state
+  (`SOUND_STATE_PLAYING`/`FADE_IN`/`FADE_OUT`/`RELEASE_RPC` all fall through to the same
+  volume/pitch recompute). `AudioEngine::Update()` already ticks every active cue's
+  `ReconcileState()` every frame (added for `P9-STOP-010`'s fade timing) -- the per-frame hook
+  point this task needed already existed, lowering the scope versus what `P9-XACT-005`'s original
+  note anticipated ("CNA has no per-frame Cue update tick at all").
+  `Cue` gained `rpcCodes_` (mirrors `XsbSound::rpcCodes`, captured once at `Play()` instead of
+  being read-and-discarded) and `basePitchCents_` (the sound's own authored `pitchCents`).
+  Extracted the RPC-curve-evaluation loop (previously inline in `Play()`) into a new private
+  `Cue::EvaluateRpc() const -> RpcResult{volumeMultiplier, pitch}`, called once at `Play()` (the
+  first evaluation) and now also from `ReconcileState()` every tick. `ReconcileState()` gained a
+  new `hasRpc = !rpcCodes_.empty()` guard: a cue with no RPC bindings takes the exact same
+  zero-per-tick-work path as before (`rpcVolumeMultiplier` would always be exactly `1.0f` anyway,
+  matching FAudio's own `if (rpc_codes->count > 0)` guard that leaves `rpcVolume`/`rpcPitch` at
+  zero forever when nothing is bound -- a pure optimization, not a behavior difference) -- only an
+  RPC-bound cue pays the new per-tick cost.
+  Found and fixed a related, previously-undocumented gap while touching this code: the existing
+  fade-out (`P9-STOP-010`) and fade-in (`P9-CATEGORY-007`) wall-clock ramps recombined only
+  `baseVolume*categoryVolume*fadeMultiplier`, silently dropping whatever RPC volume multiplier had
+  been baked into a cue's volume at `Play()` time the instant a fade began -- independent of
+  one-shot-vs-continuous RPC, a real composition bug already latent in the one-shot version. Both
+  ramps now also multiply in the freshly-evaluated `rpc.volumeMultiplier` (a no-op, exactly `1.0f`,
+  for the common non-RPC case) and reapply `rpc.pitch` when `hasRpc`. *Honesty note:* this specific
+  fade+RPC composition fix has no dedicated isolated fixture/test (would need a new cue that's
+  both RPC-bound and subject to a real fade, a nontrivial combined fixture) -- it's covered only by
+  "the full suite still passes" regression safety, not a targeted reproduction, unlike the two
+  tests below.
+  Tests: `CueTests.cpp` gained `ChangingBoundVariableAfterPlayContinuouslyUpdatesVolume` and
+  `ChangingBoundVariableAfterPlayContinuouslyUpdatesPitch` -- both reuse the existing
+  `SharedRpcBank()`/"VolumeRpcCue"/"PitchRpcCue" fixture (`P9-XACT-008/009`), set the bound
+  variable to one extreme, `Play()`, then change the variable to the OTHER extreme and call
+  `getIsPlayingProperty()` (which ticks `ReconcileState()` internally, the same mechanism
+  `AudioEngine::Update()` drives every frame -- no real sleep/wait needed) before asserting the
+  already-playing instance's volume/pitch actually changed. Verified via `git stash`: both fail
+  *behaviorally* (not a compile failure) against the pre-fix code -- the pre-fix volume ratio is
+  1.0 instead of ~10x, and pitch stays at its Play()-time value instead of moving to the new
+  curve extreme -- confirming genuine dependency on the fix. Full suite 3277/3277 (3275 baseline +
+  2 new, 2 pre-existing hardware-dependent skips); audio-scoped subset 401/401 clean under a full
+  ASan+UBSan build. `cna_demo_sound`/`cna_demo_2d` rebuilt clean. `CHECKLIST.md`'s RPC-evaluated-
+  once row rewritten to describe the new continuous behavior and the two narrower remaining gaps
+  (`AttackTime`/`ReleaseTime`, filter-frequency/Q and DSP-preset RPC targeting); the
+  `maxRpcReleaseTime`/`Stop(AsAuthored)` row (`P9-STOP-010`) and the per-track-filter row
+  (`P9-XACT-011`) both updated to stop citing the now-inaccurate "RPC evaluated once" premise.
 
 ## P9-3D — 3D audio fidelity
 

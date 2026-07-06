@@ -167,6 +167,16 @@ namespace Microsoft::Xna::Framework::Audio
         uint16_t    fadeInMS_   = 0;
         uint8_t     priority_   = 0;
 
+        // P9-XACT-016: retained (captured once, at Play() time, from the resolved XsbSound) so
+        // ReconcileState() can continuously re-evaluate bound RPC (Runtime Parameter Control)
+        // curves every tick instead of only once at Play() -- matches FACT_INTERNAL_UpdateRPCs
+        // (FACT_internal.c), which recomputes fresh every engine tick rather than diffing.
+        // rpcCodes_ mirrors XsbSound::rpcCodes (whole-sound level only, same simplification
+        // already accepted for the one-shot version); basePitchCents_ is the sound's own
+        // authored pitchCents, recombined with a freshly-evaluated RPC pitch result every tick.
+        std::vector<uint32_t> rpcCodes_;
+        int16_t     basePitchCents_ = 0;
+
         std::unordered_map<std::string, float> variables_;
 
         struct PlaybackInstance
@@ -203,6 +213,13 @@ namespace Microsoft::Xna::Framework::Audio
         // (e.g. WaveBank::getIsInUseProperty()); the actual unregistration happens later, from
         // StopInternal() (explicit Stop()/Dispose(), or SoundBank's fire-and-forget sweep).
         void ReconcileState() const;
+
+        // P9-XACT-016: result of evaluating every curve in rpcCodes_ against each curve's bound
+        // variable's *current* value -- volumeMultiplier is an amplitude ratio (1.0f == no-op),
+        // pitch is already in XNA's [-1,1] range (CentsToPitch already applied). Called once at
+        // Play() time and continuously thereafter from ReconcileState().
+        struct RpcResult { float volumeMultiplier; float pitch; };
+        [[nodiscard]] RpcResult EvaluateRpc() const;
 
         // Re-applies a new category volume to all currently active instances, recombining it
         // with each instance's stored baseVolume (see AudioEngine::SetCategoryVolumeInternal).

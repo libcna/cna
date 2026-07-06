@@ -2244,6 +2244,50 @@ TEST(CueTest, PlaySoundWithNoRpcCodesIsUnaffectedByEngineRpcCurves)
     EXPECT_FLOAT_EQ(inst->getPitchProperty(), 0.0f);
 }
 
+// P9-XACT-016: RPC volume/pitch are now re-evaluated continuously, not just once at Play() time
+// (the narrowing P9-XACT-006/007 originally documented). Changing the bound variable AFTER
+// Play() must be reflected on the very next tick -- getIsPlayingProperty() calls
+// ReconcileState() internally, which is exactly the mechanism AudioEngine::Update() also drives
+// every frame, so this doesn't need a real sleep/wait.
+TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesVolume)
+{
+    auto cue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("VolumeRpcCue"));
+    cue->SetVariable("Volume", 0.0f); // curve -> -2000 centibels -> ~0.1x amplitude multiplier
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+    const float quietVolume = inst->getVolumeProperty();
+    ASSERT_GT(quietVolume, 0.0f);
+
+    cue->SetVariable("Volume", 1.0f); // curve -> 0 centibels -> unity multiplier
+    ASSERT_TRUE(cue->getIsPlayingProperty()); // ticks ReconcileState()'s continuous RPC re-eval
+
+    const float loudVolume = inst->getVolumeProperty();
+    // Same ~20dB (10x amplitude) ratio PlayScalesVolumeByRpcCurveEvaluatedAtCurrentVariableValue
+    // checks for the Play()-time snapshot -- this proves the SAME cue's volume tracks a variable
+    // change made after it was already playing, not just at the moment Play() was called.
+    EXPECT_NEAR(loudVolume / quietVolume, 10.0f, 0.5f);
+
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
+TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesPitch)
+{
+    auto cue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("PitchRpcCue"));
+    cue->SetVariable("Volume", 0.0f); // curve -> -600 cents
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+    EXPECT_NEAR(inst->getPitchProperty(), -0.5f, 0.001f); // -600/1200
+
+    cue->SetVariable("Volume", 1.0f); // curve -> +600 cents
+    ASSERT_TRUE(cue->getIsPlayingProperty()); // ticks ReconcileState()'s continuous RPC re-eval
+
+    EXPECT_NEAR(inst->getPitchProperty(), 0.5f, 0.001f); // +600/1200
+
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
 // P9-XACT-011: end-to-end wiring test -- "FilterCue" (BuildFilterXsbFixtureBytes) is a real
 // WaveBank-backed complex sound whose single track carries real parsed high-pass filter data
 // (type=2, frequency=8000Hz, qfactor=6 -> oneOverQ=0.5). Play() must reach all the way from

@@ -118,6 +118,48 @@ namespace Microsoft::Xna::Framework::Audio
     bool Cue::getIsStoppingProperty()  const { ReconcileState(); return !isDisposed_ && state_ == State::Stopping;  }
     const std::string& Cue::getNameProperty() const { return name_; }
 
+    Cue::RpcResult Cue::EvaluateRpc() const
+    {
+        // P9-XACT-006/007/016: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c) --
+        // volume curves are authored in centibels (summed across every bound curve, then
+        // converted to a single amplitude multiplier once: 10^((a+b)/2000) == 10^(a/2000) *
+        // 10^(b/2000)), pitch curves are authored in cents (summed with the sound's own
+        // basePitchCents_ before one CentsToPitch()). Originally evaluated only once at Play()
+        // time (P9-XACT-006/007's documented narrowing); now also called continuously from
+        // ReconcileState() every tick (P9-XACT-016), so this always reflects each bound
+        // variable's *current* value, matching FACT's own per-tick recompute instead of a
+        // Play()-time snapshot.
+        float rpcVolumeCentibels = 0.0f;
+        float rpcPitchCents      = 0.0f;
+
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        if (eng)
+        {
+            for (uint32_t code : rpcCodes_)
+            {
+                const CNA::Internal::Audio::XgsRpc* rpc = eng->FindRpcByCode(code);
+                if (!rpc) continue;
+
+                const std::string* varName =
+                    eng->GetVariableNameByIndex(static_cast<int16_t>(rpc->variable));
+                if (!varName || varName->empty()) continue;
+
+                const float value  = GetVariable(*varName);
+                const float result = EvaluateRpcCurve(*rpc, value);
+
+                if (rpc->parameter == 0)      rpcVolumeCentibels += result; // RPC_PARAMETER_VOLUME
+                else if (rpc->parameter == 1) rpcPitchCents += result;      // RPC_PARAMETER_PITCH
+                // REVERBSEND/FILTERFREQUENCY/FILTERQFACTOR/DSP-preset (>=5): unsupported, see
+                // CHECKLIST.md.
+            }
+        }
+
+        const float volumeMultiplier =
+            static_cast<float>(std::pow(10.0, rpcVolumeCentibels / 2000.0));
+        const float pitch = CentsToPitch(static_cast<float>(basePitchCents_) + rpcPitchCents);
+        return {volumeMultiplier, pitch};
+    }
+
     void Cue::ReconcileState() const
     {
         // P9-STOP-003/004: State::Stopping (an authored/non-immediate Stop() with a real release
@@ -127,6 +169,15 @@ namespace Microsoft::Xna::Framework::Audio
         // reason P9-LIFECYCLE-001 never did for the Playing case -- see StopInternal()'s comment.
         if (isDisposed_ || (state_ != State::Playing && state_ != State::Stopping) || active_.empty())
             return;
+
+        // P9-XACT-016: continuous RPC volume/pitch re-evaluation. A cue with no RPC codes bound
+        // skips the evaluation entirely and uses the identity multiplier/no pitch reapplication --
+        // rpcVolumeMultiplier would always be exactly 1.0f anyway (FAudio's own
+        // `if (rpc_codes->count > 0)` guard in FACT_INTERNAL_UpdateRPCs leaves rpcVolume/rpcPitch
+        // at zero forever when nothing is bound), so this is a pure optimization keeping a
+        // non-RPC cue's steady-state tick at zero extra work, not a behavior difference.
+        const bool hasRpc = !rpcCodes_.empty();
+        const RpcResult rpc = hasRpc ? EvaluateRpc() : RpcResult{1.0f, 0.0f};
 
         // P9-STOP-010: a real authored fadeOutMS is a wall-clock deadline, not something the
         // underlying wave's own natural length has any bearing on (StopInternal()'s LongWaveBank-
@@ -159,8 +210,17 @@ namespace Microsoft::Xna::Framework::Audio
             const float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
             for (const auto& pi : active_)
                 if (pi.instance)
-                    pi.instance->setVolumeProperty(
-                        std::clamp(pi.baseVolume * catVol * fadeMultiplier, 0.0f, 1.0f));
+                {
+                    // P9-XACT-016: rpc.volumeMultiplier folds in here too -- previously this
+                    // branch recombined only baseVolume*catVol*fadeMultiplier, silently dropping
+                    // whatever RPC volume multiplier had been baked in at Play() time the moment
+                    // a fade-out began (a real gap, independent of one-shot-vs-continuous RPC,
+                    // that this same touch-point now fixes). rpc.volumeMultiplier is exactly
+                    // 1.0f when hasRpc is false, so this is a no-op for the common non-RPC case.
+                    pi.instance->setVolumeProperty(std::clamp(
+                        pi.baseVolume * catVol * rpc.volumeMultiplier * fadeMultiplier, 0.0f, 1.0f));
+                    if (hasRpc) pi.instance->setPitchProperty(rpc.pitch);
+                }
             return;
         }
 
@@ -186,7 +246,11 @@ namespace Microsoft::Xna::Framework::Audio
                 self->fadeInMS_ = 0;
                 for (const auto& pi : active_)
                     if (pi.instance)
-                        pi.instance->setVolumeProperty(std::clamp(pi.baseVolume * catVol, 0.0f, 1.0f));
+                    {
+                        pi.instance->setVolumeProperty(
+                            std::clamp(pi.baseVolume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f));
+                        if (hasRpc) pi.instance->setPitchProperty(rpc.pitch);
+                    }
             }
             else
             {
@@ -194,9 +258,30 @@ namespace Microsoft::Xna::Framework::Audio
                     static_cast<float>(elapsedMs) / static_cast<float>(fadeInMS_);
                 for (const auto& pi : active_)
                     if (pi.instance)
-                        pi.instance->setVolumeProperty(
-                            std::clamp(pi.baseVolume * catVol * fadeMultiplier, 0.0f, 1.0f));
+                    {
+                        pi.instance->setVolumeProperty(std::clamp(
+                            pi.baseVolume * catVol * rpc.volumeMultiplier * fadeMultiplier, 0.0f, 1.0f));
+                        if (hasRpc) pi.instance->setPitchProperty(rpc.pitch);
+                    }
             }
+        }
+        else if (state_ == State::Playing && hasRpc)
+        {
+            // P9-XACT-016: steady-state continuous re-application -- no fade active, but this
+            // cue has RPC bindings, so volume/pitch must keep tracking the bound variable's
+            // current value every tick, matching FACT_INTERNAL_UpdateSound's unconditional
+            // per-tick FACTWave_SetVolume/SetPitch calls (FACT_internal.c). A plain cue with no
+            // RPC bindings never reaches this branch (hasRpc is false), keeping its original
+            // zero-per-tick-work steady-state path unchanged.
+            const AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+            const float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
+            for (const auto& pi : active_)
+                if (pi.instance)
+                {
+                    pi.instance->setVolumeProperty(
+                        std::clamp(pi.baseVolume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f));
+                    pi.instance->setPitchProperty(rpc.pitch);
+                }
         }
 
         for (const auto& pi : active_)
@@ -415,8 +500,10 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        categoryIdx_ = sound->categoryIndex;
-        priority_    = sound->priority;
+        categoryIdx_    = sound->categoryIndex;
+        priority_       = sound->priority;
+        rpcCodes_       = sound->rpcCodes;    // P9-XACT-016: retained for continuous re-eval
+        basePitchCents_ = sound->pitchCents;  // P9-XACT-016
         float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
 
         // P9-CATEGORY-005/006/007/008/011: real FACT enforces the cue's OWN instanceLimit first,
@@ -452,39 +539,11 @@ namespace Microsoft::Xna::Framework::Audio
                 categoryFadeInMS = decision.fadeInMS; // unconditional overwrite, even if 0
         }
 
-        // P9-XACT-006/007: RPC (Runtime Parameter Control) volume/pitch, evaluated once here
-        // against each bound variable's *current* value -- not continuously re-evaluated while
-        // playing like real FACT's per-tick FACT_INTERNAL_UpdateRPCs (see CHECKLIST.md). Volume
-        // curves are authored in centibels (same unit as a sound's own base volume before
-        // amplitude conversion), summed across every bound curve, then converted to a multiplier
-        // once -- mathematically identical to FAudio summing centibels and converting once,
-        // since 10^((a+b)/2000) == 10^(a/2000) * 10^(b/2000). Pitch curves are authored directly
-        // in cents, so they're summed with the sound's own pitchCents before one CentsToPitch().
-        float rpcVolumeCentibels = 0.0f;
-        float rpcPitchCents      = 0.0f;
-        if (eng)
-        {
-            for (uint32_t code : sound->rpcCodes)
-            {
-                const XgsRpc* rpc = eng->FindRpcByCode(code);
-                if (!rpc) continue;
-
-                const std::string* varName =
-                    eng->GetVariableNameByIndex(static_cast<int16_t>(rpc->variable));
-                if (!varName || varName->empty()) continue;
-
-                const float value  = GetVariable(*varName);
-                const float result = EvaluateRpcCurve(*rpc, value);
-
-                if (rpc->parameter == 0)      rpcVolumeCentibels += result; // RPC_PARAMETER_VOLUME
-                else if (rpc->parameter == 1) rpcPitchCents += result;      // RPC_PARAMETER_PITCH
-                // REVERBSEND/FILTERFREQUENCY/FILTERQFACTOR/DSP-preset (>=5): unsupported, see
-                // CHECKLIST.md.
-            }
-        }
-        const float rpcVolumeMultiplier =
-            static_cast<float>(std::pow(10.0, rpcVolumeCentibels / 2000.0));
-        const float pitch = CentsToPitch(static_cast<float>(sound->pitchCents) + rpcPitchCents);
+        // P9-XACT-006/007/016: RPC (Runtime Parameter Control) volume/pitch. Originally evaluated
+        // only once, here at Play() time (P9-XACT-006/007's documented narrowing); now also
+        // re-evaluated continuously from ReconcileState() every tick (P9-XACT-016), so this
+        // initial call is just the first evaluation, not the only one.
+        const RpcResult rpc = EvaluateRpc();
 
         // Spawn one SoundEffectInstance per wave reference
         for (const auto& waveRef : sound->waves)
@@ -501,15 +560,16 @@ namespace Microsoft::Xna::Framework::Audio
             if (!sf) continue;
 
             auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
-            float combinedVol = std::clamp(waveRef.volume * catVol * rpcVolumeMultiplier, 0.0f, 1.0f);
+            float combinedVol = std::clamp(waveRef.volume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f);
             inst->setVolumeProperty(combinedVol);
-            inst->setPitchProperty(pitch);
+            inst->setPitchProperty(rpc.pitch);
             inst->setIsLoopedProperty(waveRef.loopCount > 0);
             inst->Play();
 
             // P9-XACT-011: wire the track's real parsed XACT filter (if any) into the real
-            // SDL3_mixer filter callback. One-shot at Play() time, not continuously
-            // re-evaluated -- same narrowing as the RPC volume/pitch wiring above (CHECKLIST.md).
+            // SDL3_mixer filter callback. One-shot at Play() time, not continuously re-evaluated
+            // (unlike RPC volume/pitch since P9-XACT-016) -- filter-frequency/Q RPC targeting
+            // remains unsupported outright, see CHECKLIST.md.
             if (waveRef.filterType != 0xFF)
             {
                 inst->INTERNAL_applyXactTrackFilter(
