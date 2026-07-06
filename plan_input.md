@@ -98,9 +98,16 @@ green. **Remaining risk:** none.
 For each enum: verify every member name+value byte-identical to FNA; confirm an exhaustive value-freeze test
 pins every member; verify `[Flags]` bit-combinations where applicable; confirm no extra/missing members.
 
-## A1-001 — `ButtonState` `[ ]`
-- [ ] FNA `Input/ButtonState.cs`; CNA `include/…/Input/ButtonState.hpp`; test `ButtonStateTests.cpp`.
-- [ ] Verify `Released=0, Pressed=1`; freeze test covers both; used correctly by Mouse/GamePad button props.
+## A1-001 — `ButtonState` `[x]`
+- [x] FNA `Input/ButtonState.cs`; CNA `include/…/Input/ButtonState.hpp`; test `ButtonStateTests.cpp`.
+- [x] Verify `Released=0, Pressed=1`; freeze test covers both; used correctly by Mouse/GamePad button props.
+
+**Result (2026-07-06):** `ButtonState` is **byte-identical to FNA**: `enum class ButtonState { Released,
+Pressed }` → `Released=0, Pressed=1` (FNA `ButtonState.cs:20,24`). Both members and the enum carry Doxygen
+`@brief`. **Test:** `ButtonStateTest.ValuesMatchXnaNumericConstants` pins **both** values (0 and 1) — a
+renumber fails loudly. Consumers (`MouseState` 5 button props, `GamePadButtons`/`GamePadState` button props)
+use it and are tested in their own suites. **Members reviewed:** 2/2. **Files changed:** none (perfect,
+no gap). **Behavior verified:** value parity + downstream usage. **Remaining risk:** none.
 
 ## A1-002 — `KeyState` `[ ]`
 - [ ] FNA `Input/KeyState.cs`; CNA `KeyState.hpp`; test `KeyStateTests.cpp`.
