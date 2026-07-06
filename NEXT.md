@@ -31,12 +31,12 @@
 
 - **Build:** clean. Verified backend-agnostic across **EasyGL / Vulkan / bgfx / SDL_RENDERER**
   (INPUT-BUILD-002). This session built `CnaTests` clean on EasyGL and under an ASan+UBSan config.
-- **Tests:** the input subset is selected by **`ctest -L input`** (INPUT-BUILD-003) — **297** tests,
+- **Tests:** the input subset is selected by **`ctest -L input`** (INPUT-BUILD-003) — **301** tests,
   order-independent under the baked-in `--gtest_shuffle --gtest_repeat=3`. The **only** local failures
   are 3 `MouseCursor` tests that need real cursors (the SDL `dummy` video driver can't create them); they
-  pass under CI's Xvfb+x11. Full `CnaTests` suite is **3286 passed / 2 skipped**. Authoritative recorded
+  pass under CI's Xvfb+x11. Full `CnaTests` suite is **3290 passed / 2 skipped**. Authoritative recorded
   counts live in `docs/input-build-and-test.md` (§Test counts), refreshed 2026-07-06 to these numbers
-  (INPUT-BUILD-003 follow-up: fuzz + signature-freeze + enum-parity suites now included).
+  (fuzz + signature-freeze + enum-parity + INPUT-TEST-008 golden suites now included).
 - **CI:** GitHub Actions `.github/workflows/input-ci.yml`, a 5-job matrix
   (EasyGL / SDL_RENDERER / Vulkan / bgfx / ASan+UBSan) on ubuntu-24.04, headless via `xvfb-run`, cloning
   the public SDL submodules + `sharp-runtime`/`easy-gl` siblings. **Green** through `d2adefd8`. The latest
@@ -51,6 +51,13 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-TEST-008 — golden behavior tests:** `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp` —
+  4 fixed recorded event scripts driven through `SdlInputBridge::ProcessEvent` with the COMPLETE resulting
+  snapshot asserted (keyboard pressed-set, mouse pos/buttons/wheel, two-finger touch snapshots, and one
+  interleaved cross-subsystem checkpoint). The correctness anchor to the fuzz test (fuzz = no crash,
+  golden = correct output). Deterministic headless; suite name matches the `*SdlInputBridge*` filter token.
+- **INPUT-BUILD-003 follow-up — count refresh:** re-ran counts after the fuzz/signature-freeze/enum-parity
+  suites; `docs/input-build-and-test.md` (§Test counts) now records 301 input / 3290 full (2026-07-06).
 - **`f0a185ca` INPUT-BUILD-003:** single-source-of-truth input filter (`CNA_INPUT_TEST_FILTER` in
   `CMakeLists.txt`) + `add_test(CnaInputTests ... LABELS input)`; CI switched to `ctest -L input`; purged
   the duplicated/drifted filter strings from `docs/input-build-and-test.md`, `docs/input-backend.md` (had
@@ -107,7 +114,7 @@
 - `suspected` (cannot occur via CNA's own API) — Mouse relative-mode cache could desync if SDL relative
   mode is toggled outside `Mouse::setIsRelativeMouseModeEXTProperty` (DEC-14 accepted this).
 - `resolved 2026-07-06` — the recorded test counts in `docs/input-build-and-test.md` (§Test counts) were
-  refreshed to include the fuzz + signature-freeze + enum-parity suites (297 input / 3286 full passed).
+  refreshed to include the fuzz + signature-freeze + enum-parity + golden suites (301 input / 3290 full passed).
 
 ## 6. Architecture notes
 
@@ -173,12 +180,7 @@ input item is a CI-change to confirm, not a failure. Graphics bugs (§4) reprodu
    - Done locally: `ctest -N -L input` selects exactly 1 entry (`CnaInputTests`); it runs **100% green**
      under `xvfb-run` on EasyGL (incl. MouseCursor). Remaining: confirm the Actions run for `f0a185ca`
      is `success`; if not, read the failing job's "Run input tests" step and fix the run cmd / `add_test`.
-2. **INPUT-TEST-008 — golden behavior tests** (recorded event sequence → asserted state snapshot).
-   - Goal: a correctness anchor complementing the fuzz test (fuzz proves *no crash*; golden proves
-     *correct output*).
-   - Files: new `tests/CNA/Internal/Input/*GoldenTests.cpp` (use `InputManager::ResetAllForTests`).
-   - Verify: `ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`.
-3. **INPUT-API-027 — mechanically generate the member-level parity matrix** from the headers.
+2. **INPUT-API-027 — mechanically generate the member-level parity matrix** from the headers.
    - Goal: close the last "Medium" behavioral-parity gap in `plan_input.md` §2.3 / §5.
    - Files: a generator script + `docs/xna-4-api-coverage.md` (or the §5 matrix).
    - Verify: the generated matrix covers every public member enumerated by

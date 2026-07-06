@@ -75,15 +75,15 @@ backend-agnostic — the input-filter count is identical on EasyGL / Vulkan / bg
 
 | Metric | Count |
 |--------|-------|
-| Full `CnaTests` suite | **3286 passed / 2 skipped** |
-| Canonical input filter (the filter above) | **297 passed** |
+| Full `CnaTests` suite | **3290 passed / 2 skipped** |
+| Canonical input filter (the filter above) | **301 passed** |
 
 Notes:
 - The 2 skipped tests are Devices sensor tests (`AccelerometerTests` / `GyroscopeTests`
   `GetCurrentValuePropertyDoesNotThrowWhenSupported`) — **not** input.
 - The canonical filter's last four tokens (`*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*`) were
   added 2026-07-05 to catch the pure-enum value suites and the public-API header-hygiene suite that the
-  older filter missed; without them the same run reports **290**.
+  older filter missed; without them the same run reports **294**.
 - **This table is the single source of truth for input test counts.** Other docs reference it rather than
   restating numbers. Re-run and update it whenever input tests are added.
 
