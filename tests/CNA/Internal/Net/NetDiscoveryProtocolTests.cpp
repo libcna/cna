@@ -3,9 +3,12 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Net/NetDiscoveryProtocol.hpp"
+#include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 
 using namespace CNA::Internal::Net;
 using Microsoft::Xna::Framework::Net::NetworkSessionType;
+using Microsoft::Xna::Framework::Net::PacketWriter;
 
 TEST(NetDiscoveryProtocolTest, PeekTagOnEmptyBufferThrows) {
     std::vector<uint8_t> empty;
@@ -68,4 +71,38 @@ TEST(NetDiscoveryProtocolTest, AnnounceRoundtripWithSparseProperties) {
     EXPECT_EQ(decoded.Properties[1], std::nullopt);
     EXPECT_EQ(decoded.Properties[2], std::nullopt);
     EXPECT_EQ(decoded.Properties[3], std::optional<int>(7));
+}
+
+namespace {
+    // Hand-crafts a well-formed Announce message up through the properties section, then injects
+    // a malformed properties section that DiscoveryAnnounceMessage::Encode() (via WriteProperties)
+    // could never itself produce - simulating a crafted/corrupted packet from an untrusted source
+    // (LAN discovery is unauthenticated broadcast UDP). presentCount/index/value are written
+    // exactly as WriteProperties would for a well-formed entry, except the index itself is
+    // adversarial.
+    std::vector<SharpRuntime::bytecs> BuildAnnounceWithRawPropertyIndex(int32_t index, int32_t value) {
+        PacketWriter writer;
+        writer.Write(static_cast<SharpRuntime::bytecs>(DiscoveryMessageTag::Announce));
+        writer.Write(kDiscoveryProtocolVersion);
+        writer.Write(static_cast<uint16_t>(1)); // ConnectPort
+        writer.Write(static_cast<int32_t>(0));  // CurrentGamerCount
+        writer.Write(static_cast<int32_t>(8));  // MaxGamers
+        writer.Write(static_cast<int32_t>(0));  // OpenPrivateSlots
+        writer.Write(static_cast<int32_t>(8));  // OpenPublicSlots
+        writer.Write(std::string("malformed")); // HostGamertag
+        writer.Write(static_cast<int32_t>(1));  // presentCount
+        writer.Write(index);
+        writer.Write(value);
+        return NetPacketCodec::ExtractBytes(writer);
+    }
+}
+
+// Task 1.1: a crafted/corrupted DiscoveryAnnounceMessage with a negative property index used to
+// reach NetworkSessionProperties::operator[](index)'s "index >= size()" guard (also false for a
+// negative index), falling through to an out-of-bounds std::vector access via
+// static_cast<std::size_t>(negative) - undefined behavior. Confirmed fixed: rejected cleanly with
+// a catchable exception instead.
+TEST(NetDiscoveryProtocolTest, DecodeAnnounceRejectsNegativePropertyIndex) {
+    auto bytes = BuildAnnounceWithRawPropertyIndex(-1, 123);
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), std::runtime_error);
 }

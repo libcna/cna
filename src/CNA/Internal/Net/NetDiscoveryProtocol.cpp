@@ -2,6 +2,7 @@
 // Copyright (c) Robert Vokac and contributors
 #include "CNA/Internal/Net/NetDiscoveryProtocol.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include <stdexcept>
 
 namespace CNA::Internal::Net
 {
@@ -43,6 +44,17 @@ namespace CNA::Internal::Net
             {
                 int32_t index = reader.ReadInt32();
                 int32_t value = reader.ReadInt32();
+                // Task 1.1: index comes straight off the wire (this message is parsed from
+                // unauthenticated broadcast UDP - see ENetDiscoveryService). A negative index
+                // would make this pre-extend loop's guard (count <= index) false immediately (0
+                // iterations), then fall through to NetworkSessionProperties::operator[](index)'s
+                // own "index >= size()" guard, also false for a negative index - reaching
+                // properties_[static_cast<std::size_t>(index)] with a huge, out-of-bounds
+                // std::size_t. Reject malformed input before it ever reaches operator[].
+                if (index < 0)
+                {
+                    throw std::runtime_error("NetDiscoveryProtocol: negative property index");
+                }
                 // operator[](index) only targets an arbitrary index once the list is already at
                 // least that long — past the end, it appends instead (a documented
                 // NetworkSessionProperties quirk). Pre-extend with Add() so the assignment below

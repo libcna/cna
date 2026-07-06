@@ -41,7 +41,7 @@ These are the highest-severity findings: several are remotely triggerable (a cra
 from any device on the LAN, or from a connected peer) and cause real memory corruption, unbounded
 resource consumption, or a crashed process — not just XNA-fidelity gaps.
 
-- [ ] **Task 1.1** — Fix out-of-bounds vector write from a crafted negative property index in
+- [x] **Task 1.1** — Fix out-of-bounds vector write from a crafted negative property index in
   `NetDiscoveryProtocol::ReadProperties`. Confirmed: `ReadProperties` (`src/CNA/Internal/Net/NetDiscoveryProtocol.cpp`,
   around lines 38-57) reads `index = reader.ReadInt32()` directly off the wire with no lower-bound
   check. For a negative `index`, the pre-extend `while (count <= index)` loop never executes (since
@@ -51,11 +51,16 @@ resource consumption, or a crashed process — not just XNA-fidelity gaps.
   negative `int` to a huge `std::size_t`: an out-of-bounds `std::vector::operator[]` access
   (undefined behavior). This is reachable by any LAN device (or a spoofed source) sending a crafted
   `DiscoveryAnnounceMessage` to port 61190 while any local `Find()`/`FindSessions()` is in flight —
-  no authentication exists on this path. Fix: validate `index >= 0` (and see Task 1.2 for the upper
-  bound) before ever touching `properties_`, throwing/rejecting the malformed packet instead.
-  Add a test in `tests/CNA/Internal/Net/NetDiscoveryProtocolTests.cpp` (or a new file if none exists)
-  feeding a crafted announce message with a negative property index and asserting it's rejected
-  cleanly, not crashing/corrupting memory (run under ASan if available to actually prove no OOB write).
+  no authentication exists on this path.
+  **Fixed:** added a `if (index < 0) throw std::runtime_error(...)` guard right after reading
+  `index` off the wire, before it ever touches `properties_` (matching `BinaryReader`'s own
+  established `std::runtime_error`-on-malformed-input convention elsewhere in this codebase).
+  Added `NetDiscoveryProtocolTest.DecodeAnnounceRejectsNegativePropertyIndex`, hand-crafting a raw
+  wire payload with a negative property index (bypassing the normal `Encode()` path, which could
+  never produce one) and asserting `DecodeAnnounce` throws cleanly.
+  **Verified the bug is real, not theoretical:** reverted the fix and ran the new test directly —
+  confirmed a real, immediate **segmentation fault (exit code 139)**, not just a benign no-op UB;
+  restored the fix and reran — passes, full suite 3233/3235 (2 expected skips), no regressions.
 
 - [ ] **Task 1.2** — Fix unbounded-allocation DoS via a huge positive property index in the same
   `ReadProperties` path (`NetDiscoveryProtocol.cpp`). A crafted `index` near `INT32_MAX` makes the
