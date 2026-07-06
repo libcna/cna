@@ -1334,28 +1334,64 @@ open-ended, ambitious future work — not all of it needs to land in one sitting
     `examples/demo_avatar/Content/avatar/{male,female}/**`.
   - Verify: `cmake --build cmake-build-debug --target cna_demo_avatar && SDL_VIDEODRIVER=x11 DISPLAY=:0 cmake-build-debug/cna_demo_avatar --gender male` — Space cycles Stand0→Stand1→Wave→Clap→Celebrate→Stand0.
 
-- [ ] **Task 11.19** — Real per-part texture support. Today `avatar.skinnedmodel.json` never
-  emits a `"texture"` field even though `ContentManager` can already load one per part
-  (`ContentManager.cpp:704-736`) — solid-color tint (Task 11.17) is the *only* color signal
-  that ever reaches the GPU. Bake actual Blender materials (or a simple UV-mapped placeholder
-  texture per material) through `export_gltf.py`/`convert_avatar.py` into real texture files,
-  and wire the content JSON to reference them, so avatars can look like more than flat-shaded
-  primitives.
-  - Files/modules: `tools/avatar_builder/export_gltf.py`, `tools/avatar_builder/generate_materials.py`,
-    `tools/avatar_asset_pipeline/convert_avatar.py`, `examples/demo_avatar/Content/**`.
-  - Verify: converted content includes a real texture file per part; `examples/demo_avatar`
-    shows textured (not flat-tinted) surfaces; `ContentManager`'s existing texture-loading path
-    needs no C++ changes if the JSON schema it already supports is reused correctly — confirm
-    by reading, don't assume.
+- [x] **Task 11.19** — Real per-part texture support. `convert_avatar.py` now writes a
+  small neutral-white placeholder PNG per part (via Pillow) and references it in the
+  manifest's new `"texture"` field, making `ContentManager`'s already-existing per-part
+  texture-loading path (`ContentManager.cpp:704-736`) real end-to-end. Deliberately
+  neutral, not painted per-material color: `AvatarAppearanceEXT` (Task 11.17) remains
+  the sole color-customization authority (texture × tint == tint, no double-application
+  of color). Painted surface detail is future work (Task 11.25). Verified: converted
+  content includes a real `.png` per part; `examples/demo_avatar` renders unchanged from
+  the Task 11.17 tint fix (expected, for a neutral texture); `CnaTests --gtest_filter=
+  "*Avatar*"` 92/92 passing.
 
-- [ ] **Task 11.20** — Weight-painting pass on the confirmed elbow/sleeve tear and zero-weight/
-  over-4-influence vertices (open since Phase 11a, now visually confirmed worse on `Stand1`/
-  `Celebrate` per Task 11.18's finding). Manual vertex-group weight correction in
-  `generate_body.py`/`generate_clothes.py`, not an automatic fix.
-  - Files/modules: `tools/avatar_builder/generate_body.py`, `tools/avatar_builder/generate_clothes.py`.
-  - Verify: pose the clothed avatar through `Wave`/`Clap`/`Celebrate`'s peak fold frames and
-    render a close-up; forearm/hand should no longer visibly separate from the sleeve; re-run
-    `validate_gltf.py` to confirm no new zero-weight vertices were introduced.
+- [x] **Task 11.20** — Weight-painting pass on the confirmed elbow/sleeve tear and zero-weight/
+  over-4-influence vertices. Added `generate_body.fix_automatic_weights()`, called after
+  every `parent_set(type="ARMATURE_AUTO")` in `generate_body.py`/`generate_clothes.py`/
+  `generate_hair.py`: (1) assigns zero-weight vertices to their nearest bone segment,
+  (2) caps every vertex to ≤4 influences via `vertex_group_limit_total`, (3) smoothly
+  blends parent/child weights across each bend joint (Shoulder/UpperArm, UpperArm/
+  LowerArm, UpperLeg/LowerLeg) instead of automatic weighting's near-binary assignment.
+  Verified (1)/(2) by direct per-vertex inspection (both scripts' own `__main__` now
+  assert zero remaining zero-weight/over-4-influence vertices); `validate_gltf.py`
+  confirms the synthetic `neutral_bone` joint no longer gets added. Verified (3) with a
+  real Blender render at Wave's exact peak-fold pose (UpperArm.R -80°, LowerArm.R 70°):
+  the elbow/sleeve seam that previously separated now stays visually continuous — this
+  reduces the visible gap at the bend angles this rig's animations actually use, not a
+  claim of welding the still-topologically-separate cylinder segments into one surface.
+  - **Did NOT fix, and is a separate issue from what this task targeted:** verifying via
+    `examples/demo_avatar`'s real GPU-skinned engine (not just Blender) surfaced a much
+    more severe, pre-existing bug — during actual Wave clip *playback* (not a static
+    pose), the forearm renders as a dramatically elongated, partially-detached shape.
+    Confirmed present in both this fix's content and the prior (Task 11.19) committed
+    content, so this fix neither caused nor cured it. See Task 11.20b.
+
+- [ ] **Task 11.20b** — Investigate the severe real-engine-only arm deformation found
+  while verifying Task 11.20. Reproduction: build male/female content via
+  `generate_avatar.py` → `convert_avatar.py --embedded-clips` (any recent commit — the
+  bug predates Task 11.19/11.20) → `examples/demo_avatar --gender male`, cycle to `Wave`
+  (Space, twice from launch), watch the right forearm during the swing. Ruled out so far
+  by direct inspection (this session): clip keyframe data (verified correct — the
+  glTF's `UpperArm.R`/`LowerArm.R` rotation channels have 60 samples each, and the
+  converted `.clip.bin` preserves all 60 with correct oscillating angles once bones are
+  looked up by their *actual* topological order, not declaration order — a mistake this
+  session's own throwaway debug script made first); `skeleton.bin`'s topological bone
+  order (every parent index < child index, confirmed correct); bind-pose matrices for
+  `UpperArm.R`/`LowerArm.R` (spot-checked, plausible identity-rotation-plus-translation
+  form); `ComputeBoneTransformsEXT`/`SampleTrack`'s math (code-reviewed, matches
+  `SkinnedEffect`'s already-passing single-bone-translation integration test). Reimporting
+  the exported `.glb` into a fresh Blender session and playing the *identical* `Wave`
+  action through Blender's own armature renders cleanly at every tested frame (1, 10, 18,
+  26, 34) — this isolates the bug to somewhere in CNA's own content-to-GPU path: either
+  `convert_avatar.py`'s vertex/weight binary writing, `ContentManager`'s reading of it, or
+  the EasyGL skinned shader (`EasyGLGraphicsBackend.cpp`'s `EnsureSkinnedProgram`,
+  `uBones[72]` skinning matrix palette) — not yet narrowed further. A good next step:
+  extend `examples/avatar_real_render_integration_test.cpp`'s synthetic single-bone
+  approach to a synthetic *2-3 bone chain* with known expected transformed pixel
+  positions at a large rotation angle, to pixel-check the hierarchy composition and
+  shader in isolation from real (more complex) avatar content.
+  - Files/modules: not yet known — investigation only until root cause is found.
+  - Verify: not applicable until root cause is identified and a fix is proposed.
 
 - [ ] **Task 11.21** — Runtime wardrobe attach API. Today `SkinnedModelEXT` has no compose/
   attach entry point — only `AddPartEXT` at load time — so a standalone-converted wardrobe
