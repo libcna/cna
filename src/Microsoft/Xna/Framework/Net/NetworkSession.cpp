@@ -23,6 +23,7 @@ namespace Microsoft::Xna::Framework::Net
     System::EventHandler<GamerServices::InviteAcceptedEventArgs> NetworkSession::InviteAccepted;
     std::string NetworkSession::pendingJoinAddress_;
     uint16_t NetworkSession::pendingJoinPort_ = 0;
+    int NetworkSession::instanceCount_ = 0;
 
     // --- NetworkSessionAction ---
 
@@ -190,11 +191,21 @@ namespace Microsoft::Xna::Framework::Net
         {
             CNA::Internal::Net::ENetBackend::StartHosting(this);
         }
+
+        ++instanceCount_; // Task 3.3
     }
 
     // Task 3.1: out-of-line so NetworkGamer (only forward-declared in the header) is a complete
     // type here, where ownedGamers_'s std::vector<std::unique_ptr<NetworkGamer>> is destroyed.
-    NetworkSession::~NetworkSession() = default;
+    NetworkSession::~NetworkSession()
+    {
+        --instanceCount_; // Task 3.3
+    }
+
+    int NetworkSession::GetInstanceCountForTesting()
+    {
+        return instanceCount_;
+    }
 
     // --- Properties ---
 

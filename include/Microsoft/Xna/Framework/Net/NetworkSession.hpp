@@ -43,6 +43,19 @@ namespace Microsoft::Xna::Framework::Net
 
     /**
      * @brief Manages the properties and gamers of a network gaming session.
+     *
+     * Ownership contract (Task 3.1/3.3; not applicable in real XNA, where the GC frees this
+     * object once unreachable): `Create()`/`Find()`/`Join()`/`JoinInvited()` and their `End*`
+     * counterparts all return a **caller-owned** `NetworkSession*` obtained via `new`. `Dispose()`
+     * releases the session's owned resources (its ENet transport, every gamer it created) and
+     * marks it disposed, matching `System::IDisposable`'s usual "release unmanaged resources, the
+     * object may still be inspected afterward" contract — it deliberately does **not** `delete
+     * this`, since a huge number of existing call sites (throughout this codebase's own test
+     * suite, and any real caller written the same way) legitimately read state after `Dispose()`
+     * (e.g. `getIsDisposedProperty()`), which a self-deleting `Dispose()` would turn into
+     * use-after-free. The caller must `delete` the pointer separately once truly done with it
+     * (typically right after `Dispose()`), the same way any other `new`-returned, non-reference-
+     * counted C++ object would be freed.
      */
     class NetworkSession final : public System::Object, public System::IDisposable
     {
@@ -339,6 +352,16 @@ namespace Microsoft::Xna::Framework::Net
         void Dispose() override;
 
         /**
+         * @brief Task 3.3: public so the caller (which owns every `NetworkSession*` this class's
+         * static factory methods return - see the class's own doc comment for the full ownership
+         * contract) can actually free it. Declared here but defined out-of-line in the .cpp, where
+         * `NetworkGamer.hpp` makes `NetworkGamer` a complete type - `ownedGamers_` is a
+         * `std::vector<std::unique_ptr<NetworkGamer>>`, and `NetworkGamer` is only
+         * forward-declared in this header.
+         */
+        ~NetworkSession() override;
+
+        /**
          * @brief NOXNA: the number of gamer objects this session currently owns and has not yet
          * freed (see Dispose()'s doc comment). Exists purely to make Task 3.1's ownership fix
          * testable; not part of real XNA.
@@ -356,6 +379,16 @@ namespace Microsoft::Xna::Framework::Net
          * @return The number of currently-live instances.
          */
         NOXNA [[nodiscard]] static int GetActiveActionInstanceCountForTesting();
+
+        /**
+         * @brief NOXNA: how many `NetworkSession` instances are currently live (`new`'d by
+         * `EndCreate`/`EndFind`.../..., not yet `delete`d by their owning caller - see the class's
+         * own doc comment for the ownership contract). Exists purely to make Task 3.3's documented
+         * contract testable; not part of real XNA.
+         *
+         * @return The number of currently-live instances.
+         */
+        NOXNA [[nodiscard]] static int GetInstanceCountForTesting();
 
         /**
          * @brief Returns the fully-qualified .NET type name of this class.
@@ -796,12 +829,6 @@ namespace Microsoft::Xna::Framework::Net
             bool isHost
         );
 
-        // Task 3.1: declared (not defaulted inline) and defined out-of-line in the .cpp, where
-        // NetworkGamer.hpp makes NetworkGamer a complete type - ownedGamers_ below is a
-        // std::vector<std::unique_ptr<NetworkGamer>>, and NetworkGamer is only forward-declared
-        // in this header.
-        ~NetworkSession() override;
-
         bool isDisposed_{false};
         GamerServices::GamerCollection<NetworkGamer> allGamers_;
         GamerServices::GamerCollection<LocalNetworkGamer> localGamers_;
@@ -847,5 +874,9 @@ namespace Microsoft::Xna::Framework::Net
         // above rather than growing that shared class for just one caller.
         NOXNA static std::string pendingJoinAddress_;
         NOXNA static uint16_t pendingJoinPort_;
+
+        // Task 3.3: incremented by the constructor, decremented by ~NetworkSession() - see
+        // GetInstanceCountForTesting()'s own doc comment.
+        NOXNA static int instanceCount_;
     };
 }

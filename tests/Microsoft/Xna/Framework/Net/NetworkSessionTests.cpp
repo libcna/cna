@@ -73,6 +73,28 @@ TEST(NetworkSessionTest, CreateDoesNotLeakNetworkSessionAction) {
     session->Dispose();
 }
 
+// Task 3.3: no code path anywhere in this codebase ever deleted a NetworkSession* - Dispose() only
+// ever flipped isDisposed_ to true. Confirmed and documented the ownership contract instead of
+// changing Dispose() to self-delete (see the class's own doc comment for why: an enormous number
+// of existing call sites, throughout this very test suite, legitimately read state - e.g.
+// getIsDisposedProperty() - right after calling Dispose(), which a self-deleting Dispose() would
+// turn into use-after-free). This test demonstrates the documented contract actually working: the
+// caller Dispose()s, then deletes, and the live-instance count returns to baseline either way.
+TEST(NetworkSessionTest, DeletingAfterDisposeLeavesNoLeak) {
+    int before = NetworkSession::GetInstanceCountForTesting();
+
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    EXPECT_EQ(NetworkSession::GetInstanceCountForTesting(), before + 1);
+
+    session->Dispose();
+    delete session; // the documented contract: caller owns the pointer, frees it once done
+
+    EXPECT_EQ(NetworkSession::GetInstanceCountForTesting(), before);
+}
+
 TEST(NetworkSessionTest, AllowHostMigrationAndJoinInProgressGetSet) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(

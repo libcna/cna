@@ -657,13 +657,43 @@ consistently, or introduce a small internal pool/arena with explicit lifetime ti
   fully; full suite: **3260/3262 passing** (2 expected accelerometer/gyroscope skips), no
   regressions.
 
-- [ ] **Task 3.3** — Fix `NetworkSession` objects themselves never being freed. Confirmed: no code
-  path in `src/` or `tests/` ever `delete`s a `NetworkSession*` — `Dispose()` only flips
-  `isDisposed_` to `true`. Decide the correct ownership contract (does the caller own the returned
-  pointer and must `delete` it after `Dispose()`? should `Dispose()` itself free it, matching a
-  more RAII-friendly convention?) — document it clearly in the class's own doc comments — and fix
-  accordingly. Add a test/leak-check proving the chosen contract actually results in no leak when
-  followed correctly.
+- [x] **Task 3.3** — Fix `NetworkSession` objects themselves never being freed. Confirmed: no code
+  path in `src/` or `tests/` ever `delete`d a `NetworkSession*` — `Dispose()` only flipped
+  `isDisposed_` to `true`.
+  **Decision: caller owns the pointer and must `delete` it separately (typically right after
+  `Dispose()`)** — rejected the alternative ("`Dispose()` calls `delete this`") after checking how
+  the existing test suite actually uses this class: an enormous number of call sites throughout
+  this very codebase legitimately read state (most commonly `getIsDisposedProperty()`) *after*
+  calling `Dispose()` — a completely standard, reasonable `IDisposable` usage pattern. A
+  self-deleting `Dispose()` would turn every one of those into use-after-free. Documented this
+  contract in detail on the class's own doc comment.
+  **Found and fixed an accessibility bug introduced by Task 3.1 itself while implementing this**:
+  Task 3.1's out-of-line `~NetworkSession()` declaration had been placed in the `private:` section
+  (right after the already-private constructor) — meaning no caller could actually `delete` a
+  `NetworkSession*` at all, silently defeating the very ownership contract this task establishes.
+  Moved the destructor declaration to the `public:` section (the constructor itself correctly stays
+  private, preserving the existing factory-method-only construction pattern).
+  **Added an instance counter** (`instanceCount_`, incremented in the constructor, decremented in
+  the now-public `~NetworkSession()`) and a `GetInstanceCountForTesting()` static accessor.
+  **Added `NetworkSessionTest.DeletingAfterDisposeLeavesNoLeak`**: creates a session, asserts the
+  live count increased by one, `Dispose()`s then `delete`s it (the documented contract), and
+  asserts the count returns to baseline — proving the contract, when followed, leaves no leak.
+  Deliberately did **not** retrofit the hundreds of existing tests/call sites that only ever
+  `Dispose()` without a matching `delete` — under the now-documented contract those already-existing
+  calls are simply incomplete cleanup (a pre-existing, out-of-scope-for-this-pass gap in test
+  hygiene, not a new regression), and blanket-editing that many call sites without individual review
+  in an autonomous pass would itself be a real risk.
+  **Verified the bug is real, not theoretical:** reverted both source-fix files (keeping the test)
+  and reran — failed to even **compile**, in two distinct ways: `GetInstanceCountForTesting` didn't
+  exist, *and* separately `delete session;` failed with `'~NetworkSession()' is private within this
+  context` — directly confirming the destructor's accessibility bug was real, not hypothetical.
+  Restored the fix and reran — passes. Full suite: **3261/3263 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions.
+
+---
+
+**Phase 3 complete** — all 3 Net memory-ownership tasks (Tasks 3.1-3.3) fixed, tested, and
+verified via revert-verify-restore. Continuing to Phase 4 (Net API gaps).
 
 ---
 
