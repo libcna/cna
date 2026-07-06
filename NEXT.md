@@ -51,6 +51,11 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-GAMEPAD-031/033/036/037 — type mapping test + backend docs:** added
+  `FakeGamepadTest.SdlJoystickTypeMapsToXnaGamePadType` (SDL_JoystickType → GamePadType end-to-end via the
+  fake) and a consolidated §Gamepad backend & mapping in `docs/platform-input-notes.md` (SDL gamecontrollerdb
+  authority, Steam/virtual-controller caveats, per-platform notes). Gamepad cluster now complete except
+  GAMEPAD-035 (manual hardware matrix).
 - **INPUT-GAMEPAD cluster verified (30 tasks):** mapped GAMEPAD-001..034 to the ~100-case gamepad suites
   (FakeGamepadTest / SdlGamepadBackendTest / GamePadTest / GamePadMappingTest / GamePadStateTest / DPad /
   ThumbSticks / Triggers / DeadZone) — hotplug add/remove/duplicate/over-limit, GUID formats, vibration,

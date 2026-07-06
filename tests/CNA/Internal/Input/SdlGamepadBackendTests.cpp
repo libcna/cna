@@ -264,6 +264,30 @@ TEST_F(FakeGamepadTest, CapabilitiesReflectConnectedDevice)
     EXPECT_TRUE(caps.getHasAccelerometerEXTProperty());
 }
 
+// INPUT-GAMEPAD-031: on connect the bridge maps the SDL joystick type to the XNA GamePadType
+// (sdl_joystick_type_to_gamepad_type) and stores it on the capabilities. Drive one pad per type into a
+// separate slot through the real ProcessEvent path and assert GetCapabilities reports the mapped type.
+TEST_F(FakeGamepadTest, SdlJoystickTypeMapsToXnaGamePadType)
+{
+    using Microsoft::Xna::Framework::Input::GamePadType;
+    struct Case { SDL_JoystickID id; PlayerIndex player; SDL_JoystickType sdl; GamePadType expected; const char* name; };
+    const Case cases[] = {
+        {10, PlayerIndex::One,   SDL_JOYSTICK_TYPE_GAMEPAD,      GamePadType::GamePad,     "GamePad"},
+        {20, PlayerIndex::Two,   SDL_JOYSTICK_TYPE_WHEEL,        GamePadType::Wheel,       "Wheel"},
+        {30, PlayerIndex::Three, SDL_JOYSTICK_TYPE_ARCADE_STICK, GamePadType::ArcadeStick, "ArcadeStick"},
+        {40, PlayerIndex::Four,  SDL_JOYSTICK_TYPE_FLIGHT_STICK, GamePadType::FlightStick, "FlightStick"},
+    };
+    for (const Case& c : cases)
+    {
+        FakeGamepadConfig cfg = FullyFeaturedGamepad();
+        cfg.joystickType = c.sdl;
+        fake.Register(c.id, cfg);
+        SdlInputBridge::ProcessEvent(addedEvent(c.id));
+    }
+    for (const Case& c : cases)
+        EXPECT_EQ(SdlInputBridge::GetCapabilities(c.player).getGamePadTypeProperty(), c.expected) << c.name;
+}
+
 TEST_F(FakeGamepadTest, CapabilitiesOfDisconnectedPlayerAreEmpty)
 {
     const auto caps = SdlInputBridge::GetCapabilities(PlayerIndex::Two);

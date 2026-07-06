@@ -141,3 +141,27 @@ Legend: ✅ works / ❌ unavailable / ⚠️ constrained. The X11 row is the onl
 (Xvfb+x11); Windows/macOS warp-landing and all real-hardware relative-capture are **manual-only**
 (INPUT-MOUSE-023 tracks the dated manual run). See the per-platform sections above for the details behind
 each cell.
+
+### Gamepad backend & mapping (INPUT-GAMEPAD-031/033/036/037)
+
+- **SDL is the mapping authority (INPUT-GAMEPAD-033).** CNA consumes SDL3's `SDL_Gamepad` abstraction, so
+  the physical device → standard-layout (A/B/X/Y, DPad, two sticks, two triggers, shoulders, start/back,
+  guide) normalization is done by SDL's bundled **`gamecontrollerdb`** mapping table plus SDL's built-in
+  entries. CNA does **not** ship or parse its own mapping DB; a device SDL cannot map is simply not
+  reported as a gamepad. `SDL_GameControllerAddMappingsFromFile`/env (`SDL_GAMECONTROLLERCONFIG`) can add
+  mappings at the SDL layer without any CNA change. The XNA `Buttons`/axis mapping from the SDL layout is
+  pinned by `EverySdlButtonMapsToTheExpectedXnaButton` / `AxisMappingHandlesYInversionAndTriggerNormalization`.
+- **Joystick type → `GamePadType` (INPUT-GAMEPAD-031).** On connect the bridge maps `SDL_JoystickType`
+  (`SDL_GetJoystickType`) to the XNA `GamePadType` (`GamePad`/`Wheel`/`ArcadeStick`/`FlightStick`/…) and
+  stores it on the capabilities. Tested end-to-end through the fake backend by
+  `FakeGamepadTest.SdlJoystickTypeMapsToXnaGamePadType`.
+- **Steam Input / virtual controllers (INPUT-GAMEPAD-036).** Valve controllers report the Steam vendor id
+  `0x28de`; matching FNA, CNA remaps the re-exposed controller to a fixed GUID (`xinput` for Xbox-emulated,
+  `4c05c405`/`4c05e60c` for PS4/PS5 — `SdlInputBridge` GUID path, mirroring `SDL3_FNAPlatform.cs:2193-2210`).
+  Steam Input commonly presents a **virtual Xbox 360 controller**; the real device is then hidden behind
+  it, so CNA sees the virtual pad (this is expected, not a bug). Verified indirectly by the GUID/Valve-override
+  tests (`GetGuidUsesVendorProductAndValveOverrides`, `FormatsXinputVendorProductAndNoDevice`).
+- **Per-platform specifics (INPUT-GAMEPAD-037)** are in the platform sections above: Linux/X11 hotplug+rumble,
+  Windows XInput `"xinput"` GUID + rumble/trigger-rumble/light-bar, Android/iOS depend on attached hardware /
+  the SDL backend. Real-hardware actuation across vendors (Xbox/PS/Switch/generic/BT) is manual-gated
+  (INPUT-GAMEPAD-035).

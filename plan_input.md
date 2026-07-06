@@ -1603,13 +1603,18 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 
 - **Result (2026-07-06):** Synthetic SDL axis/button events through the fake covered by the 18-case `FakeGamepadTest` plus `EverySdlButtonMapsToTheExpectedXnaButton` / `AxisMappingHandlesYInversionAndTriggerNormalization`.
 #### INPUT-GAMEPAD-031 — `GamePadType` mapping from SDL joystick type
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp` (`sdl_joystick_type_to_gamepad_type`)
 - **Work:** Verify SDL types map to XNA `GamePadType` values.
 - **Acceptance:** Mapping table tested.
 - **Tests:** new type-mapping test via fake.
 - **Deps:** INPUT-API-004.
 
+- **Result (2026-07-06):** On connect the bridge maps `SDL_JoystickType` (`SDL_GetJoystickType`) to the XNA `GamePadType`
+  (`sdl_joystick_type_to_gamepad_type`, `SdlInputBridge.cpp`) and stores it on the capabilities. Added
+  `FakeGamepadTest.SdlJoystickTypeMapsToXnaGamePadType`: registers one pad per type
+  (GAMEPAD→GamePad, WHEEL→Wheel, ARCADE_STICK→ArcadeStick, FLIGHT_STICK→FlightStick) into four slots
+  through the real `ProcessEvent` path and asserts `GetCapabilities().getGamePadTypeProperty()` maps each.
 #### INPUT-GAMEPAD-032 — Capability flags completeness (touchpad/gyro/accel/rgb/trigger-rumble)
 - **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp:1036`
@@ -1620,13 +1625,18 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 
 - **Result (2026-07-06):** Capability-flags completeness (touchpad/gyro/accel/rgb/trigger-rumble) covered by `SdlGamepadBackendTest.CapabilitiesReflectConnectedDevice` (asserts TouchPad/Gyro/Accelerometer EXT flags), `TriggerRumbleAndLightBarSupportReported`, and `GyroAndAccelerometerSupportReportedAndAbsentWhenMissing`.
 #### INPUT-GAMEPAD-033 — SDL `gamecontrollerdb` mapping assumptions
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad/Platform
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad/Platform
 - **Files:** `docs/platform-input-notes.md`
 - **Work:** Document reliance on SDL's built-in mapping DB and how unknown controllers behave.
 - **Acceptance:** Documented.
 - **Tests:** manual.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Documented in `docs/platform-input-notes.md` (§Gamepad backend & mapping): SDL is the mapping
+  authority — CNA consumes the `SDL_Gamepad` standard-layout normalization done by SDL's bundled
+  `gamecontrollerdb` + built-in entries; CNA ships/parses no mapping DB of its own, and unmapped devices are
+  simply not reported as gamepads. The SDL-layout → XNA `Buttons`/axis mapping is pinned by
+  `EverySdlButtonMapsToTheExpectedXnaButton` / `AxisMappingHandlesYInversionAndTriggerNormalization`.
 #### INPUT-GAMEPAD-034 — Fake backend conformance completeness
 - **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad/Test-infra
 - **Files:** `tests/.../FakeSdlGamepadBackend.hpp`
@@ -1648,21 +1658,29 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Deps:** INPUT-BUILD-004.
 
 #### INPUT-GAMEPAD-036 — Steam Input / virtual controller caveats
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad/Platform
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad/Platform
 - **Files:** `docs/platform-input-notes.md`
 - **Work:** Document Steam Input remapping and virtual-controller behavior differences.
 - **Acceptance:** Documented.
 - **Tests:** manual.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Documented in `docs/platform-input-notes.md` (§Gamepad backend & mapping): Valve controllers report
+  Steam vendor `0x28de` and CNA remaps the re-exposed controller to a fixed GUID (matching FNA); Steam Input
+  typically presents a virtual Xbox 360 controller (the real device hidden behind it — expected). Verified
+  indirectly by `GetGuidUsesVendorProductAndValveOverrides` / `FormatsXinputVendorProductAndNoDevice`.
 #### INPUT-GAMEPAD-037 — Platform notes (Windows/Linux/macOS/Android/iOS)
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad/Platform
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad/Platform
 - **Files:** `docs/platform-input-notes.md`
 - **Work:** Per-platform gamepad backend notes (XInput/DInput, evdev, GameController, etc.).
 - **Acceptance:** Per-platform section exists.
 - **Tests:** manual.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Consolidated the per-platform gamepad notes in `docs/platform-input-notes.md`: Linux/X11
+  hotplug+rumble, Windows XInput `"xinput"` GUID + rumble/trigger-rumble/light-bar, Android/iOS via the SDL
+  backend + attached hardware, with a cross-platform §Gamepad backend & mapping section tying them together.
+  Real-hardware actuation across vendors stays manual-gated (INPUT-GAMEPAD-035).
 ---
 
 ## 10. Touch plan
