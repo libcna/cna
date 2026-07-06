@@ -499,7 +499,7 @@ independent task instead of guessing.
 
 ## Phase 4 — `Camera` (its own design pass, not a quick addition)
 
-### DEVICES-CNA-010 — `Camera` design note (no implementation yet)
+### DEVICES-CNA-010 — `Camera` design note (no implementation yet) — CLOSED (2026-07-07)
 
 - **Priority:** Low (relative to Phases 1-3 — high complexity, narrower audience)
 - **Problem:** per `noxna_devices.md` Section 4.9, this is materially harder than every
@@ -515,6 +515,28 @@ independent task instead of guessing.
   `Camera.hpp`. Do not implement `Camera` itself in this task.
 - **Acceptance criteria:** a reviewable design note exists; no `Camera` class exists
   yet.
+- **Resolution:** Wrote `docs/cna-devices-camera-design.md`. Key findings from actually
+  reading this codebase's own graphics-texture pipeline before writing the note
+  (rather than speculating): the texture-upload bridge this task's own problem
+  statement flagged as needing per-graphics-backend work turns out to already be
+  solved, generically, by existing infrastructure —
+  `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp`'s `ITextureBackend::UpdatePixels(const
+  uint8_t* rgba, int stride)` plus `Texture2D::SetDataRGBA()` (`NOXNA`, already
+  public) together mean no new backend-specific code is needed for the upload step
+  itself — only correct RGBA format negotiation when opening the camera (flagged as an
+  open question needing empirical, per-platform verification, not resolved here).
+  Refined the permission/state design into a `CameraState` enum (`NotSupported`/
+  `Closed`/`Opening`/`Denied`/`Ready`/`Lost`) mirroring `SensorState`'s own honesty
+  principle. Proposed a **poll-based** public API (`TryAcquireFrame()`, no result
+  callback) specifically because `SDL_AcquireCameraFrame()` itself is poll-based, not
+  push-based — matching the underlying SDL3 shape rather than forcing every
+  `CNA::Devices` class into the same callback pattern regardless of fit. Documented
+  four open questions for the implementation task (RGBA negotiation reliability,
+  event-queue/permission-UX ownership, multi-camera support, device-loss recovery) and
+  a recommended narrow first-implementation scope. Cross-linked from `noxna_devices.md`
+  Section 4.9. **No `Camera` class, header, or test file was created** — confirmed
+  by design, matching this task's own acceptance criteria exactly.
+  **This closes Phase 4 and every task in `plan_cna_devices.md`.**
 
 ---
 
@@ -530,6 +552,27 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — DEVICES-CNA-010 CLOSED. All 11 tasks in this plan are now closed.**
+  `docs/cna-devices-camera-design.md` written (design only, no `Camera` implementation,
+  matching this task's own explicit scope). Found the texture-upload bridge originally
+  assumed to be the hardest part is already solved by existing
+  `ITextureBackend::UpdatePixels()`/`Texture2D::SetDataRGBA()` infrastructure.
+  Cross-linked from `noxna_devices.md`. **Summary of this whole plan's real findings,
+  for whoever picks this up next:** two platform-support corrections to
+  `noxna_devices.md` found only by reading `third_party/SDL/src/` directly instead of
+  trusting the original analysis (`FileDialog` has a real Android backend; confirmed
+  `SystemTray` genuinely does not); two real use-after-free-class bugs caught before
+  or via `devices-asan` (a filter-lifetime bug in `FileDialog` fixed before ever
+  running it; a test-file use-after-free in `SystemTrayTests.cpp` that the plain,
+  non-sanitizer build did not catch at all); and one real incident (orphaned `zenity`
+  processes from calling a real interactive dialog backend in an early test draft)
+  that directly motivated giving both `FileDialog` and `SystemTray` a swappable
+  backend from then on. Phases 1-3 (`PowerInfo`, `Locale`, `Clipboard`, `UrlLauncher`,
+  `SystemInfo`, `DisplayInfo`, `FileDialog`, `SystemTray`) are implemented, tested (36
+  new tests across 8 suites: 4+3+5+3+3+4+6+8), and verified clean under both
+  `devices-asan` and
+  `devices-ubsan` with `CNA_DEVICES=ON`, with `CNA_DEVICES=OFF` (default) confirmed
+  unaffected. Phase 4 (`Camera`) is design-only, intentionally not implemented.
 - **2026-07-07 — DEVICES-CNA-009 CLOSED. Phases 1-3 complete.** `CNA::Devices::SystemTray`
   implemented with a swappable `Detail::ITrayBackend` designed in from the start
   (learned from `DEVICES-CNA-008`'s incident). Confirmed genuinely desktop-only this

@@ -438,6 +438,16 @@ per-platform source in this repo), a rough platform-support matrix, a proposed
 
 ### 4.9 `Camera` — camera device enumeration and frame capture
 
+**A dedicated design note now exists: `docs/cna-devices-camera-design.md` (Task
+`DEVICES-CNA-010`, 2026-07-07).** It found the texture-upload bridge this section
+originally flagged as the hardest part is actually already solved by existing
+infrastructure (`ITextureBackend::UpdatePixels()`/`Texture2D::SetDataRGBA()`), refines
+the permission/state-machine design, and proposes a poll-based (not callback-based)
+public API shape matching `SDL_AcquireCameraFrame()`'s own poll-based contract rather
+than this codebase's push-callback sensor model. Read that document before starting
+any `Camera` implementation work — the summary below is retained for context but the
+design note supersedes it on every point where they'd otherwise duplicate.
+
 - **SDL3 API:** `SDL_camera.h` — `SDL_GetCameras` (enumerate), `SDL_GetCameraSupportedFormats`,
   `SDL_OpenCamera`, `SDL_GetCameraPermissionState` (camera access is permission-gated on
   every platform that has a permission model), `SDL_AcquireCameraFrame`/
