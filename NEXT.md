@@ -16,19 +16,20 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `plan_graphics.md`; per-phase synthesis docs live in `docs/*.md`.
-- **Current development phase:** Phases 1–42 are complete. **Phase 43 ("AlphaTestEffect
-  exactness", Tasks 371–380) is open** — Tasks 371–379 are done. Task 377 found
-  `AlphaTestEffect.VertexColorEnabled` has zero effect on Vulkan/Bgfx by default (opened Task
+- **Current development phase:** Phases 1–43 are complete. **Phase 43 ("AlphaTestEffect
+  exactness", Tasks 371–380) is CLOSED** — Task 380 wrote `docs/alphatesteffect-support.md`,
+  synthesizing Tasks 371–379 (mirrors `docs/basiceffect-support.md`'s Phase 42 precedent). Task 377
+  found `AlphaTestEffect.VertexColorEnabled` has zero effect on Vulkan/Bgfx by default (opened Task
   887). Task 378 fixed `AlphaTestEffect` fog forwarding on EasyGL, and discovered fog is a total
   no-op on Vulkan/Bgfx for every 3D effect, project-wide (opened Task 888). Task 379 found and
   **fixed** a real, general Bgfx bug: null-texture draws left the *previous* draw's texture bound
   instead of falling back to white (affected 7 dispatch branches, not just `AlphaTestEffect`).
-  **Task 380 is next and closes Phase 43**: document `AlphaTestEffect` backend parity (mirrors
-  Task 340/350/370's synthesis-doc precedent). Phase 42 closed with a synthesis doc
-  (`docs/basiceffect-support.md`) and opened 2 new follow-up tasks (885, 886 — lit-path
-  emissive/multi-light forwarding, real specular) rather than bundling large new features into a
-  pixel-test task. Full task-by-task detail (audit findings, exact formulas derived from FNA
-  source, discriminating-power
+  **Phase 44 ("DualTextureEffect exactness", Tasks 381–390) is next**: Task 381 opens it by
+  auditing `DualTextureEffect` properties/defaults against FNA (mirrors Task 361/371's opener
+  precedent). Phase 42 closed with a synthesis doc (`docs/basiceffect-support.md`) and opened 2 new
+  follow-up tasks (885, 886 — lit-path emissive/multi-light forwarding, real specular) rather than
+  bundling large new features into a pixel-test task. Full task-by-task detail (audit findings,
+  exact formulas derived from FNA source, discriminating-power
   verification) lives in `plan_graphics.md` — this file intentionally
   does not duplicate it.
 - **Key architectural decisions:**
@@ -183,7 +184,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 379 | **Fix (Bgfx, general)**: all 7 of Bgfx's texture-binding dispatch branches left the previous draw's texture bound when a draw's texture was null, instead of falling back to white like EasyGL/Vulkan. Fixed with a new `defaultWhiteTexture3D_` + `else` branch at every site. 3/3 PASS on all 3 backends; empirically confirmed the pre-fix bug (got black, not stale-texture). |
+| — | 380 | **Doc, closes Phase 43**: wrote `docs/alphatesteffect-support.md` synthesizing Tasks 371–379 (mirrors `docs/basiceffect-support.md`'s Phase 42 style) — per-task summaries, full 3-backend support matrix, "Open, tracked follow-up work" listing Tasks 887/888. No code changed. |
+| `b3946135` | 379 | **Fix (Bgfx, general)**: all 7 of Bgfx's texture-binding dispatch branches left the previous draw's texture bound when a draw's texture was null, instead of falling back to white like EasyGL/Vulkan. Fixed with a new `defaultWhiteTexture3D_` + `else` branch at every site. 3/3 PASS on all 3 backends; empirically confirmed the pre-fix bug (got black, not stale-texture). |
 | `4cde20c0` | 378 | **Fix**: `AlphaTestEffect::FillGpuDrawParams()` never forwarded fog fields at all — fixed on EasyGL (shader infra already existed there). Discovered fog is a total no-op on Vulkan/Bgfx for **every** 3D effect, project-wide (not just `AlphaTestEffect`) — zero shader files in either backend implement it. Opened Task 888. |
 | `b7e9388a` | 377 | **Real bug found (not fixed here)**: `AlphaTestEffect.VertexColorEnabled` has zero effect on Vulkan/Bgfx by default (their alpha-test pipeline never declares a color vertex attribute). Correct on EasyGL, confirmed by new `easygl_alphatest_vertexcolor_diffuse_test.cpp` (2/2 PASS). Empirically verified the Vulkan bug with a temporary, uncommitted test. Opened Task 887 for the fix. |
 | `d13895c2` | 376 | 17 new direct unit tests (`AlphaTestEffectTests.cpp`) locking in `ReferenceAlpha`'s `/255.0f` scaling across boundary + out-of-range values (`-10`...`300`, unclamped, matching FNA), for both `AlphaTest` switch-case shapes. No GPU needed. Zero bugs — formula already correct per Tasks 371/373. |
@@ -376,15 +378,16 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first closes Phase 43 (Task 380 fully scoped in `plan_graphics.md`,
-mirroring Task 340/350/370's synthesis-doc precedent); the rest are the accumulated backlog from
+In priority order — the first opens Phase 44 (Task 381 fully scoped in `plan_graphics.md`,
+mirroring Task 361/371's audit-opener precedent); the rest are the accumulated backlog from
 earlier phases (Tasks 863–888).
 
-1. **Task 380 — document AlphaTestEffect backend parity, closes Phase 43**
-   - Goal: write `docs/alphatesteffect-support.md` synthesizing Tasks 371–379's findings (mirrors
-     `docs/basiceffect-support.md`'s Phase 42 precedent): per-task summary, full 3-backend support
-     matrix, and the 2 tracked follow-ups (Tasks 887, 888) opened along the way.
-   - Files: new `docs/alphatesteffect-support.md`.
+1. **Task 381 — audit `DualTextureEffect` properties and defaults against FNA, opens Phase 44**
+   - Goal: read FNA's `DualTextureEffect.cs` line-by-line against CNA's `DualTextureEffect.hpp`/
+     `.cpp` (mirrors Task 361/371's opener precedent): `Texture`/`Texture2`/`DiffuseColor`/`Alpha`
+     defaults, `Clone()` field list, `EffectDirtyFlags` usage.
+   - Files: `include/Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp`,
+     `src/Microsoft/Xna/Framework/Graphics/DualTextureEffect.cpp`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -508,35 +511,39 @@ earlier phases (Tasks 863–888).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 380).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 381).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
 instruction — do not wait to be asked; one task = one commit = one push).
 
-Current status: Phases 1-42 are FULLY COMPLETE. Phase 43 ("AlphaTestEffect exactness",
-plan_graphics.md Tasks 371-380) is open: Tasks 371-379 are DONE. Task 377 found
-AlphaTestEffect.VertexColorEnabled has zero effect on Vulkan/Bgfx by default (opened Task 887).
-Task 378 fixed AlphaTestEffect fog forwarding on EasyGL, and discovered fog is a total no-op on
-Vulkan/Bgfx for every 3D effect, project-wide (opened Task 888). Task 379 found and FIXED a real,
-general Bgfx bug: null-texture draws left the previous draw's texture bound instead of falling
-back to white (affected 7 dispatch branches, not just AlphaTestEffect). Task 380 is NEXT and
-CLOSES PHASE 43: write docs/alphatesteffect-support.md synthesizing Tasks 371-379 (mirrors
-docs/basiceffect-support.md's Phase 42 precedent).
+Current status: Phases 1-43 are FULLY COMPLETE. Phase 43 ("AlphaTestEffect exactness",
+plan_graphics.md Tasks 371-380) CLOSED with Task 380 (docs/alphatesteffect-support.md, full
+synthesis of Tasks 371-379). Task 377 found AlphaTestEffect.VertexColorEnabled has zero effect on
+Vulkan/Bgfx by default (opened Task 887). Task 378 fixed AlphaTestEffect fog forwarding on EasyGL,
+and discovered fog is a total no-op on Vulkan/Bgfx for every 3D effect, project-wide (opened Task
+888). Task 379 found and FIXED a real, general Bgfx bug: null-texture draws left the previous
+draw's texture bound instead of falling back to white (affected 7 dispatch branches, not just
+AlphaTestEffect). Phase 44 ("DualTextureEffect exactness", Tasks 381-390) is NEXT: Task 381 opens
+it by auditing DualTextureEffect properties/defaults against FNA (mirrors Task 361/371's opener
+precedent).
 
 Phase 42 closed with docs/basiceffect-support.md (full synthesis) and opened 2 new follow-up
 tasks: Task 885 (lit-path EmissiveColor + DirectionalLight1/2 forwarding — Vulkan half needs a
 shared push-constant budget expansion, also used by SkinnedEffect) and Task 886 (real specular
-highlights — a new feature, zero existing infrastructure). Neither blocks Phase 43.
+highlights — a new feature, zero existing infrastructure). Phase 43 closed and opened 2 more:
+Task 887 (Vulkan/Bgfx alpha-test vertex-color unification) and Task 888 (Vulkan/Bgfx project-wide
+fog). None of these 4 block Phase 44.
 
 Last full 3-backend regression (Task 379 — fixed a general Bgfx null-texture bug across all 7
-texture-binding dispatch sites, re-verified against the entire Bgfx suite given the fix's reach):
+texture-binding dispatch sites, re-verified against the entire Bgfx suite given the fix's reach;
+Task 380 was doc-only, no rebuild needed):
 EasyGL 3468/3471 pass (3 documented pre-existing failures, no flakes this run).
 Vulkan 3376/3389 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
 Bgfx 3372/3372 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43 found, read plan_graphics.md
-directly (Tasks 351-379) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-380) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
