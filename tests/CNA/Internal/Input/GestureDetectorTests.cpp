@@ -285,6 +285,20 @@ TEST_F(GestureDetectorTest, HorizontalDragFiresWhenMovementIsPredominantlyHorizo
     DrainGestures();
 }
 
+// P6-008(d): with only HorizontalDrag enabled, a predominantly-vertical move (ay > ax) past the threshold
+// starts NO drag — vdrag/fdrag are disabled, so the detector falls through to NONE and emits nothing.
+TEST_F(GestureDetectorTest, HorizontalDragRejectsPredominantlyVerticalMovement)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::HorizontalDrag);
+
+    Press(60, 0.5f, 0.5f);
+    Move(60, 0.5f, 0.6f, 0.0f, 0.1f); // pixel delta (0, 100): ay > ax
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+
+    Release(60, 0.5f, 0.6f);
+    DrainGestures();
+}
+
 TEST_F(GestureDetectorTest, VerticalDragFiresWhenMovementIsPredominantlyVertical)
 {
     TouchPanel::setEnabledGesturesProperty(GestureType::VerticalDrag);

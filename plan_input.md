@@ -1157,12 +1157,21 @@ past 1s emits nothing). All deterministic via the test clock. **Files changed:**
 `tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+2 tests). **Tests:** pass. **Behavior verified:**
 Hold fires only when a near-stationary finger is held ≥1s and Hold is enabled. **Remaining risk:** none.
 
-## P6-008 — Verify horizontal drag
-- [ ] Test drag start.
-- [ ] Test drag delta.
-- [ ] Test drag complete.
-- [ ] Test vertical movement rejection if required.
-- [ ] Add tests.
+## P6-008 — Verify horizontal drag `[x]`
+- [x] Test drag start.
+- [x] Test drag delta.
+- [x] Test drag complete.
+- [x] Test vertical movement rejection if required.
+- [x] Add tests.
+
+**Result (2026-07-06):** Start + delta + complete already covered
+(`HorizontalDragFiresWhenMovementIsPredominantlyHorizontal` → `Delta.X==100, Delta.Y==0`;
+`DragCompleteFiresAfterAHorizontalDragAndCarriesReleaseFingerId`). **Added the axis-rejection gap test**
+`HorizontalDragRejectsPredominantlyVerticalMovement`: with only HorizontalDrag enabled, a
+predominantly-vertical move (`ay > ax`) past the threshold starts no drag (vdrag/fdrag disabled → detector
+falls to NONE, emits nothing). **Files changed:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+(+1 test). **Tests:** pass. **Behavior verified:** HorizontalDrag fires only for `ax > ay` movement.
+**Remaining risk:** none.
 
 ## P6-009 — Verify vertical drag
 - [ ] Test drag start.
