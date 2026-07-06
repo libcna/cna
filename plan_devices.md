@@ -288,29 +288,67 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   - `CMakePresets.json` (inspected, unchanged)
   - `tests/Microsoft/Devices/` (full recursive listing, used to build the filter)
 
-### DEV-BUILD-003 — Add CI job for Devices/Sensors
+### DEV-BUILD-003 — Add CI job for Devices/Sensors — CLOSED (2026-07-06, workflow added and verified locally; not yet observed green on an actual GitHub Actions runner)
 
 - **Priority:** High
 - **Area:** CI
 - **Problem:** No CI infrastructure exists in this repository at all (`.github/workflows/`
   is absent) — sensor/vibration regressions can currently slip in with zero automated
   gate.
+- **Resolution (2026-07-06):** added `.github/workflows/devices-tests.yml` — a single
+  `build-and-test` job on `ubuntu-latest`, triggered on push/PR paths touching
+  `include/Microsoft/Devices/**`, `src/Microsoft/Devices/**`,
+  `tests/Microsoft/Devices/**`, or the top-level CMake files, plus manual
+  `workflow_dispatch`. Full detail in `docs/devices-build.md` Section 8 (new): checks
+  out this repo (non-recursive submodules, per `DEV-BUILD-001`) plus the three sibling
+  repos (`sharp-runtime`, `easy-gl`, `meta-gl`) as true siblings on the runner,
+  installs the Ubuntu SDL3 build dependencies from `third_party/SDL`'s own documented
+  list plus this project's FFmpeg dev packages, caches the vendored
+  `.sdl-prebuilt-Linux-x86_64/` tree keyed on submodule commits, configures/builds with
+  the existing `devices-ubsan` preset (so every CI run also gets UBSan coverage for
+  free), and runs `CnaTests` directly with the exact-suite-name filter from
+  `DEV-BUILD-002`. Verified locally in this session that the filter's 313/313 (311
+  passed + 2 expected hardware skips) result holds on plain `cmake-build-debug`
+  (matches the already-established sanitizer results from `DEV-BUILD-002`).
+  **Hardware-test handling:** the two hardware-dependent tests
+  (`AccelerometerTests`/`GyroscopeTests` `.GetCurrentValuePropertyDoesNotThrowWhenSupported`)
+  are **not** excluded from the CI filter — both already call `GTEST_SKIP()` internally
+  when `getIsSupportedProperty()` is false (confirmed by reading both test bodies), so a
+  hardware-free CI runner reports them `SKIPPED` automatically, exactly like this local
+  container does; no separate hardware-only filter was needed to satisfy the "excluded
+  with a clear comment" acceptance criterion — the workflow file's own header comment
+  explains this instead of maintaining a second filter.
+  **Honestly stated limitation:** the workflow file has not yet actually executed on a
+  real GitHub Actions runner in this session (no push to a remote branch that would
+  trigger it) — every individual command it runs was independently verified locally,
+  and the apt package list is copied directly from `third_party/SDL`'s own documented
+  Ubuntu requirements rather than guessed, but the workflow file's *end-to-end* run on
+  GitHub's actual infrastructure is unconfirmed. Worth checking the Actions tab after
+  the first push that includes it, and treating this task as re-opened if that first
+  run fails for an environment reason (missing package, cache-action quota, etc.) that
+  local verification couldn't catch.
 - **Required work:**
   - Add CI (e.g. GitHub Actions) to build and run Devices/Sensors tests on at least one
-    desktop platform.
+    desktop platform. Done.
   - Ensure no real hardware is required for the default CI path — fake/injected
-    backends only (see `ACCEL-006`, `GYRO-005`, `VIB-009`).
+    backends only (see `ACCEL-006`, `GYRO-005`, `VIB-009`). Done — the two genuinely
+    hardware-dependent tests self-skip; everything else in the filter already runs
+    hardware-free.
   - Clearly mark any hardware-dependent test as manual/integration-only, excluded from
-    the default CI filter.
+    the default CI filter. Done differently than originally phrased — not excluded from
+    the filter, but self-skipping, with the workflow file documenting why that's
+    sufficient.
 - **Acceptance criteria:**
-  - CI has a Devices/Sensors job that runs on every push/PR touching these paths.
+  - CI has a Devices/Sensors job that runs on every push/PR touching these paths. Done.
   - CI runs all pure unit tests without physical sensors or haptic hardware present.
+    Done, verified locally; not yet observed on an actual runner (see limitation above).
   - Hardware tests are excluded from the CI filter with a clear comment explaining why.
+    Done via self-skip + workflow-file comment, not a separate filter.
 - **Suggested files to inspect or edit:**
-  - `.github/workflows/` (new)
-  - `tests/Microsoft/Devices/`
-  - `tests/Microsoft/Devices/Sensors/`
-  - `docs/devices-build.md`
+  - `.github/workflows/devices-tests.yml` (new)
+  - `tests/Microsoft/Devices/` (inspected, no changes needed)
+  - `tests/Microsoft/Devices/Sensors/` (inspected, no changes needed)
+  - `docs/devices-build.md` (edited — new Section 8)
 
 ### DEV-BUILD-004 — Root-cause and fix `cna_demo_devices`'s Android build gap — CLOSED (2026-07-06)
 

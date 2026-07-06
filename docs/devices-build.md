@@ -537,3 +537,51 @@ bridge would have had to reinvent. SDL's own Android manifest template
 abstraction seam that would only ever have one real implementation would be pure
 speculative abstraction — see `plan_devices.md`'s Task DEVICES-0031 for the full
 evidence trail before reconsidering this.
+
+## 8. Continuous Integration (`DEV-BUILD-003`, 2026-07-06)
+
+`.github/workflows/devices-tests.yml` builds `CnaTests` and runs the exact-suite-name
+Devices/Sensors filter from Section 2 above on every push/PR that touches
+`include/Microsoft/Devices/**`, `src/Microsoft/Devices/**`,
+`tests/Microsoft/Devices/**`, or the top-level CMake files, plus on manual
+`workflow_dispatch`. It runs on a plain `ubuntu-latest` GitHub-hosted runner — no
+physical sensor or haptic hardware is available there, which is the point: the two
+tests that need real hardware
+(`AccelerometerTests.GetCurrentValuePropertyDoesNotThrowWhenSupported`,
+`GyroscopeTests.GetCurrentValuePropertyDoesNotThrowWhenSupported`) are not excluded from
+the CI filter at all — they call `GTEST_SKIP()` internally whenever
+`getIsSupportedProperty()` is false (see their own bodies), so on a hardware-free runner
+they simply report `SKIPPED`, the same way they do in this local development container.
+No separate "hardware-only" CI filter was needed for that reason.
+
+The job:
+- checks out this repo (non-recursive submodules — `third_party/SDL`/`SDL_image`/
+  `SDL_mixer`/`vendor/googletest`, matching the `DEV-BUILD-001`-corrected guidance in
+  Section 0, not `--recursive`), plus the three sibling repos (`sharp-runtime`,
+  `easy-gl`, `meta-gl`) into sibling directories on the runner, since `CMakeLists.txt`
+  resolves them via `add_subdirectory(../x)`, not a submodule path;
+- installs the same Ubuntu SDL3 build dependencies documented in
+  `third_party/SDL/docs/README-linux.md`'s "Ubuntu 18.04, all available features"
+  list (plus `libwayland-dev`/`libdecor-0-dev` from its Ubuntu 22.04+ addendum) and the
+  FFmpeg dev packages from this repo's own `CLAUDE.md` (`CMakeLists.txt` requires
+  `libavcodec`/`libavformat`/`libavutil`/`libswresample` via `pkg-config` unconditionally
+  on Linux, regardless of which target is actually being built — see its
+  `CNA_FFMPEG_AVAILABLE` block);
+- caches `.sdl-prebuilt-Linux-x86_64/` (the vendored SDL3/SDL_image/SDL_mixer
+  from-source build tree, Section 1) keyed on the submodules' own tracked commits, so a
+  submodule bump invalidates the cache automatically and every other push reuses the
+  ~6-7 minute first-time SDL build (`DEV-BUILD-001`);
+- configures and builds with the existing `devices-ubsan` preset (Section 6) rather than
+  a plain, non-sanitized build, so every CI run also gets UndefinedBehaviorSanitizer
+  coverage for free, at no extra job;
+- runs `CnaTests` with the Section 2 filter directly (not through `ctest`, matching this
+  project's own documented reason in the `tests` preset description — `ctest` races
+  several tests that share hardcoded `/tmp` fixture paths across processes).
+
+This CI job has not yet actually executed on GitHub Actions as of this writing (no push
+to a remote branch has triggered it in this session) — the exact commands it runs
+(`cmake --preset devices-ubsan`, `cmake --build --preset devices-ubsan --parallel`, the
+Section 2 filter) were each independently verified locally in this container, and the
+apt package list is `third_party/SDL`'s own documented Ubuntu list, but the *workflow
+file itself* running green on an actual GitHub-hosted runner is not yet confirmed —
+worth checking the Actions tab after the first push that includes it.
