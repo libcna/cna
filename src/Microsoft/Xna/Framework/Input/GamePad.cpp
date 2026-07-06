@@ -97,4 +97,9 @@ namespace Microsoft::Xna::Framework::Input
     {
         return CNA::Internal::Input::SdlInputBridge::SetPlayerIndex(playerIndex, index);
     }
+
+    CNA::Input::PowerStateEXT GamePad::GetPowerInfoEXT(PlayerIndex playerIndex, int& percent)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetPowerInfo(playerIndex, percent);
+    }
 }

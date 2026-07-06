@@ -24,7 +24,7 @@
 - [ ] **N-007 `CNA::Input::Joystick`** — raw joystick (axes/buttons/hats/balls); test via virtual joystick.
 - [ ] **N-008 `GamePad` touchpad fingers EXT** — `GetTouchpadFingerEXT` + counts + touchpad events.
 - [x] **N-009 `GamePad` player-index EXT** — `Get/SetPlayerIndexEXT` (SDL device player-number LED).
-- [ ] **N-009b `GamePad` battery/power EXT** — `GetPowerInfoEXT` (`SDL_GetGamepadPowerInfo`), split off from N-009.
+- [x] **N-009b `GamePad` battery/power EXT** — `GetPowerInfoEXT` (`SDL_GetGamepadPowerInfo`) + shared `CNA::Input::PowerStateEXT`.
 - [ ] **N-010 `GamePad` metadata EXT** — name/path/serial/firmware/Steam-handle/connection-state.
 - [ ] **N-011 `GamePad` button labels EXT** — ABXY vs cross/circle/square/triangle.
 - [ ] **N-012 `CNA::Input::Pen`** — stylus (pressure/tilt/rotation/eraser/buttons); event-decoded.
@@ -47,6 +47,17 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-009b done (2026-07-06):** `GamePad::GetPowerInfoEXT(player, out percent)` — reads the pad's
+  battery/charge state via the gamepad seam. Introduced the shared public enum
+  `CNA::Input::PowerStateEXT {Error,Unknown,OnBattery,NoBattery,Charging,Charged}`
+  (`include/CNA/Input/PowerState.hpp`), mirroring `SDL_PowerState`; N-018 (system Power) will
+  reuse it. Seam: `ISdlGamepadBackend::GetGamepadPowerInfo` (real = `SDL_GetGamepadPowerInfo`;
+  fake = `FakeGamepadConfig.powerState`/`powerPercent`). Bridge `GetPowerInfo` resolves the slot,
+  maps SDL→EXT, and returns `Error`+percent=-1 when disconnected. Pinned in the freeze test +
+  documented in `docs/input-public-api-frozen.md`. Tests: exhaustive SDL_PowerState→PowerStateEXT
+  mapping (6 states) with percent round-trip + disconnected→Error. `ctest -L input` green;
+  ASan-clean. Files: PowerState.hpp (new), SdlGamepadBackend.hpp/.cpp, FakeSdlGamepadBackend.hpp,
+  SdlInputBridge.hpp/.cpp, GamePad.hpp/.cpp, freeze test, frozen-API doc, SdlGamepadBackendTests.cpp.
 - **N-009 done (2026-07-06):** `GamePad::Get/SetPlayerIndexEXT` — reads/sets the SDL device player
   index (the 0-based player-number LED) through the injectable gamepad seam. Established the
   "gamepad-seam-extension" flow: added `GetGamepadPlayerIndex`/`SetGamepadPlayerIndex` to

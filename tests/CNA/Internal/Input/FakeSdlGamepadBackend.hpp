@@ -38,6 +38,8 @@ namespace CNA::Internal::Input::test_support
         std::array<float, 3> accelData{{0.0f, 0.0f, 0.0f}};
         bool sensorReadFails = false;
         int playerIndex = -1; // SDL device player index (LED number); -1 = unset
+        SDL_PowerState powerState = SDL_POWERSTATE_UNKNOWN; // battery/charge state reported by the fake
+        int powerPercent = -1; // battery charge 0-100, or -1 if unknown
     };
 
     class FakeSdlGamepadBackend final : public ISdlGamepadBackend
@@ -249,6 +251,20 @@ namespace CNA::Internal::Input::test_support
                 return false;
             d->cfg.playerIndex = playerIndex; // per-device copy; a later Get reads it back
             return true;
+        }
+
+        SDL_PowerState GetGamepadPowerInfo(SDL_Gamepad* gamepad, int* percent) override
+        {
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr)
+            {
+                if (percent != nullptr)
+                    *percent = -1;
+                return SDL_POWERSTATE_ERROR;
+            }
+            if (percent != nullptr)
+                *percent = d->cfg.powerPercent;
+            return d->cfg.powerState;
         }
 
         SDL_JoystickID lastClosedId = 0;

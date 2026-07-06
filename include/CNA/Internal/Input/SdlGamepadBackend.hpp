@@ -67,6 +67,9 @@ namespace CNA::Internal::Input
 
         /** @brief NOXNA/EXT: sets the device's SDL player index (LED number). Returns success. */
         virtual bool SetGamepadPlayerIndex(SDL_Gamepad* gamepad, int playerIndex) = 0;
+
+        /** @brief NOXNA/EXT: battery/charge state; fills `*percent` (0-100, or -1 unknown). SDL_GetGamepadPowerInfo. */
+        virtual SDL_PowerState GetGamepadPowerInfo(SDL_Gamepad* gamepad, int* percent) = 0;
     };
 
     /**

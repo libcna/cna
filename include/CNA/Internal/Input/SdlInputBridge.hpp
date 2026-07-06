@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 
+#include "CNA/Input/PowerState.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
@@ -116,6 +117,13 @@ namespace CNA::Internal::Input
          * @brief NOXNA/EXT: sets the SDL device player index (LED number). Returns success.
          */
         static bool SetPlayerIndex(Microsoft::Xna::Framework::PlayerIndex playerIndex, int index);
+
+        /**
+         * @brief NOXNA/EXT: the battery/charge state of the connected pad; fills `percent`
+         * (0-100, or -1 unknown). Returns PowerStateEXT::Error if no gamepad is connected.
+         */
+        static CNA::Input::PowerStateEXT GetPowerInfo(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex, int& percent);
 
         /**
          * @brief Queries SDL for the actual hardware capabilities of the gamepad.

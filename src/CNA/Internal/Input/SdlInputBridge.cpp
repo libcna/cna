@@ -1073,6 +1073,34 @@ namespace CNA::Internal::Input
         return sdl_gamepad_backend().SetGamepadPlayerIndex(gamepad, index);
     }
 
+    static CNA::Input::PowerStateEXT sdl_power_state_to_ext(SDL_PowerState state)
+    {
+        using CNA::Input::PowerStateEXT;
+        switch (state)
+        {
+            case SDL_POWERSTATE_ON_BATTERY: return PowerStateEXT::OnBattery;
+            case SDL_POWERSTATE_NO_BATTERY: return PowerStateEXT::NoBattery;
+            case SDL_POWERSTATE_CHARGING:   return PowerStateEXT::Charging;
+            case SDL_POWERSTATE_CHARGED:    return PowerStateEXT::Charged;
+            case SDL_POWERSTATE_UNKNOWN:    return PowerStateEXT::Unknown;
+            case SDL_POWERSTATE_ERROR:
+            default:                        return PowerStateEXT::Error;
+        }
+    }
+
+    CNA::Input::PowerStateEXT SdlInputBridge::GetPowerInfo(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex, int& percent)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+        {
+            percent = -1;
+            return CNA::Input::PowerStateEXT::Error;
+        }
+        percent = -1;
+        return sdl_power_state_to_ext(sdl_gamepad_backend().GetGamepadPowerInfo(gamepad, &percent));
+    }
+
     static Microsoft::Xna::Framework::Input::GamePadType sdl_joystick_type_to_gamepad_type(SDL_JoystickType t)
     {
         using Microsoft::Xna::Framework::Input::GamePadType;

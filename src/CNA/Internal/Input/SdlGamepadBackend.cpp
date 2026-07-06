@@ -93,6 +93,10 @@ namespace CNA::Internal::Input
             {
                 return SDL_SetGamepadPlayerIndex(gamepad, playerIndex);
             }
+            SDL_PowerState GetGamepadPowerInfo(SDL_Gamepad* gamepad, int* percent) override
+            {
+                return SDL_GetGamepadPowerInfo(gamepad, percent);
+            }
         };
 
         RealSdlGamepadBackend g_realBackend;

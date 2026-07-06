@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Input/PowerState.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
@@ -107,6 +108,14 @@ namespace Microsoft::Xna::Framework::Input
          * @return True on success; false if the controller is disconnected or SDL rejected the change.
          */
         NOXNA static bool SetPlayerIndexEXT(PlayerIndex playerIndex, int index);
+
+        /**
+         * @brief NOXNA/EXT: reads the controller's battery/charge state.
+         * @param playerIndex The player index (slot) of the controller.
+         * @param percent Output receiving the battery charge (0-100), or -1 if unknown/disconnected.
+         * @return The power state, or PowerStateEXT::Error if the controller is disconnected.
+         */
+        NOXNA static CNA::Input::PowerStateEXT GetPowerInfoEXT(PlayerIndex playerIndex, int& percent);
 
         /** @brief Left stick dead zone threshold (XInput-based). */
         NOXNA static constexpr float LeftDeadZone     = 7849.0f / 32768.0f;

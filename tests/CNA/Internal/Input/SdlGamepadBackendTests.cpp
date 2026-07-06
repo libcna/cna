@@ -12,6 +12,7 @@
 #include <cmath>
 #include <limits>
 
+#include "CNA/Input/PowerState.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlGamepadBackend.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
@@ -631,6 +632,45 @@ TEST_F(FakeGamepadTest, PlayerIndexIsSafeForDisconnectedSlot)
     EXPECT_EQ(GamePad::GetPlayerIndexEXT(PlayerIndex::Four), -1);
     EXPECT_FALSE(GamePad::SetPlayerIndexEXT(PlayerIndex::Four, 3));
     EXPECT_EQ(fake.setPlayerIndexCalls, 0) << "disconnected slot must not reach the backend";
+}
+
+// --- gamepad battery/power extension (input_noxna.md N-009b) via GamePad::GetPowerInfoEXT ---
+
+// N-009b(a): GetPowerInfoEXT reads the device's battery state and charge percent through the seam,
+// and the SDL_PowerState -> PowerStateEXT mapping is exhaustive.
+TEST_F(FakeGamepadTest, PowerInfoReportsStateAndPercent)
+{
+    struct Case { SDL_PowerState sdl; CNA::Input::PowerStateEXT ext; int percent; };
+    const Case cases[] = {
+        {SDL_POWERSTATE_ON_BATTERY, CNA::Input::PowerStateEXT::OnBattery, 42},
+        {SDL_POWERSTATE_NO_BATTERY, CNA::Input::PowerStateEXT::NoBattery, -1},
+        {SDL_POWERSTATE_CHARGING,   CNA::Input::PowerStateEXT::Charging,  77},
+        {SDL_POWERSTATE_CHARGED,    CNA::Input::PowerStateEXT::Charged,   100},
+        {SDL_POWERSTATE_UNKNOWN,    CNA::Input::PowerStateEXT::Unknown,   -1},
+        {SDL_POWERSTATE_ERROR,      CNA::Input::PowerStateEXT::Error,     -1},
+    };
+    for (const Case& c : cases)
+    {
+        FakeGamepadConfig cfg = FullyFeaturedGamepad();
+        cfg.powerState = c.sdl;
+        cfg.powerPercent = c.percent;
+        fake.Register(10, cfg);
+        SdlInputBridge::ProcessEvent(addedEvent(10));
+
+        int percent = 999;
+        EXPECT_EQ(GamePad::GetPowerInfoEXT(PlayerIndex::One, percent), c.ext);
+        EXPECT_EQ(percent, c.percent);
+
+        SdlInputBridge::ProcessEvent(removedEvent(10)); // reset the slot for the next case
+    }
+}
+
+// N-009b(b): a disconnected slot never reaches the backend: Error state and percent forced to -1.
+TEST_F(FakeGamepadTest, PowerInfoIsErrorForDisconnectedSlot)
+{
+    int percent = 999;
+    EXPECT_EQ(GamePad::GetPowerInfoEXT(PlayerIndex::Four, percent), CNA::Input::PowerStateEXT::Error);
+    EXPECT_EQ(percent, -1);
 }
 
 // --- sensor enable/disable (P4-017) ---

@@ -96,6 +96,8 @@ namespace
     // NOXNA/EXT (input_noxna.md N-009): SDL device player-index (LED) get/set.
     [[maybe_unused]] constexpr auto z_GamePad_GetPlayerIndexEXT = static_cast<int(*)(PlayerIndex)>(&GamePad::GetPlayerIndexEXT);
     [[maybe_unused]] constexpr auto z_GamePad_SetPlayerIndexEXT = static_cast<bool(*)(PlayerIndex, int)>(&GamePad::SetPlayerIndexEXT);
+    // NOXNA/EXT (input_noxna.md N-009b): SDL gamepad battery/charge state.
+    [[maybe_unused]] constexpr auto z_GamePad_GetPowerInfoEXT = static_cast<CNA::Input::PowerStateEXT(*)(PlayerIndex, int&)>(&GamePad::GetPowerInfoEXT);
     static_assert(std::is_same_v<decltype(GamePad::LeftDeadZone), const float>, "GamePad::LeftDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::RightDeadZone), const float>, "GamePad::RightDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::TriggerThreshold), const float>, "GamePad::TriggerThreshold : static constexpr float");
