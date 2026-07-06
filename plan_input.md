@@ -1811,37 +1811,102 @@ verified:** doc matches the current test tree; no overstated coverage. **Remaini
 
 # Phase 10 — Documentation
 
-## P10-001 — Document strict XNA compatibility
-- [ ] Document which Input APIs are intended to match XNA 4.0 exactly.
-- [ ] Document known deviations.
-- [ ] Document C++-specific representation differences.
+## P10-001 — Document strict XNA compatibility `[x]`
+- [x] Document which Input APIs are intended to match XNA 4.0 exactly.
+- [x] Document known deviations.
+- [x] Document C++-specific representation differences.
 
-## P10-002 — Document FNA compatibility
-- [ ] Document where CNA follows FNA behavior.
-- [ ] Document any FNA extensions supported by CNA.
-- [ ] Document any known FNA behavior not yet implemented.
+**Result (2026-07-06):** Strict-XNA compatibility is documented across three tracked docs. **Which APIs are
+strict XNA:** `docs/input-public-api-frozen.md` — the canonical API-tier glossary classifies every public
+member as strict XNA / FNA-EXT / CNA-NOXNA, and `docs/input-member-parity-matrix.md` marks each member
+strict/EXT/deviation (0 STRICT/EXT gaps). **Known deviations:** `docs/input-fna-fidelity.md` collects the
+numbered `DEC-*` deviations, including this session's additions (DEC-20 touch-collection ordering,
+GetCapabilities-after-first-touch, zero-display startup, IME byte-offset). **C++-specific representation
+differences** (get/setXProperty for C# properties, `ref`/`out` → value-ref pairs, `GetHashCode()` →
+`std::size_t`/`int`, `std::vector`-backed `TouchCollection` vs null-backed C# list) are documented in the
+frozen-API doc + CHECKLIST.md's accepted-deviations table. **Files changed:** none (verified the three docs
+cover all three sub-items). **Behavior verified:** strict-vs-deviation is fully documented and cross-checked
+by the parity matrix. **Remaining risk:** none.
 
-## P10-003 — Document `NOXNA` / extension APIs
-- [ ] Document `TextInputEXT`.
-- [ ] Document relative mouse mode.
-- [ ] Document gamepad GUID, sensors, trigger vibration, light bar, and extra buttons.
-- [ ] Ensure extension docs do not imply XNA 4.0 compatibility.
+## P10-002 — Document FNA compatibility `[x]`
+- [x] Document where CNA follows FNA behavior.
+- [x] Document any FNA extensions supported by CNA.
+- [x] Document any known FNA behavior not yet implemented.
 
-## P10-004 — Document platform notes
-- [ ] Windows notes.
-- [ ] Linux notes.
-- [ ] macOS notes.
-- [ ] Android notes if supported.
-- [ ] Browser/Emscripten notes if supported.
-- [ ] Gamepad device notes.
+**Result (2026-07-06):** `docs/input-fna-fidelity.md` is the dedicated FNA-compatibility doc. **Where CNA
+follows FNA:** per-subsystem sections (Keyboard / Mouse / GamePad / TouchPanel / Gestures / TextInputEXT /
+SDL-bridge) record the FNA-faithful behavior verified line-by-line (e.g. dead-zone math, 120-unit wheel,
+`Encoding.UTF8` decode, control-char set + Ctrl+V, gesture thresholds MOVE_THRESHOLD=35 / hold 1s /
+double-tap 300ms/35px / flick 100). **FNA extensions supported:** the "Extension APIs (FNAEXT / NOXNA)"
+section lists `TextInputEXT`, relative mouse mode, scancode mode, and the GamePad EXT set
+(GUID / LightBar / TriggerVibration / Gyro / Accelerometer + Misc1/Paddle/TouchPad buttons). **Known FNA
+behavior not yet implemented / intentionally different:** the `DEC-*` list + the "not headless-verifiable /
+by-design" notes (hardware actuation, real IME, Wayland cursor readback, high-DPI) — each tagged with its
+status. **Files changed:** none (doc covers all three sub-items, incl. this session's DEC-20 etc.).
+**Behavior verified:** FNA-follow / FNA-extension / FNA-gap all documented. **Remaining risk:** none.
 
-## P10-005 — Document manual validation checklist
-- [ ] Keyboard layouts.
-- [ ] Mouse and relative mode.
-- [ ] Gamepads.
-- [ ] Touchscreen.
-- [ ] IME/text input.
-- [ ] High-DPI display.
+## P10-003 — Document `NOXNA` / extension APIs `[x]`
+- [x] Document `TextInputEXT`.
+- [x] Document relative mouse mode.
+- [x] Document gamepad GUID, sensors, trigger vibration, light bar, and extra buttons.
+- [x] Ensure extension docs do not imply XNA 4.0 compatibility.
+
+**Result (2026-07-06):** The "Extension APIs (FNAEXT / NOXNA)" section of `docs/input-fna-fidelity.md`
+documents each extension: **`TextInputEXT`** (whole class NOXNA — portable text input/IME XNA lacked);
+**relative mouse mode** (`Mouse::…IsRelativeMouseModeEXT` — pointer lock + relative delta); **scancode mode**
+(`Keyboard::GetKeyFromScancodeEXT`); and the **GamePad EXT** set — `GetGUIDEXT`, `SetLightBarEXT` (PS4/5
+LED), `SetTriggerVibrationEXT` (adaptive-trigger haptics), `GetGyroEXT`/`GetAccelerometerEXT` (motion
+sensors), plus the EXT buttons (Misc1/Paddle1-4/TouchPad). Each carries the `EXT` name suffix + `NOXNA`
+marker, and `docs/input-public-api-frozen.md`'s tier glossary explicitly places them outside strict XNA — so
+the docs **do not** imply XNA 4.0 compatibility (the class/member docs say "not part of the XNA 4.0 API").
+**Files changed:** none (all extension APIs documented + tier-classified). **Behavior verified:** every
+extension is documented and clearly marked non-XNA. **Remaining risk:** none.
+
+## P10-004 — Document platform notes `[x]`
+- [x] Windows notes.
+- [x] Linux notes.
+- [x] macOS notes.
+- [x] Android notes if supported.
+- [x] Browser/Emscripten notes if supported.
+- [x] Gamepad device notes.
+
+**Result (2026-07-06):** `docs/platform-input-notes.md` already had Linux/X11, Wayland, Windows, macOS,
+Android, iOS sections plus a cross-cutting "Gamepad backend & mapping" section (device notes). **Filled the
+genuine gap:** CNA **does** target Emscripten (`if(EMSCRIPTEN)` in CMakeLists, EasyGL/WebGL2 default) but the
+doc had no Browser section — **added "Browser / Emscripten (WebAssembly)"** covering the input-relevant
+browser behavior: exceptions enabled via `-fexceptions -sNO_DISABLE_EXCEPTION_CATCHING=1` (so the input
+paths that throw `std::out_of_range`/`InvalidOperationException` unwind instead of aborting the page);
+browser-reserved keys; Pointer Lock for relative mouse mode (needs a user gesture); touch/device-pixel-ratio
+scaling; the Gamepad-API privacy gate (controllers invisible until a button press); and hidden-DOM-input IME.
+**Files changed:** `docs/platform-input-notes.md` (+Browser/Emscripten section). **Behavior verified:** all
+six platform families now have input notes. **Remaining risk:** none.
+
+## P10-005 — Document manual validation checklist `[x]`
+- [x] Keyboard layouts.
+- [x] Mouse and relative mode.
+- [x] Gamepads.
+- [x] Touchscreen.
+- [x] IME/text input.
+- [x] High-DPI display.
+
+**Result (2026-07-06):** Two complementary manual checklists are tracked. `docs/demo-input-checklist.md`
+(the `demo_input` harness) has per-section checklists for **Keyboard** (+ layouts), **Text input & IME**,
+**Mouse** (+ relative mode), **Touch** (touch-capable display), and **GamePad** (up to 4 controllers), plus
+a "still requires separate verification" list. `docs/devices-hardware-checklist.md` covers the
+device/hardware matrix and **high-DPI display** validation. Together they cover all six required areas and
+are the destination for every `[!]` item deferred from Phases 5–9 (P5-015 high-DPI touch, P6-016 gestures,
+P7-010 IME, P8-006 display resize) — i.e. **Phase 11** executes against these checklists. **Files changed:**
+none (checklists already cover all six areas). **Behavior verified:** manual-validation checklist exists for
+keyboard-layouts / mouse+relative / gamepads / touchscreen / IME / high-DPI. **Remaining risk:** the manual
+runs themselves are Phase 11 (hardware-gated).
+
+---
+
+**Phase 10 complete (2026-07-06):** all tasks `[x]`. The input documentation set (`input-fna-fidelity.md`,
+`input-public-api-frozen.md`, `input-member-parity-matrix.md`, `platform-input-notes.md`,
+`demo-input-checklist.md`, `devices-hardware-checklist.md`) covers strict-XNA vs FNA vs NOXNA/EXT,
+per-platform notes (now incl. Browser/Emscripten), and the manual checklists. Only real change this phase:
+added the Browser/Emscripten input section (P10-004).
 
 ---
 
