@@ -118,6 +118,11 @@ namespace Microsoft::Xna::Framework::Net
         // RemoteGamers stays empty: FNA's constructor never populates it (matches upstream, not a gap here).
         for (LocalNetworkGamer* l : locals) allGamers_.Add(l);
 
+        // Task 3.1: GamerCollection<T> only ever holds non-owning raw pointers (matching real
+        // XNA's read-only-collection API shape) - ownedGamers_ is this session's own separate
+        // ownership registry, freed in bulk by Dispose()/~NetworkSession().
+        for (LocalNetworkGamer* l : locals) ownedGamers_.emplace_back(l);
+
         // Not part of FNA's original design (see DEFERRED.md item #20 in the sibling cna-samples
         // repo): give every local gamer a real host flag and a real, locally-unique id instead of
         // FNA's hardcoded true/0 stubs. The id assigned here is only a local placeholder for
@@ -173,6 +178,10 @@ namespace Microsoft::Xna::Framework::Net
             CNA::Internal::Net::ENetBackend::StartHosting(this);
         }
     }
+
+    // Task 3.1: out-of-line so NetworkGamer (only forward-declared in the header) is a complete
+    // type here, where ownedGamers_'s std::vector<std::unique_ptr<NetworkGamer>> is destroyed.
+    NetworkSession::~NetworkSession() = default;
 
     // --- Properties ---
 
@@ -240,8 +249,17 @@ namespace Microsoft::Xna::Framework::Net
         {
             CNA::Internal::Net::ENetBackend::TeardownSession(this);
         }
+        // Task 3.1: frees every gamer this session ever owned - after TeardownSession above, so
+        // ENetBackend's own per-session wire-id maps (which can hold these same raw pointers) are
+        // already torn down first, never left holding a reference to now-freed memory.
+        ownedGamers_.clear();
         activeSession_ = nullptr;
         isDisposed_ = true;
+    }
+
+    std::size_t NetworkSession::GetOwnedGamerCountForTesting() const
+    {
+        return ownedGamers_.size();
     }
 
     const std::string& NetworkSession::GetTypeName() const
@@ -343,6 +361,7 @@ namespace Microsoft::Xna::Framework::Net
         adding->SetId(nextLocalGamerId_++);
         localGamers_.Add(adding);
         allGamers_.Add(adding);
+        ownedGamers_.emplace_back(adding); // Task 3.1
 
         // Task 2.3: AddRemoteGamer (below) already enqueues a GamerJoin event so a handler
         // already subscribed before it runs still learns about the new gamer; AddLocalGamer never
@@ -416,6 +435,14 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::AddRemoteGamer(NetworkGamer* gamer)
     {
+        // Task 3.1: AddRemoteGamer deliberately does NOT take ownership of gamer, unlike the
+        // constructor/AddLocalGamer above - its existing, established contract (see
+        // NetworkSessionTests.cpp's AddRemoteGamer* tests, which pass stack-allocated NetworkGamer
+        // instances) never assumed ownership transfer, and changing that here would crash those
+        // tests (deleting non-heap memory) the moment this session is disposed or this call
+        // throws. Ownership of the gamers ENetBackend actually `new`s belongs to ENetBackend's own
+        // per-session SessionState instead - see ENetBackend.cpp's OwnedRemoteGamers.
+
         // Task 2.5: AddRemoteGamer used to add any remote gamer unconditionally, silently
         // violating the documented "maximum players allowed" contract - no FNA equivalent exists
         // to match (AddRemoteGamer is a CNA-internal, NOXNA extension; real FNA's networking is

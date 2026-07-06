@@ -976,3 +976,44 @@ TEST(ENetBackendTest, DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingFo
     }
     EXPECT_TRUE(disconnected) << "peer should have seen a prompt DISCONNECT, not a timeout";
 }
+
+// Task 3.1: every remote NetworkGamer created by HandleClientHello/HandleServerWelcome/
+// HandleGamerJoinBroadcast used to be permanently leaked - NetworkSession::AddRemoteGamer
+// deliberately never takes ownership (see its own doc comment), so ownership belongs to
+// ENetBackend's own per-session SessionState instead. Confirms a remote gamer created via a real
+// ClientHello handshake is tracked, and freed once the host's session is disposed
+// (TeardownSession erasing its SessionState).
+TEST(ENetBackendTest, HostFreesOwnedRemoteGamerOnDispose) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+    EXPECT_EQ(ENetBackend::GetOwnedRemoteGamerCountForTesting(host.session), 0u);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
+        host.session->Update();
+    }
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
+    EXPECT_EQ(ENetBackend::GetOwnedRemoteGamerCountForTesting(host.session), 1u);
+
+    host.session->Dispose();
+    EXPECT_EQ(ENetBackend::GetOwnedRemoteGamerCountForTesting(host.session), 0u);
+}

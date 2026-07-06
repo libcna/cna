@@ -62,6 +62,14 @@ namespace CNA::Internal::Net
             // simultaneous gamers), silently reassigning an id already owned by a still-connected
             // gamer and corrupting HandleAppData's wire-id-based routing.
             std::vector<uint8_t> FreeWireIds;
+            // Task 3.1: every remote NetworkGamer this SessionState's own HandleClientHello/
+            // HandleServerWelcome/HandleGamerJoinBroadcast ever `new`s, previously permanently
+            // leaked (NetworkSession::AddRemoteGamer deliberately never takes ownership - see its
+            // own doc comment - since its established contract also accepts non-heap gamers, e.g.
+            // in tests). Freed automatically when this SessionState is destroyed (TeardownSession
+            // erasing it from Sessions()), which already happens at the same time
+            // NetworkSession::Dispose() frees everything *it* owns.
+            std::vector<std::unique_ptr<NetworkGamer>> OwnedRemoteGamers;
         };
 
         // Task 2.13: process-wide, since SendAppData's silent-drop path (sender/target not yet in
@@ -174,6 +182,7 @@ namespace CNA::Internal::Net
             for (const std::string& gamertag : hello.LocalGamertags)
             {
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, gamertag));
+                state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
                 // We are the host handling an incoming ClientHello, so this gamer belongs to the
                 // connecting client - never the host (see DEFERRED.md item #20).
                 gamer->SetIsHost(false);
@@ -228,6 +237,7 @@ namespace CNA::Internal::Net
                     continue;
                 }
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, entry.Gamertag));
+                state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
                 state.GamerToWireId[gamer] = entry.WireId;
                 state.WireIdToGamer[entry.WireId] = gamer;
                 // RosterEntry doesn't carry a host flag, so this new remote gamer's IsHost stays
@@ -249,6 +259,7 @@ namespace CNA::Internal::Net
                     continue;
                 }
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, entry.Gamertag));
+                state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
                 state.GamerToWireId[gamer] = entry.WireId;
                 state.WireIdToGamer[entry.WireId] = gamer;
                 // Same scoped IsHost limitation as HandleServerWelcome above; Id is real either way.
@@ -556,6 +567,16 @@ namespace CNA::Internal::Net
     void ENetBackend::ResetDroppedAppDataCount()
     {
         droppedAppDataCount_ = 0;
+    }
+
+    std::size_t ENetBackend::GetOwnedRemoteGamerCountForTesting(NetworkSession* session)
+    {
+        auto it = Sessions().find(session);
+        if (it == Sessions().end())
+        {
+            return 0;
+        }
+        return it->second->OwnedRemoteGamers.size();
     }
 
     void ENetBackend::ConnectToHost(NetworkSession* session, const std::string& address, uint16_t port)

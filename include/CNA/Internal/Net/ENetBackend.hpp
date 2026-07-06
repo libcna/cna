@@ -142,6 +142,19 @@ namespace CNA::Internal::Net
         static void ResetDroppedAppDataCount();
 
         /**
+         * @brief Task 3.1: the number of remote gamer objects session's own transport state
+         * currently owns and has not yet freed (created by `HandleClientHello`/
+         * `HandleServerWelcome`/`HandleGamerJoinBroadcast`, freed when this session's transport
+         * state is torn down). Exists purely to make Task 3.1's ownership fix testable; not part
+         * of real XNA.
+         *
+         * @param session The session to query.
+         * @return The number of currently-owned, not-yet-freed remote gamer objects, or 0 if
+         * session has no registered transport.
+         */
+        static std::size_t GetOwnedRemoteGamerCountForTesting(NetworkSession* session);
+
+        /**
          * @brief Broadcasts a session state change (StartGame/EndGame) to every connected peer.
          *
          * No-op if RealNetworkingEnabled(session's type) is false, session has no registered

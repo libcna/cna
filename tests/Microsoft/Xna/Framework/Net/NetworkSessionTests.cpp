@@ -994,3 +994,33 @@ TEST(NetworkSessionTest, RemoveGamerOnLocalGamerRaisesSessionEndedWithReason) {
 
     session->Dispose();
 }
+
+// Task 3.1: every LocalNetworkGamer/NetworkGamer this session ever created (constructor-time
+// locals, AddLocalGamer, AddRemoteGamer) used to be permanently leaked - nothing anywhere in this
+// codebase ever deleted one. Confirms the fix: gamers created via the constructor and
+// AddLocalGamer are tracked (GetOwnedGamerCountForTesting() > 0) and all freed on Dispose().
+TEST(NetworkSessionTest, DisposeFreesEveryGamerTheSessionEverOwned) {
+    SignedInGamerCollection* previousGlobal = Gamer::getSignedInGamersProperty();
+    SignedInGamer extraGamer = MakeSignedInGamer("ExtraTag");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&extraGamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    // maxLocalGamers=2, but only 1 gamer is actually signed in globally - leaves room for
+    // AddLocalGamer below (see Task 2.3's identical setup for why this is needed at all).
+    NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 2, 8);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 1u);
+
+    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
+    session->AddLocalGamer(&newGamer);
+    EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 2u);
+
+    session->Dispose();
+    EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 0u);
+}

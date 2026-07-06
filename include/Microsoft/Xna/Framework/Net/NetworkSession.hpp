@@ -26,6 +26,7 @@
 #include "System/Threading/EventWaitHandle.hpp"
 #include "System/TimeSpan.hpp"
 #include <any>
+#include <memory>
 #include <optional>
 #include <queue>
 #include <vector>
@@ -325,8 +326,26 @@ namespace Microsoft::Xna::Framework::Net
 
         /**
          * @brief Disposes the session, flushing queued packets on all local gamers.
+         *
+         * Task 3.1: also frees every `NetworkGamer`/`LocalNetworkGamer` this session ever created
+         * (constructor-time locals, `AddLocalGamer`, `AddRemoteGamer`) - previously permanently
+         * leaked (nothing anywhere in this codebase ever `delete`d a gamer). Freeing happens here,
+         * at session teardown, rather than incrementally as gamers cycle out of
+         * `PreviousGamers` — `ENetBackend`'s own per-session wire-id maps can hold the same raw
+         * pointers, and those are only guaranteed torn down together with this session (via
+         * `ENetBackend::TeardownSession`, called from here), not at an arbitrary earlier point in
+         * the session's life.
          */
         void Dispose() override;
+
+        /**
+         * @brief NOXNA: the number of gamer objects this session currently owns and has not yet
+         * freed (see Dispose()'s doc comment). Exists purely to make Task 3.1's ownership fix
+         * testable; not part of real XNA.
+         *
+         * @return The number of currently-owned, not-yet-freed gamer objects.
+         */
+        NOXNA [[nodiscard]] std::size_t GetOwnedGamerCountForTesting() const;
 
         /**
          * @brief Returns the fully-qualified .NET type name of this class.
@@ -749,6 +768,12 @@ namespace Microsoft::Xna::Framework::Net
             bool isHost
         );
 
+        // Task 3.1: declared (not defaulted inline) and defined out-of-line in the .cpp, where
+        // NetworkGamer.hpp makes NetworkGamer a complete type - ownedGamers_ below is a
+        // std::vector<std::unique_ptr<NetworkGamer>>, and NetworkGamer is only forward-declared
+        // in this header.
+        ~NetworkSession() override;
+
         bool isDisposed_{false};
         GamerServices::GamerCollection<NetworkGamer> allGamers_;
         GamerServices::GamerCollection<LocalNetworkGamer> localGamers_;
@@ -776,6 +801,12 @@ namespace Microsoft::Xna::Framework::Net
         // owned by a still-present gamer, corrupting FindGamerById.
         NOXNA SharpRuntime::bytecs nextLocalGamerId_{0};
         std::queue<NetworkEvent> networkEvents_;
+
+        // Task 3.1: owns every gamer this session ever created, independent of GamerCollection<T>
+        // (which only ever holds non-owning raw pointers, matching real XNA's read-only-collection
+        // API shape). Freed in bulk on Dispose() - see Dispose()'s own doc comment for why not
+        // incrementally.
+        NOXNA std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;
 
         static NetworkSessionAction* activeAction_;
         static NetworkSession* activeSession_;

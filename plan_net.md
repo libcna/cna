@@ -589,15 +589,50 @@ single design decision should drive all three (e.g. adopt `std::unique_ptr`/`std
 consistently, or introduce a small internal pool/arena with explicit lifetime tied to the owning
 `NetworkSession`, documented clearly either way).
 
-- [ ] **Task 3.1** — Fix the permanent leak of every `NetworkGamer`/`LocalNetworkGamer`. Confirmed:
-  `NetworkSession.cpp` (~lines 101, 110, 330) and `ENetBackend.cpp` (~lines 144, 198, 219) all `new`
-  gamer objects that are only ever stored in `GamerCollection<T>`'s non-owning raw
-  `std::vector<T*>`. Neither `NetworkSession::Dispose()` (~lines 232-243) nor `RemoveGamer`
-  (~lines 407-446) ever `delete`s anything (`grep -rn "delete.*Gamer" src/` returns zero hits).
-  Every join/leave cycle over a session's life permanently leaks one object. Decide and implement a
-  real ownership model (see phase intro) and add a test that (where feasible, e.g. via a
-  test-only allocation counter, or at minimum via valgrind/ASan leak detection in CI) proves gamers
-  are freed on session disposal and on `RemoveGamer`.
+- [x] **Task 3.1** — Fix the permanent leak of every `NetworkGamer`/`LocalNetworkGamer`. Confirmed:
+  `NetworkSession.cpp` and `ENetBackend.cpp` all `new` gamer objects that are only ever stored in
+  `GamerCollection<T>`'s non-owning raw `std::vector<T*>`. Neither `NetworkSession::Dispose()` nor
+  `RemoveGamer` ever `delete`d anything (`grep -rn "delete.*Gamer" src/` returned zero hits). Every
+  join/leave cycle over a session's life permanently leaked at least one object.
+  **Decision:** two separate ownership registries, one per creator, rather than a single unified
+  model — `NetworkSession` creates local gamers (constructor, `AddLocalGamer`) and owns them
+  directly; `ENetBackend` creates remote gamers (`HandleClientHello`/`HandleServerWelcome`/
+  `HandleGamerJoinBroadcast`) and owns those itself. **Critical constraint discovered while
+  implementing this**: `NetworkSession::AddRemoteGamer` could **not** be made to take ownership
+  (the natural-seeming choice, since it's the common funnel all 3 `ENetBackend` creation sites
+  already call) — its established contract, exercised by 3 already-existing tests
+  (`AddRemoteGamerJoinsRostersAndRaisesGamerJoined`, `AddRemoteGamerThrowsWhenSessionIsAlreadyAtMaxGamers`,
+  `RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPrevious`), passes a **stack-allocated**
+  `NetworkGamer` local variable (`&remote`), not a heap one. Wrapping `gamer` in a `unique_ptr`
+  inside `AddRemoteGamer` and freeing it later (or on the capacity-check throw) would `delete`
+  non-heap memory — confirmed by actually trying it and watching those 3 tests crash. Ownership of
+  ENetBackend-created gamers therefore lives in `ENetBackend`'s own `SessionState` instead, freed
+  when that state is torn down (same moment `NetworkSession::Dispose()` frees its own local gamers).
+  **Fixed:**
+  - `NetworkSession`: added `NOXNA std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;`. The
+    constructor and `AddLocalGamer` push into it right alongside `localGamers_`/`allGamers_`.
+    `Dispose()` clears it (after `ENetBackend::TeardownSession`, so `ENetBackend`'s own maps are
+    torn down first and can never end up holding a stale pointer into memory `ownedGamers_` just
+    freed). Declared (but defined out-of-line, in the `.cpp`, where `NetworkGamer.hpp` makes the
+    type complete) `~NetworkSession()`, since a `std::unique_ptr<NetworkGamer>` member can't be
+    destroyed against `NetworkGamer`'s forward declaration in the header.
+  - `ENetBackend`: added `std::vector<std::unique_ptr<NetworkGamer>> OwnedRemoteGamers;` to
+    `SessionState`, populated at all 3 `new NetworkGamer(...)` call sites (before any use, so
+    ownership is captured even if `AddRemoteGamer`'s capacity check subsequently throws), freed
+    automatically when `SessionState` itself is destroyed.
+  - Added `NOXNA` test-only accessors: `NetworkSession::GetOwnedGamerCountForTesting()` and
+    `ENetBackend::GetOwnedRemoteGamerCountForTesting(NetworkSession*)`.
+  **Added `NetworkSessionTest.DisposeFreesEveryGamerTheSessionEverOwned`** (local gamers via
+  constructor + `AddLocalGamer`, using Task 2.3's temporary-global-swap technique for spare
+  capacity) and **`ENetBackendTest.HostFreesOwnedRemoteGamerOnDispose`** (a real remote gamer via a
+  genuine `ClientHello` handshake) — both assert the owned count is non-zero after creation and
+  exactly zero after `Dispose()`.
+  **Verified the bug is real, not theoretical:** reverted the 4 source-fix files (keeping the new
+  tests) and reran — failed to even **compile** (`'GetOwnedGamerCountForTesting' is not a member`,
+  `'GetOwnedRemoteGamerCountForTesting' is not a member`), since these APIs plus the whole
+  ownership registries didn't exist before this fix. Restored the fix and reran — `NetworkSessionTest.*`
+  + `ENetBackendTest.*` combined (63 tests) pass cleanly 3x in a row; full suite:
+  **3259/3261 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 3.2** — Fix the permanent leak of every `NetworkSessionAction` across the `Begin*`/`End*`
   async family. Confirmed: `new NetworkSessionAction(...)` at `NetworkSession.cpp` (~lines 524, 554,
