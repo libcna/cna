@@ -32,7 +32,7 @@
 - **Build:** clean. Verified backend-agnostic across **EasyGL / Vulkan / bgfx / SDL_RENDERER**
   (INPUT-BUILD-002). This session built `CnaTests` clean on EasyGL and under an ASan+UBSan config.
 - **Tests:** the input subset is selected by **`ctest -L input`** (INPUT-BUILD-003) — **301** tests,
-  order-independent under the baked-in `--gtest_shuffle --gtest_repeat=3`. The **only** local failures
+  order-independent under the baked-in `--gtest_shuffle --gtest_repeat=5` (INPUT-BUILD-009 gate). The **only** local failures
   are 3 `MouseCursor` tests that need real cursors (the SDL `dummy` video driver can't create them); they
   pass under CI's Xvfb+x11. Full `CnaTests` suite is **3290 passed / 2 skipped**. Authoritative recorded
   counts live in `docs/input-build-and-test.md` (§Test counts), refreshed 2026-07-06 to these numbers
@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-BUILD-009 — determinism gate standardized:** bumped the baked `CnaInputTests` command to
+  `--gtest_shuffle --gtest_repeat=5` and documented `ctest -L input` as **the** required order-independence
+  gate (why: process-wide input singletons). Green on EasyGL (×5 shuffled, 6.97s); backend-agnostic + run
+  by all 5 CI jobs. Aligned stale `repeat=3` doc references.
 - **INPUT-AUDIT-004 — task-number collisions reconciled:** `input-backend.md` reused bare legacy numbers
   868–872 (touch) and 710–722 (gesture wiring) that also name Graphics tasks; re-pointed both to the
   `INPUT-*` scheme and added a numbering-scheme note namespacing all bare input numbers as legacy IDs

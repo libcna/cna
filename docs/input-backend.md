@@ -255,8 +255,9 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 `CMakeLists.txt` (`CNA_INPUT_TEST_FILTER`) and the **authoritative counts** live in
 `docs/input-build-and-test.md` (§Test counts). Order-dependence in the process-wide static input state
 (`InputManager`, `GestureDetector`, and the `MouseCursor` stock-cursor singletons all persist for the
-process lifetime) is shaken out by the baked-in `--gtest_shuffle --gtest_repeat=3`; bump the repeat via
-a direct binary invocation with the same filter variable if you want more iterations.
+process lifetime) is shaken out by the baked-in `--gtest_shuffle --gtest_repeat=5` — the standardized
+determinism gate (INPUT-BUILD-009); bump the repeat higher via a direct binary invocation with the same
+filter variable if you want more iterations.
 
 Swap `-DCNA_GRAPHICS_BACKEND=EASYGL` for `VULKAN` or `BGFX` to verify the same input tests on the
 other backends (bgfx adds 4 backend-specific, input-unrelated tests). The full suite is just

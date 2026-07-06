@@ -55,9 +55,18 @@ cmake --build cmake-build-input-easygl --target CnaTests
 
 # Run ONLY the input tests — the canonical way (INPUT-BUILD-003).
 # `ctest -L input` runs the CnaInputTests entry, which invokes the single-source-of-truth filter
-# (CNA_INPUT_TEST_FILTER in CMakeLists.txt) shuffled x3 for order-independence. This is what CI runs.
+# (CNA_INPUT_TEST_FILTER in CMakeLists.txt) shuffled x5 for order-independence. This is what CI runs.
 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 ```
+
+> **Determinism gate (INPUT-BUILD-009).** `ctest -L input` is not just the way to run the subset — it
+> **is** the required order-independence check. Its `CnaInputTests` entry bakes in
+> `--gtest_shuffle --gtest_repeat=5`, so every invocation runs the filtered subset five times, each under
+> a fresh shuffle seed. The input state is a process-wide singleton (`InputManager`, `GestureDetector`,
+> the `MouseCursor` stock cursors), so a future static-state leak would resurface as an order-dependent
+> failure here. This gate must stay **green on every built backend** (EasyGL / Vulkan / bgfx /
+> SDL_RENDERER — the command is identical and backend-agnostic). For a deeper sweep, invoke the binary
+> directly with a higher `--gtest_repeat` and the `CNA_INPUT_TEST_FILTER` value.
 
 > Do **not** hand-copy a `--gtest_filter` string to select the input subset — it drifts (a new suite
 > whose name matches none of the tokens is silently skipped). The one authoritative token list lives in

@@ -219,14 +219,23 @@ implemented and event-driven.
 - **Deps:** none.
 
 #### INPUT-BUILD-009 — Repeat/shuffle determinism gate
-- **Priority:** P1 · **Status:** TODO · **Area:** Test
-- **Files:** none (harness), later CI
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Test
+- **Files:** `CMakeLists.txt` (`CnaInputTests` add_test), `docs/input-build-and-test.md`,
+  `docs/input-backend.md`
 - **Problem:** Order-independence is asserted but not gated; a future static-state leak could reintroduce
   order dependence.
 - **Work:** Standardize `--gtest_shuffle --gtest_repeat=5` for the input filter as a required check.
 - **Acceptance:** Documented command; green on all built backends.
 - **Tests:** shuffled repeat run.
 - **Deps:** INPUT-BUILD-002.
+- **Result (2026-07-06):** Bumped the baked `CnaInputTests` command from `--gtest_repeat=3` to
+  `--gtest_repeat=5` and documented `ctest -L input` explicitly as **the** required determinism gate (a
+  bordered note in `docs/input-build-and-test.md` §Test counts area + a CMakeLists comment explaining why:
+  the process-wide `InputManager`/`GestureDetector`/`MouseCursor` singletons make a static-state leak
+  resurface as an order-dependent failure). Verified green locally on EasyGL (297+ subset ×5 shuffled,
+  6.97s, 0 failures); the command is byte-identical and backend-agnostic (INPUT-BUILD-002), and the CI
+  matrix (`.github/workflows/input-ci.yml`) runs this same `ctest -L input` on all 5 jobs — so the bump
+  applies to every backend automatically. Aligned the stale `repeat=3` references in NEXT.md / input-backend.md.
 
 #### INPUT-BUILD-010 — Record & version the canonical test-count baseline
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Test/Docs
