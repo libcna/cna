@@ -3713,7 +3713,7 @@ not an alternate spelling to preserve.
     comment)
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (inspected, no change possible)
 
-### MOTION-005 — Define Motion support policy
+### MOTION-005 — Define Motion support policy — CLOSED (2026-07-06, kept all-or-nothing, consistent with `COMPASS-005`'s precedent)
 
 - **Priority:** High
 - **Area:** Platform Policy
@@ -3722,21 +3722,58 @@ not an alternate spelling to preserve.
   gravity, linear-acceleration, and gyroscope sensors, all simultaneously. Whether this
   all-or-nothing requirement is the right compatibility tradeoff, versus a partial-data
   fallback, needs an explicit decision.
+- **Resolution (2026-07-06):** decided to **keep the current all-or-nothing policy**,
+  matching the same reasoning already applied to `Compass` (`COMPASS-005`):
+  - **Shape correctness:** `MotionReading` has no "some fields populated, others
+    default" concept in its own documented shape — a real WP7 `Motion` instance that
+    reports `IsSupported == true` is documented to deliver `Attitude`, `Gravity`,
+    `DeviceAcceleration`, and `DeviceRotationRate` together as one coherent, fully
+    populated reading (`MOTION-001`'s citation trail). A partial-data fallback would
+    mean inventing a new, CNA-only "degraded `Motion`" concept with no real-API
+    precedent to model it against — a bigger and riskier change than this task's own
+    "define the policy" scope.
+  - **Practical device coverage:** `TYPE_GRAVITY`/`TYPE_LINEAR_ACCELERATION` are
+    themselves virtual/fused sensors (derived by the platform from the same underlying
+    accelerometer+gyroscope hardware `TYPE_ROTATION_VECTOR` already needs) — a device
+    with a rotation-vector sensor but missing gravity/linear-acceleration would be
+    unusual, non-standard hardware, not the common case.
+  - **Complexity/verification cost:** same reasoning as `COMPASS-005` — a partial-data
+    fallback would need its own fusion math for whichever fields remain derivable from
+    a reduced sensor set, its own accuracy caveats, and its own hardware-unverifiable
+    tests, adding a third such open math question (alongside `ACCEL-008`/`COMPASS-009`)
+    for comparatively low real-world benefit.
+  - **Tests:** confirmed the exact missing-sensor combination scenarios this task's
+    acceptance criteria ask for have **no host-testable seam at all** — same
+    conclusion as `COMPASS-005`: `AndroidSensorBridge::IsAvailable()` is a permanent,
+    unconditional `false` stub on every non-Android platform, so
+    `AndroidMotionBackend::IsSupported()`'s specific multi-sensor AND-combination logic
+    can never produce anything but `false` in this container regardless of which
+    sensor(s) are "available."
 - **Required work:**
   - Verify the minimum sensor set genuinely required for an XNA-compatible `Motion`
-    reading.
+    reading. Done — all four sources, matching the current implementation; the real
+    WP7 API itself specifies no minimum-hardware requirement to compare against (an
+    OS-level implementation detail, not documented in WP7's own API surface).
   - Decide fallback behavior when some (but not all) required sensors are missing.
+    Decided — none; report unsupported, matching `Compass`'s identical decision
+    (`COMPASS-005`).
   - Document the tradeoff between full XNA-shape compatibility (every field populated)
-    and broader device support (partial data, clearly marked as such).
+    and broader device support (partial data, clearly marked as such). Done — chose
+    full XNA-shape compatibility, with rationale.
 - **Acceptance criteria:**
-  - `getIsSupportedProperty()` behavior is deterministic and documented.
+  - `getIsSupportedProperty()` behavior is deterministic and documented. Done.
   - Tests cover every missing-sensor combination (attitude missing, gravity missing,
-    linear-acceleration missing, gyroscope missing, and combinations).
-  - Docs explain why `Motion` is supported or unsupported on a given device.
+    linear-acceleration missing, gyroscope missing, and combinations). N/A — confirmed
+    no host-testable seam exists; pre-existing, accepted verification ceiling, not a
+    gap this task introduced or could close.
+  - Docs explain why `Motion` is supported or unsupported on a given device. Done —
+    this closing note plus the existing code's own `IsSupported()` structure.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Motion.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
+  - `src/Microsoft/Devices/Sensors/Motion.cpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp` (inspected, no
+    change needed)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (inspected, no
+    change needed)
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
 
 ### MOTION-006 — Fix timestamp policy
