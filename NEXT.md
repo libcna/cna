@@ -13,17 +13,20 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
-  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–357 are
-  done, **Task 358 is next** ("Verify effect parameter collection enumeration order — Important for
-  compatibility" — see §8). Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks
+  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–358 are
+  done, **Task 359 is next** ("Add tests for missing parameter lookups — Return null vs throw as
+  FNA" — see §8). Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks
   351–354); Task 355 closed the `EffectPass::Apply()`-consistency sub-thread; Task 356 confirmed
   `EffectTechnique` selection is already correct by construction (verify-only, no code fix); Task
   357 confirmed CNA's `EffectParameterCollection` name/semantic lookup already matches FNA exactly
   (verify-only, no code fix — added the missing case-sensitivity/duplicate-tie-breaking test
   coverage instead), and widened Task 884 (the `EffectTechniqueCollection`-class dangling-pointer
   hazard Task 355 fixed) to also cover `EffectParameterCollection`, which has the identical
-  currently-unexercised by-value-`vector` hazard. Phase 41 itself is **not** yet closed — Tasks
-  358–360 (enumeration order/missing-lookup/lifecycle verification) remain open.
+  currently-unexercised by-value-`vector` hazard. Task 358 confirmed `EffectParameterCollection`'s
+  (and its siblings') enumeration order already matches FNA's plain insertion-order `List<T>`
+  iteration exactly (verify-only, no code fix — added the missing order-specific test, since the
+  prior test only checked element *count*, not sequence). Phase 41 itself is **not** yet closed —
+  Tasks 359–360 (missing-lookup null-vs-throw / lifecycle verification) remain open.
   **Task 351**
   audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
   returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
@@ -485,13 +488,29 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 358 — verify effect parameter collection enumeration order**
-   - Goal: confirm `EffectParameterCollection`'s iteration order (`begin()`/`end()`, range-for)
-     matches FNA's `List<EffectParameter>`-backed enumerator — insertion order preserved, no
-     reordering/sorting anywhere. Important for compatibility per the task's own Notes column.
-   - Files: likely `EffectParameterCollection.hpp`/`.cpp`,
-     `tests/.../EffectCollectionTests.cpp`.
+1. **`GRAPHICS_TASKS.md` Task 359 — add tests for missing parameter lookups (return null vs throw as FNA)**
+   - Goal: exhaustively test `EffectParameterCollection`'s not-found paths (`this[string name]`,
+     `GetParameterBySemantic`) return `nullptr`/null rather than throwing, matching FNA's confirmed
+     (Task 357) `return null;` behavior — cover edge cases like empty collection, empty search
+     string, etc.
+   - Files: likely `tests/.../EffectCollectionTests.cpp`.
    - Verification: new unit test(s) with genuine discriminating power.
+
+   **Task 358 status: done — verify-only, no code fix needed.** Re-read FNA's
+   `EffectParameterCollection.cs`/`EffectTechniqueCollection.cs`/`EffectPassCollection.cs`:
+   all 3 are thin `List<T>` wrappers whose `GetEnumerator()` returns the list's own enumerator
+   verbatim — enumeration order is always exactly declaration/insertion order, no sorting anywhere.
+   CNA's `std::vector`-backed `EffectParameterCollection` (`push_back` + pass-through `begin()`/
+   `end()`) already matched exactly — no code fix needed. Real gap found: no existing test actually
+   asserted iteration *order*, only element *count* (`IterationVisitsAllParameters`). Added
+   `IterationOrderMatchesInsertionOrder` using deliberately non-alphabetical names
+   (`Zebra`/`Apple`/`Mango`) to rule out an accidental-sort false pass. Discriminating power
+   verified (temporarily changed `Add()` to prepend instead of append; new test failed along with
+   3 pre-existing order-sensitive tests, confirming they were genuinely order-sensitive too;
+   reverted — net change is test-file-only, zero production code diff). Full 3-backend regression,
+   zero new failures: EasyGL 3377/3381, Vulkan 3300/3314, Bgfx 3283/3284 (all match documented
+   baseline exactly, only the known flaky `CueTest` triggered this run). Does not close Phase 41
+   (Tasks 359–360 remain).
 
    **Task 357 status: done — verify-only, no code fix needed.** Re-read FNA's
    `EffectParameterCollection.cs`/`EffectParameter.cs`; confirmed `this[int]`/`this[string name]`
@@ -838,11 +857,24 @@ confirmed currently unexercised (all 4 stock effects populate then cache pointer
 interleaved) and widened Task 884 to cover it alongside EffectPassCollection instead of fixing
 inline or opening a duplicate task.
 
-Next task: GRAPHICS_TASKS.md Task 358 - verify effect parameter collection enumeration order
-(important for compatibility). Goal: confirm EffectParameterCollection's begin()/end()/range-for
-iteration order matches FNA's List<EffectParameter>-backed enumerator (insertion order preserved,
-no reordering) - read FNA's EffectParameterCollection.cs GetEnumerator() and compare against CNA's
-begin()/end(). Files: likely EffectParameterCollection.hpp/.cpp, tests/.../EffectCollectionTests.cpp.
+Task 358 (verify effect parameter collection enumeration order) is now DONE - verify-only, no code
+fix needed. Re-read FNA's EffectParameterCollection.cs/EffectTechniqueCollection.cs/
+EffectPassCollection.cs: all 3 are thin List<T> wrappers whose GetEnumerator() returns the list's
+own enumerator verbatim - enumeration order is always exactly declaration/insertion order, no
+sorting anywhere. CNA's vector-backed EffectParameterCollection (push_back + pass-through
+begin()/end()) already matched exactly. Real gap: no existing test asserted iteration *order*, only
+element *count* (IterationVisitsAllParameters). Added IterationOrderMatchesInsertionOrder using
+deliberately non-alphabetical names (Zebra/Apple/Mango) to rule out an accidental-sort false pass.
+Discriminating power verified (temporarily changed Add() to prepend instead of append; new test
+failed along with 3 pre-existing order-sensitive tests, confirming those were genuinely
+order-sensitive too; reverted - net change is test-file-only, zero production code diff).
+
+Next task: GRAPHICS_TASKS.md Task 359 - add tests for missing parameter lookups (return null vs
+throw as FNA). Goal: exhaustively test EffectParameterCollection's not-found paths
+(this[string name], GetParameterBySemantic) return nullptr rather than throwing, matching FNA's
+confirmed (Task 357) `return null;` behavior - cover edge cases (empty collection, empty search
+string, etc.) beyond the basic found/not-found cases Task 185/357 already added. Files: likely
+tests/.../EffectCollectionTests.cpp.
 As always: verify genuine discriminating power for any new test (temporarily break/omit any fix,
 confirm the test fails, then revert), full 3-backend rebuild + regression if production code
 changes, update GRAPHICS_TASKS.md and NEXT.md, commit AND push after finishing (standing

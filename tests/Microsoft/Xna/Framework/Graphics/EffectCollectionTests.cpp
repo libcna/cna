@@ -200,6 +200,25 @@ TEST(EffectParameterCollectionTest, IterationVisitsAllParameters)
     EXPECT_EQ(count, 3);
 }
 
+// Task 358: FNA's EffectParameterCollection is a thin wrapper over a plain List<EffectParameter>
+// populated once at construction; GetEnumerator() just returns the list's own enumerator, so
+// foreach order is exactly declaration/insertion order (no sort, no reorder). Names are chosen
+// deliberately non-alphabetical here so an accidental sort would be caught, not masked by
+// insertion order coinciding with alphabetical order.
+TEST(EffectParameterCollectionTest, IterationOrderMatchesInsertionOrder)
+{
+    EffectParameterCollection col;
+    col.Add(MakeParam("Zebra"));
+    col.Add(MakeParam("Apple"));
+    col.Add(MakeParam("Mango"));
+    std::vector<std::string> names;
+    for (const auto& p : col) { names.push_back(p.getNameProperty()); }
+    ASSERT_EQ(names.size(), 3u);
+    EXPECT_EQ(names[0], "Zebra");
+    EXPECT_EQ(names[1], "Apple");
+    EXPECT_EQ(names[2], "Mango");
+}
+
 // Task 357: FNA's this[string name] does a plain `name.Equals(elem.Name)` scan — ordinal,
 // case-sensitive, first match wins on duplicates (foreach loop, no dedup/ambiguity check).
 // GetParameterBySemantic uses the identical pattern over Semantic instead of Name. Neither
