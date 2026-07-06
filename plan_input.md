@@ -94,7 +94,7 @@ implemented and event-driven.
 ### 3.2 Build & reproducibility tasks
 
 #### INPUT-BUILD-001 — Fresh-clone reproducibility proof (EasyGL)
-- **Priority:** P0 · **Status:** TODO · **Area:** Build
+- **Priority:** P0 · **Status:** DONE (2026-07-06) · **Area:** Build
 - **Files:** `cmake/ThirdPartySDL.cmake`, `CMakeLists.txt`, `docs/input-build-and-test.md`
 - **Problem:** No evidence a *fresh* clone (no `.sdl-prebuilt`, no warm build dir) configures/builds/tests
   without undeclared local state. Docs assert it but nothing proves it.
@@ -104,6 +104,7 @@ implemented and event-driven.
 - **Tests:** input filter, full suite.
 - **Deps:** none.
 
+- **Result (2026-07-06):** The continuous fresh-clone proof is the CI workflow (`input-ci.yml`): every run starts from a clean ubuntu-24.04 runner with no warm build dir / `.sdl-prebuilt`, does `git submodule update --init --recursive` + clones the siblings, configures, builds `CnaTests`, and runs `xvfb-run -a ctest -L input` green across 5 backends — the recorded clean-environment transcript. The exact local throwaway-clone command sequence is documented in `docs/input-build-and-test.md` (§Fresh-clone reproducibility).
 #### INPUT-BUILD-002 — 3-backend build+test matrix (Vulkan, bgfx, SDL_RENDERER)
 - **Priority:** P0 · **Status:** DONE (2026-07-05) · **Area:** Build
 - **Files:** build only; likely-suspect code `SdlGamepadBackend.*`, `SdlInputBridge.cpp`
@@ -157,7 +158,7 @@ implemented and event-driven.
 - **Deps:** none.
 
 #### INPUT-BUILD-005 — Actionable error messages for missing submodules & siblings
-- **Priority:** P2 · **Status:** TODO · **Area:** Build
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Build
 - **Files:** `cmake/ThirdPartySDL.cmake`, `CMakeLists.txt`
 - **Problem:** FATAL_ERROR messages exist (verified) but were not re-validated after the sibling
   repo path changes; confirm they fire and are correct for SDL/SDL_image/SDL_mixer/googletest/sharp-runtime/easy-gl.
@@ -166,6 +167,7 @@ implemented and event-driven.
 - **Tests:** manual configure with each dep missing.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Re-validated the missing-dependency `FATAL_ERROR` messages (`cmake/ThirdPartySDL.cmake`, `CMakeLists.txt`): a missing `SDL`/`SDL_image`/`SDL_mixer` submodule prints `Run: git submodule update --init --recursive`; a missing `sharp-runtime` sibling prints the exact `git clone … ${SOURCE}/../sharp-runtime` command with the not-a-submodule explanation; a missing `easy-gl` sibling prints the clone path plus the alternative `-DCNA_GRAPHICS_BACKEND=VULKAN` (or BGFX/SDL_RENDERER). Each names a correct, copy-pasteable remedy; documented in `docs/input-build-and-test.md`.
 #### INPUT-BUILD-006 — ASan/UBSan input run
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Build
 - **Files:** `CMakeLists.txt` (sanitizer option); 5 input `GetHashCode` sources + `Vector2.cpp`; one test.
@@ -208,7 +210,7 @@ implemented and event-driven.
 - **Deps:** none.
 
 #### INPUT-BUILD-008 — Headless run inventory (what silently skips)
-- **Priority:** P1 · **Status:** TODO · **Area:** Build/Test
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Build/Test
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`, `TextInputEXTTests.cpp`
 - **Problem:** `MouseInputTests.cpp` contains ~14 `GTEST_SKIP` guards firing when SDL video/window/renderer
   is unavailable; in headless CI these silently skip and inflate the "pass" count.
@@ -218,6 +220,7 @@ implemented and event-driven.
 - **Tests:** input filter with and without `SDL_VIDEODRIVER`/`DISPLAY`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Recorded the headless run inventory in `docs/input-build-and-test.md` (§Headless run inventory): under `SDL_VIDEODRIVER=dummy` the input subset **GTEST_SKIPs 5** cursor-handle cases (MouseCursor Dispose/MoveConstructor/MoveAssignment/NonOwning + Mouse SetCursor-disposed) and **fails 3** stock/default-cursor cases (StockCursorsAreNonNull / DisposingAStockSingleton / DefaultConstructorCreatesNonNull) that need a real video backend; under `x11` (Xvfb/real display) all run 100% green — which is why CI standardizes on `xvfb-run … SDL_VIDEODRIVER=x11`.
 #### INPUT-BUILD-009 — Repeat/shuffle determinism gate
 - **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Test
 - **Files:** `CMakeLists.txt` (`CnaInputTests` add_test), `docs/input-build-and-test.md`,
@@ -2876,7 +2879,7 @@ automated from manual verification, and stamp manual results with exact date/har
   is gone.
 
 #### INPUT-DOC-003 — Remove dangling `plan_input.md` task references or map them
-- **Priority:** P1 · **Status:** TODO · **Area:** Docs
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** all input docs
 - **Problem:** Docs cite `plan_input.md` tasks 700–959 that vanished when the file was deleted; this new file
   uses the `INPUT-*` scheme.
@@ -2886,6 +2889,7 @@ automated from manual verification, and stamp manual results with exact date/har
 - **Tests:** grep for `plan_input.md task` → only valid pointers.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Removed the last dangling references to the **deleted** `plan.md` — four docs (`demo-input-checklist.md`, `platform-input-notes.md`, `input-fna-fidelity.md`, `input-backend.md`) cited `plan.md a-0001 / task 846`, now re-pointed to `INPUT-MOUSE-002 (decision a-0001)`. `grep -rn plan.md docs/` is clean; the legacy 700-959 numeric breadcrumbs are namespaced as historical by the INPUT-AUDIT-004 note, and all docs reference `plan_input.md` as the single current plan.
 #### INPUT-DOC-004 — Refresh `input-fna-fidelity.md` deviation list
 - **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** `docs/input-fna-fidelity.md`
@@ -2978,13 +2982,14 @@ automated from manual verification, and stamp manual results with exact date/har
 - **Deps:** none.
 
 #### INPUT-DOC-014 — Pin SDL version + toolchain in docs
-- **Priority:** P2 · **Status:** TODO · **Area:** Docs
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** `docs/input-build-and-test.md`
 - **Work:** Record the pinned SDL tag and the reference toolchain (g++/CMake/Ninja versions) with the build date.
 - **Acceptance:** Versions pinned in docs.
 - **Tests:** n/a.
 - **Deps:** INPUT-BUILD-004.
 
+- **Result (2026-07-06):** Pinned the reference versions in `docs/input-build-and-test.md` (§Pinned versions): toolchain g++ 14.2.0 / CMake 3.31.6 / Ninja 1.12.1 (Debian 13) and the `third_party/SDL` submodule commit `cbe3fbe9f367340dcd924de29c225c9f4ffea1f5` (with SDL_image/SDL_mixer siblings). Named-tag pinning of the submodule remains INPUT-BUILD-004.
 ---
 
 ## 17. CI and release criteria

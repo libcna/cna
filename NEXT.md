@@ -51,6 +51,11 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-BUILD-001/005/008 + DOC-003/014 — build/doc closeouts:** documented the fresh-clone
+  reproducibility (CI is the continuous proof + local command sequence), re-validated the missing-dependency
+  `FATAL_ERROR` messages (all name a copy-pasteable fix), recorded the headless run inventory (5 skip + 3 fail
+  under `dummy`, all green under x11), removed the last dangling `plan.md` (deleted-file) references from 4
+  docs, and pinned the SDL submodule commit + toolchain in the build doc. TODO 22 → 17.
 - **INPUT-API matrix + KBD/AUDIT/TEST stragglers verified (36 tasks):** the per-type API-matrix tasks
   (API-007..026) are confirmed by the mechanical parity matrix (INPUT-API-027) + each type's suite; KBD-002..012
   behavior by the keyboard suites; AUDIT-001/003 by the inventory doc + the API-030 SDL-leak guard; and

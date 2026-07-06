@@ -76,7 +76,7 @@ See also [`docs/input-backend.md`](input-backend.md) (architecture) and
 ## Cross-cutting
 
 - **`SetPosition` on a scaled window** (all platforms): `Mouse::SetPosition` converts the caller's
-  logical coordinates to window space before `SDL_WarpMouseInWindow` (`plan.md` a-0001 / task 846).
+  logical coordinates to window space before `SDL_WarpMouseInWindow` (INPUT-MOUSE-002 (decision a-0001)).
   Two paths, both correct for their scaling model:
   - **SDL_Renderer** — `SDL_RenderCoordinatesToWindow`, which is **offset-aware**, so a true
     letterbox (centering bars) maps correctly, not just scaled (verified with a non-square 200×100

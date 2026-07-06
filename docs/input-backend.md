@@ -174,7 +174,7 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
   calls (`SDL_WarpMouseInWindow`, `SDL_Get/SetWindowRelativeMouseMode`) rather than stubs
   (Phase I4, tasks 745–749).
 - `SetPosition` converts the caller's logical coordinates to window space before the warp
-  (`plan.md` a-0001, task 846), so the OS cursor lands at the correct pixel on a scaled window: the
+  (INPUT-MOUSE-002 (decision a-0001)), so the OS cursor lands at the correct pixel on a scaled window: the
   SDL_Renderer path uses `SDL_RenderCoordinatesToWindow` (**offset-aware**, so true-letterbox bars
   map correctly — verified for a 200×100 window in task 858), and EasyGL uses its
   `TransformLogicalToWindow` (a uniform height-scale with no offset, which is exact for EasyGL's

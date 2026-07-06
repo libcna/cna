@@ -82,6 +82,58 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 Recorded **2026-07-06** in this checkout: Debian 13, g++ 14.2.0, CMake 3.31.6, Ninja 1.12.1. Input is
 backend-agnostic — the input-filter count is identical on EasyGL / Vulkan / bgfx / SDL_RENDERER.
 
+**Pinned versions (INPUT-DOC-014).** Reference toolchain as above (g++ 14.2.0 / CMake 3.31.6 /
+Ninja 1.12.1, Debian 13). The **SDL** dependency is the `third_party/SDL` git submodule
+(`libsdl-org/SDL`), pinned at commit **`cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`** in this checkout
+(alongside the `SDL_image`/`SDL_mixer` submodules); `git submodule update --init --recursive` restores
+that exact revision. (Pinning the submodule to a named upstream *tag* rather than a raw commit is tracked
+by INPUT-BUILD-004.)
+
+### Headless run inventory (INPUT-BUILD-008)
+
+`ctest -L input` must run under a display server (`xvfb-run` + `SDL_VIDEODRIVER=x11` in CI and on
+headless boxes) — a few `MouseCursor`/`SetCursor` cases need real SDL cursors. Behavior of the input
+subset by video driver:
+
+| Video driver | MouseCursor/SetCursor cursor-handle cases | Result |
+|--------------|-------------------------------------------|--------|
+| `x11` (Xvfb or real display) | run | **100% green** |
+| `dummy` (fully headless) | **5 GTEST_SKIP** + **3 fail** | not green — do not gate on `dummy` |
+
+- **Skipped under `dummy`** (need a valid `SDL_Cursor` handle to exercise ownership/disposal):
+  `MouseCursorTest.DisposeReleasesHandleAndIsIdempotent`, `.MoveConstructorTransfersOwnershipAndNullsSource`,
+  `.MoveAssignmentDisposesPreviousHandleAndTransfersOwnership`, `.NonOwningConstructorDoesNotDestroyCursorOnDestruction`,
+  and `MouseTest.SetCursorIsSafeNoOpForDisposedCursor`.
+- **Fail under `dummy`, pass under `x11`** (stock/default cursor creation returns null on the dummy
+  driver): `MouseCursorTest.StockCursorsAreNonNullWhenVideoAvailable`, `.DisposingAStockSingletonIsANoOpAndKeepsItUsable`,
+  `.DefaultConstructorCreatesNonNullOwningCursor`.
+
+So the always-portable input count is stable; only these display-dependent cursor cases vary by driver,
+which is why CI standardizes on `xvfb-run … SDL_VIDEODRIVER=x11`.
+
+### Fresh-clone reproducibility (INPUT-BUILD-001)
+
+The **continuous** fresh-clone proof is the CI workflow `.github/workflows/input-ci.yml`: every run
+starts from a clean `ubuntu-24.04` runner with **no** warm build dir and **no** `.sdl-prebuilt` cache,
+does `git submodule update --init --recursive` + clones the `sharp-runtime`/`easy-gl` siblings, configures,
+builds `CnaTests`, and runs `xvfb-run -a ctest -L input` — green across the 5-backend matrix. That is the
+recorded transcript of a clean environment building and passing with no manual patching.
+
+To reproduce locally in a throwaway clone (siblings present next to it):
+
+```bash
+git clone <cna_input-url> /tmp/cna-fresh && cd /tmp/cna-fresh
+git submodule update --init --recursive
+cmake -S . -B build -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+cmake --build build --target CnaTests
+xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir build -L input --output-on-failure
+```
+
+If a dependency is missing, the configure step fails fast with a copy-pasteable remedy (INPUT-BUILD-005):
+a missing `third_party/SDL*` submodule prints `Run: git submodule update --init --recursive`; a missing
+`sharp-runtime`/`easy-gl` sibling prints the exact `git clone … <path>` command (and, for `easy-gl`, the
+option to pick another backend). Verified in `cmake/ThirdPartySDL.cmake` and `CMakeLists.txt`.
+
 | Metric | Count |
 |--------|-------|
 | Full `CnaTests` suite | **3290 passed / 2 skipped** |

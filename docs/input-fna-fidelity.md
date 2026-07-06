@@ -88,7 +88,7 @@ byte-for-byte by INPUT-KBD-009/010):
   (`HorizontalWheelIsIgnored`).
 - **Logical→window scaling:** CNA converts logical→window at `SetPosition` time via the graphics
   backend (`TransformLogicalToWindow` / `SDL_RenderCoordinatesToWindow`); FNA scales at `GetState`
-  read time. Equivalent for the common case (see `plan.md` a-0001).
+  read time. Equivalent for the common case (see INPUT-MOUSE-002 (decision a-0001)).
 - **`ClickedEXT` is multicast (DEC-06, fixed 2026-07-05):** now a `System::MulticastAction<int>` matching
   FNA's `public static Action<int>` — `+=` adds subscribers, `=` replaces, `= nullptr` clears. (Was a
   single `std::function`; the second-subscriber-lost gap is closed.)

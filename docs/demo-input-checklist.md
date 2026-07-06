@@ -75,7 +75,7 @@ surface them. Verifying them needs a small demo enhancement or a separate harnes
   `MouseInputTests` (real-window round-trip) and the manual check in `plan_input.md` task 783.
 - **Mouse cursor warp** (`Mouse::SetPosition`) — not called by the demo. Manually verified in
   task 783 (pixel-exact under X11); the scaled/letterboxed logical→window conversion is now
-  implemented (`plan.md` a-0001 / task 846) and unit-tested (`SetPositionConvertsLogicalToWindowFor
+  implemented (INPUT-MOUSE-002 (decision a-0001)) and unit-tested (`SetPositionConvertsLogicalToWindowFor
   LetterboxedRenderer`).
 - **Gamepad sensors** (`GetGyroEXT` / `GetAccelerometerEXT`) — not read by the demo. Only the
   disconnected/zeroed fallback is unit-tested (task 740); live values need real sensor hardware.
