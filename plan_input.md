@@ -814,8 +814,25 @@ converted window→logical at event time, a-0001 — ≡ FNA's GetState scaling)
 deviations are the documented a-0001 coordinate model + DEC-14 relative-mode + P3-001 null guard).
 **Behavior verified:** SetPosition guard+warp, live relative-mode, click dispatch. **Remaining risk:** none.
 
-## L-004 — `MouseCursor.cpp` logic `[ ]`
-- [ ] Cursor ownership/move/dispose lifecycle; FromTexture2D surface build + format validation + hotspot.
+## L-004 — `MouseCursor.cpp` logic `[x]`
+- [x] Cursor ownership/move/dispose lifecycle; FromTexture2D surface build + format validation + hotspot.
+
+**Result (2026-07-06):** MouseCursor is not in FNA/XNA 4.0, so audited vs **MonoGame** semantics —
+**logic correct, no fix needed.** **RAII lifecycle:** default ctor creates the SDL default cursor (owning);
+the `SDL_Cursor*` ctor stores handle+owning; the **move ctor/assign** transfer `sdlCursor_/owning_/
+isDisposed_/isSystemSingleton_` and null the source (`sdlCursor_=null, owning_=false, isDisposed_=true` —
+so a moved-from source's `Dispose` is inert); move-assign `Dispose()`s the previous handle first; the dtor
+`Dispose()`s. **`Dispose` is idempotent** (`isDisposed_` guard) and **protects stock singletons**
+(`isSystemSingleton_` → no `SDL_DestroyCursor`, avoiding corrupting the process-shared cursor / a free after
+`SDL_Quit`). **`FromTexture2D`**: rejects non-Color/ColorSrgb formats (`invalid_argument`); extracts packed
+RGBA into a raw `uint32_t` buffer (Color has a vtable → not tightly packed) matching `SDL_PIXELFORMAT_RGBA32`;
+`SDL_CreateSurfaceFrom` (no copy) → `SDL_CreateColorCursor` (copies pixels, verified vs SDL3 source, task 831)
+→ destroy surface; an out-of-texture `originX/Y` makes `SDL_CreateColorCursor` return null → `runtime_error`
+(pinned by `FromTexture2DThrowsWhenOriginIsOutsideTheTexture`, green under Xvfb). **12 stock cursors** map
+MonoGame→SDL3 names (task 833; WaitArrow→PROGRESS since SDL3 dropped WAITARROW) as lazy Meyer's singletons
+(≡ MonoGame's lazy static ctor). **Files changed:** none (logic verified). **Behavior verified:** ownership
+transfer + dispose safety + FromTexture2D pipeline. **Remaining risk:** none (origin bounds are enforced by
+SDL's own hotspot check — behavior is correct).
 
 ## L-005 — `GamePadButtons.cpp` / `GamePadDPad.cpp` logic `[ ]`
 - [ ] Flag→property extraction; FromButtonArray OR-combine; DPad bit-weighted hash vs FNA.
