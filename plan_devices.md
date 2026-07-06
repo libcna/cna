@@ -947,27 +947,59 @@ not an alternate spelling to preserve.
   - `docs/devices-android.md` (edited)
   - `include/Microsoft/Devices/VibrateController.hpp` (edited — `StartLeftRight()` doc comment)
 
-### VIB-004 — Add iOS vibration backend plan or implementation
+### VIB-004 — Add iOS vibration backend plan or implementation — CLOSED (2026-07-06, planned only, no toolchain to implement against)
 
 - **Priority:** High
 - **Area:** iOS Backend
 - **Problem:** There is no iOS toolchain available in this development environment
   (confirmed repeatedly in this repository's own history), and no explicit iOS-native
   vibration/haptics path exists in the code.
+- **Resolution (2026-07-06):** decided **yes**, iOS vibration should eventually be
+  supported, behind `Detail::IVibrateBackend` (`VIB-002`) — full plan written in
+  `docs/devices-build.md` new Section 5.1, alongside the existing Section 5 confirming
+  no Apple toolchain exists here to implement or compile against. Summary:
+  - API choice: `CHHapticEngine` (Core Haptics, iOS 13+) via a `.hapticContinuous`
+    `CHHapticEvent`, which takes both a duration and an intensity parameter directly —
+    a much closer match to XNA's `Start(TimeSpan, float)` shape than
+    `UIImpactFeedbackGenerator` (a canned tap/knock API with no duration concept at
+    all).
+  - `IsSupported()` maps to `CHHapticEngine.capabilitiesForHardware().supportsHaptics`
+    (false on iPad and pre-Taptic-Engine iPhones).
+  - `StartLeftRight()` has no true dual-motor iOS equivalent (single Taptic Engine
+    actuator) — planned to blend `largeMotor`/`smallMotor` using the same `0.6`/`0.4`
+    weighting Android's own SDL3 haptic backend already applies for the identical
+    single-actuator reason (`VIB-003`'s finding), rather than inventing a third,
+    unrelated formula — keeps both real phone platforms behaviorally consistent.
+  - No permission/`Info.plist` entry needed (unlike `CMMotionManager`).
+  - Noted a real lifecycle wrinkle a future implementation must handle:
+    `CHHapticEngine` can stop itself on interruption/backgrounding and needs explicit
+    restart, unlike this codebase's SDL-haptic backend.
+  - Deliberately not planning a pre-iOS-13 legacy fallback — this project has not
+    decided a minimum iOS version anywhere yet; revisit once it does.
+  - Until implemented, iOS has no `IVibrateBackend` at all — same deterministic
+    permanently-unsupported/silent-no-op behavior as any other platform without one,
+    already covered by existing `VibrateControllerTests.cpp` no-hardware-present tests.
 - **Required work:**
   - Decide whether CNA should support iOS vibration in this API at all, and document
-    the decision with a rationale.
+    the decision with a rationale. Done — yes, planned.
   - If yes: plan (or implement, if an Apple toolchain ever becomes available) using
-    `UIImpactFeedbackGenerator`/`CHHapticEngine` as appropriate.
+    `UIImpactFeedbackGenerator`/`CHHapticEngine` as appropriate. Done — planned,
+    `CHHapticEngine` chosen with rationale; not implemented (no toolchain).
   - If no: document the unsupported behavior clearly (silent no-op, matching the
-    "no hardware" desktop case), so callers get deterministic behavior either way.
+    "no hardware" desktop case), so callers get deterministic behavior either way. N/A
+    (decision was yes) — but the interim "no backend registered yet" behavior is
+    exactly this deterministic no-op, and is documented as such.
 - **Acceptance criteria:**
-  - iOS behavior is deterministic and documented, whichever choice is made.
+  - iOS behavior is deterministic and documented, whichever choice is made. Done.
   - If a backend is added, it compiles behind the appropriate platform guard even
-    without an Apple toolchain available to actually link it here.
-  - Unsupported devices/platforms do not crash.
+    without an Apple toolchain available to actually link it here. N/A — no backend
+    added this pass (plan only); nothing to compile-guard yet.
+  - Unsupported devices/platforms do not crash. True today (no iOS backend exists);
+    unaffected by this task.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Detail/` (new, from `VIB-002`)
+  - `src/Microsoft/Devices/Detail/` (inspected; no iOS implementation added — no
+    toolchain to write/compile one against)
+  - `docs/devices-build.md` (edited — new Section 5.1)
   - iOS build/toolchain files (none currently present — confirm before assuming a
     location)
   - `docs/devices-*.md`

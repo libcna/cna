@@ -403,6 +403,60 @@ toolchain — not fixable by installing a package in a Linux container. Re-check
 assuming this is still true in a future session (environments can change, as Android's
 did), but don't expect it to resolve the way Android's did.
 
+### 5.1. `VibrateController` iOS backend — plan only (Task VIB-004, 2026-07-06)
+
+**Decision: yes, iOS vibration should eventually be supported, behind
+`Detail::IVibrateBackend` (`VIB-002`), via a `CHHapticEngine`-backed implementation —
+planned here, not implemented, since no Apple toolchain exists in this environment to
+write or compile Objective-C++ against (Section 5 above).**
+
+- **API choice: `CHHapticEngine` (Core Haptics, iOS 13+), not
+  `UIImpactFeedbackGenerator`.** `UIImpactFeedbackGenerator` is UIKit's canned
+  tap/knock feedback API (`.light`/`.medium`/`.heavy`/`.soft`/`.rigid` styles via
+  `impactOccurred()`) — a fundamentally different shape than XNA's
+  `Start(TimeSpan)`/`Start(TimeSpan, float)` contract (an arbitrary caller-chosen
+  duration plus a continuous intensity), and it isn't designed to run for a specified
+  duration at all. `CHHapticEngine` is the correct match: a `CHHapticEvent` of type
+  `.hapticContinuous` takes both `duration` and a `CHHapticEventParameterID.hapticIntensity`
+  value directly, which maps onto `Start(TimeSpan, float)` almost one-to-one.
+- **Hardware availability check:** `CHHapticEngine.capabilitiesForHardware().supportsHaptics`
+  — false on iPad and on iPhones without a Taptic Engine (iPhone 6s and earlier) — this
+  is the natural `IVibrateBackend::IsSupported()` implementation; a future
+  `CoreHapticsVibrateBackend` must check this before ever constructing an engine, not
+  assume every iOS device has one.
+  - **`StartLeftRight()` on iOS:** the Taptic Engine is a single actuator — there is no
+    iOS API surface for two independently-driven motors. A future implementation should
+    fold `largeMotor`/`smallMotor` into one intensity, the same way Android's own SDL3
+    haptic backend already does today for the phone's single vibrator
+    (`docs/devices-android.md`'s "Vibration" section, `large*0.6 + small*0.4`, confirmed
+    by `VIB-003`) — using the identical blend weighting would keep behavior consistent
+    across both real phone platforms, rather than inventing a third, arbitrary formula.
+    This reinforces `StartLeftRight()`'s own doc comment: true independent two-motor
+    output should only be expected from desktop dual-actuator hardware, never from a
+    phone, on either supported mobile platform.
+  - **Permissions:** none required — Core Haptics needs no `Info.plist` entry or
+    runtime permission prompt, unlike `CMMotionManager`'s `NSMotionUsageDescription`
+    (`docs/devices-native-backend-design.md`'s iOS Motion section).
+  - **Lifecycle note for a future implementation:** `CHHapticEngine` instances can stop
+    themselves on audio session interruptions/app backgrounding and must be explicitly
+    restarted (`engine.start()` again) before the next `Start()` call — a real
+    implementation will need to handle `engine.resetHandler`/`stoppedHandler`, not just
+    construct the engine once and assume it stays running, unlike this codebase's
+    SDL-haptic backend which has no equivalent interruption model to handle.
+- **Not planned:** no separate legacy pre-iOS-13 fallback (e.g. `AudioServicesPlaySystemSound`
+  with a vibration system-sound ID) — this project's minimum iOS version has not been
+  decided anywhere in this codebase yet, and speculative-abstracting for an undecided
+  minimum would be premature; a future task should decide the minimum iOS version
+  first, at which point this note should be revisited.
+
+Until an Apple toolchain is available to actually write and compile this,
+`VibrateController` has no iOS-specific backend at all — same permanently-`false`
+`getIsSupportedProperty()`/silent-no-op `Start()`/`Stop()`/`StartLeftRight()` behavior
+as any other platform without a registered `IVibrateBackend` implementation, which is
+itself deterministic and already covered by `VibrateControllerTests.cpp`'s
+no-hardware-present tests (this container has no haptic device either, so the same code
+path is already exercised here).
+
 ## 6. Sanitizer builds (Task P8-4)
 
 **A single green `ctest` run proves neither memory safety nor thread safety.** Section 2
