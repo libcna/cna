@@ -4,11 +4,16 @@
 // Builds on Task 371's audit, which found zero default-value bugs; this file
 // is the dedicated, centralized, GTest-based lock-in for all properties'
 // defaults that Task 371 itself found no existing coverage for.
+//
+// Task 376 extends this file with a direct, GPU-independent lock-in of the
+// ReferenceAlpha 0-255-int -> 0-1-float scaling formula (a common bug
+// source per plan_graphics.md's own note), including out-of-range inputs.
 
 #include <gtest/gtest.h>
 
 #include <memory>
 
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -20,6 +25,7 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::AlphaTestEffect;
 using Microsoft::Xna::Framework::Graphics::CompareFunction;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using CNA::Internal::Backends::GpuDrawParams;
 
 namespace
 {
@@ -232,4 +238,72 @@ TEST_F(AlphaTestEffectDefaultsTest, CloneCopiesAllProperties)
 TEST_F(AlphaTestEffectDefaultsTest, GetTypeNameReturnsFullyQualifiedName)
 {
     EXPECT_EQ(fx.GetTypeName(), "Microsoft.Xna.Framework.Graphics.AlphaTestEffect");
+}
+
+// -----------------------------------------------------------------------
+// Task 376: ReferenceAlpha 0-255-int -> 0-1-float scaling, direct on
+// FillGpuDrawParams()'s alphaTest[0]/[1] output — no GPU/pixel readback
+// needed, this is pure CPU-side arithmetic. FNA's AlphaTestEffect.cs
+// OnApply(): `reference = (float)referenceAlpha / 255f`, `threshold =
+// 0.5f / 255f`. CompareFunction::Greater puts `reference+threshold` in X
+// (Y unused); CompareFunction::Equal puts plain `reference` in X and
+// `threshold` in Y. Both switch-case shapes are exercised below. FNA's own
+// `referenceAlpha` field is a plain, unclamped C# int — CNA's
+// `referenceAlpha_` must behave identically for out-of-range inputs.
+
+namespace
+{
+    constexpr float kThreshold = 0.5f / 255.0f;
+
+    float ExpectedReference(int referenceAlpha)
+    {
+        return static_cast<float>(referenceAlpha) / 255.0f;
+    }
+}
+
+class AlphaTestReferenceScalingTest : public ::testing::TestWithParam<int>
+{
+protected:
+    GraphicsDevice gd;
+    AlphaTestEffect fx{gd};
+};
+
+TEST_P(AlphaTestReferenceScalingTest, GreaterPutsReferencePlusThresholdInX)
+{
+    const int referenceAlpha = GetParam();
+    fx.setAlphaFunctionProperty(CompareFunction::Greater);
+    fx.setReferenceAlphaProperty(referenceAlpha);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+
+    EXPECT_NEAR(params.alphaTest[0], ExpectedReference(referenceAlpha) + kThreshold, 1e-6f);
+    EXPECT_FLOAT_EQ(params.alphaTest[1], 0.0f);
+}
+
+TEST_P(AlphaTestReferenceScalingTest, EqualPutsPlainReferenceInXAndThresholdInY)
+{
+    const int referenceAlpha = GetParam();
+    fx.setAlphaFunctionProperty(CompareFunction::Equal);
+    fx.setReferenceAlphaProperty(referenceAlpha);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+
+    EXPECT_NEAR(params.alphaTest[0], ExpectedReference(referenceAlpha), 1e-6f);
+    EXPECT_NEAR(params.alphaTest[1], kThreshold, 1e-6f);
+}
+
+// Boundary values (0, 1, 254, 255) and out-of-range values (-10, 300) — FNA
+// never clamps ReferenceAlpha, so CNA must not either (Task 371 finding).
+INSTANTIATE_TEST_SUITE_P(BoundaryAndOutOfRange, AlphaTestReferenceScalingTest,
+    ::testing::Values(-10, 0, 1, 64, 128, 254, 255, 300));
+
+TEST_F(AlphaTestEffectDefaultsTest, ReferenceAlphaIsNotClampedOnSet)
+{
+    fx.setReferenceAlphaProperty(-10);
+    EXPECT_EQ(fx.getReferenceAlphaProperty(), -10);
+
+    fx.setReferenceAlphaProperty(300);
+    EXPECT_EQ(fx.getReferenceAlphaProperty(), 300);
 }

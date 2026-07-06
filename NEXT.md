@@ -17,14 +17,13 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `plan_graphics.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–42 are complete. **Phase 43 ("AlphaTestEffect
-  exactness", Tasks 371–380) is open** — Tasks 371–375 are done (audit, default-value suite, and
-  a threshold-sweep `CompareFunction` pixel test on all 3 backends — first-ever `AlphaTestEffect`
-  coverage of any kind on Vulkan/Bgfx; found and fixed a real `SetDepthTestEnabled`-throws
-  incompatibility on Bgfx along the way), **Task 376 is next**: verify alpha reference value
-  scaling 0–255 vs 0–1. Phase 42 closed with a synthesis doc (`docs/basiceffect-support.md`) and
-  opened 2 new follow-up tasks (885, 886 — lit-path emissive/multi-light forwarding, real
-  specular) rather than bundling large new features into a pixel-test task. Full task-by-task
-  detail (audit findings, exact formulas derived from FNA
+  exactness", Tasks 371–380) is open** — Tasks 371–376 are done (audit, default-value suite,
+  threshold-sweep `CompareFunction` pixel test on all 3 backends, and a dedicated
+  `ReferenceAlpha` scaling lock-in — zero bugs found across all of them), **Task 377 is next**:
+  verify vertex color and diffuse color interaction. Phase 42 closed with a synthesis doc
+  (`docs/basiceffect-support.md`) and opened 2 new follow-up tasks (885, 886 — lit-path
+  emissive/multi-light forwarding, real specular) rather than bundling large new features into a
+  pixel-test task. Full task-by-task detail (audit findings, exact formulas derived from FNA
   source, discriminating-power verification) lives in `plan_graphics.md` — this file intentionally
   does not duplicate it.
 - **Key architectural decisions:**
@@ -56,15 +55,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 375.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 376.
 
-### Test status (last verified: Task 375)
-- **EasyGL, full `ctest -j1`:** 3447/3451 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`,
-  + 1 flaky `CueTest` this run (confirmed genuinely timing-flaky via 3 isolated reruns, 2/3 passed).
-- **Vulkan, full `ctest -j1`:** 3370/3384 pass. 13 documented pre-existing failures (see §5), + 1
-  flaky `CueTest` this run, passes in isolation.
-- **Bgfx, full `ctest -j1`:** 3354/3354 pass — 100%, no flakes this run.
+### Test status (last verified: Task 376)
+- **EasyGL, full `ctest -j1`:** 3465/3468 pass. 3 pre-existing/documented failures (see §5):
+  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
+- **Vulkan, full `ctest -j1`:** 3374/3388 pass. 13 documented pre-existing failures (see §5), + 1
+  flaky statistical `CueTest` this run, passes in isolation.
+- **Bgfx, full `ctest -j1`:** 3371/3371 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -174,7 +172,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 373–375 | Threshold-sweep `CompareFunction` pixel test (24 assertions: 8 functions × below/at/above reference) on all 3 backends — first-ever `AlphaTestEffect` coverage of any kind on Vulkan/Bgfx (Task 190 was EasyGL-only, boundary-value-only). Found `SetDepthTestEnabled` throws on Bgfx (pre-existing, documented gap); fixed by omitting the unneeded call. Zero `AlphaTestEffect` bugs found. |
+| — | 376 | 17 new direct unit tests (`AlphaTestEffectTests.cpp`) locking in `ReferenceAlpha`'s `/255.0f` scaling across boundary + out-of-range values (`-10`...`300`, unclamped, matching FNA), for both `AlphaTest` switch-case shapes. No GPU needed. Zero bugs — formula already correct per Tasks 371/373. |
+| `9dcf85f5` | 373–375 | Threshold-sweep `CompareFunction` pixel test (24 assertions: 8 functions × below/at/above reference) on all 3 backends — first-ever `AlphaTestEffect` coverage of any kind on Vulkan/Bgfx (Task 190 was EasyGL-only, boundary-value-only). Found `SetDepthTestEnabled` throws on Bgfx (pre-existing, documented gap); fixed by omitting the unneeded call. Zero `AlphaTestEffect` bugs found. |
 | `a9089852` | 372 | New `AlphaTestEffectTests.cpp` from scratch (zero prior coverage): 27 tests covering all 8 property defaults, setter round-trips, `Clone()`, `GetTypeName()`. No bugs found, no production code changed. |
 | `70593b70` | 371 | **Opens Phase 43. Verify-only, zero bugs found** — `AlphaTestEffect`'s properties/defaults/dirty-flag constants/`OnApply()` formula all already match FNA exactly. Confirmed (not fixed, Task 378's job) that fog is a total GPU no-op for this effect. Zero existing test coverage found (Task 372's job). |
 | `dda9a7b1` | 370 | **Closes Phase 42.** Capstone test combining texture+vertexcolor+diffuse+emissive on all 3 backends, first `BasicEffect` test to use a real multi-texel texture (exercises Task 368's Bgfx layout fix for real). All 3 backends produced byte-identical output — no new bugs, pure integration verification. Wrote `docs/basiceffect-support.md` synthesis doc. |
@@ -361,16 +360,17 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 43 (Tasks 376–380 fully scoped in
+In priority order — the first continues Phase 43 (Tasks 377–380 fully scoped in
 `plan_graphics.md`, mirroring Phase 42's exact per-effect methodology for `AlphaTestEffect`); the
 rest are the accumulated backlog from earlier phases (Tasks 863–886).
 
-1. **Task 376 — verify alpha reference value scaling 0–255 vs 0–1**
-   - Goal: confirm `ReferenceAlpha` (int, `[0,255]`-ish per FNA's own unclamped `int` field) is
-     converted to the shader's `0-1` float range identically to FNA's `(float)referenceAlpha/255f`
-     — a common bug source per the plan's own note. Task 371/373's audits already confirm the
-     conversion formula matches; this task's job is a dedicated, explicit pixel/unit test locking
-     it in, plus checking out-of-range inputs (negative, `>255`) behave the same as FNA (no clamp).
+1. **Task 377 — verify vertex color and diffuse color interaction**
+   - Goal: confirm `AlphaTestEffect`'s `VertexColorEnabled` combines with `DiffuseColor` the same
+     way `BasicEffect`'s no-lighting path does (Tasks 364/367) — same shaderIndex-family structure
+     (`AlphaTestEffect.fx` mirrors `BasicEffect.fx`'s no-lighting `Vc`/`Tx`/`TxVc` shader family).
+     Plan notes "if supported" — first confirm CNA's alpha-test shader paths actually implement a
+     vertex-color-enabled variant at all before assuming a formula to test.
+   - Files: audit `AlphaTestEffect.cpp`/each backend's alpha-test shader; new pixel test if needed.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -481,32 +481,32 @@ rest are the accumulated backlog from earlier phases (Tasks 863–886).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 376).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 377).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
 instruction — do not wait to be asked; one task = one commit = one push).
 
 Current status: Phases 1-42 are FULLY COMPLETE. Phase 43 ("AlphaTestEffect exactness",
-plan_graphics.md Tasks 371-380) is open: Tasks 371-375 are DONE (audit, default-value suite, and
-a threshold-sweep CompareFunction pixel test on all 3 backends — first-ever AlphaTestEffect
-coverage of any kind on Vulkan/Bgfx), Task 376 is NEXT (verify alpha reference value scaling
-0-255 vs 0-1 — a dedicated lock-in test, formula already confirmed correct by Tasks 371/373).
+plan_graphics.md Tasks 371-380) is open: Tasks 371-376 are DONE (audit, default-value suite,
+threshold-sweep CompareFunction pixel test on all 3 backends, and a dedicated ReferenceAlpha
+scaling lock-in — zero bugs found across all of them), Task 377 is NEXT (verify vertex color and
+diffuse color interaction — plan notes "if supported"; first confirm CNA's alpha-test shader
+paths actually implement a vertex-color-enabled variant before assuming a formula to test).
 
 Phase 42 closed with docs/basiceffect-support.md (full synthesis) and opened 2 new follow-up
 tasks: Task 885 (lit-path EmissiveColor + DirectionalLight1/2 forwarding — Vulkan half needs a
 shared push-constant budget expansion, also used by SkinnedEffect) and Task 886 (real specular
 highlights — a new feature, zero existing infrastructure). Neither blocks Phase 43.
 
-Last full 3-backend regression (Tasks 373-375 — threshold-sweep CompareFunction test, 24
-assertions, zero AlphaTestEffect bugs; found and fixed a SetDepthTestEnabled-throws-on-Bgfx
-incompatibility by omitting the unneeded call):
-EasyGL 3447/3451 pass (3 documented pre-existing failures + 1 reconfirmed-flaky CueTest).
-Vulkan 3370/3384 pass (13 documented pre-existing failures + 1 flaky CueTest this run).
-Bgfx 3354/3354 pass (100%, no flakes this run).
+Last full 3-backend regression (Task 376 — 17 new direct unit tests locking in ReferenceAlpha's
+/255.0f scaling across boundary + out-of-range values, zero bugs, no GPU needed):
+EasyGL 3465/3468 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3374/3388 pass (13 documented pre-existing failures + 1 flaky statistical CueTest).
+Bgfx 3371/3371 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43 found, read plan_graphics.md
-directly (Tasks 351-375) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-376) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
