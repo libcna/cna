@@ -867,14 +867,24 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Deps:** INPUT-KBD-011.
 
 #### INPUT-KBD-011 — Resolve the scancode FIXME (SdlInputBridge.cpp:729)
-- **Priority:** P2 · **Status:** TODO · **Area:** Keyboard/Bridge
-- **Files:** `SdlInputBridge.cpp:729`
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Keyboard/Bridge
+- **Files:** `src/CNA/Internal/Input/SdlInputBridge.cpp`,
+  `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`, `docs/input-fna-fidelity.md`
 - **Problem:** `NONUSHASH`/`NONUSBACKSLASH → Keys::None` flagged "need verification" (mirrors FNA's own doubt).
 - **Work:** Verify correct XNA mapping on a non-US (e.g. German ISO) layout; fix or confirm; remove the FIXME
   with a test or a documented deviation.
 - **Acceptance:** Mapping decided; FIXME removed; test added.
 - **Tests:** scancode mapping test for those scancodes.
 - **Deps:** none.
+- **Result (2026-07-06):** Neither key has an XNA `Keys` value, and FNA (the authoritative reference) maps
+  both to `Keys.None` with the same unresolved FIXME — so there is no "more correct" value to switch to
+  (CNA does not invent a divergent `OemBackslash`). But the previous code returned `Keys::None` (a value),
+  which `SdlInputBridge` then fed to `SetKeyState`, marking `Keys::None` pressed — the exact pressed-set
+  pollution DEC-16 already rejected on the keycode path. Fixed by returning `std::nullopt` (drop) for both,
+  making the scancode path DEC-16-consistent (`Keys::None` never enters the pressed set). Replaced the bare
+  `FIXME` with a decision comment, added `IsoLayoutExtraScancodesAreDroppedNotMarkedNone` (asserts
+  `IsKeyDown(None)` false + empty pressed set for both), and recorded the deviation in
+  `docs/input-fna-fidelity.md`. `ctest -L input` 100% green.
 
 #### INPUT-KBD-012 — `FNA_KEYBOARD_USE_SCANCODES` env behavior + caching
 - **Priority:** P2 · **Status:** TODO · **Area:** Keyboard/Bridge

@@ -51,6 +51,12 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-KBD-011 — scancode FIXME resolved (behavior fix):** the ISO-layout extra scancodes
+  `NONUSHASH`/`NONUSBACKSLASH` were returning `Keys::None`, which the bridge marked *pressed* — the DEC-16
+  pollution the keycode path already avoids. Changed both to `std::nullopt` (drop), making the scancode
+  path DEC-16-consistent; replaced the bare FIXME with a decision comment, added
+  `IsoLayoutExtraScancodesAreDroppedNotMarkedNone`, documented in `docs/input-fna-fidelity.md`. **First
+  runtime behavior change this session** (all prior work was tests/tooling/docs).
 - **INPUT-AUDIT-002 — source→test coverage detector:** `tools/input_parity/check_input_test_coverage.py`
   maps every Input type (26 public + 8 internal) to its dedicated suite / test-file references and emits
   `docs/input-test-coverage.md`. Result: **0 orphaned/untested types** — every type has a suite or a

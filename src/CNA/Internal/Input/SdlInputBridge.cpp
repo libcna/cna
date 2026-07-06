@@ -748,9 +748,15 @@ namespace
         case SDL_SCANCODE_VOLUMEUP: return Keys::VolumeUp;
         case SDL_SCANCODE_VOLUMEDOWN: return Keys::VolumeDown;
         case SDL_SCANCODE_UNKNOWN: return Keys::None;
-        // FIXME: The following scancodes need verification! (matches FNA's own comment)
-        case SDL_SCANCODE_NONUSHASH: return Keys::None;
-        case SDL_SCANCODE_NONUSBACKSLASH: return Keys::None;
+        // INPUT-KBD-011: the two ISO-layout extra keys (NONUSHASH on UK, NONUSBACKSLASH on most ISO
+        // boards) have no XNA Keys equivalent. FNA maps both to Keys.None with a "need verification"
+        // FIXME (SDL3_FNAPlatform.cs:2615-2617) and then adds Keys.None to its pressed list. CNA instead
+        // DROPS them (std::nullopt), the same DEC-16 policy already applied to unmapped keycodes: never
+        // pollute the pressed set with a meaningless Keys::None (which would make IsKeyDown(None) true and
+        // leak None into GetPressedKeys()). This is a deliberate, DEC-16-consistent deviation from FNA —
+        // recorded in docs/input-fna-fidelity.md and pinned by SdlInputBridgeKeyboardTest. Not an open TODO.
+        case SDL_SCANCODE_NONUSHASH: return std::nullopt;
+        case SDL_SCANCODE_NONUSBACKSLASH: return std::nullopt;
         default: return std::nullopt;
         }
     }
