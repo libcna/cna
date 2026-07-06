@@ -37,13 +37,17 @@ framework/runtime, not a game.
   task groups (11.4-11.9), `CHECKLIST.md` full re-verification (`P11-CHECKLIST-001`),
   test-assertion precision sweep (`P11-TEST-001`), the XactParser deep re-audit (`P11-XACT-001`,
   which found 2 real gaps and spawned `P11-XACT-002`/`P11-XACT-003` as concrete implementation
-  follow-ups), and `FrameworkDispatcher` pump parity (`P11-DISPATCH-001`, which found and fixed a
-  real self-deadlock -- see §3) are done; the TODO/FIXME sweep and the RFC-1 crossfeed attempt
-  remain open, plus the two new XACT implementation tasks, being worked through **one at a time,
-  not batched**,
-  autonomously, per the user's explicit instruction -- the user is away again and any
-  task needing to ask a question gets skipped (with a note) in favor of the next one, same as
-  Phase 10's continuation. **See §4 for an important process note about how this phase started.**
+  follow-ups), `FrameworkDispatcher` pump parity (`P11-DISPATCH-001`, which found and fixed a
+  real self-deadlock -- see §3), the TODO/FIXME sweep (`P11-TODO-001`, clean), and the first XACT
+  implementation follow-up (`P11-XACT-002`, track-level wave-variation selection -- which itself
+  found and fixed a real weighted-lottery boundary bug, and spawned one more follow-up,
+  `P11-XACT-004`, for an identical latent bug in a different, pre-existing code path) are done.
+  Open: `P11-XACT-003` (per-play effect-variation randomization), `P11-XACT-004` (the newly-found
+  lottery-boundary bug), and the RFC-1 crossfeed attempt (`P11-PAN-001`, deliberately left open,
+  not attempted). Being worked through **one at a time, not batched**, autonomously, per the
+  user's explicit instruction -- the user is away again and any task needing to ask a question
+  gets skipped (with a note) in favor of the next one, same as Phase 10's continuation. **See §4
+  for an important process note about how this phase started.**
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -60,27 +64,24 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P11-DISPATCH-001`, on top of
-  `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`, and everything in Phase 10). EasyGL
-  backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d`
-  example targets not rebuilt this pass (no Audio public API surface touched beyond internals/
-  comments, not signatures).
-- **Tests:** `CnaTests` whole-suite count is **3341 / 3343 pass** (2 skipped:
+- **Build:** clean, rebuilt and reverified this pass (`P11-XACT-002`, on top of
+  `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`, and everything in
+  Phase 10). EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked.
+  `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt this pass (no Audio public API
+  surface touched — the new selection logic is entirely internal to `Cue.cpp`/`XactParser.cpp`/
+  `XactTypes.hpp`).
+- **Tests:** `CnaTests` whole-suite count is **3347 / 3349 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected — not Audio; the 1-test increase since the last sync is
-  `P11-DISPATCH-001`'s new `FrameworkDispatcherTest.UpdateDoesNotDeadlockWhenBufferNeededDisposesTheInstance`).
-  Prior sync's 1-test increase was `P10-AUDIT-002/003`'s new
-  `AudioEngineTest.RendererDetailsReportsExactlyOneSdlMixerEntry`, plus
-  one renamed-in-place `CueTest` and one tightened `SoundEffectTest` assertion, both net-zero on
-  count). The audio-scoped subset (§7's `--gtest_filter` list, now 466 tests) was reverified this
-  pass under a **fresh dedicated ASan+UBSan build**: 466/466 pass, zero leaks/errors -- the first
-  ASan/UBSan run since `P10-SAN-002`, covering everything landed since (`P10-RPC-004/007`'s
-  release-phase timers, `P10-FILTER-002/003/004/006`'s live filter-coefficient writes,
-  `P10-LOOP-003/004`'s new raw-callback regression test). Also reverified under a fresh dedicated
-  **ThreadSanitizer** build: the existing `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`
-  precedent test (10 repeats) and the new `BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion`
-  raw-callback test (5 repeats, its own atomics-across-threads code is new this pass) both clean,
-  no data races. Both sanitizer build dirs deleted after use, per this project's own convention.
+  hardware-dependent, expected — not Audio; the 6-test increase since the last sync is
+  `P11-XACT-002`'s new `CueTest.SelectTrackVariationIndex*` (5 algorithm-level) and
+  `CueTest.PlayResolvesTrackVariationEventToOneOfTheAuthoredCandidates` (1 end-to-end)). Prior
+  sync's 1-test increase was `P11-DISPATCH-001`'s new
+  `FrameworkDispatcherTest.UpdateDoesNotDeadlockWhenBufferNeededDisposesTheInstance`. The
+  audio-scoped subset (§7's `--gtest_filter` list) was last reverified under a **fresh dedicated
+  ASan+UBSan build** (466/466 pass, zero leaks/errors) and a fresh dedicated **ThreadSanitizer**
+  build (both concurrency-sensitive precedent tests clean) during the post-Phase-10 sweep -- not
+  re-run this pass (`P11-XACT-002`'s new code has no new threading/raw-pointer surface beyond the
+  existing `Cue`/`SoundEffectInstance` patterns already covered there).
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
@@ -118,6 +119,30 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11" sections.
 
+- **`P11-XACT-002`** — implemented real track-level wave-variation selection for
+  `PlayWaveTrackVariation`/`PlayWaveTrackEffectVariation` events (`Ordered`/`OrderedFromRandom`/
+  `Random`/`RandomNoRepeats`/`Shuffle`), replacing the always-pick-entry-0 fallback `P11-XACT-001`
+  found. `XactTypes.hpp` gained `XsbTrackVariationType`/`XsbTrackVariationEntry`;
+  `XactParser.cpp`'s `ParseFirstPlayWave` now retains the full candidate list + `variation_type`
+  instead of collapsing to entry 0; `Cue.cpp` gained `WeightedPickExcluding`/
+  `SelectTrackVariationIndex`, reproducing FAudio's real two-step composite selection
+  (`FACT_internal.c:730-762`'s one-time init immediately followed by
+  `FACT_INTERNAL_GetNextWave`'s own unconditional re-selection, `FACT_internal.c:199-247`) exactly,
+  wired into `Play()`'s wave-spawning loop. Scope boundary (documented, not a shortfall): resolves
+  once per fresh `Play()` ("first activation"), not true per-loop-iteration re-selection -- CNA has
+  no per-frame XACT event-scheduling system for a later iteration to run against. **Found and
+  fixed a real bug while building the end-to-end test**: `WeightedPickExcluding`'s discrete integer
+  RNG draw, combined with FAudio's own boundary check copied verbatim (`next > (max - weight)`,
+  correct only for FAudio's *continuous* float draw), produced a **total** bias for equal/near-
+  equal small integer weights -- two equal-weight-1 entries never selected the higher index at all
+  (40/40 test iterations picked the same one). Fixed by using `next >= (remaining - weight)`
+  instead. Spawned `P11-XACT-004` (open, below): the pre-existing sound-level variation-table
+  lottery has a separately-implemented copy of this exact same pattern, with the exact same latent
+  bug, currently masked by every existing test for it using skewed (not equal) weights. 6 new
+  `CueTests.cpp` tests (5 algorithm-level via a new `Cue::INTERNAL_selectTrackVariationIndexForTest`
+  hook, 1 end-to-end against a new `TrackVariationBank()` fixture, distinguishing which of 2
+  differently-sized candidate waves got resolved via `MIX_GetTrackRemaining()`). Full suite
+  3347/3349 pass (was 3341/3343), no regressions. See `plan_audio.md`.
 - **`P11-PAN-001`** — deliberately **not attempted**, not forgotten. This is the third time this
   session has looked at the RFC-1 crossfeed pan matrix; the risk (sharing SDL3_mixer's single
   cooked-callback slot with the already-shipped, ThreadSanitizer-verified filter, now carrying
@@ -487,37 +512,30 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 **Phase 11 is open** (`plan_audio.md`, started 2026-07-07 at the user's explicit request: a fresh
 structural + signature audit of CNA's Audio API vs FNA, plus real follow-up fixes/improvements).
-`11.1`-`11.3` (structural census, per-member signature audit, exception-message parity) are
-**closed** -- found zero real structural/signature bugs; three justified C++ adaptations
-documented as non-issues (see `plan_audio.md` for citations). Six real, open task groups remain,
-being worked through **one at a time, not batched**, per the user's explicit instruction, in this
-order (roughly increasing scope/risk):
+`11.1`-`11.5`, `11.7`-`11.9` are **closed** (`P11-CHECKLIST-001`, `P11-TEST-001`, `P11-XACT-001`,
+`P11-DISPATCH-001`, `P11-TODO-001`, `P11-XACT-002` -- see §3 for each). Three real, open items
+remain, being worked through **one at a time, not batched**, per the user's explicit instruction:
 
-1. **`P11-CHECKLIST-001`** (11.4) -- re-verify every `CHECKLIST.md` "Audio:" deviation row against
-   current code, line by line (not spot-checked, closing the gap `P10-AUDIT-004` admitted it left).
-   *Files:* `CHECKLIST.md`.
-2. **`P11-TEST-001`** (11.5) -- sweep all Audio test files for loose (`EXPECT_GT`-style)
-   assertions where an exact value is actually computable from the fixture, tighten them.
-   *Files:* `tests/Microsoft/Xna/Framework/Audio/*.cpp`.
-3. **`P11-XACT-001`** (11.7) -- re-read FAudio's real `FACT_internal.c` sound-bank/track parsing
-   hunting for XACT flags/features `XactParser.cpp` doesn't recognize *at all* (silently
-   ignored/zeroed), as opposed to the already-documented deliberate simplifications.
-   *Files:* `src/CNA/Internal/Audio/XactParser.cpp`, possibly `XactTypes.hpp`.
-4. **`P11-DISPATCH-001`** (11.8) -- compare `FrameworkDispatcher.cs`'s Audio-related pumping
-   against CNA's `FrameworkDispatcher.cpp` for exact parity; not covered by any prior audit in
-   this file.
-   *Files:* `src/Microsoft/Xna/Framework/FrameworkDispatcher.cpp`.
-5. **`P11-TODO-001`** (11.9) -- grep every Audio `src`/`include` file for unresolved
-   `TODO`/`FIXME`/`HACK`/`XXX` comments, resolve each into a real fix or a documented
-   `CHECKLIST.md` row.
-   *Files:* potentially many; mechanical sweep.
-6. **`P11-PAN-001`** (11.6) -- attempt RFC-1's stereo crossfeed pan matrix. Real feature work with
-   real regression risk to the shipped `T-4C` DSP filter (both would share the single SDL3_mixer
-   cooked-callback slot) -- attempt last, with a full dedicated regression/concurrency pass before
-   touching the existing filter tests; if the risk proves concrete mid-implementation, stop,
-   revert, and document why rather than force it through (this is exactly the kind of task this
-   autonomous pass's own standing instruction says to skip, not force, if it turns out to need a
-   judgment call only the user should make).
+1. **`P11-XACT-003`** -- implement per-play effect-variation randomization (pitch/volume/filter
+   frequency/Q) for `PlayWaveEffectVariation`/`PlayWaveTrackEffectVariation` events, gated by
+   `variationFlags`' `PITCH`/`VOLUME`/`FREQUENCY_Q` and `_ADD`/`_NEW_ON_LOOP` bits. Well-specified
+   (FAudio's exact algorithm cited in `plan_audio.md`'s `P11-XACT-001`/`P11-XACT-003` entries) but
+   touches existing invariants (base-pitch/RPC-pitch combination, the `P10-FILTER-002/003/004/006`
+   filter-frequency/Q RPC override) that need care not to silently override.
+   *Files:* `XactTypes.hpp`, `XactParser.cpp`, `Cue.cpp`, `SoundEffectInstance.cpp`.
+2. **`P11-XACT-004`** -- fix the pre-existing sound-level variation-table weighted lottery's
+   (`Cue::Play()`'s `SOUND_VARIATION_TYPE` branch, `P9-XACT-002`/`P10-VAR-004`) identical
+   discrete-vs-continuous boundary bug `P11-XACT-002` found and fixed in its own new
+   `WeightedPickExcluding` helper (change `next > (max - weight)` to `next >= (max - weight)`),
+   plus a new small/equal-weight regression test (every existing test for this path uses skewed
+   weights, which masks the bug). Small, mechanical, low-risk -- good next pick.
+   *Files:* `Cue.cpp` (the `SOUND_VARIATION_TYPE` branch inside `Play()`), `CueTests.cpp`.
+3. **`P11-PAN-001`** -- attempt RFC-1's stereo crossfeed pan matrix. Real feature work with real
+   regression risk to the shipped `T-4C` DSP filter (both would share the single SDL3_mixer
+   cooked-callback slot, now also carrying live RPC-driven coefficient writes). Deliberately left
+   open (not attempted) three separate times this session -- the risk is fully known up-front, not
+   something that would only surface mid-implementation, so this needs the user's explicit
+   greenlight rather than autonomous self-selection.
    *Files:* `SoundEffectInstance.{hpp,cpp}` (the `FilterMixCallback`/cooked-callback machinery).
 
 Other items still open, unrelated to Phase 11's scope itself:

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/Audio/XactTypes.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -271,6 +272,16 @@ namespace Microsoft::Xna::Framework::Audio
         // test itself) and cross-check it against Cue::Play()'s real, deterministic-for-a-known-
         // seed outcome, instead of relying on an unseeded std::random_device draw every run.
         NOXNA static void INTERNAL_seedRngForTest(unsigned int seed);
+
+        // P11-XACT-002: test-only entry point for the PlayWaveTrackVariation-family selection
+        // algorithm (Cue.cpp's anonymous-namespace SelectTrackVariationIndex), so its exact
+        // Ordered/OrderedFromRandom/Random/RandomNoRepeats/Shuffle behavior can be unit-tested
+        // directly against a synthetic entry list, without needing a full XACT fixture wired
+        // through Cue::Play() for every case. Reuses the same shared Rng() INTERNAL_seedRngForTest
+        // above reseeds, for deterministic-for-a-known-seed test outcomes.
+        NOXNA static std::size_t INTERNAL_selectTrackVariationIndexForTest(
+            const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
+            CNA::Internal::Audio::XsbTrackVariationType type);
 
         // Tests need to observe which sound a variation table selected (via the category
         // index it carries) without a real WaveBank/audio device backing playback.

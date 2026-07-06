@@ -4483,17 +4483,64 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
   implementation tasks (`P11-XACT-002`/`P11-XACT-003` below) rather than silently left as
   "already correct" — matching this file's "no silent stubs" rule. No code changed in this task
   (audit only); no build/test needed.
-* [ ] P11-XACT-002: Implement track-level wave-variation selection (Ordered/OrderedFromRandom/
+* [x] P11-XACT-002: Implement track-level wave-variation selection (Ordered/OrderedFromRandom/
   Random/RandomNoRepeats/Shuffle) for `PlayWaveTrackVariation`/`PlayWaveTrackEffectVariation`
   events, replacing the current always-pick-entry-0 behavior.
-  *Status:* Open. Real feature work, well-specified (FAudio's exact algorithm is fully known and
-  cited above, not a design ambiguity) but nontrivial: needs `XactParser.cpp` to retain the full
-  `wave_indices`/`wavebanks`/`weights` arrays per track-variation event (not collapse to one
-  entry during parsing), plus new per-Cue-instance selection state (`evtInst->valuei`-equivalent,
-  needed for `Ordered`/`Shuffle`/`RandomNoRepeats` to track the *previous* pick across repeated
-  loop iterations -- CNA's whole-sound-level event model doesn't currently retain any per-event
-  instance state, so this needs a new field, likely on `Cue` alongside `rpcCodes_`/
-  `basePitchCents_`). *Files:* `XactTypes.hpp`, `XactParser.cpp`, `Cue.{hpp,cpp}`.
+  *Note:* Closed. `XactTypes.hpp` gained `XsbTrackVariationType` (matching FAudio's
+  `variation_type` values, `FACT_internal.h`) and `XsbTrackVariationEntry` (`waveIndex`/
+  `wavebankIndex`/`weight`), plus `XsbWaveRef::trackVariationEntries`/`trackVariationType`.
+  `XactParser.cpp`'s `ParseFirstPlayWave` (`PLAYWAVETRACKVARIATION`/`PLAYWAVETRACKEFFECTVARIATION`
+  branch) now retains the full candidate list and `variation_type` (`FACT_internal.c:2303-2322`'s
+  byte layout: `evtInfoInner` low 16 bits = `wave_count`, bits 16-18 = `variation_type`,
+  `VARIATION_TYPE_MASK = 0x7`; each entry's `weight = maxWeight - minWeight`) instead of
+  collapsing to `j == 0`. `Cue.cpp` gained two new anonymous-namespace helpers:
+  `WeightedPickExcluding` (a weighted-lottery draw over the entry list, optionally excluding one
+  index) and `SelectTrackVariationIndex`, which reproduces FAudio's real *two-step* composite
+  selection exactly (`FACT_internal.c:730-762`'s one-time `valuei` init at sound-creation --
+  `-1` for `Ordered`/`OrderedFromRandom`, an unconditional weighted pick for everything else --
+  immediately followed by `FACT_INTERNAL_GetNextWave`'s own unconditional re-selection,
+  `FACT_internal.c:199-247`: `Ordered`/`OrderedFromRandom` do `+= 1` wrapping at `wave_count`;
+  `Random` does a fresh unconditional weighted pick, discarding step 1's value entirely;
+  `RandomNoRepeats`/`Shuffle` do a weighted pick excluding step 1's index). `Play()`'s
+  wave-spawning loop now runs this selection once per fresh `Play()` call when
+  `waveRef.trackVariationEntries` is non-empty, overwriting the effective wavebank/wave index
+  before resolving the `SoundEffect` -- matching CNA's existing "first PlayWave event" per-track
+  simplification (documented scope boundary, not a shortfall of this task): this is a
+  first-activation selection only, not true per-loop-iteration re-selection, since CNA has no
+  per-frame XACT event-scheduling system for a later iteration to run against. Added a test-only
+  hook (`Cue::INTERNAL_selectTrackVariationIndexForTest`, forwarded via
+  `CueTestAccess::SelectTrackVariationIndex`) so the algorithm can be exercised directly against a
+  synthetic entry list, without needing a full XACT fixture for every one of the 5 algorithms.
+  **Real bug found and fixed while building the end-to-end test**: `WeightedPickExcluding`'s
+  initial implementation used a discrete `std::uniform_int_distribution<uint32_t>(0, total - 1)`
+  draw with FAudio's own boundary comparison (`next > (max - weight)`) copied verbatim -- correct
+  for FAudio's real *continuous* float draw (`FACT_INTERNAL_rng() * max`, where landing exactly on
+  a boundary has probability zero), but wrong for a discrete integer draw: with two equal-weight-1
+  entries, `dist(0, 1)` only ever produces `next` values of 0 or 1, and *both* values resolved to
+  index 0 under a strict `>` comparison (a **total**, not statistical, bias -- the end-to-end test
+  below caught this immediately: 40/40 iterations picked the same candidate). Fixed by changing
+  the comparison to `next >= (remaining - weight)`, which reproduces the same per-entry
+  probability mass as FAudio's continuous draw (verified by hand for both the equal-weight case
+  and the pre-existing skewed-weight unit test, and confirmed by rerunning the full suite). *Not
+  fixed*: the pre-existing sound-level variation-table lottery (`Cue::Play()`'s
+  `SOUND_VARIATION_TYPE` branch, `P9-XACT-002`/`P10-VAR-004`) has its own, separately-implemented
+  copy of this same discrete weighted-lottery pattern with the identical `>` (not `>=`) boundary
+  bug -- every existing test for it uses skewed weights (e.g. 1 vs. 99), which happens to mask the
+  bug (the discretization error is proportionally tiny), so it has never been exercised with
+  small/equal weights. Logged as a new finding (`CHECKLIST.md`) rather than fixed here, since it's
+  a different code path than this task's own `WeightedPickExcluding` and touching it isn't part of
+  this task's scope -- worth a small dedicated follow-up task later.
+  Tests: 6 new (`CueTests.cpp`, "PlayWaveTrackVariation-family selection (P11-XACT-002)" section)
+  -- 5 algorithm-level (`SelectTrackVariationIndexOrderedAlwaysStartsAtEntryZero`,
+  `...OrderedWithSingleEntryStaysAtZero`, `...OrderedFromRandomIsNotAlwaysEntryZero`,
+  `...RandomFavorsHigherWeightEntryStatistically`, `...RandomNoRepeatsAndShuffleStayInBoundsAndVary`)
+  plus one end-to-end integration test (`PlayResolvesTrackVariationEventToOneOfTheAuthoredCandidates`,
+  new `BuildTrackVariationXwbFixtureBytes`/`BuildTrackVariationXsbFixtureBytes`/
+  `TrackVariationBank()` fixtures: a 2-entry compact WaveBank with a short (200-frame) and a long
+  (1600-frame, 8x) candidate, and a `PlayWaveTrackVariation` event with `variation_type=Random`
+  and equal weights, observed via `MIX_GetTrackRemaining()` against a midpoint threshold to prove
+  both candidates get selected across 40 fresh `Play()`s). Full suite: 3347 passed (2 hardware-
+  gated skips unaffected), up from 3341/3343 before this task.
 * [ ] P11-XACT-003: Implement per-play effect-variation randomization (pitch/volume/filter
   frequency/Q) for `PlayWaveEffectVariation`/`PlayWaveTrackEffectVariation` events, gated by
   `variationFlags`' `PITCH`/`VOLUME`/`FREQUENCY_Q` and `_ADD`/`_NEW_ON_LOOP` bits.
@@ -4503,6 +4550,26 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
   (`P10-FILTER-002/003/004/006`) -- effect variation's randomized pitch/frequency/Q would need to
   combine with, not silently override, whatever those already contribute. *Files:* `XactTypes.hpp`,
   `XactParser.cpp`, `Cue.cpp`, `SoundEffectInstance.cpp`.
+* [ ] P11-XACT-004: Fix the pre-existing sound-level variation-table weighted lottery's (`Cue::Play()`'s
+  `SOUND_VARIATION_TYPE` non-interactive branch, `P9-XACT-002`/`P10-VAR-004`) discrete-vs-continuous
+  boundary bug -- discovered as a side effect of implementing `P11-XACT-002` above, in the *new*
+  `WeightedPickExcluding` helper, which copied this same pattern.
+  *Status:* Open. Real FAudio's weighted lottery draws a *continuous* float (`FACT_INTERNAL_rng() *
+  max`), so its boundary check (`next > (max - weight)`) has zero probability of landing exactly on
+  the boundary; the pre-existing sound-level lottery (lines ~732-758 of `Cue.cpp`, a separate,
+  earlier copy of this same pattern predating `P11-XACT-002`) instead draws a *discrete* integer
+  via `std::uniform_int_distribution<uint32_t>(0, totalWeight - 1)` and reuses FAudio's own `>`
+  boundary check verbatim -- for two entries of equal weight (e.g. `weightMin=0,weightMax=1` on
+  both), this always resolves to entry 0, never entry 1, a total (not statistical) bias, not just
+  a rounding-error skew. Every existing test for this code path (`PlayWeightedVariationFavors...`,
+  `...WithAllWeightOnFirstEntry...`, `...WithFourEntriesMatchesIndependentReplica...`) uses
+  intentionally skewed weights (e.g. 1 vs. 99), which happens to mask the bug -- the discretization
+  error is proportionally tiny at that skew, so none of them would fail. `P11-XACT-002`'s own
+  `WeightedPickExcluding` had the identical bug and was fixed there (see its note above) by
+  changing the comparison to `next >= (remaining - weight)`; the same one-line fix (plus a new
+  small/equal-weight regression test, mirroring `PlayResolvesTrackVariationEventToOneOfTheAuthored
+  Candidates`'s discovery method) should close this out. *Files:* `Cue.cpp` (the
+  `SOUND_VARIATION_TYPE` branch inside `Play()`), `CueTests.cpp`.
 
 ## Phase 11.8 — `FrameworkDispatcher` Audio-pump parity
 

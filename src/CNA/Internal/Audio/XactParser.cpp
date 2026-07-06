@@ -191,7 +191,10 @@ namespace CNA::Internal::Audio
             else if (type == FACTEVENT_PLAYWAVETRACKVARIATION ||
                      type == FACTEVENT_PLAYWAVETRACKEFFECTVARIATION)
             {
-                // Complex track variation — pick first entry
+                // P11-XACT-002: retains the FULL candidate list + selection algorithm (not just
+                // entry 0) so Cue::Play() can run FAudio's real per-instance selection
+                // (FACT_internal.c's FACT_INTERNAL_GetNextWave) instead of always picking the
+                // first authored entry.
                 ctx.u8(); // flags
                 uint8_t loopCnt = ctx.u8();
                 ctx.u16(); ctx.u16(); // position, angle
@@ -204,20 +207,30 @@ namespace CNA::Internal::Audio
                     ctx.u16(); // variationFlags
                 }
 
+                // Matches FAudio's real parse (FACT_internal.c:2303-2322): evtInfo's low 16 bits
+                // are wave_count, bits 16-18 are variation_type (VARIATION_TYPE_MASK = 0x7).
                 uint32_t evtInfoInner = ctx.u32();
                 uint16_t waveCount = static_cast<uint16_t>(evtInfoInner & 0xFFFF);
+                auto variationType = static_cast<XsbTrackVariationType>((evtInfoInner >> 16) & 0x07u);
                 ctx.skip(4); // unknown
 
                 uint16_t waveIdx = 0xFFFF;
                 uint8_t  wbIdx   = 0xFF;
+                std::vector<XsbTrackVariationEntry> entries;
+                entries.reserve(waveCount);
                 for (uint16_t j = 0; j < waveCount; ++j)
                 {
-                    uint16_t wi = ctx.u16();
-                    uint8_t  wb = ctx.u8();
-                    ctx.u8(); ctx.u8(); // min/max weight
+                    uint16_t wi        = ctx.u16();
+                    uint8_t  wb        = ctx.u8();
+                    uint8_t  minWeight = ctx.u8();
+                    uint8_t  maxWeight = ctx.u8();
+                    // FACT_internal.c:2321: weights[j] = maxWeight - minWeight.
+                    entries.push_back({wi, wb, static_cast<uint8_t>(maxWeight - minWeight)});
                     if (j == 0) { waveIdx = wi; wbIdx = wb; }
                 }
                 result = {wbIdx, waveIdx, loopCnt, trackVol};
+                result.trackVariationEntries = std::move(entries);
+                result.trackVariationType    = variationType;
                 break;
             }
             else if (type == FACTEVENT_PITCH || type == FACTEVENT_VOLUME ||

@@ -150,6 +150,35 @@ namespace CNA::Internal::Audio
 
     // ── XSB ─────────────────────────────────────────────────────────────────
 
+    /**
+     * @brief Selection algorithm for a `PlayWaveTrackVariation`-family event's candidate wave
+     * list, matching FAudio's own `variation_type` values (`FACT_internal.h`).
+     */
+    enum class XsbTrackVariationType : uint8_t
+    {
+        /** @brief Cycle through entries in authored order, wrapping at the end. */
+        Ordered = 0,
+        /** @brief Like Ordered, but the starting point is chosen by a weighted random pick. */
+        OrderedFromRandom = 1,
+        /** @brief Weighted random pick among all entries every time. */
+        Random = 2,
+        /** @brief Weighted random pick, excluding whichever entry was just selected. */
+        RandomNoRepeats = 3,
+        /** @brief Same selection rule as RandomNoRepeats (FAudio treats both identically). */
+        Shuffle = 4,
+    };
+
+    /** @brief One candidate wave entry in a `PlayWaveTrackVariation`-family event's variation list. */
+    struct XsbTrackVariationEntry
+    {
+        /** @brief Index of the wave within its wave bank. */
+        uint16_t waveIndex;
+        /** @brief Index of the wave bank this wave belongs to. */
+        uint8_t  wavebankIndex;
+        /** @brief Selection weight (authored maxWeight - minWeight), matching FAudio's own conversion. */
+        uint8_t  weight;
+    };
+
     /** @brief Reference to a single wave, as resolved from a sound's track events. */
     struct XsbWaveRef
     {
@@ -177,6 +206,20 @@ namespace CNA::Internal::Audio
          * filterType != 0xFF.
          */
         uint8_t  filterQFactorRaw = 0;
+
+        /**
+         * @brief Full candidate list for a `PlayWaveTrackVariation`-family event
+         * (`P11-XACT-002`), matching FAudio's own per-instance selection
+         * (`FACT_internal.c`'s `FACT_INTERNAL_GetNextWave`). Empty for a plain `PlayWave`/
+         * `PlayWaveEffectVariation` event -- in that case @ref waveIndex/@ref wavebankIndex
+         * above are used directly, unchanged. When non-empty, the real selection algorithm
+         * (@ref trackVariationType) is run once at `Cue::Play()` time and the chosen entry
+         * overwrites @ref waveIndex/@ref wavebankIndex, instead of this struct's own
+         * always-entry-0 parse-time fallback.
+         */
+        std::vector<XsbTrackVariationEntry> trackVariationEntries;
+        /** @brief Selection algorithm for @ref trackVariationEntries; meaningless when that list is empty. */
+        XsbTrackVariationType trackVariationType = XsbTrackVariationType::Ordered;
     };
 
     /** @brief One sound entry parsed from a .XSB sound bank file. */

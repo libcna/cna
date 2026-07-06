@@ -40,6 +40,97 @@ namespace Microsoft::Xna::Framework::Audio
             return rng;
         }
 
+        // P11-XACT-002: weighted-random pick among entries[0..size), optionally excluding one
+        // index (pass entries.size() to exclude nothing), reused by SelectTrackVariationIndex
+        // below for every algorithm that needs a weighted draw. Matches FAudio's own
+        // weighted-lottery scan direction (FACT_internal.c's repeated downward scan, comparing
+        // against `max - weight`), both in FACT_INTERNAL_GetNextWave and the sound-level
+        // variation table Cue::Play() already implements elsewhere in this file. FAudio's own
+        // `next` is a *continuous* float draw (`FACT_INTERNAL_rng() * max`), so its boundary
+        // check `next > (max - weight)` has zero probability of landing exactly on the boundary;
+        // this uses a discrete integer draw instead, so the boundary comparison must be `>=` (not
+        // `>`) to give the boundary value itself to the entry being scanned, or every entry after
+        // the first one checked (i.e. every index below the highest, when weights are small
+        // enough for exact ties to be reachable at all) silently loses its lowest-value roll to
+        // whichever entry is checked immediately after it -- e.g. two equal-weight-1 entries with
+        // a plain `>` and dist(0, total-1) = dist(0, 1) never selects the higher index at all
+        // (next=0 falls through to entry 0, and next=1 also matches entry 0's own `next > 0`
+        // check before it ever gets excluded), a total, not approximate, bias.
+        std::size_t WeightedPickExcluding(
+            const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
+            std::size_t exclude)
+        {
+            uint32_t total = 0;
+            for (std::size_t i = 0; i < entries.size(); ++i)
+                if (i != exclude) total += entries[i].weight;
+
+            if (total == 0)
+            {
+                // Matches FAudio's own degenerate all-zero-weight behavior: its scan's
+                // `next > (max - weight)` is always `0 > 0` (false) when max stays 0 throughout,
+                // so the loop falls through without ever assigning a new valuei -- CNA has no
+                // equivalent "leave it unchanged" fallback the first time (there is no prior
+                // value yet), so this returns the first non-excluded entry as the closest
+                // defined equivalent.
+                for (std::size_t i = 0; i < entries.size(); ++i)
+                    if (i != exclude) return i;
+                return 0;
+            }
+
+            std::uniform_int_distribution<uint32_t> dist(0, total - 1);
+            const uint32_t next = dist(Rng());
+            uint32_t remaining = total;
+            for (std::size_t i = entries.size(); i > 0; --i)
+            {
+                const std::size_t idx = i - 1;
+                if (idx == exclude) continue;
+                if (next >= (remaining - entries[idx].weight)) return idx;
+                remaining -= entries[idx].weight;
+            }
+            return 0;
+        }
+
+        // P11-XACT-002: selects one candidate index from a PlayWaveTrackVariation-family event's
+        // full entry list, matching FAudio's real per-instance selection exactly -- a genuine
+        // two-step process (FACT_internal.c:730-762's one-time initial value, immediately
+        // followed by FACT_INTERNAL_GetNextWave's own unconditional re-selection, FACT_internal.c
+        // :199-247), not a single pick. CNA only ever resolves a track-variation event once per
+        // Cue::Play() (matching the existing "first PlayWave event" simplification -- this does
+        // NOT implement true per-loop-iteration re-selection, which would need a much larger
+        // per-frame XACT event-scheduling rewrite CNA doesn't have), so this reproduces exactly
+        // the first composite value a fresh FAudio sound instance would compute.
+        std::size_t SelectTrackVariationIndex(
+            const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
+            CNA::Internal::Audio::XsbTrackVariationType type)
+        {
+            using CNA::Internal::Audio::XsbTrackVariationType;
+
+            // Step 1: one-time initial value. Pure Ordered starts at -1 (as uint32_t, wraps to
+            // entries.size()-1 here so step 2's +1 lands on exactly 0); every other algorithm
+            // does an unconditional weighted pick (exclude = entries.size(), i.e. exclude
+            // nothing -- nothing has been selected yet).
+            std::size_t valuei = (type == XsbTrackVariationType::Ordered)
+                ? (entries.size() - 1)
+                : WeightedPickExcluding(entries, entries.size());
+
+            // Step 2: GetNextWave's own selection, unconditionally re-run on top of step 1.
+            switch (type)
+            {
+                case XsbTrackVariationType::Ordered:
+                case XsbTrackVariationType::OrderedFromRandom:
+                    valuei = (valuei + 1) % entries.size();
+                    break;
+                case XsbTrackVariationType::Random:
+                    valuei = WeightedPickExcluding(entries, entries.size());
+                    break;
+                case XsbTrackVariationType::RandomNoRepeats:
+                case XsbTrackVariationType::Shuffle:
+                    valuei = WeightedPickExcluding(entries, valuei);
+                    break;
+            }
+            return valuei;
+        }
+
         // Evaluates one RPC (Runtime Parameter Control) curve at a given variable value, matching
         // FAudio's FACT_INTERNAL_CalculateRPC (FACT_internal.c): clamps to the first/last point's
         // Y outside the curve's domain, otherwise piecewise-interpolates between the bracketing
@@ -779,13 +870,27 @@ namespace Microsoft::Xna::Framework::Audio
         {
             if (!eng) continue;
 
-            const std::string& wbName = (waveRef.wavebankIndex < xsb->wavebankNames.size())
-                ? xsb->wavebankNames[waveRef.wavebankIndex] : "";
+            // P11-XACT-002: a PlayWaveTrackVariation-family event's real candidate wave, chosen
+            // via FAudio's own selection algorithm, instead of waveRef.wavebankIndex/waveIndex's
+            // always-entry-0 parse-time fallback. Empty entries means a plain PlayWave/
+            // PlayWaveEffectVariation event -- use waveRef's own fields directly, unchanged.
+            uint8_t  effectiveWavebankIndex = waveRef.wavebankIndex;
+            uint16_t effectiveWaveIndex     = waveRef.waveIndex;
+            if (!waveRef.trackVariationEntries.empty())
+            {
+                const std::size_t picked =
+                    SelectTrackVariationIndex(waveRef.trackVariationEntries, waveRef.trackVariationType);
+                effectiveWavebankIndex = waveRef.trackVariationEntries[picked].wavebankIndex;
+                effectiveWaveIndex     = waveRef.trackVariationEntries[picked].waveIndex;
+            }
+
+            const std::string& wbName = (effectiveWavebankIndex < xsb->wavebankNames.size())
+                ? xsb->wavebankNames[effectiveWavebankIndex] : "";
 
             WaveBank* wb = wbName.empty() ? nullptr : eng->FindWaveBank(wbName);
             if (!wb) continue;
 
-            const SoundEffect* sf = wb->GetSoundEffect(waveRef.waveIndex);
+            const SoundEffect* sf = wb->GetSoundEffect(effectiveWaveIndex);
             if (!sf) continue;
 
             auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
@@ -974,6 +1079,13 @@ namespace Microsoft::Xna::Framework::Audio
     void Cue::INTERNAL_seedRngForTest(unsigned int seed)
     {
         Rng().seed(seed);
+    }
+
+    std::size_t Cue::INTERNAL_selectTrackVariationIndexForTest(
+        const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
+        CNA::Internal::Audio::XsbTrackVariationType type)
+    {
+        return SelectTrackVariationIndex(entries, type);
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────

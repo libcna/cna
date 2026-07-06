@@ -3111,6 +3111,328 @@ TEST(CueTest, PlayInteractiveVariationWithValueOutsideAllRangesStaysPlayingButSi
     EXPECT_EQ(CueTestAccess::CategoryIndex(*cue), 0xFFFF);
 }
 
+constexpr const char* kTrackVariationWaveBankName = "TrackVariationWaveBank";
+
+// P11-XACT-002: two-entry COMPACT WaveBank backing the PlayWaveTrackVariation-family end-to-end
+// test below -- entry 0 ("short") is 200 frames (400 bytes) so a selection of it finishes almost
+// immediately, entry 1 ("long") is 1600 frames (3200 bytes, 8x longer) so a selection of it is
+// still clearly playing well after the short wave would have ended. Observing
+// MIX_GetTrackRemaining() against that gap is how the test infers which candidate got picked
+// without needing any other introspection hook.
+constexpr uint32_t kTrackVariationShortFrameCount = 200;
+constexpr uint32_t kTrackVariationLongFrameCount   = 1600;
+
+std::vector<uint8_t> BuildTrackVariationXwbFixtureBytes()
+{
+    constexpr uint32_t headerSize        = 48;
+    constexpr uint32_t bankDataSize      = 96;
+    constexpr uint32_t entryCount        = 2;
+    constexpr uint32_t entryMetaDataSize = 4;
+    constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+    constexpr uint32_t shortBytes        = kTrackVariationShortFrameCount * 2; // mono 16-bit
+    constexpr uint32_t longBytes         = kTrackVariationLongFrameCount * 2;
+    constexpr uint32_t waveDataLength    = shortBytes + longBytes;
+    constexpr uint32_t alignment         = 4;
+
+    const uint32_t segOffset[5] = {
+        headerSize,
+        headerSize + bankDataSize,
+        headerSize + bankDataSize + entryMetaSegSize,
+        headerSize + bankDataSize + entryMetaSegSize,
+        headerSize + bankDataSize + entryMetaSegSize,
+    };
+    const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'W', 'B', 'N', 'D' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU32(data, 1); // version
+    for (int i = 0; i < 5; ++i)
+    {
+        AppendU32(data, segOffset[i]);
+        AppendU32(data, segLength[i]);
+    }
+
+    AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+    AppendU32(data, entryCount);
+    AppendPadded(data, kTrackVariationWaveBankName, 64);
+    AppendU32(data, entryMetaDataSize);
+    AppendU32(data, 0); // entryNameElementSize
+    AppendU32(data, alignment);
+    const uint32_t compactFormat =
+          (0u)            // format tag: PCM
+        | (1u << 2)       // channels: mono
+        | (44100u << 5)   // sample rate
+        | (2u << 23)      // wBlockAlign: 2 bytes/sample
+        | (1u << 31);     // 16-bit
+    AppendU32(data, compactFormat);
+    for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+    AppendU32(data, 0u);                        // entry 0 ("short"): offset=0, deviation=0
+    AppendU32(data, shortBytes / alignment);     // entry 1 ("long"): offset=100 units, deviation=0
+
+    for (uint32_t i = 0; i < waveDataLength; ++i)
+        data.push_back(0x00); // 16-bit silence
+
+    return data;
+}
+
+// .xsb with one simple cue ("TrackVarCue") pointing at a COMPLEX sound with a single track whose
+// only event is a PlayWaveTrackVariation (FACTEVENT_PLAYWAVETRACKVARIATION) referencing both
+// TrackVariationWaveBank entries with equal weight and variation_type=Random (2) -- so
+// Cue::Play() must run the real selection algorithm (SelectTrackVariationIndex) rather than the
+// parser's always-entry-0 fallback. Regression fixture for P11-XACT-002.
+std::vector<uint8_t> BuildTrackVariationXsbFixtureBytes()
+{
+    constexpr uint32_t headerSize   = 74;
+    constexpr uint32_t bankNameSize = 64;
+    constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+    const uint32_t wavebankNameOffset = baseOffset;
+    const uint32_t soundOffset        = wavebankNameOffset + 64;
+    // flags+cat+vol+pitch+prio+len(9) + trackCount(1) + track-meta vol+code+filterData+freq(9)
+    constexpr uint32_t soundPrefixSize = 9 + 1 + 9;
+    // header(evtInfo+randomOffset+separator=7) + flags+loopCount+position+angle(6) +
+    // evtInfoInner+unknown(8) + 2 entries * (waveIdx+wbIdx+minWeight+maxWeight=5)
+    constexpr uint32_t eventSize       = 7 + 6 + 8 + 2 * 5;
+    constexpr uint32_t soundSize       = soundPrefixSize + 1 /*eventCount*/ + eventSize;
+    const uint32_t trackEventsOffset  = soundOffset + soundPrefixSize;
+    const uint32_t cueSimpleOffset    = soundOffset + soundSize;
+    const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+    const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+    const std::string cueName = "TrackVarCue";
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'S', 'D', 'B', 'K' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU16(data, 46); // contentVersion
+    AppendU16(data, 0);  // toolVersion
+    AppendU16(data, 0);  // CRC
+    for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+    AppendU8(data, 0);   // platform
+
+    AppendU16(data, 1); // cueSimpleCount
+    AppendU16(data, 0); // cueComplexCount
+    AppendU16(data, 0); // unknown
+    AppendU16(data, 0); // cueTotalAlign
+    AppendU8(data, 1);  // wavebankCount
+    AppendU16(data, 1); // soundCount
+    AppendU16(data, 0); // cueNameLength
+    AppendU16(data, 0); // unknown
+
+    AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+    AppendS32(data, -1); // cueComplexOffset
+    AppendS32(data, -1); // cueNameOffset (unused by the parser)
+    AppendS32(data, 0);  // unknown
+    AppendS32(data, -1); // variationOffset
+    AppendS32(data, 0);  // transitionOffset (unused)
+    AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+    AppendS32(data, 0);  // cueHashOffset (unused)
+    AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+    AppendS32(data, static_cast<int32_t>(soundOffset));
+
+    AppendPadded(data, "TrackVariationSoundBank", bankNameSize);
+    AppendPadded(data, kTrackVariationWaveBankName, 64);
+
+    // Sound: COMPLEX, one track, no filter/RPC.
+    AppendU8(data, 0x01); // SOUND_FLAG_COMPLEX
+    AppendU16(data, 0);   // categoryIndex
+    AppendU8(data, 0xFF); // volume raw byte
+    AppendU16(data, 0);   // pitchCents
+    AppendU8(data, 0);    // priority
+    AppendU16(data, 0);   // soundLength (skipped)
+    AppendU8(data, 1);    // trackCount
+
+    AppendU8(data, 0xFF); // track volume raw byte
+    AppendU32(data, trackEventsOffset);
+    AppendU16(data, 0);   // filterData: bit0=0, no filter
+    AppendU16(data, 0);   // frequency
+
+    // Track event array: one PlayWaveTrackVariation event with 2 candidate entries.
+    AppendU8(data, 1); // eventCount
+    AppendU32(data, 3u); // evtInfo: type=FACTEVENT_PLAYWAVETRACKVARIATION (3), timestamp=0
+    AppendU16(data, 0);   // randomOffset
+    AppendU8(data, 0xFF); // separator
+    AppendU8(data, 0);    // flags
+    AppendU8(data, 0);    // loopCount
+    AppendU16(data, 0);   // position
+    AppendU16(data, 0);   // angle
+    // evtInfoInner: waveCount=2 (low16), variation_type=Random (2, bits16-18).
+    AppendU32(data, 2u | (2u << 16));
+    AppendU32(data, 0); // unknown
+    // Entry 0: TrackVariationWaveBank entry 0 ("short"), weight = maxWeight-minWeight = 1.
+    AppendU16(data, 0); // waveIdx
+    AppendU8(data, 0);  // wbIdx
+    AppendU8(data, 0);  // minWeight
+    AppendU8(data, 1);  // maxWeight
+    // Entry 1: TrackVariationWaveBank entry 1 ("long"), weight = 1.
+    AppendU16(data, 1); // waveIdx
+    AppendU8(data, 0);  // wbIdx
+    AppendU8(data, 0);  // minWeight
+    AppendU8(data, 1);  // maxWeight
+
+    // Simple cue.
+    AppendU8(data, 0);
+    AppendU32(data, soundOffset);
+
+    AppendU32(data, cueNameStrOffset);
+    AppendU16(data, 0);
+
+    AppendCStr(data, cueName);
+
+    return data;
+}
+
+WaveBank& TrackVariationWaveBank()
+{
+    static WaveBank wb(&SharedEngine(), WriteFixture(
+        "cna_cue_test", "trackvariation.xwb", BuildTrackVariationXwbFixtureBytes()));
+    return wb;
+}
+
+SoundBank& TrackVariationBank()
+{
+    (void)TrackVariationWaveBank(); // must be registered with the engine before GetCue()/Play()
+    static SoundBank bank(&SharedEngine(), WriteFixture(
+        "cna_cue_test", "trackvariation.xsb", BuildTrackVariationXsbFixtureBytes()));
+    return bank;
+}
+
+// ===================== PlayWaveTrackVariation-family selection (P11-XACT-002) =====================
+//
+// FAudio's real per-instance selection (FACT_internal.c:730-762's one-time `valuei` init,
+// immediately followed by FACT_internal.c:190-247's `FACT_INTERNAL_GetNextWave` unconditional
+// re-selection) is a genuine two-step composite, not a single pick. These tests exercise
+// `Cue::INTERNAL_selectTrackVariationIndexForTest`'s exact reproduction of that first-activation
+// value directly, without needing a full XACT fixture for every algorithm. CNA resolves a
+// track-variation event once per fresh `Cue::Play()` (matching the existing "first PlayWave
+// event" simplification, not true per-loop-iteration re-selection, which would need a much larger
+// per-frame XACT event-scheduling rewrite CNA doesn't have) -- there is no persistent cross-
+// `Play()` selection state, so every case here is a "first activation" outcome.
+
+TEST(CueTest, SelectTrackVariationIndexOrderedAlwaysStartsAtEntryZero)
+{
+    using CNA::Internal::Audio::XsbTrackVariationEntry;
+    using CNA::Internal::Audio::XsbTrackVariationType;
+    const std::vector<XsbTrackVariationEntry> entries = {
+        {0, 0, 10}, {1, 0, 10}, {2, 0, 10},
+    };
+    // Deterministic -- no RNG involved for pure Ordered's one-time init (-1, wrapping to 0 via
+    // GetNextWave's own +1), so every fresh call must land on entry 0, not just "usually".
+    for (int i = 0; i < 5; ++i)
+        EXPECT_EQ(CueTestAccess::SelectTrackVariationIndex(entries, XsbTrackVariationType::Ordered), 0u);
+}
+
+TEST(CueTest, SelectTrackVariationIndexOrderedWithSingleEntryStaysAtZero)
+{
+    using CNA::Internal::Audio::XsbTrackVariationEntry;
+    using CNA::Internal::Audio::XsbTrackVariationType;
+    const std::vector<XsbTrackVariationEntry> entries = { {0, 0, 10} };
+    EXPECT_EQ(CueTestAccess::SelectTrackVariationIndex(entries, XsbTrackVariationType::Ordered), 0u);
+}
+
+TEST(CueTest, SelectTrackVariationIndexOrderedFromRandomIsNotAlwaysEntryZero)
+{
+    // Distinguishes real randomness (the one-time weighted-random initial offset) from a stuck/
+    // regressed implementation that silently behaves like plain Ordered (always 0) -- over 50
+    // independent fresh "instances", a real random offset must eventually land somewhere else.
+    using CNA::Internal::Audio::XsbTrackVariationEntry;
+    using CNA::Internal::Audio::XsbTrackVariationType;
+    const std::vector<XsbTrackVariationEntry> entries = {
+        {0, 0, 10}, {1, 0, 10}, {2, 0, 10},
+    };
+    CueTestAccess::SeedRng(12345);
+    bool sawNonZero = false;
+    for (int i = 0; i < 50; ++i)
+    {
+        const auto picked =
+            CueTestAccess::SelectTrackVariationIndex(entries, XsbTrackVariationType::OrderedFromRandom);
+        ASSERT_LT(picked, entries.size());
+        if (picked != 0) sawNonZero = true;
+    }
+    EXPECT_TRUE(sawNonZero);
+}
+
+TEST(CueTest, SelectTrackVariationIndexRandomFavorsHigherWeightEntryStatistically)
+{
+    // Same 80%-threshold style as PlayWeightedVariationFavorsHigherWeightEntryStatistically
+    // above, for the equivalent per-track selection algorithm.
+    using CNA::Internal::Audio::XsbTrackVariationEntry;
+    using CNA::Internal::Audio::XsbTrackVariationType;
+    const std::vector<XsbTrackVariationEntry> entries = { {0, 0, 1}, {1, 0, 99} };
+    CueTestAccess::SeedRng(777);
+    constexpr int kIterations = 200;
+    int highWeightPicks = 0;
+    for (int i = 0; i < kIterations; ++i)
+        if (CueTestAccess::SelectTrackVariationIndex(entries, XsbTrackVariationType::Random) == 1)
+            ++highWeightPicks;
+    EXPECT_GT(highWeightPicks, kIterations * 0.8);
+}
+
+// RandomNoRepeats/Shuffle's real "exclude the previous pick" semantic only ever excludes the
+// *step-1* throwaway draw here (there is no genuine cross-Play() previous pick to exclude, per
+// this task's own documented scope) -- with only 2 entries, excluding step 1's (heavily
+// weight-favored) draw *inverts* the naive weight expectation for the final pick, so this
+// deliberately does not assert a specific ratio, only that the algorithm explores more than one
+// value and never goes out of bounds (a stuck-on-one-value or crashing regression would fail this).
+TEST(CueTest, SelectTrackVariationIndexRandomNoRepeatsAndShuffleStayInBoundsAndVary)
+{
+    using CNA::Internal::Audio::XsbTrackVariationEntry;
+    using CNA::Internal::Audio::XsbTrackVariationType;
+    const std::vector<XsbTrackVariationEntry> entries = { {0, 0, 1}, {1, 0, 1}, {2, 0, 98} };
+    CueTestAccess::SeedRng(4242);
+    constexpr int kIterations = 200;
+    bool sawNoRepeatsVariety = false, sawShuffleVariety = false;
+    std::size_t firstNoRepeats = entries.size(), firstShuffle = entries.size();
+    for (int i = 0; i < kIterations; ++i)
+    {
+        const auto noRepeatsPick =
+            CueTestAccess::SelectTrackVariationIndex(entries, XsbTrackVariationType::RandomNoRepeats);
+        const auto shufflePick =
+            CueTestAccess::SelectTrackVariationIndex(entries, XsbTrackVariationType::Shuffle);
+        ASSERT_LT(noRepeatsPick, entries.size());
+        ASSERT_LT(shufflePick, entries.size());
+        if (firstNoRepeats == entries.size()) firstNoRepeats = noRepeatsPick;
+        if (firstShuffle == entries.size()) firstShuffle = shufflePick;
+        if (noRepeatsPick != firstNoRepeats) sawNoRepeatsVariety = true;
+        if (shufflePick != firstShuffle) sawShuffleVariety = true;
+    }
+    EXPECT_TRUE(sawNoRepeatsVariety);
+    EXPECT_TRUE(sawShuffleVariety);
+}
+
+// End-to-end: proves Cue::Play() actually wires the new selection into wave resolution, not just
+// that the algorithm itself (tested directly above) is correct in isolation. "TrackVarCue"
+// references a 2-entry PlayWaveTrackVariation event pointing at two DISTINCT wave bank entries of
+// very different lengths (see BuildTrackVariationXwbFixtureBytes) -- which underlying wave got
+// resolved is observable via MIX_GetTrackRemaining() (frames left to play, ~the whole wave's
+// length immediately after Play()), since the two entries' lengths differ by a wide margin.
+TEST(CueTest, PlayResolvesTrackVariationEventToOneOfTheAuthoredCandidates)
+{
+    CueTestAccess::SeedRng(2024);
+    bool sawShort = false, sawLong = false;
+    for (int i = 0; i < 40; ++i)
+    {
+        auto cue = std::unique_ptr<Cue>(TrackVariationBank().GetCue("TrackVarCue"));
+        cue->Play();
+        auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+        if (!inst)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(*inst);
+        ASSERT_NE(track, nullptr);
+        const Sint64 remaining = MIX_GetTrackRemaining(track);
+        // Long entry is 8x the short entry's frame count (see the fixture builder) -- comfortably
+        // distinguishable by a simple midpoint threshold regardless of exact mixer startup slop.
+        if (remaining > kTrackVariationShortFrameCount * 4) sawLong = true; else sawShort = true;
+        cue->Stop(AudioStopOptions::Immediate);
+    }
+    EXPECT_TRUE(sawShort);
+    EXPECT_TRUE(sawLong);
+}
+
 // ===================== RPC volume/pitch (P9-XACT-006/007/008/009) =====================
 //
 // fixture.xgs's two RPC curves (see BuildXgsFixtureBytes/kVolumeRpcCode/kPitchRpcCode) are both

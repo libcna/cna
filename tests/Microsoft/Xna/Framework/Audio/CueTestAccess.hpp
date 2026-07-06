@@ -37,5 +37,15 @@ namespace Microsoft::Xna::Framework::Audio
         // so a test can deterministically predict (by independently replicating the same
         // std::mt19937 + std::uniform_int_distribution draw) which entry Cue::Play() will pick.
         static void SeedRng(unsigned int seed) { Cue::INTERNAL_seedRngForTest(seed); }
+
+        // P11-XACT-002: direct access to the PlayWaveTrackVariation-family selection algorithm,
+        // for unit-testing Ordered/OrderedFromRandom/Random/RandomNoRepeats/Shuffle behavior
+        // against a synthetic entry list without a full XACT fixture.
+        static std::size_t SelectTrackVariationIndex(
+            const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
+            CNA::Internal::Audio::XsbTrackVariationType type)
+        {
+            return Cue::INTERNAL_selectTrackVariationIndexForTest(entries, type);
+        }
     };
 }
