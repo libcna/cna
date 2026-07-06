@@ -640,10 +640,32 @@ enforced by `PublicApiInputCompileTests`. **Members reviewed:** 19/19 seam metho
 (perfect, no gap). **Behavior verified:** full seam faked + tested; no XNA-layer leak. **Remaining risk:**
 real-hardware actuation is HW-gated (`[!]`, Phase 11) — the fake proves translation/bookkeeping only.
 
-## A7-004 — `SdlInputBridge` `[ ]`
-- [ ] CNA `SdlInputBridge.hpp`/`.cpp`; tests: all `SdlInputBridge*` + golden + fuzz.
-- [ ] Members: `ProcessEvent` (every SDL case), init/reset, window resolution, UTF-8 decode, id maps, test
+## A7-004 — `SdlInputBridge` `[x]`
+- [x] CNA `SdlInputBridge.hpp`/`.cpp`; tests: all `SdlInputBridge*` + golden + fuzz.
+- [x] Members: `ProcessEvent` (every SDL case), init/reset, window resolution, UTF-8 decode, id maps, test
   hooks. Verify each event case + helper; per-case test.
+
+**Result (2026-07-06):** Public method set reviewed. **`ProcessEvent`** (190 test refs) — its **17 SDL event
+cases** were enumerated and each shown tested in the earlier P8-001 (mouse/keyboard/text/touch/gamepad),
+with the ignored-event no-op pinned (`UnconsumedResizeDisplayAndQuitEventsDoNotAffectInputState`); the
+UTF-8 decoder, control-char synthesis, Ctrl+V suppression, and window resolution were verified in the
+Phase-7/8 passes and are stressed by the deterministic **fuzz** (5000 events) + **golden** exact-state
+scripts. **Gamepad ops** (`SetVibration`, `SetTriggerVibration`, `SetLightBar`, `GetGUID`,
+`FormatGamePadGUIDEXT`, `GetGyro`, `GetAccelerometer`, `GetCapabilities`) are reached via `GamePad`'s public
+EXT methods over the fake backend (Phase-4 tests: vibration clamp/NaN, LED, sensor, GUID format).
+`GetKeyFromScancode` ← `Keyboard::GetKeyFromScancodeEXT`. **Test hooks** (`ResetForTests` 4,
+`SetScancodeModeForTests` 5, `SetGamepadCountForTests` 2, `EnsureGamepadSubsystemInitialized` 2,
+`ParseGamepadCountForTests`) all exercised; `SetSdlGamepadBackendForTests` installs the fake (used
+throughout the FakeGamepad suites). **Members reviewed:** all public methods. **Files changed:** none
+(perfect, no gap; the most heavily audited file — P8-001..008 + fuzz + golden). **Behavior verified:**
+every event case + helper covered. **Remaining risk:** none.
+
+---
+
+**Phase 7 complete (2026-07-06):** all 4 internal classes re-audited. **Removed dead code**
+(`InputManager::GetGamePadState`, zero callers). Confirmed: GestureDetector's 4 methods map FNA internals
+(byte-identical logic, Phase 6); `ISdlGamepadBackend`'s 19-method seam is fully faked with no XNA-layer leak;
+`SdlInputBridge` public surface fully covered (17 event cases + helpers + hooks).
 
 ---
 
