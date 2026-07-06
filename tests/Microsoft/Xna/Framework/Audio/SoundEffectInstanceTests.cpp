@@ -1300,3 +1300,79 @@ TEST_F(SoundEffectInstanceTest, LowPassFilterSurvivesMoveConstruction)
     EXPECT_NEAR(pcm[0], 2.0f, 0.01f);
     EXPECT_NEAR(pcm[1], 2.0f, 0.01f);
 }
+
+// ===================== Bounded loop region real playback behavior (P10-LOOP-003/004) =====================
+//
+// CHECKLIST.md's CP-17 entry and this file's own prior comments asserted that
+// MIX_PROP_PLAY_MAX_FRAME_NUMBER "also truncates the very first, pre-loop playthrough... not just
+// later iterations" -- but that claim was never actually verified against real decoded audio (the
+// note explicitly said so: "the actual mixed effect can't be black-box-verified... without
+// decoding the real audio output"). It no longer holds: MIX_SetTrackRawCallback lets a test
+// observe the real decoded PCM in playback order directly, and doing so here shows the intro
+// plays exactly once, then only the loop region repeats -- matching XNA/XAudio2's
+// LoopBegin/LoopLength semantics exactly, via nothing more than the LOOP_START_FRAME_NUMBER +
+// MAX_FRAME_NUMBER combination already in place. See plan_audio.md's P10-LOOP-003/004 note for
+// the corrected finding and the now-stale CHECKLIST.md/docs rows this invalidates.
+namespace
+{
+    struct BoundedLoopRawCallbackCtx
+    {
+        std::atomic<long long> totalFrames{0};
+        std::atomic<bool> sawLoopRegion{false};
+        std::atomic<bool> introSeenAfterLoopRegionStarted{false};
+    };
+
+    // Classifies each raw-callback buffer by its first sample: the fixture below fills the intro
+    // region with a strongly positive value and the loop region with a strongly negative one, so
+    // a buffer's very first sample unambiguously identifies which region it came from (channels=1
+    // means `samples` here IS frame count, matching MIX_TrackMixCallback's own convention --
+    // see ProcessFilterState's identical `samples == frames * channels` usage above).
+    void SDLCALL BoundedLoopRawCallback(void* userdata, MIX_Track*, const SDL_AudioSpec*,
+                                         float* pcm, int samples)
+    {
+        auto* ctx = static_cast<BoundedLoopRawCallbackCtx*>(userdata);
+        if (samples <= 0) return;
+        ctx->totalFrames.fetch_add(samples);
+
+        const bool isIntroSample = pcm[0] > 0.5f;
+        const bool isLoopSample  = pcm[0] < -0.5f;
+        if (isLoopSample) ctx->sawLoopRegion.store(true);
+        if (isIntroSample && ctx->sawLoopRegion.load())
+            ctx->introSeenAfterLoopRegionStarted.store(true);
+    }
+}
+
+TEST_F(SoundEffectInstanceTest, BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion)
+{
+    REQUIRE_DEVICE();
+    constexpr int introFrames = 200; // strongly positive samples
+    constexpr int loopFrames  = 100; // strongly negative samples
+    std::vector<unsigned char> pcm((introFrames + loopFrames) * 2);
+    int16_t* samples = reinterpret_cast<int16_t*>(pcm.data());
+    for (int i = 0; i < introFrames; ++i) samples[i] = 30000;
+    for (int i = 0; i < loopFrames; ++i) samples[introFrames + i] = -30000;
+
+    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Mono,
+                        introFrames, loopFrames);
+    SoundEffectInstance inst = effect.CreateInstance();
+    inst.setIsLoopedProperty(true);
+    inst.Play();
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+
+    BoundedLoopRawCallbackCtx ctx;
+    MIX_SetTrackRawCallback(track, BoundedLoopRawCallback, &ctx);
+
+    // Long enough for the real mixing thread to wrap the tiny 100-frame loop region many times
+    // over (100 frames is ~2.3ms at 44100Hz) -- proving genuine repeated looping, not a single
+    // pass that then stalls or falls silent.
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    inst.Stop(true);
+
+    EXPECT_FALSE(ctx.introSeenAfterLoopRegionStarted.load())
+        << "the pre-loop intro region was observed again after the loop region had already "
+           "started playing -- it must play exactly once, then only the loop region repeats";
+    EXPECT_GT(ctx.totalFrames.load(), static_cast<long long>(loopFrames) * 5)
+        << "expected several real wraps of the loop region within the observation window";
+}

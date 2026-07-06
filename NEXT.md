@@ -22,7 +22,7 @@ framework/runtime, not a game.
   task list) is fully closed, plus 4 further user-directed follow-ups. **Phase 10**
   (`plan_audio.md`'s "Phase 10 — Audio correctness hardening and XNA/XACT parity", ~90 task IDs
   across 12 groups) is the active, intentionally open-ended task list — **not** a fixed closed
-  set like Phase 9. 24 Phase 10 items are closed so far (kickoff pass, four further self-directed
+  set like Phase 9. 25 Phase 10 items are closed so far (kickoff pass, four further self-directed
   rounds, and an autonomous unattended continuation started 2026-07-06 covering §8's ordered
   candidate list); every remaining candidate is either real feature/behavior-decision work or a
   large mechanical audit (see §8). **Autonomous session note (2026-07-06/07):** the user is away
@@ -45,22 +45,23 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P10-FILTER-002/003/004/006`, on top of
-  `P10-RPC-004`/`P10-RPC-007`). EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer
-  linked. `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt this pass (no Audio public
-  API surface touched beyond `Cue`/`SoundEffectInstance` internals, not their signatures).
-- **Tests:** `CnaTests` whole-suite count is **3338 / 3340 pass** (2 skipped:
+- **Build:** clean, rebuilt and reverified this pass (`P10-LOOP-003/004`, on top of
+  `P10-FILTER-002/003/004/006` and `P10-RPC-004`/`P10-RPC-007`). EasyGL backend (Linux default),
+  `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets not
+  rebuilt this pass (no Audio public API surface touched beyond internals/comments, not
+  signatures).
+- **Tests:** `CnaTests` whole-suite count is **3339 / 3341 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected — not Audio; the 7-test increase since the last sync is
-  `P10-FILTER-002/003/004/006`'s new `SoundEffectInstanceTests.cpp` (5) + `CueTests.cpp` (2)
-  coverage). The audio-scoped subset (§7's `--gtest_filter` list) was previously **430 / 430
-  pass** under a dedicated one-off ASan+UBSan build (repeat-stressed on dispose/fire-and-forget/
-  callback-lifetime/stream-pause-resume risk areas — zero leaks/errors) and clean under a
-  dedicated ThreadSanitizer build (see §5); not rerun under a fresh ASan/TSan build this pass
-  (plain Debug build only) -- full audio-scoped filter (now 464 tests) verified green under plain
-  Debug, including a plain-Debug rerun of the existing (ThreadSanitizer-precedent)
-  `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread` test, still passing after adding the new
-  live filter-coefficient write path.
+  hardware-dependent, expected — not Audio; the 1-test increase since the last sync is
+  `P10-LOOP-003/004`'s new `SoundEffectInstanceTests.cpp` real-decoded-audio regression test).
+  The audio-scoped subset (§7's `--gtest_filter` list) was previously **430 / 430 pass** under a
+  dedicated one-off ASan+UBSan build (repeat-stressed on dispose/fire-and-forget/callback-
+  lifetime/stream-pause-resume risk areas — zero leaks/errors) and clean under a dedicated
+  ThreadSanitizer build (see §5); not rerun under a fresh ASan/TSan build this pass (plain Debug
+  build only) -- full audio-scoped filter (now 465 tests) verified green under plain Debug,
+  including a plain-Debug rerun of the existing (ThreadSanitizer-precedent)
+  `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread` test, still passing after
+  `P10-FILTER-002/003/004/006`'s new live filter-coefficient write path.
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
@@ -98,6 +99,21 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10" sections.
 
+- **`P10-LOOP-003/004`** — corrected finding, not the planned implementation. Before writing the
+  user-confirmed `MIX_SetTrackRawCallback` seek-back fix, verified whether the underlying premise
+  (that a bounded loop region truncates the pre-loop intro, `CP-17`) was even true -- it had only
+  ever been inferred from SDL3_mixer's property docs, never checked against real decoded audio (as
+  the original notes candidly admitted). A diagnostic using `MIX_SetTrackRawCallback` to observe
+  real decoded PCM in playback order on a synthetic intro/loop-region buffer showed the intro
+  already plays exactly once, then only the loop region repeats -- `SoundEffectInstance::Play()`'s
+  existing `LOOP_START_FRAME_NUMBER`+`MAX_FRAME_NUMBER` combination already matches FNA/XAudio2's
+  `LoopBegin`/`LoopLength` semantics exactly. **No raw-callback rewrite or other production
+  behavior change was needed.** Converted the diagnostic into a permanent regression test
+  (`BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion`); confirmed it has real
+  discriminating power by temporarily disabling the loop-region property-setting code and
+  observing the test correctly fail. Corrected the now-disproven claim in `CHECKLIST.md` (removed
+  the row) and `docs/xna-4-api-coverage.md` (moved to "Implemented"). Full suite 3339/3341 pass
+  (was 3338/3340), no regressions. See `plan_audio.md`.
 - **`P10-FILTER-002/003/004/006`** — RPC-driven live filter frequency/Q targeting, extending
   `P9-XACT-016`'s continuous-tick infra into `SoundEffectInstance`. New
   `SoundEffectInstance::INTERNAL_applyRpcFilterOverride(rpcFrequencyHz, rpcQFactor)` (negative
@@ -334,26 +350,20 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-`P10-RPC-002`/`P10-RPC-003`/`P10-RPC-004`/`P10-RPC-007`/`P10-FILTER-002/003/004/006` closed (24
-Phase 10 items total). The remaining open Phase 10 items are being worked through sequentially in
-this same autonomous pass, per scope decisions the user already confirmed on 2026-07-06: the
-raw-callback seek-back approach for `P10-LOOP-003/004`, and skip/reaffirm-only (no implementation)
-for `P10-PAN-002`. Roughly in increasing order of scope:
+`P10-RPC-002`/`P10-RPC-003`/`P10-RPC-004`/`P10-RPC-007`/`P10-FILTER-002/003/004/006`/
+`P10-LOOP-003/004` closed (25 Phase 10 items total; `P10-LOOP-003/004` closed with a corrected
+finding rather than the originally-planned raw-callback implementation -- see §3). The remaining
+open Phase 10 items are being worked through sequentially in this same autonomous pass, per the
+scope decision the user already confirmed on 2026-07-06: skip/reaffirm-only (no implementation)
+for `P10-PAN-002`.
 
-1. **`P10-LOOP-003/004`** — a per-track raw callback (`MIX_SetTrackRawCallback`, the unused
-   cooked-callback-adjacent slot) detecting crossing `loopStart+loopLength` and manually seeking
-   back to `loopStart`, so a bounded loop region plays its pre-loop intro once instead of
-   truncating it. Keeps `MIX_PlayTrack`, the filter cooked-callback, pause/resume, and
-   `MasterVolume` plumbing untouched (user-confirmed approach over the alternative full
-   `SDL_AudioStream` custom-playback rewrite).
-   *Files:* `SoundEffectInstance.{hpp,cpp}`.
-2. **`P10-AUDIT-002/003`** — the full per-member XNA 4.0 Audio API cross-reference at full
+1. **`P10-AUDIT-002/003`** — the full per-member XNA 4.0 Audio API cross-reference at full
    granularity (every property/method/constructor/enum-value/exception), bucketed into
    implemented/tested/approximate/unsupported. Only a class-level table exists today
    (`docs/xna-4-api-coverage.md`). Also the natural place to re-sync `CHECKLIST.md`'s now-stale
    `AttackTime`/`ReleaseTime`/filter-frequency/Q rows (see §2's note).
    *Files:* `docs/xna-4-api-coverage.md`, `plan_audio.md`, `CHECKLIST.md`.
-3. **`P10-PAN-002`** — user-confirmed to skip implementation and keep the documented accepted
+2. **`P10-PAN-002`** — user-confirmed to skip implementation and keep the documented accepted
    deviation (`CHECKLIST.md` CP-19, RFC-1); only needs reaffirming that note is still accurate, no
    code change.
 

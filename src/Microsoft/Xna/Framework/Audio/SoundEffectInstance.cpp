@@ -405,10 +405,14 @@ namespace Microsoft::Xna::Framework::Audio
             if (loopLength_ != 0)
             {
                 // SDL3_mixer has no separate "loop end" property distinct from "track end" --
-                // MAX_FRAME_NUMBER treats this position as EOF for the whole track, which also
-                // (unlike FNA/XAudio2's LoopBegin/LoopLength) truncates the very first, pre-loop
-                // playthrough at the loop's end instead of only subsequent iterations. Accepted
-                // as the closest achievable match; see CHECKLIST.md.
+                // MAX_FRAME_NUMBER treats this position as EOF for the whole track. Combined with
+                // LOOP_START_FRAME_NUMBER above, this matches FNA/XAudio2's LoopBegin/LoopLength
+                // exactly: the intro plays once, then only [loopStart_, loopStart_+loopLength_)
+                // repeats -- confirmed against real decoded audio via a raw SDL3_mixer callback
+                // (P10-LOOP-003/004, SoundEffectInstanceTests.cpp's
+                // BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion), correcting an
+                // earlier, never-actually-decoded-audio-verified assumption that this truncated
+                // the pre-loop intro too (see plan_audio.md's P10-LOOP-003/004 note).
                 SDL_SetNumberProperty(props, MIX_PROP_PLAY_MAX_FRAME_NUMBER,
                                        static_cast<Sint64>(loopStart_) + static_cast<Sint64>(loopLength_));
             }

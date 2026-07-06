@@ -3582,27 +3582,56 @@ restoration can be reverted.
 ## Phase 10.6 — Looping and playback cursor correctness
 
 * [x] P10-LOOP-001: Audit current `SoundEffect` loop-region behavior, especially bounded regions.
-  *Note:* Already documented (`CHECKLIST.md`): a bounded loop region (`loopStart`/`loopLength` not
-  covering the whole sound) truncates the *entire* track at `loopStart+loopLength`, including the
-  very first (pre-loop) playthrough -- not just subsequent loop iterations, unlike FNA/XAudio2's
-  `LoopBegin`/`LoopLength` semantics. `MIX_PROP_PLAY_MAX_FRAME_NUMBER` (the SDL3_mixer property
-  used) has no per-iteration distinction; the loop-*start* point itself
-  (`MIX_PROP_PLAY_LOOP_START_FRAME_NUMBER`) is applied correctly.
+  *Note:* Originally documented (`CHECKLIST.md`, this entry) as: a bounded loop region
+  (`loopStart`/`loopLength` not covering the whole sound) truncates the *entire* track at
+  `loopStart+loopLength`, including the very first (pre-loop) playthrough -- not just subsequent
+  loop iterations, unlike FNA/XAudio2's `LoopBegin`/`LoopLength` semantics. **Corrected by
+  P10-LOOP-003/004 below: this was never actually true.** The original claim was inferred from
+  reading `MIX_PROP_PLAY_MAX_FRAME_NUMBER`'s property documentation in isolation, without decoding
+  real mixed/raw audio to confirm it (P10-LOOP-002's own note candidly says so: "the actual mixed
+  effect can't be black-box-verified... without decoding the real audio output" -- and then never
+  did). `MIX_PROP_PLAY_LOOP_START_FRAME_NUMBER`'s own doc comment already said the combination
+  "lets one play an intro at the start of a track on the first iteration, but have a loop point
+  somewhere in the middle thereafter" -- i.e. exactly XAudio2's `LoopBegin`/`LoopLength` semantics
+  -- which P10-LOOP-003/004's real decoded-audio test now confirms is exactly what happens.
 * [x] P10-LOOP-002: Reproduce the bounded-loop-region-truncates-everything issue.
-  *Note:* Already reproduced and documented as the `CP-17` finding cited above; not re-reproduced
-  from scratch in this pass (would be redundant with the existing, already-verified finding).
-* [ ] P10-LOOP-003/004: Investigate/implement a custom playback cursor or stream-callback approach
+  *Note:* Originally marked closed as "already reproduced" via the `CP-17` finding above --
+  **but `CP-17` itself was never actually reproduced against real decoded audio**, only inferred
+  from property docs (see P10-LOOP-001's corrected note). Genuinely reproduced-or-not for the first
+  time by P10-LOOP-003/004 below, which found the issue does NOT reproduce.
+* [x] P10-LOOP-003/004: Investigate/implement a custom playback cursor or stream-callback approach
   that plays the intro once and loops only the loop segment.
-  *Status:* Open, not attempted in this pass. Real feature work: would likely need either (a) an
-  `SDL_AudioStream`-based custom playback path (bypassing `MIX_PlayTrack`'s built-in looping
-  entirely, similar to how `DynamicSoundEffectInstance` already drives its own stream) that
-  manually re-queues just the loop segment once the intro has played, or (b) a per-track "raw"
-  SDL3_mixer callback (the OTHER cooked-callback-adjacent slot, `MIX_SetTrackRawCallback`, not
-  currently used by CNA at all) that detects crossing `loopStart+loopLength` and manually seeks
-  back to `loopStart` rather than relying on `MIX_PROP_PLAY_MAX_FRAME_NUMBER`'s current
-  whole-track-bounding semantics. Both are nontrivial enough to warrant their own confirm-scope-
-  first pass before implementation, matching this branch's established practice for real feature
-  work.
+  *Note:* Closed this pass (autonomous Phase 10 continuation, 2026-07-06/07) -- **with a corrected
+  finding, not the planned implementation.** Before attempting either of the two approaches this
+  task originally proposed ((a) a custom `SDL_AudioStream` playback path, or (b) a
+  `MIX_SetTrackRawCallback`-based manual seek-back, the specific approach the user confirmed on
+  2026-07-06), first verified whether the underlying premise -- that
+  `MIX_PROP_PLAY_LOOP_START_FRAME_NUMBER` + `MIX_PROP_PLAY_MAX_FRAME_NUMBER` truncates the pre-loop
+  intro -- was even true, since P10-LOOP-001/002's notes admitted this had never been checked
+  against real decoded audio. Wrote a diagnostic using `MIX_SetTrackRawCallback` (a legitimate
+  public SDL3_mixer API, attached directly from the test via the existing
+  `SoundEffectInstanceTestAccess::GetTrack()` -- no production code needed to investigate) to
+  observe the actual decoded PCM in playback order on a synthetic buffer whose intro region is
+  filled with a strongly positive sample value and whose loop region is filled with a strongly
+  negative one. Result: the intro plays exactly once, then only the loop region repeats,
+  indefinitely -- i.e. `SoundEffectInstance::Play()`'s EXISTING property-setting code (unchanged
+  since `CP-17`) already implements FNA/XAudio2's `LoopBegin`/`LoopLength` semantics exactly. No
+  raw-callback rewrite, no custom playback path, and no other production code change was needed or
+  made (`Play()`'s loop-region comment was corrected to document the confirmed-correct behavior
+  instead of the disproven claim). Converted the diagnostic into a permanent regression test,
+  `SoundEffectInstanceTests.cpp`'s `BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion`:
+  asserts the intro-region sample value is never observed again once any loop-region sample has
+  been seen (`introSeenAfterLoopRegionStarted`), and that total observed frames comfortably exceed
+  several multiples of the tiny (100-frame) loop region within the 500ms observation window,
+  proving genuine repeated wrapping rather than a single pass. *Verify:* confirmed the test has
+  real discriminating power by temporarily short-circuiting `Play()`'s loop-region property-
+  setting block (`if (false && IsLooped_ && ...)`) and rerunning -- the test correctly fails
+  (`introSeenAfterLoopRegionStarted` becomes true, since the whole track then loops from frame 0
+  instead of `loopStart_`), then reverted. Full suite: 3339/3341 pass (was 3338/3340; the one new
+  test, no regressions), same 2 pre-existing hardware-only skips. Also corrected the now-disproven
+  claim in `CHECKLIST.md` (removed the deviation-table row entirely -- there is no deviation left
+  to document) and `docs/xna-4-api-coverage.md` (moved from "Approximate" to "Implemented", and
+  corrected the SDL3_mixer-backend-limitations bullet).
 * [x] P10-LOOP-005: Tests for full-sound loop / loop start>0 / loop length<full / loop
   start+length==full / invalid loop region / dispose-while-looping / stop-while-looping.
   *Note:* Closed this pass. Added, in `SoundEffectTests.cpp`:
@@ -3619,7 +3648,9 @@ restoration can be reverted.
   hardware-only skips) verified green.
 * [x] P10-LOOP-006: Document the limitation precisely if backend makes exact loop regions
   impossible.
-  *Note:* Already precisely documented, see P10-LOOP-001's citation.
+  *Note:* Moot as of P10-LOOP-003/004's corrected finding above -- the backend does NOT make exact
+  loop regions impossible; there is no limitation left to document. `CHECKLIST.md`/
+  `docs/xna-4-api-coverage.md` updated accordingly (see P10-LOOP-003/004's note).
 
 ## Phase 10.7 — DynamicSoundEffectInstance parity
 
