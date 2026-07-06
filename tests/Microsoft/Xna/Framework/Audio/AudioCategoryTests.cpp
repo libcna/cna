@@ -1028,8 +1028,14 @@ TEST(AudioCategoryTest, SetVolumeReappliesToAlreadyPlayingCueInstance)
         EXPECT_NO_THROW(cat.SetVolume(0.5f));
         const auto volumesAfterSetVolume = CueTestAccess::ActiveInstanceVolumes(*cue);
         ASSERT_EQ(volumesAfterSetVolume.size(), volumesAtPlay.size());
+        // P11-TEST-001: exact values, not just "decreased" -- VolCue's sound volume byte (0xFF,
+        // amplitude ~1.9977) combined with category volume 1.0 saturates the [0,1] clamp to
+        // exactly 1.0; combined with category volume 0.5 (~0.9989) does not saturate.
         for (std::size_t i = 0; i < volumesAtPlay.size(); ++i)
-            EXPECT_LT(volumesAfterSetVolume[i], volumesAtPlay[i]);
+        {
+            EXPECT_FLOAT_EQ(volumesAtPlay[i], 1.0f);
+            EXPECT_NEAR(volumesAfterSetVolume[i], 0.99887f, 1e-4f);
+        }
 
         cue->Stop(AudioStopOptions::Immediate);
     }
@@ -1073,10 +1079,18 @@ TEST(AudioCategoryTest, SetVolumeAppliesToAllActivePlayingCueInstancesInCategory
         const auto volBAfter = CueTestAccess::ActiveInstanceVolumes(*cueB);
         ASSERT_EQ(volAAfter.size(), volAAtPlay.size());
         ASSERT_EQ(volBAfter.size(), volBAtPlay.size());
+        // P11-TEST-001: exact values (see SetVolumeReappliesToAlreadyPlayingCueInstance's
+        // identical fixture/derivation) -- 1.0 (clamped) before, ~0.9989 (unclamped) after.
         for (std::size_t i = 0; i < volAAtPlay.size(); ++i)
-            EXPECT_LT(volAAfter[i], volAAtPlay[i]);
+        {
+            EXPECT_FLOAT_EQ(volAAtPlay[i], 1.0f);
+            EXPECT_NEAR(volAAfter[i], 0.99887f, 1e-4f);
+        }
         for (std::size_t i = 0; i < volBAtPlay.size(); ++i)
-            EXPECT_LT(volBAfter[i], volBAtPlay[i]);
+        {
+            EXPECT_FLOAT_EQ(volBAtPlay[i], 1.0f);
+            EXPECT_NEAR(volBAfter[i], 0.99887f, 1e-4f);
+        }
 
         cueA->Stop(AudioStopOptions::Immediate);
         cueB->Stop(AudioStopOptions::Immediate);
@@ -1211,7 +1225,11 @@ TEST(AudioCategoryTest, InstanceLimitReplaceOldestFadesOutVictimAndFadesInNewCue
         ASSERT_TRUE(cueB->getIsPlayingProperty());
         const auto volBAfter = CueTestAccess::ActiveInstanceVolumes(*cueB);
         ASSERT_FALSE(volBAfter.empty());
-        EXPECT_GT(volBAfter[0], 0.9f);
+        // P11-TEST-001: exact value, not just ">0.9" -- CatReplaceCueB's sound volume byte
+        // (0xFF, amplitude ~1.9977) combined with the "CatReplace" category's own authored
+        // volume byte (also 0xFF, ~1.9977) is ~3.99 pre-clamp, so the fully-faded-in target
+        // volume clamps to exactly 1.0.
+        EXPECT_FLOAT_EQ(volBAfter[0], 1.0f);
 
         cueB->Stop(AudioStopOptions::Immediate);
     }

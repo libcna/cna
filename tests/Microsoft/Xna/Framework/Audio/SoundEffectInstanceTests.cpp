@@ -23,6 +23,7 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
+#include "CNA/Internal/Audio/AudioMixer.hpp"
 
 #include <SDL3_mixer/SDL_mixer.h>
 
@@ -1079,7 +1080,13 @@ TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterDispatchesHighPassWithConver
     SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
     EXPECT_EQ(kind, 2); // FilterState::Kind::HighPass
     EXPECT_NEAR(oneOverQ, 0.5f, 1e-6f);
-    EXPECT_GT(frequency, 0.0f);
+    // P11-TEST-001: exact value, not just non-zero -- compare against the same Hz->cutoff
+    // conversion the production code uses, against the real mixer's own sample rate.
+    SDL_AudioSpec spec{};
+    ASSERT_TRUE(MIX_GetMixerFormat(CNA::Internal::Audio::GetMixer(), &spec));
+    EXPECT_NEAR(frequency,
+                SoundEffectInstanceTestAccess::CalculateFilterCutoff(8000.0f, static_cast<float>(spec.freq)),
+                1e-6f);
 }
 
 TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterDispatchesLowPassType)
@@ -1188,7 +1195,13 @@ TEST_F(SoundEffectInstanceTest, ApplyRpcFilterOverrideOverridesBothAxesWhenBothP
     int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
     SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
     EXPECT_NEAR(oneOverQ, 0.25f, 1e-6f);
-    EXPECT_GT(frequency, 0.0f);
+    // P11-TEST-001: exact value, not just non-zero -- the RPC override (8000Hz) wins over the
+    // 4000Hz base, compared against the real mixer's own sample rate.
+    SDL_AudioSpec spec{};
+    ASSERT_TRUE(MIX_GetMixerFormat(CNA::Internal::Audio::GetMixer(), &spec));
+    EXPECT_NEAR(frequency,
+                SoundEffectInstanceTestAccess::CalculateFilterCutoff(8000.0f, static_cast<float>(spec.freq)),
+                1e-6f);
 }
 
 // Both axes at the "no override" sentinel must reproduce exactly the base frequency/Q -- a

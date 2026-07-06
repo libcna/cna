@@ -813,7 +813,11 @@ TEST(AudioEngineTest, UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQu
                             "could not create a real SoundEffectInstance";
         }
         const float startVolume = preStop->getVolumeProperty();
-        ASSERT_GT(startVolume, 0.0f);
+        // P11-TEST-001: exact value, not just non-zero -- both the sound's and category 0's
+        // volume bytes are 0xFF, whose log-centibel amplitude conversion exceeds 1.0
+        // individually, so the combined pre-fade volume clamps to exactly 1.0 (see the fade
+        // comment below for the same 0xFF/0xFF fixture detail).
+        ASSERT_FLOAT_EQ(startVolume, 1.0f);
 
         cue->Stop(AudioStopOptions::AsAuthored);
 

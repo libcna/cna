@@ -2771,7 +2771,10 @@ TEST(CueTest, StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration)
                             "could not create a real SoundEffectInstance";
         }
         const float startVolume = inst->getVolumeProperty();
-        ASSERT_GT(startVolume, 0.0f);
+        // P11-TEST-001: exact value -- LongCue's sound volume byte (0xFF, amplitude ~1.9977)
+        // combined with the "Default" category's own authored volume byte (also 0xFF) clamps
+        // to exactly 1.0, matching this test's own comment above about the clamp.
+        ASSERT_FLOAT_EQ(startVolume, 1.0f);
 
         cue->Stop(AudioStopOptions::AsAuthored);
         std::this_thread::sleep_for(std::chrono::milliseconds(kLongCueFadeOutMS * 4 / 5));
@@ -3464,7 +3467,13 @@ TEST(CueTest, PlayWiresRealXactTrackFilterIntoSpawnedInstance)
     SoundEffectInstanceTestAccess::GetFilterState(*inst, kind, frequency, oneOverQ);
     EXPECT_EQ(kind, 2); // FilterState::Kind::HighPass
     EXPECT_NEAR(oneOverQ, 0.5f, 1e-6f); // qfactor=6 -> min(3/6,1)
-    EXPECT_GT(frequency, 0.0f);
+    // P11-TEST-001: exact value, not just non-zero -- BuildFilterXsbFixtureBytes' authored
+    // 8000Hz, compared against the real mixer's own sample rate.
+    SDL_AudioSpec spec{};
+    ASSERT_TRUE(MIX_GetMixerFormat(CNA::Internal::Audio::GetMixer(), &spec));
+    EXPECT_NEAR(frequency,
+                SoundEffectInstanceTestAccess::CalculateFilterCutoff(8000.0f, static_cast<float>(spec.freq)),
+                1e-4f);
 }
 
 // ===================== RPC-driven live filter frequency (P10-FILTER-002/003/006) =====================
@@ -3522,10 +3531,17 @@ TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesFilterFrequency)
     float highFrequency = -1.0f;
     SoundEffectInstanceTestAccess::GetFilterState(*inst, kind, highFrequency, oneOverQ);
 
-    // Cutoff is monotonically increasing with the desired Hz over this range (INTERNAL_calculateFilterCutoff
-    // is 2*sin(pi*min(hz/sampleRate,0.5))) -- a strictly higher live-evaluated frequency must
-    // produce a strictly higher cutoff, not just "some different value".
-    EXPECT_GT(highFrequency, lowFrequency);
+    // P11-TEST-001: exact values, not just "increased" -- the curve's two endpoints (variable
+    // 0.0 -> 2000Hz, 1.0 -> 12000Hz, per BuildFilterFreqRpcXgsFixtureBytes) map through the same
+    // Hz->cutoff conversion the production code uses, against the real mixer's own sample rate.
+    SDL_AudioSpec spec{};
+    ASSERT_TRUE(MIX_GetMixerFormat(CNA::Internal::Audio::GetMixer(), &spec));
+    EXPECT_NEAR(lowFrequency,
+                SoundEffectInstanceTestAccess::CalculateFilterCutoff(2000.0f, static_cast<float>(spec.freq)),
+                1e-4f);
+    EXPECT_NEAR(highFrequency,
+                SoundEffectInstanceTestAccess::CalculateFilterCutoff(12000.0f, static_cast<float>(spec.freq)),
+                1e-4f);
 
     cue->Stop(AudioStopOptions::Immediate);
 }
@@ -3666,7 +3682,10 @@ TEST(CueTest, CueInstanceLimitReplaceOldestEvictsOldestBankWideCueNotSameDefinit
         // no fade-in, even though an unrelated cue is already active in the bank.
         const auto triggerAVolAtPlay = CueTestAccess::ActiveInstanceVolumes(*triggerA);
         ASSERT_FALSE(triggerAVolAtPlay.empty());
-        EXPECT_GT(triggerAVolAtPlay[0], 0.9f);
+        // P11-TEST-001: exact value, not just ">0.9" -- TriggerCue's sound volume byte (0xFF,
+        // amplitude ~1.9977) combined with the "Default" category's own authored volume byte
+        // (also 0xFF, ~1.9977) is ~3.99 pre-clamp, so full (no-fade) volume clamps to exactly 1.0.
+        EXPECT_FLOAT_EQ(triggerAVolAtPlay[0], 1.0f);
 
         std::unique_ptr<Cue> triggerB(CueLimitBank().GetCue("TriggerCue"));
         triggerB->Play();
@@ -3679,7 +3698,7 @@ TEST(CueTest, CueInstanceLimitReplaceOldestEvictsOldestBankWideCueNotSameDefinit
         EXPECT_TRUE(triggerA->getIsPlayingProperty());
         const auto triggerAVolAfter = CueTestAccess::ActiveInstanceVolumes(*triggerA);
         ASSERT_FALSE(triggerAVolAfter.empty());
-        EXPECT_GT(triggerAVolAfter[0], 0.9f); // still untouched, no fade applied to it
+        EXPECT_FLOAT_EQ(triggerAVolAfter[0], 1.0f); // still untouched, no fade applied to it
 
         const auto triggerBVolAtPlay = CueTestAccess::ActiveInstanceVolumes(*triggerB);
         ASSERT_FALSE(triggerBVolAtPlay.empty());
@@ -3696,7 +3715,7 @@ TEST(CueTest, CueInstanceLimitReplaceOldestEvictsOldestBankWideCueNotSameDefinit
         ASSERT_TRUE(triggerB->getIsPlayingProperty());
         const auto triggerBVolAfter = CueTestAccess::ActiveInstanceVolumes(*triggerB);
         ASSERT_FALSE(triggerBVolAfter.empty());
-        EXPECT_GT(triggerBVolAfter[0], 0.9f);
+        EXPECT_FLOAT_EQ(triggerBVolAfter[0], 1.0f); // fully faded in after kCueLimitFadeMS elapses
 
         triggerA->Stop(AudioStopOptions::Immediate);
         triggerB->Stop(AudioStopOptions::Immediate);

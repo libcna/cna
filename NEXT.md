@@ -110,8 +110,20 @@ framework/runtime, not a game.
 ## 3. Recent changes
 
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
-every item are in `plan_audio.md`'s "Phase 9"/"Phase 10" sections.
+every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11" sections.
 
+- **`P11-TEST-001`** — test assertion precision sweep. Checked all 33 `EXPECT_GT`/`EXPECT_LT`/
+  `ASSERT_GT`/`ASSERT_LT` occurrences across 9 Audio test files individually against their real
+  fixture inputs (computing the actual centibel/amplitude conversion by hand where needed, not
+  assumed); tightened 11 to exact values (several volume checks turned out to clamp to exactly
+  `1.0f` given two `0xFF`/`0xFF` authored-volume-byte fixtures whose combined amplitude exceeds
+  1.0 pre-clamp; two filter-frequency checks tightened to the real Hz->cutoff conversion against
+  the actual mixer sample rate). Left the rest loose deliberately after checking: real-hardware/
+  async-timing-dependent counts, mid-fade-ramp direction checks (exact math tested elsewhere),
+  a statistical test, RPC-ratio tests' divide-by-zero guards (each already has its own precise
+  ratio check with an explicit comment on why ratio-not-absolute was chosen), and two
+  Apply3D-wiring tests (purpose is proving the wiring reaches real attenuation, not re-verifying
+  the formula). Full suite 3340/3342 pass (unchanged count), no regressions. See `plan_audio.md`.
 - **Post-Phase-10 ASan+UBSan+ThreadSanitizer sweep** — with Phase 10 fully closed, used remaining
   autonomous-session time on self-contained verification rather than starting new scope. Fresh
   dedicated ASan+UBSan build: full audio-scoped filter (466 tests) 466/466 pass, zero leaks/errors

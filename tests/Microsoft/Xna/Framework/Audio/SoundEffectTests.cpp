@@ -452,7 +452,9 @@ TEST(SoundEffectTest, FromStreamValidWavSucceedsAndReportsNonzeroDuration)
 
     ASSERT_TRUE(fx != nullptr);
     EXPECT_FALSE(fx->getIsDisposedProperty());
-    EXPECT_GT(fx->getDurationProperty().getTotalSecondsProperty(), 0.0);
+    // P11-TEST-001: exact value, not just non-zero -- BuildMinimalWavBytes()'s 4410 frames at
+    // 44100Hz is exactly 0.1 seconds.
+    EXPECT_NEAR(fx->getDurationProperty().getTotalSecondsProperty(), 0.1, 1e-6);
 }
 
 // CP-17: FromStream must parse a WAV's "smpl" chunk into a real loop region, matching FNA's own

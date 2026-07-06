@@ -4362,15 +4362,57 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
 
 ## Phase 11.5 — Test assertion precision sweep
 
-* [ ] P11-TEST-001: Scan all Audio test files for remaining loose (non-exact) assertions where an
+* [x] P11-TEST-001: Scan all Audio test files for remaining loose (non-exact) assertions where an
   exact expected value is actually knowable, and tighten them.
-  *Status:* Open. Continuation of the theme `P10-AUDIT-002/003` started (which tightened exactly
-  2 instances, `SoundEffect::Duration` and `AudioEngine::RendererDetails`, as examples found along
-  the way, not from an exhaustive sweep). Grep every Audio test file for
-  `EXPECT_GT`/`EXPECT_TRUE.*>.*0`/`EXPECT_NE.*nullptr`-style loose patterns, then for each one
-  actually check whether the test fixture's inputs make an *exact* value computable -- only
-  tighten those; leave genuinely-approximate assertions (e.g. real-time/threading-dependent
-  values) as they are.
+  *Note:* Closed this pass. Grepped every Audio test file for `EXPECT_GT`/`EXPECT_LT`/
+  `ASSERT_GT`/`ASSERT_LT` (33 occurrences across 9 files) and checked each one individually against
+  its fixture's actual inputs, computing the real formula by hand (or in Python, for the
+  centibel/amplitude conversion) before deciding whether to tighten -- not assumed. Tightened 11:
+  - `SoundEffectTests.cpp`: `FromStreamValidWavSucceedsAndReportsNonzeroDuration` -- exact
+    `0.1` seconds (`BuildMinimalWavBytes()`'s 4410 frames at 44100Hz).
+  - `AudioEngineTests.cpp`: `UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQuery`'s
+    pre-fade `startVolume` -- exact `1.0f` (both the sound's and category 0's authored volume
+    bytes are `0xFF`, whose amplitude conversion individually exceeds 1.0, so the product
+    saturates the `[0,1]` clamp).
+  - `AudioCategoryTests.cpp`: `SetVolumeReappliesToAlreadyPlayingCueInstance`/
+    `SetVolumeAppliesToAllActivePlayingCueInstancesInCategory` -- exact `1.0f` before
+    `SetVolume(0.5f)` (same 0xFF/0xFF saturation), exact `~0.99887f` after (computed via Python:
+    `ReadVolByteAsAmplitude(255) * 0.5`, confirmed not clamped);
+    `InstanceLimitReplaceOldestFadesOutVictimAndFadesInNewCue`'s fully-faded-in `volBAfter[0]` --
+    exact `1.0f` (CatReplaceCueB's sound byte 0xFF times the "CatReplace" category's own authored
+    0xFF byte is ~3.99 pre-clamp, saturates).
+  - `SoundEffectInstanceTests.cpp`: both `ApplyXactTrackFilterDispatchesHighPassWithConvertedOneOverQ`
+    and `ApplyRpcFilterOverrideOverridesBothAxesWhenBothProvided`'s `frequency` checks -- exact
+    value via `INTERNAL_calculateFilterCutoff(8000.0f, <real mixer sample rate via
+    MIX_GetMixerFormat>)`, the same conversion the production code itself uses (added
+    `#include "CNA/Internal/Audio/AudioMixer.hpp"` to reach `GetMixer()`).
+  - `CueTests.cpp`: `PlayWiresRealXactTrackFilterIntoSpawnedInstance`'s `frequency` (exact,
+    8000Hz, same real-sample-rate conversion);
+    `ChangingBoundVariableAfterPlayContinuouslyUpdatesFilterFrequency`'s `lowFrequency`/
+    `highFrequency` (exact, the curve's 2000Hz/12000Hz endpoints, replacing a bare
+    monotonic-increase check with the real expected cutoff at each endpoint);
+    `StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration`'s pre-fade `startVolume` (exact
+    `1.0f`, same 0xFF/0xFF saturation as `LongCue`'s existing comment already described but never
+    asserted precisely); `CueInstanceLimitReplaceOldestEvictsOldestBankWideCueNotSameDefinitionSibling`'s
+    `triggerAVolAtPlay`/`triggerAVolAfter`/`triggerBVolAfter` -- exact `1.0f` (same TriggerCue
+    0xFF/0xFF saturation pattern).
+  Left loose, deliberately, after checking (not skipped out of laziness): every `Microphone`/
+  `DynamicSoundEffectInstance` byte/event count depending on real async audio-thread timing
+  (tightening would introduce flakiness, not precision); `AudioEngineTest`'s/`CueTest`'s
+  mid-fade-ramp volume checks during a real `sleep_for`-timed ramp (the *direction* is what's
+  under test there, exact fade math is already precisely tested elsewhere, e.g.
+  `StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration`'s own pre-existing ratio checks); the
+  weighted-lottery statistical test (`EXPECT_GT(highWeightPicks, kIterations*0.8)`, inherently
+  probabilistic); every `SharedRpcBank`/`AttackTimeBank`/`ReleaseTimeBank` RPC-ratio test's
+  `ASSERT_GT(...,0.0f)` guard (each already has its own precise ratio check right after it, with
+  an explicit existing comment explaining the ratio-not-absolute-value choice specifically so the
+  test doesn't depend on the fixture's volume-byte conversion -- tightening the guard would
+  contradict that already-reasoned decision); the two `Apply3D`-reaches-real-attenuation wiring
+  tests (`SoundBankTests.cpp`/`CueTests.cpp`, `farGain < nearGain`) whose purpose is proving the
+  wiring exists, not re-verifying the exact attenuation formula (already exact-tested at the
+  `SoundEffectInstance` level). *Verify:* every tightened assertion rebuilt and rerun individually
+  before moving to the next; full suite 3340/3342 pass (unchanged count -- tightening existing
+  assertions, not adding tests), no regressions.
 
 ## Phase 11.6 — RFC-1: stereo crossfeed pan matrix
 
