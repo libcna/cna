@@ -1163,13 +1163,60 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
   **3300/3302 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 6.3** — Investigate and fix the partial-failure state possible in
+- [x] **Task 6.3** — Investigate and fix the partial-failure state possible in
   `ENetBackend::StartHosting`. Confirmed: if `ENetDiscoveryService::RegisterHost` throws (e.g. via
   `EnsureSocket`'s bind/create failure) *after* `sessions.emplace(...)` has already succeeded, the
   session is left registered with a live, bound ENet host but never registered for LAN discovery —
   a real host that's permanently undiscoverable via `Find()`, with no rollback. Add proper
   transactional rollback (or reorder the operations so failure can't leave an inconsistent state)
   and a test.
+
+  Fixed via reordering: `ENetDiscoveryService::RegisterHost(session, boundPort)` now runs
+  **before** `sessions.emplace(session, std::move(state))`. A throw from `RegisterHost` now just
+  unwinds normally — `state`'s `ENetHostHandle` destructor tears down the half-created host via
+  RAII, and `Sessions()` never learns about the session at all (no manual rollback code needed).
+
+  Added `ENetBackend::GetSessionCountForTesting()` (a `NOXNA` test-only accessor returning
+  `Sessions().size()`) to make the fix's actual invariant — zero sessions registered after a
+  failed `StartHosting` — directly, deterministically observable, rather than relying on whether
+  a later allocation happens to reuse the failed attempt's freed heap address (confirmed via a
+  first draft that this is *not* reliable: a "does a retry work afterward" check passed even
+  with the bug still present, since the retry's `NetworkSession*` didn't happen to reuse the same
+  address).
+
+  Testing this needed a genuinely isolated process, for two independent reasons: (1)
+  `ENetDiscoveryService`'s own discovery socket is a process-wide singleton with no reset hook
+  (matching `ENetLibrary`'s own precedent) — once bound, `EnsureSocket()` never attempts to bind
+  again, so forcing its failure requires a process that has never touched it before, ruling out
+  `CnaTests` itself; and (2) forcing a genuine bind failure by occupying the discovery port with
+  another socket **does not work at all** — this port is deliberately designed so any two
+  `SO_REUSEADDR`-set UDP sockets coexist on it (see Task 6.5), confirmed empirically when a first
+  draft using exactly that approach passed in isolation but failed for the *wrong* reason
+  (`bind()` failure on the test's own blocking socket, not on `EnsureSocket()`) once run as part
+  of the full suite, where `CnaTests`'s own long-lived discovery socket was already bound.
+
+  Added a new `--role=start-hosting-partial-failure` mode to the existing
+  `tools/net/net_two_process_harness.cpp` (reusing its established spawn/CMake wiring rather than
+  standing up a whole new executable) and a matching
+  `TwoProcessLoopbackTest.StartHostingRollsBackCleanlyOnDiscoveryRegistrationFailure` test. The
+  harness forces the failure portably via `setrlimit(RLIMIT_NOFILE, ...)`, lowered to exactly one
+  more than its own baseline open-descriptor count (3, for stdin/stdout/stderr) — the "+1"
+  headroom deliberately allows `ENetHostHandle::CreateHost`'s own real-hosting socket (opened
+  *before* `RegisterHost`'s discovery socket, confirmed via `enet_host_create`'s source) to
+  succeed normally, so the forced `EMFILE` lands specifically on `RegisterHost`'s own
+  `enet_socket_create()` call — exercising the exact reordering this task fixed, rather than
+  failing a step earlier (confirmed via a first draft using no headroom at all: it made
+  `CreateHost` itself throw first, so neither the buggy nor the fixed ordering was ever actually
+  exercised, and the test passed regardless of the fix). Confirms `NetworkSession::Create` throws
+  cleanly, asserts `GetSessionCountForTesting() == 0` immediately after, restores the real
+  descriptor limit, then retries as a secondary sanity check that real hosting still works
+  normally afterward.
+
+  Revert-verify-restore: reverting just the reordering (keeping the new test and the accessor)
+  reproduced the exact predicted symptom — `partial-failure: 1 session(s) left registered after
+  the failed StartHosting attempt`. Restored the fix; full suite (run twice for stability, since
+  this test spawns a real child process): **3301/3303 passing** both times (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 6.4** — Investigate whether `ENetBackend::Sessions()`'s function-local static map and
   `ENetDiscoveryService`'s file-static `registeredHost_`/`socket_`/`currentResults_` need real

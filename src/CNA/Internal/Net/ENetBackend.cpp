@@ -491,9 +491,17 @@ namespace CNA::Internal::Net
         );
 #endif
         uint16_t boundPort = state->Host.getBoundPortProperty();
-        sessions.emplace(session, std::move(state));
 
+        // Task 6.3: RegisterHost can throw (EnsureSocket's bind/create failure). Previously the
+        // session was already emplace()'d into Sessions() by this point - a throw here left a
+        // real, live, bound ENet host registered but never discoverable via Find(), with no
+        // rollback and no way to retry (StartHosting is a no-op once Sessions() already contains
+        // this session). Registering for discovery *before* committing to Sessions() means a
+        // throw here instead just unwinds normally: `state`'s ENetHostHandle destructor tears
+        // down the half-created host, and Sessions() never learns about it at all.
         ENetDiscoveryService::RegisterHost(session, boundPort);
+
+        sessions.emplace(session, std::move(state));
     }
 
     void ENetBackend::TeardownSession(NetworkSession* session)
@@ -593,6 +601,11 @@ namespace CNA::Internal::Net
             return 0;
         }
         return it->second->OwnedRemoteGamers.size();
+    }
+
+    std::size_t ENetBackend::GetSessionCountForTesting()
+    {
+        return Sessions().size();
     }
 
     void ENetBackend::ConnectToHost(NetworkSession* session, const std::string& address, uint16_t port)

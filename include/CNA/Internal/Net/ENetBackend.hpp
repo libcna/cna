@@ -155,6 +155,18 @@ namespace CNA::Internal::Net
         static std::size_t GetOwnedRemoteGamerCountForTesting(NetworkSession* session);
 
         /**
+         * @brief Task 6.3: the number of sessions currently registered in `ENetBackend`'s own
+         * process-wide transport-state map.
+         *
+         * Exists purely to make `StartHosting`'s all-or-nothing registration invariant testable:
+         * a session should never be committed to this map unless *every* step of `StartHosting`
+         * (including discovery registration) succeeded. Not part of real XNA.
+         *
+         * @return The number of currently-registered sessions.
+         */
+        static std::size_t GetSessionCountForTesting();
+
+        /**
          * @brief Broadcasts a session state change (StartGame/EndGame) to every connected peer.
          *
          * No-op if RealNetworkingEnabled(session's type) is false, session has no registered
