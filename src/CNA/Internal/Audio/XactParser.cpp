@@ -325,7 +325,7 @@ namespace CNA::Internal::Audio
         }
 
         // Category data (10 bytes each at categoryOffset): instanceLimit, fadeInMS, fadeOutMS,
-        // maxInstanceBehavior (skip), parentIndex, volume, visibility.
+        // maxInstanceBehavior, parentIndex, volume, visibility.
         result.categories.resize(categoryCount);
         {
             Ctx cc = ctx;
@@ -337,7 +337,10 @@ namespace CNA::Internal::Audio
                 cat.instanceLimit = cc.u8();           // 1 byte
                 cat.fadeInMS      = cc.u16();          // 2 bytes
                 cat.fadeOutMS     = cc.u16();          // 2 bytes
-                cc.u8();                               // maxInstanceBehavior >> 3, skip
+                // P9-CATEGORY-005: retained (was discarded) -- see FACT_internal.c's
+                // ParseXGSHeader, which shifts the same byte right by 3 to isolate
+                // max_instance_behavior from its low 3 bits (unused/reserved by FACT itself).
+                cat.maxInstanceBehavior = cc.u8() >> 3; // 1 byte
                 cat.parentIndex   = cc.u16();          // 2 bytes
                 cat.volume        = ReadVolByteAsAmplitude(cc); // 1 byte
                 cc.u8();                               // visibility

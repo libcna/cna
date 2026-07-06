@@ -361,6 +361,73 @@ namespace Microsoft::Xna::Framework::Audio
                 cue->Stop(opt);
     }
 
+    // ── Category instance-limit enforcement ──────────────────────────────────
+
+    AudioEngine::CategoryInstanceLimitDecision
+    AudioEngine::CheckCategoryInstanceLimit(unsigned short idx, Cue* newCue) const
+    {
+        if (!xactImpl_ || idx >= xactImpl_->xgs.categories.size())
+            return {true, 0};
+
+        const CNA::Internal::Audio::XgsCategory& cat = xactImpl_->xgs.categories[idx];
+
+        // P9-CATEGORY-005: matches FACT_internal.c's play_sound() -- category->instanceCount is
+        // incremented when a sound starts and only decremented once its instance is actually
+        // destroyed (FACT_INTERNAL_DestroySound), so a cue still fading out its release tail
+        // (State::Stopping) still counts here, even though it's excluded from the victim search
+        // below (handle_instance_limit()'s cursor loop skips FACT_STATE_STOPPING/STOPPED cues).
+        std::size_t liveCount = 0;
+        for (const Cue* cue : xactImpl_->activeCues)
+            if (cue && cue != newCue && cue->categoryIdx_ == idx
+                && (cue->state_ == Cue::State::Playing || cue->state_ == Cue::State::Stopping))
+                ++liveCount;
+
+        if (liveCount < cat.instanceLimit)
+            return {true, 0};
+
+        // max_instance_behavior values (FACT_internal.h): 0=FAIL, 1=QUEUE, 2=REPLACE_OLDEST,
+        // 3=REPLACE_QUIETEST, 4=REPLACE_LOWEST_PRIORITY.
+        if (cat.maxInstanceBehavior == 0)
+            return {false, 0}; // FAIL: reject the new cue outright, matching FACTCue_Stop(IMMEDIATE)
+
+        // P9-CATEGORY-010: FAudio's own handle_instance_limit() (FACT_internal.c) treats QUEUE
+        // and REPLACE_OLDEST identically (its own source carries a "FIXME: How does QUEUE differ
+        // from REPLACE_OLDEST?" comment) and its REPLACE_QUIETEST branch is an unfinished stub
+        // that -- despite the name -- just keeps overwriting `replaced` with whatever cue it last
+        // saw, i.e. behaves exactly like REPLACE_OLDEST too. CNA matches FAudio's real shipped
+        // behavior rather than implementing a "more correct" quietest search FAudio itself never
+        // does: all three collapse to "evict the oldest still-Playing cue in this category" here.
+        // REPLACE_LOWEST_PRIORITY is the one behavior FAudio fully implements, so CNA does too.
+        Cue* victim = nullptr;
+        uint8_t victimPriority = 0xFF;
+        for (Cue* cue : xactImpl_->activeCues)
+        {
+            if (!cue || cue == newCue || cue->categoryIdx_ != idx || cue->state_ != Cue::State::Playing)
+                continue;
+
+            if (cat.maxInstanceBehavior == 4) // REPLACE_LOWEST_PRIORITY
+            {
+                if (!victim || cue->priority_ < victimPriority)
+                {
+                    victim = cue;
+                    victimPriority = cue->priority_;
+                }
+            }
+            else // QUEUE / REPLACE_OLDEST / REPLACE_QUIETEST
+            {
+                // activeCues is append-ordered (RegisterCue only ever push_back()s), so the
+                // first same-category match still Playing is the oldest one.
+                victim = cue;
+                break;
+            }
+        }
+
+        if (victim)
+            victim->ForceFadeOutForInstanceLimit(cat.fadeOutMS);
+
+        return {true, cat.fadeInMS};
+    }
+
     // ── Cue registration ──────────────────────────────────────────────────────
 
     void AudioEngine::RegisterCue(Cue* cue)

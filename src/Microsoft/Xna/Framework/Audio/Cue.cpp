@@ -164,6 +164,41 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
+        // P9-CATEGORY-007: real category-authored fadeInMS, wall-clock driven the same way
+        // P9-STOP-010's fadeOutMS_ ramp is above -- matches FACT_INTERNAL_UpdateSound's
+        // SOUND_STATE_FADE_IN handling (FACT_internal.c): linear volume ramp from 0 up to the
+        // cue's normal target volume over fadeInMS_, then clear the fade and settle at full
+        // volume. Unlike the Stopping/fadeOutMS_ branch above, this does NOT return early --
+        // real FACT keeps ticking a fading-in sound's normal per-frame update (including natural-
+        // completion) right alongside the fade, so the natural-completion check below still runs
+        // this same tick.
+        if (state_ == State::Playing && fadeInMS_ > 0)
+        {
+            const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - fadeInStart_).count();
+
+            auto* self = const_cast<Cue*>(this);
+            const AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+            const float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
+
+            if (elapsedMs >= fadeInMS_)
+            {
+                self->fadeInMS_ = 0;
+                for (const auto& pi : active_)
+                    if (pi.instance)
+                        pi.instance->setVolumeProperty(std::clamp(pi.baseVolume * catVol, 0.0f, 1.0f));
+            }
+            else
+            {
+                const float fadeMultiplier =
+                    static_cast<float>(elapsedMs) / static_cast<float>(fadeInMS_);
+                for (const auto& pi : active_)
+                    if (pi.instance)
+                        pi.instance->setVolumeProperty(
+                            std::clamp(pi.baseVolume * catVol * fadeMultiplier, 0.0f, 1.0f));
+            }
+        }
+
         for (const auto& pi : active_)
             if (pi.instance && pi.instance->getStateProperty() != SoundState::Stopped)
                 return; // at least one wave reference is still playing (or looping)
@@ -381,7 +416,27 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
         categoryIdx_ = sound->categoryIndex;
+        priority_    = sound->priority;
         float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
+
+        // P9-CATEGORY-005/006/007/008: real FACT enforces a category's instanceLimit right here,
+        // before the new sound is actually allowed to start (FACT_internal.c's play_sound) --
+        // reusing categoryIdx_/priority_ just resolved above. FAIL rejects this cue outright
+        // (matches FACTCue_Stop(cue, IMMEDIATE) on the *new* cue in handle_instance_limit); any
+        // other behavior may fade out a victim cue already playing in the same category and
+        // hands back a fadeInMS to apply to this cue below.
+        uint16_t categoryFadeInMS = 0;
+        if (eng)
+        {
+            const AudioEngine::CategoryInstanceLimitDecision decision =
+                eng->CheckCategoryInstanceLimit(categoryIdx_, this);
+            if (!decision.allowed)
+            {
+                state_ = State::Stopped;
+                return;
+            }
+            categoryFadeInMS = decision.fadeInMS;
+        }
 
         // P9-XACT-006/007: RPC (Runtime Parameter Control) volume/pitch, evaluated once here
         // against each bound variable's *current* value -- not continuously re-evaluated while
@@ -460,6 +515,18 @@ namespace Microsoft::Xna::Framework::Audio
 
         state_ = State::Playing;
         if (eng) eng->RegisterCue(this);
+
+        // P9-CATEGORY-007: start the fade-in ramp at silence -- ReconcileState() (ticked by
+        // AudioEngine::Update() and every state getter) brings it up to full volume over
+        // categoryFadeInMS from here, same as the fade-out ramp starts at full volume in
+        // StopInternal()/ForceFadeOutForInstanceLimit().
+        if (categoryFadeInMS > 0)
+        {
+            fadeInMS_ = categoryFadeInMS;
+            fadeInStart_ = std::chrono::steady_clock::now();
+            for (auto& pi : active_)
+                if (pi.instance) pi.instance->setVolumeProperty(0.0f);
+        }
     }
 
     // ── Pause / Resume / Stop ─────────────────────────────────────────────────
@@ -549,6 +616,27 @@ namespace Microsoft::Xna::Framework::Audio
 
         if (bank_ && bank_->engine_)
             bank_->engine_->UnregisterCue(this);
+    }
+
+    void Cue::ForceFadeOutForInstanceLimit(uint16_t fadeOutMS)
+    {
+        // Mirrors StopInternal()'s own "hasRealTail" split: a real, nonzero, authored fadeOutMS
+        // gets a real Stopping tail (P9-STOP-010's ramp, just category-triggered instead of
+        // Stop()-triggered); a zero fadeOutMS has nothing to fade, so hard-stop immediately,
+        // matching FACT_INTERNAL_BeginFadeOut's effectively-instant behavior for fadeOutMS == 0.
+        if (isDisposed_ || state_ != State::Playing) return;
+
+        if (fadeOutMS == 0)
+        {
+            StopInternal(true);
+            return;
+        }
+
+        state_     = State::Stopping;
+        paused_    = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
+        fadeStart_ = std::chrono::steady_clock::now();
+        fadeOutMS_ = fadeOutMS;
+        fadeInMS_  = 0; // a cue being evicted can't also still be fading in
     }
 
     void Cue::ApplyCategoryVolume(float catVol)

@@ -2067,12 +2067,86 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   *Note:* `AudioCategoryTests.cpp::PauseAndResumeAffectAllActiveCuesInCategory`. Honesty note: `Pause()`/`Resume()` never cascade into `UnregisterCue()`, so this test would also pass against the pre-`P9-CATEGORY-001` code — it's a completeness/regression test for the multi-cue case, not a bug reproduction (unlike `P9-CATEGORY-002`, where `git stash` genuinely showed a failure).
 * [x] P9-CATEGORY-004 Add regression tests for changing category volume while cues are active.
   *Note:* `AudioCategoryTests.cpp::SetVolumeAppliesToAllActivePlayingCueInstancesInCategory` — two real WaveBank-backed cue instances (`SharedVolBank`), verifies `AudioCategory::SetVolume` lowers both instances' `MIX_Track` gain, not just whichever cue happens to be first in the registry. Same honesty note as `P9-CATEGORY-003`: `ApplyCategoryVolume()` doesn't mutate `activeCues` either, so this is also a completeness test, not a bug reproduction. Full suite (2081/2081) green after this group; also verified clean under a full ASan+UBSan build. `cna_demo_sound`/`cna_demo_2d` rebuilt clean.
-* [ ] P9-CATEGORY-005 Implement XACT category `instanceLimit` if enough parsed data is already available.
-* [ ] P9-CATEGORY-006 Add tests for category instance limits using synthetic/minimal XACT data or direct internal fixtures.
-* [ ] P9-CATEGORY-007 Implement category fade-in behavior where feasible.
-* [ ] P9-CATEGORY-008 Implement category fade-out behavior where feasible.
-* [ ] P9-CATEGORY-009 Add tests for category fade-in/fade-out behavior.
-* [ ] P9-CATEGORY-010 Clearly document any category behavior that remains approximate.
+* [x] P9-CATEGORY-005 Implement XACT category `instanceLimit` if enough parsed data is already available.
+  *Note:* Read FAudio's real enforcement (`FACT_internal.c`'s `play_sound()`/`handle_instance_limit()`)
+  line-by-line first: category `instanceLimit`/`fadeInMS`/`fadeOutMS` were already parsed into
+  `XgsCategory` (`XA-11`), but `maxInstanceBehavior` (the byte immediately after `fadeOutMS` in the
+  10-byte category record) was parsed-and-discarded (`cc.u8(); // skip`, `XactParser.cpp`) --
+  retained it as a new `XgsCategory::maxInstanceBehavior` field (`cc.u8() >> 3`, matching FAudio's
+  own bit-shift exactly). Added `AudioEngine::CheckCategoryInstanceLimit(idx, newCue)`, called from
+  `Cue::Play()` right after it resolves the new cue's `categoryIdx_`/`priority_` (a new `Cue`
+  field, captured from `XsbSound::priority`, needed for `REPLACE_LOWEST_PRIORITY` below): counts
+  currently-live (Playing or Stopping -- a fading-out victim hasn't actually been "destroyed" yet
+  in FACT terms, so it still counts, matching `category->instanceCount` semantics exactly) same-
+  category cues in `AudioEngine::activeCues`; at or above `instanceLimit`, applies
+  `maxInstanceBehavior`: `FAIL` (0) rejects the new cue outright (`state_ = State::Stopped`,
+  no instance created -- matches `handle_instance_limit()` calling `FACTCue_Stop(cue, IMMEDIATE)`
+  on the *new* cue); `REPLACE_LOWEST_PRIORITY` (4) evicts whichever live same-category cue has the
+  lowest `priority_`; `QUEUE`/`REPLACE_OLDEST`/`REPLACE_QUIETEST` (1/2/3) all evict the oldest
+  still-`Playing` cue (`activeCues` is append-ordered, so the first match is oldest) -- see the
+  `CHECKLIST.md` note on why this three-way collapse matches FAudio's own shipped behavior instead
+  of being a CNA-only shortcut. Cue-level `instanceLimit`/`maxInstanceBehavior` (from a *complex*
+  `.xsb` cue's own fields, as opposed to the XGS category-level fields here) remain out of scope,
+  same as already noted at `P9-STOP-010`'s note on cue-level `fadeOutMS`/`instanceLimit` parsing.
+* [x] P9-CATEGORY-006 Add tests for category instance limits using synthetic/minimal XACT data or direct internal fixtures.
+  *Note:* New self-contained fixture group in `AudioCategoryTests.cpp` (`CategoryLimitEngine`/
+  `CategoryLimitWaveBank`/`CategoryLimitBank`, independent from `SharedEngine()`), three categories
+  each configured for one `maxInstanceBehavior`: `CatFail` (instanceLimit=1, `FAIL`), `CatReplace`
+  (instanceLimit=1, `REPLACE_OLDEST`, fade both directions), `CatPriority` (instanceLimit=2,
+  `REPLACE_LOWEST_PRIORITY`, no fade). Three tests:
+  `InstanceLimitFailRejectsNewCueOnceLimitReached` (second cue in `CatFail` is immediately
+  `Stopped`, no instance created, first cue unaffected);
+  `InstanceLimitReplaceOldestFadesOutVictimAndFadesInNewCue` (covers `P9-CATEGORY-007/008/009`
+  too, see below); `InstanceLimitReplaceLowestPriorityEvictsLowestPriorityRegardlessOfPlayOrder`
+  (plays a high-priority cue, then a low-priority cue -- both fit under `instanceLimit=2`, no
+  eviction yet -- then a third cue, which must evict the *low*-priority one even though the
+  *high*-priority one was played first; proves this is genuinely priority-based, not
+  oldest-first, which would evict the wrong one). Verified via `git stash` (reverting only the six
+  source files, keeping the new tests): all three fail against the pre-fix code (confirmed real
+  bug reproductions, not tautological assertions), pass again after restoring the fix.
+* [x] P9-CATEGORY-007 Implement category fade-in behavior where feasible.
+  *Note:* Added `Cue::fadeInStart_`/`fadeInMS_` fields alongside the existing `P9-STOP-010`
+  fade-out fields; `Cue::ReconcileState()` gained a symmetric fade-in ramp (linear 0 → full volume
+  over `fadeInMS_`, wall-clock driven) that does *not* return early -- unlike the fade-out branch,
+  real FACT keeps ticking a fading-in sound's normal per-frame update (including natural-
+  completion) alongside the fade (`FACT_INTERNAL_UpdateSound`'s `SOUND_STATE_FADE_IN` branch falls
+  through, `FACT_internal.c`). `Cue::Play()` sets `fadeInMS_`/`fadeInStart_` and zeroes each new
+  instance's initial volume when `CheckCategoryInstanceLimit()` hands back a nonzero
+  `category.fadeInMS`. Read real FACT first (`FACT.c`'s hardcoded 3-category fallback) and
+  confirmed category `fadeInMS`/`fadeOutMS` are *only* ever referenced from
+  `handle_instance_limit()`/`play_sound()` -- never from `AudioCategory::Pause/Resume/Stop/
+  SetVolume` in real FACT either, so this is the complete, correct scope, not a narrowed one.
+* [x] P9-CATEGORY-008 Implement category fade-out behavior where feasible.
+  *Note:* Added `Cue::ForceFadeOutForInstanceLimit(fadeOutMS)`, called on the victim cue from
+  `AudioEngine::CheckCategoryInstanceLimit()`: reuses the exact `State::Stopping`/`fadeOutMS_`
+  ramp `P9-STOP-010` already built for `Stop(AsAuthored)` (same `ReconcileState()` code path,
+  just triggered by category eviction instead of an explicit `Stop()` call) -- a category-
+  authored fadeOutMS produces the identical audible fade-out shape as a per-cue authored one.
+  `fadeOutMS == 0` hard-stops immediately (`StopInternal(true)`), matching
+  `FACT_INTERNAL_BeginFadeOut`'s effectively-instant behavior for a zero fade target
+  (`FACT_internal.c`).
+* [x] P9-CATEGORY-009 Add tests for category fade-in/fade-out behavior.
+  *Note:* `AudioCategoryTests.cpp::InstanceLimitReplaceOldestFadesOutVictimAndFadesInNewCue` --
+  `CatReplace` (instanceLimit=1, both `fadeInMS`/`fadeOutMS` = 60ms). Playing a second cue while
+  the first is active asserts, synchronously (no sleep needed for this part): the victim is
+  immediately `IsStopping()`, and the new cue's instance volume is exactly `0.0f` (fade-in starts
+  at silence). After sleeping past the fade duration (matching the existing `kLongCueFadeOutMS`-
+  style margin pattern from `P9-STOP-010`'s own tests): victim is `IsStopped()` with no active
+  instance (fade-out ramp completed), new cue is fully faded in (volume > 0.9). Verified via
+  `git stash` alongside `P9-CATEGORY-006` above (same stash/pop pass covered all three new tests).
+  Full suite 3268/3268 (3265 baseline + 3 new) green; audio-scoped subset (392/392, was 389)
+  green under a full ASan+UBSan build with no audio-related leaks/errors. `cna_demo_sound`/
+  `cna_demo_2d` rebuilt clean.
+* [x] P9-CATEGORY-010 Clearly document any category behavior that remains approximate.
+  *Note:* `CHECKLIST.md`'s `XA-11` row rewritten (not removed) to describe what's now real vs.
+  what's still an accepted deviation: the `QUEUE`/`REPLACE_OLDEST`/`REPLACE_QUIETEST` three-way
+  collapse (matches FAudio's own acknowledged `FIXME`/unfinished-stub behavior, not a CNA
+  shortcut of an otherwise-precise FACT feature); category fade only ever applying within
+  instance-limit replacement, never on `AudioCategory::Pause/Resume/SetVolume/Stop` (matches real
+  FACT exactly, confirmed by reading every `fadeInMS`/`fadeOutMS` reference in
+  `FACT_internal.c`/`FACT.c`); and cue-level (XSB, per-cue) `instanceLimit`/`maxInstanceBehavior`
+  remaining unenforced, same already-accepted scope boundary as `P9-STOP-010`'s cue-level
+  `fadeOutMS` note.
 
 ## P9-VALIDATION — Constructor and argument validation
 

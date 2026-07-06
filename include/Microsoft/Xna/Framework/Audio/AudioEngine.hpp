@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Audio/RendererDetail.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -111,6 +112,17 @@ namespace Microsoft::Xna::Framework::Audio
 
         GetTypeNameHPP()
 
+        // P9-CATEGORY-005/006/007/008: result of a category instanceLimit check (Cue::Play()
+        // calls CheckCategoryInstanceLimit() below). `allowed` is false only for
+        // maxInstanceBehavior == FAIL once the category is already at its instanceLimit; a true
+        // `fadeInMS` (nonzero) is the category's authored fade-in the new cue should apply,
+        // matching FACT_internal.c's play_sound()/handle_instance_limit().
+        NOXNA struct CategoryInstanceLimitDecision
+        {
+            bool     allowed;
+            uint16_t fadeInMS;
+        };
+
     private:
         friend class AudioCategory;
         friend class WaveBank;
@@ -145,6 +157,15 @@ namespace Microsoft::Xna::Framework::Audio
         void PauseCategoryInternal(unsigned short idx);
         void ResumeCategoryInternal(unsigned short idx);
         void StopCategoryInternal(unsigned short idx, bool immediate);
+
+        // P9-CATEGORY-005/006/007/008: called by Cue::Play() right after it resolves the new
+        // cue's category/priority. Counts this category's currently live (Playing or Stopping,
+        // i.e. not yet actually destroyed) cues against XgsCategory::instanceLimit; if at the
+        // limit, applies XgsCategory::maxInstanceBehavior (see AudioEngine.cpp for the exact
+        // FACT_internal.c-matched semantics of each value) and may fade out a victim cue via
+        // Cue::ForceFadeOutForInstanceLimit(). `newCue` is excluded from its own count (it isn't
+        // registered into activeCues yet at the point Play() calls this).
+        CategoryInstanceLimitDecision CheckCategoryInstanceLimit(unsigned short idx, Cue* newCue) const;
 
         // Active-cue registration for category operations
         void RegisterCue(Cue* cue);

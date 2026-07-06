@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "CueTestAccess.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -15,6 +16,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 using Microsoft::Xna::Framework::Audio::AudioCategory;
@@ -554,6 +556,283 @@ namespace
             "cna_audio_category_test", "p9stop_long.xsb", BuildP9StopLongXsbFixtureBytes()));
         return bank;
     }
+
+    // ── P9-CATEGORY-005/006/007/008: instanceLimit + maxInstanceBehavior + fade fixture ───────
+    //
+    // A dedicated engine/wavebank/soundbank, independent from SharedEngine() above, with three
+    // categories each configured for one of the maxInstanceBehavior values CNA implements:
+    //   0 "CatFail"     instanceLimit=1, FAIL                  -- exceeding the limit rejects the
+    //                    new cue outright.
+    //   1 "CatReplace"  instanceLimit=1, REPLACE_OLDEST, both fadeInMS/fadeOutMS=kCategoryLimit-
+    //                    FadeMS -- exceeding the limit fades out the oldest active cue and fades
+    //                    the new one in.
+    //   2 "CatPriority" instanceLimit=2, REPLACE_LOWEST_PRIORITY, no fade -- exceeding the limit
+    //                    evicts whichever active cue has the lowest XsbSound::priority,
+    //                    regardless of play order (distinguishes this from REPLACE_OLDEST).
+
+    void AppendCategoryEx(std::vector<uint8_t>& buf, uint8_t instanceLimit, uint16_t fadeInMS,
+                          uint16_t fadeOutMS, uint8_t maxInstanceBehavior)
+    {
+        AppendU8(buf, instanceLimit);
+        AppendU16(buf, fadeInMS);
+        AppendU16(buf, fadeOutMS);
+        // XactParser.cpp reads this byte and shifts right by 3 -- real .xgs files store the
+        // behavior value in the byte's upper bits, so encode it left-shifted by 3 here to
+        // round-trip correctly.
+        AppendU8(buf, static_cast<uint8_t>(maxInstanceBehavior << 3));
+        AppendU16(buf, 0xFFFF); // parentIndex (none)
+        AppendU8(buf, 0xFF);    // volume byte
+        AppendU8(buf, 0);       // visibility
+    }
+
+    constexpr uint16_t kCategoryLimitFadeMS = 60;
+
+    std::vector<uint8_t> BuildCategoryLimitXgsFixtureBytes()
+    {
+        constexpr uint32_t headerSize       = 65;
+        constexpr uint32_t categoryDataSize = 10;
+        constexpr uint32_t categoryCount    = 3;
+
+        const uint32_t categoryOffset     = headerSize;
+        const uint32_t variableOffset     = categoryOffset + categoryCount * categoryDataSize;
+        const uint32_t categoryNameOffset = variableOffset;
+        const std::string name0 = "CatFail";
+        const std::string name1 = "CatReplace";
+        const std::string name2 = "CatPriority";
+        const uint32_t variableNameOffset =
+            categoryNameOffset + static_cast<uint32_t>(name0.size()) + 1 +
+            static_cast<uint32_t>(name1.size()) + 1 +
+            static_cast<uint32_t>(name2.size()) + 1;
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'X', 'G', 'S', 'F' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // unknown
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 3);   // platform
+
+        AppendU16(data, categoryCount);
+        AppendU16(data, 0); // variableCount
+        AppendU16(data, 0); // blob1Count
+        AppendU16(data, 0); // blob2Count
+        AppendU16(data, 0); // rpcCount
+        AppendU16(data, 0); // dspPresetCount
+        AppendU16(data, 0); // dspParameterCount
+
+        AppendU32(data, categoryOffset);
+        AppendU32(data, variableOffset);
+        AppendU32(data, 0); // blob1Offset
+        AppendU32(data, 0); // categoryNameIndexOffset
+        AppendU32(data, 0); // blob2Offset
+        AppendU32(data, 0); // variableNameIndexOffset
+        AppendU32(data, categoryNameOffset);
+        AppendU32(data, variableNameOffset);
+
+        AppendCategoryEx(data, 1, 0, 0, 0);                                            // CatFail
+        AppendCategoryEx(data, 1, kCategoryLimitFadeMS, kCategoryLimitFadeMS, 2);       // CatReplace
+        AppendCategoryEx(data, 2, 0, 0, 4);                                            // CatPriority
+
+        AppendCStr(data, name0);
+        AppendCStr(data, name1);
+        AppendCStr(data, name2);
+
+        return data;
+    }
+
+    constexpr const char* kCategoryLimitWaveBankName = "CategoryLimitWaveBank";
+
+    // Same 1-second mono 16-bit silence pattern as BuildP9StopLongXwbFixtureBytes -- long enough
+    // that natural completion can never race the short category fade windows exercised below.
+    std::vector<uint8_t> BuildCategoryLimitXwbFixtureBytes()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 44100u * 2u; // 1 second, mono 16-bit @ 44100Hz
+        constexpr uint32_t alignment         = 4;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, kCategoryLimitWaveBankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u)            // format tag: PCM
+            | (1u << 2)       // channels: mono
+            | (44100u << 5)   // sample rate
+            | (2u << 23)      // wBlockAlign: 2 bytes/sample
+            | (1u << 31);     // 16-bit
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        AppendU32(data, 0u); // entry 0: offset=0, deviation=0 (last/only entry)
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(0x00); // 16-bit silence
+
+        return data;
+    }
+
+    struct CategoryLimitSoundDef { std::string cueName; uint16_t categoryIndex; uint8_t priority; };
+
+    const std::vector<CategoryLimitSoundDef>& CategoryLimitSoundDefs()
+    {
+        static const std::vector<CategoryLimitSoundDef> defs = {
+            {"CatFailCueA",        0,   0},
+            {"CatFailCueB",        0,   0},
+            {"CatReplaceCueA",     1,   0},
+            {"CatReplaceCueB",     1,   0},
+            {"CatPriorityCueHigh", 2, 200}, // survives -- highest priority among CatPriority cues
+            {"CatPriorityCueLow",  2,  10}, // evicted -- lowest priority among CatPriority cues
+            {"CatPriorityCueNew",  2, 100}, // triggers the eviction once played third
+        };
+        return defs;
+    }
+
+    // One simple sound + one simple cue per CategoryLimitSoundDefs() entry, all referencing wave
+    // index 0 of the single wavebank above (same layout as BuildVolXsbFixtureBytes, generalized
+    // to N sounds/cues instead of 1).
+    std::vector<uint8_t> BuildCategoryLimitXsbFixtureBytes()
+    {
+        const auto& defs = CategoryLimitSoundDefs();
+        const uint16_t soundCount = static_cast<uint16_t>(defs.size());
+
+        constexpr uint32_t headerSize            = 74;
+        constexpr uint32_t bankNameSize           = 64;
+        constexpr uint32_t baseOffset             = headerSize + bankNameSize;
+        constexpr uint32_t soundSize              = 12;
+        constexpr uint32_t cueSimpleEntrySize     = 5;
+        constexpr uint32_t cueNameIndexEntrySize  = 6;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        const uint32_t cueSimpleOffset    = soundOffset + soundCount * soundSize;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + soundCount * cueSimpleEntrySize;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + soundCount * cueNameIndexEntrySize;
+
+        std::vector<uint32_t> nameAbsOffsets(soundCount);
+        {
+            uint32_t running = cueNameStrOffset;
+            for (uint16_t i = 0; i < soundCount; ++i)
+            {
+                nameAbsOffsets[i] = running;
+                running += static_cast<uint32_t>(defs[i].cueName.size()) + 1;
+            }
+        }
+
+        std::vector<uint32_t> soundAbsOffsets(soundCount);
+        for (uint16_t i = 0; i < soundCount; ++i)
+            soundAbsOffsets[i] = soundOffset + i * soundSize;
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, soundCount); // cueSimpleCount
+        AppendU16(data, 0);          // cueComplexCount
+        AppendU16(data, 0);          // unknown
+        AppendU16(data, 0);          // cueTotalAlign
+        AppendU8(data, 1);           // wavebankCount
+        AppendU16(data, soundCount); // soundCount
+        AppendU16(data, 0);          // cueNameLength
+        AppendU16(data, 0);          // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "CategoryLimitSoundBank", bankNameSize);
+        AppendPadded(data, kCategoryLimitWaveBankName, 64);
+
+        for (const auto& def : defs)
+        {
+            AppendU8(data, 0);                  // flags
+            AppendU16(data, def.categoryIndex); // categoryIndex
+            AppendU8(data, 0xFF);               // volume raw byte
+            AppendU16(data, 0);                 // pitchCents
+            AppendU8(data, def.priority);       // priority
+            AppendU16(data, 0);                 // soundLength (skipped)
+            AppendU16(data, 0);                 // waveIdx
+            AppendU8(data, 0);                  // wbIdx
+        }
+
+        for (uint16_t i = 0; i < soundCount; ++i)
+        {
+            AppendU8(data, 0); // flags
+            AppendU32(data, soundAbsOffsets[i]); // sbCode
+        }
+
+        for (uint16_t i = 0; i < soundCount; ++i)
+        {
+            AppendU32(data, nameAbsOffsets[i]);
+            AppendU16(data, 0); // unknown
+        }
+
+        for (const auto& def : defs)
+            AppendCStr(data, def.cueName);
+
+        return data;
+    }
+
+    AudioEngine& CategoryLimitEngine()
+    {
+        static const std::string path =
+            WriteFixture("cna_audio_category_limit_test", "fixture.xgs",
+                         BuildCategoryLimitXgsFixtureBytes());
+        static AudioEngine engine(path);
+        return engine;
+    }
+
+    WaveBank& CategoryLimitWaveBank()
+    {
+        static WaveBank wb(&CategoryLimitEngine(), WriteFixture(
+            "cna_audio_category_limit_test", "fixture.xwb", BuildCategoryLimitXwbFixtureBytes()));
+        return wb;
+    }
+
+    SoundBank& CategoryLimitBank()
+    {
+        (void)CategoryLimitWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&CategoryLimitEngine(), WriteFixture(
+            "cna_audio_category_limit_test", "fixture.xsb", BuildCategoryLimitXsbFixtureBytes()));
+        return bank;
+    }
 }
 
 // ===================== Name =====================
@@ -848,4 +1127,146 @@ TEST(AudioCategoryTest, InequalityOperatorMatchesNegatedEquals)
     AudioCategory c = SharedEngine().GetCategory("Combat");
     EXPECT_FALSE(a != b);
     EXPECT_TRUE(a != c);
+}
+
+// ===================== P9-CATEGORY-005/006/007/008: instanceLimit / maxInstanceBehavior =====
+
+// FAIL (0): once "CatFail" (instanceLimit=1) already has one cue playing, a second cue in the
+// same category must be rejected outright -- matches handle_instance_limit() calling
+// FACTCue_Stop(cue, IMMEDIATE) on the *new* cue (FACT_internal.c). The first cue must be
+// completely unaffected.
+TEST(AudioCategoryTest, InstanceLimitFailRejectsNewCueOnceLimitReached)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cueA(CategoryLimitBank().GetCue("CatFailCueA"));
+        cueA->Play();
+        if (!CueTestAccess::ActiveInstance(*cueA, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        ASSERT_TRUE(cueA->getIsPlayingProperty());
+
+        std::unique_ptr<Cue> cueB(CategoryLimitBank().GetCue("CatFailCueB"));
+        cueB->Play();
+
+        EXPECT_TRUE(cueB->getIsStoppedProperty());
+        EXPECT_FALSE(cueB->getIsPlayingProperty());
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*cueB, 0), nullptr);
+
+        // cueA must be completely unaffected by cueB's rejected Play().
+        EXPECT_TRUE(cueA->getIsPlayingProperty());
+        EXPECT_NE(CueTestAccess::ActiveInstance(*cueA, 0), nullptr);
+
+        cueA->Stop(AudioStopOptions::Immediate);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// REPLACE_OLDEST (2): once "CatReplace" (instanceLimit=1) already has one cue playing, a second
+// cue in the same category must fade out the first (over the category's authored fadeOutMS,
+// State::Stopping) and fade itself in from silence (over the category's authored fadeInMS) --
+// matches handle_instance_limit()'s FACT_INTERNAL_BeginFadeOut(victim, category->fadeOutMS) and
+// play_sound()'s SOUND_STATE_FADE_IN using category->fadeInMS (FACT_internal.c).
+TEST(AudioCategoryTest, InstanceLimitReplaceOldestFadesOutVictimAndFadesInNewCue)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cueA(CategoryLimitBank().GetCue("CatReplaceCueA"));
+        cueA->Play();
+        if (!CueTestAccess::ActiveInstance(*cueA, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        ASSERT_TRUE(cueA->getIsPlayingProperty());
+
+        std::unique_ptr<Cue> cueB(CategoryLimitBank().GetCue("CatReplaceCueB"));
+        cueB->Play();
+
+        // cueA is immediately Stopping (its fade-out ramp has just started); cueB starts
+        // playing from silence (its fade-in ramp starts at volume 0.0 exactly).
+        EXPECT_TRUE(cueA->getIsStoppingProperty());
+        EXPECT_FALSE(cueA->getIsStoppedProperty());
+        const auto volBAtPlay = CueTestAccess::ActiveInstanceVolumes(*cueB);
+        ASSERT_FALSE(volBAtPlay.empty());
+        EXPECT_FLOAT_EQ(volBAtPlay[0], 0.0f);
+
+        // Comfortably past kCategoryLimitFadeMS for both ramps.
+        std::this_thread::sleep_for(std::chrono::milliseconds(kCategoryLimitFadeMS + 150));
+
+        EXPECT_TRUE(cueA->getIsStoppedProperty());
+        EXPECT_FALSE(cueA->getIsStoppingProperty());
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*cueA, 0), nullptr);
+
+        ASSERT_TRUE(cueB->getIsPlayingProperty());
+        const auto volBAfter = CueTestAccess::ActiveInstanceVolumes(*cueB);
+        ASSERT_FALSE(volBAfter.empty());
+        EXPECT_GT(volBAfter[0], 0.9f);
+
+        cueB->Stop(AudioStopOptions::Immediate);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// REPLACE_LOWEST_PRIORITY (4): "CatPriority" (instanceLimit=2, no fade) has two cues already
+// playing (High, priority=200; Low, priority=10) when a third is played. FACT's
+// handle_instance_limit() searches for the lowest-priority *currently playing* cue in the
+// category regardless of play order -- Low must be evicted even though High was played first
+// (which would be the REPLACE_OLDEST victim instead), proving this is genuinely priority-based,
+// not just oldest-first. No fade is authored on this category, so eviction is a synchronous
+// immediate stop (Cue::ForceFadeOutForInstanceLimit's fadeOutMS==0 branch).
+TEST(AudioCategoryTest, InstanceLimitReplaceLowestPriorityEvictsLowestPriorityRegardlessOfPlayOrder)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cueHigh(CategoryLimitBank().GetCue("CatPriorityCueHigh"));
+        cueHigh->Play();
+        if (!CueTestAccess::ActiveInstance(*cueHigh, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+
+        std::unique_ptr<Cue> cueLow(CategoryLimitBank().GetCue("CatPriorityCueLow"));
+        cueLow->Play();
+        ASSERT_TRUE(cueLow->getIsPlayingProperty()); // limit is 2, both fit without eviction yet
+
+        std::unique_ptr<Cue> cueNew(CategoryLimitBank().GetCue("CatPriorityCueNew"));
+        cueNew->Play();
+
+        // Low (lowest priority among the two active cues) is evicted immediately (no fade
+        // authored on this category); High (higher priority) is untouched; New plays normally.
+        EXPECT_TRUE(cueLow->getIsStoppedProperty());
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*cueLow, 0), nullptr);
+
+        EXPECT_TRUE(cueHigh->getIsPlayingProperty());
+        EXPECT_NE(CueTestAccess::ActiveInstance(*cueHigh, 0), nullptr);
+
+        EXPECT_TRUE(cueNew->getIsPlayingProperty());
+        EXPECT_NE(CueTestAccess::ActiveInstance(*cueNew, 0), nullptr);
+
+        cueHigh->Stop(AudioStopOptions::Immediate);
+        cueNew->Stop(AudioStopOptions::Immediate);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
 }

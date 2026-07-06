@@ -155,6 +155,18 @@ namespace Microsoft::Xna::Framework::Audio
         std::chrono::steady_clock::time_point fadeStart_{};
         uint16_t    fadeOutMS_  = 0;
 
+        // P9-CATEGORY-005/007/008: real category-level instanceLimit enforcement (see
+        // AudioEngine::CheckCategoryInstanceLimit(), called from Play()). fadeInMS_/fadeInStart_
+        // drive a linear fade-in ramp the same way fadeStart_/fadeOutMS_ already drive the
+        // fade-out ramp above, matching FACT_INTERNAL_UpdateSound's SOUND_STATE_FADE_IN handling
+        // (FACT_internal.c) -- only meaningful while state_ == State::Playing and fadeInMS_ > 0.
+        // priority_ is this cue's resolved sound priority (XsbSound::priority), captured at
+        // Play() time so a category's REPLACE_LOWEST_PRIORITY behavior can compare it against
+        // other currently-playing cues in the same category without re-reading the .xsb.
+        std::chrono::steady_clock::time_point fadeInStart_{};
+        uint16_t    fadeInMS_   = 0;
+        uint8_t     priority_   = 0;
+
         std::unordered_map<std::string, float> variables_;
 
         struct PlaybackInstance
@@ -169,6 +181,16 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<WaveBank*> waveBanksUsed_;
 
         void StopInternal(bool immediate);
+
+        // P9-CATEGORY-005/007: called by AudioEngine::CheckCategoryInstanceLimit() when this cue
+        // is chosen as the victim to make room for a new cue exceeding its category's
+        // instanceLimit. Reuses the exact Stopping/fadeOutMS_ ramp ReconcileState() already
+        // implements for Stop(AsAuthored) (P9-STOP-010) -- a real FACT category-authored
+        // fadeOutMS produces the identical audible fade-out shape as a per-cue authored one, only
+        // the trigger differs. A zero fadeOutMS hard-stops immediately, matching
+        // FACT_INTERNAL_BeginFadeOut's effectively-instant behavior for fadeOutMS == 0
+        // (FACT_internal.c).
+        void ForceFadeOutForInstanceLimit(uint16_t fadeOutMS);
 
         // P9-LIFECYCLE-001/002: lazily reconciles state_ from Playing to Stopped once every
         // instance in active_ has finished naturally (no explicit Stop() call) -- matches FNA,

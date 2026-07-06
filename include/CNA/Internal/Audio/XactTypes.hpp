@@ -28,6 +28,12 @@ namespace CNA::Internal::Audio
         uint16_t    fadeInMS;
         /** @brief Fade-out duration in milliseconds. */
         uint16_t    fadeOutMS;
+        /**
+         * @brief Behavior applied when a new cue would exceed instanceLimit: 0=fail (reject the
+         * new cue), 1=queue, 2=replace oldest, 3=replace quietest, 4=replace lowest priority.
+         * Matches FAudio's own max_instance_behavior enum (FACT_internal.h).
+         */
+        uint8_t     maxInstanceBehavior;
     };
 
     /** @brief One global variable entry parsed from a .XGS global settings file. */
