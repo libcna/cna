@@ -1229,7 +1229,7 @@ not an alternate spelling to preserve.
     edited; confirms the real restart-on-re-Start() behavior)
   - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (edited)
 
-### VIB-008 — Make left/right motor support explicitly `NOXNA`
+### VIB-008 — Make left/right motor support explicitly `NOXNA` — CLOSED (2026-07-06, re-verified through the VIB-002 refactor, doc comment strengthened)
 
 - **Priority:** Medium
 - **Area:** `NOXNA` Extension
@@ -1237,19 +1237,43 @@ not an alternate spelling to preserve.
   header — this task is to keep it that way through the `VIB-002`/`VIB-003` backend
   refactor and make sure its documentation is unambiguous, not to introduce the marker
   for the first time.
+- **Resolution (2026-07-06):** re-confirmed `StartLeftRight` is still declared
+  `NOXNA void StartLeftRight(...)` in `VibrateController.hpp` after the full `VIB-002`
+  backend-abstraction refactor (grepped directly, not assumed) — the refactor moved its
+  implementation into `Detail::SdlHapticVibrateBackend::StartLeftRight()` but did not
+  touch the public declaration's marker. `docs/devices-api-coverage.md`'s existing
+  per-member table already lists it as `NOXNA` (row: `StartLeftRight(float, float,
+  TimeSpan)` | `NOXNA` | `SDL_HAPTIC_LEFTRIGHT`; mutually exclusive with `Start()`) —
+  confirmed still present and accurate. Strengthened its own doc comment (`VIB-003`)
+  with a `@note` explaining that on Android specifically, the real phone vibrator
+  receives a single blended intensity, not genuine independent motors — reinforcing
+  "this is a CNA extension for hardware that can actually do two motors" rather than
+  something every platform delivers identically. No `DEV-API-002` strict-mode
+  mechanism exists yet to test rejection against (`DEV-API-002` itself is still open,
+  tracked separately) — this task's own acceptance criterion ("ensure any future
+  strict-mode check rejects it") is satisfied by the marker already being correctly in
+  place for that future check to find, not by building the check here (out of this
+  task's scope, `VERIFY-003`'s).
 - **Required work:**
-  - Keep `StartLeftRight` behind `NOXNA` through any backend changes.
+  - Keep `StartLeftRight` behind `NOXNA` through any backend changes. Done, re-verified.
   - Document that it is a CNA extension for dual-motor/gamepad-like haptic hardware, not
-    XNA `VibrateController` API.
+    XNA `VibrateController` API. Done — already documented; strengthened further with
+    the Android single-actuator-blending caveat (`VIB-003`).
   - Ensure any future strict-XNA-surface check (from `DEV-API-002`) rejects it if that
-    mechanism is built.
+    mechanism is built. N/A yet — no such mechanism exists; the marker is correctly in
+    place for it to find once built (`VERIFY-003`).
 - **Acceptance criteria:**
-  - `DEV-API-001`'s matrix covers `StartLeftRight` as `NOXNA`.
-  - Docs clearly state it is not XNA 4.0 API.
+  - `DEV-API-001`'s matrix covers `StartLeftRight` as `NOXNA`. Confirmed, already true.
+  - Docs clearly state it is not XNA 4.0 API. Confirmed, and strengthened.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/VibrateController.hpp`
-  - `src/Microsoft/Devices/VibrateController.cpp`
-  - `tests/Microsoft/Devices/VibrateControllerTests.cpp`
+  - `include/Microsoft/Devices/VibrateController.hpp` (inspected/edited via `VIB-003`,
+    no further change needed here)
+  - `src/Microsoft/Devices/VibrateController.cpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/Detail/SdlHapticVibrateBackend.cpp` (inspected, no change
+    needed — implementation moved here by `VIB-002`, marker stayed on the public
+    declaration)
+  - `docs/devices-api-coverage.md` (inspected, already correct)
+  - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (inspected, already covered)
 
 ### VIB-009 — Add fake vibration backend tests — CLOSED (2026-07-06, via `VIB-002`)
 
