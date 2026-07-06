@@ -28,9 +28,8 @@ framework/runtime, not a game.
   working straight through Phase 10's list without stopping to ask; every item either landed for
   real or was closed with a corrected finding/reaffirmed decision instead of a code change (see §3
   for each). With Phase 10 exhausted, this pass moved to self-contained verification work not
-  gated on a new design decision -- see §8 for what's running/next; a genuinely new "Phase 11"
-  scope is intentionally NOT started, since defining new task scope is exactly the kind of
-  decision this session is deferring to the user's return (§9).
+  gated on a new design decision (see §3's ASan/UBSan/TSan sweep). **The user has since confirmed
+  (2026-07-06) that a Phase 11 will happen** -- concrete scope/task list not yet defined; see §8.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -381,20 +380,19 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 ## 8. Next smallest tasks
 
 **Phase 10 is fully closed (89/89 task IDs), and the follow-up ASan+UBSan+ThreadSanitizer sweep
-came back clean (§2/§3).** There is no further self-selectable work left on this branch that
-doesn't require a new scope/design decision. Per this autonomous pass's own standing instruction
-not to invent new scope (§9), **the session is stopping here** rather than starting a new "Phase
-11" or otherwise picking new work. Genuinely open items that need the user's input before anything
-further can be self-directed:
+came back clean (§2/§3).** **The user has confirmed (2026-07-06) that a Phase 11 will happen** --
+this branch's Audio work continues past the Phase 10 hardening/parity list.
 
-- **Deciding whether to open a "Phase 11"** (or otherwise define new Audio work) at all -- Phase 10
-  was explicitly scoped as "hardening and XNA/XACT parity" and has run its course; what comes next
-  (if anything) is a product decision, not a mechanical one.
+**Phase 11 scope is not yet defined.** No task list, theme, or starting point has been given yet;
+none should be invented speculatively. When the user gives concrete direction for Phase 11 (a
+specific bug, feature, or area to focus on), start a new "Phase 11" major section in
+`plan_audio.md` (same structure as Phase 9/10: numbered sub-groups, `[ ]`/`[x]` task IDs,
+git-stash-verified fixes) and update this file's "Current phase" (§1) accordingly.
+
+Other items still open, unrelated to Phase 11's scope itself:
 - The two explicit design-only RFCs recorded in `plan_audio.md` (`P10-PAN-002`'s RFC-1: internal
   post-SDL3_mixer crossfeed mixing layer; `P10-HRTF-002`'s RFC-2: optional FAudio/FACT backend) --
-  proposals only, never approved as work, per §9.
-- Whether to push this branch's commits (`git log origin/feature/audio..HEAD`) -- not done this
-  pass, per this project's standing "never push without being explicitly asked" rule.
+  proposals only, never approved as work; could become Phase 11 candidates if the user picks them.
 
 ---
 
