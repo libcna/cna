@@ -14,7 +14,7 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 
 | Type | Header | Dedicated suite | Test files | Note |
 |------|--------|-----------------|-----------|------|
-| `ButtonState` | `include/Microsoft/Xna/Framework/Input/ButtonState.hpp` | yes | 9 |  |
+| `ButtonState` | `include/Microsoft/Xna/Framework/Input/ButtonState.hpp` | yes | 10 |  |
 | `Buttons` | `include/Microsoft/Xna/Framework/Input/Buttons.hpp` | yes | 8 |  |
 | `GamePad` | `include/Microsoft/Xna/Framework/Input/GamePad.hpp` | yes | 12 |  |
 | `GamePadButtons` | `include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp` | yes | 4 |  |
@@ -24,7 +24,7 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `GamePadState` | `include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp` | yes | 5 |  |
 | `GamePadThumbSticks` | `include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp` | yes | 4 |  |
 | `GamePadTriggers` | `include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp` | yes | 4 |  |
-| `GamePadType` | `include/Microsoft/Xna/Framework/Input/GamePadType.hpp` | yes | 5 |  |
+| `GamePadType` | `include/Microsoft/Xna/Framework/Input/GamePadType.hpp` | yes | 6 |  |
 | `GestureSample` | `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp` | yes | 5 |  |
 | `GestureType` | `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp` | yes | 8 |  |
 | `KeyState` | `include/Microsoft/Xna/Framework/Input/KeyState.hpp` | yes | 4 |  |
@@ -34,7 +34,7 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `Mouse` | `include/Microsoft/Xna/Framework/Input/Mouse.hpp` | yes | 7 |  |
 | `MouseCursor` | `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp` | yes | 3 |  |
 | `MouseState` | `include/Microsoft/Xna/Framework/Input/MouseState.hpp` | yes | 5 |  |
-| `TextInputEXT` | `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | yes | 6 |  |
+| `TextInputEXT` | `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | yes | 7 |  |
 | `TouchCollection` | `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` | yes | 6 |  |
 | `TouchLocation` | `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp` | yes | 5 |  |
 | `TouchLocationState` | `include/Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp` | yes | 9 |  |
@@ -49,7 +49,7 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `GamePadButton` | `include/CNA/Internal/Input/InputManager.hpp` | yes | 2 |  |
 | `GestureDetector` | `include/CNA/Internal/Input/GestureDetector.hpp` | yes | 4 |  |
 | `ISdlGamepadBackend` | `include/CNA/Internal/Input/SdlGamepadBackend.hpp` | no | 1 | covered via SdlGamepadBackendTests.cpp via the FakeSdlGamepadBackend seam |
-| `InputManager` | `include/CNA/Internal/Input/InputManager.hpp` | no | 15 | covered via InputResetTests / SdlInputBridge* / SdlGamepadBackendTests (no same-named suite by design) |
+| `InputManager` | `include/CNA/Internal/Input/InputManager.hpp` | no | 16 | covered via InputResetTests / SdlInputBridge* / SdlGamepadBackendTests (no same-named suite by design) |
 | `MouseButton` | `include/CNA/Internal/Input/InputManager.hpp` | no | 1 | covered via SdlInputBridgeMouseTests / InputManager (internal enum) |
 | `RawGamePadState` | `include/CNA/Internal/Input/InputManager.hpp` | no | 0 | covered via SdlGamepadBackendTests.cpp via InputManager::GetRawGamePadState (bound as auto) |
 | `SdlInputBridge` | `include/CNA/Internal/Input/SdlInputBridge.hpp` | yes | 12 |  |
