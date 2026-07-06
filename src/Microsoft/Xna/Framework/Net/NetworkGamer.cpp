@@ -19,9 +19,11 @@ namespace Microsoft::Xna::Framework::Net
     bool NetworkGamer::getHasLeftSessionProperty() const     { return hasLeftSession_; }
     void NetworkGamer::SetHasLeftSession(bool value)         { hasLeftSession_ = value; }
     bool NetworkGamer::getHasVoiceProperty() const            { return hasVoice_; }
-    SharpRuntime::bytecs NetworkGamer::getIdProperty() const  { return 0; }
+    SharpRuntime::bytecs NetworkGamer::getIdProperty() const  { return id_; }
+    void NetworkGamer::SetId(SharpRuntime::bytecs value)      { id_ = value; }
     bool NetworkGamer::getIsGuestProperty() const             { return isGuest_; }
-    bool NetworkGamer::getIsHostProperty() const              { return true; }
+    bool NetworkGamer::getIsHostProperty() const              { return isHost_; }
+    void NetworkGamer::SetIsHost(bool value)                  { isHost_ = value; }
     bool NetworkGamer::getIsLocalProperty() const             { return false; }
     bool NetworkGamer::getIsMutedByLocalUserProperty() const  { return isMutedByLocalUser_; }
     bool NetworkGamer::getIsPrivateSlotProperty() const       { return isPrivateSlot_; }

@@ -33,7 +33,10 @@ TEST(NetworkGamerTest, DefaultPropertyValues) {
     EXPECT_FALSE(g.getHasVoiceProperty());
     EXPECT_EQ(g.getIdProperty(), 0);
     EXPECT_FALSE(g.getIsGuestProperty());
-    EXPECT_TRUE(g.getIsHostProperty());
+    // Id/IsHost are real per-instance state (see DEFERRED.md item #20 in the sibling
+    // cna-samples repo), not FNA's hardcoded 0/true stubs — NetworkSession/ENetBackend set
+    // them explicitly; a bare CreateInternal() with no owning session defaults to false.
+    EXPECT_FALSE(g.getIsHostProperty());
     EXPECT_FALSE(g.getIsLocalProperty());
     EXPECT_FALSE(g.getIsMutedByLocalUserProperty());
     EXPECT_FALSE(g.getIsPrivateSlotProperty());
@@ -41,6 +44,22 @@ TEST(NetworkGamerTest, DefaultPropertyValues) {
     EXPECT_FALSE(g.getIsTalkingProperty());
     EXPECT_EQ(g.getRoundtripTimeProperty(), System::TimeSpan::Zero);
     EXPECT_EQ(g.getSessionProperty(), nullptr);
+}
+
+TEST(NetworkGamerTest, SetIdUpdatesProperty) {
+    NetworkGamer g = NetworkGamer::CreateInternal(nullptr);
+    EXPECT_EQ(g.getIdProperty(), 0);
+    g.SetId(7);
+    EXPECT_EQ(g.getIdProperty(), 7);
+}
+
+TEST(NetworkGamerTest, SetIsHostUpdatesProperty) {
+    NetworkGamer g = NetworkGamer::CreateInternal(nullptr);
+    EXPECT_FALSE(g.getIsHostProperty());
+    g.SetIsHost(true);
+    EXPECT_TRUE(g.getIsHostProperty());
+    g.SetIsHost(false);
+    EXPECT_FALSE(g.getIsHostProperty());
 }
 
 TEST(NetworkGamerTest, SetIsReadyProperty) {

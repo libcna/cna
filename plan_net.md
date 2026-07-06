@@ -1532,7 +1532,7 @@ NetRumble (#062) — all four `cna-samples` networking samples call `NetworkSess
   `tools/net/gamerservices_dispatcher_harness.cpp` (new),
   `tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp` (new), `CMakeLists.txt`.
 
-- [ ] **Task 12.2** — Give `NetworkGamer` real per-instance `IsHost`/`Id` state instead of
+- [x] **Task 12.2** — Give `NetworkGamer` real per-instance `IsHost`/`Id` state instead of
   hardcoded stub constants (`DEFERRED.md` item #20). Root cause, confirmed by direct inspection of
   `src/Microsoft/Xna/Framework/Net/NetworkGamer.cpp`:
   ```cpp
@@ -1547,24 +1547,60 @@ NetRumble (#062) — all four `cna-samples` networking samples call `NetworkSess
   protocol that writes a gamer's `Id` into a packet and looks it back up on the receiving end
   (exactly what ClientServerSample's/NetworkPrediction's/PeerToPeer's per-object state sync does) —
   breaks as soon as more than one gamer is in a session.
-  Fix approach: add a real `bool isHost_` member to `NetworkGamer` (or derive it from whichever
-  session-level flag `NetworkSession`'s constructor already sets correctly at
-  `NetworkSession.cpp:104-111` — `host_ = localGamers_[0]` after `Create()`, vs. whatever
-  `Join()`/`JoinInvited()`/`ENetBackend`'s remote-gamer construction path should set for a
-  non-host), set once at construction for every `NetworkGamer`/`LocalNetworkGamer` (construction
-  sites: `NetworkSession.cpp:86,95,288` for locals, `ENetBackend.cpp:140,188,203` for remotes,
-  `LocalNetworkGamer::CreateInternal`/`NetworkGamer::CreateInternal`), and return it from
-  `getIsHostProperty()` instead of the hardcoded `true`. Add a real per-session-unique `bytecs id_`
-  assigned at the same construction sites (e.g. a `NetworkSession`-owned monotonic counter, or
-  index-in-`AllGamers`, whichever preserves stable identity across the session's lifetime — decide
-  and document the exact scheme, since packets on the wire will depend on it not changing gamer to
-  gamer), returned from `getIdProperty()` instead of the hardcoded `0`.
-  Add unit tests: multiple gamers in one session get distinct `Id`s; `FindGamerById` returns the
-  correct gamer for each; exactly one gamer (session host) reports `IsHost == true` on the host
-  machine and `IsHost == false` for every remote gamer as observed from a client machine.
-  File: `include/`+`src/Microsoft/Xna/Framework/Net/NetworkGamer.hpp`/`.cpp`,
-  `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp`,
-  `src/CNA/Internal/Net/ENetBackend.cpp`.
+  **Key discovery that shaped the fix:** `ENetBackend.cpp` already had a complete, real,
+  cross-machine-consistent per-gamer "wire-id" system (`SessionState::NextWireId`/
+  `GamerToWireId`/`WireIdToGamer`, negotiated via `ClientHello`/`ServerWelcome`/
+  `GamerJoinBroadcast`) — it just wasn't surfaced through the public `NetworkGamer::Id` property.
+  No new wire-protocol work was needed for `Id`; only wiring the already-computed wire-id through a
+  new setter.
+  **Fix applied:**
+  - `NetworkGamer` gained `NOXNA void SetId(bytecs)` / `NOXNA void SetIsHost(bool)`, mirroring the
+    existing `SetHasLeftSession` pattern; `id_`/`isHost_` are real members (defaulting `0`/`false`).
+  - `NetworkSession`'s private constructor gained a `bool isHost` parameter (not part of FNA's
+    signature): `EndCreate` passes `true`, `EndJoin`/`EndJoinInvited` pass `false`. Every local
+    gamer gets `SetIsHost(isHost)` plus a sequential local-placeholder `SetId(0,1,2,...)` at
+    construction (and in `AddLocalGamer`, continuing from `allGamers_.getCountProperty()`).
+  - `ENetBackend.cpp`'s `AssignWireId` now also calls `gamer->SetId(id)` — this alone fixes `Id`
+    for both `EnsureLocalWireIds` (host's own locals) and `HandleClientHello`'s newly-joining
+    client gamers. `HandleServerWelcome`'s two loops (own locals learning their host-assigned id;
+    new remote gamers from `ExistingRoster`) and `HandleGamerJoinBroadcast`'s loop likewise call
+    `SetId(...)` with the wire id — overwriting `NetworkSession`'s local placeholder with the real,
+    host-negotiated value once a `SystemLink` session actually connects. `HandleClientHello` also
+    calls `SetIsHost(false)` on new remote gamers (a connecting client's gamers are provably never
+    the host).
+  **Scoped, documented limitation (not fixed here):** a remote gamer representing the actual host
+  machine, as seen from a non-host client, still reports `IsHost == false` — `RosterEntry` carries
+  no host flag, so distinguishing "the host's gamers" from "other clients' gamers" within
+  `welcome.ExistingRoster`/a `GamerJoinBroadcast` isn't solvable without a wire-protocol addition.
+  This is a strict improvement over today (where *every* gamer, including other clients,
+  incorrectly reported `true`) and matches exactly what `DEFERRED.md`'s own writeup says the real
+  sample needed (a correct session-level "am I the host" check via `NetworkSession.IsHost`/a local
+  gamer's `IsHost`, not per-remote-gamer host identification) — documented via `//` comments at
+  every relevant call site and in `SetIsHost`'s own doc comment, not silently left unaddressed.
+  **Tests:** `NetworkGamerMachineTests.cpp` — updated `DefaultPropertyValues` (`IsHost` now
+  defaults `false`, not the old hardcoded-`true` stub), added `SetIdUpdatesProperty`/
+  `SetIsHostUpdatesProperty`. `NetworkSessionTests.cpp` — renamed
+  `FindGamerByIdMatchesFirstGamerSinceIdIsAlwaysZero` → `FindGamerByIdMatchesSoleLocalGamer` (its
+  old name described the bug, not the fix), added `MultipleLocalGamersGetDistinctIdsAndFindGamerByIdRoutesCorrectly`
+  (2 local gamers get `Id` 0/1, `FindGamerById` routes to the right one),
+  `CreateMakesLocalGamersReportIsHostTrue`, `JoinInvitedMakesLocalGamersReportIsHostFalse`.
+  `ENetBackendTests.cpp` — extended `HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGamer`/
+  `ClientSendsClientHelloAndProcessesServerWelcome` to assert the real wire-negotiated `Id` values
+  end-to-end over actual ENet traffic (not just in isolation), and caught two of my own wrong
+  assumptions while doing so: local gamers always report gamertag `"Stub Gamer"` (searching
+  `AllGamers` by real gamertag never finds them — must use `getLocalGamersProperty()[0]` instead),
+  and this test file's "client" fixture is itself built via `NetworkSession::Create()` (an ENet
+  networking-role simulation, not a real `Join()`), so its own local gamer legitimately reports
+  `IsHost == true` — not a place to assert the `Join()`-side `false` behavior.
+  Full regression check: all 3231 non-skipped `CnaTests` pass (3233 total, 2 expected skips — +5
+  vs. Task 12.1's count), including the real two-process ENet loopback test and every
+  `ENetBackendTest`/`ENetDiscoveryServiceTest` case.
+  Files: `include/`+`src/Microsoft/Xna/Framework/Net/NetworkGamer.hpp`/`.cpp`,
+  `include/`+`src/Microsoft/Xna/Framework/Net/NetworkSession.hpp`/`.cpp`,
+  `src/CNA/Internal/Net/ENetBackend.cpp`,
+  `tests/Microsoft/Xna/Framework/Net/NetworkGamerMachineTests.cpp`,
+  `tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp`,
+  `tests/CNA/Internal/Net/ENetBackendTests.cpp`.
 
 - [ ] **Task 12.3** — Raise the initial `GamerJoined` event(s) synchronously during
   `Create()`/`Join()` instead of queuing them for the next `Update()` (`DEFERRED.md` item #21).

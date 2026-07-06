@@ -75,12 +75,14 @@ namespace Microsoft::Xna::Framework::Net
         int maxGamers,
         int privateGamerSlots,
         int maxLocal,
-        std::optional<std::vector<SignedInGamer*>> localGamers
+        std::optional<std::vector<SignedInGamer*>> localGamers,
+        bool isHost
     )
         : allGamers_(GamerServices::GamerCollection<NetworkGamer>::CreateInternal({}))
         , localGamers_(GamerServices::GamerCollection<LocalNetworkGamer>::CreateInternal({}))
         , remoteGamers_(GamerServices::GamerCollection<NetworkGamer>::CreateInternal({}))
         , previousGamers_(GamerServices::GamerCollection<NetworkGamer>::CreateInternal({}))
+        , isHost_(isHost)
         , maxGamers_(maxGamers)
         , privateGamerSlots_(privateGamerSlots)
         , sessionProperties_(std::move(properties))
@@ -113,6 +115,19 @@ namespace Microsoft::Xna::Framework::Net
 
         // RemoteGamers stays empty: FNA's constructor never populates it (matches upstream, not a gap here).
         for (LocalNetworkGamer* l : locals) allGamers_.Add(l);
+
+        // Not part of FNA's original design (see DEFERRED.md item #20 in the sibling cna-samples
+        // repo): give every local gamer a real host flag and a real, locally-unique id instead of
+        // FNA's hardcoded true/0 stubs. The id assigned here is only a local placeholder for
+        // non-SystemLink sessions - ENetBackend overwrites it with the wire-negotiated id once a
+        // real SystemLink session actually joins/hosts (see ENetBackend.cpp's AssignWireId/
+        // HandleServerWelcome/HandleGamerJoinBroadcast).
+        SharpRuntime::bytecs nextLocalId = 0;
+        for (LocalNetworkGamer* l : locals)
+        {
+            l->SetIsHost(isHost_);
+            l->SetId(nextLocalId++);
+        }
 
         host_ = localGamers_[0];
 
@@ -299,6 +314,8 @@ namespace Microsoft::Xna::Framework::Net
             throw System::InvalidOperationException("LocalGamer max limit!");
         }
         auto* adding = new LocalNetworkGamer(LocalNetworkGamer::CreateInternal(gamer, this));
+        adding->SetIsHost(isHost_);
+        adding->SetId(static_cast<SharpRuntime::bytecs>(allGamers_.getCountProperty()));
         localGamers_.Add(adding);
         allGamers_.Add(adding);
     }
@@ -568,7 +585,8 @@ namespace Microsoft::Xna::Framework::Net
             69,
             activeAction_->MaxPrivateSlots,
             activeAction_->MaxLocalGamers,
-            activeAction_->LocalGamers
+            activeAction_->LocalGamers,
+            true // EndCreate: this machine is hosting (see DEFERRED.md item #20)
         );
 
         activeAction_ = nullptr;
@@ -750,7 +768,8 @@ namespace Microsoft::Xna::Framework::Net
             MaxSupportedGamers,              // FIXME upstream
             4,                                // FIXME upstream
             actionMaxLocalGamers,
-            actionLocalGamers
+            actionLocalGamers,
+            false // EndJoin: this machine is joining someone else's session (see DEFERRED.md item #20)
         );
         return activeSession_;
     }
@@ -842,7 +861,8 @@ namespace Microsoft::Xna::Framework::Net
             MaxSupportedGamers,              // FIXME upstream
             4,                                // FIXME upstream
             actionMaxLocalGamers,
-            actionLocalGamers
+            actionLocalGamers,
+            false // EndJoinInvited: this machine is joining someone else's session (see DEFERRED.md item #20)
         );
         return activeSession_;
     }

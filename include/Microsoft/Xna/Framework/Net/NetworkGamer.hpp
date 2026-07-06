@@ -44,11 +44,22 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the gamer's session-local identifier.
          *
-         * Always 0, matching FNA's stub.
-         *
          * @return The gamer identifier.
          */
         [[nodiscard]] SharpRuntime::bytecs getIdProperty() const;
+
+        /**
+         * @brief Sets the gamer's session-local identifier.
+         *
+         * FNA hardcodes this property's getter to 0 for every gamer (a real, confirmed upstream
+         * limitation - see DEFERRED.md item #20 in the sibling cna-samples repo). Restored here,
+         * NOXNA, so NetworkSession and the ENet backend can assign a real, cross-machine-consistent
+         * id: NetworkSession assigns a local placeholder at construction, and ENetBackend overwrites
+         * it with the wire-negotiated id once a SystemLink session actually joins/hosts.
+         *
+         * @param value The new identifier.
+         */
+        NOXNA void SetId(SharpRuntime::bytecs value);
 
         /**
          * @brief Gets whether this gamer is a guest.
@@ -60,11 +71,27 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets whether this gamer is the session host.
          *
-         * Always true, matching FNA's stub.
-         *
          * @return true if the gamer is the session host.
          */
         [[nodiscard]] bool getIsHostProperty() const;
+
+        /**
+         * @brief Sets whether this gamer is the session host.
+         *
+         * FNA hardcodes this property's getter to true for every gamer (see DEFERRED.md item #20
+         * in the sibling cna-samples repo - this made NetworkSession.IsHost always true on every
+         * machine). Restored here, NOXNA, so NetworkSession can set a local gamer's real host
+         * status at construction (true after Create(), false after Join()/JoinInvited()).
+         *
+         * Scoped limitation: a *remote* gamer representing the actual host machine still reports
+         * false here, since determining that from the wire roster alone (RosterEntry carries no
+         * host flag) is not yet implemented - only a session's own local gamers get a fully
+         * correct value. This already fully replaces the broken NetworkSession.IsHost for local
+         * "am I the host" checks, which is what real callers need it for.
+         *
+         * @param value The new host state.
+         */
+        NOXNA void SetIsHost(bool value);
 
         /**
          * @brief Gets whether this gamer is a local gamer.
@@ -163,7 +190,9 @@ namespace Microsoft::Xna::Framework::Net
     private:
         bool hasLeftSession_{false};
         bool hasVoice_{false};
+        SharpRuntime::bytecs id_{0};
         bool isGuest_{false};
+        bool isHost_{false};
         bool isMutedByLocalUser_{false};
         bool isPrivateSlot_{false};
         bool isReady_{false};

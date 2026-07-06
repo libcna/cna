@@ -174,7 +174,7 @@ TEST(NetworkSessionTest, AddLocalGamerThrowsAtMaxLimit) {
     session->Dispose();
 }
 
-TEST(NetworkSessionTest, FindGamerByIdMatchesFirstGamerSinceIdIsAlwaysZero) {
+TEST(NetworkSessionTest, FindGamerByIdMatchesSoleLocalGamer) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
@@ -185,6 +185,60 @@ TEST(NetworkSessionTest, FindGamerByIdMatchesFirstGamerSinceIdIsAlwaysZero) {
 
     session->Dispose();
 }
+
+// Real, distinct per-gamer ids (see DEFERRED.md item #20 in the sibling cna-samples repo) — a
+// multi-gamer session used to have every gamer report Id == 0, so FindGamerById always resolved
+// to the first gamer regardless of which id was requested.
+TEST(NetworkSessionTest, MultipleLocalGamersGetDistinctIdsAndFindGamerByIdRoutesCorrectly) {
+    auto gamer1 = MakeSignedInGamer("tag1");
+    auto gamer2 = MakeSignedInGamer("tag2");
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer1, &gamer2}, 8, 0, NetworkSessionProperties{}
+    );
+
+    LocalNetworkGamer* first = session->getLocalGamersProperty()[0];
+    LocalNetworkGamer* second = session->getLocalGamersProperty()[1];
+    EXPECT_EQ(first->getIdProperty(), 0);
+    EXPECT_EQ(second->getIdProperty(), 1);
+    EXPECT_EQ(session->FindGamerById(0), first);
+    EXPECT_EQ(session->FindGamerById(1), second);
+    EXPECT_EQ(session->FindGamerById(2), nullptr);
+
+    session->Dispose();
+}
+
+// NetworkGamer::IsHost (see DEFERRED.md item #20): real per-instance state derived from whether
+// the owning NetworkSession was created via Create() (host) vs. Join()/JoinInvited() (client),
+// instead of FNA's hardcoded-true stub that made every gamer, on every machine, report host.
+TEST(NetworkSessionTest, CreateMakesLocalGamersReportIsHostTrue) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+
+    EXPECT_TRUE(session->getLocalGamersProperty()[0]->getIsHostProperty());
+    EXPECT_TRUE(session->getIsHostProperty());
+
+    session->Dispose();
+}
+
+TEST(NetworkSessionTest, JoinInvitedMakesLocalGamersReportIsHostFalse) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::JoinInvited(std::vector<SignedInGamer*>{&gamer});
+
+    EXPECT_FALSE(session->getLocalGamersProperty()[0]->getIsHostProperty());
+    EXPECT_FALSE(session->getIsHostProperty());
+
+    session->Dispose();
+}
+
+// NOTE: AddLocalGamer()'s successful (non-throwing) path is not exercised here, for the same
+// reason AddLocalGamerThrowsAtMaxLimit's own comment explains: the explicit-local-gamers Create()/
+// JoinInvited() overloads always set maxLocalGamers_ to the passed list's size, so any session
+// constructed through them already has zero spare capacity — AddLocalGamer always throws
+// immediately. There is no currently-safe way to construct a session with spare local-gamer
+// capacity (the maxLocalGamers-only overloads fall back to the empty global Gamer::SignedInGamers
+// in this test binary — see this file's own top-of-file note on why that's unsafe to exercise).
 
 TEST(NetworkSessionTest, UpdateAfterDisposeThrows) {
     auto gamer = MakeSignedInGamer();

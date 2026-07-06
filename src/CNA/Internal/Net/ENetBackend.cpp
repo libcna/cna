@@ -68,6 +68,10 @@ namespace CNA::Internal::Net
             uint8_t id = state.NextWireId++;
             state.GamerToWireId[gamer] = id;
             state.WireIdToGamer[id] = gamer;
+            // Surface the real, cross-machine-consistent wire-id through the public
+            // NetworkGamer::Id property (see DEFERRED.md item #20 in the sibling cna-samples
+            // repo) - overwrites NetworkSession's own construction-time local placeholder id.
+            gamer->SetId(id);
             return id;
         }
 
@@ -138,6 +142,9 @@ namespace CNA::Internal::Net
             for (const std::string& gamertag : hello.LocalGamertags)
             {
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, gamertag));
+                // We are the host handling an incoming ClientHello, so this gamer belongs to the
+                // connecting client - never the host (see DEFERRED.md item #20).
+                gamer->SetIsHost(false);
                 uint8_t id = AssignWireId(state, gamer);
                 welcome.AssignedWireIds.push_back(id);
                 newWireIds.push_back(id);
@@ -177,6 +184,9 @@ namespace CNA::Internal::Net
                 uint8_t id = welcome.AssignedWireIds[static_cast<size_t>(i)];
                 state.GamerToWireId[locals[i]] = id;
                 state.WireIdToGamer[id] = locals[i];
+                // Overwrite NetworkSession's own construction-time local placeholder id with the
+                // real, host-negotiated one (see DEFERRED.md item #20).
+                locals[i]->SetId(id);
             }
 
             for (const RosterEntry& entry : welcome.ExistingRoster)
@@ -188,6 +198,12 @@ namespace CNA::Internal::Net
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, entry.Gamertag));
                 state.GamerToWireId[gamer] = entry.WireId;
                 state.WireIdToGamer[entry.WireId] = gamer;
+                // RosterEntry doesn't carry a host flag, so this new remote gamer's IsHost stays
+                // at NetworkGamer's default (false) even when it's actually the host's gamer -
+                // a scoped, documented limitation (see DEFERRED.md item #20 and
+                // NetworkGamer::SetIsHost's doc comment). Its Id is real and wire-consistent
+                // regardless.
+                gamer->SetId(entry.WireId);
                 session->AddRemoteGamer(gamer);
             }
         }
@@ -203,6 +219,8 @@ namespace CNA::Internal::Net
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, entry.Gamertag));
                 state.GamerToWireId[gamer] = entry.WireId;
                 state.WireIdToGamer[entry.WireId] = gamer;
+                // Same scoped IsHost limitation as HandleServerWelcome above; Id is real either way.
+                gamer->SetId(entry.WireId);
                 session->AddRemoteGamer(gamer);
             }
         }

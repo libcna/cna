@@ -201,11 +201,21 @@ TEST(ENetBackendTest, HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGam
 
     EXPECT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
     EXPECT_EQ(joinCount, 1);
-    bool foundRemote = false;
+    NetworkGamer* remoteGamer = nullptr;
     for (NetworkGamer* g : host.session->getAllGamersProperty()) {
-        if (g->getGamertagProperty() == "RemotePlayer") foundRemote = true;
+        // Local gamers always report "Stub Gamer" (see WireGamertagFor's own comment); a real
+        // gamertag search only ever finds the remote gamer, so the host's own local gamer is
+        // looked up directly below instead.
+        if (g->getGamertagProperty() == "RemotePlayer") remoteGamer = g;
     }
-    EXPECT_TRUE(foundRemote);
+    ASSERT_NE(remoteGamer, nullptr);
+    NetworkGamer* localGamer = host.session->getLocalGamersProperty()[0];
+    // Task 12.2 (DEFERRED.md item #20): NetworkGamer::Id is now the real, wire-negotiated id
+    // (not FNA's hardcoded 0), and only the host's own local gamer reports IsHost == true.
+    EXPECT_EQ(remoteGamer->getIdProperty(), welcome.AssignedWireIds[0]);
+    EXPECT_EQ(localGamer->getIdProperty(), 0);
+    EXPECT_FALSE(remoteGamer->getIsHostProperty());
+    EXPECT_TRUE(localGamer->getIsHostProperty());
 }
 
 TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
@@ -256,11 +266,23 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
 
     ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
     EXPECT_EQ(joinCount, 1);
-    bool foundHostPlayer = false;
+    NetworkGamer* hostPlayer = nullptr;
     for (NetworkGamer* g : client.session->getAllGamersProperty()) {
-        if (g->getGamertagProperty() == "HostPlayer") foundHostPlayer = true;
+        if (g->getGamertagProperty() == "HostPlayer") hostPlayer = g;
     }
-    EXPECT_TRUE(foundHostPlayer);
+    ASSERT_NE(hostPlayer, nullptr);
+    // Task 12.2 (DEFERRED.md item #20): the client's own local gamer gets the host-assigned wire
+    // id (5, per welcome.AssignedWireIds above); the remote "HostPlayer" gamer gets its roster
+    // wire id (0).
+    EXPECT_EQ(client.session->getLocalGamersProperty()[0]->getIdProperty(), 5);
+    EXPECT_EQ(hostPlayer->getIdProperty(), 0);
+    // NOTE: not asserting IsHost here — this fixture's "client" session is itself constructed via
+    // NetworkSession::Create() (see SystemLinkSessionFixture above), so its own local gamer
+    // legitimately reports IsHost == true; that reflects this test's Create()-based fixture setup,
+    // not the real Join()-based client path exercised by NetworkSessionTests.cpp's
+    // JoinInvitedMakesLocalGamersReportIsHostFalse. The remote "HostPlayer" gamer's IsHost stays at
+    // NetworkGamer's default false — a documented, scoped limitation (RosterEntry carries no host
+    // flag; see NetworkGamer::SetIsHost's doc comment), not something this test can prove correct.
 }
 
 // --- Task 5.5: AppData relay (real SendData/ReceiveData) ---

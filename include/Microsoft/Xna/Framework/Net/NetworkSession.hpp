@@ -709,7 +709,12 @@ namespace Microsoft::Xna::Framework::Net
             int maxGamers,
             int privateGamerSlots,
             int maxLocal,
-            std::optional<std::vector<GamerServices::SignedInGamer*>> localGamers
+            std::optional<std::vector<GamerServices::SignedInGamer*>> localGamers,
+            // Not part of FNA's original constructor signature (see DEFERRED.md item #20 in the
+            // sibling cna-samples repo): true from EndCreate (this machine is hosting), false from
+            // EndJoin/EndJoinInvited (this machine is joining someone else's session). Drives every
+            // local gamer's real NetworkGamer::SetIsHost() instead of FNA's hardcoded-true stub.
+            bool isHost
         );
 
         bool isDisposed_{false};
@@ -722,6 +727,7 @@ namespace Microsoft::Xna::Framework::Net
         int bytesPerSecondReceived_{0};
         int bytesPerSecondSent_{0};
         NetworkGamer* host_{nullptr};
+        bool isHost_{true};
         int maxGamers_{0};
         int privateGamerSlots_{0};
         NetworkSessionProperties sessionProperties_;
