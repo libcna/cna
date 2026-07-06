@@ -852,7 +852,7 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Detail/SdlHapticVibrateBackend.cpp` (new)
   - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (edited)
 
-### VIB-003 — Implement Android phone vibrator backend
+### VIB-003 — Implement Android phone vibrator backend — CLOSED (2026-07-06, re-verified with a fresh, independent read; one real new finding documented, no code change)
 
 - **Priority:** Critical
 - **Area:** Android Backend
@@ -862,31 +862,90 @@ not an alternate spelling to preserve.
   (per an existing comment in `VibrateController.cpp`) to not build a redundant native
   bridge; this task's job is to re-verify that decision still holds, not to assume it
   is wrong.
+- **Resolution (2026-07-06):** independently re-read the actual SDL3 Android haptic
+  source (`third_party/SDL/src/haptic/android/SDL_syshaptic.c`,
+  `third_party/SDL/src/core/android/SDL_android.c`'s JNI bridge functions, and
+  `third_party/SDL/android-project/.../SDLControllerManager.java`'s
+  `SDLHapticHandler`/`SDLHapticHandler_API26`/`SDLHapticHandler_API31` classes) from
+  scratch — not just re-citing the prior pass's conclusion (`docs/devices-android.md`'s
+  existing "Vibration: no native bridge exists, and none is needed" section,
+  `plan_devices.md`'s old Task DEVICES-0031). **The core conclusion holds and is
+  re-confirmed:** `SDL_SYS_HapticRunEffect()`/`SDL_SYS_HapticStopEffect()` reach
+  `Context.VIBRATOR_SERVICE` (registered as haptic device id `999999` by
+  `SDLHapticHandler.pollHapticDevices()`) via `Android_JNI_HapticRun()`/
+  `Android_JNI_HapticStop()`, with full amplitude control
+  (`VibrationEffect.createOneShot()` on API 26+, per-vibrator `VibratorManager` lookup
+  on API 31+) already implemented — no gap in the single-motor `Start(TimeSpan)`/
+  `Start(TimeSpan, float)` path.
+  - **One real, previously-undocumented finding surfaced by reading the *dual-motor*
+    path specifically (relevant to `VIB-008`, `StartLeftRight`):** on Android,
+    `StartLeftRight(largeMotor, smallMotor, duration)` does **not** produce genuine
+    independent dual-motor vibration on the phone's own vibrator. Its call path
+    (`SDL_HAPTIC_LEFTRIGHT` effect → `SDL_SYS_HapticRunEffect()`) blends both
+    magnitudes into one intensity — `total = (large/32767 * 0.6f) + (small/32767 * 0.4f)`
+    — before calling `Android_JNI_HapticRun()`, the *single*-intensity path. The genuine
+    independent-dual-motor path SDL3's Android backend does implement,
+    `Android_JNI_HapticRumble()` → `SDLHapticHandler_API31.rumble()` (looks up an
+    `InputDevice`'s own `VibratorManager`, drives up to two vibrators independently), is
+    wired up **only** from `SDL_sysjoystick.c`'s controller-rumble path (i.e.
+    `Microsoft::Xna::Framework::Input::GamePad::SetVibration()`), never from the
+    generic `SDL_Haptic` effect path `VibrateController` uses. Not a CNA bug — CNA calls
+    the standard SDL3 `SDL_Haptic` API correctly; the blending is entirely internal to
+    SDL3's own Android backend, and matches the identical `0.6f`/`0.4f` weighting
+    `SDLHapticHandler_API31.rumble()`'s own single-vibrator fallback already uses. Fully
+    documented in `docs/devices-android.md`'s "Vibration" section (new paragraph) and
+    cross-referenced from `StartLeftRight()`'s own doc comment
+    (`VibrateController.hpp`) with a `@note`, so a reader relying on this method for
+    "two independent motors, felt as such on a phone" isn't misled.
+  - **Manifest permission:** re-confirmed present, not just in SDL's own vendored
+    template but in the demo's actual generated manifest
+    (`examples/demo_devices/android/.../app/src/main/AndroidManifest.xml:54`,
+    `<uses-permission android:name="android.permission.VIBRATE" />`) — grepped directly,
+    not assumed.
+  - **Physical-device verification:** still not performed (no Android device/emulator
+    with a real vibrator motor available in this session) — same standing gap as every
+    other hardware-dependent task in this plan. `docs/devices-hardware-checklist.md`
+    Section 3 already has the manual checklist entry this task's acceptance criteria
+    ask for; no result has been recorded against it yet.
+  - **Unit test coverage:** now satisfied by `VIB-002`/`VIB-009`'s fake-backend tests
+    (`FakeVibrateBackend`/`ScopedFakeVibrateBackend` in `VibrateControllerTests.cpp`) —
+    backend selection/forwarding is fully covered without a physical device.
 - **Required work:**
   - Re-verify, by reading SDL3's actual Android haptic backend source
     (`third_party/SDL`), that it truly reaches `Vibrator`/`VibratorManager` with
-    adequate amplitude control for this project's needs.
+    adequate amplitude control for this project's needs. Done, independently.
   - If the existing SDL3-only approach is confirmed sufficient, document that
     re-verification explicitly (do not silently re-assert the old conclusion without
-    having checked it again).
+    having checked it again). Done — see Resolution above, including a genuinely new
+    finding the prior pass hadn't recorded.
   - If gaps are found (e.g. missing `VibrationEffect`/`VibratorManager` support for
     modern Android versions, or missing legacy fallback), implement or plan a
     dedicated Android backend behind the `IVibrateBackend` abstraction from `VIB-002`.
+    N/A for the single-motor path (no gap); the dual-motor blending finding is
+    documented as a known, accepted limitation, not something a dedicated native
+    bridge would be justified to fix alone (see `VIB-008`).
   - Ensure Android manifest permissions are documented (`VIBRATE` permission) whether or
-    not a new native path is added.
+    not a new native path is added. Done, re-confirmed against the actual demo manifest.
 - **Acceptance criteria:**
   - The Android demo (`examples/demo_devices/android/`) can vibrate a physical phone's
-    motor.
+    motor. **Not verified this session** — no Android hardware available.
   - Backend handles devices without a vibrator gracefully (no crash, `IsSupported`-style
-    check returns false).
+    check returns false). Already true, unchanged by this task, covered by existing
+    `VibrateControllerTests`.
   - Unit tests cover backend selection using fake platform hooks, not a physical device.
+    Done — see `VIB-002`/`VIB-009`.
   - A manual test checklist entry records Android OS/API version and device model used.
+    Checklist entry already exists (`docs/devices-hardware-checklist.md` Section 3); no
+    result recorded yet — still open, tracked there, not duplicated here.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/VibrateController.cpp`
-  - `src/Microsoft/Devices/Detail/` (new, from `VIB-002`)
-  - `third_party/SDL/src/haptic/` (read-only research — vendored, do not edit)
-  - `examples/demo_devices/android/`
-  - `docs/devices-android.md`
+  - `src/Microsoft/Devices/VibrateController.cpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/Detail/` (inspected, no change needed)
+  - `third_party/SDL/src/haptic/` (read-only research — vendored, not edited)
+  - `third_party/SDL/src/joystick/android/SDL_sysjoystick.c` (read-only research —
+    vendored, not edited; this is where the dual-motor-blending finding came from)
+  - `examples/demo_devices/android/` (inspected manifest, no change needed)
+  - `docs/devices-android.md` (edited)
+  - `include/Microsoft/Devices/VibrateController.hpp` (edited — `StartLeftRight()` doc comment)
 
 ### VIB-004 — Add iOS vibration backend plan or implementation
 

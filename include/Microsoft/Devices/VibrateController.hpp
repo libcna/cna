@@ -132,6 +132,18 @@ namespace Microsoft::Devices
          * call is a silent no-op. Stop() also stops any effect started this
          * way.
          *
+         * @note On Android (Task VIB-003, re-verified 2026-07-06 against
+         * SDL3's actual Android haptic backend source), the phone's own
+         * built-in vibrator does not receive two independent motor
+         * intensities: SDL3's Android `SDL_Haptic` backend blends
+         * largeMotor/smallMotor into a single intensity
+         * (`large*0.6 + small*0.4`) before handing it to
+         * `Context.VIBRATOR_SERVICE`. True independent dual-motor output is
+         * only reachable via SDL3's separate gamepad-rumble path
+         * (`Microsoft::Xna::Framework::Input::GamePad::SetVibration()`), not
+         * this one. See `docs/devices-android.md`'s "Vibration" section for
+         * the full source-level trail.
+         *
          * @param largeMotor Low-frequency motor strength, clamped to [0.0f, 1.0f].
          * @param smallMotor High-frequency motor strength, clamped to [0.0f, 1.0f].
          * @param duration Requested vibration duration, in the inclusive

@@ -19,6 +19,41 @@ clamped-`[1,255]` mapping a custom bridge would have had to reinvent. Building o
 anyway was explicitly decided against (`plan_devices.md` Task DEVICES-0031) — see
 `docs/devices-build.md` Section 7 for the full evidence trail before reconsidering this.
 
+**Re-verified 2026-07-06 (`plan_devices.md` Task VIB-003)**, re-reading the same source
+files with fresh eyes rather than trusting the prior pass's conclusion unchecked: the
+conclusion above still holds — `Android_JNI_HapticRun`/`Android_JNI_HapticStop`
+(`SDL_syshaptic.c`'s `SDL_SYS_HapticRunEffect`/`SDL_SYS_HapticStopEffect`) reach
+`Context.VIBRATOR_SERVICE` via `SDLHapticHandler`/`SDLHapticHandler_API26`/
+`SDLHapticHandler_API31`'s `run()`/`stop()` methods, exactly as before. **One new,
+previously-undocumented finding surfaced by this re-read, relevant to `StartLeftRight()`
+specifically (`plan_devices.md` Task VIB-008):** on Android, `StartLeftRight(largeMotor,
+smallMotor, duration)` does **not** produce genuine independent dual-motor vibration on
+the phone's own vibrator. The call path is `SDL_HAPTIC_LEFTRIGHT` effect →
+`SDL_SYS_HapticRunEffect()` (`SDL_syshaptic.c`), which **blends both magnitudes into a
+single intensity** —
+`total = (large_magnitude/32767 * 0.6f) + (small_magnitude/32767 * 0.4f)` — before
+calling `Android_JNI_HapticRun()` (the single-intensity path). The *true* independent
+dual-motor path in SDL3's Android backend, `Android_JNI_HapticRumble()` →
+`SDLHapticHandler_API31.rumble()` (which calls `InputDevice.getVibratorManager()` and
+drives up to two vibrators independently), is wired up **only** from
+`SDL_sysjoystick.c`'s controller-rumble path (`SDL_RumbleJoystick`, i.e.
+`Microsoft::Xna::Framework::Input::GamePad::SetVibration()`) — never from the generic
+`SDL_Haptic` effect path `VibrateController` uses. This is not a CNA bug: CNA calls the
+standard, documented SDL3 `SDL_Haptic` API correctly; the blending happens entirely
+inside SDL3's own Android backend, matching the identical `0.6f`/`0.4f` weighting
+`SDLHapticHandler_API31.rumble()`'s own single-vibrator fallback branch already uses for
+non-phone haptic devices with only one vibrator — i.e. SDL3 treats "one vibrator, two
+requested intensities" consistently the same way in both the Java and native layers.
+Practically: a real phone's single built-in vibrator motor, via this codebase's
+`StartLeftRight()`, always receives one blended intensity, never two independent
+values — worth knowing before writing gameplay code that assumes true per-motor
+independence will be felt on a phone. Desktop dual-actuator force-feedback hardware
+(non-gamepad, so not excluded by `IsConnectedGamepadHapticDevice()`) is unaffected by
+this Android-specific blending and may achieve genuine independent magnitudes if the
+underlying platform driver supports `SDL_HAPTIC_LEFTRIGHT` natively — not verified
+against real desktop dual-actuator hardware in this session (no such hardware
+available), but architecturally unrelated to the Android limitation above.
+
 ## Sensors: pure NDK native, no JNI, no Java bridge
 
 Compass/Motion's Android backends use `<android/sensor.h>`/`<android/looper.h>`
