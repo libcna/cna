@@ -38,6 +38,11 @@ namespace CNA::Internal::Net
         // ignores stray announces.
         std::vector<AvailableNetworkSession>* currentResults_ = nullptr;
 
+        // Task 4.2: when currentResults_ is set (a search is in progress), the wall-clock moment
+        // FindSessions() sent its Query - used to measure a real round-trip time for each Announce
+        // reply's QualityOfService, instead of always reporting the same hardcoded stub.
+        std::chrono::steady_clock::time_point queryStartTime_;
+
         ENetSocket EnsureSocket()
         {
             if (socket_ != ENET_SOCKET_NULL)
@@ -166,13 +171,19 @@ namespace CNA::Internal::Net
                             );
                             if (!alreadyKnown)
                             {
+                                // Task 4.2: a real measurement (the wall-clock round-trip between
+                                // sending the Query and receiving this specific Announce reply),
+                                // not the always-hardcoded-stub QualityOfService::CreateInternal().
+                                auto elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
+                                    std::chrono::steady_clock::now() - queryStartTime_
+                                );
                                 currentResults_->push_back(AvailableNetworkSession::CreateInternal(
                                     announce.CurrentGamerCount,
                                     announce.HostGamertag,
                                     announce.OpenPrivateSlots,
                                     announce.OpenPublicSlots,
                                     announce.Properties,
-                                    QualityOfService::CreateInternal(),
+                                    QualityOfService::CreateInternal(System::TimeSpan::FromMilliseconds(elapsed.count())),
                                     address,
                                     announce.ConnectPort,
                                     // Task 2.15: explicit, even though it's also the default -
@@ -282,6 +293,8 @@ namespace CNA::Internal::Net
         DiscoveryQueryMessage query;
         query.SessionTypeFilter = sessionTypeFilter;
         auto bytes = NetDiscoveryProtocol::Encode(query);
+
+        queryStartTime_ = std::chrono::steady_clock::now(); // Task 4.2
 
         ENetAddress broadcastAddress;
         broadcastAddress.host = ENET_HOST_BROADCAST;

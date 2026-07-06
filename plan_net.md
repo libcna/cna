@@ -723,14 +723,37 @@ verified via revert-verify-restore. Continuing to Phase 4 (Net API gaps).
   fix and reran — passes. Full suite: **3262/3264 passing** (2 expected accelerometer/gyroscope
   skips), no regressions.
 
-- [ ] **Task 4.2** — Make `QualityOfService` reflect real measurements for real `SystemLink`
+- [x] **Task 4.2** — Make `QualityOfService` reflect real measurements for real `SystemLink`
   sessions instead of always being a hardcoded stub. Confirmed:
-  `QualityOfService::CreateInternal()` takes zero parameters and always yields `IsAvailable=true`
-  plus all-zero rates; the only production call site (`ENetDiscoveryService.cpp`, ~line 159) invokes
-  it with no arguments when building a real `AvailableNetworkSession` from a genuine LAN discovery
-  reply. Wire real bandwidth/RTT measurements through (ties into Task 4.1 for RTT). Add a test
-  asserting a `QualityOfService` built from a real discovered session reflects real measured
-  values, not the hardcoded stub.
+  `QualityOfService::CreateInternal()` took zero parameters and always yielded `IsAvailable=true`
+  plus all-zero rates; the only production call site (`ENetDiscoveryService.cpp`) invoked it with
+  no arguments when building a real `AvailableNetworkSession` from a genuine LAN discovery reply.
+  **Checked FNA's own reference first**: FNA's `internal QualityOfService()` constructor is itself
+  an acknowledged stub (`// TODO: Everything below` in its own source) that always sets
+  `IsAvailable = true` with all-zero rates — so the existing parameterless `CreateInternal()`'s
+  behavior is faithful to FNA, not a CNA gap; kept it as-is for callers with nothing real to report.
+  **Scope decision:** at discovery time there is no established `ENetPeer` connection yet to the
+  querying side (discovery is connectionless broadcast UDP query/reply, not a full ENet handshake),
+  so real bandwidth genuinely isn't measurable here (ties to Task 4.1's own RTT-only scope for the
+  same underlying reason) — but the wall-clock round-trip between sending the `Query` and receiving
+  each host's specific `Announce` reply *is* a real, directly measurable RTT sample.
+  **Fixed:** added `QualityOfService::CreateInternal(System::TimeSpan roundtripTime)` (used for both
+  `AverageRoundtripTime` and `MinimumRoundtripTime`, since one query/reply exchange yields exactly
+  one sample, not a running series). `ENetDiscoveryService::FindSessions` records the query's send
+  time (`queryStartTime_`); `HandleReceived`'s `Announce` case computes the elapsed wall-clock time
+  and passes it to the new overload instead of the argument-less stub. Bandwidth fields stay 0/
+  unmeasured either way, honestly documented as out of reach for this specific mechanism.
+  **Added `QualityOfServiceTest.MeasuredOverloadReflectsRealRoundtripTime`** (unit-level: the new
+  overload correctly threads a given `TimeSpan` into both RTT fields, `IsAvailable=true`, bandwidth
+  still 0) and **extended `ENetDiscoveryServiceTest.FindSessionsDiscoversRegisteredHost`** with
+  assertions that a real discovered session's `QualityOfService` is available and reports a
+  genuine non-zero measured RTT (proving the actual `FindSessions()` code path, not just the
+  isolated constructor).
+  **Verified the bug is real, not theoretical:** reverted the 3 source-fix files (keeping the
+  tests) and reran — failed to even **compile**
+  (`no matching function for call to QualityOfService::CreateInternal(TimeSpan&)`), since the
+  measured overload didn't exist before this fix. Restored the fix and reran — passes. Full suite:
+  **3263/3265 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 4.3** — Implement real effect for `NetworkSession.SimulatedLatency`/`SimulatedPacketLoss`.
   Confirmed: `grep` finds no reference to either property name anywhere in `CNA::Internal::Net`

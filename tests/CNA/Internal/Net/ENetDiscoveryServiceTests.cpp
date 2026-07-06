@@ -98,6 +98,16 @@ TEST(ENetDiscoveryServiceTest, FindSessionsDiscoversRegisteredHost) {
     // public slots is 69 - privateSlots(0) - currentGamerCount(1), not derived from the 8 passed
     // to Create() here.
     EXPECT_EQ(found[0].getOpenPublicGamerSlotsProperty(), 68);
+    // Task 4.2: QualityOfService::CreateInternal() used to be called with no arguments here,
+    // always yielding the same hardcoded all-zero-rates stub regardless of any real measurement.
+    // A real query/reply round trip genuinely happened just above to produce this very result, so
+    // its measured RTT must be a real, non-zero duration.
+    EXPECT_TRUE(found[0].getQualityOfServiceProperty().getIsAvailableProperty());
+    EXPECT_GT(found[0].getQualityOfServiceProperty().getAverageRoundtripTimeProperty(), System::TimeSpan::Zero);
+    EXPECT_EQ(
+        found[0].getQualityOfServiceProperty().getAverageRoundtripTimeProperty(),
+        found[0].getQualityOfServiceProperty().getMinimumRoundtripTimeProperty()
+    );
 #endif
 }
 

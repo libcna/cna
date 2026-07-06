@@ -19,6 +19,22 @@ TEST(QualityOfServiceTest, DefaultValues) {
     EXPECT_EQ(System::TimeSpan::Zero, qos.getMinimumRoundtripTimeProperty());
 }
 
+// Task 4.2: the parameterless CreateInternal() always yielded the same hardcoded stub (all-zero
+// rates, no matter what) - the only production call site (ENetDiscoveryService.cpp) now uses this
+// measured overload instead, with a real wall-clock round-trip time from an actual discovery
+// query/reply exchange.
+TEST(QualityOfServiceTest, MeasuredOverloadReflectsRealRoundtripTime) {
+    auto measured = System::TimeSpan::FromMilliseconds(42.5);
+    auto qos = QualityOfService::CreateInternal(measured);
+    EXPECT_EQ(measured, qos.getAverageRoundtripTimeProperty());
+    EXPECT_EQ(measured, qos.getMinimumRoundtripTimeProperty());
+    EXPECT_TRUE(qos.getIsAvailableProperty());
+    // Bandwidth isn't measurable from a connectionless discovery query/reply alone - stays 0,
+    // same as the parameterless overload.
+    EXPECT_EQ(0, qos.getBytesPerSecondDownstreamProperty());
+    EXPECT_EQ(0, qos.getBytesPerSecondUpstreamProperty());
+}
+
 // --- AvailableNetworkSession ---
 
 namespace {
