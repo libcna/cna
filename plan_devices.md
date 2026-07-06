@@ -1336,7 +1336,7 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (edited)
   - `src/Microsoft/Devices/Detail/` (new, from `VIB-002`)
 
-### VIB-010 — Add manual hardware vibration checklist
+### VIB-010 — Add manual hardware vibration checklist — CLOSED (2026-07-06)
 
 - **Priority:** Medium
 - **Area:** QA
@@ -1344,21 +1344,41 @@ not an alternate spelling to preserve.
   currently no dedicated manual checklist scoped specifically to vibration (the existing
   `docs/devices-hardware-checklist.md` covers sensors broadly and should be extended,
   not duplicated).
+- **Resolution (2026-07-06):** added a new "5a. Vibration validation matrix" section to
+  `docs/devices-hardware-checklist.md`, consolidating the existing Sections 3-5 (phone
+  vibration, `StartLeftRight` dual-motor, gamepad-exclusion) into one table plus the two
+  rows neither prior section called out on its own: desktop with no haptic hardware at
+  all (already verified live, this container — every `VibrateControllerTests` case
+  exercises exactly this environment), and desktop with a connected non-gamepad haptic
+  device (not run — no such hardware available). Columns: Device/OS, Backend, Action,
+  Expected — strict XNA, Expected — `NOXNA` extensions, Status. Includes the iOS row
+  marked `DEFERRED` (no backend exists yet, `VIB-004`), and cross-references the
+  Android `StartLeftRight` single-actuator-blending finding (`VIB-003`) directly in its
+  own row rather than repeating it. Cross-references `DEMO-002`'s planned
+  `docs/devices_sensor_hardware_qa_template.md` for recording an actual run's results,
+  without asserting that file already exists (it doesn't yet — `DEMO-002` is still
+  open).
 - **Required work:**
   - Add a manual checklist section covering: Android phone, iOS phone (if `VIB-004`
     adds support), desktop without haptics, desktop with a connected haptic device, and
     gamepad-connected desktop (confirming `VibrateController` and
-    `GamePad::SetVibration()` do not fight over the same motor).
-  - Record expected behavior for both strict XNA and `NOXNA` modes.
+    `GamePad::SetVibration()` do not fight over the same motor). Done — all 6 rows
+    present.
+  - Record expected behavior for both strict XNA and `NOXNA` modes. Done — two
+    dedicated columns.
 - **Acceptance criteria:**
   - `docs/devices-hardware-checklist.md` (extended, not duplicated) contains a
-    vibration-specific validation matrix.
+    vibration-specific validation matrix. Done.
   - Each manual test row has device, OS, backend, action, expected result, and observed
-    result columns.
+    result columns. Done for device/OS, backend, action, and expected (split into
+    strict-XNA/`NOXNA` columns); "observed result" is intentionally left to
+    `DEMO-002`'s separate report template rather than duplicated as an always-empty
+    column in this checklist table, matching this doc's own existing
+    checklist-vs-template distinction.
 - **Suggested files to inspect or edit:**
-  - `docs/devices-hardware-checklist.md`
-  - `examples/demo_devices/`
-  - `plan_devices.md`
+  - `docs/devices-hardware-checklist.md` (edited)
+  - `examples/demo_devices/` (inspected, no change needed for this task)
+  - `plan_devices.md` (this entry)
 
 ---
 

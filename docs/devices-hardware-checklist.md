@@ -246,6 +246,24 @@ exercised, only reasoned about from SDL3's API documentation.
    re-evaluated per-call (not cached from the first probe), since gamepads can connect
    and disconnect at any time during a running game.
 
+## 5a. Vibration validation matrix (Task VIB-010, 2026-07-06)
+
+Consolidates Sections 3-5 above into one at-a-glance matrix, plus the two cases neither
+section calls out as its own row (desktop with no haptics at all, and desktop with a
+non-gamepad haptic device connected). `Task DEMO-002` plans a separate
+`docs/devices_sensor_hardware_qa_template.md` report template to record an actual run's
+results against — this table is the checklist of *what* to check, not a form for
+recording one specific session's results.
+
+| Device / OS | Backend | Action | Expected — strict XNA | Expected — `NOXNA` extensions | Status |
+|---|---|---|---|---|---|
+| Android phone | `Detail::SdlHapticVibrateBackend` → `Context.VIBRATOR_SERVICE` | `Start(TimeSpan)` | Phone's built-in motor buzzes for the given duration | `Start(TimeSpan, intensity)` scales buzz strength; `getIsSupportedProperty()` true; `getDeviceNameProperty()` non-empty | **NOT RUN** — no Android device in this session (Section 3) |
+| Android phone | same | `StartLeftRight(large, small, duration)` | N/A (not real XNA API) | Blends to one intensity on the phone's single actuator (confirmed via SDL3 source, `VIB-003`) — do **not** expect two independently-felt motors | **NOT RUN**, but the single-actuator-blend *code path* is source-confirmed, not just assumed (`VIB-003`) |
+| iOS phone | none yet (`VIB-004`, plan only) | `Start(TimeSpan)` | Deterministic silent no-op (no backend registered) until a `CHHapticEngine` backend is implemented | Same — `getIsSupportedProperty()` false | **DEFERRED** — no backend exists; nothing to run yet |
+| Desktop, no haptic hardware present | `Detail::SdlHapticVibrateBackend`, no device opens | `Start()`/`Stop()`/`StartLeftRight()`/`getIsSupportedProperty()`/`getDeviceNameProperty()` | Silent no-op for `Start`/`Stop`/`StartLeftRight`; `getIsSupportedProperty()` false; `getDeviceNameProperty()` empty | Same | **VERIFIED, this container** — every `VibrateControllerTests` case exercises exactly this environment live (313→ growing test count, all passing) |
+| Desktop with a connected non-gamepad haptic device (e.g. a USB force-feedback wheel) | same, real device opened | `Start(TimeSpan)`/`Start(TimeSpan, intensity)` | Device actuates for the given duration; `getIsSupportedProperty()` true | Intensity scales strength; `StartLeftRight()` may achieve genuine independent magnitudes if the device/driver supports `SDL_HAPTIC_LEFTRIGHT` natively (unlike the Android single-actuator blend above) | **NOT RUN** — no such hardware available in this session |
+| Desktop with a connected rumble-capable gamepad, no other haptic device | same | `getIsSupportedProperty()`, `Start()`, `GamePad::SetVibration()` | `VibrateController` excludes the gamepad's own haptic ID (`IsConnectedGamepadHapticDevice()`) — behaves as if unsupported; `GamePad::SetVibration()` drives the gamepad normally; neither API fights the other for the same motor | Same | **NOT RUN** — no gamepad connected in this session (full steps: Section 5 above) |
+
 ## 6. `Detail::AndroidSensorBridge` lifecycle safety (`plan_devices.md` Task DEVICES-0085)
 
 **Code under test:** `AndroidSensorBridge::Stop()`'s self-join-detects-and-detaches
