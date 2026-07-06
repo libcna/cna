@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-KBD-010 — scancode map completeness audited:** mechanically diffed `try_convert_sdl_scancode`
+  (122 mapped) vs FNA `INTERNAL_scanMap` (125) — all 122 shared scancodes map identically; only
+  differences are the 3 CNA drops (UNKNOWN/NONUSHASH/NONUSBACKSLASH, INPUT-KBD-011). Broadened the scancode
+  group test 7→19 cases to span every group; keycode-ignored + FIXME-pair already tested. No code change.
 - **INPUT-KBD-009 — keycode map completeness audited:** mechanically diffed `try_convert_sdl_key` (123
   entries) vs FNA `INTERNAL_keyMap` (123) — all 122 shared keycodes map identically; only deviations are
   DEC-16 (`SDLK_UNKNOWN` drop) + DEC-17 (`SDLK_AC_BACK`→Escape). All groups tested; added

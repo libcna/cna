@@ -887,12 +887,23 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
   present in *both* maps, so they are mapped, not dropped). `ctest -L input` 100% green.
 
 #### INPUT-KBD-010 — SDL scancode-mode mapping completeness
-- **Priority:** P1 · **Status:** TODO · **Area:** Keyboard/Bridge
-- **Files:** `SdlInputBridge.cpp:601–734`, keyboard bridge tests
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Keyboard/Bridge
+- **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Work:** Diff `try_convert_sdl_scancode` vs FNA `INTERNAL_scanMap`; cover the FIXME line 729 pair.
 - **Acceptance:** Diff empty or documented; scancode mode ignores keycode (tested).
 - **Tests:** extend keyboard bridge tests.
 - **Deps:** INPUT-KBD-011.
+- **Result (2026-07-06):** Mechanically diffed CNA's `try_convert_sdl_scancode` (122 `case SDL_SCANCODE_…
+  → Keys::…` entries) against FNA's `INTERNAL_scanMap` (SDL3_FNAPlatform.cs:2490–2618, 125 entries).
+  **All 122 shared scancodes map to the identical `Keys` value** (zero mismatches); the only differences
+  are the three scancodes CNA deliberately drops rather than mapping to `Keys.None` — `SDL_SCANCODE_UNKNOWN`,
+  `SDL_SCANCODE_NONUSHASH`, `SDL_SCANCODE_NONUSBACKSLASH` — the INPUT-KBD-011 / DEC-16-consistent deviation
+  (the "FIXME line 729 pair" plus the UNKNOWN sentinel), already covered by
+  `IsoLayoutExtraScancodesAreDroppedNotMarkedNone`. Acceptance met: "scancode mode ignores keycode" is
+  pinned by the existing `ScancodeModeIgnoresTheLayoutDependentKeycode`, and the group coverage of
+  `ScancodeMapUsedWhenScancodeModeForced` was broadened from 7 to 19 cases so it now spans every scancode
+  group (letters/digits/numpad/modifiers/function/OEM/navigation/media), matching the keycode group test.
+  `ctest -L input` 100% green.
 
 #### INPUT-KBD-011 — Resolve the scancode FIXME (SdlInputBridge.cpp:729)
 - **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Keyboard/Bridge

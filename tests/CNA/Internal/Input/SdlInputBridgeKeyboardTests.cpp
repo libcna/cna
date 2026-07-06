@@ -183,15 +183,38 @@ TEST_F(SdlInputBridgeKeyboardTest, ScancodeMapUsedWhenScancodeModeForced)
 {
     SdlInputBridge::SetScancodeModeForTests(true);
 
+    // INPUT-KBD-010: one representative per scancode-map group. A full mechanical diff of
+    // try_convert_sdl_scancode vs FNA's INTERNAL_scanMap is byte-identical on all 122 shared scancodes;
+    // the only differences are the three CNA drops (UNKNOWN / NONUSHASH / NONUSBACKSLASH — INPUT-KBD-011),
+    // covered by IsoLayoutExtraScancodesAreDroppedNotMarkedNone.
     struct Case { SDL_Scancode scancode; Keys expected; const char* name; };
     const Case cases[] = {
+        // Letters / digits
         {SDL_SCANCODE_A, Keys::A, "A"},
         {SDL_SCANCODE_1, Keys::D1, "D1"},
+        // Numpad
         {SDL_SCANCODE_KP_1, Keys::NumPad1, "NumPad1"},
         {SDL_SCANCODE_KP_PLUS, Keys::Add, "Add"},
+        // Modifiers
         {SDL_SCANCODE_LSHIFT, Keys::LeftShift, "LeftShift"},
+        {SDL_SCANCODE_LCTRL, Keys::LeftControl, "LeftControl"},
+        {SDL_SCANCODE_LALT, Keys::LeftAlt, "LeftAlt"},
+        // Function keys (incl. extended F13)
         {SDL_SCANCODE_F1, Keys::F1, "F1"},
         {SDL_SCANCODE_F13, Keys::F13, "F13"},
+        // OEM
+        {SDL_SCANCODE_SEMICOLON, Keys::OemSemicolon, "OemSemicolon"},
+        {SDL_SCANCODE_COMMA, Keys::OemComma, "OemComma"},
+        {SDL_SCANCODE_PERIOD, Keys::OemPeriod, "OemPeriod"},
+        {SDL_SCANCODE_GRAVE, Keys::OemTilde, "OemTilde"},
+        {SDL_SCANCODE_SLASH, Keys::OemQuestion, "OemQuestion"},
+        // Navigation / whitespace
+        {SDL_SCANCODE_UP, Keys::Up, "Up"},
+        {SDL_SCANCODE_SPACE, Keys::Space, "Space"},
+        {SDL_SCANCODE_RETURN, Keys::Enter, "Enter"},
+        {SDL_SCANCODE_ESCAPE, Keys::Escape, "Escape"},
+        // Media
+        {SDL_SCANCODE_VOLUMEUP, Keys::VolumeUp, "VolumeUp"},
     };
 
     for (const Case& c : cases)
