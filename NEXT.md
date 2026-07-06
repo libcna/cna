@@ -12,280 +12,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
-- **Current development phase:** Phases 1–41 are complete. **Phase 42 (BasicEffect exactness,
-  `GRAPHICS_TASKS.md` Tasks 361–370) is open** — **Task 366 is done, Task 367 is next** ("Pixel
-  test: `TextureEnabled=true` and `VertexColorEnabled=true` — Texture × vertex color" — see §8).
-  **Task 366** verified `TextureEnabled=true`'s texture×diffuse multiplication is genuinely correct
-  on all 3 backends — **pure verify-only task, no bug found** (unlike Task 364's `VertexColorEnabled`
-  finding, texture sampling was never actually broken here — it's a much more heavily-exercised path
-  elsewhere, e.g. `SpriteBatch`/`Texture2D` tests). Confirmed the exact formula from FNA source:
-  `BasicEffect.cs`'s `shaderIndex` selection picks `VSBasicTxNoFog`/`PSBasicTxNoFog` for this
-  combination; `PSBasicTxNoFog` returns `SAMPLE_TEXTURE(Texture, pin.TexCoord) * pin.Diffuse`
-  verbatim, with no vertex-color multiply in this shader variant. All 3 backends' textured-3D shader
-  paths (EasyGL's `EnsureTextured3DProgram()`, Vulkan's `textured3d.vert/frag.glsl`, Bgfx's
-  `vs_textured3d.sc`/`fs_textured3d.sc`) already correctly compute `texture × diffuseColor`. Closed a
-  real coverage gap instead: Task 189's `easygl_basiceffect_combinations_test.cpp` only had
-  degenerate cases (white texture OR white diffuse, never both non-white), which couldn't actually
-  distinguish "texture ignored" from "diffuse ignored" from "correctly multiplied" — added a proper
-  discriminating test per backend reusing Task 365's exact `(200,100,50)`/`(0.8,0.4,0.6)` numeric
-  pair. Verified genuine discriminating power on all 3 backends independently (temporarily stripped
-  the diffuse multiply from each backend's shader — EasyGL's runtime GLSL string, Vulkan's
-  `textured3d.frag.glsl` + `compile_shaders.py`/libshaderc, Bgfx's `fs_textured3d.sc` +
-  `compile_shaders.py`/shaderc — confirmed each new test failed with exactly the texture-only result,
-  then reverted, confirmed byte-identical via `git diff`). **Deferred finding** (out of this task's
-  narrow scope, folded into Task 369's "ambient + emissive + specular combination" scope):
-  `EffectHelpers.SetMaterialColor`'s lighting-disabled branch is `(DiffuseColor+EmissiveColor)*Alpha`,
-  but CNA's `FillGpuDrawParams()` computes only `DiffuseColor*Alpha`, omitting `+EmissiveColor` —
-  invisible in Tasks 364-366 since all leave `EmissiveColor` at its default `(0,0,0)`, but a real
-  mismatch Task 369 needs to catch and fix. Full 3-backend regression: EasyGL 3415/3419 (3
-  pre-existing, unchanged), Vulkan 3337/3352 (13 pre-existing + 1 order-dependent
-  `Vulkan_FillMode_WireFrame` flake + 1 flaky `CueTest`, unchanged), Bgfx 3321/3322 (1 flaky
-  `CueTest`, unchanged).
-
-  **Task 365** (the
-  inverse/complement of Task 364) verified `VertexColorEnabled=true`'s vertex-color multiplication
-  is genuinely correct on all 3 backends — **pure new-coverage verification, no bug found**.
-  Confirmed the exact expected formula from FNA source: `Common.fxh`'s `ComputeCommonVSOutput()`
-  sets `vout.Diffuse = DiffuseColor` (already `(DiffuseColor+EmissiveColor)*Alpha` via
-  `EffectHelpers.SetMaterialColor`), then `VSBasicVcNoFog` additionally executes
-  `vout.Diffuse *= vin.Color` — a component-wise product including alpha — and `PSBasicNoFog`
-  passes it through unmodified. Confirmed all 3 backends' `VertexColorEnabled` gate (added by Task
-  364) already correctly implements the `true` branch as this exact multiply (`EasyGL`:
-  `FragColor=vc*uDiffuseColor`; `Vulkan`: `fragColor=inColor*pc.diffuseColor`; `Bgfx`:
-  `v_color0=vc*u_diffuseColor`) — Task 364 only needed to add/fix the `false` (skip) branch, the
-  pre-existing `true` branch was never touched by that fix. Added one new pixel test per backend
-  (`examples/{easygl,vulkan,bgfx}_basiceffect_vertexcolor_enabled_test.cpp`) using a distinctive
-  vertex color `(200,100,50,200)` and `DiffuseColor(0.8,0.4,0.6)` chosen so the correct product
-  `(160,40,30)` is numerically distinct from either input alone (`DiffuseColor`-only would read
-  `(204,102,153)`; vertex-color-only would read `(200,100,50)`) — the test asserts the readback
-  matches the product and neither single-input fallback. **Verified genuine discriminating power on
-  all 3 backends independently**: temporarily forced each backend's shader to output `DiffuseColor`
-  alone (ignoring vertex color), rebuilt, confirmed the exact predicted `(204,102,153)` failure on
-  each, then reverted — Vulkan/Bgfx required regenerating their embedded SPIR-V/shader-bytecode
-  headers via each backend's own `compile_shaders.py` (their vertex-color multiply lives in
-  precompiled shader bytecode baked into a `.hpp`, not runtime-interpreted source like EasyGL's).
-  Full 3-backend regression: EasyGL 3415/3418 (3 pre-existing, unchanged), Vulkan 3337/3351 (13
-  pre-existing + 1 flaky `CueTest`, unchanged), Bgfx 3320/3321 (1 reconfirmed-flaky, unrelated
-  `NetworkSessionTest.FindReturnsEmptyCollection`, passed cleanly on isolated re-run). **Task
-  364** was the phase's first real GPU pixel-readback task and found real bugs on **all 3
-  backends**: EasyGL's and Bgfx's no-texture `BasicEffect` shader path unconditionally multiplied
-  by the per-vertex color regardless of `VertexColorEnabled` (fixed with a new gating
-  uniform on each); Vulkan's separate `stride==16` `colored3d` pipeline was far worse — a bare
-  vertex-color passthrough that read neither `DiffuseColor` nor `VertexColorEnabled` at all
-  (fixed by extending its push-constant layout to match the existing `FillExtPushConst()` layout).
-  Fixing Vulkan exposed 2 stale tests (`vulkan_rt2d_test.cpp`, `vulkan_render_target_usage_test.cpp`)
-  that were accidentally relying on the bug and never explicitly set `VertexColorEnabled=true`
-  themselves — both fixed. Also found (documented, not fixed — new **Task 884**) that Bgfx is the
-  only backend whose default `RasterizerState` cull state actually matches FNA's real
-  `CullCounterClockwiseFace` default, so it silently culled every full-screen NDC quad used
-  throughout this whole pixel-test family; EasyGL/Vulkan's own defaults are both effectively
-  "CullNone" instead — worked around with an explicit `RasterizerState::CullNone` in the new Bgfx
-  test only. Full 3-backend regression: EasyGL 3414/3417 (3 pre-existing), Vulkan 3336/3350 (13
-  pre-existing + 1 flaky `CueTest`), Bgfx 3320/3320 (100%, first-ever clean `BasicEffect`
-  pixel-readback pass on this backend). **Task 363** cross-checked `BasicEffect::EnableDefaultLighting()`'s exact 3-light-rig
-  constants (key/fill/back + ambient) literal-for-literal against FNA's
-  `EffectHelpers.EnableDefaultLighting`/`BasicEffect.EnableDefaultLighting` and confirmed they
-  already matched exactly (including Task 194's old `Light2` corrections) — a verify-only task,
-  no code fix needed. Added 5 new tests to `BasicEffectTests.cpp` with a tight `1e-6f` epsilon
-  (these are hardcoded literals, not computed approximations), complementing Task 194's existing
-  EasyGL GPU-integration test with a GPU-independent GTest-level lock-in. Verified genuine
-  discriminating power (temporarily perturbed `DirectionalLight1`'s diffuse-color Y, confirmed the
-  new test failed with the exact expected diff, reverted). Full 3-backend regression, zero new
-  failures: EasyGL 3413/3416 (3 pre-existing), Vulkan 3333/3349 (13 pre-existing + 2 flaky
-  `CueTest` + 1 order-dependent `Vulkan_FillMode_WireFrame` flake), Bgfx 3319/3319 (100%).
-  **Task 362** built a new, centralized
-  GTest fixture (`tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp`, 22 tests, one per
-  Task 361's audited property) and found **a 3rd real default-value bug** beyond Task 361's 2:
-  CNA's `DirectionalLight::DirectionalLight()` initialized `direction_` to `Vector3::Forward`
-  ((0,0,-1)); FNA's equivalent field has no initializer at all (defaults to `Vector3.Zero`) —
-  fixed, with the constructor's Doxygen comment corrected too. Verified genuine discriminating
-  power (reverted the fix, confirmed the new test fails, reverted back; also spot-checked
-  `SpecularPower` the same way). Full 3-backend regression, zero new failures: EasyGL 3408/3411,
-  Vulkan 3329/3344 (13 pre-existing + 1 flaky `CueTest` + 1 order-dependent `Vulkan_RenderTargetUsage`
-  flake), Bgfx 3314/3314 (100%). **Task 361 opened Phase 42**:
-  audited `BasicEffect` against FNA's `BasicEffect.cs` (22 properties/defaults compared) and found
-  2 real, fixed default-value bugs: CNA's `VertexColorEnabled` field defaulted to `true` (FNA's
-  `vertexColorEnabled` has no initializer, i.e. defaults to `false`) — fixed to `false`; and FNA's
-  `BasicEffect(GraphicsDevice)` constructor unconditionally sets `DirectionalLight0.Enabled = true`
-  (confirmed from source) while CNA's constructor set none of `DirectionalLight0`'s state, leaving
-  it at `DirectionalLight`'s own class default (`false`) — fixed by adding
-  `DirectionalLight0.setEnabledProperty(true);` to the constructor. Both bugs had existing tests in
-  `examples/basic_effect_test.cpp` (from Task 22) that enshrined the wrong defaults as "correct" —
-  both assertions corrected, with genuine discriminating-power verification (temporarily reverted
-  each fix, confirmed the corrected assertions fail, reverted back). `EnableDefaultLighting()`'s
-  constants were cross-checked byte-for-byte against FNA's `EffectHelpers.EnableDefaultLighting`
-  and are already exactly correct (feeds Task 363). Confirmed, deliberately deferred (not fixed):
-  CNA's `BasicEffect::OnApply()` is an empty stub — all derived-value computation FNA does via
-  `EffectDirtyFlags`-gated lazy recomputation through real `EffectParameter` objects instead happens
-  in a separate, ungated `FillGpuDrawParams()` (a large, pre-existing architectural divergence,
-  consistent with Task 351's finding that CNA's stock effects bypass the `EffectParameter`
-  reflection pipeline entirely) — and `FillGpuDrawParams()` only forwards `DirectionalLight0`,
-  never `SpecularColor`/`SpecularPower`/`DirectionalLight1`/`DirectionalLight2` — both real
-  pixel-fidelity gaps but squarely in scope for Tasks 368/369, not this task. Full 3-backend
-  rebuild + regression, zero new failures: EasyGL 3386/3389, Vulkan 3309/3322, Bgfx 3292/3292
-  (100%). **Task 360 closed Phase 41**:
-  confirmed FNA's own `Effect`/`EffectPass` have zero disposed-state check anywhere (calling
-  `EffectPass.Apply()` after disposal would hand a zeroed-out native handle straight to
-  `FNA3D_ApplyEffect` — real, silent UB in FNA itself, confirmed from source), so CNA's
-  `Effect::Apply()` throwing `System::ObjectDisposedException` is a deliberate, beneficial
-  CNA-specific safety improvement (same category as `GraphicsAdapter::DeviceId`/`VendorId`, Task
-  345), correctly kept as-is. Confirmed double-dispose is already safe by construction
-  (`GraphicsResource::Dispose(bool)`'s existing `if (isDisposed_) return;` guard, matching FNA's
-  own `if (!IsDisposed)` guard) — no code fix needed. Closed a real coverage gap: added
-  `ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectDisposed` (Task 351 only ever tested
-  `Effect::Apply()` directly after dispose, never the `EffectPass::Apply()` entry point) and
-  `DisposeIsIdempotentAndDoesNotThrow`. `Effect::Clone()` still doesn't exist (deferred to Task
-  883) — its "clone after dispose" sub-case is explicitly N/A until Task 883 lands, not fabricated
-  here. Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks 351–354); Task 355 closed
-  the `EffectPass::Apply()`-consistency sub-thread; Task 356 confirmed `EffectTechnique` selection
-  is already correct by construction (verify-only, no code fix); Task 357 confirmed CNA's
-  `EffectParameterCollection` name/semantic lookup already matches FNA exactly (verify-only, no
-  code fix — added the missing case-sensitivity/duplicate-tie-breaking test coverage instead), and
-  widened Task 884 (the `EffectTechniqueCollection`-class dangling-pointer hazard Task 355 fixed)
-  to also cover `EffectParameterCollection`, which has the identical currently-unexercised
-  by-value-`vector` hazard. Task 358 confirmed `EffectParameterCollection`'s (and its siblings')
-  enumeration order already matches FNA's plain insertion-order `List<T>` iteration exactly
-  (verify-only, no code fix — added the missing order-specific test, since the prior test only
-  checked element *count*, not sequence). Task 359 confirmed CNA's
-  `EffectParameterCollection::operator[](int)` (via `std::vector::at()`) already throws
-  `std::out_of_range` for negative/`>=Count` indices exactly like FNA's `List<T>` indexer, distinct
-  from the name/semantic lookups' `null`-return behavior already proven in Task 357 (verify-only,
-  no code fix — added the missing out-of-range and empty-collection edge-case tests for all 3
-  lookup surfaces).
-  **Task 351**
-  audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
-  returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
-  subclass uses; the CNA-only `Effect::Apply()` wasn't wrapped in `NOXNA`; and — found while writing
-  tests — `Effect` was missing `using GraphicsResource::Dispose;`, so `Dispose(bool)` **hid** the
-  inherited public zero-arg `Dispose()` (C++ name-hiding), meaning `effect.Dispose()` failed to
-  **compile** on any concrete effect class unless called through a base-class pointer (confirmed:
-  no existing code anywhere called it directly, so this was live and undiscovered).
-  `Texture`/`Texture2D`/`RenderTarget2D` already had the fix for this exact pattern; `Effect`
-  didn't. Also confirmed, deliberately NOT fixed here: CNA's `Effect` has no FNA-equivalent
-  `.fx`-bytecode constructor or `Clone()`/protected-clone-constructor at all (root cause:
-  `Effect::OnApply()` is pure virtual — CNA has no MojoShader/bytecode pipeline at the base-class
-  level) — the bytecode-constructor question is Task 352's job; the `Clone()` gap is tracked as new
-  **Task 883** (needs a C++ ownership-model decision plus fixing a discovered aliasing hazard where
-  `EffectPass::Apply()`'s `owner_` pointer would keep pointing at the original effect after a naive
-  clone, plus `Clone()` overrides in all 7 stock-effect subclasses — too large for a base-class-only
-  audit). New `tests/.../EffectTests.cpp` (13 tests; previously zero direct base-class coverage
-  existed). Full phase history is in `GRAPHICS_TASKS.md`; the most recent closed phases have synthesis
-  docs: `docs/rasterizerstate-support.md` (Phase 38), `docs/rendertarget-support.md` (Phase 39),
-  `docs/viewport-displaymode-adapter-support.md` (Phase 40). **Phase 40 connected directly to
-  Task 880** (found in Phase 39): `Viewport` has zero
-  GPU backend wiring on all 3 backends — Tasks 341–344 were all pure math/unit tests against the
-  `Viewport` class in isolation (no `GraphicsDevice` involved), so none of them touched it.
-  **Task 348** traced the real window-resize chain end-to-end and confirmed a related, deliberate
-  CNA divergence from FNA: `PresentationParameters.BackBufferWidth`/`Height` do NOT follow a real
-  window resize (only `Viewport` does, via `PresentationMode::FixedHeightDynamicWidth`'s
-  fixed-height/dynamic-width scaling) — this is intentional (an existing source comment explains
-  why matching FNA's behavior here would corrupt CNA's virtual-resolution feature), not a bug.
-  Task 348 also opened **Task 882**: `PresentationMode`'s other 4 values (`Letterbox`/`Overscan`/
-  `Stretch`/`NativeBackBuffer`) aren't distinctly implemented on EasyGL, and Vulkan/Bgfx don't
-  implement virtual-resolution scaling at all — tracked, not fixed (needs its own dedicated,
-  multi-backend investigation). **Task 349** verified `Viewport` reset behavior around a
-  backbuffer resize and found a real bug in the mechanism itself (not GPU wiring): `GraphicsDevice
-  ::UpdateViewportFromWindow()` — called every frame from `Present()` — decided "did the size
-  change?" by comparing against `Viewport`'s own current width/height rather than a dedicated
-  last-known-size field, so a game-set custom sub-region `Viewport` (e.g. split-screen) was
-  silently stomped back to full-window size on the very next frame even with no resize at all.
-  Fixed with new `lastKnownViewportWidth_`/`Height_` tracking fields; the correct FNA-matching
-  reset-to-full-size-on-genuine-resize behavior was preserved and is now pixel/property-verified
-  on both EasyGL and Vulkan. Task 345 audited `GraphicsAdapter`
-  against FNA (fixed 4 real bugs, most notably a dangling-reference bug in the old `DefaultAdapter`
-  static field) and opened a finding closed by Task 347 (added FNA's missing `this[SurfaceFormat]`
-  indexer to `DisplayModeCollection`). Task 346 (skipped one round, then picked up) verified
-  `GraphicsAdapter`'s existing headless-CI fallback chain is structurally complete, fixed one
-  small leak, and added a genuine (non-mocked) regression test for the "SDL video subsystem not
-  initialized" enumeration-failure path. **Task 350 closed Phase 40**: wrote
-  `docs/viewport-displaymode-adapter-support.md`, synthesizing Tasks 341–349 plus a dedicated
-  non-desktop-platform section — confirmed FNA has zero Android/mobile platform branching in this
-  entire API area, confirmed CNA's Android support is compile-only (never executed, no APK
-  packaging integration, blocked emulator run — see `docs/devices-build.md` §4.1) and its
-  Emscripten/Web support is unstarted scaffolding (tracked separately as Phase 69), and documented
-  SDL3's own anticipated-but-unverified Android/Web display-enumeration caveats. Docs-only, no
-  code changed, no new bug found. **Task 352 decided CNA's XNA `.fx`/compiled-effect-bytecode
-  policy: full support** (the user's explicit choice among unsupported/partial/full, presented
-  after Task 351 found CNA's `Effect` has zero bytecode machinery at all). Confirmed via FNA
-  source that FNA's bytecode constructor/clone-constructor delegate everything to FNA3D/MojoShader
-  (FNA3D's own local checkout is an uninitialized empty submodule, so its exact Vulkan-side
-  MojoShader integration couldn't be verified line-by-line — a noted knowledge gap, not asserted
-  fact). Found that MojoShader's full C source (zlib-licensed) is already readable locally at
-  `/rv/data/library/github.com/u3d-community/U3D/Source/ThirdParty/MojoShader` — its
-  `mojoshader_effects.c` already parses exactly XNA's compiled-effect container format, and
-  `mojoshader.c` transpiles D3D9 SM2/3 bytecode to `GLSL`/`GLSL120`/`ARB1`/`NV2`-`NV4` — **no
-  SPIR-V profile exists**, so Vulkan needs an extra GLSL→SPIR-V hop (`glslang`, currently only
-  present locally as Android NDK/Flatpak build tooling, not a vendorable checkout — a real tracked
-  blocker). Given the scope (new native dependency, 2 real translation paths + 1 unknown-feasibility
-  Bgfx path, `Effect`/`Clone()` wiring, real bytecode test fixtures with no XNA Content Pipeline
-  tooling available), opened **new Phase 74** (Tasks 10200–10209, its own reserved task-number
-  block mirroring the WebGPU backend's `10000`+ convention) rather than folding it into Phase 41.
-  Full reasoning in new `docs/fx-bytecode-support-plan.md`. **Re-scoped Tasks 353/354** from their
-  original "assume unsupported" framing to fit the full-support decision: 353 is now an interim
-  throw-on-bytecode safety net until Phase 74 lands; 354's doc now needs to cover what's supported
-  today, the interim guard, and the Phase 74 roadmap. Pure planning task — no code changed, no
-  rebuild needed. **Task 353 shipped the interim guard**: added the previously-entirely-missing
-  `Effect(GraphicsDevice&, const std::vector<SharpRuntime::bytecs>&)` constructor, matching FNA's
-  `Effect(GraphicsDevice, byte[] effectCode)` signature (FNA has no offset/count overload for this
-  one — confirmed via grep). Body immediately `throw`s `System::NotImplementedException` naming
-  Phase 74/`docs/fx-bytecode-support-plan.md` and pointing at `ShaderEffect`/the stock effects as
-  today's real alternatives — mirrors this project's existing `NotImplementedException` usage
-  elsewhere (`BoundingFrustum::Intersects(Ray)`, `NetworkMachine`, `Achievement`). Note: `Effect`
-  remains abstract in C++ (Task 351's pure-virtual-`OnApply()` finding), so this constructor is only
-  reachable via a concrete subclass's delegation — an existing, already-documented divergence from
-  FNA's concrete `Effect`, not something this task changes. 2 new tests added to `EffectTests.cpp`
-  (extended the file's `TestEffect` fixture with a matching bytecode-forwarding constructor);
-  discriminating power verified by temporarily replacing the throw with the same programmatic setup
-  the no-bytecode constructor uses and confirming both new tests fail, then reverting. Full
-  3-backend regression, zero new failures: EasyGL 3368/3371 (3 pre-existing, unchanged). Vulkan
-  3290/3304 (13 pre-existing + 1 reconfirmed order-dependent `Vulkan_RenderTargetUsage` flake).
-  Bgfx 3274/3274 (100%). **Task 354** wrote the developer-facing counterpart to
-  `docs/fx-bytecode-support-plan.md`: new `docs/shader-effect-vs-fx-bytecode.md`, verified against
-  real source rather than invented — `ShaderEffect(device, vertSrc, fragSrc)` takes raw GLSL
-  strings on EasyGL but pre-compiled SPIR-V bytes (packed into `std::string`) on Vulkan (same
-  constructor, different parameter *content* per backend, confirmed from
-  `examples/easygl_shader_effect_test.cpp`/`examples/vulkan_shader_effect_test.cpp`), quotes Task
-  353's exact thrown exception text read directly from `Effect.cpp`, states plainly that Bgfx's
-  `ShaderEffect` backend is a no-op stub, gives "hand-port the original HLSL to GLSL/SPIR-V today"
-  as practical porting guidance, and summarizes Phase 74's 8-step roadmap without duplicating
-  `docs/fx-bytecode-support-plan.md`. Docs-only, no code changed, no rebuild needed.
-  **Task 355** confirmed Task 351's deferred finding for real (FNA's `EffectPass.Apply()` throws
-  `InvalidOperationException` if the pass isn't part of the effect's `CurrentTechnique`; CNA's had
-  zero such validation, and didn't even track which technique a pass belonged to) and fixed it:
-  gave `EffectTechnique` a stable identity token (`getIdInternal()`, mirroring FNA's opaque
-  `TechniquePointer` handle) and `EffectPass` a `techniqueId_` checked in `Apply()`, throwing
-  `System::InvalidOperationException` on mismatch — including the null-`CurrentTechnique` case,
-  where FNA itself would crash with a `NullReferenceException` (CNA maps that to this same defined
-  exception, a deliberate, documented deviation from UB). **A second, more serious bug surfaced
-  while writing the interleaved-technique-switch test**: `EffectTechniqueCollection` stored
-  `EffectTechnique` by value in a `std::vector`, so `Effect::currentTechnique_` (captured at
-  construction as `&techniques_[0]`) would dangle the instant a second technique was ever added
-  (guaranteed reallocation on 1→2 capacity growth) — the same bug class as Task 345's
-  `DefaultAdapter` dangling reference. Fixed by switching to
-  `std::vector<std::unique_ptr<EffectTechnique>>` (this project's established idiom for this exact
-  problem) with a small custom iterator pair preserving range-for support. The identical hazard in
-  `EffectPassCollection` is not yet exercised by any test/production code and was left as-is,
-  tracked as new **Task 884**. 4 new tests in `EffectTests.cpp`'s `EffectApplyTest` fixture;
-  discriminating power verified (temporarily short-circuited the validation, confirmed 3 of 4 new
-  tests fail, reverted). Full 3-backend regression, zero new failures: EasyGL 3370/3375 (3
-  pre-existing + 2 reconfirmed-flaky `CueTest`). Vulkan 3294/3308 (13 pre-existing + 1 reconfirmed
-  order-dependent `Vulkan_FillMode_WireFrame` flake). Bgfx 3278/3278 (100%).
-  **Task 356** re-read FNA's `CurrentTechnique` setter (`Effect.cs`) and `EffectPass.Apply()`
-  (`EffectPass.cs`) with a narrower lens: does switching `CurrentTechnique` do anything beyond a
-  plain pointer swap? Confirmed FNA's setter only does two things — a native
-  `FNA3D_SetEffectTechnique` call (implementation detail, no C#-observable effect of its own) and
-  `INTERNAL_currentTechnique = value` — and all real enforcement already lives in
-  `EffectPass.Apply()`'s live comparison, which Task 355 already ported faithfully. **Conclusion: no
-  code fix needed**, CNA's plain-pointer-swap setter already provides the full contract; verify-only,
-  matching Task 344's precedent. Added `CurrentTechniquePropertyPassCollectionTracksSelectedTechnique`
-  to `EffectTests.cpp`, using a different access pattern than Task 355's test (re-fetching
-  `getCurrentTechniqueProperty()->getPassesProperty()[0]` after each switch instead of holding a
-  fixed `EffectPass&`), proving the *live selection* itself resolves to each technique's own pass
-  collection bidirectionally. Discriminating power verified: temporarily made
-  `setCurrentTechniqueProperty()` a no-op, confirmed the new test fails alongside Task 355's
-  technique-switch tests, reverted. Full 3-backend regression, zero new failures: EasyGL 3373/3376
-  (3 pre-existing, no `CueTest` flake this run). Vulkan 3295/3309 (13 pre-existing + 1
-  reconfirmed-flaky `CueTest`). Bgfx 3277/3279 (2 reconfirmed-flaky `CueTest` failures this run).
+- **Current development phase:** Phases 1–41 are complete. **Phase 42 ("BasicEffect exactness",
+  Tasks 361–370) is open** — Tasks 361–366 are done, **Task 367 is next**. See §8 for the exact
+  goal and §3 for what the last 6 tasks found. Full task-by-task detail (audit findings, exact
+  formulas derived from FNA source, discriminating-power verification) lives in `GRAPHICS_TASKS.md`
+  — this file intentionally does not duplicate it.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -300,6 +31,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
     downstream consequences (texture-in-shader sampling, `EffectParameter` storage).
   - `GraphicsDevice` stores state objects (`BlendState`/`DepthStencilState`/`RasterizerState`) **by
     value**, unlike FNA's reference-type aliasing. Deliberate, project-wide, not fixed (Task 869).
+  - CNA's stock effects (`BasicEffect` etc.) bypass FNA's `EffectDirtyFlags`/`EffectParameter`
+    reflection pipeline entirely — derived shader values are computed in an ungated
+    `FillGpuDrawParams()` instead of a real `OnApply()` override (Task 351/361 finding).
+  - XNA compiled `.fx` bytecode: the project has decided on **full support** as the long-term goal
+    (Task 352), planned as new **Phase 74** (Tasks 10200–10209, `docs/fx-bytecode-support-plan.md`).
+    Until that lands, `Effect`'s bytecode constructor throws `NotImplementedException` (Task 353).
+    Today, custom shaders go through `ShaderEffect` (hand-written GLSL on EasyGL, pre-compiled
+    SPIR-V on Vulkan, no-op stub on Bgfx) — see `docs/shader-effect-vs-fx-bytecode.md`.
 
 ---
 
@@ -307,28 +46,19 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last actually rebuilt/re-verified for
-  Task 365 (new pixel test per backend, plus temporary/reverted shader edits — EasyGL's runtime
-  GLSL string in `EasyGLGraphicsBackend.cpp`, Vulkan's `colored3d.vert.glsl` regenerated into
-  `spirv_shaders.hpp` via `compile_shaders.py`, Bgfx's `vs_colored3d.sc` regenerated into
-  `bgfx_shaders.hpp` via its own `compile_shaders.py` — all reverted back to their committed Task
-  364 state, confirmed via clean `git status`).
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 366.
 
-### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 3415/3418 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 366)
+- **EasyGL, full `ctest -j1`:** 3415/3419 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3337/3351 pass. 13 documented failures (see §5) + 1 reconfirmed-flaky,
-  unrelated `CueTest` failure: 5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*`
-  (Task 870), `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
-  `Vulkan_RenderTargetCube_SampleAfterUnbind` (Task 876 — genuine confirmed bug, supposed to fail
-  until fixed).
-- **Bgfx, full `ctest -j1`:** 3320/3321 pass — 1 reconfirmed-flaky, unrelated
-  `NetworkSessionTest.FindReturnsEmptyCollection` failure this run (passed cleanly on isolated
-  re-run immediately after).
-- **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently**
-  — concurrent runs previously produced transient GPU/driver-contention false failures. If a
-  single run shows an anomaly beyond the documented list, re-run that test in isolation before
-  treating it as a regression.
+- **Vulkan, full `ctest -j1`:** 3337/3352 pass. 13 documented pre-existing failures (see §5) + 1
+  order-dependent `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage` flake + 1 flaky `CueTest`.
+- **Bgfx, full `ctest -j1`:** 3321/3322 pass. 1 flaky, unrelated `CueTest`/`NetworkSessionTest`
+  failure (not a regression — passes cleanly in isolation).
+- **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
+  concurrent runs previously produced transient GPU/driver-contention false failures. If a single
+  run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
+  as a regression.
 
 ### What currently works
 - Full `Texture2D`/`Texture3D`/`TextureCube` construction, `SetData`/`GetData` (arbitrary
@@ -341,57 +71,51 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   all 3 backends (Task 293 fix).
 - `EnvironmentMapEffect` and `SpriteBatch` (all 20 FNA public methods) work on all 3 backends.
 - Vulkan rendering is colorspace-correct (`Texture2D`/swapchain both fixed from sRGB to UNORM).
-- `RenderTarget2D`: constructors, `DepthStencilFormat`/`MultiSampleCount`/`RenderTargetUsage`, and
-  now `IsContentLost`/`ContentLost` (Task 331) all match FNA at the property level. Basic
-  render-to-texture round trip pixel-verified on EasyGL and Vulkan. Depth testing while rendering
-  INTO a `RenderTarget2D` is genuinely functional on EasyGL and Vulkan, not just a stored property
-  (Task 335) — though the exact `DepthStencilFormat` value isn't respected on any backend, only a
-  coarse always/never (Vulkan) or hardcoded-format (EasyGL/Bgfx) choice (Task 877).
-- `RenderTargetCube`: constructor, `DepthStencilFormat`/`MultiSampleCount`/`RenderTargetUsage`/
-  `IsContentLost`/`ContentLost` all match FNA at the property level; `GetTypeName()` now correctly
-  reports `"...RenderTargetCube"` instead of the inherited `"...TextureCube"` (Task 332).
-  Sampling a `RenderTargetCube` back out via `EnvironmentMapEffect` after unbinding is
-  pixel-verified working on **EasyGL only** (Task 334) — see below for Vulkan/Bgfx gaps.
-- `RenderTarget2D`/`RenderTargetCube`'s `mipMap` is genuinely functional **on EasyGL**: `LevelCount`
-  correctly reflects the full mip chain, GPU storage is pre-allocated for every level, and the
-  chain is auto-regenerated from level 0 on unbind (mirroring FNA3D's `OPENGL_ResolveTarget`),
-  pixel-verified via a mip-completeness probe (Task 336). Vulkan/Bgfx report the same correct
-  `LevelCount` (shared computation) but don't yet back it with real GPU mips (Task 878).
-- `RenderTarget2D`/`RenderTargetCube`'s MSAA (`preferredMultiSampleCount`) is genuinely functional
-  **on EasyGL**: `MultiSampleCount` reflects the real, device-capability-clamped value (mirroring
-  FNA's `ClosestMSAAPower`+`FNA3D_GetMaxMultiSampleCount`), a real multisampled renderbuffer is
-  created and resolved via `glBlitFramebuffer` on unbind, pixel-verified with a genuine
-  differential anti-aliasing proof (Task 337). Vulkan/Bgfx honestly report `MultiSampleCount=0`
-  (not yet implemented, Task 879) rather than a fake pass-through.
+- `RenderTarget2D`/`RenderTargetCube`: constructors, `DepthStencilFormat`/`MultiSampleCount`/
+  `RenderTargetUsage`/`IsContentLost`/`ContentLost` all match FNA at the property level. Basic
+  render-to-texture round trip pixel-verified on EasyGL and Vulkan; depth testing while rendering
+  INTO a render target works on EasyGL/Vulkan (Task 335), though exact `DepthStencilFormat` isn't
+  respected on any backend (Task 877). Mip chains (Task 336) and MSAA (Task 337) are genuinely
+  functional on **EasyGL only** — Vulkan/Bgfx report the correct properties but don't back them
+  with real GPU resources yet (Tasks 878/879).
 - `SetRenderTarget`/`SetRenderTargets` correctly reset `Viewport`/`ScissorRectangle` to the newly
-  bound target's size (or the backbuffer's, when unbinding), matching FNA exactly, on all 3
-  backends (shared `GraphicsDevice.cpp` code) — `ScissorRectangle`'s reset has a real,
-  pixel-verified GPU effect (Task 338); `Viewport`'s GPU effect is still a no-op everywhere
-  (Task 880, see below).
+  bound target's size on all 3 backends (Task 338) — `ScissorRectangle`'s reset has a real,
+  pixel-verified GPU effect; `Viewport`'s GPU effect is still a no-op everywhere (Task 880).
+- `Effect`/`EffectTechnique`/`EffectPass`/`EffectParameterCollection` base-class contract now
+  matches FNA closely (Phase 41, Tasks 351–360): technique/pass validation, lookup-by-name/semantic
+  semantics, enumeration order, and dispose/lifecycle behavior all verified or fixed to match FNA.
+  `Effect::Clone()` still doesn't exist (Task 883).
+- `BasicEffect` (Phase 42, Tasks 361–366 so far): all 22 property defaults now verified/correct
+  against FNA (2 real default-value bugs fixed in Task 361, 1 more in Task 362).
+  `EnableDefaultLighting()`'s exact constants confirmed correct (Task 363). Pixel-verified on all 3
+  backends: no-texture diffuse-only rendering (Task 364, fixed 3 real per-backend bugs where
+  `VertexColorEnabled` wasn't honored), vertex-color multiplication (Task 365, already correct),
+  and texture × diffuse multiplication (Task 366, already correct).
 
 ### What does NOT work yet
 - **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
   equations / depth-compare ops / no stencil testing at all, regardless of what's requested.
-  Tracked as Task 868/Task 870, confirmed repeatedly via pixel tests, not fixed (large,
+  Tracked as Task 868/870, confirmed repeatedly via pixel tests, not fixed (large,
   multi-pipeline-site changes).
 - `GraphicsDevice.ReferenceStencil`'s independent-override behavior has zero backend connection on
   all 3 backends (Task 872). `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` everywhere
   (Task 871).
-- `RenderTarget2D`/`RenderTargetCube`'s `mipMap` still doesn't produce real GPU mips on Vulkan/Bgfx
-  (fixed on EasyGL, Task 336; Vulkan/Bgfx tracked as Task 878). Same shape for MSAA (fixed on
-  EasyGL, Task 337; Vulkan/Bgfx honestly report `MultiSampleCount=0`, tracked as Task 879).
+- `RenderTarget2D`/`RenderTargetCube`'s mip chains and MSAA don't produce real GPU resources on
+  Vulkan/Bgfx (Tasks 878/879 — fixed on EasyGL already).
 - `GraphicsDevice.Viewport` has **zero GPU backend wiring on all 3 backends** — every backend
   hardcodes its actual viewport call to the full render-target/window size regardless of what
-  `Viewport` is set to (confirmed via code reading, found while doing Task 338). A sub-region
-  viewport (split-screen, atlas-subrect rendering) currently has no effect anywhere. Tracked as
-  Task 880, not fixed.
+  `Viewport` is set to. A sub-region viewport (split-screen, atlas-subrect rendering) currently has
+  no effect anywhere. Tracked as Task 880, not fixed.
+- **`GraphicsDevice`'s default `RasterizerState` (`CullCounterClockwiseFace`, matches FNA) is never
+  pushed to any backend's actual GPU state at construction** — Bgfx's own hardcoded default happens
+  to be the only one of the 3 that matches FNA's, so it's the only backend that silently culls a
+  standard-winding full-screen quad unless `RasterizerState::CullNone` is set explicitly (Task 884,
+  found this session).
 - `SetRenderTargets`'s simultaneous-target cap doesn't match FNA's real `MAX_RENDERTARGET_BINDINGS
-  = 4`: EasyGL/Bgfx silently cap at 8 (no error, just truncates beyond that), Vulkan has no
-  CNA-level cap at all (relies on the raw GPU's own limit). Found while auditing Task 339 — no
-  real game code here is affected (no test exercises >2 targets), tracked as Task 881, not fixed.
-- `EasyGL_MRT_TwoAttachments` (Task 145): even a basic, same-size/format 2-target MRT setup
-  doesn't render correctly on EasyGL — attachment 1 stays black. Pre-existing, off-limits for
-  opportunistic fixing (needs its own dedicated root-cause investigation, see §9).
+  = 4`: EasyGL/Bgfx silently cap at 8, Vulkan has no CNA-level cap at all (Task 881).
+- `EasyGL_MRT_TwoAttachments` (Task 145): even a basic, same-size/format 2-target MRT setup doesn't
+  render correctly on EasyGL — attachment 1 stays black. Pre-existing, off-limits for opportunistic
+  fixing (see §9).
 - `Texture3D`/`TextureCube::GetData` is a total silent no-op on Vulkan/Bgfx (Task 865).
   `TextureCube::DDSFromStreamEXT` is a non-functional stub (Task 663).
 - `Texture2D::SetData(level>0,...)` is a silent no-op on Vulkan/Bgfx; EasyGL's non-mip-aware
@@ -399,95 +123,77 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - `SpriteBatch`'s `SamplerState` is a no-op on Vulkan/Bgfx (EasyGL only). Multiple
   `SpriteBatch::Begin()`/`End()` per frame on Vulkan: only the last batch renders.
 - `Texture3D` sampling cannot be wired into any shader without an architecture change (Task 863).
-- On Bgfx, `SpriteBatch::Draw`ing a `RenderTarget2D` as a texture reads the wrong handle type
-  (`BgfxRenderTargetBackend::fbo` instead of `::colorTex`, via an invalid `static_cast` to the
-  unrelated `BgfxTextureBackend` type) — confirmed by layout analysis, doesn't crash but samples
-  wrong/garbage data (Task 873).
-- Same bug shape on Bgfx for `RenderTargetCube` sampled via `EnvironmentMapEffect` — reads
-  `BgfxRenderTargetCubeBackend::fbo` instead of `::cubeTex` (Task 874, found this session).
-- On Vulkan, `SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);` with **no draw call**
-  in between never gets a render pass recorded — the RT's image stays `VK_IMAGE_LAYOUT_UNDEFINED`
-  forever (Task 875, found this session).
-- On Vulkan, sampling a `RenderTargetCube` via `EnvironmentMapEffect` after unbinding renders
-  black instead of its actual rendered content, even with a real draw call into each face —
-  root cause not yet isolated (Task 876, found this session).
+- Bgfx: `SpriteBatch::Draw`ing a `RenderTarget2D`/`RenderTargetCube` reads the wrong handle type via
+  an invalid `static_cast` — samples wrong/garbage data, doesn't crash (Tasks 873/874).
+- Vulkan: `SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);` with no draw call never
+  gets a render pass recorded (Task 875). Sampling a `RenderTargetCube` via `EnvironmentMapEffect`
+  after unbinding renders black instead of actual content, root cause not isolated (Task 876).
 - No backend honors the exact requested `DepthStencilFormat` for a render target's depth/stencil
-  attachment: EasyGL always allocates depth-only `DepthComponent24` (no stencil bits, ever);
-  Vulkan always allocates a depth buffer regardless of `hasDepth`, using the device-global depth
-  format; Bgfx always uses `D24S8` regardless of the exact format requested (most correct of the
-  three, but still not format-exact). The core depth-TEST functionality itself does work on
-  EasyGL/Vulkan (Task 335) — this is specifically about format fidelity (Task 877, found this
-  session).
+  attachment (Task 877) — the depth-TEST functionality itself works (Task 335), this is format
+  fidelity only.
+- `BasicEffect::FillGpuDrawParams()` only forwards `DirectionalLight0` (never `SpecularColor`/
+  `SpecularPower`/`DirectionalLight1`/`DirectionalLight2`) and omits `+EmissiveColor` from the
+  disabled-lighting diffuse formula — both real mismatches vs. FNA, invisible in Tasks 364–366
+  since those cases leave the affected properties at their defaults. Squarely Tasks 368/369's scope.
 
 ---
 
 ## 3. Recent changes
 
-Most recent first. Full history (including everything before Task 271, and full detail for every
-task below) is in `GRAPHICS_TASKS.md` and `git log`.
+Most recent first. Full detail (exact FNA-derived formulas, discriminating-power verification,
+per-backend fix shape) is in `GRAPHICS_TASKS.md` — this table is intentionally a one-line-per-task
+index, not a duplicate.
 
-| Commit / Task | Change |
-|---|---|
-| Task 365 | The inverse/complement of Task 364. Confirmed from FNA source (`Common.fxh`/`BasicEffect.fx`) that `VertexColorEnabled=true`'s expected output is `DiffuseColor × Alpha × VertexColor` (component-wise, including alpha) via `VSBasicVcNoFog`'s `vout.Diffuse *= vin.Color`. Confirmed all 3 backends' `VertexColorEnabled` gate (added by Task 364) already correctly implemented the `true` branch as this exact multiply — Task 364 only added/fixed the `false` (skip) branch, this pre-existing multiply was untouched by that fix. **Pure new-coverage verification task, no bug found.** Added one new pixel test per backend (`examples/{easygl,vulkan,bgfx}_basiceffect_vertexcolor_enabled_test.cpp`) with a distinctive vertex color `(200,100,50,200)` and `DiffuseColor(0.8,0.4,0.6)` chosen so the correct product `(160,40,30)` is numerically distinct from either input alone (`DiffuseColor`-only reads `(204,102,153)`; vertex-color-only reads `(200,100,50)`). Verified genuine discriminating power on all 3 backends independently by temporarily forcing each backend's shader to output `DiffuseColor` alone and confirming the exact predicted `(204,102,153)` failure, then reverting (Vulkan/Bgfx required regenerating their embedded shader-bytecode headers via each backend's `compile_shaders.py`, since their vertex-color multiply lives in precompiled bytecode, not runtime-interpreted source like EasyGL's). Full 3-backend regression: EasyGL 3415/3418 (3 pre-existing), Vulkan 3337/3351 (13 pre-existing + 1 flaky `CueTest`), Bgfx 3320/3321 (1 reconfirmed-flaky, unrelated `NetworkSessionTest.FindReturnsEmptyCollection`). |
-| Task 364 | Phase 42's first real GPU pixel-readback task (Tasks 361-363 were GPU-independent). Derived the expected `DiffuseColor × Alpha` output formula from FNA's `BasicEffect.cs`/`BasicEffect.fx`/`Common.fxh`/`EffectHelpers.cs`. Found and fixed 3 real bugs, one per backend, all in the same spot: `FillGpuDrawParams()`'s `vertexColorEnabled` forwarding (wired since Task 361) was never actually honored by any backend's no-texture shader path. EasyGL's/Bgfx's `colored3D` fragment/vertex shader unconditionally multiplied by the per-vertex color — added a gating uniform on each. Vulkan's separate `stride==16` pipeline was worse still — a bare vertex-color passthrough reading neither `DiffuseColor` nor the flag — fixed by extending its push-constant layout to match the existing `FillExtPushConst()` layout byte-for-byte. Fixing Vulkan exposed and required fixing 2 stale tests (`vulkan_rt2d_test.cpp`, `vulkan_render_target_usage_test.cpp`) that had been accidentally relying on the bug since Task 361 flipped `VertexColorEnabled`'s default to `false`. Also found, documented, not fixed (new **Task 884**): Bgfx's default `RasterizerState` cull state is the only one of the 3 backends actually matching FNA's real `CullCounterClockwiseFace` default, so it alone silently culled every quad in this whole pixel-test family — worked around with explicit `RasterizerState::CullNone` in the new Bgfx test. Verified genuine discriminating power on all 3 backends independently. Full 3-backend regression: EasyGL 3414/3417 (3 pre-existing), Vulkan 3336/3350 (13 pre-existing + 1 flaky `CueTest`), Bgfx 3320/3320 (100%, first-ever clean `BasicEffect` pixel-readback pass on this backend). |
-| Task 350 | **Closes Phase 40.** Wrote `docs/viewport-displaymode-adapter-support.md`, a full Phase 40 synthesis (mirroring `docs/rendertarget-support.md`'s Phase 39 closer) covering Tasks 341–349, plus this task's own non-desktop-platform section. Re-audited FNA's `GraphicsAdapter.cs`/`DisplayMode.cs`/`DisplayModeCollection.cs`/`Viewport.cs`/`SDL3_FNAPlatform.cs` for Android/mobile platform branching and found **zero** — FNA is a thin, unconditional wrapper over plain SDL3 display calls, and CNA's `GraphicsAdapter.cpp` mirrors that with no platform guards of its own. Checked actual non-desktop build/run reality instead of assuming: Android — `CNA` cross-compiles for `arm64-v8a` via NDK (`docs/devices-build.md` §4) but has **never actually executed** any display/adapter code (no APK packaging integration, blocked emulator run — `docs/devices-build.md` §4.1); Web/Emscripten — real build scaffolding exists in `CMakeLists.txt` but **no `emcc` build has ever been performed** (unstarted, tracked separately as Phase 69). Documented SDL3's own anticipated (explicitly labeled not-locally-verified) Android/Web display-enumeration caveats, and concluded CNA's existing headless-fallback path (Task 346) isn't the path Android would actually take (a real single display would go through the normal per-display loop) but no code change is anticipated to be necessary either way. No new bug found — pure documentation/synthesis, matching Task 340's precedent exactly: docs-only, no code changed, no rebuild/regression needed. |
-| Task 349 | Read FNA's `GraphicsDevice.Reset()` line-by-line: it unconditionally resets `Viewport` to `(0,0,newW,newH)` regardless of any previously-set custom `Viewport`, and `GraphicsDeviceManager.ApplyChanges()` always calls it; FNA's `Present()` never touches `Viewport` at all. **Found and fixed a real bug in CNA's equivalent mechanism**: `GraphicsDevice::UpdateViewportFromWindow()` (called every frame via `Present()`, per Task 348) decided "did the size change?" by comparing against `Viewport`'s own current width/height — so a game-set custom sub-region `Viewport` (legal FNA usage, e.g. split-screen) was silently stomped back to full-window size on the very next frame, even with no resize at all. Fixed by adding dedicated `lastKnownViewportWidth_`/`Height_` fields to `GraphicsDevice` that track the backend-derived size independently of whatever `Viewport` is currently set to. **Second finding, documented not fixed (self-healing, not a persistent bug)**: `GraphicsDeviceManager::ApplyChanges()` queries the window size immediately after `SDL_SetWindowSize()` with no event pump in between; on X11/Xvfb this can transiently observe a stale size, but it self-corrects within a frame or two since `Present()` re-derives `Viewport` every frame. New shared test `examples/viewport_reset_after_resize_test.cpp` (EasyGL + Vulkan, mirroring Task 338's cross-backend precedent): sets a custom `Viewport(10,20,100,60)`, confirms it survives a frame's `Present()` with no resize, then triggers a real resize via GDM and polls (mirroring Task 348's polling precedent) until `Viewport` settles to `(0,0,640,360)`. **Verified genuine discriminating power**: reverting the fix made exactly the 4 "survives Present()" assertions fail, while the 4 post-resize assertions still passed, before restoring. Full 3-backend rebuild + regression (shared `GraphicsDevice.hpp`/`.cpp` touched): EasyGL 3353/3356 (3 pre-existing, no `CueTest` flake this run). Vulkan 3275/3289 (13 pre-existing + 1 reconfirmed-flaky `CueTest`). Bgfx 3258/3259 (1 reconfirmed-flaky `CueTest`). |
-| Task 348 | Opened Phase 40's third sub-area. Traced the real window-resize chain end-to-end: `SDL_EVENT_WINDOW_RESIZED` → `Game`'s event loop → `GameWindow::updateFromSDL()` → `GameWindow.ClientSizeChanged` → `GraphicsDeviceManager::INTERNAL_OnClientSizeChanged` → `GraphicsDevice::UpdateViewportFromWindow()`. **Confirmed a real, deliberate FNA divergence, correctly not "fixed"**: FNA's `INTERNAL_OnClientSizeChanged` forwards the new window size into `PresentationParameters.BackBufferWidth`/`Height` (full device Reset on every resize); CNA's doesn't, by design (an existing accurate comment explains why — would corrupt `FixedHeightDynamicWidth`'s virtual-resolution scaling). **Genuine discovery while verifying the new test's discriminating power**: `Viewport` tracking doesn't actually depend on the `ClientSizeChanged` event at all — `GraphicsDevice::Present()` unconditionally refreshes it every frame, a stronger guarantee than FNA's — so the event chain itself needed its own separately-discriminating check. **Closed a real test-coverage gap**: Task 227's existing test only covers the GDM-API-driven resize path; new `examples/easygl_real_window_resize_test.cpp` (`EasyGL_RealWindowResize`) calls `SDL_SetWindowSize()` directly on the live window and verifies 4 things: Viewport height pinned, Viewport width changes, `BackBufferWidth`/`Height` unchanged (regression marker), and `ClientSizeChanged` fires. EasyGL-only (matches Task 227's precedent — Vulkan/Bgfx have no virtual-resolution scaling to pin). **New findings deferred to Task 882**: `PresentationMode::Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer` aren't distinctly implemented on EasyGL (only `FixedHeightDynamicWidth` has real logic); Vulkan/Bgfx implement no virtual-resolution scaling at all. Full 3-backend rebuild + regression (new EasyGL-only test, inert `CMakeLists.txt` change): EasyGL 3351/3355 (3 pre-existing + 1 reconfirmed-flaky `CueTest`). Vulkan 3274/3288 (13 pre-existing + 1 reconfirmed-flaky `CueTest`, no order-dependent flake this run). Bgfx 3259/3259 (100%). |
-| Task 346 | Verified the headless-CI fallback chain already present in `GraphicsAdapter.cpp` is structurally complete: `AdaptersChanged()` falls back to a synthetic 800×480 "Default Display" adapter when `SDL_GetDisplays()` fails; `queryDisplayModes()`/`queryCurrentDisplayMode()` fall back similarly for a display that enumerates but whose modes/current-mode queries fail (including the all-null-pointers edge case, already correctly handled). **Fixed one real small bug**: the no-displays branch never called `SDL_free(displays)` before returning — a latent leak when SDL returns a non-null array with `count<=0` — fixed with an unconditional (documented-safe-on-null) `SDL_free(displays)`. **Added a genuine, non-fabricated regression test**: confirmed via a standalone probe that `SDL_GetDisplays()` reliably fails with "Video subsystem has not been initialized" whenever `SDL_INIT_VIDEO` isn't initialized — the real headless-CI scenario, not a mocked one. New `HeadlessFallback_NoVideoSubsystemProducesSingleSyntheticAdapter` test: skips if something else left video initialized (every other SDL-touching test in this project balances its own init/quit calls, so this reliably holds), otherwise calls `AdaptersChanged()` directly and verifies the synthetic adapter's exact values, then restores a real enumeration afterward. Verified it exercises the real path both standalone and interleaved with `GameWindowTests.cpp`. Full 3-backend rebuild + regression: EasyGL 3351/3354 (3 pre-existing, unchanged). Vulkan 3274/3288 (13 pre-existing + 1 reconfirmed order-dependent flake — `Vulkan_FillMode_WireFrame` this run). Bgfx 3258/3259 (1 reconfirmed-flaky `CueTest`). |
-| Task 347 | Closes the finding from Task 345's `GraphicsAdapter` audit. Compared `DisplayModeCollection` against FNA's `Graphics/DisplayModeCollection.cs` line-by-line: enumeration (`begin()`/`end()`) and integer indexing (`operator[](int)`, out-of-range throwing) already matched and were fully tested. **Fixed the real gap**: added FNA's missing `this[SurfaceFormat]` indexer as a second `operator[](SurfaceFormat)` overload (C++ overloads `operator[]` by parameter type — coexists cleanly with the int overload). Also `NOXNA`-wrapped `getCountProperty()`/integer `operator[]`, which don't exist in FNA's API at all (a `CLAUDE.md` violation on their own, matching `begin()`/`end()`'s existing correct treatment — `NOXNA` is a no-op marker, zero behavior change). New tests: `IndexBySurfaceFormatReturnsOnlyMatchingModesInOriginalOrder`, `IndexBySurfaceFormatReturnsEmptyWhenNoModeMatches`, `IndexBySurfaceFormatOnEmptyCollectionReturnsEmpty`. Verified discriminating power by temporarily making the new indexer return every mode unconditionally and confirming the 2 filter-correctness tests fail, before reverting. Full 3-backend rebuild + regression (header-only addition, widely included): EasyGL 3349/3353 (3 pre-existing + 1 reconfirmed-flaky `CueTest`). Vulkan 3274/3287 (13 pre-existing, unchanged, no flakes this run). Bgfx 3258/3258 (100%). |
-| Task 345 | Audited `GraphicsAdapter` against FNA's `GraphicsAdapter.cs` + `SDL3_FNAPlatform.cs`. Fixed 4 real bugs: (1) `AdaptersChanged()` swapped `DeviceName`/`Description` — FNA gives them different values (`DeviceName`=synthetic `\\.\DISPLAYn`, `Description`=real display name). (2) `queryDisplayModes()` didn't dedupe modes differing only by refresh rate and iterated forward instead of FNA's reverse order — fixed to match exactly. (3) **Most severe**: `static GraphicsAdapter& DefaultAdapter` was a raw reference bound once at static-init time; since `AdaptersChanged()` destroys and recreates every adapter, any later call (an intended, FNA-documented usage) left it — and 2 production call sites in `GraphicsDeviceManager.cpp` — dangling. Removed the field entirely (FNA's own `DefaultAdapter` is a property, always re-evaluated) and repointed both call sites at the existing, always-fresh `getDefaultAdapterProperty()`. (4) Stale Doxygen comments on `getDeviceIdProperty()`/`getVendorIdProperty()` claimed "not implemented" but both are real (Linux PCI sysfs query) — corrected. Documented (not reverted) an intentional deviation: FNA throws `NotImplementedException` for `DeviceId`/`Revision`/`SubSystemId`/`VendorId`; CNA provides real values for the first two. Removed a dead `friend class GraphicsAdapterFactory` (class doesn't exist). Closed a real test-coverage gap — zero `GraphicsAdapter` tests existed despite a stale comment claiming otherwise — with new `GraphicsAdapterTests.cpp` (23 tests). Verified discriminating power for both the swap and dedup fixes by reverting each and confirming the corresponding test fails. **New finding deferred to Task 347**: FNA's `DisplayModeCollection` has a `this[SurfaceFormat]` indexer CNA lacks entirely, while CNA's extra `Count`/integer-`operator[]` (not in FNA) aren't `NOXNA`-wrapped. Full 3-backend rebuild + regression (touches shared `GraphicsDeviceManager.cpp`): EasyGL 3347/3350 (3 pre-existing, unchanged). Vulkan 3269/3284 (13 pre-existing + 2 reconfirmed-flaky `CueTest`; one `Vulkan_DepthBias` 0/4 anomaly reconfirmed as the normal 3/4 pattern in isolation). Bgfx 3254/3255 (1 reconfirmed-flaky `CueTest`). |
-| Task 344 | Confirmed by reading FNA's `Viewport.cs` (Task 341's audit) that `MinDepth`/`MaxDepth` setters have zero validation/clamping, and `Project`/`Unproject` use them in unguarded arithmetic. Added 3 new `ViewportTests.cpp` tests: `ProjectWithMinDepthGreaterThanMaxDepthProducesInvertedZWithoutThrowing`, `ProjectUnprojectRoundTripWithInvertedMinMaxDepth` (MinDepth=1,MaxDepth=0 — confirms no reordering/clamping), and `UnprojectWithEqualMinMaxDepthProducesNonFiniteResult` (MinDepth==MaxDepth — confirms genuine IEEE-754 NaN propagation via `std::isnan`, not a guarded fallback). **Verified genuine discriminating power**: temporarily added a "protective" min/max swap to `Project` and a divide-by-zero guard to `Unproject` (the exact kind of FNA-deviating fix a well-intentioned future change might introduce) and confirmed all 3 new tests fail, before reverting both back to the committed Task 341 state. Test-file-only change: EasyGL ctest 3323/3327 (3 pre-existing + 1 reconfirmed-flaky `CueTest`, confirmed passing in isolation). Vulkan ctest 3247/3261 (13 pre-existing + 1 reconfirmed order-dependent flake — `Vulkan_FillMode_WireFrame` this run). Bgfx ctest 3231/3232 (1 reconfirmed-flaky `CueTest`). |
-| Tasks 342-343 | Task 341's audit found every pre-existing `Project`/`Unproject` test used identity matrices only, so the perspective-divide branch (`if (!MathHelper::WithinEpsilon(a, 1.0f))`) in both methods was never actually exercised. Added 4 new `ViewportTests.cpp` tests using a real `Matrix::CreatePerspectiveFieldOfView` + `Matrix::CreateLookAt`: `ProjectWithNonIdentityPerspectiveMatrix`/`ProjectWithNonIdentityViewAndProjectionMatrices` (Task 342, hand-derived expected values from FNA's own formulas), `UnprojectRecoversOriginalPointThroughNonIdentityPerspectiveMatrix`/`ProjectUnprojectRoundTripWithNonIdentityViewAndProjectionMatrices` (Task 343). **Verified genuine discriminating power**: temporarily forced each method's own perspective-divide condition to `false` in turn and confirmed exactly the tests that depend on that method's divide branch fail (Project's 2 fail when Project's divide is disabled; Unproject's 2 fail when Unproject's divide is disabled, independently) before reverting both back to the committed Task 341 state. Test-file-only change (no production code touched): EasyGL ctest 3321/3324 (3 pre-existing, unchanged). Vulkan ctest 3242/3258 (13 pre-existing + 1 reconfirmed-flaky `CueTest` + 1 reconfirmed order-dependent `Vulkan_RenderTargetUsage` flake + 1 one-off `DynamicSoundEffectInstanceTest` timing flake, confirmed passing in isolation). Bgfx ctest 3229/3229 (100%). |
-| Task 341 | **Opens Phase 40.** Audited `Viewport` against FNA's `Graphics/Viewport.cs` line-by-line: `Project`/`Unproject` math, `AspectRatio`, `Bounds`, `TitleSafeArea`, `ToString()` all already matched FNA exactly — no math bug. **Fixed a real CLAUDE.md convention violation**: `X`/`Y`/`MinDepth`/`MaxDepth` were public raw fields with no getter/setter, while `Height`/`Width` in the same class correctly used `getXProperty()`/`setXProperty()` — converted all 4 to the same `DEF_PROP`-backed pattern (private `X_`/`Y_`/`MinDepth_`/`MaxDepth_`, member order now matches FNA's C# order: Height, MaxDepth, MinDepth, Width, Y, X). Updated the only 3 call sites touching the raw fields (`GraphicsDevice::UpdateViewportFromWindow()`, `ViewportTests.cpp`, `easygl_viewport_state_test.cpp`) and added a new `SettersUpdateEachFieldIndependently` test (previously only constructors were tested, never the setters). Full 3-backend rebuild + regression (header change touches everything including `Viewport.hpp`): EasyGL 3316/3320 (3 pre-existing + 1 reconfirmed-flaky `CueTest`). Vulkan 3239/3254 (13 pre-existing + 2 reconfirmed-flaky `CueTest`). Bgfx 3224/3225 (1 reconfirmed-flaky `CueTest`). |
-| Task 340 | **Closes Phase 39.** Wrote `docs/rendertarget-support.md`, a full Phase 39 synthesis (mirroring `docs/rasterizerstate-support.md`'s Phase 38 closer) covering Tasks 331–340: 2 real EasyGL fixes shipped (Task 336 mip support, Task 337 MSAA support), 1 shared-code fix (Task 338's Viewport/ScissorRectangle reset on RT switch), and the per-backend MRT limits table (EasyGL/Bgfx cap at 8, Vulkan uncapped at the CNA level, none matching FNA's real 4-target limit — Task 881). Docs-only task, no code changed, no regression risk. Phase 40 (Viewport, DisplayMode, adapter behavior, Tasks 341–350) is already planned in `GRAPHICS_TASKS.md` and opens next — directly relevant to Task 880 (Viewport has zero GPU wiring). |
-| Task 339 | Audit-only closure (no code changed, mirrors Task 330's precedent) — read FNA's actual `SetRenderTargets` source and confirmed it does **zero explicit validation** of format/size/count mismatches between MRT targets; it computes dimensions from `renderTargets[0]` only and delegates everything to the native driver. "Reject invalid combinations" simply isn't an XNA-level behavior. Confirmed CNA's own 3 backends behave the same way (no CNA-level validation, delegate to GL/Vulkan/bgfx) — consistent with FNA, not a divergence. **Found one real, minor, new divergence**: FNA's actual MRT cap is `MAX_RENDERTARGET_BINDINGS=4` (implicit, via a fixed-size array that would throw past 4); CNA's EasyGL/Bgfx silently cap at 8 (no throw), Vulkan has no CNA-level cap at all. Tracked as new **Task 881**, not fixed (no test exercises >2 targets, low priority). Correctly did NOT touch the already-tracked, off-limits `EasyGL_MRT_TwoAttachments` (Task 145) bug — even the basic same-size 2-target MRT case is already known-broken on EasyGL, which blocks any *meaningful* deeper mismatched-format verification; re-diagnosing it here would violate the project's own "each needs its own dedicated investigation" rule. No new test — nothing in FNA to assert against, and the one concrete regression-worthy angle (Task 881's cap divergence) has no existing >2-target test infrastructure to extend. No regression risk, no code changed. |
-| Task 338 | Verified `SetRenderTarget(nullptr)`/`SetRenderTargets({})` return to the backbuffer — the core routing was already extensively proven by dozens of existing tests. **Found and fixed a real gap while auditing FNA's actual `SetRenderTargets` source**: FNA *always* resets `Viewport`/`ScissorRectangle` to `(0,0,newWidth,newHeight)` on every render-target switch (new target's size when binding, backbuffer's when unbinding) — confirmed CNA's `SetRenderTarget`/`SetRenderTargets` never touched either property at all. Added `GraphicsDevice::ResetViewportAndScissorForRenderTarget`, wired into all 3 `SetRenderTarget*`/`SetRenderTargets` overloads, matching FNA's exact placement. New `examples/rendertarget_viewport_scissor_reset_test.cpp` (EasyGL + Vulkan) proves both the property values AND a real GPU-level effect (a stale scissor rect from before an RT switch no longer incorrectly clips draws afterward). **Found and deliberately deferred a separate, much bigger gap discovered along the way**: `GraphicsDevice.Viewport` has **zero GPU wiring on any of the 3 backends** — every backend hardcodes its actual viewport to the full target size, ignoring `Viewport` entirely; a sub-region viewport currently has no effect anywhere. Tracked as new **Task 880**, not fixed here (unrelated in scope to render-target switching specifically, needs its own dedicated 3-backend task). Full regression, all 3 backends: EasyGL ctest 3316/3319 (3 pre-existing, unchanged). Vulkan ctest 3238/3253 (13 pre-existing + 1 reconfirmed-flaky unrelated `CueTest`). Bgfx ctest 3223/3224 (1 reconfirmed-flaky unrelated `CueTest`). |
-| Task 337 | Confirmed and **actually fixed** MSAA render target support on EasyGL, reusing Task 336's exact resolve-on-unbind mechanism and fix shape. Following FNA's real mechanism (`ClosestMSAAPower` + `FNA3D_GetMaxMultiSampleCount` clamp, then a real multisampled renderbuffer resolved via `glBlitFramebuffer` when the target is unbound — the same `OPENGL_ResolveTarget` function Task 336 already touched for mips). Added `ClosestMSAAPower` to `RenderTarget2D.cpp`/`RenderTargetCube.cpp`; threaded `multiSampleCount` through `IGraphicsBackend::CreateRenderTarget2D`/`CreateRenderTargetCube` (all 3 backends); added `GetMultiSampleCount()` to both render-target backend interfaces so the XNA layer queries the backend's REAL clamped value post-construction, rather than reporting the raw request. **EasyGL**: creates a real multisampled color (+depth) renderbuffer, resolves it into the sampleable texture on unbind (same call site as Task 336's mip regen, correctly ordered — resolve then mip-regenerate). RenderTargetCube reuses one shared multisample renderbuffer across all 6 faces (matching FNA's single `glColorBuffer`), tracking the last-bound face for the resolve. **Rigorously pixel-verified with a genuine anti-aliasing proof** (not just solid-fill plumbing, which even a non-MSAA target passes trivially): new `easygl_rendertarget2d_msaa_test.cpp` renders a diagonal-edged triangle into `MultiSampleCount=0` and `=8` RTs, and confirms the `0` case is purely binary (hard aliased edge) while the `8` case has genuinely intermediate (partially-covered) pixel values. Updated Task 331/332's property tests: unlike `LevelCount` (backend-agnostic), `MultiSampleCount` is legitimately backend/device-capability-dependent even in real FNA, so the tests now accept either EasyGL's real clamped value or Vulkan/Bgfx's honest `0`, while still catching a blind pass-through (literal `9999`) as a failure on any backend. Also fixed a documentation typo from the Task 336 session (several comments said "Task 877" instead of "Task 878" for the Vulkan/Bgfx mip gap). **Vulkan/Bgfx**: accept-and-ignore `multiSampleCount`, report `0` — tracked as new **Task 879**. Full 3-backend rebuild + regression: EasyGL 3315/3318 (3 pre-existing, unchanged). Vulkan 3239/3252 (13 pre-existing, unchanged). Bgfx 3224/3224 (100%). |
-| Task 336 | Confirmed and **actually fixed** render target mipmap support on EasyGL, following FNA3D's real native-source mechanism (`OPENGL_ResolveTarget`: mips auto-regenerate from level 0 via `glGenerateMipmap` when a mipmapped RT stops being the active target). Threaded `mipMap` through `IGraphicsBackend::CreateRenderTarget2D`/`CreateRenderTargetCube` (all 3 backends' signatures updated); `RenderTarget2D.cpp`/`RenderTargetCube.cpp` now compute real `LevelCount` (matching `Texture2D`/`TextureCube`'s own pattern, previously a `mipMap ? 1 : 1` no-op). **EasyGL**: pre-allocates every mip level's GPU storage at RT construction; discovered `IRenderTargetBackend`/`IRenderTargetCubeBackend::UnbindAsRenderTarget()` were **completely dead code** (never called anywhere) — added `currentRt2D_`/`currentRtCube_` tracking to `EasyGLGraphicsBackend` so switching away from a bound RT/cube-face now actually calls it, which regenerates mips when needed. Pixel-verified with a new mip-completeness probe (`TextureFilter::Anisotropic` renders solid black on GL-incomplete mip chains — reused Task 867/299's established diagnostic signature); verified the test genuinely discriminates by temporarily forcing a failure case. Updated Task 331/332's property tests' pinned "known gap" assertions to the new correct values (`LevelCount==7`). **Vulkan/Bgfx**: accept-and-ignore `mipMap` (no functional change) — tracked as new **Task 878**, matching the project's existing Task 867 precedent (property correct everywhere, GPU support lags per-backend). Full 3-backend rebuild + regression pass (interface change touched all 3): EasyGL 3312/3317 (3 pre-existing + 2 reconfirmed-flaky unrelated `CueTest` failures). Vulkan 3239/3252 (13 pre-existing, unchanged). Bgfx 3224/3224 (100%). |
-| Task 335 | Verified depth buffer creation for render targets is functional, not just a stored property. New backend-agnostic test `examples/rendertarget2d_depth_test.cpp` (`EasyGL_RenderTarget2D_DepthBuffer`/`Vulkan_RenderTarget2D_DepthBuffer`): draws a near GREEN quad then a far RED quad into a `RenderTarget2D` with `DepthFormat::Depth24Stencil8` and `DepthStencilState::Default`, then samples the RT back via `SpriteBatch` (the already-proven sampling-after-unbind path). **PASSES on both EasyGL and Vulkan** — depth testing genuinely works inside render targets, not just the backbuffer. **3 real, scoped format-fidelity gaps found** (not fixed here, tracked as new **Task 877**): EasyGL's `EasyGLRenderTargetBackend`/`EasyGLRenderTargetCubeBackend` both hardcode `DepthComponent24` — a `Depth24Stencil8` request silently gets zero stencil bits; Vulkan's `VulkanRenderTargetBackend` drops its `hasDepth` parameter entirely — every RT gets a depth buffer regardless of request, using the device-global depth format rather than the requested one; Bgfx (code-reading + Task 179's existing smoke coverage only) is the most correct of the three — respects `hasDepth`, uses `D24S8` (has stencil) — but still doesn't differentiate exact `DepthFormat` values. EasyGL ctest: 3313/3316 (3 pre-existing/documented, unchanged). Vulkan ctest: 3239/3252 (13 documented, unchanged, new test passes). |
-| Task 334 | Verified `RenderTargetCube` can be sampled as `TextureCube` after unbinding, via `EnvironmentMapEffect` — no existing test covered this at all (Task 142's `vulkan_rtcube_test.cpp` renders into all 6 faces but never samples the cube back out). Wrote new tests on all 3 backends. **EasyGL: PASSES**, exact blue match, architecturally sound (virtual `BindGL()` dispatch, no unsafe cast). **Vulkan: FAILS, two distinct real bugs found**: (1) a `Clear()`-only version of the test showed every cube face stuck at `VK_IMAGE_LAYOUT_UNDEFINED` — `VulkanGraphicsBackend::Clear()` only sets a global clear-colour scalar and never registers the bound RT as "used" (only an actual draw call does) — tracked as **Task 875**. (2) After switching to a real `SpriteBatch` draw per face (working around #1), the test still renders black instead of blue — root cause not isolated (candidates: `SpriteBatch`-into-cube-face correctness was never itself pixel-verified before now, or `EnvironmentMapEffect`'s descriptor-set caching) — tracked as **Task 876**. A render-pass-compatibility validation warning also appears but is a confirmed red herring (present in Task 142's own already-passing test too). **Bgfx: same unsafe-cast bug shape as Task 873**, confirmed by layout analysis (`static_cast<BgfxTextureCubeBackend&>` on a `BgfxRenderTargetCubeBackend` reads `fbo` where `handle` should be) — tracked as **Task 874**, doesn't crash (new smoke test confirms), can't be pixel-verified. EasyGL ctest: 3312/3315 (unchanged, 3 documented). Vulkan ctest: 3237/3251 (13 documented + 1 new correctly-failing test). Bgfx ctest: 3224/3224 (100%). |
-| Task 333 | Verified `RenderTarget2D` can be sampled as `Texture2D` after unbinding. EasyGL (Task 87) and Vulkan (Task 148) already had passing pixel tests doing exactly this — reconfirmed, no change needed. **Found and confirmed a new, severe, previously-only-suspected Bgfx bug** (Task 179's test had an informal comment guessing at it): `BgfxSpriteBatchBackend::Draw` casts a `RenderTarget2D`'s backend (`BgfxRenderTargetBackend`) to the unrelated `BgfxTextureBackend` type via `static_cast`, reading its `fbo` (framebuffer handle) where `textureHandle` should be — confirmed by direct memory-layout analysis (both are `struct { uint16_t idx; }`, so it compiles and doesn't crash, but samples a framebuffer-pool handle as if it were a texture-pool handle). New `bgfx_render_target_sample_test.cpp` (`Bgfx_RenderTarget2D_SampleAfterUnbind`) confirms no crash (consistent with silent wrong-data sampling, not an error). Tracked as Task 873, not fixed here (needs a scoped Bgfx-only fix plus non-visual verification, since Bgfx has no pixel readback). Rebuilt and fully re-verified Bgfx this session: 3223/3223 (100%), first full run in several sessions. EasyGL: 3311/3314 (unchanged). Vulkan: 3237/3250 (unchanged). |
-| Task 332 | Audited `RenderTargetCube` against FNA's `RenderTargetCube.cs` line-by-line — same shape as Task 331, one class over. Most of it already matched FNA (unlike `RenderTarget2D`, `RenderTargetCube` already had `IsContentLost`/`ContentLost`). **Fixed**: `GetTypeName()` was never overridden, so a `RenderTargetCube` reported itself as `"...TextureCube"` — added the override. **Confirmed the known lead** (`mipMap`/`MultiSampleCount` silently ignored) is the same shape as Tasks 336/337, already covered by those general tasks, not new. **Found and deliberately did NOT fix** (architecture-blocked): tried to add `RenderTarget2D`'s `Dispose(bool)` "still bound" guard, but it doesn't compile — `RenderTargetBinding` only stores `Texture*`, and `RenderTargetCube` doesn't inherit `Texture` (Task 863). Also confirmed `GraphicsDevice::SetRenderTarget(RenderTargetCube*, CubeMapFace)` never records the binding at all, so `GetRenderTargets()` can never see a bound cube face — a direct consequence of Task 863, not a new independent bug. New test `examples/easygl_rendertargetcube_properties_test.cpp` (`EasyGL_RenderTargetCube_Properties`/`Vulkan_RenderTargetCube_Properties`, 15/15 both backends). EasyGL ctest: 3311/3314. Vulkan ctest: 3237/3250 (both: only documented pre-existing failures). |
-| `3fdb6c6` Task 331 | **Opens Phase 39.** Audited `RenderTarget2D` against FNA line-by-line. Fixed a real gap: added missing `IsContentLost`/`ContentLost` (mirroring `RenderTargetCube`). Found and deliberately deferred two gaps to dedicated tasks: `mipMap` ignored (Task 336), `MultiSampleCount` not clamped/wired (Task 337). New pixel-free property test on both backends (15/15 pass each). |
+| Commit | Task | Summary |
+|---|---|---|
+| `90b9be1b` | 366 | Verify-only: texture × diffuse color already correct on all 3 backends; closed a real test-coverage gap (prior test only used degenerate white/white cases). |
+| `a4a80bd2` | 365 | Verify-only: `DiffuseColor × Alpha × VertexColor` already correct on all 3 backends when `VertexColorEnabled=true`. |
+| `54aee7a2` | 364 | **Fix**: `VertexColorEnabled` wasn't honored by any of the 3 backends' no-texture shaders — fixed per-backend; found (not fixed) a Bgfx-only rasterizer-cull-default bug (Task 884). |
+| `563dcbb2` | 363 | Verify-only: `EnableDefaultLighting()`'s exact constants already match FNA literal-for-literal. |
+| `251c38d2` | 362 | Exhaustive default-value tests for all 22 `BasicEffect` properties; **fix**: `DirectionalLight`'s direction default was wrong (`Vector3::Forward` instead of `Vector3.Zero`). |
+| `c079089d` | 361 | Opened Phase 42. Audited `BasicEffect` vs FNA; **fix**: 2 default-value bugs (`VertexColorEnabled`, `DirectionalLight0.Enabled`). |
+| `41dd2bc8` | 360 | **Closed Phase 41.** Effect lifecycle tests (dispose/apply-after-dispose); confirmed CNA's disposed-effect guard is a deliberate safety improvement over FNA (which has none). |
+| `77f0e1af` | 359 | Verify-only: missing-parameter-lookup behavior (null vs. throw) already matches FNA exactly across all 3 lookup surfaces. |
+| `0216b64e` | 358 | Verify-only: `EffectParameterCollection` enumeration order already matches FNA's plain insertion order. |
+| `f1d97235` | 357 | Verify-only: name/semantic lookup semantics already match FNA (ordinal, case-sensitive, first-match-wins). |
+| `0216b64e`/`009772e8` | 356 | Verify-only: `CurrentTechnique` selection already correctly matches FNA. |
+| `05bb689f` | 355 | **Fix**: `EffectPass::Apply()` now validates the pass belongs to the current technique (matching FNA); **fix**: `EffectTechniqueCollection`'s by-value vector storage was a dangling-pointer hazard — switched to `vector<unique_ptr<...>>`. |
+| `19f61361` | 354 | Docs: `docs/shader-effect-vs-fx-bytecode.md` — what's supported today, the interim throw guard, the Phase 74 roadmap. |
+| `41b66531` | 353 | **Feat**: added the previously-missing bytecode-accepting `Effect` constructor; throws `NotImplementedException` until Phase 74 lands. |
+| `e2a67b87` | 352 | Decision (user's, not inferred): full support for `.fx` bytecode. Found MojoShader's source locally vendorable; opened Phase 74. |
+| `2a9748cf` | 351 | Opened Phase 41. Audited `Effect` vs FNA; **fix**: `GetTypeName()`, missing `NOXNA`, a `Dispose()` name-hiding bug that broke compilation on every concrete effect class. |
+| `755efaf2` | 350 | **Closed Phase 40.** Docs: `docs/viewport-displaymode-adapter-support.md` — non-desktop (Android/Web) limitations. |
+| `3a8de4a3` | 349 | **Fix**: `UpdateViewportFromWindow()` was stomping a custom `Viewport` back to full-size on every frame; fixed with dedicated last-known-size tracking. |
+| `a43702b3` | 348 | Verified `Viewport` tracks a real OS-level window resize; confirmed `PresentationParameters.BackBufferWidth/Height` deliberately don't follow it (documented CNA divergence). |
+| `704f0e13`/`6c58aa61`/`42cf16cf` | 345–347 | Audited `GraphicsAdapter`/`DisplayModeCollection`; **fix**: dangling `DefaultAdapter` reference, missing `this[SurfaceFormat]` indexer, headless-fallback leak. |
 
-Phase 38 (Tasks 321–330, `RasterizerState`): see `docs/rasterizerstate-support.md` and
-`GRAPHICS_TASKS.md`. Headline: no new bugs found — pure test-coverage closure (`CullMode`
-Tasks 323–325, `FillMode` Task 326, `RasterizerState` defaults Task 322, preset `Name` gap
-fix Task 321, closing confirmation Task 330 that `RasterizerState` has no freeze/immutability
-enforcement, matching FNA).
-
-Phase 37 (Tasks 311–320, `DepthStencilState`): see `docs/depthstencilstate-support.md` and
-`GRAPHICS_TASKS.md`. Headline: discovered and reconfirmed 5× that Vulkan's `DepthStencilState`
-support is almost entirely fake (Task 870); fixed a real EasyGL bug (`SDL_GL_STENCIL_SIZE` never
-requested, Task 315); found Task 871 (`Clear` ignores stencil) and Task 872 (`ReferenceStencil`
-has zero backend connection).
-
-Older history (Phases 34–36, Tasks 271–310): see `GRAPHICS_TASKS.md` and
-`docs/sampler-state-support.md`. Headline: Task 293 fixed a severe, project-wide bug (per-slot
-`SamplerState` silently ignored by all 3D draws, all 3 backends); Task 304 found Vulkan's
-`BlendState` support is almost entirely fake (Task 868, not fixed, confirmed 5×).
+Older history (Phases 1–39): see `GRAPHICS_TASKS.md` and `docs/*.md` synthesis docs
+(`docs/rasterizerstate-support.md` Phase 38, `docs/rendertarget-support.md` Phase 39,
+`docs/sampler-state-support.md` Phases 34–36, `docs/depthstencilstate-support.md` Phase 37).
+Headline older findings: Task 293 fixed a severe, project-wide bug (per-slot `SamplerState`
+silently ignored by all 3D draws, all 3 backends); Task 304/868 found Vulkan's `BlendState` support
+is almost entirely fake; Task 315 fixed a real EasyGL stencil-buffer-request bug.
 
 ---
 
 ## 4. Current blocker / main problem
 
 **There is no build-breaking or test-breaking blocker.** The repository builds and the test suites
-pass at the rates given in §2 on all 3 backends (EasyGL, Vulkan, Bgfx — all fully rebuilt and
-re-verified this session).
+pass at the rates given in §2 on all 3 backends.
 
-The most significant *correctness* gap is architectural, not a build/test failure: `Texture3D`/
-`TextureCube` do not inherit `Texture` in CNA (they inherit `GraphicsResource` directly), which
-structurally prevents `Texture3D` from ever being sampled via the normal
-`GraphicsDevice.Textures[slot]` path. No failing command or test is tied to this — it manifests as
-a compile-time impossibility if game code tries `GraphicsDevice.Textures[i] = my3DTexture` the way
-real XNA/FNA code would. See `GRAPHICS_TASKS.md` Task 863.
+The most significant *correctness* gap is architectural: `Texture3D`/`TextureCube` do not inherit
+`Texture` in CNA (they inherit `GraphicsResource` directly), which structurally prevents
+`Texture3D` from ever being sampled via the normal `GraphicsDevice.Textures[slot]` path. No failing
+command or test is tied to this — it manifests as a compile-time impossibility if game code tries
+`GraphicsDevice.Textures[i] = my3DTexture`. See `GRAPHICS_TASKS.md` Task 863.
 
 The most significant *silent-failure* gaps (compile and run without error, wrong or no data):
 Vulkan's `BlendState`/`DepthStencilState` support (Tasks 868/870), `TextureCube::DDSFromStreamEXT`
-(Task 663), `Texture3D`/`TextureCube::GetData` on Vulkan/Bgfx (Task 865), and `RenderTarget2D`'s
-`mipMap`/`MultiSampleCount` params being accepted but not actually wired to any backend
-(Tasks 336/337, found this session). None have a test that currently fails loudly — they're only
-visible via dedicated pixel tests or direct code reading.
+(Task 663), `Texture3D`/`TextureCube::GetData` on Vulkan/Bgfx (Task 865), `RenderTarget2D`'s
+mip/MSAA params accepted but not wired on Vulkan/Bgfx (Tasks 878/879), and `BasicEffect`'s
+missing `+EmissiveColor`/unforwarded specular+extra-lights terms (found Task 366, Task 369's job).
+None have a test that currently fails loudly — they're only visible via dedicated pixel tests or
+direct code reading.
 
 ---
 
@@ -499,31 +205,32 @@ visible via dedicated pixel tests or direct code reading.
 | Confirmed, MASSIVE, not fixed | Vulkan's `DepthStencilState` support is almost entirely fake — `DepthBufferFunction` hardcoded, entire stencil-test parameter set unused. Confirmed 5× via pixel tests. EasyGL fully correct. | Task 870 |
 | Confirmed, universal, not fixed | `GraphicsDevice.ReferenceStencil`'s independent-override has zero backend connection on all 3 backends. | Task 872 |
 | Confirmed, universal, not fixed | `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` on every backend. | Task 871 |
-| Fixed on EasyGL, not fixed on Vulkan/Bgfx | `RenderTarget2D`/`RenderTargetCube`'s `mipMap` produces a real, pixel-verified mip chain on EasyGL (Task 336); Vulkan/Bgfx report the correct `LevelCount` but don't yet allocate/generate real GPU mips. | Task 878 |
-| Fixed on EasyGL, not fixed on Vulkan/Bgfx | `RenderTarget2D`/`RenderTargetCube`'s MSAA produces a real, pixel-verified anti-aliased resolve on EasyGL (Task 337); Vulkan/Bgfx honestly report `MultiSampleCount=0` (not a fake pass-through) rather than implementing real multisample attachments. | Task 879 |
-| Confirmed, universal, not fixed | `GraphicsDevice.Viewport` is decorative — no backend actually applies it to the GPU; every backend hardcodes the full render-target/window size instead. `SetRenderTarget`'s new reset-to-target-size behavior (Task 338) is correct at the property level but has no GPU-visible effect until this lands. | Task 880 |
-| Confirmed, not fixed (found Task 331) | `RenderTarget2D`'s `preferredMultiSampleCount` is stored verbatim, never clamped/wired to any backend. | Task 337 |
+| Fixed on EasyGL, not fixed on Vulkan/Bgfx | `RenderTarget2D`/`RenderTargetCube`'s `mipMap` produces a real, pixel-verified mip chain on EasyGL (Task 336); Vulkan/Bgfx don't yet allocate/generate real GPU mips. | Task 878 |
+| Fixed on EasyGL, not fixed on Vulkan/Bgfx | `RenderTarget2D`/`RenderTargetCube`'s MSAA produces a real, pixel-verified anti-aliased resolve on EasyGL (Task 337); Vulkan/Bgfx honestly report `MultiSampleCount=0`. | Task 879 |
+| Confirmed, universal, not fixed | `GraphicsDevice.Viewport` is decorative — no backend actually applies it to the GPU; every backend hardcodes the full render-target/window size instead. | Task 880 |
 | Confirmed, severe, silent failure | `TextureCube::DDSFromStreamEXT` ignores its stream argument, always returns a blank 1×1 texture. | Task 663 |
 | Confirmed, severe, silent failure | `Texture3D`/`TextureCube::GetData` total no-op on Vulkan/Bgfx. | Task 865 |
 | Confirmed, silent failure | `Texture2D::SetData(level>0,...)` no-op on Vulkan/Bgfx; EasyGL renders solid black for mip filters on mip-incomplete textures. | Task 867 |
 | Confirmed, architectural, not fixed | `Texture3D`/`TextureCube` can't be sampled in any shader — don't inherit `Texture`. | Task 863 |
-| Confirmed, severe, silent failure, not fixed | Bgfx: `SpriteBatch::Draw`ing a `RenderTarget2D` reads a framebuffer handle where a texture handle is expected (`static_cast` to an unrelated backend type) — samples wrong data, doesn't crash. At the time this was found, Bgfx pixel-readback wasn't yet proven working in any test (see Task 364, which confirms `GetBackBufferData`/`ReadBackbuffer` genuinely works on Bgfx) — this bug could now be pixel-verified with the same pattern, not yet done. | Task 873 |
-| Confirmed, severe, silent failure, not fixed | Bgfx: same bug shape as Task 873 for `RenderTargetCube` sampled via `EnvironmentMapEffect` — reads `BgfxRenderTargetCubeBackend::fbo` where `cubeTex` should be. | Task 874 |
-| Confirmed, real, not fixed | Vulkan: `SetRenderTarget`+`Clear()` with no draw call in between never records a render pass — target's image stays `VK_IMAGE_LAYOUT_UNDEFINED` forever. | Task 875 |
-| Confirmed, real, not fixed, root cause not isolated | Vulkan: sampling a `RenderTargetCube` via `EnvironmentMapEffect` after unbinding renders black instead of actual content, even with a real draw call per face. | Task 876 |
-| Confirmed, format-fidelity gap, not fixed | No backend honors the exact requested `DepthStencilFormat` for a render target's depth/stencil attachment (EasyGL: no stencil bits ever; Vulkan: `hasDepth` ignored; Bgfx: format not exact). Core depth-test functionality itself works (Task 335). | Task 877 |
+| Confirmed, severe, silent failure, not fixed | Bgfx: `SpriteBatch::Draw`ing a `RenderTarget2D` reads a framebuffer handle where a texture handle is expected — samples wrong data, doesn't crash. | Task 873 |
+| Confirmed, severe, silent failure, not fixed | Bgfx: same bug shape as Task 873 for `RenderTargetCube` via `EnvironmentMapEffect`. | Task 874 |
+| Confirmed, real, not fixed | Vulkan: `SetRenderTarget`+`Clear()` with no draw call never records a render pass — target's image stays `VK_IMAGE_LAYOUT_UNDEFINED` forever. | Task 875 |
+| Confirmed, real, not fixed, root cause not isolated | Vulkan: sampling a `RenderTargetCube` via `EnvironmentMapEffect` after unbinding renders black instead of actual content. | Task 876 |
+| Confirmed, format-fidelity gap, not fixed | No backend honors the exact requested `DepthStencilFormat` for a render target's depth/stencil attachment. Core depth-test functionality itself works (Task 335). | Task 877 |
 | Confirmed, architectural, deliberate | `GraphicsDevice` stores state objects by value, unlike FNA's reference-type aliasing. No game code here relies on FNA's behavior. | Task 869 |
 | Confirmed bug | `SpriteBatch` with multiple `Begin()`/`End()` per frame on Vulkan: only the last batch renders. | — |
 | Confirmed, incomplete | `SpriteBatch`'s `SamplerState` (`Begin()`) is a no-op on Vulkan/Bgfx (EasyGL only). | — |
-| Confirmed, pre-existing | `EasyGL_MRT_TwoAttachments`: attachment 1 stays black with 2 render targets. Not caused by recent work. | Task 145 |
-| Confirmed, minor, not fixed | `SetRenderTargets`'s simultaneous-target cap doesn't match FNA's real `MAX_RENDERTARGET_BINDINGS=4` (EasyGL/Bgfx cap at 8, Vulkan uncapped at the CNA level). No test exercises >2 targets. | Task 881 |
-| Confirmed, incomplete (found Task 348) | `PresentationMode::Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer` aren't distinctly implemented in `EasyGLGraphicsBackend::getLogicalSize()` — only `FixedHeightDynamicWidth` has real logic; every other mode silently behaves the same, contradicting each one's documented behavior. Vulkan/Bgfx implement no virtual-resolution/presentation-mode scaling at all in `GetViewportSize()` (always raw physical window size); Vulkan's `SetVirtualResolution()` instead triggers `RecreateSwapchain()`, a materially different mechanism needing its own investigation. | Task 882 |
+| Confirmed, pre-existing | `EasyGL_MRT_TwoAttachments`: attachment 1 stays black with 2 render targets. | Task 145 |
+| Confirmed, minor, not fixed | `SetRenderTargets`'s simultaneous-target cap doesn't match FNA's real `MAX_RENDERTARGET_BINDINGS=4`. | Task 881 |
+| Confirmed, incomplete | `PresentationMode::Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer` aren't distinctly implemented on EasyGL; Vulkan/Bgfx implement no virtual-resolution scaling at all. | Task 882 (not yet a formal `GRAPHICS_TASKS.md` row — referenced inline in Task 348) |
 | Confirmed, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` aborts on an internal assert in the sibling `easy-gl` repo. | — |
 | Confirmed, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. | — |
 | Confirmed, pre-existing, flaky | `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage`: order-dependent, only one fails per full-suite run. | — |
-| Confirmed, architectural, not fixed (found Task 364) | `GraphicsDevice`'s default `RasterizerState` (`CullCounterClockwiseFace`, matches FNA) is never pushed to any backend's actual GPU state at device construction — each backend starts from its own hardcoded internal field until `setRasterizerStateProperty()` is explicitly called. EasyGL/Vulkan's own defaults are both effectively "CullNone" (mutually consistent with each other, but wrong vs. FNA); Bgfx's `cullFlags_` is the only one hardcoded to match FNA's real default, so it's the only backend that silently culls the standard full-screen NDC quad winding used throughout the whole BasicEffect pixel-test family unless `RasterizerState::CullNone` is set explicitly. | Task 884 |
+| Confirmed, architectural, not fixed | `GraphicsDevice`'s default `RasterizerState` is never pushed to any backend's actual GPU state at construction; Bgfx's hardcoded default happens to be the only one matching FNA's, so it alone silently culls standard-winding quads unless `CullNone` is set explicitly. | Task 884 (also covers the `EffectTechniqueCollection`/`EffectParameterCollection`/`EffectPassCollection` dangling-vector hazard class — Techniques fixed by Task 355, Parameters/Pass not yet exercised) |
+| Confirmed, architectural, not fixed | `Effect::Clone()` doesn't exist — needs an ownership-model decision plus fixing an `EffectPass::Apply()` owner-aliasing hazard plus `Clone()` overrides in all 7 stock effects. | Task 883 |
+| Confirmed, real, not fixed | `BasicEffect::FillGpuDrawParams()` only forwards `DirectionalLight0` (never `SpecularColor`/`SpecularPower`/`DirectionalLight1`/`DirectionalLight2`) and omits `+EmissiveColor` from the disabled-lighting diffuse formula. | Tasks 368/369 |
 | Suspected, not reproduced | Vulkan/Bgfx likely have the same mip-allocation bug already fixed on EasyGL's `TextureCube` (Task 276), for `Texture3D`/`TextureCube` on both backends. | Task 864 |
-| Needs verification | Whether Bgfx's window actually has a physical stencil buffer (the same class of gap just found/fixed on EasyGL) has not been checked. | — |
+| Needs verification | Whether Bgfx's window actually has a physical stencil buffer has not been checked. | — |
 | Incomplete, by design | Stride-keyed vertex layout only supports strides 16/20/24/32/52. Vulkan has no `Tangent`/`Binormal` mapping. `SurfaceFormat` support is Color-only for real GPU formats. `SDL_Renderer` has no 3D at all. | — |
 | Risky assumption | `GraphicsDevice`'s user-primitive scratch buffers never shrink — fine for typical use, but memory stays at the high-water mark for the device's lifetime. | — |
 
@@ -539,7 +246,7 @@ visible via dedicated pixel tests or direct code reading.
 | Backend contracts | `include/CNA/Internal/Backends/Common/` | `IGraphicsBackend`, `IVertexBuffer`, etc. |
 | EasyGL backend | `src/CNA/Internal/Backends/EasyGL/` | Primary; OpenGL ES 3.2 via EasyGL wrapper |
 | Vulkan backend | `src/CNA/Internal/Backends/Vulkan/` | `VulkanVertexFormatHelper.hpp` for per-format mapping |
-| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | `BgfxVertexFormatHelper.hpp`; `ReadBackbuffer()` (screenshot-callback based) works and is pixel-proven as of Task 364 |
+| Bgfx backend | `src/CNA/Internal/Backends/Bgfx/` | `BgfxVertexFormatHelper.hpp`; `ReadBackbuffer()` (screenshot-callback based) works and is pixel-proven (Task 364) |
 | CNA utilities | `include/CNA/`, `src/CNA/` | `NOXNA` helpers, logging, math |
 | sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types, primitive aliases |
 
@@ -564,8 +271,11 @@ visible via dedicated pixel tests or direct code reading.
   scratch buffers used by all `DrawUserPrimitives`/`DrawUserIndexedPrimitives` overloads. Never
   resize down; never reenter mid-write.
 - **No backend's `CreateRenderTarget2D`/`CreateRenderTargetCube` accepts a mip count or a
-  multisample count** — `RenderTarget2D`/`RenderTargetCube`'s `mipMap`/`multiSampleCount`
-  constructor parameters are currently accepted but not wired through (Tasks 336/337/332).
+  multisample count on Vulkan/Bgfx** — only EasyGL actually wires these through (Tasks 336/337).
+- **`Effect`/`EffectTechnique`/`EffectPass`/`EffectParameterCollection`** — collections of these
+  must use `vector<unique_ptr<T>>`, not `vector<T>` by value, if any code caches a raw pointer/
+  reference across an `Add()` call (a real dangling-pointer bug class found in Task 355; see
+  Task 884 for the collections not yet converted).
 
 ### FNA reference
 
@@ -615,385 +325,71 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order:
+In priority order — the first 4 are the rest of Phase 42, already scoped by `GRAPHICS_TASKS.md`;
+the rest are the accumulated backlog from earlier phases (Tasks 863–884).
 
-1. **`GRAPHICS_TASKS.md` Task 367 — pixel test: `TextureEnabled=true` and `VertexColorEnabled=true`
-   — Texture × vertex color (EasyGL/Vulkan/Bgfx)**
-   - Goal: real GPU pixel-readback test proving `BasicEffect` correctly combines texture sample ×
-     vertex color × `DiffuseColor` when both `TextureEnabled` and `VertexColorEnabled` are true (per
-     FNA's `VSBasicTxVcNoFog`/`PSBasicTxNoFog`: vertex shader does `vout.Diffuse *= vin.Color` on top
-     of `ComputeCommonVSOutput()`'s `DiffuseColor`, then the pixel shader multiplies in the sampled
-     texture) — confirm the exact 3-way formula from FNA source rather than assuming, same discipline
-     as Tasks 364-366.
-   - Reuse the established quad/readback pattern from
-     `examples/{easygl,vulkan,bgfx}_basiceffect_texture_enabled_test.cpp` (Task 366) —
-     `GetBackBufferData` center-pixel readback, distinctive-value discriminating-power design (pick a
-     texel color, vertex color, and `DiffuseColor` whose 3-way product is numerically distinct from
-     any 2-of-3 partial product), and remember the Bgfx `RasterizerState::CullNone` cull-default
-     workaround (Task 884, §5) for the standard `tl,bl,br`/`tl,br,tr` NDC quad winding. This is the
-     stride-24 `VertexPositionColorTexture` path (distinct from stride-16/stride-20 which Tasks
-     364-366 already covered) — confirm which shader program/pipeline actually handles stride 24 on
-     each backend before assuming it's wired correctly.
-   - Note Task 361's finding: `BasicEffect::FillGpuDrawParams()` only forwards `DirectionalLight0`
-     and never `SpecularColor`/`SpecularPower`/`DirectionalLight1`/`DirectionalLight2` — likely
-     irrelevant to this specific task (lighting disabled by default), but keep in mind for Tasks
-     368/369. Also carry forward Task 366's deferred finding: `FillGpuDrawParams()` omits
-     `+EmissiveColor` from the disabled-lighting diffuse formula (real FNA mismatch, invisible with
-     `EmissiveColor` at its default `(0,0,0)`) — still not this task's job, but Task 369's.
+1. **Task 367 — pixel test: `TextureEnabled=true` AND `VertexColorEnabled=true` (texture × vertex color)**
+   - Goal: derive the 3-way formula from FNA's `VSBasicTxVcNoFog`/`PSBasicTxNoFog` (texture sample ×
+     vertex color × `DiffuseColor`), then pixel-verify on all 3 backends. This is the stride-24
+     `VertexPositionColorTexture` path — distinct from the stride-16/20 paths Tasks 364–366 covered.
+   - Files: `examples/{easygl,vulkan,bgfx}_basiceffect_texture_vertexcolor_enabled_test.cpp` (new).
+   - Verification: `GetBackBufferData` center-pixel readback with a 3-way-distinguishable numeric
+     triple (texel/vertex-color/`DiffuseColor` chosen so the correct product differs from any
+     2-of-3 partial product). Remember the Bgfx `RasterizerState::CullNone` workaround (Task 884).
 
-   **Task 366 status: done.** Verified `TextureEnabled=true`'s texture×diffuse multiplication is
-   genuinely correct on all 3 backends. **Pure verify-only task, no bug found** — unlike Task 364's
-   finding, texture sampling was never actually broken (a much more heavily-exercised path elsewhere).
-   Confirmed the exact formula from FNA source (`BasicEffect.cs`'s `shaderIndex` selects
-   `VSBasicTxNoFog`/`PSBasicTxNoFog`; `PSBasicTxNoFog` returns
-   `SAMPLE_TEXTURE(Texture,pin.TexCoord)*pin.Diffuse`, no vertex-color multiply in this variant); all
-   3 backends' textured-3D shader paths already correctly compute `texture × diffuseColor`. Closed a
-   real coverage gap: Task 189's combinations test only had degenerate white-texture-or-white-diffuse
-   cases that couldn't distinguish "ignored" from "correctly multiplied" — added a proper
-   discriminating test per backend reusing Task 365's `(200,100,50)`/`(0.8,0.4,0.6)` numeric pair.
-   Verified genuine discriminating power on all 3 backends independently (stripped the diffuse
-   multiply from each backend's shader in turn — EasyGL runtime GLSL, Vulkan `textured3d.frag.glsl` +
-   `compile_shaders.py`, Bgfx `fs_textured3d.sc` + `compile_shaders.py` — confirmed each new test
-   failed with the texture-only result, reverted, confirmed byte-identical). Deferred to Task 369:
-   `FillGpuDrawParams()` omits `+EmissiveColor` from the disabled-lighting diffuse formula (real
-   mismatch vs. FNA's `EffectHelpers.SetMaterialColor`, invisible here since `EmissiveColor` is at its
-   default). Full 3-backend regression: EasyGL 3415/3419 (3 pre-existing), Vulkan 3337/3352 (13
-   pre-existing + 1 order-dependent `Vulkan_FillMode_WireFrame` flake + 1 flaky `CueTest`), Bgfx
-   3321/3322 (1 flaky `CueTest`). Pushed as (see commit list below).
+2. **Task 368 — pixel test: one directional light enabled**
+   - Goal: verify `BasicEffect`'s lighting math (normal-dependent output) against FNA's per-vertex
+     lighting formula when `LightingEnabled=true` with a single `DirectionalLight` on.
+   - Files: new pixel test per backend; likely touches `BasicEffect.cpp`'s `FillGpuDrawParams()`
+     if the Task 361 finding (`DirectionalLight1`/`2`/specular not forwarded) turns out to matter here.
 
-   **Task 365 status: done.** The inverse/complement of Task 364 — verified `VertexColorEnabled=
-   true`'s vertex-color multiplication is genuinely correct on all 3 backends. **Pure new-coverage
-   verification, no bug found**: confirmed from FNA source (`Common.fxh`'s `ComputeCommonVSOutput()`
-   + `VSBasicVcNoFog`'s `vout.Diffuse *= vin.Color`) that the expected formula is `DiffuseColor ×
-   Alpha × VertexColor` component-wise (including alpha), and confirmed all 3 backends' existing
-   `VertexColorEnabled` gate (added by Task 364) already implements exactly this multiply on the
-   `true` branch — Task 364 only needed to add/fix the `false` (skip) branch. Added one new pixel
-   test per backend using vertex color `(200,100,50,200)` and `DiffuseColor(0.8,0.4,0.6)`, chosen so
-   the correct product `(160,40,30)` is numerically distinct from either input alone (`DiffuseColor`
-   -only reads `(204,102,153)`; vertex-color-only reads `(200,100,50)`). Verified genuine
-   discriminating power on all 3 backends independently (temporarily forced each backend's shader to
-   output `DiffuseColor` alone, rebuilt, confirmed the exact predicted `(204,102,153)` failure,
-   reverted — Vulkan/Bgfx required regenerating embedded shader-bytecode headers via each backend's
-   own `compile_shaders.py`). Full 3-backend regression: EasyGL 3415/3418 (3 pre-existing), Vulkan
-   3337/3351 (13 pre-existing + 1 flaky `CueTest`), Bgfx 3320/3321 (1 reconfirmed-flaky, unrelated
-   `NetworkSessionTest.FindReturnsEmptyCollection`). Pushed as (see commit list below).
+3. **Task 369 — pixel test: ambient + emissive + specular combination**
+   - Goal: harder reference case; this is where Task 366's deferred `+EmissiveColor` finding and
+     Task 361's "only `DirectionalLight0` forwarded" finding need to actually be fixed — confirm
+     both against FNA's `EffectHelpers.SetMaterialColor`/`BasicEffect.fx` first.
+   - Files: `BasicEffect.cpp` (`FillGpuDrawParams()`), new pixel test per backend.
 
-   **Task 364 status: done.** First real GPU pixel-readback task in Phase 42. Derived the expected
-   `DiffuseColor × Alpha` output formula directly from FNA's `BasicEffect.cs`/`BasicEffect.fx`/
-   `Common.fxh`/`EffectHelpers.cs` (not guessed). Found and fixed 3 real per-backend bugs where
-   `VertexColorEnabled` was silently ignored by the no-texture shader path (EasyGL/Bgfx always
-   multiplied by vertex color; Vulkan's separate `stride==16` pipeline ignored `DiffuseColor` *and*
-   the flag entirely, a bare vertex-color passthrough). Fixing Vulkan exposed and required fixing 2
-   stale tests (`vulkan_rt2d_test.cpp`, `vulkan_render_target_usage_test.cpp`) that had been
-   accidentally relying on the bug since Task 361 flipped `VertexColorEnabled`'s default to `false`.
-   Also found (not fixed, new Task 884, §5): Bgfx's default `RasterizerState` cull state is the
-   only one of the 3 backends that actually matches FNA's real default, so it alone silently culled
-   every quad in this pixel-test family; worked around with explicit `RasterizerState::CullNone` in
-   the new Bgfx test. Verified genuine discriminating power on all 3 backends independently
-   (temporarily reverted each shader gate, confirmed the exact red-tinted failure, reverted). Full
-   3-backend regression: EasyGL 3414/3417 (3 pre-existing), Vulkan 3336/3350 (13 pre-existing + 1
-   flaky `CueTest`), Bgfx 3320/3320 (100%, first clean `BasicEffect` pixel-readback pass on this
-   backend). Pushed as (see commit list below).
+4. **Task 370 — cross-backend `BasicEffect` image comparison suite**
+   - Goal: same scene rendered on EasyGL/Vulkan/Bgfx, compared for consistency — likely the natural
+     place to close out Phase 42 with a synthesis doc (mirroring Task 340/350's precedent).
 
-   **Task 363 status: done.** Cross-checked `EnableDefaultLighting()`'s exact constants
-   literal-for-literal against FNA's `EffectHelpers.EnableDefaultLighting`/`BasicEffect.cs` —
-   already exact, no fix needed (verify-only, complements Task 194's existing EasyGL
-   integration test). Added 5 new GTest cases to `BasicEffectTests.cpp` with a tight `1e-6f`
-   epsilon; verified genuine discriminating power (temporarily perturbed a constant, confirmed
-   the test failed, reverted). Full 3-backend regression, zero new failures: EasyGL 3413/3416
-   (3 pre-existing), Vulkan 3333/3349 (13 pre-existing + 2 flaky `CueTest` + 1 order-dependent
-   `Vulkan_FillMode_WireFrame` flake), Bgfx 3319/3319 (100%). Pushed as (see commit list below).
+5. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
+   `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
+   effects). Files: `Effect.hpp`/`.cpp` + all 7 stock-effect pairs.
 
-   **Task 362 status: done.** Re-derived Task 361's 22-property list directly from FNA source and
-   built a new, centralized `tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp` (22
-   `TEST_F` cases, one `BasicEffectDefaultsTest` fixture) — no such dedicated unit-test file existed
-   before (`examples/basic_effect_test.cpp` is a separate GPU-integration-style check). **Found a
-   3rd real default-value bug** beyond Task 361's 2: CNA's `DirectionalLight::DirectionalLight()`
-   initialized `direction_` to `Vector3::Forward` ((0,0,-1)); FNA's `INTERNAL_direction` field has no
-   initializer at all (defaults to `Vector3.Zero`, confirmed from `DirectionalLight.cs`) — fixed in
-   `DirectionalLight.cpp`, plus corrected the constructor's Doxygen comment. Grepped the whole
-   codebase and confirmed nothing relied on the old nonzero default (every real usage sets
-   `Direction` explicitly before reading it). Verified genuine discriminating power (reverted the fix,
-   confirmed the new test fails, reverted back; plus a lighter spot-check reverting `SpecularPower`'s
-   already-correct default, confirmed its test fails too). Full 3-backend regression, zero new
-   failures: EasyGL 3408/3411 (3 pre-existing), Vulkan 3329/3344 (13 pre-existing + 1 flaky `CueTest`
-   + 1 order-dependent `Vulkan_RenderTargetUsage` flake), Bgfx 3314/3314 (100%).
+6. **Task 884 — fix the `RasterizerState`-default GPU-sync gap** and the remaining
+   `EffectParameterCollection`/`EffectPassCollection` by-value-vector dangling-pointer hazard.
+   Files: each backend's device-construction path; `EffectParameterCollection.hpp`/
+   `EffectPassCollection.hpp`.
 
-   **Task 361 status: done — opened Phase 42.** Read FNA's
-   `Graphics/Effect/StockEffects/BasicEffect.cs` line-by-line against CNA's `BasicEffect.hpp`/`.cpp`;
-   built a 22-property default-value comparison table (in this task's `GRAPHICS_TASKS.md` Notes
-   cell). **2 real, fixed bugs**: `VertexColorEnabled` defaulted to `true` in CNA vs. FNA's real
-   default `false` (fixed); FNA's constructor unconditionally sets `DirectionalLight0.Enabled = true`
-   (confirmed from source) but CNA's constructor didn't, leaving it at the class default `false`
-   (fixed by adding the missing `setEnabledProperty(true)` call). Both had existing tests in
-   `examples/basic_effect_test.cpp` (Task 22) asserting the *wrong* defaults as correct — both
-   corrected, with discriminating-power verification (temporarily reverted each fix, confirmed the
-   corrected assertions fail, reverted back). `EnableDefaultLighting()`'s constants cross-checked
-   byte-for-byte against FNA's `EffectHelpers.EnableDefaultLighting` — already exact (feeds Task
-   363). Deliberately deferred, not fixed: `BasicEffect::OnApply()` is an empty stub in CNA (all
-   derived-value computation instead happens in an ungated `FillGpuDrawParams()`, bypassing FNA's
-   `EffectDirtyFlags`/`EffectParameter` mechanism entirely — large pre-existing architectural
-   divergence, consistent with Task 351); `FillGpuDrawParams()` only forwards `DirectionalLight0`,
-   never `SpecularColor`/`SpecularPower`/`DirectionalLight1`/`DirectionalLight2` — both real
-   pixel-fidelity gaps, squarely Tasks 368/369's scope. `Clone()` gap remains tracked as Task 883
-   (not duplicated). Full 3-backend regression, zero new failures: EasyGL 3386/3389 (3
-   pre-existing), Vulkan 3309/3322 (13 pre-existing), Bgfx 3292/3292 (100%, no flakes this run).
+7. **Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`.**
+   Files: `GraphicsDevice.cpp` (`SetRenderTargets`). Verification: 5-target call throws, 1–4 work.
 
-   **Task 360 status: done — closed Phase 41.** Read FNA's `Effect.Dispose(bool)`/
-   `GraphicsResource.Dispose(bool)` (both guarded by `if (!IsDisposed)`) and confirmed CNA's
-   `GraphicsResource::Dispose(bool)` already has the identical `if (isDisposed_) return;` guard —
-   double-dispose already safe by construction, no code fix needed. Confirmed from source that
-   FNA's own `Effect`/`EffectPass` have **zero** disposed-state check anywhere — `EffectPass.Apply()`
-   after disposal would feed a zeroed-out native handle straight to `FNA3D_ApplyEffect`, real silent
-   UB in FNA itself — so CNA's `Effect::Apply()` throwing `ObjectDisposedException` is a deliberate,
-   confirmed, beneficial safety improvement (same class as `GraphicsAdapter::DeviceId`/`VendorId`,
-   Task 345), correctly kept. Closed a real coverage gap: added
-   `ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectDisposed` (Task 351 only tested
-   `Effect::Apply()` directly, never the `EffectPass::Apply()` entry point) and
-   `DisposeIsIdempotentAndDoesNotThrow`. Discriminating power verified for the pass-level test
-   (temporarily removed the `isDisposed_` check, confirmed both it and Task 351's existing
-   `ApplyAfterDisposeThrowsObjectDisposedException` fail, reverted); honestly noted the
-   double-dispose test has no meaningful way to "break" via a temporary diff since
-   `GraphicsDevice::RemoveResourceReference` is already a safe no-op on a not-found resource.
-   `Effect::Clone()` still doesn't exist (deferred to Task 883) — its "clone after dispose"
-   sub-case is explicitly N/A until Task 883 lands. Full 3-backend regression, zero new failures:
-   EasyGL 3386/3389 (3 pre-existing), Vulkan 3309/3322 (13 pre-existing), Bgfx 3291/3292 (1
-   reconfirmed-flaky `CueTest`) — all matching the documented baseline exactly.
+8. **Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends.**
+   Files: `IGraphicsBackend.hpp`, `GraphicsDevice.cpp`, all 3 backends' graphics-backend `.cpp`.
+   Verification: sub-region-viewport pixel test (should fail on all 3 backends today).
 
-   **Task 359 status: done — verify-only, no code fix needed.** Re-read FNA's
-   `EffectParameterCollection.cs`: `this[int index]` returns `elements[index]` on a plain
-   `List<EffectParameter>` — throws for negative/`>=Count` (standard `List<T>` indexer behavior),
-   distinct from `this[string name]`/`GetParameterBySemantic`'s `null`-return behavior already
-   confirmed in Task 357. CNA's `operator[](int)` already uses `elements_.at(index)`, which throws
-   `std::out_of_range` for the same cases — already matched FNA exactly, no code fix needed. Added
-   6 new tests to `EffectCollectionTests.cpp`: out-of-range throw coverage for the mutable/const
-   `operator[](int)` overloads (previously untested — only string/semantic not-found paths had
-   explicit tests), plus the empty-collection edge case for all 3 lookup surfaces. Discriminating
-   power verified (temporarily replaced `.at(index)` with an index-clamping non-throwing lookup,
-   confirmed exactly the 3 non-empty out-of-range tests fail with "it throws nothing", reverted).
-   Full 3-backend regression, zero new failures: EasyGL 3383/3387, Vulkan 3306/3320, Bgfx 3289/3290
-   (all match documented baseline exactly, only the known-flaky `CueTest` this run). Does not close
-   Phase 41 (Task 360 remains).
+9. **Task 878/879 — implement real mip/MSAA render-target support on Vulkan and Bgfx**, mirroring
+   Task 336/337's exact EasyGL fix shape. Files: each backend's render-target backend classes.
 
-   **Task 358 status: done — verify-only, no code fix needed.** Re-read FNA's
-   `EffectParameterCollection.cs`/`EffectTechniqueCollection.cs`/`EffectPassCollection.cs`:
-   all 3 are thin `List<T>` wrappers whose `GetEnumerator()` returns the list's own enumerator
-   verbatim — enumeration order is always exactly declaration/insertion order, no sorting anywhere.
-   CNA's `std::vector`-backed `EffectParameterCollection` (`push_back` + pass-through `begin()`/
-   `end()`) already matched exactly — no code fix needed. Real gap found: no existing test actually
-   asserted iteration *order*, only element *count* (`IterationVisitsAllParameters`). Added
-   `IterationOrderMatchesInsertionOrder` using deliberately non-alphabetical names
-   (`Zebra`/`Apple`/`Mango`) to rule out an accidental-sort false pass. Discriminating power
-   verified (temporarily changed `Add()` to prepend instead of append; new test failed along with
-   3 pre-existing order-sensitive tests, confirming they were genuinely order-sensitive too;
-   reverted — net change is test-file-only, zero production code diff). Full 3-backend regression,
-   zero new failures: EasyGL 3377/3381, Vulkan 3300/3314, Bgfx 3283/3284 (all match documented
-   baseline exactly, only the known flaky `CueTest` triggered this run). Does not close Phase 41
-   (Tasks 359–360 remain).
+10. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
+    attachments** on all 3 backends (currently hardcoded/coarse choices).
 
-   **Task 357 status: done — verify-only, no code fix needed.** Re-read FNA's
-   `EffectParameterCollection.cs`/`EffectParameter.cs`; confirmed `this[int]`/`this[string name]`
-   (ordinal, case-sensitive, first-match-wins, null-if-missing) and the separate
-   `GetParameterBySemantic(string)` *method* (FNA has no by-semantic collection indexer) both
-   already matched CNA exactly. Added 4 new tests to `EffectCollectionTests.cpp`
-   (`IndexByNameIsCaseSensitive`, `IndexByNameFirstMatchWinsOnDuplicateNames`,
-   `GetParameterBySemanticIsCaseSensitive`, `GetParameterBySemanticFirstMatchWinsOnDuplicates`) —
-   the only genuinely new coverage, since basic found/not-found cases already existed from Task
-   185. Discriminating power verified (temporarily made lookup case-insensitive + last-match-wins,
-   confirmed both new tests fail, reverted). Found `EffectParameterCollection` has the same
-   by-value-`vector` dangling-pointer hazard class Task 355 fixed for `EffectTechniqueCollection` —
-   confirmed currently unexercised (all 4 stock effects populate then cache pointers, never
-   interleaved) and widened Task 884 to cover it alongside `EffectPassCollection`, rather than
-   fixing inline (out of this task's narrow scope) or opening a duplicate task. Full 3-backend
-   regression, zero new failures: EasyGL 3377/3380, Vulkan 3300/3313, Bgfx 3283/3283. Does not
-   close Phase 41 (Tasks 358–360 remain).
+11. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
+    (875); `RenderTargetCube` via `EnvironmentMapEffect` renders black after unbind, root cause not
+    isolated (876, needs isolation before a fix is attempted — see §9).
 
-   **Task 355 status: done.** Confirmed and fixed Task 351's deferred `EffectPass::Apply()`
-   technique-validation finding (gave `EffectTechnique` a stable identity token, `EffectPass` a
-   `techniqueId_`, `Apply()` now throws `System::InvalidOperationException` on a technique
-   mismatch, matching FNA). Also fixed a second, more serious bug found while testing:
-   `EffectTechniqueCollection`'s by-value `vector<EffectTechnique>` storage could dangle
-   `Effect::currentTechnique_` on a second `Add()` — switched to
-   `vector<unique_ptr<EffectTechnique>>` (same idiom as `GraphicsAdapter::adapters_`). Opened new
-   Task 884 (identical latent hazard in `EffectPassCollection`, not yet exercised, not fixed).
-   4 new tests, discriminating power verified. Full 3-backend regression, zero new failures:
-   EasyGL 3370/3375, Vulkan 3294/3308, Bgfx 3278/3278 (100%).
+12. **Task 873/874 — fix Bgfx's wrong-handle-type `static_cast`s** for `RenderTarget2D`/
+    `RenderTargetCube` sampling. Files: `BgfxGraphicsBackend.hpp`/`.cpp`.
 
-2. **`GRAPHICS_TASKS.md` Task 883 — implement `Effect::Clone()` (new, opened by Task 351)**
-   - Goal: FNA's `Effect` has a public virtual `Clone()` (used by every stock effect, each
-     overriding it to return `new XxxEffect(this)`); CNA's `Effect` has none. Needs: (1) a C++
-     ownership-model decision (FNA returns a GC-managed `Effect`; CNA likely wants
-     `std::unique_ptr<Effect>` or similar), (2) fixing a real aliasing hazard found during Task
-     351's audit — `EffectPass::Apply()` calls `owner_->Apply()` where `owner_` is bound to the
-     *original* `Effect*` at construction time, so a naive copy-based clone would leave the
-     clone's passes silently operating on the original effect's state instead of its own; cloned
-     passes/techniques must be re-bound to the new clone (`this`), not copied verbatim, and (3)
-     `Clone()` overrides + copy constructors in all 7 concrete stock-effect subclasses
-     (`BasicEffect`, `SkinnedEffect`, `AlphaTestEffect`, `DualTextureEffect`,
-     `EnvironmentMapEffect`, `SpriteEffect`, `ShaderEffect`), mirroring FNA's own per-subclass
-     `Clone()` pattern, so subclass-specific state (matrices, lighting, texture bindings, GLSL
-     source) isn't silently dropped.
-   - Files: `Effect.hpp`/`.cpp` plus all 7 stock-effect `.hpp`/`.cpp` pairs.
-   - Verification: clone independence tests (mutating a clone's parameter doesn't affect the
-     original and vice versa), a regression test that would have caught the `owner_`-aliasing
-     hazard (e.g. clone a technique, call the clone's pass `Apply()`, confirm it's the *clone*
-     — not the original — that becomes the device's current effect).
+13. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
+    test fixture *first*, then implement against it).
 
-3. **`GRAPHICS_TASKS.md` Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`**
-   - Goal: found this session (Task 339) — FNA's real MRT limit is 4 simultaneous targets
-     (implicitly enforced via a fixed-size array that throws past 4); CNA's EasyGL/Bgfx silently
-     cap at 8 with no error, Vulkan has no CNA-level cap at all.
-   - Fix shape: add an explicit check in `GraphicsDevice::SetRenderTargets` (shared C++, before
-     delegating to any backend) that throws when `renderTargets.size() > 4`, matching FNA's real
-     limit — this removes the need for each backend's own ad-hoc cap.
-   - Files: `GraphicsDevice.cpp` (`SetRenderTargets`).
-   - Verification: new unit test constructing 5 `RenderTargetBinding`s and asserting
-     `SetRenderTargets` throws, plus confirming 1–4 still work.
+14. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+    (`vkCmdCopyImageToBuffer` + staging buffer, mirroring the existing upload path in reverse).
 
-4. **`GRAPHICS_TASKS.md` Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends**
-   - Goal: found this session (Task 338) — `GraphicsDevice.setViewportProperty()` has zero backend
-     wiring; every backend hardcodes its actual viewport to the full render-target/window size,
-     ignoring `Viewport` entirely. A sub-region viewport (split-screen, atlas-subrect rendering)
-     currently has no effect anywhere.
-   - Fix shape: add `virtual void SetViewport(int x, int y, int w, int h, float minDepth, float
-     maxDepth) {}` to `IGraphicsBackend`, call it from `GraphicsDevice::setViewportProperty()`
-     (mirroring `setScissorRectangleProperty()`'s existing pattern exactly). EasyGL needs a real
-     `glViewport(x,y,w,h)` (+ `glDepthRangef` for `MinDepth`/`MaxDepth`) instead of the hardcoded
-     full-size call; Vulkan needs the `VkViewport` dynamic state set per-draw (audit existing
-     backbuffer-resize viewport machinery first); Bgfx needs `bgfx::setViewRect`-adjacent state.
-   - Files: `IGraphicsBackend.hpp`, `GraphicsDevice.cpp` (`setViewportProperty`),
-     `EasyGLGraphicsBackend.cpp` (all the hardcoded `set_viewport(0,0,...)` call sites),
-     `VulkanGraphicsBackend.cpp`, `BgfxGraphicsBackend.cpp`.
-   - Verification: new sub-region-viewport pixel test — bind a viewport smaller than the full
-     target, draw a full-screen quad, confirm pixels outside the viewport rect stay
-     background-colored (this would almost certainly FAIL on all 3 backends today, confirming
-     the gap precisely before fixing it).
-
-5. **`GRAPHICS_TASKS.md` Task 878 — implement `RenderTarget2D`/`RenderTargetCube` mip support on Vulkan and Bgfx**
-   - Goal: found in Task 336 — EasyGL now has a real, pixel-verified mip chain for render targets
-     (pre-allocated storage + auto-`glGenerateMipmap`-on-unbind); Vulkan/Bgfx accept-and-ignore the
-     `mipMap` parameter. `LevelCount` is already correct everywhere (shared C++ computation) —
-     this task is purely about making Vulkan's/Bgfx's GPU resources match what the property
-     already claims.
-   - Fix shape: Vulkan needs `VkImageCreateInfo::mipLevels` set to the real level count (currently
-     hardcoded `1`), a mip-aware `VkImageView`, and a `vkCmdBlitImage` cascade (blit level N→N+1)
-     issued when the RT stops being active — mirroring where EasyGL's fix calls
-     `generate_mipmap()`. Bgfx needs `hasMips=true` passed to `bgfx::createTexture2D`/
-     `createTextureCube` (same shape as Task 864's `Texture3D`/`TextureCube` finding).
-   - Files: `VulkanGraphicsBackend.cpp`/`.hpp` (`VulkanRenderTargetBackend`/
-     `VulkanRenderTargetCubeBackend`), `BgfxGraphicsBackend.cpp`/`.hpp` (same).
-   - Verification: port `easygl_rendertarget2d_mip_test.cpp`'s `TextureFilter::Anisotropic`
-     black/blue methodology to Vulkan.
-
-6. **`GRAPHICS_TASKS.md` Task 879 — implement `RenderTarget2D`/`RenderTargetCube` MSAA support on Vulkan and Bgfx**
-   - Goal: found this session (Task 337) — EasyGL now has real MSAA-for-RT (multisampled
-     renderbuffer + `glBlitFramebuffer` resolve-on-unbind, pixel-verified via a genuine
-     anti-aliasing differential test); Vulkan/Bgfx accept-and-ignore `multiSampleCount` and
-     honestly report `MultiSampleCount=0` (correct-but-incomplete, not a lie — unlike `LevelCount`,
-     this property is legitimately device-capability-dependent, so `0` is an honest "not
-     implemented" answer, not a shortcut).
-   - Fix shape: Vulkan needs the color (+depth) image created with a real `VkSampleCountFlagBits`
-     (queried via `VkPhysicalDeviceLimits::framebufferColorSampleCounts`, mirroring
-     `OPENGL_GetMaxMultiSampleCount`'s capability query) and a `vkCmdResolveImage`/resolve
-     attachment when the RT stops being active. Bgfx needs a `BGFX_TEXTURE_RT_MSAA_X{2,4,8,16}`
-     flag on the color texture's creation (currently plain `BGFX_TEXTURE_RT`) — bgfx may
-     auto-resolve at `bgfx::frame()` time, needs verification once wired. Override
-     `GetMultiSampleCount()` on both backends' render-target classes once implemented.
-   - Files: `VulkanGraphicsBackend.cpp`/`.hpp`, `BgfxGraphicsBackend.cpp`/`.hpp` (render-target
-     backend constructors + factory methods).
-   - Verification: port `easygl_rendertarget2d_msaa_test.cpp`'s diagonal-edge differential
-     anti-aliasing methodology to Vulkan.
-
-7. **`GRAPHICS_TASKS.md` Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil attachments**
-   - Goal: found this session (Task 335) — all 3 backends allocate a render target's depth/stencil
-     attachment with a hardcoded/coarse choice instead of the actual requested `DepthFormat`:
-     EasyGL always uses `DepthComponent24` (no stencil bits, ever); Vulkan ignores `hasDepth`
-     entirely (always allocates, using the device-global depth format); Bgfx always uses `D24S8`
-     (closest to correct, but not format-exact).
-   - Fix shape: thread the real `DepthFormat` enum (not just a `hasDepth` boolable) through
-     `IGraphicsBackend::CreateRenderTarget2D`/`CreateRenderTargetCube`'s signatures to each
-     backend's actual attachment-format selection.
-   - Files: `EasyGLGraphicsBackend.cpp`/`.hpp`, `VulkanGraphicsBackend.cpp`/`.hpp`,
-     `BgfxGraphicsBackend.cpp`/`.hpp` (render-target backend constructors + factory methods).
-   - Verification: a stencil-specific pixel test on EasyGL proving `Depth24Stencil8` actually
-     gates a stencil-enabled draw inside a render target (currently would fail — no stencil bits
-     exist there today).
-
-8. **`GRAPHICS_TASKS.md` Task 875 — fix Vulkan: `Clear()` alone never records a render pass for a bound RT**
-   - Goal: `VulkanGraphicsBackend::Clear()` only records a global clear-colour scalar and never
-     registers the currently-bound RT in `RecordCommandBuffer`'s `usedRTs` list — only an actual
-     draw call does. A `SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);` pattern with
-     no draw call silently never gets a render pass recorded; the RT's image stays
-     `VK_IMAGE_LAYOUT_UNDEFINED` forever (found this session, Task 334, see NEXT.md §5).
-   - Fix shape: either mark the currently-bound RT as "used" at `Clear()` time too (not just at
-     draw time), or record a minimal begin+clear+end render pass for Clear-only RTs during
-     `RecordCommandBuffer`.
-   - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
-     (`Clear()`, `RecordCommandBuffer()`'s `usedRTs` construction).
-   - Verification: port `easygl_rt_roundtrip_test.cpp` (Task 180, EasyGL-only, Clear-only pattern)
-     to Vulkan as a new regression test.
-
-9. **`GRAPHICS_TASKS.md` Task 876 — investigate why `RenderTargetCube` sampled via `EnvironmentMapEffect` renders black on Vulkan**
-   - Goal: even with a real `SpriteBatch` draw into each of a `RenderTargetCube`'s 6 faces (working
-     around Task 875), sampling it back via `EnvironmentMapEffect` renders black instead of the
-     actual rendered colour (found this session, Task 334, see NEXT.md §5). The sampling path
-     itself (`dynamic_cast<IVulkanCubeSamplable*>` + `GetVkCubeImageView()`) is architecturally
-     sound — something in the data chain is wrong.
-   - Two unisolated candidates: (a) `SpriteBatch`-into-cube-face pixel correctness was never
-     itself verified before this session (Task 142 only checks the backbuffer isn't corrupted,
-     not that the faces got the right colour); (b) `GetOrCreateEnvMapDescSet`'s per-frame
-     descriptor-set cache/write could be stale or wrong specifically for a `RenderTargetCube`'s
-     `cubeView_`.
-   - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
-     (`GetOrCreateEnvMapDescSet`, the `needsEnvMap` draw-recording branch,
-     `VulkanRenderTargetCubeBackend`).
-   - Verification: first isolate which half is broken — e.g. add a temporary Vulkan-side debug
-     readback of the RT cube face content immediately after Phase 1's draw, independent of
-     `EnvironmentMapEffect`, before attempting a fix. See `examples/vulkan_rendertargetcube_sample_test.cpp`
-     for the existing failing repro.
-
-10. **`GRAPHICS_TASKS.md` Tasks 873/874 — fix Bgfx's wrong-handle-type casts for `RenderTarget2D`/`RenderTargetCube` sampling**
-   - Goal: `BgfxSpriteBatchBackend::Draw` and `BgfxGraphicsBackend`'s `envMapping` branch each cast
-     any `ITextureBackend`/`ITextureCubeBackend` to the plain-texture concrete type via
-     `static_cast`, but `RenderTarget2D`/`RenderTargetCube`'s backends are unrelated sibling
-     classes (`BgfxRenderTargetBackend`/`BgfxRenderTargetCubeBackend`) — this reads the framebuffer
-     handle (`fbo`) where the texture handle (`textureHandle`/`handle`) should be, silently
-     sampling the wrong data (confirmed Task 333/334, see NEXT.md §5). Worth fixing both together
-     in one pass since the fix shape is identical.
-   - Fix shape: add a virtual accessor to `ITextureBackend`/`ITextureCubeBackend` for "the
-     `bgfx::TextureHandle` to sample", implemented by the plain-texture backends (return their own
-     handle) and the render-target backends (return their colour texture handle — `colorTex`/
-     `cubeTex`); use it instead of the blind `static_cast`s.
-   - Files: `include/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp`,
-     `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`.
-   - Verification: no pixel readback available on Bgfx — verify structurally instead (assert the
-     extracted handle's `.idx` equals the render-target backend's colour-texture handle, not its
-     framebuffer handle, after the fix). See `examples/bgfx_render_target_sample_test.cpp`/
-     `bgfx_render_target_cube_sample_test.cpp` for the existing doesn't-crash smoke tests to extend.
-
-11. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
-   - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
-     flag, reuse `Texture2D.cpp`'s DXT decode helpers, 6×`levelCount` `SetData` calls).
-   - Files: `src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp`, `TextureCubeTests.cpp`.
-   - Verification: build a real/hand-built DDS cube-map test fixture **first**, then implement
-     against it — do not mark done on "compiles and doesn't throw" alone (see §9).
-
-12. **`GRAPHICS_TASKS.md` Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
-   - Goal: `vkCmdCopyImageToBuffer` + host-visible staging buffer, mirroring the existing upload
-     path's staging-buffer pattern in reverse.
-   - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
-     (`VulkanTexture3DBackend`/`VulkanTextureCubeBackend::GetData`).
-   - Verification: new Vulkan pixel-readback test analogous to the EasyGL ones in
-     `easygl_texture3d_partial_box_readback_test.cpp`.
-
-13. **`GRAPHICS_TASKS.md` Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug**
-   - Goal: confirm (via a failing test first, matching the Task 276 methodology) that `Texture3D`/
-     `TextureCube` mip levels >0 silently fail on Vulkan and Bgfx, then fix by pre-allocating every
-     mip level at image/texture creation time.
-   - Files: `VulkanGraphicsBackend.cpp` (`VkImageCreateInfo::mipLevels`),
-     `BgfxGraphicsBackend.cpp` (`hasMips` parameter to `bgfx::createTexture3D`/`createTextureCube`).
-   - Verification: new mip round-trip test per backend, mirroring
-     `examples/easygl_texturecube_mip_test.cpp`.
+15. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
+    `Texture3D`/`TextureCube` (confirm with a failing test first, per Task 276's methodology).
 
 ---
 
@@ -1003,10 +399,8 @@ In priority order:
   a deliberate, scoped design pass — it touches `EffectParameter`, `TextureCollection`, and every
   backend's texture-bind code. Not a small patch.
 - **No rushed `TextureCube::DDSFromStreamEXT` implementation** without a real DDS cube-map test
-  fixture built first — a "looks plausible" parser that isn't verified against real data just
-  trades one silent-failure stub for a differently-silent one.
-- **No SpriteBatch Vulkan multi-batch fix** until the root cause is isolated — a wrong fix could
-  silently break single-batch rendering.
+  fixture built first.
+- **No SpriteBatch Vulkan multi-batch fix** until the root cause is isolated.
 - **No opportunistic fixes** for `EasyGL_MRT_TwoAttachments`, `Vulkan_DepthBias`, or
   `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage` flakiness — each needs its own dedicated
   root-cause investigation, not a guess bundled into an unrelated task.
@@ -1019,289 +413,52 @@ In priority order:
 - **No API renames or namespace moves** — XNA API names and shapes are frozen by the FNA reference.
 - **No mass Doxygen or NOXNA cleanup passes** — fix tags only on files you're already touching for
   a real reason.
-- **No opportunistic fix for Task 868 (Vulkan blend state) or Task 870 (Vulkan
-  `DepthBufferFunction`/stencil testing)** bundled into an unrelated task — both are large,
-  multi-pipeline-site changes confirmed across many tests; each needs its own dedicated task and
-  full regression pass.
+- **No opportunistic fix for Task 868/870 (Vulkan blend/depth-stencil state)** bundled into an
+  unrelated task — both are large, multi-pipeline-site changes; each needs its own dedicated task.
 - **No opportunistic fix for Task 871/872 (stencil `Clear`/`ReferenceStencil` backend gaps)** —
-  verify with a real test first, same discipline as every other tracked bug.
-- **No rushed fix for Task 878 (Vulkan/Bgfx render-target mip support)** — mirror Task 336's exact
-  EasyGL fix shape (real storage pre-allocation + resolve-time generation), and verify with the
-  same `TextureFilter::Anisotropic` black/blue methodology (ported to Vulkan) before declaring it
-  fixed — don't just bump `LevelCount` without also making the GPU resource genuinely mip-complete.
-- **No rushed fix for Task 879 (Vulkan/Bgfx render-target MSAA support)** — mirror Task 337's exact
-  EasyGL fix shape (real multisample attachment + resolve-time blit/resolve), and verify with the
-  same diagonal-edge differential anti-aliasing methodology (ported to Vulkan) before declaring it
-  fixed — a solid-fill-only test proves nothing here (see Task 337's own writeup for why).
-- **No rushed fix for Task 873/874 (Bgfx handle-cast bugs)** bundled into an unrelated task — fix
-  with their own dedicated task, and verify structurally (extracted handle equals the colour
-  texture handle, not the framebuffer handle) since no pixel readback exists on Bgfx to confirm
-  visually.
-- **No fix for Task 875 (Vulkan Clear-only RT gap) or Task 876 (Vulkan RenderTargetCube-via-
-  EnvironmentMapEffect renders black)** without isolating the root cause first (Task 876
-  especially — two unisolated candidates, see §8) — a guessed fix risks masking the real bug
-  instead of fixing it.
-- **No opportunistic fix for Task 877 (DepthStencilFormat format-fidelity gap)** bundled into an
-  unrelated task — verify with a dedicated stencil-in-RT pixel test first, same discipline as
-  every other tracked bug; the core depth-test functionality already works (Task 335), so this is
-  specifically about exact format fidelity, not a functional blocker.
-- **No rushed fix for Task 880 (Viewport has zero GPU wiring)** — this is a large, pre-existing,
-  three-backend-wide gap unrelated specifically to render-target switching (found while doing
-  Task 338, but the gap predates it and affects Viewport everywhere, not just after
-  SetRenderTarget); write the sub-region-viewport pixel test FIRST (it should fail on all 3
-  backends today) before attempting any backend wiring, same discipline as every other tracked
-  multi-backend gap.
-- **No opportunistic fix for Task 145 (`EasyGL_MRT_TwoAttachments`)** bundled into a Task 881 or
-  Task 340 pass — it needs its own dedicated root-cause investigation (already stated in this
-  section above); do not let MRT-adjacent work in later tasks turn into an accidental fix attempt.
-- **No rushed fix for Task 881 (MRT count cap mismatch)** without a real unit test proving both
-  the throw-past-4 behavior and that 1–4 targets still work — low priority, no existing game code
-  here is affected.
+  verify with a real test first.
+- **No rushed fix for Task 878/879 (Vulkan/Bgfx render-target mip/MSAA)** — mirror Task 336/337's
+  exact EasyGL fix shape and verify with the same pixel-differential methodology (ported to
+  Vulkan/Bgfx) before declaring it fixed.
+- **No rushed fix for Task 873/874 (Bgfx handle-cast bugs)** — verify structurally (extracted handle
+  equals the colour-texture handle, not the framebuffer handle) since Bgfx has no pixel readback
+  for these two specifically.
+- **No fix for Task 875/876 (Vulkan render-target bugs)** without isolating the root cause first —
+  Task 876 especially has 2 unisolated candidates (see `GRAPHICS_TASKS.md`).
+- **No opportunistic fix for Task 877 (DepthStencilFormat fidelity)** bundled into an unrelated
+  task — verify with a dedicated stencil-in-RT pixel test first.
+- **No rushed fix for Task 880 (Viewport GPU wiring)** — write the sub-region-viewport pixel test
+  FIRST (it should fail on all 3 backends today) before attempting any backend wiring.
+- **No opportunistic fix for Task 145 (`EasyGL_MRT_TwoAttachments`)** bundled into Task 881 or any
+  MRT-adjacent task — it needs its own dedicated root-cause investigation.
+- **No rushed fix for Task 881 (MRT count cap mismatch)** without a real unit test proving both the
+  throw-past-4 behavior and that 1–4 targets still work.
+- **No implementing `Effect::Clone()` (Task 883) as a side effect of an unrelated Phase 42 task** —
+  it needs its own dedicated task given the ownership-model decision and the `owner_`-aliasing fix
+  it requires.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8.
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 367).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
-Update NEXT.md after finishing.
+Update NEXT.md and GRAPHICS_TASKS.md after finishing, then commit AND push (standing
+instruction — do not wait to be asked; one task = one commit = one push).
 
-Current status: Phases 1-41 are FULLY COMPLETE. Phase 42 (BasicEffect exactness, GRAPHICS_TASKS.md
-Tasks 361-370) is now open, Task 366 is DONE, Task 367 next (pixel test: TextureEnabled=true AND
-VertexColorEnabled=true - Texture x vertex color - EasyGL/Vulkan/Bgfx).
-Last full 3-backend regression (Task 366: verified TextureEnabled=true's texture x diffuse
-multiplication is genuinely correct on all 3 backends, pure verify-only task, no bug found - unlike
-Task 364's VertexColorEnabled finding, texture sampling was never actually broken here. Confirmed
-from FNA source (BasicEffect.cs's shaderIndex selects VSBasicTxNoFog/PSBasicTxNoFog;
-PSBasicTxNoFog returns SAMPLE_TEXTURE(Texture,pin.TexCoord)*pin.Diffuse, no vertex-color multiply
-in this variant) that all 3 backends' textured-3D shader paths already correctly compute
-texture x diffuseColor. Closed a real coverage gap instead: Task 189's combinations test only had
-degenerate white-texture-or-white-diffuse cases that couldn't distinguish "ignored" from "correctly
-multiplied" - added a proper discriminating test per backend reusing Task 365's
-(200,100,50)/(0.8,0.4,0.6) numeric pair (correct product (160,40,30)). Verified genuine
-discriminating power on all 3 backends independently by temporarily stripping the diffuse multiply
-from each backend's shader in turn (EasyGL runtime GLSL, Vulkan textured3d.frag.glsl +
-compile_shaders.py/libshaderc, Bgfx fs_textured3d.sc + compile_shaders.py/shaderc), confirming each
-new test failed with the texture-only result, then reverting (confirmed byte-identical via git diff).
-Deferred to Task 369: FillGpuDrawParams() omits +EmissiveColor from the disabled-lighting diffuse
-formula (real mismatch vs. FNA's EffectHelpers.SetMaterialColor, invisible in Tasks 364-366 since
-EmissiveColor is at its default (0,0,0))):
-EasyGL 3415/3419 pass (3 documented pre-existing failures: EasyGL_MRT_TwoAttachments,
-EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests). Vulkan 3337/3352 pass (13
-documented pre-existing failures + 1 order-dependent Vulkan_FillMode_WireFrame flake + 1 flaky
-CueTest). Bgfx 3321/3322 pass (1 flaky CueTest).
-Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
-if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
-it as a regression.
+Current status: Phases 1-41 are FULLY COMPLETE. Phase 42 ("BasicEffect exactness",
+GRAPHICS_TASKS.md Tasks 361-370) is open: Tasks 361-366 are DONE, Task 367 is NEXT (pixel test:
+TextureEnabled=true AND VertexColorEnabled=true - texture x vertex color - EasyGL/Vulkan/Bgfx).
 
-Tasks 351-355 (the Effect-base-class-audit + .fx-bytecode-policy + EffectPass::Apply-consistency
-sub-threads of Phase 41) are now ALL closed - see GRAPHICS_TASKS.md for detail. Summary: Task 351
-audited Effect against FNA and fixed 3 real bugs (GetTypeName fully-qualified name, Apply() missing
-NOXNA, a Dispose() name-hiding bug that broke compilation on every concrete effect class), and
-deferred the .fx-bytecode-constructor question to Task 352 and the Clone() gap to new Task 883.
-Task 352 (a user policy decision, not inferred) chose FULL support for compiled XNA .fx bytecode;
-research found MojoShader's zlib-licensed C source already vendorable locally at
-/rv/data/library/github.com/u3d-community/U3D/Source/ThirdParty/MojoShader (parses XNA's
-compiled-effect container already; transpiles D3D9 SM2/3 bytecode to GLSL but has NO SPIR-V
-output, so Vulkan needs an extra GLSL->SPIR-V hop via glslang, not yet vendorable from a local
-checkout). Opened new Phase 74 (Tasks 10200-10208) for the real implementation, documented in
-docs/fx-bytecode-support-plan.md, and re-scoped Tasks 353/354 to fit "full support is the target,
-not yet built." Task 353 shipped the interim guard: added the previously-missing
-Effect(GraphicsDevice&, const std::vector<SharpRuntime::bytecs>&) constructor (matching FNA's
-signature) whose body throws System::NotImplementedException naming Phase 74 and pointing at
-ShaderEffect/stock effects as today's real alternative. Task 354 wrote the developer-facing
-counterpart doc, docs/shader-effect-vs-fx-bytecode.md, covering what works today, what throws and
-why, practical hand-port-to-GLSL/SPIR-V porting guidance, and the Phase 74 roadmap summary. Task
-355 confirmed and fixed Task 351's deferred EffectPass::Apply() technique-validation finding
-(EffectTechnique got a stable getIdInternal() identity token mirroring FNA's opaque
-TechniquePointer; EffectPass got a techniqueId_ checked in Apply(), throwing
-System::InvalidOperationException on a technique mismatch, matching FNA's own guard, including the
-null-CurrentTechnique case where FNA itself would crash with a NullReferenceException) and ALSO
-fixed a second, more serious bug found while writing the interleaved-technique-switch test:
-EffectTechniqueCollection stored EffectTechnique by value in a vector, so Effect::currentTechnique_
-(captured at construction) would dangle the instant a second technique was added (guaranteed
-reallocation on 1->2 capacity growth) - same bug class as Task 345's DefaultAdapter dangling
-reference. Fixed via vector<unique_ptr<EffectTechnique>> (matching GraphicsAdapter::adapters_'s
-established idiom) with a small custom iterator pair. Opened new Task 884 (identical latent hazard
-in EffectPassCollection, not yet exercised by any test, not fixed).
+Last full 3-backend regression (Task 366, verify-only — no bug found):
+EasyGL 3415/3419 pass (3 documented pre-existing failures).
+Vulkan 3337/3352 pass (13 documented pre-existing failures + 1 order-dependent flake + 1 flaky CueTest).
+Bgfx 3321/3322 pass (1 flaky, unrelated CueTest/NetworkSessionTest failure).
+Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
-Task 356 (verify EffectTechnique selection changes applied pass collection) is now DONE - verify-only,
-no code fix needed. Re-read FNA's CurrentTechnique setter (Effect.cs) and EffectPass.Apply()
-(EffectPass.cs): the setter only does a native FNA3D_SetEffectTechnique call (no C#-observable
-effect) plus a plain pointer assignment; all real enforcement already lives in EffectPass.Apply()'s
-live comparison, which Task 355 already ported correctly. Added
-CurrentTechniquePropertyPassCollectionTracksSelectedTechnique to EffectTests.cpp (re-fetches
-getCurrentTechniqueProperty()->getPassesProperty()[0] after each switch, proving the live selection
-itself resolves to each technique's own pass collection, bidirectionally), discriminating power
-verified (temporarily made setCurrentTechniqueProperty() a no-op, confirmed the new test + Task
-355's technique-switch tests all fail, reverted).
-
-Task 357 (verify effect parameter lookup by name and semantic) is now DONE - verify-only, no code
-fix needed. Re-read FNA's EffectParameterCollection.cs/EffectParameter.cs: this[int]/this[string
-name] (ordinal, case-sensitive, first-match-wins, null-if-missing) and the separate
-GetParameterBySemantic(string) *method* (FNA has NO by-semantic collection indexer) both already
-matched CNA exactly. Added 4 new tests to EffectCollectionTests.cpp (IndexByNameIsCaseSensitive,
-IndexByNameFirstMatchWinsOnDuplicateNames, GetParameterBySemanticIsCaseSensitive,
-GetParameterBySemanticFirstMatchWinsOnDuplicates) - the only genuinely new coverage; basic
-found/not-found cases already existed from Task 185's EffectCollectionTests.cpp (discovered mid-task
-- avoid duplicating those). Discriminating power verified (temporarily made lookup case-insensitive
-+ last-match-wins, confirmed both new tests fail, reverted). Found EffectParameterCollection has the
-same by-value-vector dangling-pointer hazard class Task 355 fixed for EffectTechniqueCollection -
-confirmed currently unexercised (all 4 stock effects populate then cache pointers, never
-interleaved) and widened Task 884 to cover it alongside EffectPassCollection instead of fixing
-inline or opening a duplicate task.
-
-Task 358 (verify effect parameter collection enumeration order) is now DONE - verify-only, no code
-fix needed. Re-read FNA's EffectParameterCollection.cs/EffectTechniqueCollection.cs/
-EffectPassCollection.cs: all 3 are thin List<T> wrappers whose GetEnumerator() returns the list's
-own enumerator verbatim - enumeration order is always exactly declaration/insertion order, no
-sorting anywhere. CNA's vector-backed EffectParameterCollection (push_back + pass-through
-begin()/end()) already matched exactly. Real gap: no existing test asserted iteration *order*, only
-element *count* (IterationVisitsAllParameters). Added IterationOrderMatchesInsertionOrder using
-deliberately non-alphabetical names (Zebra/Apple/Mango) to rule out an accidental-sort false pass.
-Discriminating power verified (temporarily changed Add() to prepend instead of append; new test
-failed along with 3 pre-existing order-sensitive tests, confirming those were genuinely
-order-sensitive too; reverted - net change is test-file-only, zero production code diff).
-
-Task 359 (add tests for missing parameter lookups) is now DONE - verify-only, no code fix needed.
-Re-read FNA's EffectParameterCollection.cs: this[int index] returns elements[index] on a plain
-List<EffectParameter> - throws for negative/>=Count (standard List<T> indexer behavior), distinct
-from this[string name]/GetParameterBySemantic's null-return behavior already confirmed in Task 357.
-CNA's operator[](int) already uses elements_.at(index), which throws std::out_of_range for the same
-cases - already matched FNA exactly. Added 6 new tests to EffectCollectionTests.cpp: out-of-range
-throw coverage for the mutable/const operator[](int) overloads (previously untested), plus the
-empty-collection edge case for all 3 lookup surfaces (by-index throws, by-name/-semantic return
-null). Discriminating power verified (temporarily replaced .at(index) with an index-clamping
-non-throwing lookup - guarded to avoid a UB crash on the empty-collection case specifically -
-confirmed exactly the 3 non-empty out-of-range tests fail with "it throws nothing", reverted).
-
-Task 360 (add effect lifecycle tests: dispose, clone after dispose, apply after dispose) is now
-DONE - CLOSES PHASE 41. Confirmed FNA's Effect.Dispose(bool)/GraphicsResource.Dispose(bool) are
-both guarded by if (!IsDisposed) - CNA's GraphicsResource::Dispose(bool) already has the identical
-if (isDisposed_) return; guard, so double-dispose was already safe by construction, no code fix
-needed. Confirmed from source that FNA's own Effect/EffectPass have ZERO disposed-state check
-anywhere (EffectPass.Apply() after disposal would feed a zeroed-out native handle straight to
-FNA3D_ApplyEffect - real silent UB in FNA itself) - so CNA's Effect::Apply() throwing
-ObjectDisposedException is a deliberate, confirmed, beneficial safety improvement over FNA (same
-class as GraphicsAdapter::DeviceId/VendorId, Task 345), correctly kept as-is, not reverted to match
-FNA's unsafe behavior. Closed a real coverage gap: added
-ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectDisposed (Task 351 only tested
-Effect::Apply() directly after dispose, never the EffectPass::Apply() entry point) and
-DisposeIsIdempotentAndDoesNotThrow. Discriminating power verified for the pass-level test
-(temporarily removed the isDisposed_ check from Effect::Apply(), confirmed both it and Task 351's
-existing ApplyAfterDisposeThrowsObjectDisposedException fail with "it throws nothing", reverted);
-honestly documented that the double-dispose test has no meaningful way to "break" via a temporary
-diff, since GraphicsDevice::RemoveResourceReference is already a safe no-op on a not-found
-resource. Effect::Clone() still does not exist (deferred to Task 883) - its "clone after dispose"
-sub-case is explicitly N/A until Task 883 lands, not fabricated here.
-
-Task 361 (audit BasicEffect properties and defaults against FNA BasicEffect.cs) is now DONE - opened
-Phase 42. Read FNA's Graphics/Effect/StockEffects/BasicEffect.cs line-by-line against CNA's
-BasicEffect.hpp/.cpp; built a 22-property default-value table. 2 real, fixed bugs: VertexColorEnabled
-defaulted to true in CNA vs. FNA's real false (FNA's field has no initializer and the constructor
-never sets it); and FNA's BasicEffect(GraphicsDevice) constructor unconditionally sets
-DirectionalLight0.Enabled = true (confirmed from source) while CNA's constructor set nothing, leaving
-it at DirectionalLight's own class default false - fixed by adding the missing
-setEnabledProperty(true) call. Both had existing tests in examples/basic_effect_test.cpp (Task 22)
-asserting the wrong defaults as correct - both corrected, discriminating power verified (temporarily
-reverted each fix, confirmed the corrected assertions fail, reverted back). EnableDefaultLighting()'s
-constants cross-checked byte-for-byte against FNA's EffectHelpers.EnableDefaultLighting - already
-exact, no fix needed (feeds Task 363). Deliberately deferred, not fixed: BasicEffect::OnApply() is an
-empty stub in CNA (all derived-value computation instead happens in an ungated FillGpuDrawParams(),
-bypassing FNA's EffectDirtyFlags/EffectParameter mechanism entirely - consistent with Task 351's
-finding); FillGpuDrawParams() only forwards DirectionalLight0, never SpecularColor/SpecularPower/
-DirectionalLight1/DirectionalLight2 - both real pixel-fidelity gaps, squarely Tasks 368/369's scope,
-not this task's. Clone() gap remains tracked as Task 883 (not duplicated). Full 3-backend regression,
-zero new failures: EasyGL 3386/3389, Vulkan 3309/3322, Bgfx 3292/3292 (100%).
-
-Task 362 (unit test default values for every BasicEffect property) is now DONE. Re-derived Task
-361's 22-property list directly from FNA source and built a new, centralized
-tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp (22 TEST_F cases, one
-BasicEffectDefaultsTest fixture) - no dedicated unit-test file existed before. Found a 3rd real
-default-value bug beyond Task 361's 2: CNA's DirectionalLight::DirectionalLight() initialized
-direction_ to Vector3::Forward ((0,0,-1)); FNA's INTERNAL_direction field has no initializer at all
-(defaults to Vector3.Zero, confirmed from DirectionalLight.cs) - fixed in DirectionalLight.cpp, plus
-corrected the constructor's Doxygen comment. Grepped the whole codebase and confirmed nothing relied
-on the old nonzero default. Discriminating power verified (reverted the fix, confirmed the new test
-fails, reverted back; plus a lighter spot-check on the already-correct SpecularPower default).
-Full 3-backend regression, zero new failures: EasyGL 3408/3411, Vulkan 3329/3344 (13 pre-existing +
-1 flaky CueTest + 1 order-dependent Vulkan_RenderTargetUsage flake), Bgfx 3314/3314 (100%).
-
-Task 363 (unit test EnableDefaultLighting() exact constants) is now DONE. Read FNA's
-EffectHelpers.cs (EnableDefaultLighting) and BasicEffect.cs's own EnableDefaultLighting()
-(additionally sets LightingEnabled = true) literal-for-literal; confirmed CNA's
-BasicEffect::EnableDefaultLighting() already matches every constant exactly (key/fill/back-light +
-ambient, including Task 194's old Light2 corrections) - verify-only, no code fix needed. Added 5 new
-GTest cases to BasicEffectTests.cpp (LightingEnabled, AmbientLightColor, and one per light's
-Direction/DiffuseColor/SpecularColor/Enabled), tight 1e-6f epsilon since these are hardcoded
-literals not computed approximations; explicitly locked in DirectionalLight1.SpecularColor ==
-Vector3::Zero (fill light has no specular contribution, unlike light0/light2) as its own
-assertion. Complements Task 194's existing EasyGL GPU-integration test with a GPU-independent
-GTest-level lock-in. Discriminating power verified (temporarily perturbed DirectionalLight1's
-diffuse-color Y from 0.7607844f to 0.9f in BasicEffect.cpp, confirmed the new test failed with the
-exact expected diff, reverted). Full 3-backend regression, zero new failures: EasyGL 3413/3416 (3
-pre-existing), Vulkan 3333/3349 (13 pre-existing + 2 flaky CueTest + 1 order-dependent
-Vulkan_FillMode_WireFrame flake), Bgfx 3319/3319 (100%).
-
-Task 364 (pixel test: VertexColorEnabled=false, no texture, diffuse color only) is now DONE. First
-real GPU pixel-readback task in Phase 42 (Tasks 361-363 were all GPU-independent). Derived the
-expected output formula directly from FNA source: BasicEffect.cs's OnApply() shaderIndex
-computation selects VSBasicNoFog/PSBasicNoFog for this combination; BasicEffect.fx + Common.fxh's
-ComputeCommonVSOutput() sets vout.Diffuse=DiffuseColor and never applies `vout.Diffuse *= vin.Color`
-for this variant; EffectHelpers.SetMaterialColor() folds Alpha in. Net formula: expected fragment =
-DiffuseColor x Alpha, independent of any vertex-color attribute in the buffer. Found and fixed 3
-real bugs, one per backend, all in the exact same spot FillGpuDrawParams()'s vertexColorEnabled
-forwarding (Task 361) turned out not to be honored by any backend's shader: EasyGL's prog_colored_
-fragment shader unconditionally computed FragColor=vColor*uDiffuseColor with no gate at all - added
-a uVertexColorEnabled uniform and gated the multiply. Vulkan was far worse: stride==16
-(VertexPositionColor) draws use a separate, minimal colored3d pipeline whose vertex shader was a
-bare `fragColor = inColor;` passthrough, reading neither DiffuseColor nor VertexColorEnabled for any
-combination - fixed by extending its push-constant struct to mirror the existing 32-float
-FillExtPushConst() layout byte-for-byte (zero new fill code needed) and gating the multiply; bumped
-the push-constant range from 64 to 128 bytes. Preserved the legacy no-GpuDrawParams
-DrawColoredPrimitives/DrawIndexedColoredPrimitives paths on both EasyGL and Vulkan by explicitly
-forcing "opaque passthrough" values there (uniforms/push-constant floats default to 0, which would
-otherwise silently break those call sites). Fixing Vulkan exposed 2 stale tests -
-vulkan_rt2d_test.cpp and vulkan_render_target_usage_test.cpp - that draw VertexPositionColor quads
-via BasicEffect expecting the raw vertex color without ever setting VertexColorEnabled=true
-themselves (stale since Task 361 flipped the property's real default to false); both previously
-"passed" only because Vulkan's bug ignored the flag. Fixed by adding the missing explicit
-`fx.VertexColorEnabled = true;` to both. Bgfx had the identical EasyGL-shaped bug in
-vs_colored3d.sc/fs_colored3d.sc - fixed the same way (new u_diffuseColor/u_vertexColorEnabled3D
-uniforms, gated in the vertex shader). Building this task's new Bgfx test (the first ever to call
-GetBackBufferData() for a BasicEffect draw on this backend) surfaced a 4th, separate, much larger
-pre-existing bug: any BasicEffect DrawUserPrimitives draw (textured or not) silently produced zero
-fragments on Bgfx until RasterizerState::CullNone was set explicitly. Root cause: GraphicsDevice's
-C++-level rasterizerState_ default is correctly CullCounterClockwiseFace (matches FNA), but this
-default is never pushed to any backend's actual GPU state at construction; EasyGL/Vulkan's own
-internal defaults are both effectively CullNone (native GL default / hardcoded 0), while Bgfx's
-cullFlags_ is the only one of the three hardcoded to match FNA's real default, so it alone silently
-culled every full-screen NDC quad used throughout this whole pixel-test family. Not fixed here (a
-bigger, separate 3-way default-sync architectural gap, same shape as Task 880) - tracked as new
-Task 884; worked around in the new Bgfx test only via explicit RasterizerState::CullNone. New tests,
-one per backend: examples/easygl_basiceffect_vertexcolor_disabled_test.cpp,
-vulkan_basiceffect_vertexcolor_disabled_test.cpp, bgfx_basiceffect_vertexcolor_disabled_test.cpp.
-Verified genuine discriminating power on all 3 backends independently (temporarily reverted each
-backend's shader gate to an unconditional vertex-color multiply, confirmed the exact red-tinted
-failure got=(51,0,0), reverted all 3 back to the fix). Full 3-backend regression: EasyGL 3414/3417
-(3 pre-existing, unchanged), Vulkan 3336/3350 (13 pre-existing + 1 flaky CueTest, unchanged shape;
-confirmed vulkan_rt2d_test/vulkan_render_target_usage_test pass cleanly post-fix), Bgfx 3320/3320
-(100%, no flakes this run - first-ever clean full pass exercising a real BasicEffect pixel-readback
-test on this backend).
-
-Next task: GRAPHICS_TASKS.md Task 365 - pixel test: VertexColorEnabled=true, no texture - Vertex
-color multiplication (EasyGL/Vulkan/Bgfx). Goal: real GPU pixel-readback test proving BasicEffect
-renders DiffuseColor x vertexColor when VertexColorEnabled=true and no texture is bound. Task 364's
-fix already wires this correctly (verified as part of its own discriminating-power check), so Task
-365 is expected to be new-coverage, not a bug-fix task - confirm with a real pixel readback rather
-than assuming. Reuse the same quad/vertex-format/readback pattern from Task 364's 3 new test files,
-just flip the flag and change the expected-color formula to a product. Remember the Bgfx
-RasterizerState cull-default gap (Task 884): set RasterizerState::CullNone explicitly in the new
-Bgfx test, same as Task 364's.
-As always: verify genuine discriminating power for any new test (temporarily break/omit any fix,
-confirm the test fails, then revert), full 3-backend rebuild + regression if production code
-changes, update GRAPHICS_TASKS.md and NEXT.md, commit AND push after finishing (standing
-instruction - do not wait to be asked).
+For the full history of what each task in Phase 41/42 found and fixed, read GRAPHICS_TASKS.md
+directly (Tasks 351-366) rather than this file — this file intentionally keeps only a one-line
+summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
