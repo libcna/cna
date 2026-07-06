@@ -224,15 +224,23 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   the fix — compiles and passes again. Full suite: **3240/3242 passing** (2 expected
   accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.2** — Fix `NetworkSession::RemoveGamer` never removing a departing gamer from
+- [x] **Task 2.2** — Fix `NetworkSession::RemoveGamer` never removing a departing gamer from
   `localGamers_`. Confirmed (`NetworkSession.cpp`, ~lines 407-446): `isLocal` is computed by
   scanning `localGamers_`, and the gamer is removed from `remoteGamers_`/`allGamers_` and added to
-  `previousGamers_` — but `localGamers_.Remove(gamer)` is never called. Reachable in production via
-  `ENetBackend.cpp`'s `RemoveGamer(locals[0], HostEndedSession)` call (~line 299). This breaks the
-  `AllGamers == LocalGamers ∪ RemoteGamers` invariant: a removed local gamer keeps appearing in
-  `getLocalGamersProperty()` forever. Fix: remove from `localGamers_` too when `isLocal` is true.
-  Add a test that adds a local gamer, removes it via `RemoveGamer`, and asserts it's gone from
-  `LocalGamers` too (not just `AllGamers`).
+  `previousGamers_` — but `localGamers_.Remove(gamer)` was never called. Reachable in production via
+  `ENetBackend.cpp`'s `RemoveGamer(locals[0], HostEndedSession)` call (~line 299). This broke the
+  `AllGamers == LocalGamers ∪ RemoteGamers` invariant: a removed local gamer kept appearing in
+  `getLocalGamersProperty()` forever.
+  **Fixed:** added `if (isLocal) { localGamers_.Remove(static_cast<LocalNetworkGamer*>(gamer)); }`
+  right alongside the existing `remoteGamers_`/`allGamers_` removal.
+  **Extended** `RemoveGamerOnLocalGamerRaisesSessionEndedWithReason` (already exercised
+  `RemoveGamer` on a local gamer) with assertions that `getLocalGamersProperty()` and
+  `getAllGamersProperty()` both drop to 0 and `getPreviousGamersProperty()` gains the removed
+  gamer.
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with
+  `getLocalGamersProperty().getCountProperty()` still `1` (expected `0`) — the removed local gamer
+  really did keep appearing forever. Restored the fix and reran — passes. Full suite:
+  **3240/3242 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.3** — Fix `NetworkSession::AddLocalGamer` never raising `GamerJoined`. Confirmed:
   `AddLocalGamer` only does `localGamers_.Add(adding); allGamers_.Add(adding);` with no event

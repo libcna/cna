@@ -733,12 +733,21 @@ TEST(NetworkSessionTest, RemoveGamerOnLocalGamerRaisesSessionEndedWithReason) {
         observedReason = e.getEndReasonProperty();
     };
 
-    session->RemoveGamer(session->getLocalGamersProperty()[0], NetworkSessionEndReason::HostEndedSession);
+    LocalNetworkGamer* localGamer = session->getLocalGamersProperty()[0];
+    session->RemoveGamer(localGamer, NetworkSessionEndReason::HostEndedSession);
     session->Update();
 
     EXPECT_EQ(endedCount, 1);
     EXPECT_EQ(observedReason, NetworkSessionEndReason::HostEndedSession);
     EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Ended);
+    // Task 2.2: localGamers_ used to never be pruned in RemoveGamer (unlike remoteGamers_/
+    // allGamers_, which already were) - a removed local gamer kept appearing in
+    // getLocalGamersProperty() forever, breaking the AllGamers == LocalGamers UNION RemoteGamers
+    // invariant.
+    EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getPreviousGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->getPreviousGamersProperty()[0], localGamer);
 
     session->Dispose();
 }

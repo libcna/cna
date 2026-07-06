@@ -423,6 +423,14 @@ namespace Microsoft::Xna::Framework::Net
         }
 
         gamer->SetHasLeftSession(true);
+        // Task 2.2: localGamers_ was never pruned here, unlike remoteGamers_/allGamers_ just
+        // below - a removed local gamer kept appearing in getLocalGamersProperty() forever,
+        // breaking the AllGamers == LocalGamers UNION RemoteGamers invariant. Reachable in
+        // production via ENetBackend.cpp's RemoveGamer(locals[0], HostEndedSession) call.
+        if (isLocal)
+        {
+            localGamers_.Remove(static_cast<LocalNetworkGamer*>(gamer));
+        }
         remoteGamers_.Remove(gamer);
         allGamers_.Remove(gamer);
 
