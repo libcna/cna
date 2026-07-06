@@ -8,6 +8,7 @@ namespace Microsoft::Xna::Framework::Graphics
     BasicEffect::BasicEffect(GraphicsDevice& device)
         : Effect(device)
     {
+        DirectionalLight0.setEnabledProperty(true);
     }
 
     void BasicEffect::OnApply()

@@ -68,11 +68,11 @@ protected:
         }
 
         // --- VertexColorEnabled ---
-        check(fx.VertexColorEnabled == true, "VertexColorEnabled default true");
-        fx.VertexColorEnabled = false;
-        check(fx.VertexColorEnabled == false, "VertexColorEnabled set false");
+        check(fx.VertexColorEnabled == false, "VertexColorEnabled default false");
         fx.VertexColorEnabled = true;
         check(fx.VertexColorEnabled == true, "VertexColorEnabled set true");
+        fx.VertexColorEnabled = false;
+        check(fx.VertexColorEnabled == false, "VertexColorEnabled set false");
 
         // --- TextureEnabled ---
         check(fx.getTextureEnabledProperty() == false, "TextureEnabled default false");
@@ -153,15 +153,21 @@ protected:
 
         // --- DirectionalLight0 ---
         auto& light0 = fx.getDirectionalLight0Property();
-        check(!light0.getEnabledProperty(), "DirectionalLight0 default disabled");
+        check(light0.getEnabledProperty(), "DirectionalLight0 default enabled (matches FNA's BasicEffect ctor)");
         const Vector3 dir{0.0f, -1.0f, 0.0f};
         light0.setDirectionProperty(dir);
         check(veq(light0.getDirectionProperty(), dir), "DirectionalLight0 direction round-trip");
         const Vector3 dcol{1.0f, 1.0f, 0.8f};
         light0.setDiffuseColorProperty(dcol);
         check(veq(light0.getDiffuseColorProperty(), dcol), "DirectionalLight0 diffuse round-trip");
+        light0.setEnabledProperty(false);
+        check(!light0.getEnabledProperty(), "DirectionalLight0 disabled");
         light0.setEnabledProperty(true);
-        check(light0.getEnabledProperty(), "DirectionalLight0 enabled");
+        check(light0.getEnabledProperty(), "DirectionalLight0 re-enabled");
+
+        // --- DirectionalLight1 / DirectionalLight2 defaults ---
+        check(!fx.getDirectionalLight1Property().getEnabledProperty(), "DirectionalLight1 default disabled");
+        check(!fx.getDirectionalLight2Property().getEnabledProperty(), "DirectionalLight2 default disabled");
 
         // --- EnableDefaultLighting ---
         {
