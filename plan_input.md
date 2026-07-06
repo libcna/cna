@@ -41,17 +41,17 @@ For **every** input type, leave it in a state where:
 
 ## Per-type audit checklist (applied to every type task below)
 
-Each `A*-*` type task runs this uniform checklist:
-- [ ] **Enumerate** every public member of the CNA type (ctor / method / operator / property getter+setter /
+Each `A*-*` type task runs this uniform checklist (template — not tasks to tick):
+- **Enumerate** every public member of the CNA type (ctor / method / operator / property getter+setter /
   constant / static factory / enum value) from the header.
-- [ ] **Diff vs FNA** `<Type>.cs`: present / missing / extra; classify each strict-XNA vs EXT vs NOXNA.
-- [ ] **Verify behavior** of each member line-by-line against the FNA source (clamping, casts, layouts,
+- **Diff vs FNA** `<Type>.cs`: present / missing / extra; classify each strict-XNA vs EXT vs NOXNA.
+- **Verify behavior** of each member line-by-line against the FNA source (clamping, casts, layouts,
   overloads, defaults, exceptions).
-- [ ] **Doxygen**: every public member has a `/** @brief … */` block.
-- [ ] **Test existence**: name the dedicated test covering each member/overload/operator/constant; **add** a
+- **Doxygen**: every public member has a `/** @brief … */` block.
+- **Test existence**: name the dedicated test covering each member/overload/operator/constant; **add** a
   test for any member lacking one. Out-ref overloads tested separately; equality/`==`/`!=`/`Equals`,
   `GetHashCode`, `ToString` each tested (equal + unequal where applicable).
-- [ ] **Record** the result block (members, FNA file, tests confirmed/added, deviations, result, risk).
+- **Record** the result block (members, FNA file, tests confirmed/added, deviations, result, risk).
 
 ---
 
