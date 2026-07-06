@@ -34,7 +34,7 @@
 ## Phase P3 — powerful but platform-narrow / manual actuation
 - [ ] **N-013 `CNA::Input::Haptics`** — SDL_haptic force-feedback (constant/periodic/ramp/condition/custom + gain/autocenter).
 - [ ] **N-014 `CNA::Input::TextComposition`** — IME candidate lists (`SDL_EVENT_TEXT_EDITING_CANDIDATES`) + input-type hints.
-- [ ] **N-015 `CNA::Input::Sensor`** — device-level accelerometer/gyro (`SDL_sensor`).
+- [x] **N-015 `CNA::Input::Sensors`** — device-level accelerometer/gyro + enumeration (`SDL_sensor`) via seam.
 - [x] **N-016 `Mouse` capture / global-position EXT** — `SetCaptureEXT`, `GetGlobalPositionEXT`, `WarpGlobalEXT` via seam.
 - [x] **N-017 `CNA::Input::InputDevices`** — enumeration (mice/keyboards/touch id+name) via seam. Hot-plug events -> N-017b.
 - [ ] **N-017b `InputDevices` hot-plug events** — `SDL_EVENT_{MOUSE,KEYBOARD}_ADDED/REMOVED` multicast events (split off from N-017).
@@ -50,6 +50,17 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-015 done (2026-07-06):** `CNA::Input::Sensors` — host-device motion sensors (distinct from the
+  gamepad gyro/accel EXT). `GetSensorsEXT() -> vector<SensorInfoEXT{id,name,SensorTypeEXT}>` +
+  `GetAccelerometerEXT(out Vector3)`/`GetGyroscopeEXT(out Vector3)` (m/s² / rad/s), returning false
+  when absent. New public header `include/CNA/Input/Sensors.hpp` (enum `SensorTypeEXT` + struct
+  `SensorInfoEXT` w/ ==/!= + class). New injectable `ISystemSensorBackend` seam (real enumerates
+  `SDL_GetSensors`, maps SDL_SensorType<->EXT, and ReadSensor does open->`SDL_GetSensorData`->close
+  on the first matching sensor) with `SetSystemSensorBackendForTests`. Whole types NOXNA/additive
+  (no freeze pin). Named `Sensors` (plural, matches the plan's `Sensors::` shape + InputDevices
+  style). Tests `CnaInputSensorsTest` + `CnaInputSensorInfoEXTTest` drive a fake: enumeration
+  forwarding, accel/gyro sample reads, false-when-absent (out-param untouched), descriptor equality.
+  `ctest -L input` green; ASan-clean.
 - **N-016 done (2026-07-06):** `Mouse::SetCaptureEXT(bool)`, `GetGlobalPositionEXT(out x,y)`,
   `WarpGlobalEXT(x,y)` — mouse capture + desktop-global cursor position/warp. New injectable
   `ISystemMouseBackend` seam (real = `SDL_CaptureMouse`/`SDL_GetGlobalMouseState`/`SDL_WarpMouse
