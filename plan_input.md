@@ -488,10 +488,20 @@ mutable+advisory `IsReadOnly` (DEC / P5-001). **Members reviewed:** all. **Files
 no gap; corrected a false-alarm — FindById is genuine FNA API, not a missing NOXNA tag). **Behavior
 verified:** full member + FNA parity. **Remaining risk:** none.
 
-## A5-003 — `TouchPanelCapabilities` (struct) `[ ]`
-- [ ] FNA `Input/Touch/TouchPanelCapabilities.cs`; CNA `Touch/TouchPanelCapabilities.hpp`/`.cpp`; test
-  (`TouchInputTests.cpp` / `TouchEdgeCaseTests.cpp`).
-- [ ] Members: ctors, IsConnected, MaximumTouchCount. Per-member.
+## A5-003 — `TouchPanelCapabilities` (struct) `[x]`
+- [x] FNA `Input/Touch/TouchPanelCapabilities.cs`; CNA `Touch/TouchPanelCapabilities.hpp`/`.cpp`; test
+  `TouchInputTests.cpp`.
+- [x] Members: ctors, IsConnected, MaximumTouchCount. Per-member.
+
+**Result (2026-07-06):** **2 properties match FNA** `TouchPanelCapabilities.cs`: `IsConnected` →
+`getIsConnectedProperty`, `MaximumTouchCount` → `getMaximumTouchCountProperty`. CNA adds a default + 2-arg
+ctor, both `NOXNA` — correctly, since FNA/XNA has **no public constructor** (the properties have internal
+set); documented in the header. **Test map:** `TouchPanelCapabilitiesTest.DefaultConstructorProducesDisconnected
+ZeroCapacity` (default → IsConnected=false, MaxTouchCount=0) + `ParameterizedConstructorSetsConnectionAndMax
+TouchCount` (both properties set). Behavior at the `TouchPanel::GetCapabilities` level (MaxTouchCount=4
+connected / 0 disconnected, DEC-09) is covered by the GetCapabilities suites (A5-005). **Members reviewed:**
+2 props + 2 ctors. **Files changed:** none (perfect, no gap). **Behavior verified:** property + ctor parity.
+**Remaining risk:** none.
 
 ## A5-004 — `GestureSample` (struct) `[ ]`
 - [ ] FNA `Input/Touch/GestureSample.cs`; CNA `Touch/GestureSample.hpp`/`.cpp`; test `TouchInputTests.cpp`.
