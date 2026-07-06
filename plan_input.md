@@ -869,13 +869,22 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Deps:** none.
 
 #### INPUT-KBD-009 — SDL keycode-mode mapping completeness
-- **Priority:** P1 · **Status:** TODO · **Area:** Keyboard/Bridge
-- **Files:** `SdlInputBridge.cpp:456–595`, `SdlInputBridgeKeyboardTests.cpp`
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Keyboard/Bridge
+- **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Work:** Line-by-line diff `try_convert_sdl_key` vs FNA; cover letters/digits/numpad/oem/modifiers/
   function/media/locale fallbacks (², |, +, ø, æ, é→unmapped).
 - **Acceptance:** Diff empty or deviations documented; all groups tested.
 - **Tests:** extend keyboard bridge tests.
 - **Deps:** none.
+- **Result (2026-07-06):** Mechanically diffed CNA's `try_convert_sdl_key` (123 `case SDLK_… → Keys::…`
+  entries) against FNA's `INTERNAL_keyMap` (SDL3_FNAPlatform.cs:2358–2489, 123 entries). **All 122 shared
+  keycodes map to the identical `Keys` value** (zero value-mismatches); the only differences are the two
+  already-documented deviations — DEC-16 (`SDLK_UNKNOWN`: FNA→`Keys.None`, CNA drops) and DEC-17
+  (`SDLK_AC_BACK`→`Keys::Escape`, CNA-only convenience). Group coverage confirmed: the existing
+  `KeycodeMapCoversLettersDigitsNumpadOemModifiersFunctionAndMediaKeys` spans every group, and DEC-16/-17
+  each have a test. Added `LocaleUnmappedKeycodeIsDroppedNotMarkedNone` for the "é → unmapped" locale
+  fallback (é U+00E9 and CJK 中 U+4E2D drop cleanly; note that æ/ø/² resolve via named SDLK constants
+  present in *both* maps, so they are mapped, not dropped). `ctest -L input` 100% green.
 
 #### INPUT-KBD-010 — SDL scancode-mode mapping completeness
 - **Priority:** P1 · **Status:** TODO · **Area:** Keyboard/Bridge

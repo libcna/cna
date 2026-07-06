@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-KBD-009 — keycode map completeness audited:** mechanically diffed `try_convert_sdl_key` (123
+  entries) vs FNA `INTERNAL_keyMap` (123) — all 122 shared keycodes map identically; only deviations are
+  DEC-16 (`SDLK_UNKNOWN` drop) + DEC-17 (`SDLK_AC_BACK`→Escape). All groups tested; added
+  `LocaleUnmappedKeycodeIsDroppedNotMarkedNone` (é/中 → dropped). Verification + one test, no code change.
 - **INPUT-BUILD-009 — determinism gate standardized:** bumped the baked `CnaInputTests` command to
   `--gtest_shuffle --gtest_repeat=5` and documented `ctest -L input` as **the** required order-independence
   gate (why: process-wide input singletons). Green on EasyGL (×5 shuffled, 6.97s); backend-agnostic + run

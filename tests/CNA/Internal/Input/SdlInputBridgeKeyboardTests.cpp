@@ -147,6 +147,28 @@ TEST_F(SdlInputBridgeKeyboardTest, UnmappedKeycodeIsDroppedNotMarkedNone)
     EXPECT_EQ(Keyboard::GetState().GetPressedKeys().size(), 0u);
 }
 
+// INPUT-KBD-009: a locale/accented keycode with no XNA Keys equivalent (SDL delivers it as the raw
+// Unicode codepoint, and try_convert_sdl_key has no case for it) hits the default `nullopt` path and is
+// DROPPED — the DEC-16 policy again (never pollute the pressed set with Keys::None). This is the
+// "é → unmapped" locale fallback. A full line-by-line diff of the keycode map vs FNA's INTERNAL_keyMap is
+// byte-identical on all 122 shared keycodes; the only differences are DEC-16 (SDLK_UNKNOWN drop) and
+// DEC-17 (SDLK_AC_BACK → Escape). (Codepoints that DO resolve — e.g. æ/ø — correspond to named SDLK
+// constants present in both maps and are covered by the map itself, not here.)
+TEST_F(SdlInputBridgeKeyboardTest, LocaleUnmappedKeycodeIsDroppedNotMarkedNone)
+{
+    // é (U+00E9) and a CJK ideograph 中 (U+4E2D): printable codepoints with no named SDLK / map entry.
+    for (const SDL_Keycode kc : {SDL_Keycode{0xE9}, SDL_Keycode{0x4E2D}})
+    {
+        InputManager::ResetForTests();
+        SdlInputBridge::ProcessEvent(keyDownWithKeycode(kc));
+
+        EXPECT_FALSE(Keyboard::GetState().IsKeyDown(Keys::None))
+            << "locale keycode " << static_cast<unsigned>(kc) << " must not mark Keys::None";
+        EXPECT_EQ(Keyboard::GetState().GetPressedKeys().size(), 0u)
+            << "locale keycode " << static_cast<unsigned>(kc) << " must be dropped";
+    }
+}
+
 // DEC-17: SDLK_AC_BACK (the Android/browser Back button) maps to Keys::Escape. This is a CNA-only
 // convenience (FNA has no AC_BACK mapping) so "back" acts as cancel/exit on those platforms.
 TEST_F(SdlInputBridgeKeyboardTest, AndroidBackButtonMapsToEscape)
