@@ -888,11 +888,22 @@ bogus previous is possible). **Files changed:** `tests/CNA/Internal/Input/TouchE
 **Tests:** `TouchEdgeCaseTest.*` 21/21 pass. **Behavior verified:** previous-location honesty across all four
 transition classes. **Remaining risk:** none.
 
-## P5-009 — Verify repeated touch down
-- [ ] Test repeated Pressed with same id.
-- [ ] Decide whether it should replace, ignore, or transition.
-- [ ] Match FNA/XNA where possible.
-- [ ] Add regression tests.
+## P5-009 — Verify repeated touch down `[x]`
+- [x] Test repeated Pressed with same id.
+- [x] Decide whether it should replace, ignore, or transition.
+- [x] Match FNA/XNA where possible.
+- [x] Add regression tests.
+
+**Result (2026-07-06):** **Decision: REPLACE.** Verified against the production path
+(`SdlInputBridge.cpp:1426-1445`): a `FINGER_DOWN` resolves a stable touch id via `get_or_create_touch_id`
+(the id survives until `FINGER_UP`), then `SetTouchState(id, Pressed, pos)` overwrites in place — so a
+second down for the same finger updates the position and keeps the state `Pressed` (no duplicate slot, no
+premature Moved). SDL never emits down-after-down for a live finger (it guarantees down→motion→up), so this
+is a safe defensive superset of FNA rather than a divergence. **Strengthened**
+`RepeatedFingerDownWithSameIdOverwritesRatherThanDuplicates` to also assert the state stays `Pressed` (not
+transitioned) and that a fresh Pressed carries no previous location. **Files changed:**
+`tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp` (test hardened). **Tests:** pass. **Behavior verified:**
+repeated down = replace, single Pressed touch, last position wins. **Remaining risk:** none.
 
 ## P5-010 — Verify touch cancel behavior
 - [ ] Test SDL canceled finger event.

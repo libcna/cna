@@ -157,14 +157,21 @@ TEST_F(TouchEdgeCaseTest, UnknownReleasedFingerHasNoBogusPreviousAndClears)
     EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 0);
 }
 
+// P5-009: a repeated Pressed for the same finger id REPLACES (does not duplicate, ignore, or transition):
+// in production `get_or_create_touch_id` keeps the same touch id until FINGER_UP, so a second FINGER_DOWN
+// overwrites position while the state stays Pressed (no phantom second touch, no premature Moved). SDL
+// never actually emits down-after-down for a live finger, so this is a defensive superset of FNA.
 TEST_F(TouchEdgeCaseTest, RepeatedFingerDownWithSameIdOverwritesRatherThanDuplicates)
 {
     InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(10, 10));
     InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(20, 20));
 
+    TouchLocation prev;
     const TouchCollection state = InputManager::GetTouchState();
-    ASSERT_EQ(state.getCountProperty(), 1);
-    EXPECT_EQ(state[0].getPositionProperty(), Vector2(20, 20));
+    ASSERT_EQ(state.getCountProperty(), 1);                                // replaced, not duplicated
+    EXPECT_EQ(state[0].getStateProperty(), TouchLocationState::Pressed);   // still Pressed, not transitioned
+    EXPECT_EQ(state[0].getPositionProperty(), Vector2(20, 20));            // last position wins
+    EXPECT_FALSE(state[0].TryGetPreviousLocation(prev));                   // a fresh Pressed has no previous
 }
 
 TEST_F(TouchEdgeCaseTest, FingerIdReusedAfterReleaseStartsFresh)
