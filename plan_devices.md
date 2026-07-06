@@ -4979,7 +4979,7 @@ not an alternate spelling to preserve.
 
 ## 14. Final verification tasks
 
-### VERIFY-001 — Run the full Devices/Sensors test suite
+### VERIFY-001 — Run the full Devices/Sensors test suite — CLOSED (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** Verification
@@ -5004,6 +5004,28 @@ not an alternate spelling to preserve.
   cmake --build --preset devices-ubsan --target CnaTests
   ./cmake-build-devices-ubsan/CnaTests --gtest_filter='*Devices*:*Sensors*:*Vibrate*:*Accelerometer*:*Gyroscope*:*Compass*:*Motion*:*Android*:*ScopeExit*:*SensorBase*:*SensorFailed*:*SensorSubsystemOwnership*'
   ```
+- **Resolution:** Confirmed the established exact-suite-name filter
+  (`docs/devices-build.md`'s own documented command, from `DEV-BUILD-002`/
+  `DEV-BUILD-003`) still names exactly the 21 test suites that exist under
+  `tests/Microsoft/Devices/` today — cross-checked 1:1 against `find
+  tests/Microsoft/Devices -name '*.cpp'`'s current output (21 files, 21 suite names,
+  no mismatch either direction), so no filter update was needed despite the many test
+  files this session touched. Built fresh (`cmake --build cmake-build-debug --target
+  CnaTests`) and ran:
+  ```bash
+  ./cmake-build-debug/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
+  ```
+  **Result: `343 tests from 21 test suites ran. [PASSED] 341 tests. [SKIPPED] 2 tests`**
+  (`AccelerometerTests.GetCurrentValuePropertyDoesNotThrowWhenSupported`,
+  `GyroscopeTests.GetCurrentValuePropertyDoesNotThrowWhenSupported` — both
+  intentionally hardware-gated skips, unchanged from every prior session's baseline,
+  not a new or unexpected skip). **Zero failures.** This is up from `DEV-BUILD-002`'s
+  own recorded baseline of 313 tests (311 passed + 2 skips) — the +30 test growth
+  reflects every test this session's own tasks added (`ANDROID-BRIDGE-001`'s 3,
+  `READINGS-003`'s 2, plus the larger `VIB-002`/`VIB-009`/`ACCEL-006`/`GYRO-005`
+  additions from earlier in this same session, per `NEXT.md`'s running tallies) — all
+  now confirmed passing together in one full run, not just individually at the time
+  each was added.
 
 ### VERIFY-002 — Run sanitizer verification
 
