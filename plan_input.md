@@ -364,9 +364,20 @@ reviewed:** 2 props + 3 ctors + equality/hash + 3 dead-zone modes = all. **Files
 no gap). **Behavior verified:** dead-zone (None/IndependentAxes/Circular) + FNA hash. **Remaining risk:**
 none.
 
-## A4-004 — `GamePadTriggers` (struct) `[ ]`
-- [ ] FNA `Input/GamePadTriggers.cs`; CNA `GamePadTriggers.hpp`/`.cpp`; test `GamePadTriggersTests.cpp`.
-- [ ] Members: ctors, Left/Right clamp, `Equals`/`==`/`!=`, `GetHashCode`. Per-member.
+## A4-004 — `GamePadTriggers` (struct) `[x]`
+- [x] FNA `Input/GamePadTriggers.cs`; CNA `GamePadTriggers.hpp`/`.cpp`; test `GamePadTriggersTests.cpp`.
+- [x] Members: ctors, Left/Right clamp, `Equals`/`==`/`!=`, `GetHashCode`. Per-member.
+
+**Result (2026-07-06):** **Left/Right (float)** match FNA `GamePadTriggers.cs`. The 2-arg ctor clamps to
+`[0,1]` — FNA-faithful (`MathHelper.Clamp(x, 0, 1)`), pinned by `TwoArgConstructorClampsToZeroOneRange`.
+Ctors: default (NOXNA), 2-arg, private dead-zone ctor. **Equality is FNA-faithful:** verified FNA's
+`operator==` uses `MathHelper.WithinEpsilon` and CNA's `Equals` likewise uses `MathHelper::WithinEpsilon`
+(epsilon tolerance is **not** a deviation), pinned by `EqualityUsesEpsilonToleranceRatherThanExactFloatEquality`.
+`GetHashCode` → `GetHashCodeMatchesFloatBitHashSumFormula`. Dead-zone (trigger threshold) →
+`NonNoneDeadZoneModeExcludesTriggerThresholdThenClamps` + `...ZeroesValueWithinThreshold` +
+`NoneDeadZoneModePassesValueThroughClampedOnly`. **Members reviewed:** 2 props + 3 ctors + equality/hash +
+3 dead-zone = all. **Files changed:** none (perfect, no gap). **Behavior verified:** clamp + epsilon equality
+(FNA-faithful) + dead-zone + hash. **Remaining risk:** none.
 
 ## A4-005 — `GamePadCapabilities` (struct) `[ ]`
 - [ ] FNA `Input/GamePadCapabilities.cs`; CNA `GamePadCapabilities.hpp`/`.cpp`; test (GamePad suites).
