@@ -434,7 +434,7 @@ independent task instead of guessing.
     zero reports — confirms the `DialogContext`/fake-backend heap allocations are
     leak-free.
 
-### DEVICES-CNA-009 — `SystemTray`
+### DEVICES-CNA-009 — `SystemTray` — CLOSED (2026-07-07)
 
 - **Priority:** Low
 - **SDL3 API:** `SDL_tray.h` — `SDL_CreateTray`/`SDL_CreateTrayMenu`/
@@ -451,6 +451,49 @@ independent task instead of guessing.
 - **Acceptance criteria:** builds/tests pass; no leak of the underlying `SDL_Tray*`
   (verify under `devices-asan`).
 - **Suggested files:** new files only.
+- **Resolution:** Confirmed genuinely desktop-only by reading
+  `third_party/SDL/src/tray/` (`cocoa`/`unix`/`windows` only, no `android` directory,
+  unlike `FileDialog`'s corrected finding) and `third_party/SDL/CMakeLists.txt`'s own
+  per-platform tray-source selection — this claim, unlike `FileDialog`'s original one,
+  checked out as accurate. **Designed with a swappable backend from the very start
+  this time**, applying the lesson from `DEVICES-CNA-008`'s real `zenity` incident
+  before writing any test: `Detail::ITrayBackend` + `Detail::SdlTrayBackend`, deliberately
+  scoped to a flat, single-level menu (no submenus — `SDL_CreateTraySubmenu()` not
+  wrapped, matching this task's own "Low priority, niche value" framing). **Backend
+  injection had to be a constructor parameter, not a post-construction
+  `SetBackendForTesting()` call** (unlike `VibrateController`/`Compass`/`FileDialog`):
+  the real backend's `Create()` — which is what actually makes an OS-visible tray icon
+  appear — runs as soon as `SystemTray`'s constructor asks for it, so a fake must
+  already be in place *before* construction, not swapped in afterward. Added a second,
+  explicitly test-only constructor overload taking the backend directly.
+  - **A second real bug found by this task, this time via `devices-asan` rather than
+    by direct observation like the `zenity` incident:** an early draft of
+    `DestructorCallsDestroyOnTheInjectedFakeBackend` read a raw `FakeTrayBackend*`
+    pointer's `DestroyCalled` field *after* the owning `SystemTray` (and therefore the
+    backend it owned) had already gone out of scope and been destroyed — a genuine
+    heap-use-after-free, confirmed by ASan's full report (`SystemTrayTests.cpp:137`,
+    reading memory freed by `SystemTray::~SystemTray()` at `SystemTrayTests.cpp:135`).
+    **This did not crash or fail under the plain (non-sanitizer) `cmake-build-debug`
+    build at all** — a concrete, first-hand demonstration of exactly why this
+    project's sanitizer discipline exists, not a hypothetical risk. Fixed by adding a
+    `std::shared_ptr<bool> DestroyedFlag` to the fake backend, set from `Destroy()`,
+    checked via the test's own independently-owned `shared_ptr` copy (which safely
+    outlives the fake) rather than via the fake's own (about-to-be-freed) member.
+  - Added `tests/CNA/Devices/SystemTrayTests.cpp` (8 tests): construction/destruction
+    forwarding to the fake, tooltip forwarding, entry-add parameter forwarding and
+    index assignment, entry click-callback firing, and checked/enabled round-trips —
+    all exclusively via the fake backend; the real backend's actual OS-level tray
+    visibility is, as this task's own acceptance criteria anticipated, inherently
+    manual/human-observable and out of reach for an automated test — stated honestly,
+    not silently skipped.
+  - Build: `cmake --build cmake-build-debug --target CNA`/`--target CnaTests` (both
+    clean). Ran `SystemTrayTests.*` (8/8 pass, 0ms, confirmed via `ps aux` that no
+    real tray-related process/state was created). Re-ran under `devices-asan` with
+    `ASAN_OPTIONS=detect_leaks=1`: caught the real use-after-free above on the first
+    run (non-zero exit, full report captured); after the fix, 8/8 pass, exit code `0`,
+    zero reports. Full existing filter plus every `CNA::Devices` suite through this
+    task: 391 tests, 389 passed, 2 pre-existing expected skips, zero regressions.
+    **All of Phases 1-3 are now complete.**
 
 ---
 
@@ -487,6 +530,16 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — DEVICES-CNA-009 CLOSED. Phases 1-3 complete.** `CNA::Devices::SystemTray`
+  implemented with a swappable `Detail::ITrayBackend` designed in from the start
+  (learned from `DEVICES-CNA-008`'s incident). Confirmed genuinely desktop-only this
+  time (no Android tray backend exists, unlike `FileDialog`). **Caught a second real
+  bug via `devices-asan`:** a use-after-free in the test file itself (reading a freed
+  fake backend's field after its owning `SystemTray` was destroyed) that the plain
+  non-sanitizer build did not catch at all — fixed with an externally-owned
+  `shared_ptr<bool>` flag. 8 tests, ASan clean after the fix. Full suite 391/391 (389
+  pass + 2 expected skips). Next: `DEVICES-CNA-010` (`Camera` design note, Phase 4 —
+  no implementation).
 - **2026-07-07 — DEVICES-CNA-008 CLOSED.** `CNA::Devices::FileDialog` implemented, with
   a real platform-support correction found by reading `third_party/SDL/src/dialog/`
   directly (Android has a real backend — "desktop-only" was wrong; corrected in
