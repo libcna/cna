@@ -1068,39 +1068,43 @@ fires `Mouse::INTERNAL_onClicked(button-1)` (zero-based); logical↔window conve
 relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-derived and leaks SDL types.
 
 #### INPUT-MOUSE-001 — `Mouse.GetState()` position/buttons/scroll
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse
 - **Files:** `Mouse.cpp`, `InputManager.cpp`
 - **Work:** Verify all 5 buttons + X/Y + scroll reflect events.
 - **Acceptance:** All fields correct.
 - **Tests:** existing `MouseTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `Mouse.GetState()` position/buttons/scroll are covered by `MouseTest.GetStateReflectsPositionAndButtonsFromInputManager` and `GetStateReflectsScrollWheelDelta`.
 #### INPUT-MOUSE-002 — `Mouse.SetPosition(x,y)` logical→window
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse
 - **Files:** `Mouse.cpp`
 - **Work:** Verify logical coords convert to window coords via the graphics transform; test with letterbox.
 - **Acceptance:** Warp lands at expected window pixel (unit-level).
 - **Tests:** existing letterbox conversion cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `SetPosition` logical→window is covered by `MouseTest.SetPositionUpdatesGetState`, `SetPositionConvertsLogicalToWindowForLetterboxedRenderer`, and `SetPositionHandlesLetterboxOffsetNotJustScale`.
 #### INPUT-MOUSE-003 — WindowHandle plumbing (uintptr_t, no SDL leak)
-- **Priority:** P3 · **Status:** TODO · **Area:** Mouse
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Mouse
 - **Files:** `Mouse.hpp/.cpp`
 - **Work:** Verify get/set round-trip; SDL_Window* confined to .cpp.
 - **Acceptance:** Round-trips; no SDL in header.
 - **Tests:** existing + INPUT-API-030.
 - **Deps:** none.
 
+- **Result (2026-07-06):** WindowHandle is a `std::uintptr_t` (frozen by `PublicApiInputSignatureFreezeTests`); the no-SDL-leak property is enforced by the `PublicApiInputCompileTests` `#error` guard (INPUT-API-030), and it is exercised in `MouseInputTests`. No SDL type crosses the public boundary.
 #### INPUT-MOUSE-004 — Null / unset window behavior
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse
 - **Files:** `Mouse.cpp`
 - **Work:** Confirm GetState/SetPosition behave safely with no window set (no crash).
 - **Acceptance:** Safe no-op / defined behavior.
 - **Tests:** new no-window case (may GTEST_SKIP if requires display).
 - **Deps:** none.
 
+- **Result (2026-07-06):** Null/unset-window behavior is covered by `MouseTest.GetIsRelativeMouseModeEXTDefaultsToFalseWithNoWindow` and `SetRelativeMouseModeIsSafeNoOpWithNoWindow`; button/motion events with `windowID 0` pass raw coords through (`to_logical_position` null-window path, exercised across the bridge mouse tests).
 #### INPUT-MOUSE-005 — High-DPI / logical vs window coordinates
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse/Platform
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse/Platform
 - **Files:** `Mouse.cpp`, `SdlInputBridge.cpp` (`to_logical_position`)
 - **Problem:** Motion events convert via `SDL_RenderCoordinatesFromWindow` / backend transform. High-DPI
   correctness is unverified on a real HiDPI display.
@@ -1109,14 +1113,16 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Tests:** conversion unit test.
 - **Deps:** none.
 
+- **Result (2026-07-06):** The logical↔window conversion is unit-tested via the letterbox/offset SetPosition cases (`SetPositionConvertsLogicalToWindowForLetterboxedRenderer`, `SetPositionHandlesLetterboxOffsetNotJustScale`) with a real SDL_Renderer; true high-DPI (device-pixel-ratio) correctness is display-dependent and flagged for manual verification in `docs/platform-input-notes.md`.
 #### INPUT-MOUSE-006 — Relative mouse mode default & accumulation
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse
 - **Files:** `Mouse.cpp`, `InputManager.cpp`
 - **Work:** Verify default off; enabling accumulates deltas; GetState drains to 0; round-trip toggle flushes.
 - **Acceptance:** Matches existing relative-mode cases.
 - **Tests:** existing relative-mode cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Relative mode is covered by `GetIsRelativeMouseModeEXTDefaultsToFalseWithNoWindow`, `RelativeModeAccumulatesDeltaAndDrainsOnRead`, `SetIsRelativeMouseModeEXTSyncsInputManagerDeltaHandling`, and `SetPositionIsNoOpWhenRelativeModeEnabled` — default off, accumulate, drain-on-read, and toggle all pinned.
 #### INPUT-MOUSE-007 — External SDL relative-mode desync (suspected)
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-14 — accept, getter is live; cache is internal) · **Area:** Mouse
 - **Files:** `Mouse.cpp`, `InputManager.cpp`, `docs/input-fna-fidelity.md`
@@ -1127,29 +1133,32 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Deps:** none.
 
 #### INPUT-MOUSE-008 — Button state transitions (all 5)
-- **Priority:** P3 · **Status:** TODO · **Area:** Mouse/Bridge
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Mouse/Bridge
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify Left/Right/Middle/X1/X2 down/up map correctly.
 - **Acceptance:** All transitions correct.
 - **Tests:** existing mouse bridge tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Added `SdlInputBridgeMouseButtonStateTest.AllFiveButtonsTransitionThroughBridge`: drives SDL_EVENT_MOUSE_BUTTON_DOWN/UP for all five buttons through the real bridge and asserts each transitions Pressed↔Released while the others stay Released.
 #### INPUT-MOUSE-009 — XButton1/XButton2 mapping
-- **Priority:** P3 · **Status:** TODO · **Area:** Mouse/Bridge
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Mouse/Bridge
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Confirm SDL X1/X2 → XNA XButton1/2.
 - **Acceptance:** Correct.
 - **Tests:** extend mouse bridge tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** XButton1/XButton2 map end-to-end on both paths: the ClickedEXT index path (`ButtonDownFiresClickedEXTWithZeroBasedIndex`) and the button-state path (the new `AllFiveButtonsTransitionThroughBridge`).
 #### INPUT-MOUSE-010 — Wheel value & XNA 120-unit convention
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse/Bridge
 - **Files:** `SdlInputBridge.cpp:1248`
 - **Work:** Verify whole notches ×120, fractional sub-notch truncated (int cast before ×120), accumulation.
 - **Acceptance:** Matches FNA notch truncation.
 - **Tests:** existing `SdlInputBridgeMouseWheelTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** The XNA 120-unit wheel convention is covered by the `SdlInputBridgeMouseWheelTest` suite (whole notches ×120, zero delta, horizontal ignored, fractional sub-notch truncated-before-scaling, repeated accumulation).
 #### INPUT-MOUSE-011 — Horizontal wheel policy (dropped)
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-18) · **Area:** Mouse/Bridge
 - **Files:** `SdlInputBridge.cpp:1249–1258`
@@ -1160,21 +1169,23 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Deps:** none.
 
 #### INPUT-MOUSE-012 — Motion events → position + relative delta
-- **Priority:** P3 · **Status:** TODO · **Area:** Mouse/Bridge
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Mouse/Bridge
 - **Files:** `SdlInputBridge.cpp:1195`
 - **Work:** Verify motion sets logical pos and feeds relative delta (only counted when relative mode on).
 - **Acceptance:** Correct.
 - **Tests:** extend mouse bridge tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Motion → position + relative delta is covered by `GetStateReflectsPositionAndButtonsFromInputManager` (position) and `RelativeModeAccumulatesDeltaAndDrainsOnRead` (relative delta accumulation).
 #### INPUT-MOUSE-013 — `ClickedEXT` behavior + no-subscriber safety
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse/EXT
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse/EXT
 - **Files:** `Mouse.cpp`
 - **Work:** Verify down fires zero-based `ClickedEXT`; up does not; no-subscriber is safe.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing `OnClicked*` cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `ClickedEXT` is covered by `InternalOnClickedFiresClickedEXTWithButtonIndex`, `ClickedEXTIsMulticastAndInvokesAllSubscribersInOrder`, `ClickedEXTAssignmentReplacesAllSubscribers`, and `InternalOnClickedIsSafeWithNoSubscriber`.
 #### INPUT-MOUSE-014 — `ClickedEXT` single vs multicast decision
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-06 — multicast) · **Area:** Mouse/EXT
 - **Files:** `Mouse.hpp`, `docs/input-fna-fidelity.md`
@@ -1185,15 +1196,16 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Deps:** none.
 
 #### INPUT-MOUSE-015 — `MouseState` value semantics
-- **Priority:** P3 · **Status:** TODO · **Area:** Mouse
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Mouse
 - **Files:** `MouseState.cpp`
 - **Work:** Verify ctor slots, `Equals/==/!=`, hash consistency, `ToString` content format vs FNA.
 - **Acceptance:** All parity cases pass.
 - **Tests:** existing `MouseStateTest`.
 - **Deps:** INPUT-API-016.
 
+- **Result (2026-07-06):** `MouseState` value semantics are covered by the 10-case `MouseStateTest` suite (default ctor, 8-arg ctor field placement, equality/operators for each differing field, GetHashCode formula + consistency, ToString none/multi-button ordering).
 #### INPUT-MOUSE-016 — `MouseCursor` lifecycle & disposal
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse/CNA
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse/CNA
 - **Files:** `MouseCursor.cpp`
 - **Work:** Verify owning vs non-owning destruction, idempotent Dispose, move ctor/assign ownership transfer,
   stock singletons not destroyed.
@@ -1201,14 +1213,16 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Tests:** existing `MouseCursorTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `MouseCursor` lifecycle/disposal is covered by `MouseCursorTest` (default ctor non-null owning, Dispose releases + idempotent, non-owning ctor no-destroy, move-ctor/assignment ownership transfer, color-cursor survives source buffer).
 #### INPUT-MOUSE-017 — System cursor singletons
-- **Priority:** P3 · **Status:** TODO · **Area:** Mouse/CNA
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Mouse/CNA
 - **Files:** `MouseCursor.cpp`
 - **Work:** Verify 12 stock getters return non-null stable singletons; disposing a stock is a no-op.
 - **Acceptance:** Stable identity.
 - **Tests:** existing cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** System-cursor singletons are covered by `StockCursorsAreNonNullWhenVideoAvailable`, `StockCursorGetterReturnsTheSameInstanceOnRepeatedCalls`, and `DisposingAStockSingletonIsANoOpAndKeepsItUsable`.
 #### INPUT-MOUSE-018 — `MouseCursor` SDL-in-public-header decision
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Mouse/API/Guardrail
 - **Files:** `MouseCursor.hpp`, `MouseCursor.cpp`, `PublicApiInputCompileTests.cpp`
@@ -1234,7 +1248,7 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
   ("except where explicitly intended"); the SDL *header/definition* no longer reaches consumers.
 
 #### INPUT-MOUSE-019 — `FromTexture2D` validation
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse/CNA
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse/CNA
 - **Files:** `MouseCursor.cpp`
 - **Work:** Verify Color/ColorSrgb accepted, non-Color rejected, origin-outside-texture throws, cursor
   survives source buffer free.
@@ -1242,6 +1256,7 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Tests:** existing `FromTexture2D` cases (some GTEST_SKIP headless).
 - **Deps:** none.
 
+- **Result (2026-07-06):** `FromTexture2D` validation is covered by `FromTexture2DCreatesCursorFromColorTexture`, `FromTexture2DAcceptsColorSrgbTexture`, `FromTexture2DRejectsNonColorSurfaceFormat`, and `FromTexture2DThrowsWhenOriginIsOutsideTheTexture`.
 #### INPUT-MOUSE-020 — SDL init assumptions for cursor creation
 - **Priority:** P2 · **Status:** TODO · **Area:** Mouse/Platform
 - **Files:** `MouseCursor.cpp`
@@ -1252,13 +1267,14 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Deps:** none.
 
 #### INPUT-MOUSE-021 — `SetCursor` behavior incl. disposed cursor
-- **Priority:** P3 · **Status:** TODO · **Area:** Mouse/CNA
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Mouse/CNA
 - **Files:** `Mouse.cpp`
 - **Work:** Verify SetCursor applies; disposed cursor → no-op (no crash).
 - **Acceptance:** Matches existing case.
 - **Tests:** existing `SetCursor disposed no-op`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `SetCursor` incl. disposed cursor is covered by `SetCursorIsSafeNoOpForDisposedCursor` (and the stock-singleton no-op disposal case).
 #### INPUT-MOUSE-022 — Wayland/macOS/Windows cursor & warp caveats
 - **Priority:** P2 · **Status:** TODO · **Area:** Mouse/Platform
 - **Files:** `docs/platform-input-notes.md`

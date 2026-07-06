@@ -10,10 +10,14 @@
 
 #include <SDL3/SDL.h>
 
+#include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 
+using CNA::Internal::Input::InputManager;
 using CNA::Internal::Input::SdlInputBridge;
+using Microsoft::Xna::Framework::Input::ButtonState;
 using Microsoft::Xna::Framework::Input::Mouse;
 
 namespace
@@ -55,6 +59,42 @@ TEST(SdlInputBridgeMouseTest, ButtonDownFiresClickedEXTWithZeroBasedIndex)
     }
 
     Mouse::ClickedEXT = nullptr;
+}
+
+// INPUT-MOUSE-008 / -009: every one of the five mouse buttons transitions Pressed↔Released end-to-end
+// through the real SDL bridge (SDL_EVENT_MOUSE_BUTTON_DOWN/UP → InputManager → MouseState), and only the
+// pressed button reads Pressed. Complements the InputManager-level GetStateReflectsPositionAndButtons and
+// covers the X1/X2 mapping (MOUSE-009) on the state path, not just the ClickedEXT index path.
+TEST(SdlInputBridgeMouseButtonStateTest, AllFiveButtonsTransitionThroughBridge)
+{
+    struct Case { Uint8 sdlButton; ButtonState (Microsoft::Xna::Framework::Input::MouseState::*getter)() const; const char* name; };
+    using MS = Microsoft::Xna::Framework::Input::MouseState;
+    const Case cases[] = {
+        {SDL_BUTTON_LEFT,   &MS::getLeftButtonProperty,    "Left"},
+        {SDL_BUTTON_RIGHT,  &MS::getRightButtonProperty,   "Right"},
+        {SDL_BUTTON_MIDDLE, &MS::getMiddleButtonProperty,  "Middle"},
+        {SDL_BUTTON_X1,     &MS::getXButton1Property,      "XButton1"},
+        {SDL_BUTTON_X2,     &MS::getXButton2Property,      "XButton2"},
+    };
+
+    for (const Case& c : cases)
+    {
+        InputManager::ResetForTests();
+
+        SdlInputBridge::ProcessEvent(mouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_DOWN, c.sdlButton));
+        const auto down = Mouse::GetState();
+        EXPECT_EQ((down.*c.getter)(), ButtonState::Pressed) << c.name << " should be Pressed after DOWN";
+        // every OTHER button stays Released
+        for (const Case& o : cases)
+            if (o.sdlButton != c.sdlButton)
+                EXPECT_EQ((down.*o.getter)(), ButtonState::Released)
+                    << o.name << " must stay Released while only " << c.name << " is down";
+
+        SdlInputBridge::ProcessEvent(mouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_UP, c.sdlButton));
+        EXPECT_EQ((Mouse::GetState().*c.getter)(), ButtonState::Released) << c.name << " should be Released after UP";
+    }
+
+    InputManager::ResetForTests();
 }
 
 TEST(SdlInputBridgeMouseTest, ButtonUpDoesNotFireClickedEXT)

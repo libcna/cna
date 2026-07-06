@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-MOUSE cluster verified (16 tasks) + all-5-button bridge test:** mapped MOUSE-001/002/003/004/005/
+  006/008/009/010/012/013/015/016/017/019/021 to the existing 39-case mouse suites (all backed) and added
+  `AllFiveButtonsTransitionThroughBridge` (SDL DOWN/UP for all 5 buttons → MouseState transitions) to close
+  the one real gap (button-state all-5 through the bridge, incl. X1/X2). No production code change.
 - **INPUT-KBD-021/022 — window events + event-pump freshness:** window lifecycle events (minimize/restore/
   maximize/close/focus) fall through the bridge as no-ops and don't corrupt keyboard state (new
   `WindowLifecycleEventsDoNotCorruptKeyboardState`); added an authoritative "Event-pump freshness" note to
