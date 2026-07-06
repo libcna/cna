@@ -417,14 +417,20 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Deps:** none.
 
 #### INPUT-API-010 — Matrix: `GamePadCapabilities` (struct, XNA+EXT) — PARTIAL
-- **Priority:** P2 · **Status:** TODO · **Area:** API
-- **Files:** `GamePadCapabilities.hpp/.cpp`
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
+- **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp` (`GamePadCapabilitiesTest`, verified)
 - **Problem:** No `==`/`GetHashCode`/`ToString`; setters are `NOXNA` (FNA `internal set`); 10 EXT props.
 - **Work:** Confirm FNA has no equality/ToString on this struct (record as expected); verify every
   getter/setter round-trips; classify each EXT prop.
 - **Acceptance:** Matrix filled; absence of equality justified against FNA.
 - **Tests:** existing capability tests + per-EXT round-trip.
 - **Deps:** none.
+- **Result (2026-07-06):** FNA `GamePadCapabilities.cs` has **no** `operator==`/`!=`, `Equals`, `GetHashCode`,
+  or `ToString` (plain struct with `internal set` accessors), so CNA correctly declares none — the setters
+  are `NOXNA` (mapping FNA's `internal set`) and the parity tool (INPUT-API-027) does not flag any missing
+  member. `GamePadCapabilitiesTest.EveryGetterAndSetterRoundTrips` exhaustively round-trips every standard
+  getter/setter **and** all 10 EXT props (LightBar, TriggerVibrationMotors, Misc1, Paddle1–4, TouchPad,
+  Gyro, Accelerometer); `DefaultConstructorHasAllFlagsFalseAndTypeUnknown` pins the default. No code change.
 
 #### INPUT-API-011 — Matrix: `GamePadState` (struct, XNA) — COVERED
 - **Priority:** P2 · **Status:** TODO · **Area:** API
@@ -522,13 +528,19 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Deps:** none.
 
 #### INPUT-API-022 — Matrix: `GestureSample` (struct, XNA+EXT) — PARTIAL
-- **Priority:** P2 · **Status:** TODO · **Area:** API
-- **Files:** `Touch/GestureSample.hpp/.cpp`
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
+- **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` (`GestureSampleTest`, verified)
 - **Problem:** No `==`/hash/ToString (verify FNA also lacks them); FingerId EXT props.
 - **Work:** Fill matrix; verify all 6 getters + 2 EXT getters; confirm 3 ctors.
 - **Acceptance:** Matrix filled; equality absence justified vs FNA.
 - **Tests:** existing `GestureSampleTest` + property assertions.
 - **Deps:** none.
+- **Result (2026-07-06):** FNA `GestureSample.cs` is a plain value struct with **no** `operator==`/`!=`,
+  `Equals`, `GetHashCode`, or `ToString`, so CNA correctly declares none (parity tool does not flag it).
+  `GestureSampleTest` covers all 6 XNA getters (`GestureType`, `Timestamp`, `Position`, `Position2`,
+  `Delta`, `Delta2`) plus the 2 `NOXNA` `FingerId(2)EXT` getters, and all 3 constructors: the `NOXNA`
+  default (zeroed/None), the public 6-arg (finger ids default to `NO_FINGER`), and the `NOXNA` 8-arg with
+  explicit finger ids. No code change.
 
 #### INPUT-API-023 — Matrix: `TouchLocation` (struct, XNA) — COVERED (add TryGetPreviousLocation test)
 - **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API

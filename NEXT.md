@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-API-010 / -022 — PARTIAL matrix tasks verified DONE:** `GamePadCapabilities` and `GestureSample`
+  — confirmed FNA declares no `==`/`Equals`/`GetHashCode`/`ToString` on either (plain structs), so CNA's
+  absence is correct; existing tests already exhaustively cover every getter/setter (incl. all 10
+  capability EXT props) and all constructors. Verification-only, no code change.
 - **INPUT-API-006 / -023 — value-type coverage verified + extended:** confirmed `GamePadButtons` needs no
   `ToString` (FNA `ValueType` default; already fully covered) and closed the two `TouchLocation` gaps —
   added `EqualityDistinguishesPreviousStateAndPosition` and `ToStringMatchesFnaFormatExactly` to
