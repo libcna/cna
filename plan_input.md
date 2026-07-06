@@ -929,8 +929,18 @@ list (which throws `NullReferenceException` on mutate) — P5-001, documented. *
 verified). **Behavior verified:** all members' logic matches FNA modulo the documented container deviations.
 **Remaining risk:** none.
 
-## L-011 — `TouchLocation.cpp` logic `[ ]`
-- [ ] TryGetPreviousLocation both paths, Equals (all 5 fields), Id+Position hash, ToString format vs FNA.
+## L-011 — `TouchLocation.cpp` logic `[x]`
+- [x] TryGetPreviousLocation both paths, Equals (all 5 fields), Id+Position hash, ToString format vs FNA.
+
+**Result (2026-07-06):** **Byte-identical to FNA `TouchLocation.cs`** — no fix. Ctors: default (Invalid),
+3-arg (prev = Invalid/Zero), 5-arg (stores prev). `TryGetPreviousLocation` writes the out-param on **every**
+path (`TouchLocation(id_, prevState_, prevPosition_)`) then returns `prevState_ != Invalid` — semantically
+identical to FNA (which returns `previousLocation.State != Invalid`, and `previousLocation.State == prevState`
+by construction); DEC-12. `Equals` compares **all 5 fields** (id/position/state/prevPosition/prevState) ≡ FNA
+`TouchLocation.cs:80-86`. `GetHashCode` = `id_ + position_.GetHashCode()` ≡ FNA `Id.GetHashCode() +
+Position.GetHashCode()` (int hash = the int). `ToString` = `"{Position:" + position_.ToString() + "}"` ≡ FNA.
+**Files changed:** none (logic verified). **Behavior verified:** previous-location both paths + 5-field
+equality + hash + ToString all match FNA. **Remaining risk:** none.
 
 ## L-012 — `TouchPanel.cpp` logic `[ ]`
 - [ ] GetState slot vs InputManager path + MAX_TOUCHES cap, GetCapabilities, SetFinger release/press
