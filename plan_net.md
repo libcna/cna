@@ -924,11 +924,33 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `AvailableNetworkSessionTest.EqualityExcludesQualityOfServiceAndSessionProperties`). Full suite:
   **3270/3272 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 5.10** — Add thorough `PacketReader`/`PacketWriter` round-trip tests beyond math types:
+- [x] **Task 5.10** — Add thorough `PacketReader`/`PacketWriter` round-trip tests beyond math types:
   `Byte`/`SByte`/`Int16`/`UInt16`/`UInt32`/`Int64`/`UInt64`/`String`, boundary values (`Int64`
   min/max), multi-byte/Unicode string content, and EOF/underrun behavior verified through
   `PacketReader` itself (not just relying on `sharp-runtime`'s own separate test suite for the
-  underlying `BinaryReader`/`BinaryWriter`).
+  underlying `BinaryReader`/`BinaryWriter`). Added 12 new tests to `PacketReaderWriterTests.cpp`:
+  `ByteRoundtrip`, `SByteRoundtrip`, `Int16Roundtrip`, `UInt16Roundtrip`, `UInt32Roundtrip`,
+  `Int64RoundtripBoundaryValues` (both `INT64_MIN` and `INT64_MAX`), `UInt64Roundtrip`,
+  `StringRoundtripAscii`, `StringRoundtripEmpty`, `StringRoundtripMultiByteUnicodeContent` (Czech
+  diacritics plus a 4-byte emoji, so the 7-bit-encoded length prefix must count encoded UTF-8 bytes
+  rather than code points — confirmed correct), `ReadingPastEndOfBufferThrows` and
+  `ReadingPartialValueAtEndOfBufferThrows` (underrun exactly at the buffer boundary vs. mid-value).
+  All go through `PacketWriter`→`PacketReader` round-trips (or `PacketReader` directly for the
+  underrun cases), not sharp-runtime's own `BinaryReader`/`BinaryWriter` test suite, so a future
+  regression in how `PacketReader`/`PacketWriter` wire up to those bases would be caught here too.
+
+  Confirmed current EOF/underrun behavior: `BinaryReader::ReadBytes` throws
+  `std::runtime_error("Unexpected end of stream.")`, not `System::IO::EndOfStreamException` (which
+  already exists in `sharp-runtime` with its own tests, but is never actually thrown anywhere) —
+  real .NET's `BinaryReader` throws `EndOfStreamException` specifically. This is a `sharp-runtime`
+  change (touches `BinaryReader.cpp`, an existing file) and per this repo's own convention (see
+  Task 4.4) requires asking the user before modifying existing `sharp-runtime` files — logged as
+  **Task 6.10** below instead of fixed here, consistent with Task 4.4/4.5/6.6 being deferred for the
+  same reason. Tests above assert today's actual thrown type (`std::runtime_error`) so they'll
+  force an intentional update (not a silent behavior change) whenever Task 6.10 lands.
+
+  Pure test-coverage addition, no revert-verify applies. Full suite: **3282/3284 passing** (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 5.11** — Add negative-capacity tests for `PacketReader(int)`/`PacketWriter(int)`. Real
   .NET's `MemoryStream(int capacity)` throws `ArgumentOutOfRangeException` for a negative value
@@ -1049,6 +1071,16 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   access modifier (`{ get; private set; }`, not `internal`) — a minor doc-accuracy fix, not a
   behavior change, but worth correcting so future readers don't misunderstand what CNA's `NOXNA
   SetHasLeftSession()` extension is actually restoring vs. adding.
+
+- [ ] **Task 6.10** — Investigate and fix (in `sharp-runtime`, coordinating per that repo's own
+  modification rule — see Task 4.4) `BinaryReader::ReadBytes` throwing plain
+  `std::runtime_error("Unexpected end of stream.")` on premature end-of-stream instead of
+  `System::IO::EndOfStreamException`, which already exists in `sharp-runtime` (with its own passing
+  tests in `IOTests.cpp`) but is never actually thrown by `BinaryReader` anywhere. Real .NET's
+  `BinaryReader` throws `EndOfStreamException` specifically for this case. Discovered while writing
+  Task 5.10's `PacketReader` underrun tests (`ReadingPastEndOfBufferThrows`,
+  `ReadingPartialValueAtEndOfBufferThrows`), which currently assert the actual (wrong-type)
+  `std::runtime_error` — update those two tests to expect `EndOfStreamException` once this lands.
 
 ---
 

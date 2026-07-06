@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <limits>
+#include <string>
+
 #include "Microsoft/Xna/Framework/Net/PacketReader.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 
@@ -185,4 +188,105 @@ TEST(PacketReaderWriterTest, Vector4Roundtrip) {
     PacketReader r = MakeReaderFromWriter(w);
     Vector4 result = r.ReadVector4();
     EXPECT_EQ(result, v);
+}
+
+// Task 5.10: round-trip coverage for the primitive overloads PacketReader/PacketWriter inherit
+// from BinaryReader/BinaryWriter, exercised through PacketReader/PacketWriter themselves rather
+// than only relying on sharp-runtime's own separate BinaryReader/BinaryWriter test suite - so a
+// regression in how PacketReader/PacketWriter wire up to those bases (e.g. a bad `using` or a
+// hiding override) would be caught here even if the base classes' own tests still pass.
+
+TEST(PacketReaderWriterTest, ByteRoundtrip) {
+    PacketWriter w;
+    w.Write(static_cast<uint8_t>(200));
+    PacketReader r = MakeReaderFromWriter(w);
+    EXPECT_EQ(r.ReadByte(), 200);
+}
+
+TEST(PacketReaderWriterTest, SByteRoundtrip) {
+    PacketWriter w;
+    w.Write(static_cast<int8_t>(-100));
+    PacketReader r = MakeReaderFromWriter(w);
+    EXPECT_EQ(r.ReadSByte(), -100);
+}
+
+TEST(PacketReaderWriterTest, Int16Roundtrip) {
+    PacketWriter w;
+    w.Write(static_cast<int16_t>(-12345));
+    PacketReader r = MakeReaderFromWriter(w);
+    EXPECT_EQ(r.ReadInt16(), -12345);
+}
+
+TEST(PacketReaderWriterTest, UInt16Roundtrip) {
+    PacketWriter w;
+    w.Write(static_cast<uint16_t>(60000));
+    PacketReader r = MakeReaderFromWriter(w);
+    EXPECT_EQ(r.ReadUInt16(), 60000);
+}
+
+TEST(PacketReaderWriterTest, UInt32Roundtrip) {
+    PacketWriter w;
+    w.Write(static_cast<uint32_t>(4000000000U));
+    PacketReader r = MakeReaderFromWriter(w);
+    EXPECT_EQ(r.ReadUInt32(), 4000000000U);
+}
+
+TEST(PacketReaderWriterTest, Int64RoundtripBoundaryValues) {
+    PacketWriter wMin;
+    wMin.Write(std::numeric_limits<int64_t>::min());
+    PacketReader rMin = MakeReaderFromWriter(wMin);
+    EXPECT_EQ(rMin.ReadInt64(), std::numeric_limits<int64_t>::min());
+
+    PacketWriter wMax;
+    wMax.Write(std::numeric_limits<int64_t>::max());
+    PacketReader rMax = MakeReaderFromWriter(wMax);
+    EXPECT_EQ(rMax.ReadInt64(), std::numeric_limits<int64_t>::max());
+}
+
+TEST(PacketReaderWriterTest, UInt64Roundtrip) {
+    PacketWriter w;
+    w.Write(std::numeric_limits<uint64_t>::max());
+    PacketReader r = MakeReaderFromWriter(w);
+    EXPECT_EQ(r.ReadUInt64(), std::numeric_limits<uint64_t>::max());
+}
+
+TEST(PacketReaderWriterTest, StringRoundtripAscii) {
+    PacketWriter w;
+    w.Write(std::string("hello packet"));
+    PacketReader r = MakeReaderFromWriter(w);
+    EXPECT_EQ(r.ReadString(), "hello packet");
+}
+
+TEST(PacketReaderWriterTest, StringRoundtripEmpty) {
+    PacketWriter w;
+    w.Write(std::string(""));
+    PacketReader r = MakeReaderFromWriter(w);
+    EXPECT_EQ(r.ReadString(), "");
+}
+
+TEST(PacketReaderWriterTest, StringRoundtripMultiByteUnicodeContent) {
+    // UTF-8 multi-byte content: Czech "Příliš žluťoučký kůň" plus a 4-byte emoji, so the
+    // 7-bit-encoded length prefix must count encoded bytes, not code points.
+    const std::string unicode = "P\xc5\x99\xc3\xadli\xc5\xa1 \xc5\xbelu\xc5\xa5ou\xc4\x8dk\xc3\xbd k\xc5\xaf\xc5\x88 \xf0\x9f\x8e\xae";
+    PacketWriter w;
+    w.Write(unicode);
+    PacketReader r = MakeReaderFromWriter(w);
+    EXPECT_EQ(r.ReadString(), unicode);
+}
+
+TEST(PacketReaderTest, ReadingPastEndOfBufferThrows) {
+    PacketWriter w;
+    w.Write(static_cast<int32_t>(1));
+    PacketReader r = MakeReaderFromWriter(w);
+    (void) r.ReadInt32();
+    EXPECT_THROW((void) r.ReadByte(), std::runtime_error);
+}
+
+TEST(PacketReaderTest, ReadingPartialValueAtEndOfBufferThrows) {
+    PacketWriter w;
+    // Two bytes on the wire, but ReadInt32 needs four - an underrun mid-value, not just at
+    // the exact boundary the previous test covers.
+    w.Write(static_cast<int16_t>(7));
+    PacketReader r = MakeReaderFromWriter(w);
+    EXPECT_THROW((void) r.ReadInt32(), std::runtime_error);
 }
