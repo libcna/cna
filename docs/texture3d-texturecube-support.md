@@ -71,7 +71,7 @@ is why this went unnoticed until this task cross-checked the Vulkan/Bgfx backend
 
 Not fixed here — this is a real feature gap (Vulkan needs a staging-buffer-based
 `vkCmdCopyImageToBuffer` readback path; Bgfx has no such API in this project by design), tracked as
-new `GRAPHICS_TASKS.md` Task 865.
+new `plan_graphics.md` Task 865.
 
 ---
 
@@ -88,7 +88,7 @@ allocates GPU storage past level 0, so a sub-image write to `level>0` silently g
 is real for `EasyGLTextureCubeBackend`. Every other cell in this table has the **identical code
 shape** (mip level count/flag hardcoded to "1 level only", `mipMap` parameter unused), so the same
 failure is highly likely everywhere else, but only the one cell was actually reproduced with a
-test and fixed. Tracked as new `GRAPHICS_TASKS.md` Task 862 (EasyGL `Texture3D`, already tracked)
+test and fixed. Tracked as new `plan_graphics.md` Task 862 (EasyGL `Texture3D`, already tracked)
 and Task 864 (Vulkan + Bgfx, both types — new).
 
 ---
@@ -126,7 +126,7 @@ workaround exists for it.
 
 Confirmed non-functional stub on all backends (it's implemented once, in the shared XNA-layer
 `TextureCube.cpp`, not per-backend): ignores the `stream` argument entirely and always returns a
-blank 1×1 `Color` cube map. Task 272 finding, tracked as `GRAPHICS_TASKS.md` Task 663.
+blank 1×1 `Color` cube map. Task 272 finding, tracked as `plan_graphics.md` Task 663.
 
 ---
 

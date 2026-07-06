@@ -1,7 +1,7 @@
 # CNA — Cross-cutting / Deferred Task Plan
 
 > A home for tasks that are **real and wanted** but do not belong to a single feature plan
-> (`plan_input.md`, `GRAPHICS_TASKS.md`, …) — typically because they cross a layer boundary that
+> (`plan_input.md`, `plan_graphics.md`, …) — typically because they cross a layer boundary that
 > the originating branch is scoped not to touch. Tasks here use an **`a-NNNN`** id scheme,
 > independent of the numeric task bands used by the feature plans.
 >
@@ -81,4 +81,4 @@ interface, so it cannot be done cleanly inside the input branch.
 - FNA's own approach: fixed `INTERNAL_WindowWidth/Height ÷ INTERNAL_BackBufferWidth/Height` ratio
   (`Mouse.cs:107-116`); CNA removed those fields in task 747 in favor of the general
   `IGraphicsBackend` transform, which is why an inverse on that interface is the right fix.
-- `plan_input.md` Phase I9 tasks 800/801; `GRAPHICS_TASKS.md` (graphics track).
+- `plan_input.md` Phase I9 tasks 800/801; `plan_graphics.md` (graphics track).

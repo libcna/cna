@@ -252,7 +252,7 @@ TEST_F(EffectApplyTest, ApplyAfterDisposeThrowsObjectDisposedException)
 // UB here, not a bug to match — same category of intentional divergence as
 // GraphicsAdapter::DeviceId/VendorId (Task 345).
 // Effect::Clone() does not exist in CNA yet (deferred to Task 883), so a
-// "clone after dispose" sub-case is not testable today; see GRAPHICS_TASKS.md
+// "clone after dispose" sub-case is not testable today; see plan_graphics.md
 // Task 360 for the deferral note.
 // -----------------------------------------------------------------------
 

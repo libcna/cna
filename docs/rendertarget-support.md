@@ -1,6 +1,6 @@
 # RenderTarget2D / RenderTargetCube Support Matrix
 
-Phase 39 (`GRAPHICS_TASKS.md` Tasks 331–340) audited and pixel-verified `RenderTarget2D` and
+Phase 39 (`plan_graphics.md` Tasks 331–340) audited and pixel-verified `RenderTarget2D` and
 `RenderTargetCube` conformance against FNA across all three graphics backends (EasyGL, Vulkan,
 Bgfx). This document summarizes the findings and closes the phase.
 
@@ -218,4 +218,4 @@ Pre-existing, not opened this phase, still blocking deeper MRT work: `EasyGL_MRT
 its own dedicated root-cause investigation before Task 881 or any other MRT-adjacent work can be
 meaningfully extended.
 
-This closes Phase 39 (`GRAPHICS_TASKS.md` Tasks 331–340) in full.
+This closes Phase 39 (`plan_graphics.md` Tasks 331–340) in full.

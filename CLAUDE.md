@@ -403,6 +403,22 @@ Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
 
 ---
 
+## WebGPU Is Forbidden For Now
+
+**Do not implement, plan, or work on any WebGPU-related task, in `plan_graphics.md` or otherwise,
+until the project owner explicitly lifts this restriction.**
+
+- This applies to all WebGPU tasks tracked in `plan_graphics.md` (Phases 56–69, Tasks 10001+),
+  including CMake scaffolding, the `CNA_BACKEND_WEBGPU` backend, `wgpu-native` vendoring, WGSL
+  shaders, and the Emscripten/WASM target (Phase 69).
+- If asked to work through `plan_graphics.md` autonomously, **skip every WebGPU task entirely** —
+  do not start it, do not stub it, do not create WebGPU-related files or CMake options.
+- This is a hard project-wide prohibition, not a priority/ordering note. It stays in force even
+  though `plan_graphics.md`'s own "Execution order" section separately describes WebGPU as
+  deprioritized — treat this section as authoritative if the two ever seem to disagree.
+
+---
+
 ## System Dependencies (Linux)
 
 The following system packages are required to build CNA on Debian/Ubuntu:

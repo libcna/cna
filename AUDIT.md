@@ -795,14 +795,14 @@ resume-prompt note), `TextureCube` had the *exact same 3 bug classes* Task 271 f
    matching this session's established scope discipline (Task 271 left the EasyGL mip-chain gap
    similarly undone). **Strongly recommended as a dedicated, immediate follow-up task** (more urgent
    than the `Texture2D` missing-EXT-method findings, precisely because this one fails silently
-   rather than loudly) — not yet given its own `GRAPHICS_TASKS.md` number; add one before Phase 33
+   rather than loudly) — not yet given its own `plan_graphics.md` number; add one before Phase 33
    is considered complete.
 
 #### Confirmed limitations (documented, not fixed, matching established precedent)
 
 - **`CubeMapFace` values are never validated.** `static_cast<int>(face)` is passed straight to the
   backend with no range check, for both the pre-existing and newly-added overloads. This is already
-  explicitly tracked as its own task: `GRAPHICS_TASKS.md` Task 279, "Add validation for invalid
+  explicitly tracked as its own task: `plan_graphics.md` Task 279, "Add validation for invalid
   `CubeMapFace` values" — deliberately not pulled forward into this audit.
 - **EasyGL's `mipMap`/`SurfaceFormat` handling for `TextureCube`** was not separately re-verified in
   this pass — Task 271 already documented the identical limitation for `Texture3D`
@@ -935,7 +935,7 @@ level of every face via `set_image_2d(level, ..., nullptr)` before returning. Su
 126 checks (6 faces × 21 pixels across 3 levels) now pass. 1973/1975 EasyGL ctest pass (2
 pre-existing, unrelated failures unchanged).
 
-**Not fixed in this task, flagged as a follow-up (`GRAPHICS_TASKS.md` Task 862):**
+**Not fixed in this task, flagged as a follow-up (`plan_graphics.md` Task 862):**
 `EasyGLTexture3DBackend`'s constructor has the identical single-level-only pattern (only level 0
 allocated via `set_image_3d`, `SetData` writes via `set_sub_image_3d`), so `Texture3D::SetData` at
 `level>0` on a mipmapped volume almost certainly has the same silent-failure bug. Task 271's audit
@@ -1122,7 +1122,7 @@ the same "mip level >0 never allocated" bug that Task 276 found and fixed for
 regardless of its (unused) `mipMap` parameter.
 
 Neither finding was fixed here — both are real feature gaps, not guard fixes, and squarely outside
-a documentation task's scope. Tracked as new `GRAPHICS_TASKS.md` Task 864 (Vulkan/Bgfx mip-level
+a documentation task's scope. Tracked as new `plan_graphics.md` Task 864 (Vulkan/Bgfx mip-level
 allocation, both texture types) and Task 865 (Vulkan `GetData` readback implementation; Bgfx's lack
 of any readback API is treated as an accepted, already-documented, project-wide limitation, not a
 bug). **This closes Phase 33 (Tasks 271–280) — all ten tasks are now done.**
@@ -1179,7 +1179,7 @@ failures from this change).
 Task 282 asks for a shared helper that gives the CPU bytes-per-pixel or compressed-block size for
 each `SurfaceFormat`. Checked FNA's `Texture.cs` first (region "Static SurfaceFormat Size Methods")
 rather than inventing a `SurfaceFormatHelper` class per the plan's guessed name in
-`GRAPHICS_TASKS.md` — FNA already has exactly this, as two public static methods directly on
+`plan_graphics.md` — FNA already has exactly this, as two public static methods directly on
 `Texture`: `GetBlockSizeSquaredEXT(SurfaceFormat)` and `GetFormatSizeEXT(SurfaceFormat)`. Both are
 real FNA API (not CNA inventions), so ported them onto CNA's `Texture` class with the same names,
 matching the project rule to follow FNA's actual API shape over a plan's placeholder wording.

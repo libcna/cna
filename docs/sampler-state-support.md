@@ -1,6 +1,6 @@
 # SamplerState / Texture Sampling Support Matrix
 
-Phase 35 (`GRAPHICS_TASKS.md` Tasks 291–300) audited and pixel-verified `SamplerState` and texture
+Phase 35 (`plan_graphics.md` Tasks 291–300) audited and pixel-verified `SamplerState` and texture
 sampling conformance against FNA across all three graphics backends (EasyGL, Vulkan, Bgfx). This
 document summarizes the findings.
 

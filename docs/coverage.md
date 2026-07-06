@@ -3,9 +3,9 @@
 **Date:** 2026-06-21  
 **Branch:** develop  
 **HEAD:** 04f0692  
-**Analysis method:** static source inspection of `include/`, `src/`, `GRAPHICS_TASKS.md`,
+**Analysis method:** static source inspection of `include/`, `src/`, `plan_graphics.md`,
 `IGraphicsBackend.hpp`, and backend `.cpp` files. FNA class counts estimated from known
-XNA 4.0 documentation and GRAPHICS_TASKS.md. Build was not run during analysis.
+XNA 4.0 documentation and plan_graphics.md. Build was not run during analysis.
 
 ---
 

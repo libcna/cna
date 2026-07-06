@@ -22,7 +22,7 @@
 // black). This is a real, confirmed, documented deviation from FNA - Point/Linear NEVER select
 // a higher mip level regardless of minification - so this half of the test expects RED (level 0)
 // even at extreme minification, and is asserting the CURRENT, known-limited behavior, not a bug
-// discovered fresh here. See GRAPHICS_TASKS.md Task 298 / a new tracked follow-up task for the
+// discovered fresh here. See plan_graphics.md Task 298 / a new tracked follow-up task for the
 // real fix (set GL_TEXTURE_MAX_LEVEL/maxLod correctly per texture, then switch Point/Linear back
 // to their mip-aware GPU filter equivalents).
 //

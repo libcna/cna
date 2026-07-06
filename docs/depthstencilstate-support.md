@@ -1,6 +1,6 @@
 # DepthStencilState Support Matrix
 
-Phase 37 (`GRAPHICS_TASKS.md` Tasks 311–320) audited and pixel-verified `DepthStencilState`
+Phase 37 (`plan_graphics.md` Tasks 311–320) audited and pixel-verified `DepthStencilState`
 conformance against FNA across all three graphics backends (EasyGL, Vulkan, Bgfx). This document
 summarizes the findings.
 

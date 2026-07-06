@@ -21,7 +21,7 @@
 | ℹ️  | Known limitation (not a bug) |
 | ⚠️  | Partial / no-op / stub |
 
-> **Task numbering:** Input tasks occupy the **700+ band**. `GRAPHICS_TASKS.md` owns 100–699.
+> **Task numbering:** Input tasks occupy the **700+ band**. `plan_graphics.md` owns 100–699.
 > Phase titles here (`Phase I1…I7`) are local to this document.
 
 ---
@@ -347,7 +347,7 @@ behavior.
 | 861 | Keep task 811 explicitly partial/hardware-gated. | ✅ | Verified 811 is still `⚠️` (partial) with its hardware-gated note intact — **not** silently converted to complete. No fake SDL gamepad backend was added. |
 | 862 | Clean build + `CnaTests` on EasyGL/Vulkan/bgfx from initialized submodules. | ✅ | Fresh `rm -rf` + configure + build in `cmake-build-input-{easygl,vulkan,bgfx}` (submodules already `init --recursive`; `.sdl-prebuilt` persists outside the build tree). **Results: EasyGL 1964/1964, Vulkan 1964/1964, bgfx 1968/1968** (+4 bgfx-specific); input filter **217** on all three. |
 | 863 | Verify a source archive without submodules still fails with the clear CMake error. | ✅ | Re-verified (as in task 844): temporarily hid `third_party/SDL/CMakeLists.txt` (trap-restored) → configure fails with exit 1 and `Missing vendored 'SDL' … Run: git submodule update --init --recursive`. Configure-time error (acceptable), documented in README. |
-| 864 | Final `NEXT.md`: `feature/input` ready for review/merge if 856–863 pass. | ✅ | NEXT.md §1/§8/§10 state the branch is pre-merge-audited and merge-ready; next branch is outside input (graphics `GRAPHICS_TASKS.md`) unless the user says otherwise. |
+| 864 | Final `NEXT.md`: `feature/input` ready for review/merge if 856–863 pass. | ✅ | NEXT.md §1/§8/§10 state the branch is pre-merge-audited and merge-ready; next branch is outside input (graphics `plan_graphics.md`) unless the user says otherwise. |
 
 ---
 

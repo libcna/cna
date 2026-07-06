@@ -2,6 +2,10 @@
 
 ---
 
+> ⛔ **WebGPU is forbidden for now** — do not work on any WebGPU task (Phases 56–69, Tasks
+> 10001+ in `plan_graphics.md`) until the project owner explicitly lifts this restriction. See
+> `CLAUDE.md` ("WebGPU Is Forbidden For Now").
+
 ## 1. Project summary
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model (`Microsoft::Xna::Framework`),
@@ -11,11 +15,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - **Main goal:** full XNA 4.0 API coverage with pixel-accurate behavior, backed by unit tests and
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
-  `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
+  `plan_graphics.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–41 are complete. **Phase 42 ("BasicEffect exactness",
   Tasks 361–370) is open** — Tasks 361–366 are done, **Task 367 is next**. See §8 for the exact
   goal and §3 for what the last 6 tasks found. Full task-by-task detail (audit findings, exact
-  formulas derived from FNA source, discriminating-power verification) lives in `GRAPHICS_TASKS.md`
+  formulas derived from FNA source, discriminating-power verification) lives in `plan_graphics.md`
   — this file intentionally does not duplicate it.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
@@ -141,7 +145,7 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 ## 3. Recent changes
 
 Most recent first. Full detail (exact FNA-derived formulas, discriminating-power verification,
-per-backend fix shape) is in `GRAPHICS_TASKS.md` — this table is intentionally a one-line-per-task
+per-backend fix shape) is in `plan_graphics.md` — this table is intentionally a one-line-per-task
 index, not a duplicate.
 
 | Commit | Task | Summary |
@@ -167,7 +171,7 @@ index, not a duplicate.
 | `a43702b3` | 348 | Verified `Viewport` tracks a real OS-level window resize; confirmed `PresentationParameters.BackBufferWidth/Height` deliberately don't follow it (documented CNA divergence). |
 | `704f0e13`/`6c58aa61`/`42cf16cf` | 345–347 | Audited `GraphicsAdapter`/`DisplayModeCollection`; **fix**: dangling `DefaultAdapter` reference, missing `this[SurfaceFormat]` indexer, headless-fallback leak. |
 
-Older history (Phases 1–39): see `GRAPHICS_TASKS.md` and `docs/*.md` synthesis docs
+Older history (Phases 1–39): see `plan_graphics.md` and `docs/*.md` synthesis docs
 (`docs/rasterizerstate-support.md` Phase 38, `docs/rendertarget-support.md` Phase 39,
 `docs/sampler-state-support.md` Phases 34–36, `docs/depthstencilstate-support.md` Phase 37).
 Headline older findings: Task 293 fixed a severe, project-wide bug (per-slot `SamplerState`
@@ -185,7 +189,7 @@ The most significant *correctness* gap is architectural: `Texture3D`/`TextureCub
 `Texture` in CNA (they inherit `GraphicsResource` directly), which structurally prevents
 `Texture3D` from ever being sampled via the normal `GraphicsDevice.Textures[slot]` path. No failing
 command or test is tied to this — it manifests as a compile-time impossibility if game code tries
-`GraphicsDevice.Textures[i] = my3DTexture`. See `GRAPHICS_TASKS.md` Task 863.
+`GraphicsDevice.Textures[i] = my3DTexture`. See `plan_graphics.md` Task 863.
 
 The most significant *silent-failure* gaps (compile and run without error, wrong or no data):
 Vulkan's `BlendState`/`DepthStencilState` support (Tasks 868/870), `TextureCube::DDSFromStreamEXT`
@@ -222,7 +226,7 @@ direct code reading.
 | Confirmed, incomplete | `SpriteBatch`'s `SamplerState` (`Begin()`) is a no-op on Vulkan/Bgfx (EasyGL only). | — |
 | Confirmed, pre-existing | `EasyGL_MRT_TwoAttachments`: attachment 1 stays black with 2 render targets. | Task 145 |
 | Confirmed, minor, not fixed | `SetRenderTargets`'s simultaneous-target cap doesn't match FNA's real `MAX_RENDERTARGET_BINDINGS=4`. | Task 881 |
-| Confirmed, incomplete | `PresentationMode::Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer` aren't distinctly implemented on EasyGL; Vulkan/Bgfx implement no virtual-resolution scaling at all. | Task 882 (not yet a formal `GRAPHICS_TASKS.md` row — referenced inline in Task 348) |
+| Confirmed, incomplete | `PresentationMode::Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer` aren't distinctly implemented on EasyGL; Vulkan/Bgfx implement no virtual-resolution scaling at all. | Task 882 (not yet a formal `plan_graphics.md` row — referenced inline in Task 348) |
 | Confirmed, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` aborts on an internal assert in the sibling `easy-gl` repo. | — |
 | Confirmed, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. | — |
 | Confirmed, pre-existing, flaky | `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage`: order-dependent, only one fails per full-suite run. | — |
@@ -280,7 +284,7 @@ direct code reading.
 ### FNA reference
 
 Authoritative behavioral reference: `/rv/data/library/github.com/FNA-XNA/FNA/src`. When CNA
-intentionally diverges from FNA, document it in the commit/PR description and in `GRAPHICS_TASKS.md`
+intentionally diverges from FNA, document it in the commit/PR description and in `plan_graphics.md`
 — not as a source comment explaining the deviation's rationale.
 
 ---
@@ -325,7 +329,7 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first 4 are the rest of Phase 42, already scoped by `GRAPHICS_TASKS.md`;
+In priority order — the first 4 are the rest of Phase 42, already scoped by `plan_graphics.md`;
 the rest are the accumulated backlog from earlier phases (Tasks 863–884).
 
 1. **Task 367 — pixel test: `TextureEnabled=true` AND `VertexColorEnabled=true` (texture × vertex color)**
@@ -424,7 +428,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–884).
   equals the colour-texture handle, not the framebuffer handle) since Bgfx has no pixel readback
   for these two specifically.
 - **No fix for Task 875/876 (Vulkan render-target bugs)** without isolating the root cause first —
-  Task 876 especially has 2 unisolated candidates (see `GRAPHICS_TASKS.md`).
+  Task 876 especially has 2 unisolated candidates (see `plan_graphics.md`).
 - **No opportunistic fix for Task 877 (DepthStencilFormat fidelity)** bundled into an unrelated
   task — verify with a dedicated stencil-in-RT pixel test first.
 - **No rushed fix for Task 880 (Viewport GPU wiring)** — write the sub-region-viewport pixel test
@@ -445,11 +449,11 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–884).
 Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 367).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
-Update NEXT.md and GRAPHICS_TASKS.md after finishing, then commit AND push (standing
+Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
 instruction — do not wait to be asked; one task = one commit = one push).
 
 Current status: Phases 1-41 are FULLY COMPLETE. Phase 42 ("BasicEffect exactness",
-GRAPHICS_TASKS.md Tasks 361-370) is open: Tasks 361-366 are DONE, Task 367 is NEXT (pixel test:
+plan_graphics.md Tasks 361-370) is open: Tasks 361-366 are DONE, Task 367 is NEXT (pixel test:
 TextureEnabled=true AND VertexColorEnabled=true - texture x vertex color - EasyGL/Vulkan/Bgfx).
 
 Last full 3-backend regression (Task 366, verify-only — no bug found):
@@ -458,7 +462,7 @@ Vulkan 3337/3352 pass (13 documented pre-existing failures + 1 order-dependent f
 Bgfx 3321/3322 pass (1 flaky, unrelated CueTest/NetworkSessionTest failure).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
-For the full history of what each task in Phase 41/42 found and fixed, read GRAPHICS_TASKS.md
+For the full history of what each task in Phase 41/42 found and fixed, read plan_graphics.md
 directly (Tasks 351-366) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

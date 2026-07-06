@@ -2,7 +2,7 @@
 
 This is a practical, developer-facing guide for anyone porting an XNA/FNA game (or writing a new
 one) against CNA and wondering how custom shaders/effects work today. For the internal audit trail
-behind these decisions, see `GRAPHICS_TASKS.md` Tasks 351–354 and `docs/fx-bytecode-support-plan.md`
+behind these decisions, see `plan_graphics.md` Tasks 351–354 and `docs/fx-bytecode-support-plan.md`
 (the Phase 74 implementation plan referenced below). For per-backend pixel-test coverage of every
 stock effect, see `docs/xna-4-api-coverage.md` §7.
 
@@ -79,7 +79,7 @@ around one of the standard vertex layouts).
 
 The long-term policy decision (Task 352) is **full support** for real compiled `.fx` bytecode,
 not a permanent throw. This is real, currently-unimplemented, multi-phase work (Tasks 10200–10208,
-`GRAPHICS_TASKS.md` Phase 74), summarized here — see `docs/fx-bytecode-support-plan.md` for the
+`plan_graphics.md` Phase 74), summarized here — see `docs/fx-bytecode-support-plan.md` for the
 full reasoning:
 
 1. Vendor MojoShader (its zlib-licensed C source is already available locally and reads XNA's
