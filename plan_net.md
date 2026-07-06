@@ -970,10 +970,23 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   the fix. Restored the fix; rebuilt clean. Full suite: **3284/3286 passing** (2 expected
   accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 5.12** — Create a dedicated `LocalNetworkGamerTests.cpp` file. Confirmed its ~14 test
+- [x] **Task 5.12** — Create a dedicated `LocalNetworkGamerTests.cpp` file. Confirmed its ~14 test
   cases currently live embedded in `NetworkSessionTests.cpp` (~lines 504-605), contrary to
   `CHECKLIST.md`'s per-class test-file convention. Move them (no behavior change, pure test-file
-  reorganization).
+  reorganization). Actual count was 17 `LocalNetworkGamerTest.*` cases (lines 753-875), plus the
+  `LocalGamerFixture` fixture and its `MakeSignedInGamer` helper — all moved verbatim into the new
+  `tests/Microsoft/Xna/Framework/Net/LocalNetworkGamerTests.cpp`, with only the includes trimmed to
+  what that file actually needs. `NetworkSessionTests.cpp` keeps its own `LocalNetworkGamer.hpp`/
+  `System::ArgumentException` includes since other, unrelated tests in that file still reference
+  both. `CMakeLists.txt` globs test sources recursively, so the new file needed no build-system
+  changes.
+
+  Pure reorganization, no revert-verify applies. Ran `LocalNetworkGamerTest.*` (17/17) and
+  `NetworkSessionTest.*` (44/44) explicitly, then the full suite: **3284/3286 passing** (2 expected
+  accelerometer/gyroscope skips). One transient, unrelated failure
+  (`CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`, a statistical audio test)
+  appeared on the first run and was confirmed pre-existing flakiness, not a regression — it passed
+  5/5 in isolation and the very next full-suite run was clean.
 
 - [ ] **Task 5.13** — Add a multi-peer (3+ node) integration test. Confirmed every existing
   `ENetBackendTests.cpp` scenario is a single host + at most one client — the fan-out/relay logic
