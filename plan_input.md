@@ -912,8 +912,22 @@ GamePad) is **byte-identical to FNA** in its core math (flag extraction, dead-zo
 StickToButtons packing, hashes) — the only deviations are the documented deterministic `GetHashCode` choices
 (vs FNA's `base.GetHashCode()`) and the event-driven-vs-poll architecture.
 
-## L-010 — `TouchCollection.cpp` logic `[ ]`
-- [ ] Indexer/CopyTo/IndexOf/Contains/mutators over the vector; advisory IsReadOnly; FindById out-semantics.
+## L-010 — `TouchCollection.cpp` logic `[x]`
+- [x] Indexer/CopyTo/IndexOf/Contains/mutators over the vector; advisory IsReadOnly; FindById out-semantics.
+
+**Result (2026-07-06):** Logic verified vs FNA `TouchCollection.cs` — **faithful with the documented
+C++-container deviations only; no new fix.** `Count`=size; `IsConnected`=touch-device-present;
+`IsReadOnly`=`true` but **advisory** (P5-001 — the mutators actually mutate, matching FNA whose `IsReadOnly`
+getter is hard-coded true yet whose Add/Clear/Insert/Remove/RemoveAt mutate the backing list). `operator[]`
+(const+mutable), `RemoveAt`, `Insert` bounds-check → `std::out_of_range` (maps FNA's
+`ArgumentOutOfRangeException`). `Contains`/`IndexOf`/`Remove` are linear scans with `==` (≡ FNA List ops).
+`FindById(id, out)` → `TouchLocation&` out-ref (≡ FNA). `CopyTo` **inserts** at `arrayIndex` (documented
+P5-002 deviation: growable `std::vector` vs FNA's fixed-array overwrite) with an index guard (bad index →
+`out_of_range`). `Add`/`Clear` = push_back/clear. `begin`/`end` NOXNA iterators replace FNA's `GetEnumerator`.
+The one unavoidable deviation: CNA's default collection is an **empty mutable vector** vs FNA's null-backed
+list (which throws `NullReferenceException` on mutate) — P5-001, documented. **Files changed:** none (logic
+verified). **Behavior verified:** all members' logic matches FNA modulo the documented container deviations.
+**Remaining risk:** none.
 
 ## L-011 — `TouchLocation.cpp` logic `[ ]`
 - [ ] TryGetPreviousLocation both paths, Equals (all 5 fields), Id+Position hash, ToString format vs FNA.
