@@ -119,9 +119,19 @@ no gap). **Behavior verified:** value parity + downstream usage. **Remaining ris
 `KeyboardState::operator[]`/`getItem`, exercised in `KeyboardInputTests`. **Members reviewed:** 2/2. **Files
 changed:** none (perfect, no gap). **Behavior verified:** value parity. **Remaining risk:** none.
 
-## A1-003 — `Keys` `[ ]`
-- [ ] FNA `Input/Keys.cs`; CNA `Keys.hpp`; test `KeyboardInputTests.cpp` (value table).
-- [ ] Verify all 160 members name+value byte-identical (incl. hex OEM/IME/console); size anchor `static_assert`.
+## A1-003 — `Keys` `[x]`
+- [x] FNA `Input/Keys.cs`; CNA `Keys.hpp`; test `KeyboardInputTests.cpp` (value table).
+- [x] Verify all 160 members name+value byte-identical (incl. hex OEM/IME/console); size anchor `static_assert`.
+
+**Result (2026-07-06):** A normalized (name→value, hex-aware) diff of CNA `Keys.hpp` vs FNA `Keys.cs` reports
+**160 members on each side, 0 only-in-CNA, 0 only-in-FNA, 0 value mismatches** — byte-identical, including
+the hex OEM/IME/console members. **Test:** `KeyboardStateTest.KeysValuesMatchXNANumericConstants` pins **all
+160** values via a `{Keys, int}` table, with `static_assert(sizeof(cases)/sizeof(cases[0]) == 160)` (count
+anchor) and `EXPECT_EQ(seen.size(), 160u)` (all present + distinct) — a member add/remove/renumber fails the
+build or the test. **Doxygen:** verified **0** of the 160 enum members lack an immediately-preceding `@brief`
+(161 `@brief` = 160 members + the enum). Consumers (`KeyboardState`, the bridge keycode/scancode maps) are
+tested in their suites. **Members reviewed:** 160/160. **Files changed:** none (perfect, no gap). **Behavior
+verified:** full value + Doxygen parity. **Remaining risk:** none.
 
 ## A1-004 — `Buttons` `[ ]`
 - [ ] FNA `Input/Buttons.cs`; CNA `Buttons.hpp`; test `ButtonsTests.cpp`.
