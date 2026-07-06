@@ -332,9 +332,20 @@ Released`; equality → `EqualityOperatorsForEqualAndDifferingInstances`; hash �
 FromButtonArray + 4 equality/hash = all. **Files changed:** none (perfect, no gap). **Behavior verified:**
 flag→property mapping + equality/hash. **Remaining risk:** none.
 
-## A4-002 — `GamePadDPad` (struct) `[ ]`
-- [ ] FNA `Input/GamePadDPad.cs`; CNA `GamePadDPad.hpp`/`.cpp`; test (GamePadState/mapping suites).
-- [ ] Members: ctors, Up/Down/Left/Right, `Equals`/`==`/`!=`, `GetHashCode`. Per-member.
+## A4-002 — `GamePadDPad` (struct) `[x]`
+- [x] FNA `Input/GamePadDPad.cs`; CNA `GamePadDPad.hpp`/`.cpp`; test `GamePadDPadTest` suite.
+- [x] Members: ctors, Up/Down/Left/Right, `Equals`/`==`/`!=`, `GetHashCode`, `FromButtonArray`. Per-member.
+
+**Result (2026-07-06):** **4 direction props** (Down, Left, Right, Up) match FNA `GamePadDPad.cs`. The explicit
+ctor's arg order `(upValue, downValue, leftValue, rightValue)` is **byte-identical to FNA** and pinned by
+`ExplicitConstructorSetsEachDirectionIndependently`. `FromButtonArray` is `NOXNA static` (maps FNA's internal
+one). All Doxygen'd. **Test map** (dedicated `GamePadDPadTest` suite): default →
+`DefaultConstructorHasAllDirectionsReleased`; explicit ctor → `ExplicitConstructorSetsEachDirectionIndependently`;
+`FromButtonArray` → `...DerivesDirectionsFromCombinedFlags` + `...CombinesAcrossSeparateListElements` +
+`...WithEmptyListLeavesAllDirectionsReleased`; equality → `EqualityOperatorsForEqualAndDifferingInstances`;
+hash → `GetHashCodeMatchesFnaBitWeightedFormula` (verifies FNA's exact bit-weighted hash). **Members
+reviewed:** 4 props + 2 ctors + FromButtonArray + equality/hash = all. **Files changed:** none (perfect, no
+gap). **Behavior verified:** ctor-slot order + FNA bit-weighted hash. **Remaining risk:** none.
 
 ## A4-003 — `GamePadThumbSticks` (struct) `[ ]`
 - [ ] FNA `Input/GamePadThumbSticks.cs`; CNA `GamePadThumbSticks.hpp`/`.cpp`; test `GamePadThumbSticksTests.cpp`.
