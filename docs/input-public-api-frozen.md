@@ -42,7 +42,7 @@ so the golden file is not coupled to internal churn):
 
 - `TouchPanel::INTERNAL_onTouchEvent`, `TouchPanel::ResetForTests`
 - `Mouse::INTERNAL_onClicked`, `Mouse::ResetForTests`
-- `TextInputEXT::INTERNAL_OnTextInput`, `TextInputEXT::INTERNAL_OnTextEditing`, `TextInputEXT::ResetForTests`
+- `TextInputEXT::INTERNAL_OnTextInput`, `TextInputEXT::INTERNAL_OnTextEditing`, `TextInputEXT::INTERNAL_OnTextEditingCandidates`, `TextInputEXT::ResetForTests`
 - private data members (e.g. `GamePadButtons::buttons_`)
 
 Hidden-friend equality operators (`operator==` / `operator!=` on the value structs) are frozen via an
@@ -266,6 +266,7 @@ override must be added.
 - `TextInputEXT() = delete;` — NOXNA
 - `static System::MulticastAction<charcs> TextInput;` — EXT
 - `static System::MulticastAction<const std::string&, int, int> TextEditing;` — EXT
+- `static System::MulticastAction<const std::vector<std::string>&, int, bool> TextEditingCandidatesEXT;` — NOXNA/EXT (IME candidate list)
 - `static std::uintptr_t getWindowHandleProperty();` / `static void setWindowHandleProperty(std::uintptr_t);` — EXT
 - `static bool IsTextInputActive();` — EXT
 - `static bool IsScreenKeyboardShown();` — EXT

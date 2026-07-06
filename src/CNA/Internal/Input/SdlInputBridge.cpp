@@ -1681,6 +1681,26 @@ namespace CNA::Internal::Input
                 }
                 break;
             }
+        case SDL_EVENT_TEXT_EDITING_CANDIDATES:
+            {
+                // NOXNA/EXT (input_noxna.md N-014): SDL3-new IME candidate list. Decode the
+                // SDL-owned string array into UTF-8 std::strings before the event is recycled.
+                std::vector<std::string> candidates;
+                const int count = event.edit_candidates.candidates != nullptr
+                                      ? event.edit_candidates.num_candidates
+                                      : 0;
+                candidates.reserve(static_cast<std::size_t>(count < 0 ? 0 : count));
+                for (int i = 0; i < count; ++i)
+                {
+                    const char* candidate = event.edit_candidates.candidates[i];
+                    candidates.emplace_back(candidate != nullptr ? candidate : "");
+                }
+                Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditingCandidates(
+                    candidates,
+                    event.edit_candidates.selected_candidate,
+                    event.edit_candidates.horizontal);
+                break;
+            }
         case SDL_EVENT_FINGER_DOWN:
             {
                 // Windows only notices a touch screen once it's touched (FNA SDL3_FNAPlatform.cs:972).

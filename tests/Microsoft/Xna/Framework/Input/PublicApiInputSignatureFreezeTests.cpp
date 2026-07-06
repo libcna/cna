@@ -351,6 +351,8 @@ namespace
     static_assert(!std::is_default_constructible_v<TextInputEXT>, "TextInputEXT() = delete");
     [[maybe_unused]] constexpr auto z_TextInputEXT_TextInput = &TextInputEXT::TextInput;   // static System::MulticastAction<charcs>
     [[maybe_unused]] constexpr auto z_TextInputEXT_TextEditing = &TextInputEXT::TextEditing; // static System::MulticastAction<const std::string&, int, int>
+    // NOXNA/EXT (input_noxna.md N-014): IME candidate-list event.
+    [[maybe_unused]] constexpr auto z_TextInputEXT_TextEditingCandidatesEXT = &TextInputEXT::TextEditingCandidatesEXT; // static MulticastAction<const std::vector<std::string>&, int, bool>
     [[maybe_unused]] constexpr auto z_TextInputEXT_getWindowHandleProperty_1 = static_cast<std::uintptr_t(*)()>(&TextInputEXT::getWindowHandleProperty);
     [[maybe_unused]] constexpr auto z_TextInputEXT_setWindowHandleProperty_2 = static_cast<void(*)(std::uintptr_t)>(&TextInputEXT::setWindowHandleProperty);
     [[maybe_unused]] constexpr auto z_TextInputEXT_IsTextInputActive_3 = static_cast<bool(*)()>(&TextInputEXT::IsTextInputActive);

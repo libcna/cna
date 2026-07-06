@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -54,6 +55,18 @@ namespace Microsoft::Xna::Framework::Input
          * `=` to set a single handler or `= nullptr` to clear.
          */
         NOXNA static System::MulticastAction<const std::string&, int, int> TextEditing;
+
+        /**
+         * @brief NOXNA/EXT: raised with the current IME candidate list during composition.
+         *
+         * SDL3-new (`SDL_EVENT_TEXT_EDITING_CANDIDATES`); older SDL/XNA had no candidate-list event.
+         * Lets a game render the CJK/IME candidate popup itself. The arguments are the candidate
+         * strings (UTF-8), the index of the pre-selected candidate (or -1 if none), and whether the
+         * list is laid out horizontally (otherwise vertically).
+         *
+         * Multicast: use `+=` to add subscribers, `=` to set a single handler or `= nullptr` to clear.
+         */
+        NOXNA static System::MulticastAction<const std::vector<std::string>&, int, bool> TextEditingCandidatesEXT;
 
         /**
          * @brief Returns the native window handle used by the text input APIs.
@@ -115,6 +128,15 @@ namespace Microsoft::Xna::Framework::Input
          * @param length The length of the active editing region.
          */
         NOXNA static void INTERNAL_OnTextEditing(const std::string& text, int start, int length);
+
+        /**
+         * @brief Internal: dispatches an IME candidate-list event to subscribers.
+         * @param candidates The candidate strings (UTF-8).
+         * @param selected The index of the selected candidate, or -1 if none.
+         * @param horizontal True if the candidate list is horizontal; false if vertical.
+         */
+        NOXNA static void INTERNAL_OnTextEditingCandidates(
+            const std::vector<std::string>& candidates, int selected, bool horizontal);
 
         /**
          * @brief Test-only: resets TextInputEXT's static state (callbacks, window handle).

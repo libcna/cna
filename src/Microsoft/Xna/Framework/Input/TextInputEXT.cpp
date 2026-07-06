@@ -16,6 +16,7 @@ namespace Microsoft::Xna::Framework::Input
 {
     System::MulticastAction<charcs>                       TextInputEXT::TextInput;
     System::MulticastAction<const std::string&, int, int> TextInputEXT::TextEditing;
+    System::MulticastAction<const std::vector<std::string>&, int, bool> TextInputEXT::TextEditingCandidatesEXT;
     std::uintptr_t                                  TextInputEXT::windowHandle_ = 0;
 
     std::uintptr_t TextInputEXT::getWindowHandleProperty()
@@ -99,10 +100,18 @@ namespace Microsoft::Xna::Framework::Input
             TextEditing(text, start, length);
     }
 
+    void TextInputEXT::INTERNAL_OnTextEditingCandidates(
+        const std::vector<std::string>& candidates, int selected, bool horizontal)
+    {
+        if (TextEditingCandidatesEXT)
+            TextEditingCandidatesEXT(candidates, selected, horizontal);
+    }
+
     void TextInputEXT::ResetForTests()
     {
         TextInput    = nullptr;
         TextEditing  = nullptr;
+        TextEditingCandidatesEXT = nullptr;
         windowHandle_ = 0;
     }
 }

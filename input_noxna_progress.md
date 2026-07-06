@@ -33,7 +33,8 @@
 
 ## Phase P3 — powerful but platform-narrow / manual actuation
 - [ ] **N-013 `CNA::Input::Haptics`** — SDL_haptic force-feedback (constant/periodic/ramp/condition/custom + gain/autocenter).
-- [ ] **N-014 `CNA::Input::TextComposition`** — IME candidate lists (`SDL_EVENT_TEXT_EDITING_CANDIDATES`) + input-type hints.
+- [x] **N-014 `TextInputEXT::TextEditingCandidatesEXT`** — IME candidate lists (`SDL_EVENT_TEXT_EDITING_CANDIDATES`). Input-type hints -> N-014b.
+- [ ] **N-014b `TextInputEXT` input-type hints** — `StartTextInputWithTypeEXT(TextInputTypeEXT)` (text/URL/email/number/password) via `SDL_StartTextInputWithProperties` (split off from N-014).
 - [x] **N-015 `CNA::Input::Sensors`** — device-level accelerometer/gyro + enumeration (`SDL_sensor`) via seam.
 - [x] **N-016 `Mouse` capture / global-position EXT** — `SetCaptureEXT`, `GetGlobalPositionEXT`, `WarpGlobalEXT` via seam.
 - [x] **N-017 `CNA::Input::InputDevices`** — enumeration (mice/keyboards/touch id+name) via seam. Hot-plug events -> N-017b.
@@ -50,6 +51,16 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-014 done (2026-07-07):** `TextInputEXT::TextEditingCandidatesEXT` — a
+  `MulticastAction<const vector<string>&, int, bool>` (candidates, selected index, horizontal) for
+  SDL3's IME candidate list (CJK). The bridge decodes `SDL_EVENT_TEXT_EDITING_CANDIDATES`
+  (`event.edit_candidates.*`) into UTF-8 std::strings before the SDL event is recycled, then
+  `INTERNAL_OnTextEditingCandidates` invokes the event (mirrors the existing TextInput/TextEditing
+  dispatch); ResetForTests clears it. Kept it on the existing `TextInputEXT` class (not a new
+  TextComposition type). Pinned the event in the freeze test (TextInputEXT is pinned) + documented
+  (incl. the INTERNAL dispatcher in the internal list). Tests `SdlInputBridgeCandidatesTest` feed a
+  synthetic candidates event (incl. a CJK UTF-8 string) + a null-list case. `ctest -L input` green;
+  ASan-clean. Deferred the `StartTextInputWithTypeEXT` input-type hint to N-014b.
 - **N-017b done (2026-07-06):** `InputDevices::{Mouse,Keyboard}{Connected,Disconnected}EXT` — four
   `System::MulticastAction<uint32_t>` hot-plug events carrying the SDL device id (use `+=`). The
   bridge's ProcessEvent decodes `SDL_EVENT_{MOUSE,KEYBOARD}_{ADDED,REMOVED}` (`event.mdevice.which`/
