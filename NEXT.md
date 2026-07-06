@@ -12,29 +12,37 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
-- **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
-  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–359 are
-  done, **Task 360 is next** ("Add effect lifecycle tests: dispose, clone after dispose, apply
-  after dispose — Match FNA where possible" — see §8). Note for whoever picks up Task 360:
-  `Effect::Clone()` does not exist yet in CNA (deferred to Task 883 per Task 351's finding), so the
-  "clone after dispose" sub-case should be scoped as "N/A until Task 883 lands" rather than
-  blocking the rest of that task. Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks
-  351–354); Task 355 closed the `EffectPass::Apply()`-consistency sub-thread; Task 356 confirmed
-  `EffectTechnique` selection is already correct by construction (verify-only, no code fix); Task
-  357 confirmed CNA's `EffectParameterCollection` name/semantic lookup already matches FNA exactly
-  (verify-only, no code fix — added the missing case-sensitivity/duplicate-tie-breaking test
-  coverage instead), and widened Task 884 (the `EffectTechniqueCollection`-class dangling-pointer
-  hazard Task 355 fixed) to also cover `EffectParameterCollection`, which has the identical
-  currently-unexercised by-value-`vector` hazard. Task 358 confirmed `EffectParameterCollection`'s
-  (and its siblings') enumeration order already matches FNA's plain insertion-order `List<T>`
-  iteration exactly (verify-only, no code fix — added the missing order-specific test, since the
-  prior test only checked element *count*, not sequence). Task 359 confirmed CNA's
+- **Current development phase:** Phases 1–41 are complete. **Phase 42 (BasicEffect exactness,
+  `GRAPHICS_TASKS.md` Tasks 361–370) is open** — **Task 361 is next** ("Audit `BasicEffect`
+  properties and defaults against FNA `BasicEffect.cs`" — see §8). **Task 360 closed Phase 41**:
+  confirmed FNA's own `Effect`/`EffectPass` have zero disposed-state check anywhere (calling
+  `EffectPass.Apply()` after disposal would hand a zeroed-out native handle straight to
+  `FNA3D_ApplyEffect` — real, silent UB in FNA itself, confirmed from source), so CNA's
+  `Effect::Apply()` throwing `System::ObjectDisposedException` is a deliberate, beneficial
+  CNA-specific safety improvement (same category as `GraphicsAdapter::DeviceId`/`VendorId`, Task
+  345), correctly kept as-is. Confirmed double-dispose is already safe by construction
+  (`GraphicsResource::Dispose(bool)`'s existing `if (isDisposed_) return;` guard, matching FNA's
+  own `if (!IsDisposed)` guard) — no code fix needed. Closed a real coverage gap: added
+  `ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectDisposed` (Task 351 only ever tested
+  `Effect::Apply()` directly after dispose, never the `EffectPass::Apply()` entry point) and
+  `DisposeIsIdempotentAndDoesNotThrow`. `Effect::Clone()` still doesn't exist (deferred to Task
+  883) — its "clone after dispose" sub-case is explicitly N/A until Task 883 lands, not fabricated
+  here. Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks 351–354); Task 355 closed
+  the `EffectPass::Apply()`-consistency sub-thread; Task 356 confirmed `EffectTechnique` selection
+  is already correct by construction (verify-only, no code fix); Task 357 confirmed CNA's
+  `EffectParameterCollection` name/semantic lookup already matches FNA exactly (verify-only, no
+  code fix — added the missing case-sensitivity/duplicate-tie-breaking test coverage instead), and
+  widened Task 884 (the `EffectTechniqueCollection`-class dangling-pointer hazard Task 355 fixed)
+  to also cover `EffectParameterCollection`, which has the identical currently-unexercised
+  by-value-`vector` hazard. Task 358 confirmed `EffectParameterCollection`'s (and its siblings')
+  enumeration order already matches FNA's plain insertion-order `List<T>` iteration exactly
+  (verify-only, no code fix — added the missing order-specific test, since the prior test only
+  checked element *count*, not sequence). Task 359 confirmed CNA's
   `EffectParameterCollection::operator[](int)` (via `std::vector::at()`) already throws
   `std::out_of_range` for negative/`>=Count` indices exactly like FNA's `List<T>` indexer, distinct
   from the name/semantic lookups' `null`-return behavior already proven in Task 357 (verify-only,
   no code fix — added the missing out-of-range and empty-collection edge-case tests for all 3
-  lookup surfaces). Phase 41 itself is **not** yet closed — Task 360 (lifecycle verification)
-  remains open.
+  lookup surfaces).
   **Task 351**
   audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
   returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
@@ -496,14 +504,35 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 360 — add effect lifecycle tests (dispose, clone after dispose, apply after dispose)**
-   - Goal: match FNA where possible for `Effect` lifecycle edge cases: disposing an effect, calling
-     `Apply()` after disposal (should already throw per Task 351's `EffectTest.ApplyAfterDispose...`
-     coverage — confirm/extend, don't duplicate), and "clone after dispose". **`Effect::Clone()`
-     does not exist yet in CNA** (deferred to Task 883 below) — scope the "clone after dispose"
-     sub-case as "N/A until Task 883 lands" rather than blocking the rest of this task.
-   - Files: likely `tests/.../EffectTests.cpp`.
-   - Verification: new unit test(s) with genuine discriminating power.
+1. **`GRAPHICS_TASKS.md` Task 361 — audit `BasicEffect` properties and defaults against FNA `BasicEffect.cs`** (opens Phase 42)
+   - Goal: read FNA's `Graphics/Effects/BasicEffect.cs` line-by-line, build a table of every public
+     property and its default value, compare against CNA's `BasicEffect.hpp`/`.cpp`. Notes column
+     hint: "Create table."
+   - Files: likely `include/.../BasicEffect.hpp`, `src/.../BasicEffect.cpp`, a new/updated table
+     (in this task's `GRAPHICS_TASKS.md` Notes cell or a `docs/*.md`, per this project's established
+     audit-task precedent).
+   - Verification: fix any real mismatch found; add/extend tests with genuine discriminating power.
+
+   **Task 360 status: done — closed Phase 41.** Read FNA's `Effect.Dispose(bool)`/
+   `GraphicsResource.Dispose(bool)` (both guarded by `if (!IsDisposed)`) and confirmed CNA's
+   `GraphicsResource::Dispose(bool)` already has the identical `if (isDisposed_) return;` guard —
+   double-dispose already safe by construction, no code fix needed. Confirmed from source that
+   FNA's own `Effect`/`EffectPass` have **zero** disposed-state check anywhere — `EffectPass.Apply()`
+   after disposal would feed a zeroed-out native handle straight to `FNA3D_ApplyEffect`, real silent
+   UB in FNA itself — so CNA's `Effect::Apply()` throwing `ObjectDisposedException` is a deliberate,
+   confirmed, beneficial safety improvement (same class as `GraphicsAdapter::DeviceId`/`VendorId`,
+   Task 345), correctly kept. Closed a real coverage gap: added
+   `ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectDisposed` (Task 351 only tested
+   `Effect::Apply()` directly, never the `EffectPass::Apply()` entry point) and
+   `DisposeIsIdempotentAndDoesNotThrow`. Discriminating power verified for the pass-level test
+   (temporarily removed the `isDisposed_` check, confirmed both it and Task 351's existing
+   `ApplyAfterDisposeThrowsObjectDisposedException` fail, reverted); honestly noted the
+   double-dispose test has no meaningful way to "break" via a temporary diff since
+   `GraphicsDevice::RemoveResourceReference` is already a safe no-op on a not-found resource.
+   `Effect::Clone()` still doesn't exist (deferred to Task 883) — its "clone after dispose"
+   sub-case is explicitly N/A until Task 883 lands. Full 3-backend regression, zero new failures:
+   EasyGL 3386/3389 (3 pre-existing), Vulkan 3309/3322 (13 pre-existing), Bgfx 3291/3292 (1
+   reconfirmed-flaky `CueTest`) — all matching the documented baseline exactly.
 
    **Task 359 status: done — verify-only, no code fix needed.** Re-read FNA's
    `EffectParameterCollection.cs`: `this[int index]` returns `elements[index]` on a plain
@@ -813,13 +842,14 @@ Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
-Current status: Phases 1-40 are FULLY COMPLETE. Phase 41 (Effect base class and compiled effect
-compatibility, GRAPHICS_TASKS.md Tasks 351-360) is open, Tasks 351-359 are ALL DONE, Task 360 next.
-Last full 3-backend regression (Task 359, test-file-only addition to EffectCollectionTests.cpp;
-EffectParameterCollection.cpp was temporarily edited for a discriminating-power check and reverted
-to its exact pre-Task-359 state): EasyGL 3383/3387 pass (3 documented pre-existing failures + 1
-reconfirmed-flaky CueTest that run). Vulkan 3306/3320 pass (13 documented pre-existing failures + 1
-reconfirmed-flaky CueTest that run). Bgfx 3289/3290 pass (1 reconfirmed-flaky CueTest that run).
+Current status: Phases 1-41 are FULLY COMPLETE. Phase 42 (BasicEffect exactness, GRAPHICS_TASKS.md
+Tasks 361-370) is now open, Task 361 next.
+Last full 3-backend regression (Task 360, 2 new tests added to EffectTests.cpp; Effect.cpp was
+temporarily edited for a discriminating-power check and reverted to its exact pre-Task-360 state):
+EasyGL 3386/3389 pass (3 documented pre-existing failures that run: EasyGL_MRT_TwoAttachments,
+EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests). Vulkan 3309/3322 pass (13
+documented pre-existing failures that run). Bgfx 3291/3292 pass (1 reconfirmed-flaky CueTest that
+run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
 if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
 it as a regression.
@@ -905,12 +935,31 @@ null). Discriminating power verified (temporarily replaced .at(index) with an in
 non-throwing lookup - guarded to avoid a UB crash on the empty-collection case specifically -
 confirmed exactly the 3 non-empty out-of-range tests fail with "it throws nothing", reverted).
 
-Next task: GRAPHICS_TASKS.md Task 360 - add effect lifecycle tests (dispose, clone after dispose,
-apply after dispose - match FNA where possible). Goal: cover Effect lifecycle edge cases; Task 351
-already added an ApplyAfterDispose-style test to EffectTests.cpp (confirm/extend rather than
-duplicate). IMPORTANT: Effect::Clone() does NOT exist yet in CNA (deferred to new Task 883, see
-GRAPHICS_TASKS.md/§8 item 2) - scope the "clone after dispose" sub-case as "N/A until Task 883
-lands" rather than blocking the rest of this task. Files: likely tests/.../EffectTests.cpp.
+Task 360 (add effect lifecycle tests: dispose, clone after dispose, apply after dispose) is now
+DONE - CLOSES PHASE 41. Confirmed FNA's Effect.Dispose(bool)/GraphicsResource.Dispose(bool) are
+both guarded by if (!IsDisposed) - CNA's GraphicsResource::Dispose(bool) already has the identical
+if (isDisposed_) return; guard, so double-dispose was already safe by construction, no code fix
+needed. Confirmed from source that FNA's own Effect/EffectPass have ZERO disposed-state check
+anywhere (EffectPass.Apply() after disposal would feed a zeroed-out native handle straight to
+FNA3D_ApplyEffect - real silent UB in FNA itself) - so CNA's Effect::Apply() throwing
+ObjectDisposedException is a deliberate, confirmed, beneficial safety improvement over FNA (same
+class as GraphicsAdapter::DeviceId/VendorId, Task 345), correctly kept as-is, not reverted to match
+FNA's unsafe behavior. Closed a real coverage gap: added
+ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectDisposed (Task 351 only tested
+Effect::Apply() directly after dispose, never the EffectPass::Apply() entry point) and
+DisposeIsIdempotentAndDoesNotThrow. Discriminating power verified for the pass-level test
+(temporarily removed the isDisposed_ check from Effect::Apply(), confirmed both it and Task 351's
+existing ApplyAfterDisposeThrowsObjectDisposedException fail with "it throws nothing", reverted);
+honestly documented that the double-dispose test has no meaningful way to "break" via a temporary
+diff, since GraphicsDevice::RemoveResourceReference is already a safe no-op on a not-found
+resource. Effect::Clone() still does not exist (deferred to Task 883) - its "clone after dispose"
+sub-case is explicitly N/A until Task 883 lands, not fabricated here.
+
+Next task: GRAPHICS_TASKS.md Task 361 - audit BasicEffect properties and defaults against FNA
+BasicEffect.cs (opens Phase 42). Goal: read FNA's Graphics/Effects/BasicEffect.cs line-by-line,
+build a table of every public property and its default value, compare against CNA's
+BasicEffect.hpp/.cpp. Notes column hint: "Create table." Files: likely
+include/.../BasicEffect.hpp, src/.../BasicEffect.cpp.
 As always: verify genuine discriminating power for any new test (temporarily break/omit any fix,
 confirm the test fails, then revert), full 3-backend rebuild + regression if production code
 changes, update GRAPHICS_TASKS.md and NEXT.md, commit AND push after finishing (standing

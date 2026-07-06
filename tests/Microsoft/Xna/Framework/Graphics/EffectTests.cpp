@@ -238,6 +238,39 @@ TEST_F(EffectApplyTest, ApplyAfterDisposeThrowsObjectDisposedException)
 }
 
 // -----------------------------------------------------------------------
+// Task 360: effect lifecycle — dispose idempotency and apply-after-dispose
+// coverage across every entry point. FNA's own Effect.Dispose(bool)/
+// GraphicsResource.Dispose(bool) are both guarded by `if (!IsDisposed)`, so
+// a second Dispose() call is always a safe no-op — CNA's
+// GraphicsResource::Dispose(bool) carries the identical `if (isDisposed_)
+// return;` guard. Note: FNA's own EffectPass.Apply()/Effect has NO
+// IsDisposed check at all (verified by reading Effect.cs/EffectPass.cs) —
+// calling Apply() on a disposed FNA effect hands a zeroed-out native handle
+// straight to FNA3D_ApplyEffect, undefined behavior at the native layer.
+// CNA's Effect::Apply() throwing ObjectDisposedException is a deliberate,
+// confirmed, beneficial CNA-specific safety improvement over FNA's silent
+// UB here, not a bug to match — same category of intentional divergence as
+// GraphicsAdapter::DeviceId/VendorId (Task 345).
+// Effect::Clone() does not exist in CNA yet (deferred to Task 883), so a
+// "clone after dispose" sub-case is not testable today; see GRAPHICS_TASKS.md
+// Task 360 for the deferral note.
+// -----------------------------------------------------------------------
+
+TEST_F(EffectApplyTest, DisposeIsIdempotentAndDoesNotThrow)
+{
+    EXPECT_NO_THROW(fx.Dispose());
+    EXPECT_NO_THROW(fx.Dispose());
+    EXPECT_TRUE(fx.getIsDisposedProperty());
+}
+
+TEST_F(EffectApplyTest, ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectDisposed)
+{
+    EffectPass& p0 = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+    fx.Dispose();
+    EXPECT_THROW(p0.Apply(), System::ObjectDisposedException);
+}
+
+// -----------------------------------------------------------------------
 // Task 355: EffectPass::Apply() must throw System::InvalidOperationException
 // ("Applied a pass not in the current technique!") when applied while it is
 // not part of the effect's CurrentTechnique, matching FNA's own
