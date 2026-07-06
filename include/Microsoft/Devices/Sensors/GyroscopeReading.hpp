@@ -54,32 +54,47 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Returns true if both readings have equal RotationRate and Timestamp.
          *
+         * Task DEV-API-004: a CNA extension, not real XNA/WP7 API — see
+         * AccelerometerReading::operator==()'s doc comment for the full
+         * rationale (verified against `GyroscopeReading`'s own archived
+         * MSDN page, same `ValueType`-inherited pattern).
+         *
          * @param other The reading to compare against.
          * @return true if equal; otherwise false.
          */
-        bool operator==(const GyroscopeReading& other) const;
+        NOXNA bool operator==(const GyroscopeReading& other) const;
 
         /**
          * @brief Returns true if the readings differ in RotationRate or Timestamp.
          *
+         * See operator==()'s doc comment — same CNA-extension rationale.
+         *
          * @param other The reading to compare against.
          * @return true if not equal; otherwise false.
          */
-        bool operator!=(const GyroscopeReading& other) const;
+        NOXNA bool operator!=(const GyroscopeReading& other) const;
 
         /**
          * @brief Returns a string representation of the reading.
          *
+         * Task DEV-API-004: a CNA extension, not real XNA/WP7 API — see
+         * AccelerometerReading::ToString()'s doc comment for the full
+         * rationale.
+         *
          * @return String in the format "RotationRate:{X:0 Y:0 Z:0}".
          */
-        [[nodiscard]] std::string ToString() const;
+        NOXNA [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Returns a hash code for this reading.
          *
+         * Task DEV-API-004: a CNA extension, not real XNA/WP7 API — see
+         * AccelerometerReading::GetHashCode()'s doc comment for the full
+         * rationale.
+         *
          * @return Hash derived from RotationRate and Timestamp.
          */
-        [[nodiscard]] std::size_t GetHashCode() const;
+        NOXNA [[nodiscard]] std::size_t GetHashCode() const;
 
         /**
          * @brief Returns the fully-qualified .NET type name of this class.

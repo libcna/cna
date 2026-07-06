@@ -123,9 +123,9 @@ in "Exceptions / Enums" below.)
 | Parameterless + parameterized constructors | Real | High | Two ctors each: default (zero/identity values) and one taking every data member |
 | `get<Field>Property()` (per field) | Real | High | Public getters, `const` reference or by-value depending on field type |
 | `set<Field>Property()` (per field) | Real, `AccelerometerReadingEventArgs` has none | High | **`AccelerometerReading`/`GyroscopeReading`/`CompassReading`/`MotionReading`/`AttitudeReading`:** `private` + `friend class <owning sensor>` (Task P3-2), matching the real API's `internal set`. **`AccelerometerReadingEventArgs` (fixed `READINGS-002`, 2026-07-06): removed entirely** — the real API has no setter for `X`/`Y`/`Z` (public get-only) and only a `private set` for `Timestamp`, which needs no dedicated method since the constructor already assigns the private field directly. See "Flagged findings" below for the full citation. |
-| `operator==`/`operator!=` | Real | High | Field-by-field equality |
-| `ToString()` | Real | High | Matches XNA's conventional `"{Field:value ...}"` format |
-| `GetHashCode()` | Real | High | Hash derived from every data member; consistent for equal instances |
+| `operator==`/`operator!=` | `NOXNA` | High | **Fixed (`DEV-API-004`, 2026-07-06):** was wrongly marked `Real` here — each real reading structure's own archived MSDN page (`AccelerometerReading` `ff403534`, `GyroscopeReading` via `hh239315`'s sibling pattern, `CompassReading` `hh203072`, `MotionReading` `hh220685`, `AttitudeReading` `hh220667`) shows no equality operator at all; `Equals(Object)` is inherited unmodified from `System.ValueType` (field-reflection based). C++ has no equivalent automatic equality, so this is a genuine, useful CNA extension, now tagged `NOXNA` in all five headers. Was a real, previously-unflagged **Extra-unmarked** finding, same bug pattern as `SENSORBASE-007`'s `TimeBetweenUpdatesChanged` finding. |
+| `ToString()` | `NOXNA` | High | **Fixed (`DEV-API-004`, 2026-07-06):** was wrongly marked `Real` with an incorrect claim ("Matches XNA's conventional format") — every real reading structure's `ToString()` is inherited unmodified from `System.ValueType.ToString()`, which returns only the fully qualified type name (e.g. `"Microsoft.Devices.Sensors.AccelerometerReading"`), never field values. CNA's field-value format is a more useful convention, now tagged `NOXNA`. |
+| `GetHashCode()` | `NOXNA` | High | **Fixed (`DEV-API-004`, 2026-07-06):** was wrongly marked `Real` — every real reading structure's `GetHashCode()` is inherited unmodified from `System.ValueType.GetHashCode()`. Now tagged `NOXNA`. |
 | `GetTypeName()` | `NOXNA` | High | Hand-declared per struct as `NOXNA [[nodiscard]] std::string GetTypeName() const;` (not the `GetTypeNameHPP()` macro — these don't inherit `System::Object` polymorphically the way the four sensor classes do) |
 
 ## `Microsoft::Devices::Sensors::Motion`
@@ -269,6 +269,17 @@ file's prior content, rather than assuming the file was still current.
   archived MSDN page (`hh239315(v=vs.105)`) lists exactly one event
   (`CurrentValueChanged`) — no such member exists in the real API. Fixed: tagged `NOXNA`
   in `SensorBase.hpp`, corrected in this file's table above.
+  **Update 2026-07-06 (`DEV-API-004`): three more genuine Extra-unmarked findings found
+  the same way, this time systemic across all five reading structs** —
+  `operator==`/`operator!=`/`ToString()`/`GetHashCode()` were all marked `Real` in the
+  "Cross-cutting members — reading structs" table above, with `ToString()`'s note even
+  actively claiming (incorrectly) that it "Matches XNA's conventional format." Fetched
+  each reading structure's own archived MSDN page directly (`AccelerometerReading`
+  `ff403534`, `CompassReading` `hh203072`, `MotionReading` `hh220685`, `AttitudeReading`
+  `hh220667`, plus `GyroscopeReading` by the identical established pattern): all show
+  `Equals`/`GetHashCode`/`ToString` inherited unmodified from `System.ValueType`, and no
+  equality operator at all. Fixed: tagged `NOXNA` on all four members across all five
+  headers, corrected this file's table above.
 - **Wrong signature/visibility (unverified): 2 found**, both newly recorded in "Flagged
   findings" above (`AccelerometerReadingEventArgs`'s and `SensorReadingEventArgs<T>`'s
   public setters, vs. every reading struct's `private`+`friend` convention) —

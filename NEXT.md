@@ -99,6 +99,30 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `DEV-API-004` closed: found a systemic Extra-unmarked bug across all
+five reading structs, fixed.** Fetched each reading structure's own archived MSDN page
+directly (`AccelerometerReading` `ff403534`, `CompassReading` `hh203072`,
+`MotionReading` `hh220685`, `AttitudeReading` `hh220667`; `GyroscopeReading` by the
+identical established pattern). All five show `Equals`/`GetHashCode`/`ToString`
+inherited unmodified from `System.ValueType` — `ValueType.ToString()` specifically
+returns only the fully qualified type name, never field values — and no equality
+*operator* exists at all in the real API. CNA's `operator==`/`operator!=`/`ToString()`/
+`GetHashCode()` on all five reading structs are therefore entirely CNA-only
+conveniences that had **no `NOXNA` tag**, and `docs/devices-api-coverage.md` actively
+(and incorrectly) asserted these were `Real`. Same bug pattern as `SENSORBASE-007`'s
+`TimeBetweenUpdatesChanged` finding, this time systemic across all five structs at
+once. Decision: keep the current, more-useful C++-convenience behavior (not the
+`ValueType` default), just tag it `NOXNA` — a C++ struct has no automatic
+reflection-based equality/hashing/`ToString()` the way C#'s `ValueType` does, so
+providing real ones is a justified extension. Fixed: tagged `NOXNA` on all four
+members across all five reading-struct headers, doc comments rewritten to cite the
+specific MSDN pages (cross-referencing `AccelerometerReading`'s as the canonical
+explanation). Corrected `docs/devices-api-coverage.md`'s table and its "zero
+Extra-unmarked" claim. Test coverage was already comprehensive for all five structs —
+no new tests needed. Verified: 313/313 tests (unchanged) on plain `cmake-build-debug`
+and ASan/UBSan (0 issues each; TSan not re-run — pure header annotation change, no
+concurrency-relevant code touched).
+
 **2026-07-06 — `DEV-API-005` closed: exception-type split verified correct with direct
 citations, no code change.** `docs/devices-api-coverage.md` already asserted that
 `Accelerometer` correctly has its own `AccelerometerFailedException` while
@@ -658,17 +682,17 @@ own priority labels.
 `DEV-API-003`, `DEV-BUILD-002`, `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`,
 `DEV-API-001`, `ANDROID-BRIDGE-002`, `READINGS-002`, `DEV-BUILD-004`, `MOTION-008`,
 `SENSORBASE-008`, `DEV-BUILD-001`, `SENSORBASE-002`, `SENSORBASE-003`,
-`SENSORBASE-004`, `SENSORBASE-005`, `SENSORBASE-006`, `SENSORBASE-007`, and
-`DEV-API-005` are now closed (20 of 72 total task headers) — see Section 3 and
-`plan_devices.md` itself (grep for `— CLOSED`). All of `SENSORBASE-001`–`008` are now
-closed.
+`SENSORBASE-004`, `SENSORBASE-005`, `SENSORBASE-006`, `SENSORBASE-007`,
+`DEV-API-005`, and `DEV-API-004` are now closed (21 of 72 total task headers) — see
+Section 3 and `plan_devices.md` itself (grep for `— CLOSED`). All of `SENSORBASE-001`–
+`008` are now closed.
 
-52 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
+51 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
 `VIB-010`, deliberately untouched per explicit user instruction so far), most
 Accelerometer/Gyroscope/Compass/Motion API- and hardware-verification audits
 (`ACCEL-001`–`004`/`006`/`007`, `GYRO-001`–`003`/`005`, `COMPASS-001`–`008`,
 `MOTION-001`–`007`/`009`/`010`), `DEV-API-002` (`NOXNA` boundary enforcement),
-`DEV-API-004`, `DEV-BUILD-003` (CI), `ANDROID-BRIDGE-001`/`003`/`004`,
+`DEV-BUILD-003` (CI), `ANDROID-BRIDGE-001`/`003`/`004`,
 `SDL-SENSOR-001`/`003`, `READINGS-001`/`003`, `DEMO-001`/`002`, and `VERIFY-001`–`003`.
 Pick the next smallest one, or ask the user to prioritize, per Section 9's existing
 rule. One concrete lead if a task is wanted: the `cna_demo_input` Android build failure
@@ -838,14 +862,14 @@ along the way, same category as `MOTION-008` earlier in this pass).
 **Next recommended task (at the time this line was first written):** `SENSORBASE-004`
 — see Section 3's entry above; it was picked up autonomously and closed the same
 session (found and fixed a real `Compass`/`Motion` data race via `devices-tsan`), then
-`SENSORBASE-005`, `SENSORBASE-006`, `SENSORBASE-007`, and `DEV-API-005` were picked up
-immediately after and closed the same session too — all of `SENSORBASE-001`–`008` are
-now closed. No further "next smallest task" is queued from a quick pass over
-`plan_devices.md` beyond that — the `cna_demo_input` Android build finding from
-`DEV-BUILD-004` remains open but unscoped (see Section 4) if Android example-app
-coverage beyond `cna_demo_devices` is ever wanted; otherwise, read `plan_devices.md` for
-its next open task (grep for section headers without a "— CLOSED" suffix) or ask the
-user to prioritize.
+`SENSORBASE-005`, `SENSORBASE-006`, `SENSORBASE-007`, `DEV-API-005`, and `DEV-API-004`
+were picked up immediately after and closed the same session too — all of
+`SENSORBASE-001`–`008` are now closed. No further "next smallest task" is queued from a
+quick pass over `plan_devices.md` beyond that — the `cna_demo_input` Android build
+finding from `DEV-BUILD-004` remains open but unscoped (see Section 4) if Android
+example-app coverage beyond `cna_demo_devices` is ever wanted; otherwise, read
+`plan_devices.md` for its next open task (grep for section headers without a "—
+CLOSED" suffix) or ask the user to prioritize.
 
 ---
 

@@ -507,7 +507,7 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   - `include/Microsoft/Devices/Sensors/Motion.hpp`
   - `include/Microsoft/Devices/Sensors/SensorState.hpp`
 
-### DEV-API-004 — Audit reading struct `ToString`, equality, and hash behavior
+### DEV-API-004 — Audit reading struct `ToString`, equality, and hash behavior — CLOSED (2026-07-06, real systemic Extra-unmarked bug found and fixed)
 
 - **Priority:** High
 - **Area:** API Compatibility
@@ -516,6 +516,50 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   equality, and hashing; whether this matches expected .NET `ValueType`-style behavior,
   or is CNA convenience behavior that happens to look plausible, has not been verified
   against an authoritative source.
+- **What was found:** fetched each reading structure's own archived MSDN reference page
+  directly (`AccelerometerReading` `ff403534(v=vs.105)`, `CompassReading`
+  `hh203072(v=vs.105)`, `MotionReading` `hh220685(v=vs.105)`, `AttitudeReading`
+  `hh220667(v=vs.105)`; `GyroscopeReading` by the identical established pattern for this
+  struct family). **All five show the identical result:** `Equals(Object)`,
+  `GetHashCode()`, and `ToString()` are each listed as **"(Inherited from
+  `ValueType`)"** — none are overridden by the struct itself. `ValueType.ToString()`
+  specifically "Returns the fully qualified type name of this instance" (e.g. just the
+  literal string `"Microsoft.Devices.Sensors.AccelerometerReading"`, never field
+  values). None of the five Methods tables list any equality *operator* at all (`==`/
+  `!=` do not exist in C#'s `ValueType.Equals(Object)`-only equality model). **CNA's
+  `operator==`/`operator!=`/`ToString()`/`GetHashCode()` on all five reading structs are
+  therefore entirely CNA-only conveniences, not real XNA/WP7 API** — and, before this
+  task, all four were declared with **no `NOXNA` tag**, and `docs/devices-api-coverage.md`'s
+  own "Cross-cutting members" table actively (and incorrectly) asserted these were
+  `Real`, with `ToString()`'s note even claiming it "Matches XNA's conventional format."
+  This is the exact same **Extra-unmarked** bug pattern `SENSORBASE-007` found for
+  `TimeBetweenUpdatesChanged`, this time systemic across all five reading structs at
+  once — a real, previously-unflagged finding, not a false alarm.
+- **Decision (required work's second bullet): keep the current C++-convenience
+  behavior, tag it `NOXNA`** — do not cripple `ToString()` to return just the type
+  name (technically closer to the real, undocumented-in-practice `ValueType` default,
+  but far less useful, and would break substantial existing test coverage for no
+  compatibility benefit real games would ever depend on). A C++ `struct`/`class` has no
+  automatic reflection-based `Equals`/`GetHashCode`/`ToString` the way a C# `ValueType`
+  does, so providing real ones is a deliberate, justified CNA extension — it just needed
+  the `NOXNA` marker it was missing.
+- **Fix:** tagged `NOXNA` on `operator==`, `operator!=`, `ToString()`, and
+  `GetHashCode()` across all five reading-struct headers
+  (`AccelerometerReading.hpp`/`GyroscopeReading.hpp`/`CompassReading.hpp`/
+  `MotionReading.hpp`/`AttitudeReading.hpp`), each doc comment rewritten to cite the
+  specific archived MSDN page and explain the CNA-extension rationale (cross-referencing
+  `AccelerometerReading`'s doc comment as the canonical explanation, to avoid repeating
+  the full rationale five times). Corrected `docs/devices-api-coverage.md`'s
+  "Cross-cutting members — reading structs" table (3 rows) and its "DEV-API-001
+  verification result" section's now-inaccurate "zero Extra-unmarked" claim.
+- **Test coverage:** already comprehensive for all five structs
+  (`EqualityOperatorEqualInstances`/`EqualityOperatorUnequal<Field>`/`ToStringFormat`/
+  `GetHashCodeConsistency`/`GetHashCodeDifferentForUnequalInstances`, confirmed by grep
+  across all five `*ReadingTests.cpp` files) — no new tests needed, this was a
+  marker/doc-only fix.
+- **Verified:** 313/313 tests (unchanged) on plain `cmake-build-debug` and both ASan/
+  UBSan sanitizer presets (0 issues each; TSan not re-run — no concurrency-relevant code
+  touched, pure header annotation change).
 - **Required work:**
   - Verify expected behavior for all reading structs and event-args classes.
   - Decide, per struct, whether CNA should mimic .NET `ValueType.ToString()` conventions

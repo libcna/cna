@@ -86,32 +86,47 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Returns true if both readings have equal heading, magnetometer, and timestamp values.
          *
+         * Task DEV-API-004: a CNA extension, not real XNA/WP7 API — see
+         * AccelerometerReading::operator==()'s doc comment for the full
+         * rationale (verified against `CompassReading`'s own archived MSDN
+         * page, `hh203072(v=vs.105)`, same `ValueType`-inherited pattern).
+         *
          * @param other The reading to compare against.
          * @return true if equal; otherwise false.
          */
-        bool operator==(const CompassReading& other) const;
+        NOXNA bool operator==(const CompassReading& other) const;
 
         /**
          * @brief Returns true if the readings differ in any heading, magnetometer, or timestamp value.
          *
+         * See operator==()'s doc comment — same CNA-extension rationale.
+         *
          * @param other The reading to compare against.
          * @return true if not equal; otherwise false.
          */
-        bool operator!=(const CompassReading& other) const;
+        NOXNA bool operator!=(const CompassReading& other) const;
 
         /**
          * @brief Returns a string representation of the reading.
          *
+         * Task DEV-API-004: a CNA extension, not real XNA/WP7 API — see
+         * AccelerometerReading::ToString()'s doc comment for the full
+         * rationale.
+         *
          * @return String in the format "MagneticHeading:0 TrueHeading:0 HeadingAccuracy:0 MagnetometerReading:{X:0 Y:0 Z:0}".
          */
-        [[nodiscard]] std::string ToString() const;
+        NOXNA [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Returns a hash code for this reading.
          *
+         * Task DEV-API-004: a CNA extension, not real XNA/WP7 API — see
+         * AccelerometerReading::GetHashCode()'s doc comment for the full
+         * rationale.
+         *
          * @return Hash derived from all reading values.
          */
-        [[nodiscard]] std::size_t GetHashCode() const;
+        NOXNA [[nodiscard]] std::size_t GetHashCode() const;
 
         /**
          * @brief Returns the fully-qualified .NET type name of this class.
