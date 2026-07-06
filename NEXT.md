@@ -57,14 +57,15 @@ framework/runtime, not a game.
   hardware-dependent, expected — not Audio; the 1-test increase since the last sync is
   `P10-AUDIT-002/003`'s new `AudioEngineTest.RendererDetailsReportsExactlyOneSdlMixerEntry`, plus
   one renamed-in-place `CueTest` and one tightened `SoundEffectTest` assertion, both net-zero on
-  count). The audio-scoped subset (§7's `--gtest_filter` list) was previously **430 / 430 pass** under a
-  dedicated one-off ASan+UBSan build (repeat-stressed on dispose/fire-and-forget/callback-
-  lifetime/stream-pause-resume risk areas — zero leaks/errors) and clean under a dedicated
-  ThreadSanitizer build (see §5); not rerun under a fresh ASan/TSan build this pass (plain Debug
-  build only) -- full audio-scoped filter (now 465 tests) verified green under plain Debug,
-  including a plain-Debug rerun of the existing (ThreadSanitizer-precedent)
-  `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread` test, still passing after
-  `P10-FILTER-002/003/004/006`'s new live filter-coefficient write path.
+  count). The audio-scoped subset (§7's `--gtest_filter` list, now 466 tests) was reverified this
+  pass under a **fresh dedicated ASan+UBSan build**: 466/466 pass, zero leaks/errors -- the first
+  ASan/UBSan run since `P10-SAN-002`, covering everything landed since (`P10-RPC-004/007`'s
+  release-phase timers, `P10-FILTER-002/003/004/006`'s live filter-coefficient writes,
+  `P10-LOOP-003/004`'s new raw-callback regression test). Also reverified under a fresh dedicated
+  **ThreadSanitizer** build: the existing `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`
+  precedent test (10 repeats) and the new `BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion`
+  raw-callback test (5 repeats, its own atomics-across-threads code is new this pass) both clean,
+  no data races. Both sanitizer build dirs deleted after use, per this project's own convention.
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
@@ -102,6 +103,13 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10" sections.
 
+- **Post-Phase-10 ASan+UBSan+ThreadSanitizer sweep** — with Phase 10 fully closed, used remaining
+  autonomous-session time on self-contained verification rather than starting new scope. Fresh
+  dedicated ASan+UBSan build: full audio-scoped filter (466 tests) 466/466 pass, zero leaks/errors
+  -- first ASan/UBSan run since `P10-SAN-002`, covering everything landed since. Fresh dedicated
+  ThreadSanitizer build: `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread` (10 repeats) and
+  the new `BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion` (5 repeats) both clean.
+  Both build dirs deleted after use. No code changes; docs-only update to §2/this entry.
 - **`P10-PAN-002`** — closed as the user-confirmed skip/reaffirm-only decision (no implementation
   attempted). Reaffirmed `CHECKLIST.md` CP-19/RFC-1's reasoning still holds, and noted it's if
   anything *stronger* now: `P10-FILTER-002/003/004/006` (this same pass) made the single SDL3_mixer
@@ -372,23 +380,21 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**Phase 10 is fully closed (89/89 task IDs).** There is no more Phase 10 work to pick from. The
-autonomous pass is using the remaining time on self-contained *verification* work that doesn't
-require any new scope/design decision -- not starting a new "Phase 11" (defining new task scope is
-itself exactly the kind of decision this session is deferring to the user, per §9):
+**Phase 10 is fully closed (89/89 task IDs), and the follow-up ASan+UBSan+ThreadSanitizer sweep
+came back clean (§2/§3).** There is no further self-selectable work left on this branch that
+doesn't require a new scope/design decision. Per this autonomous pass's own standing instruction
+not to invent new scope (§9), **the session is stopping here** rather than starting a new "Phase
+11" or otherwise picking new work. Genuinely open items that need the user's input before anything
+further can be self-directed:
 
-1. **Fresh ASan+UBSan and ThreadSanitizer sweep of the full accumulated Audio test suite.** §2 has
-   said "not rerun under a fresh ASan/TSan build this pass" for several consecutive passes now
-   (the last real sanitizer run was `P10-SAN-002`, before this session's `P10-RPC-004` onward
-   commits) -- a real, if low-urgency, gap given how much new code (RPC-release timing, live
-   filter-coefficient writes, the new loop-region regression test's raw callback) has landed since
-   then. Uses the exact recipe already in §7 (`cmake-build-asan`/`cmake-build-tsan`, deleted after
-   use); no design decision needed, purely confirms what's already shipped is clean.
-   *Files:* none expected (verification only; any finding would need its own task).
-
-If that comes back clean (as expected -- nothing this pass touched raw memory lifetime beyond the
-established, already-covered coefficient-write pattern), there is no further self-selectable work
-left, and the session should stop making commits and wait for the user.
+- **Deciding whether to open a "Phase 11"** (or otherwise define new Audio work) at all -- Phase 10
+  was explicitly scoped as "hardening and XNA/XACT parity" and has run its course; what comes next
+  (if anything) is a product decision, not a mechanical one.
+- The two explicit design-only RFCs recorded in `plan_audio.md` (`P10-PAN-002`'s RFC-1: internal
+  post-SDL3_mixer crossfeed mixing layer; `P10-HRTF-002`'s RFC-2: optional FAudio/FACT backend) --
+  proposals only, never approved as work, per §9.
+- Whether to push this branch's commits (`git log origin/feature/audio..HEAD`) -- not done this
+  pass, per this project's standing "never push without being explicitly asked" rule.
 
 ---
 

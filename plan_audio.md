@@ -4122,3 +4122,27 @@ cmake --build cmake-build-asan --target CnaTests -j"$(nproc)"
 SDL_AUDIODRIVER=dummy ./cmake-build-asan/CnaTests
 rm -rf cmake-build-asan
 ```
+
+## Phase 10 closure note (2026-07-07)
+
+**All 89/89 Phase 10 task IDs across all 12 groups (`10.1`–`10.12`) are now `[x]`.** The final six
+(`P10-RPC-004`, `P10-RPC-007`, `P10-FILTER-002/003/004/006`, `P10-LOOP-003/004`,
+`P10-AUDIT-002/003`, `P10-PAN-002`) closed during an autonomous unattended continuation started
+2026-07-06, per the user's own explicit authorization to work straight through this list without
+stopping to ask (see `NEXT.md`'s "Autonomous session note"). Every item either landed a real fix
+(with the full git-stash-verify + full-suite-run + commit cycle this branch has used throughout),
+or closed with a corrected finding/reaffirmed decision instead of a code change when investigation
+showed the originally-assumed problem didn't actually reproduce (`P10-LOOP-003/004`) or the
+decision was already sound and unchanged (`P10-PAN-002`).
+
+With Phase 10 exhausted, this same autonomous pass used its remaining time on one piece of
+self-contained verification work that needed no new scope decision: a fresh, dedicated ASan+UBSan
+build (full audio-scoped filter, 466 tests, all pass, zero leaks/errors -- the first such run since
+`P10-SAN-002`, covering every commit since) and a fresh, dedicated ThreadSanitizer build
+(`ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread` ×10 repeats,
+`BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion` ×5 repeats, both clean). Both build
+dirs deleted after use, matching this file's own documented one-off recipe above.
+
+No new "Phase 11" was opened -- deciding what, if anything, comes after a hardening phase that has
+run its course is a product decision for the user, not something this pass invents for itself
+(see `NEXT.md` §8/§9 for the specific open items deferred to the user's return).
