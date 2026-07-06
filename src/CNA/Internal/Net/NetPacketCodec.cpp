@@ -4,6 +4,7 @@
 #include "System/IO/MemoryStream.hpp"
 
 #include <enet/enet.h>
+#include <limits>
 #include <stdexcept>
 
 namespace CNA::Internal::Net
@@ -24,6 +25,23 @@ namespace CNA::Internal::Net
         {
             writer.Write(entry.WireId);
             writer.Write(entry.Gamertag);
+        }
+
+        // Task 2.12: every list-length count field in this wire format is a single byte; naively
+        // casting a collection's size() down to bytecs would silently wrap (e.g. 256 -> 0) while
+        // the full, untruncated collection is still serialized right after it, desynchronizing
+        // the decoder. Currently unreachable via any real join/leave flow
+        // (NetworkSession::MaxSupportedGamers == 31), but nothing in the wire format itself
+        // enforces that invariant - guard explicitly here rather than relying on it forever.
+        bytecs EncodeCount(std::size_t size, const char* fieldName)
+        {
+            if (size > static_cast<std::size_t>(std::numeric_limits<bytecs>::max()))
+            {
+                throw std::runtime_error(
+                    std::string("NetPacketCodec: ") + fieldName + " exceeds the wire format's 255-entry capacity"
+                );
+            }
+            return static_cast<bytecs>(size);
         }
     }
 
@@ -57,7 +75,7 @@ namespace CNA::Internal::Net
     {
         PacketWriter writer;
         writer.Write(static_cast<bytecs>(MessageTag::ClientHello));
-        writer.Write(static_cast<bytecs>(message.LocalGamertags.size()));
+        writer.Write(EncodeCount(message.LocalGamertags.size(), "ClientHelloMessage.LocalGamertags"));
         for (const auto& gamertag : message.LocalGamertags)
         {
             writer.Write(gamertag);
@@ -88,13 +106,13 @@ namespace CNA::Internal::Net
         PacketWriter writer;
         writer.Write(static_cast<bytecs>(MessageTag::ServerWelcome));
 
-        writer.Write(static_cast<bytecs>(message.AssignedWireIds.size()));
+        writer.Write(EncodeCount(message.AssignedWireIds.size(), "ServerWelcomeMessage.AssignedWireIds"));
         for (bytecs wireId : message.AssignedWireIds)
         {
             writer.Write(wireId);
         }
 
-        writer.Write(static_cast<bytecs>(message.ExistingRoster.size()));
+        writer.Write(EncodeCount(message.ExistingRoster.size(), "ServerWelcomeMessage.ExistingRoster"));
         for (const auto& entry : message.ExistingRoster)
         {
             WriteRosterEntry(writer, entry);
@@ -134,7 +152,7 @@ namespace CNA::Internal::Net
     {
         PacketWriter writer;
         writer.Write(static_cast<bytecs>(MessageTag::GamerJoinBroadcast));
-        writer.Write(static_cast<bytecs>(message.NewGamers.size()));
+        writer.Write(EncodeCount(message.NewGamers.size(), "GamerJoinBroadcastMessage.NewGamers"));
         for (const auto& entry : message.NewGamers)
         {
             WriteRosterEntry(writer, entry);
@@ -164,7 +182,7 @@ namespace CNA::Internal::Net
     {
         PacketWriter writer;
         writer.Write(static_cast<bytecs>(MessageTag::GamerLeaveBroadcast));
-        writer.Write(static_cast<bytecs>(message.WireIds.size()));
+        writer.Write(EncodeCount(message.WireIds.size(), "GamerLeaveBroadcastMessage.WireIds"));
         for (bytecs wireId : message.WireIds)
         {
             writer.Write(wireId);

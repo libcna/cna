@@ -451,15 +451,27 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   and reran (3x) — passes every time, each cycle completing near-instantly. Full suite:
   **3249/3251 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.12** — Fix list-length wire fields silently truncating past 255 entries. Confirmed
-  pattern in `NetPacketCodec::Encode` (~lines 60, 91, 97, 137, 167): `.size()` is cast down to a
+- [x] **Task 2.12** — Fix list-length wire fields silently truncating past 255 entries. Confirmed
+  pattern in `NetPacketCodec::Encode` (~lines 60, 91, 97, 137, 167): `.size()` was cast down to a
   single `bytecs` for `LocalGamertags`/`AssignedWireIds`/`ExistingRoster`/`NewGamers`/`WireIds`,
-  while the accompanying loop still serializes the *full*, untruncated collection — if any of these
-  ever exceeds 255 entries, the written count wraps (e.g. 256→0) while every element is still
-  written, desynchronizing the decoder. Low likelihood given `NetworkSession::MaxSupportedGamers ==
-  31`, but nothing ties the wire format to that invariant. Add an assertion/static bound check tying
-  the wire format's capacity to `MaxSupportedGamers`, and a test (or a `static_assert`-style
-  compile-time check plus a runtime guard) documenting/enforcing the real limit.
+  while the accompanying loop still serialized the *full*, untruncated collection — if any of these
+  ever exceeded 255 entries, the written count would wrap (e.g. 256→0) while every element was
+  still written, desynchronizing the decoder. Low likelihood given
+  `NetworkSession::MaxSupportedGamers == 31`, but nothing tied the wire format to that invariant.
+  **Fixed:** added an `EncodeCount(std::size_t size, const char* fieldName)` helper (anonymous
+  namespace) that throws `std::runtime_error` if `size` exceeds `bytecs`'s range instead of
+  silently truncating; applied it at all 5 call sites across
+  `Encode(ClientHelloMessage/ServerWelcomeMessage/GamerJoinBroadcastMessage/GamerLeaveBroadcastMessage)`.
+  **Added 5 tests** (one per field): `ClientHelloEncodeThrowsWhenLocalGamertagsExceeds255`,
+  `ServerWelcomeEncodeThrowsWhenAssignedWireIdsExceeds255`,
+  `ServerWelcomeEncodeThrowsWhenExistingRosterExceeds255`,
+  `GamerJoinBroadcastEncodeThrowsWhenNewGamersExceeds255`,
+  `GamerLeaveBroadcastEncodeThrowsWhenWireIdsExceeds255` — each builds a 256-element collection and
+  asserts `Encode()` throws instead of silently wrapping.
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran all 5 — all
+  failed with "throws nothing" (confirming the old code really did accept and silently truncate
+  oversized collections). Restored the fix and reran — all 5 pass. Full suite:
+  **3254/3256 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.13** — Fix `SendAppData` silently dropping packets sent before the ENet handshake
   completes. Confirmed (`ENetBackend.cpp`, ~lines 489-536): a `GamerToWireId` lookup miss does a

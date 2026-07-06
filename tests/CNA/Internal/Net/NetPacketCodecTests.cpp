@@ -32,6 +32,17 @@ TEST(NetPacketCodecTest, ClientHelloRoundtripEmpty) {
     EXPECT_TRUE(decoded.LocalGamertags.empty());
 }
 
+// Task 2.12: every list-length count field in this wire format is a single byte; naively casting
+// size() down to bytecs would silently wrap (e.g. 256 -> 0) while the full, untruncated collection
+// is still serialized right after it, desynchronizing the decoder. Currently unreachable via any
+// real join/leave flow (NetworkSession::MaxSupportedGamers == 31), but nothing in the wire format
+// itself enforced that invariant.
+TEST(NetPacketCodecTest, ClientHelloEncodeThrowsWhenLocalGamertagsExceeds255) {
+    ClientHelloMessage message;
+    message.LocalGamertags.assign(256, "x");
+    EXPECT_THROW(NetPacketCodec::Encode(message), std::runtime_error);
+}
+
 TEST(NetPacketCodecTest, ServerWelcomeRoundtrip) {
     ServerWelcomeMessage message;
     message.AssignedWireIds = {3, 4};
@@ -51,6 +62,18 @@ TEST(NetPacketCodecTest, ServerWelcomeRoundtrip) {
     EXPECT_EQ(decoded.ExistingRoster[1].Gamertag, "guest");
 }
 
+TEST(NetPacketCodecTest, ServerWelcomeEncodeThrowsWhenAssignedWireIdsExceeds255) {
+    ServerWelcomeMessage message;
+    message.AssignedWireIds.assign(256, 1);
+    EXPECT_THROW(NetPacketCodec::Encode(message), std::runtime_error);
+}
+
+TEST(NetPacketCodecTest, ServerWelcomeEncodeThrowsWhenExistingRosterExceeds255) {
+    ServerWelcomeMessage message;
+    message.ExistingRoster.assign(256, RosterEntry{1, "x"});
+    EXPECT_THROW(NetPacketCodec::Encode(message), std::runtime_error);
+}
+
 TEST(NetPacketCodecTest, GamerJoinBroadcastRoundtrip) {
     GamerJoinBroadcastMessage message;
     message.NewGamers = {{5, "newgamer"}};
@@ -62,6 +85,12 @@ TEST(NetPacketCodecTest, GamerJoinBroadcastRoundtrip) {
     ASSERT_EQ(decoded.NewGamers.size(), 1u);
     EXPECT_EQ(decoded.NewGamers[0].WireId, 5);
     EXPECT_EQ(decoded.NewGamers[0].Gamertag, "newgamer");
+}
+
+TEST(NetPacketCodecTest, GamerJoinBroadcastEncodeThrowsWhenNewGamersExceeds255) {
+    GamerJoinBroadcastMessage message;
+    message.NewGamers.assign(256, RosterEntry{1, "x"});
+    EXPECT_THROW(NetPacketCodec::Encode(message), std::runtime_error);
 }
 
 TEST(NetPacketCodecTest, GamerLeaveBroadcastRoundtrip) {
@@ -76,6 +105,12 @@ TEST(NetPacketCodecTest, GamerLeaveBroadcastRoundtrip) {
     EXPECT_EQ(decoded.WireIds[0], 7);
     EXPECT_EQ(decoded.WireIds[1], 8);
     EXPECT_EQ(decoded.WireIds[2], 9);
+}
+
+TEST(NetPacketCodecTest, GamerLeaveBroadcastEncodeThrowsWhenWireIdsExceeds255) {
+    GamerLeaveBroadcastMessage message;
+    message.WireIds.assign(256, 1);
+    EXPECT_THROW(NetPacketCodec::Encode(message), std::runtime_error);
 }
 
 TEST(NetPacketCodecTest, StateChangeBroadcastRoundtrip) {
