@@ -352,17 +352,35 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   silently accepted). Restored the fix and reran (3x) — passes every time. Full suite:
   **3244/3246 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.8** — Fix `LocalNetworkGamer::ReceiveData(vector&, int offset, sender)` writing past
+- [x] **Task 2.8** — Fix `LocalNetworkGamer::ReceiveData(vector&, int offset, sender)` writing past
   the end of the caller's buffer. Confirmed (`LocalNetworkGamer.cpp`, ~lines 44-47):
-  `int len = std::min(packet.size(), data.size());` ignores `offset` entirely, then
+  `int len = std::min(packet.size(), data.size());` ignored `offset` entirely, then
   `std::copy(packet.begin(), packet.begin()+len, data.begin()+offset)` — concrete repro:
   `data.size()==10`, `offset==5`, incoming packet `size()==8` → `len=min(8,10)=8` → writes
-  `data[5..13)`, 3 elements past the end of a 10-element buffer (undefined behavior). FNA's
-  `Array.Copy` throws a catchable `ArgumentException` for the equivalent misuse. Fix: compute the
-  correct bound as `std::min(packet.size(), data.size() - offset)` (with a check that `offset <=
-  data.size()` first, throwing an appropriate exception otherwise). Add a test with a real
-  non-empty queue and a non-zero offset that would overflow without the fix (run under ASan if
-  available to prove no OOB write).
+  `data[5..13)`, 3 elements past the end of a 10-element buffer (undefined behavior).
+  **Refined the plan's own originally-suggested fix after checking the FNA reference directly**:
+  FNA's real `ReceiveData` computes `len` the *exact same offset-oblivious way*
+  (`Math.Min(packet.Length, data.Length)`), then calls `Array.Copy(packet, 0, data, offset, len)` —
+  and .NET's `Array.Copy` validates `offset + len` against the destination length and throws
+  `ArgumentException` on overflow. So clamping `len` to `data.size() - offset` (this task's
+  originally-written suggestion) would have been a *new* divergence from FNA — silently succeeding
+  with a smaller length where real FNA throws. The faithful fix preserves FNA's exact `len`
+  computation and instead validates the copy bounds before performing it, throwing to match
+  `Array.Copy`'s real behavior.
+  **Fixed:** added `if (offset < 0 || offset + len > static_cast<int>(data.size())) { throw System::ArgumentException("offset"); }`
+  right before the `std::copy` call — after the packet is already popped from the queue, matching
+  FNA's own `Dequeue()`-before-`Array.Copy` ordering (the packet is consumed either way).
+  **Added `LocalNetworkGamerTest.ReceiveDataWithOffsetThrowsInsteadOfWritingPastBufferEnd`**
+  (`tests/.../NetworkSessionTests.cpp`, where the existing `LocalNetworkGamerTest` suite already
+  lives): enqueues a real packet directly via the `NOXNA` `EnqueuePacket` helper (no full ENet
+  round-trip needed) and calls `ReceiveData` with an offset that would overflow a 10-element
+  buffer, asserting `System::ArgumentException`.
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with
+  "throws nothing" (the missing validation meant no exception occurred, though this particular
+  heap layout happened not to crash outright — ASan is not currently configured in this repo's
+  CMake setup, so the exception-based assertion is the direct, deterministic proof rather than a
+  sanitizer trap). Restored the fix and reran — passes. Full suite: **3245/3247 passing** (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.9** — Add bounds validation to both `LocalNetworkGamer::SendData(offset, count,
   ...)` overloads. Confirmed (`LocalNetworkGamer.cpp`, ~lines 96-98, 116-118):

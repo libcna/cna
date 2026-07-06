@@ -642,6 +642,23 @@ TEST(LocalNetworkGamerTest, ReceiveDataReturnsZeroWhenQueueEmpty) {
     EXPECT_EQ(sender, nullptr);
 }
 
+// Task 2.8: len was computed as std::min(packet.size(), data.size()) - completely ignoring
+// offset, unlike FNA's own Array.Copy(packet.Packet, 0, data, offset, len), which validates
+// offset+len against data.Length and throws ArgumentException on overflow. std::copy has no such
+// validation, so writing to data.begin() + offset for len elements silently wrote past the end of
+// the caller's buffer (undefined behavior) whenever offset + len > data.size().
+TEST(LocalNetworkGamerTest, ReceiveDataWithOffsetThrowsInsteadOfWritingPastBufferEnd) {
+    LocalGamerFixture fixture;
+    NetworkSession::NetworkEvent evt;
+    evt.Packet = {1, 2, 3, 4, 5, 6, 7, 8}; // size 8
+    fixture.gamer->EnqueuePacket(evt);
+    ASSERT_TRUE(fixture.gamer->getIsDataAvailableProperty());
+
+    std::vector<SharpRuntime::bytecs> buffer(10); // size 10; len = min(8,10) = 8; 5+8=13 > 10
+    NetworkGamer* sender = nullptr;
+    EXPECT_THROW(fixture.gamer->ReceiveData(buffer, 5, sender), System::ArgumentException);
+}
+
 TEST(LocalNetworkGamerTest, SendDataThenReceiveDataRoundtrip) {
     LocalGamerFixture fixture;
     std::vector<SharpRuntime::bytecs> payload{1, 2, 3, 4};

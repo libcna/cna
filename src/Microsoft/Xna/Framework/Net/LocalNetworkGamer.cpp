@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include <algorithm>
 
@@ -44,6 +45,16 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSession::NetworkEvent packet = std::move(packetQueue_.front());
         packetQueue_.pop();
         int len = std::min(static_cast<int>(packet.Packet.size()), static_cast<int>(data.size()));
+        // Task 2.8: FNA's own Array.Copy(packet.Packet, 0, data, offset, len) validates offset+len
+        // against data.Length and throws ArgumentException on overflow (len itself is computed
+        // the same offset-oblivious way in FNA, so it can legitimately exceed data.size() - offset
+        // for a non-zero offset) - preserved here instead of std::copy's undefined behavior for an
+        // out-of-bounds destination range. The packet is still consumed from the queue either way,
+        // matching FNA's Dequeue()-before-Array.Copy ordering.
+        if (offset < 0 || offset + len > static_cast<int>(data.size()))
+        {
+            throw System::ArgumentException("offset");
+        }
         std::copy(packet.Packet.begin(), packet.Packet.begin() + len, data.begin() + offset);
 
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
