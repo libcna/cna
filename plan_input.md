@@ -783,8 +783,18 @@ FNA's bitfield store — not producible from hardware, memory-safe (GetHashCode 
 **Files changed:** none (logic verified, no fix needed). **Behavior verified:** all methods match FNA
 computation. **Remaining risk:** none.
 
-## L-002 — `MouseState.cpp` logic `[ ]`
-- [ ] vs FNA `MouseState.cs`: field packing, `==` field-by-field compare, ToString format, hash choice.
+## L-002 — `MouseState.cpp` logic `[x]`
+- [x] vs FNA `MouseState.cs`: field packing, `==` field-by-field compare, ToString format, hash choice.
+
+**Result (2026-07-06):** Logic verified vs FNA — **faithful, no fix needed.** Ctors set every field (8-arg
+param order confirmed in A3-001). `Equals` compares X/Y/5 buttons/ScrollWheel field-by-field = FNA `operator==`
+(`MouseState.cs:142-158`). **`ToString` is byte-identical to FNA** (`MouseState.cs:185-229`): buttons rendered
+in order Left→Right→Middle→XButton1→XButton2, space-separated, "None" when empty, wrapped as
+`[MouseState X={x}, Y={y}, Buttons={..}, Wheel={w}]`. **`GetHashCode`** = `x ^ (y*31) ^ (scrollWheel*17)`
+with unsigned wraparound (avoids signed-overflow UB) — a **deterministic field-based choice** (documented
+P3-003) vs FNA's non-deterministic `base.GetHashCode()`; note it hashes position+wheel (not the button
+states, which still affect `Equals`) — a valid hash (equal⇒equal). **Files changed:** none (logic verified).
+**Behavior verified:** field compare + exact ToString + deterministic hash. **Remaining risk:** none.
 
 ## L-003 — `Mouse.cpp` logic `[ ]`
 - [ ] vs FNA `Mouse.cs`: GetState assembly, SetPosition (relative-mode guard + warp), WindowHandle
