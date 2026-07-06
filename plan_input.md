@@ -1624,11 +1624,33 @@ Runtime behavior documented in `docs/input-fna-fidelity.md` (DEC-15) and the sou
 `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp` (+1 test). **Behavior verified:** mouse + keyboard
 state survive window lifecycle events. **Remaining risk:** none.
 
-## P8-008 — Verify backend reset
-- [ ] Ensure all internal input state can be reset for tests.
-- [ ] Ensure reset does not require SDL window.
-- [ ] Ensure reset leaves system in deterministic state.
-- [ ] Add tests.
+## P8-008 — Verify backend reset `[x]`
+- [x] Ensure all internal input state can be reset for tests.
+- [x] Ensure reset does not require SDL window.
+- [x] Ensure reset leaves system in deterministic state.
+- [x] Add tests.
+
+**Result (2026-07-06):** `InputManager::ResetAllForTests` fans out (fixed order, InputManager.cpp:126-134) to
+every subsystem and is proven to clear each: keyboard (`ClearsAccumulatedInputManagerState`), touch + display
+metrics (`ClearsTouchPanelDisplayMetricsAndTouches`), gesture queue + previous-touch continuity
+(`ClearsQueuedGesturesOnReset`, `ClearsPreviousTouchSlotContinuityOnReset`), mouse buttons/pos/wheel +
+callbacks (`ClearsAccumulatedMouseButtonsPositionAndWheel`, `ClearsMouseAndTextInputCallbacks`), the bridge
+finger→touch-id counter (`ResetsSequentialTouchIdCounterViaBridge`), and gamepad slots/packets
+(`ResetClearsAllGamepadSlotsAndPacketNumbers`). **Closed the last gap** — the bridge's text-input suppress
+flag: added `ResetForTestsClearsTextInputSuppressionFlag` (a Ctrl+V paste turns suppression on; after
+`SdlInputBridge::ResetForTests` a following TEXT_INPUT flows again, proving the flag was cleared in
+isolation). **No window required** — every reset test runs headless and `ResetForTests` touches no SDL
+window API (it does not close app-owned gamepad handles either). **Deterministic** — pinned by
+`InputResetAllForTests.IsIdempotent` (double reset lands identical) and the shuffle×5 gate. **Files changed:**
+`tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp` (+1 test). **Behavior verified:** full reset of
+every subsystem incl. the bridge suppress flag; window-free and deterministic. **Remaining risk:** none.
+
+---
+
+**Phase 8 complete (2026-07-06):** all tasks `[x]` (P8-006 display-resize / high-DPI-input sub-items `[!]` →
+Phase 11). **+4 tests** closing the ignored-event / stale-handle-neutralization / mouse-lifecycle /
+suppress-flag-reset gaps found by an audit vs FNA `SDL3_FNAPlatform.cs`; the 17-event consumed set is
+enumerated and its FNA-relative omissions documented as intentional. No `src/` change; `ctest -L input` green.
 
 ---
 

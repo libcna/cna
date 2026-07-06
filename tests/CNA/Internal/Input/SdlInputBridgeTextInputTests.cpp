@@ -241,6 +241,27 @@ TEST_F(SdlInputBridgeTextInputTest, CtrlVEmitsPasteCharAndSuppressesLiteralText)
     EXPECT_EQ(captured, u"x");
 }
 
+// P8-008(a): SdlInputBridge::ResetForTests must clear the text-input suppression flag in isolation. Enter a
+// Ctrl+V paste (which turns suppression ON to swallow the literal echo), reset WITHOUT releasing the keys,
+// then confirm a following TEXT_INPUT flows normally — proving reset cleared the flag rather than leaving it
+// stuck for the next test.
+TEST_F(SdlInputBridgeTextInputTest, ResetForTestsClearsTextInputSuppressionFlag)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(keyEvent(true, SDLK_LCTRL));
+    SdlInputBridge::ProcessEvent(keyEvent(true, SDLK_V)); // paste char 22 emitted, suppression ON
+    SdlInputBridge::ProcessEvent(textInputEvent("v"));    // literal 'v' echo is suppressed while ON
+    captured.clear();
+
+    SdlInputBridge::ResetForTests(); // must clear g_textInputSuppress (and the control-down flags)
+
+    // ResetForTests does not touch TextInputEXT's callback, so the subscriber above is still registered.
+    SdlInputBridge::ProcessEvent(textInputEvent("x"));
+    EXPECT_EQ(captured, u"x") << "reset must clear the paste-suppression flag so text flows again";
+}
+
 TEST_F(SdlInputBridgeTextInputTest, CtrlVSuppressionDoesNotStickWhenCtrlReleasedWithoutVKeyUp)
 {
     // Task 875: the Ctrl+V paste-echo suppression must not get stuck if the V key-up is missing or
