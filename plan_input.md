@@ -680,9 +680,15 @@ per-type audit added only tests + removed one *internal* method (`InputManager::
 **public XNA member parity is unchanged**. **Files changed:** none (matrix regenerated identically).
 **Remaining risk:** none.
 
-## A8-002 — Regenerate test-coverage document `[ ]`
-- [ ] Re-run `tools/input_parity/check_input_test_coverage.py`; confirm every type has a dedicated suite;
+## A8-002 — Regenerate test-coverage document `[x]`
+- [x] Re-run `tools/input_parity/check_input_test_coverage.py`; confirm every type has a dedicated suite;
   update `docs/input-test-coverage.md`.
+
+**Result (2026-07-06):** Regenerated `docs/input-test-coverage.md` (26 public + 8 internal types).
+**Gaps: "None — every Input type has a dedicated suite or a documented sibling-suite cover."** The file is
+unchanged (this audit's new tests — IsKeyUp, capabilities isolation, IsButtonUp, TouchPanel WindowHandle
+round-trip — live in test files that already referenced those types, so the type→test-file mapping is
+unchanged). **Files changed:** none (regenerated identically). **Remaining risk:** none.
 
 ## A8-003 — Re-verify signature + enum freeze `[ ]`
 - [ ] Confirm `PublicApiInputSignatureFreezeTests` + `PublicApiInputCompileTests` + enum-value suites still
