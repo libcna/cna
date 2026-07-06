@@ -2848,27 +2848,63 @@ not an alternate spelling to preserve.
 
 ## 8. Compass tasks
 
-### COMPASS-001 — Verify Compass public API
+### COMPASS-001 — Verify Compass public API — CLOSED (2026-07-06, shape confirmed correct; one significant new behavioral finding surfaced for `COMPASS-002`)
 
 - **Priority:** Critical
 - **Area:** Compass API
 - **Problem:** `Compass` has the inherited `SensorBase<T>` API plus a `Calibrate` event
   and compass-specific reading fields; its `getStateProperty()` is already `NOXNA`
   (confirmed Section 1) — verify the rest of the surface just as thoroughly.
+- **Resolution (2026-07-06):** fetched `Compass`'s own archived MSDN class page
+  directly (`hh220912(v=vs.105)`, `ms:assetid` confirmed `T:Microsoft.Devices.Sensors.Compass`).
+  Properties (`CurrentValue`/`IsDataValid`/`IsSupported`/`TimeBetweenUpdates`),
+  Methods (`Dispose`/`Start`/`Stop`, all inherited from `SensorBase<T>`), and Events
+  (`Calibrate`, `CurrentValueChanged`) tables all match `Compass.hpp`'s shape exactly —
+  no missing or extra strict-XNA member found. `getStateProperty()`'s `NOXNA` marking
+  re-confirmed correct (no `State` property listed). `SetBackendForTesting()` confirmed
+  `NOXNA`, test-only, as already documented.
+  - **Manifest capability requirement (`ID_CAP_SENSORS`, WP7-specific):** the real
+    class's Remarks section requires this capability in the WP7 app manifest — this has
+    no direct 1:1 equivalent in an Android `AndroidManifest.xml` (WP7's capability-ID
+    system and Android's permission/`uses-feature` system are structurally different);
+    the closest CNA/Android equivalent (`android.hardware.sensor.compass`
+    `uses-feature`) is already documented as present in `docs/devices-android.md`. Not a
+    gap — different platforms, different manifest mechanisms, already handled correctly
+    on the Android side.
+  - **Significant new finding, surfaced by reading the *Remarks* section (not just the
+    member tables) — handed off to `COMPASS-002`, not resolved here:** the real
+    `Compass`'s Remarks state *"The compass uses a different axis to compute the
+    heading, depending on the orientation of the device"* — and the companion
+    walkthrough page (`hh202974(v=vs.105)`, "How to get data from the compass sensor for
+    Windows Phone 8") confirms this means the device's **physical tilt** (held upright
+    like a traditional compass vs. held flat like a map), not the screen rotation/
+    landscape-lock question `ACCEL-008` raised — with actual sample code detecting which
+    mode is active via the *accelerometer's* Z/Y values. `Detail::AndroidCompassMath::ConvertRotationVectorToMagneticHeadingDegrees()`
+    currently has no equivalent tilt-mode switch at all — it extracts a single fixed
+    azimuth component regardless of how the phone is being held. See `COMPASS-002` for
+    the full writeup and citation; not implemented in this task (out of this task's own
+    narrow "verify the public surface" scope, and — like `ACCEL-008` — a substantial,
+    hardware-unverifiable behavioral question, not a quick fix).
+  - **Tests:** `CompassTests.cpp` already compiles against and exercises the confirmed
+    shape (constructor, `getIsSupportedProperty()`, `getStateProperty()`,
+    `Start()`/`Stop()`/`Dispose()`, `Calibrate`, `CurrentValueChanged`,
+    `SetBackendForTesting()`) — no new mechanism needed here (`DEV-API-002`/`VERIFY-003`
+    remain the separate, still-open strict-mode-check task).
 - **Required work:**
-  - Compare `Compass.hpp` to the official XNA/WP7 API.
+  - Compare `Compass.hpp` to the official XNA/WP7 API. Done, with a direct, independent
+    MSDN re-fetch.
   - Verify `getIsSupportedProperty()`, `Calibrate`, `CurrentValueChanged`,
     `TimeBetweenUpdates`, `Start()`/`Stop()`/`Dispose()`, and `SetBackendForTesting()`
-    (confirmed `NOXNA`, correctly).
+    (confirmed `NOXNA`, correctly). Done, all confirmed correct.
 - **Acceptance criteria:**
-  - `DEV-API-001`'s matrix covers `Compass` completely.
-  - All extra API is marked or documented.
-  - Tests compile against expected signatures.
+  - `DEV-API-001`'s matrix covers `Compass` completely. Confirmed.
+  - All extra API is marked or documented. Confirmed.
+  - Tests compile against expected signatures. Confirmed, already true.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Compass.hpp`
-  - `include/Microsoft/Devices/Sensors/CompassReading.hpp`
-  - `src/Microsoft/Devices/Sensors/Compass.cpp`
-  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Compass.hpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/Sensors/CompassReading.hpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/Sensors/Compass.cpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (inspected, no change needed)
 
 ### COMPASS-002 — Define correct `TrueHeading` behavior
 
