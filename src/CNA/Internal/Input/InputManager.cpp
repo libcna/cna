@@ -453,10 +453,6 @@ namespace CNA::Internal::Input
         return Microsoft::Xna::Framework::Input::Touch::TouchCollection(std::move(snapshot));
     }
 
-    GamePadState InputManager::GetGamePadState(const PlayerIndex playerIndex)
-    {
-        return Microsoft::Xna::Framework::Input::GamePad::GetState(playerIndex);
-    }
 
     RawGamePadState InputManager::GetRawGamePadState(const PlayerIndex playerIndex)
     {

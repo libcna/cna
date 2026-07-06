@@ -199,13 +199,6 @@ namespace CNA::Internal::Input
         static bool HasAnyTouch();
 
         /**
-         * @brief Returns a snapshot of current gamepad state for one player.
-         */
-        static Microsoft::Xna::Framework::Input::GamePadState GetGamePadState(
-            Microsoft::Xna::Framework::PlayerIndex playerIndex
-        );
-
-        /**
          * @brief Returns raw gamepad values (no dead-zone applied) for one player.
          *
          * Used by GamePad::GetState() to apply dead-zone processing at the XNA layer.

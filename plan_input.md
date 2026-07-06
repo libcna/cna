@@ -582,10 +582,26 @@ correctly NOXNA, both `IsScreenKeyboardShown` overloads tested, all members name
 
 # Phase 7 — Internal classes (`CNA::Internal::Input`)
 
-## A7-001 — `InputManager` `[ ]`
-- [ ] CNA `InputManager.hpp`/`.cpp`; tests `InputResetTests.cpp` + subsystem suites.
-- [ ] Members: every `Set*`/`Get*State` accessor (keyboard/mouse/gamepad/touch), reset entry points.
+## A7-001 — `InputManager` `[x]`
+- [x] CNA `InputManager.hpp`/`.cpp`; tests `InputResetTests.cpp` + subsystem suites.
+- [x] Members: every `Set*`/`Get*State` accessor (keyboard/mouse/gamepad/touch), reset entry points.
   Verify each mutates/reads the accumulated singleton correctly; per-member test.
+
+**Result (2026-07-06):** Enumerated **18 public static methods** and mapped test coverage. The 10 setters/
+mutators (`SetKeyState` 13, `SetMouseButtonState` 9, `SetMousePosition` 4, `SetMouseRelativeMode` 2,
+`AddScrollWheelDelta` 2, `AddMouseRelativeDelta` 3, `SetGamePadButtonState` 11, `SetGamePadAxisValue` 31,
+`SetGamePadConnection` 31, `SetTouchState` 29 refs) and both resets (`ResetForTests` 24, `ResetAllForTests`
+25) are **directly** test-referenced; `GetTouchState` (17) and `GetRawGamePadState` (2) directly. The
+delegating getters `HasAnyTouch`/`GetKeyboardState`/`GetMouseState` have **0 direct** test refs but are
+**live and indirectly covered** — `HasAnyTouch` ← `TouchPanel::GetCapabilities` (GetCapabilities tests),
+`GetKeyboardState` ← `SdlInputBridge` control-key/text paths (bridge keyboard tests), `GetMouseState` ←
+`Mouse::GetState` (every Mouse test). **Removed dead code:** `InputManager::GetGamePadState(PlayerIndex)`
+had **zero callers anywhere** in the repo and its body delegated *backwards* to the public
+`GamePad::GetState` — deleted the declaration + definition. **Files changed:**
+`include/CNA/Internal/Input/InputManager.hpp`, `src/CNA/Internal/Input/InputManager.cpp` (dead-method
+removal — provably behavior-neutral, no caller). **Tests:** `ctest -L input` 100% green after removal.
+**Behavior verified:** every remaining public method is exercised (directly or via the public API it backs).
+**Remaining risk:** none.
 
 ## A7-002 — `GestureDetector` `[ ]`
 - [ ] FNA `Input/Touch/GestureDetector.cs`; CNA `GestureDetector.hpp`/`.cpp`; test `GestureDetectorTests.cpp`.
