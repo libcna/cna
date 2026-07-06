@@ -17,12 +17,12 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `plan_graphics.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–42 are complete. **Phase 43 ("AlphaTestEffect
-  exactness", Tasks 371–380) is open** — Task 371 is done (verify-only, zero bugs — `AlphaTestEffect`
-  already matches FNA exactly), **Task 372 is next**: write the (currently nonexistent)
-  `AlphaTestEffectTests.cpp` default-value unit tests. Phase 42 closed with a synthesis doc
-  (`docs/basiceffect-support.md`) and opened 2 new follow-up tasks (885, 886 — lit-path
-  emissive/multi-light forwarding, real specular) rather than bundling large new features into a
-  pixel-test task. Full task-by-task detail (audit findings, exact formulas derived from FNA
+  exactness", Tasks 371–380) is open** — Tasks 371–372 are done (audit + 27-test default-value
+  suite, zero bugs), **Task 373 is next**: pixel test every `CompareFunction` on EasyGL. Phase 42
+  closed with a synthesis doc (`docs/basiceffect-support.md`) and opened 2 new follow-up tasks
+  (885, 886 — lit-path emissive/multi-light forwarding, real specular) rather than bundling large
+  new features into a pixel-test task. Full task-by-task detail (audit findings, exact formulas
+  derived from FNA
   source, discriminating-power verification) lives in `plan_graphics.md` — this file intentionally
   does not duplicate it.
 - **Key architectural decisions:**
@@ -54,17 +54,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 370.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 372.
 
-### Test status (last verified: Task 370)
-- **EasyGL, full `ctest -j1`:** 3419/3423 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`,
-  + 1 flaky `CueTest` this run (passes in isolation).
-- **Vulkan, full `ctest -j1`:** 3341/3356 pass. 13 documented pre-existing failures (see §5), + 1
-  reconfirmed order-dependent `Vulkan_FillMode_WireFrame` flake + 1 flaky `CueTest`, both pass in
-  isolation.
-- **Bgfx, full `ctest -j1`:** 3325/3326 pass, 1 flaky `CueTest` this run (failed once, passed twice
-  on reruns — genuinely timing-flaky, unrelated to graphics).
+### Test status (last verified: Task 372)
+- **EasyGL, full `ctest -j1`:** 3447/3450 pass. 3 pre-existing/documented failures (see §5):
+  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
+- **Vulkan, full `ctest -j1`:** 3370/3383 pass. 13 documented pre-existing failures (see §5),
+  exact-name match, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3353/3353 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -174,7 +171,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 371 | **Opens Phase 43. Verify-only, zero bugs found** — `AlphaTestEffect`'s properties/defaults/dirty-flag constants/`OnApply()` formula all already match FNA exactly. Confirmed (not fixed, Task 378's job) that fog is a total GPU no-op for this effect. Zero existing test coverage found (Task 372's job). |
+| — | 372 | New `AlphaTestEffectTests.cpp` from scratch (zero prior coverage): 27 tests covering all 8 property defaults, setter round-trips, `Clone()`, `GetTypeName()`. No bugs found, no production code changed. |
+| `70593b70` | 371 | **Opens Phase 43. Verify-only, zero bugs found** — `AlphaTestEffect`'s properties/defaults/dirty-flag constants/`OnApply()` formula all already match FNA exactly. Confirmed (not fixed, Task 378's job) that fog is a total GPU no-op for this effect. Zero existing test coverage found (Task 372's job). |
 | `dda9a7b1` | 370 | **Closes Phase 42.** Capstone test combining texture+vertexcolor+diffuse+emissive on all 3 backends, first `BasicEffect` test to use a real multi-texel texture (exercises Task 368's Bgfx layout fix for real). All 3 backends produced byte-identical output — no new bugs, pure integration verification. Wrote `docs/basiceffect-support.md` synthesis doc. |
 | `ccb957a0` | 369 | **Fix**: `FillGpuDrawParams()` dropped `EmissiveColor` from the `LightingEnabled=false` diffuse formula on all 3 backends (shared C++ fix, matches `EffectHelpers.SetMaterialColor`'s exact branching). Lit-path emissive/multi-light/specular deliberately scoped out into new Tasks 885/886 rather than bundled in. |
 | `1e6f87c7` | 368 | **2 real bugs fixed**: `FillGpuDrawParams()` ignored `DirectionalLight0.Enabled` entirely (all 3 backends, shared C++ fix); Bgfx's `MakeBgfxLayout()` never bound `Normal`/`TexCoord0` for strides 20/24/32 (Bgfx-only, wide-reaching — silently broke per-vertex UV/normal on those strides project-wide, invisible until this task's non-1×1-texture, real-normal test). |
@@ -359,64 +357,69 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first opens Phase 43 (Tasks 371–380 fully scoped in `plan_graphics.md`,
-mirroring Phase 42's exact per-effect methodology for `AlphaTestEffect`); the rest are the
-accumulated backlog from earlier phases (Tasks 863–886).
+In priority order — the first 3 continue Phase 43 (Tasks 373–380 fully scoped in
+`plan_graphics.md`, mirroring Phase 42's exact per-effect methodology for `AlphaTestEffect`); the
+rest are the accumulated backlog from earlier phases (Tasks 863–886).
 
-1. **Task 372 — unit test default values for all `AlphaTestEffect` properties**
-   - Goal: exhaustive default-value tests, same style as Task 362's `BasicEffect` version. No
-     backend needed (pure property tests). Zero existing coverage — `AlphaTestEffectTests.cpp`
-     doesn't exist yet, create it from scratch.
-   - Files: new `tests/Microsoft/Xna/Framework/Graphics/AlphaTestEffectTests.cpp`.
+1. **Task 373 — pixel test every `CompareFunction` on EasyGL**
+   - Goal: verify all 8 `CompareFunction` values (`Never`/`Less`/`Equal`/`LessEqual`/`Greater`/
+     `NotEqual`/`GreaterEqual`/`Always`) actually gate per-pixel `discard` correctly, complementing
+     Task 190's existing coverage. Use non-degenerate reference/actual alpha pairs per case so each
+     function's pass/fail boundary is genuinely exercised, not just a single fixed value.
+   - Files: new pixel test, EasyGL only (Tasks 374/375 mirror it on Vulkan/Bgfx).
 
-2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
+2. **Task 374/375 — same `CompareFunction` pixel test on Vulkan/Bgfx**
+   - Goal: port Task 373's test unchanged (up to the standard per-backend workarounds) to prove
+     cross-backend consistency, same pattern as Tasks 364-370.
+
+3. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
    effects). Files: `Effect.hpp`/`.cpp` + all 7 stock-effect pairs.
 
-3. **Task 884 — fix the `RasterizerState`-default GPU-sync gap** and the remaining
+4. **Task 884 — fix the `RasterizerState`-default GPU-sync gap** and the remaining
    `EffectParameterCollection`/`EffectPassCollection` by-value-vector dangling-pointer hazard.
    Files: each backend's device-construction path; `EffectParameterCollection.hpp`/
    `EffectPassCollection.hpp`.
 
-4. **Task 885 — forward `EmissiveColor` on `BasicEffect`'s lit path + `DirectionalLight1`/`2`**
+5. **Task 885 — forward `EmissiveColor` on `BasicEffect`'s lit path + `DirectionalLight1`/`2`**
    (opened by Task 369). Needs a new uniform on EasyGL/Bgfx's lit shaders (straightforward) plus
    expanding Vulkan's shared 128-byte `pipelineLayoutExt3D_` push-constant budget (also used by
    `SkinnedEffect` — coordinate testing across both). Files: `BasicEffect.cpp`, each backend's lit
    shader, `GpuDrawParams`.
 
-5. **Task 886 — implement real specular highlights for `BasicEffect`** (opened by Task 369; a new
+6. **Task 886 — implement real specular highlights for `BasicEffect`** (opened by Task 369; a new
    feature, not a bug fix — zero specular infrastructure exists today). Needs world-space-position
    varyings, eye-position uniform (reuse `EnvironmentMapEffect`/`SkinnedEffect`'s
    `Matrix::Invert(view).Translation` technique), half-vector math, and `SpecularColor`/
    `SpecularPower` forwarding, all 3 backends. Likely shares Task 885's Vulkan push-constant work.
 
-6. **Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`.**
+7. **Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`.**
    Files: `GraphicsDevice.cpp` (`SetRenderTargets`). Verification: 5-target call throws, 1–4 work.
 
-7. **Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends.**
+8. **Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends.**
    Files: `IGraphicsBackend.hpp`, `GraphicsDevice.cpp`, all 3 backends' graphics-backend `.cpp`.
    Verification: sub-region-viewport pixel test (should fail on all 3 backends today).
 
-8. **Task 878/879 — implement real mip/MSAA render-target support on Vulkan and Bgfx**, mirroring
+9. **Task 878/879 — implement real mip/MSAA render-target support on Vulkan and Bgfx**, mirroring
    Task 336/337's exact EasyGL fix shape. Files: each backend's render-target backend classes.
 
-9. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
-   attachments** on all 3 backends (currently hardcoded/coarse choices).
+10. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
+    attachments** on all 3 backends (currently hardcoded/coarse choices).
 
-10. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
+11. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
     (875); `RenderTargetCube` via `EnvironmentMapEffect` renders black after unbind, root cause not
     isolated (876, needs isolation before a fix is attempted — see §9).
 
-11. **Task 873/874 — fix Bgfx's wrong-handle-type `static_cast`s** for `RenderTarget2D`/
+12. **Task 873/874 — fix Bgfx's wrong-handle-type `static_cast`s** for `RenderTarget2D`/
     `RenderTargetCube` sampling. Files: `BgfxGraphicsBackend.hpp`/`.cpp`.
 
-12. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
+13. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
     test fixture *first*, then implement against it).
 
-13. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+14. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
     (`vkCmdCopyImageToBuffer` + staging buffer, mirroring the existing upload path in reverse).
 
-14. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
+15. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
     `Texture3D`/`TextureCube` (confirm with a failing test first, per Task 276's methodology).
 
 ---
@@ -478,30 +481,30 @@ accumulated backlog from earlier phases (Tasks 863–886).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 372).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 373).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
 instruction — do not wait to be asked; one task = one commit = one push).
 
 Current status: Phases 1-42 are FULLY COMPLETE. Phase 43 ("AlphaTestEffect exactness",
-plan_graphics.md Tasks 371-380) is open: Task 371 is DONE (verify-only, zero bugs — AlphaTestEffect
-already matches FNA exactly), Task 372 is NEXT (write AlphaTestEffectTests.cpp default-value
-tests from scratch — zero existing coverage).
+plan_graphics.md Tasks 371-380) is open: Tasks 371-372 are DONE (audit + 27-test default-value
+suite, zero bugs found), Task 373 is NEXT (pixel test every CompareFunction on EasyGL,
+complementing Task 190's existing coverage; Tasks 374/375 mirror it on Vulkan/Bgfx).
 
 Phase 42 closed with docs/basiceffect-support.md (full synthesis) and opened 2 new follow-up
 tasks: Task 885 (lit-path EmissiveColor + DirectionalLight1/2 forwarding — Vulkan half needs a
 shared push-constant budget expansion, also used by SkinnedEffect) and Task 886 (real specular
 highlights — a new feature, zero existing infrastructure). Neither blocks Phase 43.
 
-Last full 3-backend regression (Task 370 — closed Phase 42, combined-feature capstone test, all 3
-backends produced byte-identical pixel output, no new bugs found; Task 371 changed no code):
-EasyGL 3419/3423 pass (3 documented pre-existing failures + 1 flaky this run, passes in isolation).
-Vulkan 3341/3356 pass (13 documented pre-existing failures + 2 flaky this run, both pass in isolation).
-Bgfx 3325/3326 pass (1 flaky this run — failed once, passed twice on reruns, genuinely timing-flaky).
+Last full 3-backend regression (Task 372 — new AlphaTestEffectTests.cpp, 27 tests, zero bugs,
+no production code changed):
+EasyGL 3447/3450 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3370/3383 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3353/3353 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43 found, read plan_graphics.md
-directly (Tasks 351-371) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-372) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
