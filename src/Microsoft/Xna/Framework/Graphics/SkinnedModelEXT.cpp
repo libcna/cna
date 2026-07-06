@@ -70,6 +70,32 @@ namespace Microsoft::Xna::Framework::Graphics
         ownedParts_.push_back(std::move(part));
     }
 
+    void SkinnedModelEXT::AttachPartEXT(SkinnedModelEXT&& other)
+    {
+        if (other.BoneCount != BoneCount)
+        {
+            throw System::ArgumentException(
+                "AttachPartEXT: other.BoneCount (" + std::to_string(other.BoneCount)
+                    + ") does not match this model's BoneCount (" + std::to_string(BoneCount) + ")",
+                "other");
+        }
+
+        for (auto& part : other.Parts)
+        {
+            Parts.push_back(part);
+        }
+        other.Parts.clear();
+
+        for (auto& vb : other.vertexBuffers_) { vertexBuffers_.push_back(std::move(vb)); }
+        for (auto& ib : other.indexBuffers_) { indexBuffers_.push_back(std::move(ib)); }
+        for (auto& p : other.ownedParts_) { ownedParts_.push_back(std::move(p)); }
+        for (auto& t : other.textures_) { textures_.push_back(std::move(t)); }
+        other.vertexBuffers_.clear();
+        other.indexBuffers_.clear();
+        other.ownedParts_.clear();
+        other.textures_.clear();
+    }
+
     void SkinnedModelEXT::ComputeBoneTransformsEXT(const std::string& clipName,
                                                     System::TimeSpan position,
                                                     bool loop,

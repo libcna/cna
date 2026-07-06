@@ -160,6 +160,32 @@ namespace Microsoft::Xna::Framework::Graphics
                          std::unique_ptr<ModelMeshPart> part,
                          Texture2D texture = Texture2D());
 
+        /**
+         * @brief Attaches every part from another, independently-loaded SkinnedModelEXT
+         * onto this model, taking ownership of its buffers.
+         *
+         * @note NOXNA — CNA extension (Task 11.21). Lets a standalone-converted wardrobe
+         * piece (`tools/avatar_builder/generate_wardrobe.py` + `convert_avatar.py`, Task
+         * 11.14) actually be worn by an already-loaded, running avatar — until this
+         * method existed, such a piece could be converted but never attached at
+         * runtime. Requires @p other to share this model's exact bone count and index
+         * order (guaranteed for any two models built from the same canonical skeleton —
+         * `tools/avatar_builder/generate_skeleton.py`'s `BONES` table, via
+         * `convert_avatar.py`'s deterministic topological bone sort — since a wardrobe
+         * piece's per-vertex joint indices are then already correct for this model's own
+         * `ParentBoneIndices`/`BindPoseLocal` arrays with no remapping needed). Does not
+         * support attaching a model built from a different skeleton (see @throws).
+         *
+         * @param other Another SkinnedModelEXT sharing this model's exact bone layout;
+         *              left with no parts of its own afterward (moved-from).
+         * @throws System::ArgumentException if @p other's BoneCount differs from this
+         *         model's — the one cheap, always-available check that a mismatched
+         *         skeleton wasn't passed; it cannot detect a same-count-but-different
+         *         skeleton, so callers are still responsible for only attaching pieces
+         *         built from the same canonical skeleton as this model.
+         */
+        void AttachPartEXT(SkinnedModelEXT&& other);
+
     private:
         std::vector<std::unique_ptr<VertexBuffer>> vertexBuffers_;
         std::vector<std::unique_ptr<IndexBuffer>> indexBuffers_;

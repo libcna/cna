@@ -111,3 +111,22 @@ TEST(SkinnedModelEXTTest, DefaultConstructedHasNoBonesOrClips)
     EXPECT_TRUE(model.Clips.empty());
     EXPECT_TRUE(model.Parts.empty());
 }
+
+TEST(SkinnedModelEXTTest, AttachPartMismatchedBoneCountThrows)
+{
+    SkinnedModelEXT host;
+    host.BoneCount = 19;
+    SkinnedModelEXT wardrobePiece;
+    wardrobePiece.BoneCount = 5;
+    EXPECT_THROW(host.AttachPartEXT(std::move(wardrobePiece)), System::ArgumentException);
+}
+
+TEST(SkinnedModelEXTTest, AttachPartSameBoneCountNoPartsIsNoOp)
+{
+    SkinnedModelEXT host;
+    host.BoneCount = 19;
+    SkinnedModelEXT wardrobePiece;
+    wardrobePiece.BoneCount = 19;
+    EXPECT_NO_THROW(host.AttachPartEXT(std::move(wardrobePiece)));
+    EXPECT_TRUE(host.Parts.empty());
+}

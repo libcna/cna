@@ -694,6 +694,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             set_tests_properties(EasyGL_AvatarRenderer_RealRender PROPERTIES
                 TIMEOUT 30
                 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+            # Task 11.21: SkinnedModelEXT::AttachPartEXT runtime wardrobe-attach real render.
+            cna_easygl_test(cna_test_avatar_attach_part
+                            examples/avatar_attach_part_integration_test.cpp)
+            target_link_libraries(cna_test_avatar_attach_part PRIVATE CNA_GamerServices)
+            add_test(NAME EasyGL_AvatarRenderer_AttachPart
+                     COMMAND cna_test_avatar_attach_part)
+            set_tests_properties(EasyGL_AvatarRenderer_AttachPart PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
         endif()
 
         # Task 125: DXT1 texture loaded via FromStream, rendered, pixel readback
