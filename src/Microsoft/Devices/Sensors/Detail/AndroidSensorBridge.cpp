@@ -81,14 +81,38 @@ namespace Microsoft::Devices::Sensors::Detail
         // blocking join()/non-blocking detach(): both of those happen after
         // this mutex is released, so a reentrant self-stop (called from
         // this bridge's own callback, on its own worker thread) can never
-        // deadlock against it. What this mutex does NOT make safe: two
-        // distinct external (non-worker) threads calling Stop() on the same
-        // bridge at the same time would both pass the "is a worker
-        // running" check and could both attempt to join() the same
-        // std::thread concurrently -- see Start()'s/Stop()'s own doc
-        // comments for why that case is documented as unsupported rather
-        // than further serialized here.
+        // deadlock against it.
+        //
+        // Task ANDROID-BRIDGE-003 (2026-07-06): this mutex alone previously
+        // did NOT make it safe for two distinct external (non-worker)
+        // threads to call Stop() on the same bridge concurrently -- both
+        // would pass the "is a worker running" check (joinable() is still
+        // true until someone actually calls join()/detach(), which happens
+        // *after* this mutex is released) and both would then call
+        // worker_.join() on the same std::thread object concurrently, a
+        // real data race (join() is a non-const member function). Fixed by
+        // joinClaimed_/stopFinishedCv_ below, the same "one winner claims
+        // the teardown, everyone else waits for it to finish" pattern
+        // SensorBase<T>::ClaimDisposalOnce()/WaitForDisposalToComplete()
+        // already established for the analogous concurrent-Dispose() race.
         std::mutex stateMutex_;
+
+        // Task ANDROID-BRIDGE-003: true once some external (non-worker)
+        // thread has claimed the right to actually call worker_.join() for
+        // the current Stop() request -- checked and set atomically under
+        // stateMutex_. A second, concurrent external Stop() caller that
+        // finds this already true does not call join() itself (which would
+        // race the winner's own join() call); it instead waits on
+        // stopFinishedCv_ until the winner's join() has completed, so
+        // Stop() remains synchronous (the worker is guaranteed joined by
+        // the time any caller's Stop() returns) for every caller, not just
+        // the winner. Reset to false at the top of a fresh Start().
+        bool joinClaimed_ = false;
+
+        // Signaled once the join-claiming thread's worker_.join() call
+        // returns, so any concurrent Stop() caller waiting in the branch
+        // above wakes up. See joinClaimed_'s own comment.
+        std::condition_variable stopFinishedCv_;
 
         std::thread worker_;
         std::atomic<bool> stopRequested_{false};
@@ -413,6 +437,7 @@ namespace Microsoft::Devices::Sensors::Detail
             impl_->callback_ = std::move(callback);
             impl_->stopRequested_.store(false, std::memory_order_release);
             impl_->startOutcome_ = Impl::StartOutcome::Pending;
+            impl_->joinClaimed_ = false;
 
             // Captures impl_ (a shared_ptr copy), not this -- see
             // Impl::Run()'s own doc comment and the shared_ptr<Impl>
@@ -465,11 +490,7 @@ namespace Microsoft::Devices::Sensors::Detail
             // Released (end of this scope) before the blocking join() /
             // non-blocking detach() below -- never held across either, so
             // a reentrant self-stop from this bridge's own callback (on
-            // its own worker thread) can never deadlock against it. This
-            // does NOT make two distinct external (non-worker) threads
-            // calling Stop() concurrently safe from a double-join race —
-            // see this method's own Doxygen comment for that documented,
-            // unsupported boundary.
+            // its own worker thread) can never deadlock against it.
             std::lock_guard<std::mutex> lock(impl_->stateMutex_);
 
             if (!impl_->worker_.joinable())
@@ -512,7 +533,39 @@ namespace Microsoft::Devices::Sensors::Detail
         }
         else
         {
-            impl_->worker_.join();
+            // Task ANDROID-BRIDGE-003 (2026-07-06): two distinct external
+            // threads could previously both reach this branch and both
+            // call worker_.join() concurrently on the same std::thread --
+            // a real data race, since join() is non-const. Fixed with the
+            // same "one winner claims the teardown, everyone else waits
+            // for it" pattern SensorBase<T>'s ClaimDisposalOnce()/
+            // WaitForDisposalToComplete() already established: only the
+            // first external caller to observe joinClaimed_ == false
+            // claims it and actually calls join(); every other concurrent
+            // caller instead waits on stopFinishedCv_ until the winner's
+            // join() has completed. This keeps Stop() synchronous (the
+            // worker is guaranteed joined by the time *any* caller's
+            // Stop() returns), not just for the winner.
+            bool shouldJoin = false;
+            {
+                std::lock_guard<std::mutex> lock(impl_->stateMutex_);
+                if (!impl_->joinClaimed_)
+                {
+                    impl_->joinClaimed_ = true;
+                    shouldJoin = true;
+                }
+            }
+
+            if (shouldJoin)
+            {
+                impl_->worker_.join();
+                impl_->stopFinishedCv_.notify_all();
+            }
+            else
+            {
+                std::unique_lock<std::mutex> lock(impl_->stateMutex_);
+                impl_->stopFinishedCv_.wait(lock, [this] { return !impl_->worker_.joinable(); });
+            }
         }
 #endif
     }

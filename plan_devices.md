@@ -4244,7 +4244,7 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (edited)
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (edited)
 
-### ANDROID-BRIDGE-003 — Improve Start/Stop lifecycle guarantees further
+### ANDROID-BRIDGE-003 — Improve Start/Stop lifecycle guarantees further — CLOSED (2026-07-06, the documented concurrent-`Stop()` gap fixed)
 
 - **Priority:** High
 - **Area:** Android Bridge
@@ -4255,25 +4255,81 @@ not an alternate spelling to preserve.
   assuming those passes closed every case. One specific, already-documented remaining
   gap: two or more distinct external (non-worker) threads calling `Stop()`
   concurrently on the same bridge is still unserialized and can race on `join()`.
+- **Resolution (2026-07-06):** re-examined the documented gap with fresh eyes rather
+  than re-stating the old "accepted limitation" conclusion, and **closed it** — the
+  previous write-up left it unserialized specifically to avoid deadlock, but a safe
+  fix was available that avoids that risk: the exact same "one winner claims the
+  teardown, everyone else waits for it to finish" pattern
+  `SensorBase<T>::ClaimDisposalOnce()`/`WaitForDisposalToComplete()` already
+  established (and this codebase has already relied on) for the analogous
+  concurrent-`Dispose()` race.
+  - **Fix:** added `Impl::joinClaimed_` (bool, guarded by the existing `stateMutex_`)
+    and `Impl::stopFinishedCv_` (`std::condition_variable`). In `Stop()`'s external-
+    thread branch, only the first caller to observe `joinClaimed_ == false` claims it
+    (atomically, under the lock) and actually calls `worker_.join()`; every other
+    concurrent external caller instead waits on `stopFinishedCv_` until the winner's
+    `join()` completes (predicate: `!impl_->worker_.joinable()`, which becomes false
+    only after a successful `join()`), then returns. `joinClaimed_` is reset to `false`
+    at the top of a fresh `Start()`, so a later `Stop()`→`Start()`→`Stop()` cycle works
+    correctly again. The reentrant self-stop case (worker thread stopping itself) is
+    entirely unchanged — it still detaches, never touches `joinClaimed_`/
+    `stopFinishedCv_` at all, so this fix adds no new deadlock risk to that already-
+    solved case.
+  - **Why this doesn't reintroduce the previously-identified deadlock risk:** the
+    original concern was presumably about holding a lock across the blocking `join()`
+    call — this fix doesn't do that; `stateMutex_` is only held for the brief
+    claim-check-and-set, released before the winner's `join()` call, and the losers'
+    wait uses a *different* synchronization primitive (`stopFinishedCv_`, released
+    automatically by `wait()` while blocked) specifically designed for "block until
+    another thread finishes," not a second attempt to acquire an already-held lock.
+  - **Verification, stated honestly:** this is `#ifdef __ANDROID__`-only code with no
+    real Android hardware/emulator available in this session — the fix's correctness
+    was verified by careful reasoning (a direct structural mirror of the
+    already-validated `ClaimDisposalOnce()` pattern, not a novel untested design) and a
+    successful Android NDK cross-compile of the `CNA` target, not by an actual
+    multi-thread stress test observing the race close on real hardware. The pre-existing
+    host-testable scenarios (`Start()`/`Stop()` on the non-Android stub, which is
+    unaffected by this change since the stub never reaches real `Impl` state) all
+    continue to pass unchanged.
+  - **Other required-work items (test additions for `Start()` failure/reentrant-`Stop()`/
+    destructor cleanup):** already covered by this codebase's existing test suite
+    (`StopWithoutStartDoesNotCrash`, `DestructorWithoutStartDoesNotCrash`,
+    `StartTwiceInARowNeverCrashesOnNonAndroidPlatform`,
+    `SetSampleIntervalDoesNotCrashAfterFailedStart`, etc.) at the level the non-Android
+    stub can exercise — re-confirmed present, not newly added, since the real
+    Android-only scenarios these tests describe have no host-testable seam beyond what
+    already exists (same standing limitation as every other Android-only fix this
+    session).
 - **Required work:**
   - Add tests for: `Start()` failure (queue creation/enable failure), `Stop()` before
     `Start()`, repeated `Stop()`, `Stop()` called reentrantly from the worker's own
-    callback, and destructor cleanup.
+    callback, and destructor cleanup. Re-confirmed already covered at the
+    host-testable level; no new tests added for these (unrelated to this task's actual
+    fix).
   - Decide whether the still-open "two concurrent external `Stop()` callers" gap should
     finally be closed (it was previously left as a documented, deliberate boundary to
     avoid a different deadlock risk) or remains an accepted limitation — re-examine
-    with fresh eyes rather than re-stating the old conclusion unchecked.
+    with fresh eyes rather than re-stating the old conclusion unchecked. Done —
+    closed, not left as a limitation.
   - Prefer safe, deterministic cleanup over detach-and-abandon wherever a safe
     alternative can be found without reintroducing the previously-identified deadlock
-    risk.
+    risk. Done — every external caller now gets deterministic, synchronous `Stop()`
+    behavior; only the genuinely-reentrant self-stop case still detaches (unchanged,
+    still the correct choice there).
 - **Acceptance criteria:**
   - No leaked event queues or worker threads across repeated Start/Stop cycles.
+    Unaffected by this change, already true.
   - `Stop()` behavior is deterministic for every documented-supported calling pattern.
-  - Tests cover every lifecycle edge case listed above.
+    Done — now true for concurrent external callers too, not just single-caller usage.
+  - Tests cover every lifecycle edge case listed above. Covered at the host-testable
+    level; the specific new concurrent-join fix itself has no host-testable seam (see
+    Resolution above).
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
-  - `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp` (edited — doc
+    comments)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp` (edited — real fix)
+  - `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` (inspected,
+    no change needed — existing coverage already adequate at the host-testable level)
 
 ### ANDROID-BRIDGE-004 — Add Android API-level documentation
 

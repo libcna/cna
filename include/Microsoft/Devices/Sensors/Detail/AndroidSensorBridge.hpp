@@ -243,13 +243,10 @@ namespace Microsoft::Devices::Sensors::Detail
          * another calls Stop()) cannot corrupt this bridge's internal
          * `std::thread` handle. That mutex is never held across this
          * method's own bounded wait for the worker's startup handshake, so
-         * it cannot deadlock against Stop(). What remains unsupported: two
-         * or more *external* (non-worker) threads calling Stop()
-         * concurrently on the same bridge — see Stop()'s own note. Callers
-         * that need genuinely concurrent Start()/Stop() from multiple
-         * threads must serialize those calls themselves (this bridge is
-         * designed for the single-owner-thread usage `Compass`/`Motion`
-         * already give it).
+         * it cannot deadlock against Stop(). Two or more *external*
+         * (non-worker) threads calling `Stop()` concurrently on the same
+         * bridge is now also safe and synchronous for every caller (Task
+         * ANDROID-BRIDGE-003, 2026-07-06) — see `Stop()`'s own note for how.
          */
         bool Start(const System::TimeSpan& timeBetweenUpdates, SampleCallback callback);
 
@@ -270,15 +267,19 @@ namespace Microsoft::Devices::Sensors::Detail
          * released again before this method's own blocking `join()` (or the
          * reentrant case's non-blocking `detach()`) — never held across
          * either, so a reentrant self-stop from the worker's own callback
-         * cannot deadlock against it. **Still unsupported, not fixed by
-         * that mutex:** calling Stop() concurrently from two or more
-         * distinct *external* (non-worker) threads on the same bridge at
-         * the same time. Only one caller may safely be "the" thread that
-         * stops a given bridge at a time; concurrent external callers must
-         * be serialized by the caller (matching Start()'s own note, and
-         * `Compass`/`Motion`'s existing single-owner-thread usage — neither
-         * class itself serializes concurrent `Stop()`/`Dispose()` calls
-         * below its own `SensorBase<T>`-level disposal guard).
+         * cannot deadlock against it. **Fixed (Task ANDROID-BRIDGE-003,
+         * 2026-07-06), previously unsupported:** two or more distinct
+         * *external* (non-worker) threads calling `Stop()` concurrently on
+         * the same bridge. Only the first such caller actually calls
+         * `join()` on the worker thread (claiming that right under the
+         * same internal mutex); every other concurrent external caller
+         * instead waits for that first caller's `join()` to complete
+         * before its own `Stop()` call returns — mirroring
+         * `SensorBase<T>`'s own `ClaimDisposalOnce()`/
+         * `WaitForDisposalToComplete()` pattern for the analogous
+         * concurrent-`Dispose()` case. Every caller's `Stop()` is therefore
+         * synchronous (the worker is guaranteed joined once any `Stop()`
+         * call returns), not just the winner's.
          *
          * @note This bridge's internal worker state (the `Impl` this class
          * privately owns) is kept alive by the worker thread itself for as
