@@ -942,9 +942,23 @@ Position.GetHashCode()` (int hash = the int). `ToString` = `"{Position:" + posit
 **Files changed:** none (logic verified). **Behavior verified:** previous-location both paths + 5-field
 equality + hash + ToString all match FNA. **Remaining risk:** none.
 
-## L-012 — `TouchPanel.cpp` logic `[ ]`
-- [ ] GetState slot vs InputManager path + MAX_TOUCHES cap, GetCapabilities, SetFinger release/press
+## L-012 — `TouchPanel.cpp` logic `[x]`
+- [x] GetState slot vs InputManager path + MAX_TOUCHES cap, GetCapabilities, SetFinger release/press
   branches, coordinate scaling, EnqueueGesture/ReadGesture queue, Update ordering vs FNA.
+
+**Result (2026-07-06):** Logic verified vs FNA `TouchPanel.cs` — **faithful with documented deviations only.**
+`ReadGesture` = throw `InvalidOperationException` on empty, else `front()`+`pop()` (FIFO) ≡ FNA (`gestures[0]`
++ `RemoveAt(0)`). `EnqueueGesture` = queue push ≡ FNA `Enqueue`. `INTERNAL_onTouchEvent` **coordinate scaling
+is byte-identical to FNA**: `touchPos = round(x*DisplayWidth), round(y*DisplayHeight)`, `delta =
+round(dx*DisplayWidth), round(dy*DisplayHeight)`, then Pressed→`OnPressed`, Moved→`OnMoved(delta)`,
+Released→`OnReleased` — plus CNA's zero-display early-return guard (P5-014 startup safety, absent from FNA).
+`SetFinger` release (`NO_FINGER`: prev `!=Invalid && !=Released` → Released, else Invalid) and press/move
+(prev `==Invalid` → Pressed, else Moved) branches are byte-identical to FNA `TouchPanel.cs:165-217` (P5-007).
+`GetState` uses the slot-array path (mirrors FNA's `touches[]` iteration) then the InputManager fallback with
+the `MAX_TOUCHES` cap (DEC-10, P5-006). `GetCapabilities` reports `MaximumTouchCount=4` (DEC-09).
+`Update` copies current→previous before the gesture update (DEC-13, reverse of FNA but inert). **Files
+changed:** none (logic verified). **Behavior verified:** gesture queue FIFO + FNA coordinate scaling +
+SetFinger branches + dual GetState. **Remaining risk:** none.
 
 ## L-013 — `GestureDetector.cpp` logic `[ ]`
 - [ ] The full gesture state machine vs FNA `GestureDetector.cs`: every OnPressed/OnMoved/OnReleased/OnUpdate
