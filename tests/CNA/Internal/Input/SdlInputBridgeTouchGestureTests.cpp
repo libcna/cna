@@ -58,6 +58,36 @@ namespace
     };
 }
 
+// INPUT-TOUCH-024: gesture positions and touch-state positions share ONE coordinate basis — the logical
+// (virtual back-buffer) space. GraphicsDevice sets TouchPanel::DisplayWidth/Height to virtualWidth/Height;
+// the gesture path scales normalized SDL coords linearly by DisplayWidth/Height (round(x*W, y*H)), and the
+// touch-state path (to_touch_pixel_position → to_logical_position) maps into the same logical space. This
+// pins that a Tap's pixel position divided by the display metric equals the normalized point the
+// touch-state snapshot reports for the same finger — i.e. both encode the identical logical point.
+// (Headless has no window, so GetState reports the raw normalized coord; the gesture pixel is that coord
+// scaled by DisplayWidth/Height, so gesturePos/metric == statePos is the basis-equality invariant.)
+TEST_F(SdlInputBridgeTouchGestureTest, GestureAndTouchStateShareTheLogicalCoordinateBasis)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap);
+    constexpr float nx = 0.5f, ny = 0.25f;
+
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 6001, nx, ny));
+    const TouchCollection s = TouchPanel::GetState();
+    ASSERT_EQ(s.getCountProperty(), 1);
+    const Microsoft::Xna::Framework::Vector2 statePos = s[0].getPositionProperty();
+
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_UP, 6001, nx, ny));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const Microsoft::Xna::Framework::Vector2 gesturePos = TouchPanel::ReadGesture().getPositionProperty();
+
+    // Same logical point: the gesture pixel position is the normalized state position scaled by the same
+    // DisplayWidth/Height, so dividing back out recovers the normalized coordinate exactly.
+    EXPECT_FLOAT_EQ(gesturePos.X / static_cast<float>(DisplaySize), statePos.X);
+    EXPECT_FLOAT_EQ(gesturePos.Y / static_cast<float>(DisplaySize), statePos.Y);
+    EXPECT_FLOAT_EQ(gesturePos.X, nx * static_cast<float>(DisplaySize));
+    EXPECT_FLOAT_EQ(gesturePos.Y, ny * static_cast<float>(DisplaySize));
+}
+
 TEST_F(SdlInputBridgeTouchGestureTest, FingerDownUpThroughProcessEventProducesTap)
 {
     TouchPanel::setEnabledGesturesProperty(GestureType::Tap);

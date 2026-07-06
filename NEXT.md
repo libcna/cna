@@ -51,6 +51,11 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-TOUCH-024 — coordinate-basis consistency verified:** confirmed gesture and touch-state positions
+  share one logical (virtual back-buffer) basis (`GraphicsDevice` sets DisplayWidth/Height=virtualSize;
+  gesture scales linearly like FNA, GetState maps window→logical); they coincide for uniform presentations
+  (new `GestureAndTouchStateShareTheLogicalCoordinateBasis` test). Documented the accepted letterbox-bar
+  edge nuance. Resolves the old "task 952" flag.
 - **INPUT-TOUCH cluster verified (19 tasks):** mapped TOUCH-001..019/021/022/025 to the existing ~59-case
   touch suites (TouchInputTest / TouchEdgeCaseTest / TouchCollectionTest / TouchLocationTest /
   SdlInputBridgeTouchGestureTest) — all backed (display/gesture round-trips, GetState snapshot+fallback,

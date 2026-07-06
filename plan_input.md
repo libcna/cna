@@ -1858,7 +1858,7 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Deps:** none.
 
 #### INPUT-TOUCH-024 — Coordinate-basis consistency (gesture vs renderer-logical) (task 952)
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch/Gesture
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch/Gesture
 - **Files:** `SdlInputBridge.cpp`, `TouchPanel.cpp`, `GestureDetector.cpp`
 - **Problem:** Fidelity doc flags that gesture path coords vs renderer-logical basis need verification.
 - **Work:** Verify gestures and touch state share one coordinate basis; add a test with letterboxing.
@@ -1866,6 +1866,15 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Tests:** new letterbox gesture-coordinate test.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Verified the two touch paths share **one** coordinate basis — the logical
+  (virtual back-buffer) space. `GraphicsDevice` sets `DisplayWidth/Height` = `virtualWidth/Height`; the
+  gesture path scales normalized coords linearly by those (`round(x·W, y·H)`, matching FNA), and the
+  touch-state path (`to_touch_pixel_position` → `to_logical_position`) maps into the same space. For any
+  uniform (non-letterbox) presentation they coincide exactly — pinned by
+  `SdlInputBridgeTouchGestureTest.GestureAndTouchStateShareTheLogicalCoordinateBasis` (gesturePos ÷ metric
+  == the normalized state position). Documented in `docs/input-fna-fidelity.md`, including the accepted
+  edge nuance that under a true letterbox the two differ only within the centering bars (gesture stays
+  linear/FNA-matching; touch-state is letterbox-aware) — where touches do not land on game content.
 #### INPUT-TOUCH-025 — `TouchPanelCapabilities` equality/ToString policy
 - **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `TouchPanelCapabilities.cpp`

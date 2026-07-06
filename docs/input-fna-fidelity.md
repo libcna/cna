@@ -241,11 +241,19 @@ type + interruption is partial (task 906).
   and **rejected** (it would silently diverge from the reference); the XNA-standard mitigation is for the
   game to gate input on `Game.IsActive`. Pinned by
   `SdlInputBridgeKeyboardTest.WindowFocusLostDoesNotClearHeldKeysMatchingFna`.
-- **Coordinate consistency (task 952):** mouse and the `InputManager` touch snapshot both use
-  renderer-logical space and are consistent. The **gesture** path feeds `GestureDetector` in a
-  display-size pixel basis, which can differ from renderer-logical space when logical size ≠
-  backbuffer size (letterboxed). `displayOrientation_` is stored but not applied to coordinates.
-  Flagged for targeted verification.
+- **Coordinate consistency (INPUT-TOUCH-024, was task 952 — verified):** both touch paths target the same
+  **logical (virtual back-buffer) coordinate space.** `GraphicsDevice` sets `TouchPanel::DisplayWidth/Height`
+  to `virtualWidth/Height`. The **gesture** path scales the normalized SDL coord linearly by
+  `DisplayWidth/Height` (`round(x·W, y·H)` in `TouchPanel::INTERNAL_onTouchEvent`) — identical to FNA, which
+  also scales normalized touch by the back-buffer size. The **touch-state** path (`to_touch_pixel_position`
+  → `to_logical_position`) maps into that same logical space. For a **uniform** presentation (no letterbox
+  bars — e.g. EasyGL's `FixedHeightDynamicWidth` default, or any matched-aspect `SDL_Renderer`) the two
+  coincide exactly; pinned by `GestureAndTouchStateShareTheLogicalCoordinateBasis` (gesturePos ÷ metric ==
+  the normalized state position). **Known edge nuance:** under a true letterbox (logical aspect ≠ window
+  aspect, centering bars) the gesture path stays linear (FNA-matching) while the touch-state path is
+  letterbox-aware, so the two can differ *within the bar regions* — where a touch does not land on game
+  content anyway. This is accepted (gesture side matches FNA; the divergence is confined to the bars).
+  `displayOrientation_` is stored but not applied to coordinates (matches FNA).
 
 ---
 
