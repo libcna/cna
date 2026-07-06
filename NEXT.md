@@ -99,6 +99,24 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `SENSORBASE-003` closed: found and closed a real reentrancy-test gap
+for Compass/Motion; documented one deeper, unverified risk.** Re-audited by grepping
+existing test coverage first: `Accelerometer`/`Gyroscope` each have several
+self-destruction/reentrancy tests (from Tasks P5-3/P7-3/P8-1); `CompassTests.cpp`/
+`MotionTests.cpp` had **zero**, despite sharing the identical `SensorBase<T>`-level
+`ClaimDisposalOnce()` machinery. Added `DisposeFromWithinOwnCallbackDoesNotDeadlock` to
+both (via the existing fake-backend seam) — both pass cleanly, confirming the
+class-level reentrancy handling is safe. **Found by code-reading, not fixed, explicitly
+documented (not silently left unmentioned):** a deeper risk where a handler *destroys*
+(not just `Dispose()`s) the `Compass`/`Motion` instance while the real
+`AndroidCompassBackend`/`AndroidMotionBackend`'s own `PublishReading()`-family callback
+is still on the call stack, tearing down `backend_` mid-call — architecturally the same
+class of bug `Accelerometer`'s Task P8-1 fixed, but Android-only and unreachable via the
+fake backend or any sanitizer in this container. Cross-referenced into the two
+already-existing plan tasks scoped exactly for this (`COMPASS-008`/`MOTION-010`, both
+still open) rather than inventing a new one. Verified: 302/302 tests (up from 300) on
+plain `cmake-build-debug` and all three sanitizer presets, 0 new findings.
+
 **2026-07-06 — `SENSORBASE-002` closed: default `TimeBetweenUpdates` confirmed
 correct, no code change.** The archived MSDN pages document no default value for
 `SensorBase(TSensorReading).TimeBetweenUpdates` at all. Cross-checked against

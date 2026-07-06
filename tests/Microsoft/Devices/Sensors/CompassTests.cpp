@@ -384,6 +384,49 @@ TEST(CompassTests, CalibrateFiresFromBackendCalibrationCallback)
     EXPECT_TRUE(invoked);
 }
 
+// Task SENSORBASE-003: unlike Accelerometer/Gyroscope, this exact reentrancy
+// scenario (an event handler calling Dispose() on its own sender, from
+// within a callback the sender itself triggered) had never been tested for
+// Compass at all before this task -- confirmed by grep, zero such tests
+// existed. This proves Compass's own ClaimDisposalOnce()/Stop() reentrancy
+// handling (shared with every SensorBase<T> derivative) doesn't deadlock or
+// throw unexpectedly when driven through the fake-backend seam. It does
+// NOT prove the deeper question of what happens if the real
+// Detail::AndroidCompassBackend/AndroidSensorBridge chain is torn down
+// (backend_ destroyed) while still executing one of its own member
+// functions further up the call stack (e.g. AndroidCompassBackend::
+// PublishReading() calling back into a handler that deletes the owning
+// Compass instance, not just Dispose()s it) -- that scenario is Android-only
+// and requires real hardware or an Android ASan build this container cannot
+// run; left explicitly documented as unverified, not silently assumed safe,
+// in plan_devices.md's SENSORBASE-003 closing note.
+TEST(CompassTests, DisposeFromWithinOwnCallbackDoesNotDeadlock)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    bool handlerRan = false;
+    c.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<CompassReading>&)
+    {
+        handlerRan = true;
+        c.Dispose();
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const CompassReading synthetic(
+        5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 42.0);
+    EXPECT_NO_THROW(fake->CapturedOnReading(synthetic));
+    EXPECT_TRUE(handlerRan);
+
+    // The reentrant call above already disposed it; a second, external
+    // Dispose() call must still throw exactly as it would for any other
+    // already-disposed instance.
+    EXPECT_THROW(c.Dispose(), System::ObjectDisposedException);
+}
+
 // Confirms Stop() actually calls through to the backend's own Stop(), not
 // just flipping Compass's own started_/state_ bookkeeping.
 TEST(CompassTests, StopCallsBackendStop)

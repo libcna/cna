@@ -364,6 +364,42 @@ TEST(MotionTests, CurrentValueChangedFiresFromBackendReading)
     EXPECT_TRUE(m.getIsDataValidProperty());
 }
 
+// Task SENSORBASE-003: see CompassTests.cpp's identical test for the full
+// rationale -- unlike Accelerometer/Gyroscope, this exact reentrancy
+// scenario had never been tested for Motion at all before this task.
+// Proves Motion's own ClaimDisposalOnce()/Stop() reentrancy handling doesn't
+// deadlock via the fake-backend seam; does NOT prove the deeper question of
+// tearing down the real Detail::AndroidMotionBackend/AndroidSensorBridge
+// chain mid-callback, which is Android-only and unverified here (see
+// plan_devices.md's SENSORBASE-003 closing note).
+TEST(MotionTests, DisposeFromWithinOwnCallbackDoesNotDeadlock)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    bool handlerRan = false;
+    m.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<MotionReading>&)
+    {
+        handlerRan = true;
+        m.Dispose();
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        System::DateTimeOffset::getUtcNowProperty());
+    const MotionReading synthetic(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        System::DateTimeOffset::getUtcNowProperty());
+    EXPECT_NO_THROW(fake->CapturedOnReading(synthetic));
+    EXPECT_TRUE(handlerRan);
+
+    EXPECT_THROW(m.Dispose(), System::ObjectDisposedException);
+}
+
 // Confirms Stop() actually calls through to the backend's own Stop().
 TEST(MotionTests, StopCallsBackendStop)
 {

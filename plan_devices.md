@@ -986,7 +986,7 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
 
-### SENSORBASE-003 — Fix event reentrancy and self-destruction safety
+### SENSORBASE-003 — Fix event reentrancy and self-destruction safety — CLOSED (2026-07-06, gap found and closed for Compass/Motion; one deeper risk documented, unverified)
 
 - **Priority:** Critical
 - **Area:** Lifecycle / Events
@@ -996,22 +996,84 @@ not an alternate spelling to preserve.
   codebase's history for `Detail::AndroidSensorBridge`; this task is to re-audit the
   *current* state (after those fixes) for `SensorBase<T>`'s own dispatch path and the
   SDL subsystem, not to assume prior fixes fully closed every angle.
+- **Resolution (2026-07-06):** re-audited by grepping every sensor test file for
+  existing self-destruction/reentrancy coverage first, rather than re-reading already
+  extensively-hardened code from scratch. Found a real, concrete gap:
+  `Accelerometer`/`Gyroscope` each have multiple such tests (`DisposeFromWithinOwnCallbackDoesNotDeadlock`,
+  `SelfDestroyingFromOwnCallbackDuring...`, `DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUseAfterFree`,
+  from Tasks P5-3/P7-3/P8-1) — **`CompassTests.cpp`/`MotionTests.cpp` had zero**, even
+  though `Compass`/`Motion` share the exact same `SensorBase<T>`-level
+  `ClaimDisposalOnce()`/`WaitForDisposalToComplete()` reentrancy machinery. This was
+  never tested for these two classes at all, confirmed by grep before assuming either
+  way.
+  - Added `CompassTests.DisposeFromWithinOwnCallbackDoesNotDeadlock` and
+    `MotionTests.DisposeFromWithinOwnCallbackDoesNotDeadlock` (via the existing fake-backend
+    seam, `FakeCompassBackend`/`FakeMotionBackend`'s `CapturedOnReading`): a
+    `CurrentValueChanged` handler calls `Dispose()` on its own sender from within the
+    callback the sender itself triggered. Both pass cleanly (no deadlock, no throw,
+    correct "already disposed" behavior on a subsequent external `Dispose()` call) —
+    confirms `Compass`/`Motion`'s own `ClaimDisposalOnce()`/`Stop()` reentrancy handling
+    is safe at the class level, same conclusion as the existing Accelerometer/Gyroscope
+    tests.
+  - **One deeper risk found by code-reading, explicitly NOT verified, matching this
+    task's own acceptance criterion to document rather than silently assume safe:**
+    `Compass`/`Motion` each own their real Android backend via
+    `std::unique_ptr<ICompassBackend>`/`IMotionBackend` (`backend_`). If a game's
+    `CurrentValueChanged` handler *destroys* (not just `Dispose()`s) the owning
+    `Compass`/`Motion` instance from within its own callback, `backend_`'s destructor
+    runs — tearing down the real `Detail::AndroidCompassBackend`/`AndroidMotionBackend`
+    and its `AndroidSensorBridge`(s) — **while that same backend's own member function
+    (`PublishReading()`, called from `HandleRotationVectorSample()`/etc.) is still on
+    the call stack**, having called back into the very handler that triggered the
+    teardown. This is architecturally the same class of bug Accelerometer's Task P8-1
+    fixed (a callback destroying its own dispatcher mid-dispatch) — but `Compass`/
+    `Motion`'s real backend is Android-only (`#if defined(__ANDROID__)`) and cannot be
+    exercised in this container even with a sanitizer; the fake-backend tests above
+    cannot reach this code path at all (the fake has no `PublishReading()`-equivalent
+    call-stack structure). **Not fixed, not proven safe or unsafe — explicitly
+    documented as an open, hardware-verification-only risk**, per this task's own
+    acceptance criterion ("any remaining unsupported case is explicitly documented"),
+    rather than silently left unmentioned the way it was before this pass (the existing
+    Accelerometer/Gyroscope "destroying from within your own callback" boundary was
+    already documented; this equivalent risk for Compass/Motion was not, until now).
+  - Verified: 302/302 tests (up from 300) on plain `cmake-build-debug` and all three
+    sanitizer presets (0 ASan; TSan 44 reports/UBSan 3 reports, both entirely the same
+    pre-existing findings as before, none new).
 - **Required work:**
   - Audit all sensor dispatch methods (`SensorBase<T>`'s own `CurrentValueChanged`
     raising, `Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances()`, and each
-    Android backend's callback path).
+    Android backend's callback path). Done — `SdlSensorSubsystem`/`Accelerometer`/
+    `Gyroscope` already extensively audited and hardened in prior phases (re-confirmed,
+    not re-litigated); `Compass`/`Motion`'s own class-level logic newly audited and
+    tested this pass; the two classes' real Android backend call-stack risk identified
+    but not fixable/testable here.
   - Confirm `this`/captured pointers are not touched after raising user callbacks unless
     lifetime is provably still valid (shared ownership, or an established documented
-    boundary).
+    boundary). Done for `SensorBase<T>`'s own `setCurrentValueProperty()` and
+    `Compass`/`Motion`'s own `onReading`/`onCalibrationNeeded` lambdas (neither touches
+    `this` after the event/callback returns). Not verified for the real Android
+    backend's own call stack (see above).
   - Add tests where event handlers call `Stop()`, `Dispose()`, and destroy the sensor
-    object from inside `CurrentValueChanged`/`ReadingChanged`/`Calibrate`.
+    object from inside `CurrentValueChanged`/`ReadingChanged`/`Calibrate`. Done for
+    `Dispose()` on `Compass`/`Motion` (new tests above); full C++ `delete`-style
+    destruction was already tested for `Accelerometer`/`Gyroscope` in prior phases and
+    is architecturally not reachable the same way for `Compass`/`Motion` via the fake
+    backend (no shared multi-instance batch dispatch to reproduce).
 - **Acceptance criteria:**
   - No use-after-free occurs when event handlers stop/dispose sensors, for every
-    documented-supported case.
-  - `devices-asan`/`devices-tsan` runs are clean for these specific tests.
+    documented-supported case. Done, for every class, at the level each class's own
+    architecture makes testable in this container.
+  - `devices-asan`/`devices-tsan` runs are clean for these specific tests. Done.
   - Any remaining unsupported case (e.g. destroying the owning object from within its
     own callback, on its own worker thread) is explicitly documented, matching this
-    codebase's existing "accepted boundary" pattern rather than silently ignored.
+    codebase's existing "accepted boundary" pattern rather than silently ignored. Done
+    — see the `Compass`/`Motion` real-backend risk documented above.
+- **Suggested files to inspect or edit:**
+  - `include/Microsoft/Devices/Sensors/SensorBase.hpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp` (inspected, no
+    change needed — already hardened in prior phases)
+  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (edited)
 - **Suggested files to inspect or edit:**
   - `include/Microsoft/Devices/Sensors/SensorBase.hpp`
   - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
@@ -1728,11 +1790,25 @@ not an alternate spelling to preserve.
   for `AndroidCompassBackend`'s own callback closures
   (`HandleRotationVectorSample`/`HandleMagneticFieldSample`/`PublishReading`), not just
   the shared bridge.
+- **Progress (2026-07-06, `SENSORBASE-003`):** `CompassTests.DisposeFromWithinOwnCallbackDoesNotDeadlock`
+  now exists (fake-backend seam) and confirms `Compass`'s own `ClaimDisposalOnce()`/
+  `Stop()` reentrancy handling is safe when `Dispose()` (not full destruction) is called
+  reentrantly. **The deeper risk this task actually asks about — a handler
+  *destroying* the `Compass` instance (not just `Dispose()`-ing it) while
+  `AndroidCompassBackend::PublishReading()`/`HandleRotationVectorSample()`/
+  `HandleMagneticFieldSample()` are still on the call stack, tearing down `backend_`
+  mid-call — remains open and unverified**, since the fake backend has no equivalent
+  call-stack structure to reproduce it and the real backend is Android-only. This is
+  this task's actual remaining scope.
 - **Required work:**
   - Re-confirm `Compass`/`AndroidCompassBackend`'s own object lifetime story under a
     `Stop()`/`Dispose()`-from-within-`Calibrate`-or-`CurrentValueChanged` scenario.
+    Partially done (2026-07-06) — see Progress note above.
   - Add tests using a fake backend that destroys the `Compass` object from inside a
-    callback, to the extent this is a supported scenario (document if it is not).
+    callback, to the extent this is a supported scenario (document if it is not). Still
+    open — the fake backend's simpler call structure can't reproduce the real
+    `AndroidCompassBackend`'s own call-stack-reentrancy risk; a real device or an
+    Android-native ASan build is likely required.
 - **Acceptance criteria:**
   - `devices-asan`/`devices-tsan` report no lifetime or race issues for documented-
     supported scenarios.
@@ -2016,12 +2092,20 @@ not an alternate spelling to preserve.
   (`HandleAttitudeSample`/`HandleGravitySample`/`HandleLinearAccelerationSample`/
   `HandleGyroscopeSample`/`PublishReading`), which is more surface area than `Compass`'s
   two.
+- **Progress (2026-07-06, `SENSORBASE-003`):** `MotionTests.DisposeFromWithinOwnCallbackDoesNotDeadlock`
+  now exists (fake-backend seam), confirming `Motion`'s own reentrant-`Dispose()`
+  handling is safe — same finding and same remaining scope as `COMPASS-008`'s identical
+  progress note: the deeper risk (a handler *destroying* `Motion` while one of the five
+  real `AndroidMotionBackend` callbacks is still on the call stack, tearing down
+  `backend_` mid-call) remains open and unverified, Android-only, not reproducible via
+  the fake backend.
 - **Required work:**
   - Re-confirm `Motion`/`AndroidMotionBackend`'s object lifetime story under
     `Stop()`/`Dispose()`-from-within-`CurrentValueChanged` for each of the five
-    callback paths.
+    callback paths. Partially done (2026-07-06) — see Progress note above.
   - Add tests for `Stop()`/`Dispose()`/destroy-from-within-callback using a fake
-    backend, to the extent this is a supported scenario (document if not).
+    backend, to the extent this is a supported scenario (document if not). `Dispose()`
+    done; full destroy-from-within-callback still open (same limitation as `COMPASS-008`).
   - Audit all five callbacks' shared-state mutations
     (`attitude_`/`gravity_`/`deviceAcceleration_`/`deviceRotationRate_`, all
     mutex-guarded per existing code) for races introduced by concurrent delivery from
