@@ -199,7 +199,7 @@ implemented and event-driven.
     design at process exit); memory-error + UB detection was full.
 
 #### INPUT-BUILD-007 — TSan review of the "single-thread only" claim
-- **Priority:** P2 · **Status:** TODO · **Area:** Build
+- **Priority:** P2 · **Status:** CANCELLED (2026-07-06) · **Area:** Build
 - **Files:** `InputManager.hpp` (thread-safety note), `docs/input-backend.md` §6
 - **Problem:** Input state is intentionally unsynchronized process-wide static state. The single-thread
   invariant is asserted but not enforced or tested.
@@ -209,6 +209,7 @@ implemented and event-driven.
 - **Tests:** input filter (+ TSan if chosen).
 - **Deps:** none.
 
+- **Cancelled (2026-07-06):** de-scoped at the user's request. The single-thread contract is already stated and self-evident from the code (no `mutex`/`atomic`/`thread` anywhere under the input dirs — verified in `docs/input-backend.md` §6); a TSan run is not pursued.
 #### INPUT-BUILD-008 — Headless run inventory (what silently skips)
 - **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** Build/Test
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`, `TextInputEXTTests.cpp`
