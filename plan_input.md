@@ -503,10 +503,21 @@ connected / 0 disconnected, DEC-09) is covered by the GetCapabilities suites (A5
 2 props + 2 ctors. **Files changed:** none (perfect, no gap). **Behavior verified:** property + ctor parity.
 **Remaining risk:** none.
 
-## A5-004 — `GestureSample` (struct) `[ ]`
-- [ ] FNA `Input/Touch/GestureSample.cs`; CNA `Touch/GestureSample.hpp`/`.cpp`; test `TouchInputTests.cpp`.
-- [ ] Members: ctors (public + internal-equiv), GestureType, Timestamp, Position/Position2, Delta/Delta2,
+## A5-004 — `GestureSample` (struct) `[x]`
+- [x] FNA `Input/Touch/GestureSample.cs`; CNA `Touch/GestureSample.hpp`/`.cpp`; test `TouchInputTests.cpp`.
+- [x] Members: ctors (public + internal-equiv), GestureType, Timestamp, Position/Position2, Delta/Delta2,
   FingerId/FingerId2 EXT. Per-member.
+
+**Result (2026-07-06):** **8 properties match FNA `GestureSample.cs`:** GestureType, Timestamp, Position,
+Position2, Delta, Delta2 (strict XNA) + `FingerIdEXT`, `FingerId2EXT` — verified these two **are genuine FNA
+extensions** (FNA `GestureSample.cs:61,67`), so CNA correctly tags them `NOXNA` + `EXT` suffix (FNA additions
+beyond stock XNA, not CNA-invented). Ctors: default (NOXNA), public 6-field (→ FNA public ctor), internal
+NOXNA ctor adding the finger ids (defaulting to `NO_FINGER` — matches FNA lines 93-94/117-118). **Test map:**
+default → `DefaultConstructorProducesZeroedNoneSample`; public ctor →
+`PublicConstructorSetsFieldsAndDefaultsFingerIdsToNoFinger` (verified it asserts **all 8 getters**);
+internal ctor → `InternalConstructorSetsExplicitFingerIds`. **Members reviewed:** 8 props + 3 ctors = all.
+**Files changed:** none (perfect, no gap; confirmed FingerIdEXT is FNA API). **Behavior verified:** all
+fields + finger-id defaulting. **Remaining risk:** none.
 
 ## A5-005 — `TouchPanel` (static class) `[ ]`
 - [ ] FNA `Input/Touch/TouchPanel.cs`; CNA `Touch/TouchPanel.hpp`/`.cpp`; tests `TouchInputTests.cpp` +
