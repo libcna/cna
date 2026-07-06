@@ -7,6 +7,7 @@
 
 #include "Microsoft/Devices/Detail/IVibrateBackend.hpp"
 #include "Microsoft/Devices/VibrateController.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/TimeSpan.hpp"
 
@@ -172,6 +173,49 @@ TEST(VibrateControllerTests, StartWithOverlongDurationThrows)
     // XNA/WP7 max is 5 seconds; anything past it must throw, not clamp.
     EXPECT_THROW(
         VibrateController::getDefaultProperty()->Start(TimeSpan::FromSeconds(5.001)),
+        System::ArgumentOutOfRangeException);
+}
+
+// Task VIB-006: verified against the archived MSDN Start(TimeSpan) page
+// (learn.microsoft.com/en-us/previous-versions/windows/apps/ff403287(v=vs.105)):
+// "duration ... Valid times are between 0 and 5 seconds. Values greater than
+// 5 or less than 0 raise an exception." TimeSpan::MaxValue/MinValue are both
+// far outside that range and must throw cleanly (no overflow/UB when
+// converting to a backend duration), not just "some sufficiently large
+// value."
+TEST(VibrateControllerTests, StartWithMaxTimeSpanValueThrows)
+{
+    EXPECT_THROW(
+        VibrateController::getDefaultProperty()->Start(TimeSpan::MaxValue),
+        System::ArgumentOutOfRangeException);
+}
+
+TEST(VibrateControllerTests, StartWithMinTimeSpanValueThrows)
+{
+    EXPECT_THROW(
+        VibrateController::getDefaultProperty()->Start(TimeSpan::MinValue),
+        System::ArgumentOutOfRangeException);
+}
+
+// Task VIB-006: the archived MSDN Start(TimeSpan) page documents the thrown
+// type as plain "ArgumentException", not "ArgumentOutOfRangeException" --
+// CNA throws the more specific subtype instead (System::ArgumentOutOfRangeException
+// derives from System::ArgumentException, exactly like the real .NET
+// hierarchy), which is compatible: any caller catching the documented
+// ArgumentException still catches this. This test pins that compatibility
+// relationship down explicitly rather than leaving it an implicit,
+// unverified assumption.
+TEST(VibrateControllerTests, OutOfRangeDurationExceptionIsCatchableAsArgumentException)
+{
+    EXPECT_THROW(
+        VibrateController::getDefaultProperty()->Start(TimeSpan::FromSeconds(6)),
+        System::ArgumentException);
+}
+
+TEST(VibrateControllerTests, StartLeftRightWithMaxTimeSpanValueThrows)
+{
+    EXPECT_THROW(
+        VibrateController::getDefaultProperty()->StartLeftRight(0.5f, 0.5f, TimeSpan::MaxValue),
         System::ArgumentOutOfRangeException);
 }
 

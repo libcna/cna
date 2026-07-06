@@ -50,7 +50,10 @@ namespace Microsoft::Devices
          *
          * @param duration Requested vibration duration, in the inclusive
          * range [System::TimeSpan::Zero, System::TimeSpan::FromSeconds(5)],
-         * matching the documented Windows Phone 7 maximum. If the current
+         * matching the documented Windows Phone 7 maximum (archived MSDN
+         * page for this method, `ff403287(v=vs.105)`, re-verified Task
+         * VIB-006: "Valid times are between 0 and 5 seconds. Values greater
+         * than 5 or less than 0 raise an exception."). If the current
          * platform or device exposes no haptic/vibration capability, this
          * call is a silent no-op.
          *

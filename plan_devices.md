@@ -1082,7 +1082,7 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (inspected, coverage already
     added by `VIB-009`)
 
-### VIB-006 — Validate duration compatibility
+### VIB-006 — Validate duration compatibility — CLOSED (2026-07-06, confirmed correct against a direct MSDN citation, minor test/doc gaps closed)
 
 - **Priority:** High
 - **Area:** Vibration API
@@ -1091,19 +1091,74 @@ not an alternate spelling to preserve.
   `TimeSpan.FromSeconds(5)` — confirm this range and the exact rejection behavior
   against an authoritative reference rather than assuming the current implementation is
   correct just because it exists).
+- **Resolution (2026-07-06):** fetched the archived MSDN `VibrateController.Start(TimeSpan)`
+  page directly (`learn.microsoft.com/en-us/previous-versions/windows/apps/ff403287(v=vs.105)`,
+  found via the classic `msdn.microsoft.com/en-us/library/microsoft.devices.vibratecontroller.start(system.timespan)(v=VS.105)`
+  redirect). Its Parameters/Remarks text: *"duration ... the amount of time, in
+  seconds, for which the phone vibrates. Valid times are between 0 and 5 seconds.
+  Values greater than 5 or less than 0 raise an exception."* and its Remarks table:
+  *"ArgumentException | Duration is greater than the 5 seconds or duration is
+  negative."* Confirms, with a direct citation (not an assumption):
+  - **Range is `[0, 5]` seconds, both ends inclusive** — exactly CNA's existing
+    `duration < TimeSpan::Zero || duration > FromSeconds(5)` check (strict `<`/`>`, so
+    both `Zero` and `FromSeconds(5)` exactly are valid, already tested).
+  - **`Start(TimeSpan.Zero)` is documented as "starting" a zero-duration vibration**,
+    not an implicit `Stop()` — matches CNA's existing behavior (still calls through to
+    the backend with `durationMs = 0`, not special-cased into a `Stop()` call).
+  - **The real, documented exception type is plain `ArgumentException`, not
+    `ArgumentOutOfRangeException`.** CNA throws the latter — re-examined and kept
+    unchanged: `System::ArgumentOutOfRangeException : public System::ArgumentException`
+    in `sharp-runtime` (mirroring .NET's real inheritance,
+    `System.ArgumentOutOfRangeException : System.ArgumentException`), so any code
+    catching the documented `ArgumentException` still catches CNA's
+    `ArgumentOutOfRangeException` — a compatible refinement, not a contradiction, and
+    consistent with every other range-validated XNA API elsewhere in this codebase
+    already throwing the more specific subtype. Added
+    `OutOfRangeDurationExceptionIsCatchableAsArgumentException` to pin this
+    relationship down explicitly rather than leave it an implicit, unverified
+    assumption.
+  - Added `StartWithMaxTimeSpanValueThrows`/`StartWithMinTimeSpanValueThrows`/
+    `StartLeftRightWithMaxTimeSpanValueThrows` (`TimeSpan::MaxValue`/`MinValue`,
+    not just "some sufficiently large value") plus
+    `OutOfRangeDurationExceptionIsCatchableAsArgumentException` — 4 new tests total.
+    Confirms validation happens before any duration-to-milliseconds conversion, so no
+    overflow/UB is reachable even at the representable extremes. The
+    zero/short/exactly-5s/negative/above-5s cases this task's own required work asks
+    for were already covered by pre-existing tests
+    (`StartWithZeroDurationDoesNotThrow`/`StartWithShortDurationDoesNotThrow`/
+    `StartWithExactlyMaxDurationDoesNotThrow`/`StartWithNegativeDurationThrows`/
+    `StartWithOverlongDurationThrows`) — confirmed by reading them, not assumed.
+    Repeated `Start()` calls are covered by `TwoConsecutiveStartsDoNotCrash` and
+    `VIB-007`'s own dedicated tests.
+  - Cross-referenced the citation directly in `Start(const TimeSpan&)`'s own doc
+    comment (`VibrateController.hpp`).
+  - **Consistency across backends (`VIB-002`/`VIB-003`):** duration validation lives in
+    `VibrateController` itself, before any backend is called (confirmed by
+    `StartWithOutOfRangeDurationThrowsAndNeverReachesBackend`,
+    `VIB-002`/`VIB-009`) — so this is structurally guaranteed identical for every
+    current and future backend, not something that could drift per-backend.
+  - Verified: 48 `VibrateControllerTests` (up from 44), all passing, on plain
+    `cmake-build-debug`.
 - **Required work:**
-  - Verify minimum and maximum duration behavior against XNA/WP7 documentation.
+  - Verify minimum and maximum duration behavior against XNA/WP7 documentation. Done —
+    direct citation above.
   - Add boundary tests for zero, negative, exactly 5 seconds, above 5 seconds, very
-    large `TimeSpan` values, and repeated `Start()` calls.
+    large `TimeSpan` values, and repeated `Start()` calls. Done — 3 new tests for the
+    `TimeSpan::MaxValue`/`MinValue` extremes; the rest were already covered.
   - Confirm whether `Start(TimeSpan.Zero)` should stop, no-op, or start a
     zero-duration vibration, and make the implementation match that decision exactly.
+    Done — confirmed "starts a zero-duration vibration" is the documented behavior,
+    already matched by the existing implementation, no change needed.
 - **Acceptance criteria:**
-  - Duration validation behavior is documented with its rationale.
-  - Tests cover every boundary case listed above.
+  - Duration validation behavior is documented with its rationale. Done — cited MSDN
+    page added to the doc comment.
+  - Tests cover every boundary case listed above. Done.
   - Behavior is consistent across every backend introduced by `VIB-002`/`VIB-003`.
+    Done — structurally guaranteed, see Resolution above.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/VibrateController.cpp`
-  - `tests/Microsoft/Devices/VibrateControllerTests.cpp`
+  - `src/Microsoft/Devices/VibrateController.cpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/VibrateController.hpp` (edited — doc comment citation)
+  - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (edited)
 
 ### VIB-007 — Define repeated `Start`/`Stop` behavior
 
