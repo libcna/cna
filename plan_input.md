@@ -421,10 +421,31 @@ AreDown` (single down→false, unpressed→true, partial-combined→true, all-do
 all. **Files changed:** `tests/…/GamePadStateTests.cpp` (+1 test). **Behavior verified:** ctor packing +
 IsButtonDown/Up FNA semantics + equality-with-packet + hash. **Remaining risk:** none.
 
-## A4-007 — `GamePad` (static class) `[ ]`
-- [ ] FNA `Input/GamePad.cs`; CNA `GamePad.hpp`/`.cpp`; tests `GamePadTests.cpp` + `GamePadInputTests.cpp`.
-- [ ] Members: `GetState` (×overloads incl. dead-zone), `GetCapabilities`, `SetVibration`, EXT
+## A4-007 — `GamePad` (static class) `[x]`
+- [x] FNA `Input/GamePad.cs`; CNA `GamePad.hpp`/`.cpp`; tests `GamePadTests.cpp` + `GamePadInputTests.cpp`.
+- [x] Members: `GetState` (×overloads incl. dead-zone), `GetCapabilities`, `SetVibration`, EXT
   (`GetGUIDEXT`/`SetLightBarEXT`/`SetTriggerVibrationEXT`/`GetGyroEXT`/`GetAccelerometerEXT`). Per-member.
+
+**Result (2026-07-06):** **9 static members**, all matching FNA `GamePad.cs`: `GetCapabilities(PlayerIndex)`,
+`GetState(PlayerIndex)` + `GetState(PlayerIndex, GamePadDeadZone)` (2 overloads), `SetVibration`,
+`GetGUIDEXT`, `SetLightBarEXT(PlayerIndex, Color)`, `SetTriggerVibrationEXT`, `GetGyroEXT`,
+`GetAccelerometerEXT`, plus `ExcludeAxisDeadZone`. **Tagging verified:** `ExcludeAxisDeadZone` is `NOXNA`
+(maps FNA's `internal static`); the EXT sensor methods are `NOXNA` with the FNA `out Vector3` mapped to a
+`Vector3&` (documented out→ref C++ deviation). **Overloads tested separately:** the dead-zone
+`GetState(PlayerIndex, GamePadDeadZone)` is exercised distinctly (`GamePadInputTests.cpp:62,189`) from the
+plain overload; the out-ref sensor reads verify the out value (`GyroAndAccelReadReturnData`). **Test refs:**
+GetState 82, SetVibration 12, SetLightBarEXT 8, SetTriggerVibrationEXT 6, GetGyroEXT 4, GetCapabilities/
+GetGUIDEXT/GetAccelerometerEXT 3 each — all covered. **Members reviewed:** 9/9. **Files changed:** none
+(perfect, no gap). **Behavior verified:** FNA parity + overload separation + out→ref convention. **Remaining
+risk:** none.
+
+---
+
+**Phase 4 complete (2026-07-06):** all 7 GamePad types re-audited member-by-member vs FNA. Every member
+present, correctly tagged (strict / EXT / NOXNA), and covered by a named test. **Added 2 tests:** the
+`GamePadCapabilities` 35-flag strict isolation guard (A4-005) and the `GamePadState` IsButtonUp semantics
+test (A4-006). Confirmed FNA-faithful: dead-zone math, trigger clamp + epsilon equality, DPad bit-weighted
+hash, IsButtonDown/Up bit semantics, ctor arg orders, out→ref sensor convention.
 
 ---
 
