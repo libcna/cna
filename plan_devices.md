@@ -4331,7 +4331,7 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` (inspected,
     no change needed — existing coverage already adequate at the host-testable level)
 
-### ANDROID-BRIDGE-004 — Add Android API-level documentation
+### ANDROID-BRIDGE-004 — Add Android API-level documentation — CLOSED (2026-07-06, consolidated + closed the manifest/doc gap)
 
 - **Priority:** Medium
 - **Area:** Android Platform
@@ -4351,6 +4351,33 @@ not an alternate spelling to preserve.
 - **Suggested files to inspect or edit:**
   - `docs/devices-android.md`
   - `examples/demo_devices/android/`
+- **Resolution:** `docs/devices-android.md`'s "Permissions and manifest features" section
+  already documented `VIBRATE` and the sensor `uses-feature` declarations, but was
+  missing two things the manifest itself didn't declare either: an explicit minimum-API
+  statement (API 24, already implied elsewhere in the doc by the
+  `ASensorManager_getInstance()` note, now stated directly) and the
+  `HIGH_SAMPLING_RATE_SENSORS` permission. This project's default `TimeBetweenUpdates`
+  (2ms, ~500Hz — `SensorBase<T>`'s own default) exceeds Android 12+ (API 31+)'s ~200Hz
+  normal-permission sampling cap; without the permission, a real API 31+ device would
+  silently deliver slower samples than requested, with nothing in this bridge to detect
+  or signal the cap being hit (the bridge's `ASensorEventQueue_setEventRate()` call has
+  no return-path visibility into OS-side throttling). Added
+  `android.permission.HIGH_SAMPLING_RATE_SENSORS` to `cna_demo_devices`'s manifest
+  (a normal-protection-level permission — declared only, never runtime-prompted, so
+  always safe to declare) and consolidated the rationale, plus the minimum-API-level
+  statement, into `docs/devices-android.md`. Also added an explicit "devices actually
+  tested" line to that same section (Medium_Phone emulator only, no physical device —
+  this fact already existed in the "Build integration" section further down the same
+  file, but the task's acceptance criteria specifically asked for it in the Permissions
+  section too, so it is now stated in both places rather than requiring a cross-reference
+  hunt). One incidental bug caught by validation before commit: the first draft of the
+  manifest comment contained a literal `--` (`"cap (~200Hz) -- without this"`), which is
+  illegal inside an XML comment (`<!-- ... -->` cannot contain `--` anywhere in its body)
+  and would have made the manifest fail to parse; caught by running the manifest through
+  `python3 -c "import xml.dom.minidom as m; m.parse(...)"` before committing, and fixed
+  by rewording to a semicolon. No C++ code changed by this task, so no `CnaTests` rebuild
+  was needed; the manifest's well-formedness was confirmed via the XML parse above rather
+  than a full Gradle build (no Android SDK/emulator invoked this session).
 
 ---
 

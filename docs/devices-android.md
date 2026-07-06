@@ -71,6 +71,8 @@ deprecation warning is locally suppressed in `AndroidSensorBridge.cpp`.
 
 ## Permissions and manifest features
 
+- **Minimum API level: 24** (`ASensorManager_getInstance()`'s deprecated-but-required
+  package-agnostic form, see the API level note above, is the binding constraint).
 - `android.permission.VIBRATE` — already present, uncommented, in SDL's own vendored
   Android manifest template. No CNA-side action needed.
 - `android.hardware.sensor.{accelerometer,gyroscope,compass}` — added as
@@ -78,6 +80,23 @@ deprecation warning is locally suppressed in `AndroidSensorBridge.cpp`.
   (Task DEVICES-0123), so the demo still installs on devices missing any one sensor. No
   runtime permission prompt is needed for `SensorManager`/NDK sensor registration on
   current Android (re-verify at the exact target API level before relying on this).
+- `android.permission.HIGH_SAMPLING_RATE_SENSORS` — added to `cna_demo_devices`'s
+  manifest (`plan_devices.md` Task ANDROID-BRIDGE-004, 2026-07-06). Android 12+ (API 31+)
+  caps sensor sampling at ~200Hz for apps that don't declare this permission; this
+  project's own default `TimeBetweenUpdates` (2ms, ~500Hz — see `SensorBase<T>`'s default)
+  exceeds that cap, so without the permission a device on API 31+ would silently deliver
+  samples slower than requested, with no error or signal that the cap was hit. It is a
+  normal-protection-level permission (declared in the manifest only, never prompted to the
+  user at runtime), so it is safe to declare unconditionally rather than gate behind a
+  build flavor. `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`'s
+  `Start()` Doxygen comment documents the same cap from the code side; this bridge does
+  not detect or compensate for the OS silently slowing samples down if the permission is
+  ever removed.
+- **Devices actually tested:** the `Medium_Phone` Android emulator image only (see
+  "Build integration" below) — **no physical Android device has ever been used** to
+  verify any sensor, vibration, or permission behavior in this namespace. Every
+  API-level/permission claim above is sourced from NDK headers and Android platform
+  documentation, not from on-device confirmation.
 
 ## Build integration (`examples/demo_devices/android/`)
 

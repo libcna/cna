@@ -61,6 +61,15 @@
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
 
+    <!-- Task ANDROID-BRIDGE-004 (2026-07-06): this project's default
+         TimeBetweenUpdates (2ms, ~500Hz) exceeds Android 12+ (API 31+)'s
+         normal-permission sampling-rate cap (~200Hz); without this
+         permission, a device on API 31+ would silently deliver samples
+         slower than requested instead of throwing or otherwise signaling
+         the cap. Normal protection-level permission (not runtime-prompted),
+         safe to declare unconditionally. See docs/devices-android.md. -->
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
+
     <!-- Allow access to Internet -->
     <!-- if you want to connect to the network or internet, uncomment this. -->
     <!--
