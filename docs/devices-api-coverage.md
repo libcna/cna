@@ -173,7 +173,7 @@ type-name API a game would call.
 | Type | Confidence | Notes |
 |---|---|---|
 | `SensorFailedException` | High | Message + `(message, errorId)` ctors; `ErrorId` defaults `0` (no documented real WP7 error codes exist) |
-| `AccelerometerFailedException` | High | `Accelerometer`-specific; mirrors `SensorFailedException`'s 3 ctors. `Gyroscope`/`Compass`/`Motion` correctly have no dedicated subclass, use plain `SensorFailedException` |
+| `AccelerometerFailedException` | High | `Accelerometer`-specific; mirrors `SensorFailedException`'s 3 ctors. `Gyroscope`/`Compass`/`Motion` correctly have no dedicated subclass, use plain `SensorFailedException`. **Verified with direct citations (`DEV-API-005`, 2026-07-06):** `Gyroscope`/`Compass`/`Motion`'s own class pages (`hh239201(v=vs.110)`/`hh220912(v=vs.105)`/`hh239189(v=vs.105)`) list `Start`/`Stop` as inherited from `SensorBase<TSensorReading>`, never overridden — and that base `Start()` page (`hh220889(v=vs.105)`) documents `SensorFailedException` as its own real failure type. `Accelerometer.Stop()`'s own dedicated page (`ff707301(v=vs.105)`, confirming it *is* overridden) documents `AccelerometerFailedException` specifically. The split is exactly correct, not a CNA invention needing a `NOXNA` tag. |
 | `SensorState` (enum) | Medium | 6 values (`NotSupported`/`Ready`/`Initializing`/`NoData`/`NoPermissions`/`Disabled`) — MonoGame cross-check only, no direct MSDN enum page found |
 | `ISensorReading` | High | Single `Timestamp` member |
 | `CalibrationEventArgs` | High | Empty marker class, confirmed against its exact member-list page |

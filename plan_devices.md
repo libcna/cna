@@ -537,7 +537,7 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   - `src/Microsoft/Devices/Sensors/*Reading.cpp`
   - `tests/Microsoft/Devices/Sensors/*ReadingTests.cpp`
 
-### DEV-API-005 — Audit exception types and messages
+### DEV-API-005 — Audit exception types and messages — CLOSED (2026-07-06, verified correct as-is against archived MSDN citations, no code change)
 
 - **Priority:** High
 - **Area:** API Compatibility
@@ -545,6 +545,58 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   `AccelerometerFailedException`; `Gyroscope`, `Compass`, and `Motion` all throw the
   generic `SensorFailedException`. Whether this split matches real XNA/WP7 exception
   types (which may not have a generic "sensor failed" exception at all) is unverified.
+- **What was found — the exception-type split is exactly correct, now with direct
+  citations (`docs/devices-api-coverage.md` previously asserted this with no citation
+  shown):**
+  - Fetched `Gyroscope`/`Compass`/`Motion`'s own archived MSDN class pages
+    (`hh239201(v=vs.110)`, `hh220912(v=vs.105)`, `hh239189(v=vs.105)`): all three list
+    `Start`/`Stop` as **"(Inherited from `SensorBase<TSensorReading>`)"** — none of them
+    override `Start()`/`Stop()` in the real API at all. `SensorBase(TSensorReading).Start()`'s
+    own page (`hh220889(v=vs.105)`) documents its Exceptions table as
+    `UnauthorizedAccessException`/`InvalidOperationException`/`OutOfMemoryException`/
+    `ObjectDisposedException`/`SensorFailedException` ("Data acquisition from the sensor
+    cannot be started. The cause of the error is described in the exception's message
+    field.") — confirming `SensorFailedException` genuinely is the real, base-class,
+    shared failure type these three sensors throw, not a CNA invention.
+  - Fetched `Accelerometer.Stop()`'s own dedicated page (`ff707301(v=vs.105)`, distinct
+    from the base page — confirming `Accelerometer` *does* override `Stop()` in the real
+    API): Exceptions table lists `UnauthorizedAccessException`/`AccelerometerFailedException`
+    specifically — confirming `AccelerometerFailedException` is real, `Accelerometer`-only
+    API, exactly matching CNA's existing choice.
+  - **Unsupported sensor:** `InvalidOperationException` — already verified by
+    `SENSORBASE-005` against `CurrentValue`'s own page (`hh239261`).
+  - **Disposed sensor:** `ObjectDisposedException` — documented directly on
+    `Start()`'s own Exceptions table above; CNA throws it symmetrically from `Stop()`
+    too (not separately documented on the real `Stop()` page, but not contradicted by
+    it either — a reasonable, undocumented-either-way extension, consistent with the
+    conventional .NET `IDisposable` pattern).
+  - **Double `Start()`:** matches the same `SensorFailedException`/`AccelerometerFailedException`
+    "cannot be started, cause in message" contract above — CNA's actual messages
+    ("...already started") are intentionally CNA wording (the real API's own message
+    text is not specified beyond "described in the exception's message field").
+  - **Double `Stop()`:** `SensorBase(TSensorReading).Stop()`'s own base page
+    (`hh220748(v=vs.110)`) has **no Exceptions/Remarks section at all** — no documented
+    exception for calling `Stop()` when not started. CNA's choice (safe no-op) is
+    unverified-but-not-contradicted, same tier as the disposed-`Stop()` case above.
+  - **Invalid `TimeBetweenUpdates`:** already resolved by `SENSORBASE-008` (verified
+    correct as-is — the real setter has no documented range restriction either).
+  - **Test coverage:** already comprehensive and already asserts the exact correct type
+    per class at every throw site (`AccelerometerFailedException` throughout
+    `AccelerometerTests.cpp`'s `Start()`-failure paths; `SensorFailedException`
+    throughout `GyroscopeTests.cpp`/`CompassTests.cpp`/`MotionTests.cpp`) — confirmed by
+    grep, no new tests needed.
+- **Decision (required work's second bullet): keep `SensorFailedException` as the
+  shared type for `Gyroscope`/`Compass`/`Motion`** — this is not a CNA-invented
+  stand-in needing a `NOXNA` tag, it is the real, documented, base-class exception type
+  those three classes genuinely throw in the real API (confirmed above), so no
+  dedicated `GyroscopeFailedException`/`CompassFailedException`/`MotionFailedException`
+  should ever be added — doing so would be a *deviation* from the real API, not a fix.
+- **Doc updates:** `docs/devices-api-coverage.md`'s `Exceptions / Enums` table entry for
+  `AccelerometerFailedException` upgraded from an uncited assertion to citing all of the
+  above archived MSDN pages directly.
+- **Verified:** no code or test changes — this was a pure documentation/citation task,
+  confirming already-correct, already-tested behavior. Existing 313/313 test result
+  unaffected.
 - **Required work:**
   - Verify expected exception types/messages for: unsupported sensor, disposed sensor,
     double `Start()`, double `Stop()`, failed `Start()`, invalid `TimeBetweenUpdates`.

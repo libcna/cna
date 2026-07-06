@@ -99,6 +99,30 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `DEV-API-005` closed: exception-type split verified correct with direct
+citations, no code change.** `docs/devices-api-coverage.md` already asserted that
+`Accelerometer` correctly has its own `AccelerometerFailedException` while
+`Gyroscope`/`Compass`/`Motion` correctly share the base `SensorFailedException`, but
+with no citation shown. Fetched the real class pages directly: `Gyroscope`/`Compass`/
+`Motion`'s own archived MSDN pages (`hh239201(v=vs.110)`/`hh220912(v=vs.105)`/
+`hh239189(v=vs.105)`) all list `Start`/`Stop` as inherited from
+`SensorBase<TSensorReading>`, never overridden — and the base `Start()` page
+(`hh220889(v=vs.105)`) documents `SensorFailedException` as its own real, base-class
+failure type. `Accelerometer.Stop()`'s own dedicated page (`ff707301(v=vs.105)`,
+confirming `Accelerometer` *does* override `Stop()`) documents
+`AccelerometerFailedException` specifically. Also verified: unsupported sensor
+(`InvalidOperationException`, already confirmed by `SENSORBASE-005`), disposed sensor
+(`ObjectDisposedException`, directly documented on `Start()`'s own page), double
+`Stop()` (the base `Stop()` page, `hh220748(v=vs.110)`, has no Exceptions section at
+all — CNA's safe-no-op choice is unverified-but-not-contradicted), invalid
+`TimeBetweenUpdates` (already resolved by `SENSORBASE-008`). Test coverage was already
+comprehensive and already asserts the exact correct type per class at every throw site
+— confirmed by grep, no new tests needed. Decision: keep `SensorFailedException` as the
+real, shared type for `Gyroscope`/`Compass`/`Motion` — adding per-class dedicated
+exception types for those three would be a *deviation* from the real API, not a fix.
+Updated `docs/devices-api-coverage.md`'s table entry with the citations. No test/build
+verification needed — pure documentation task, no code or test changes.
+
 **2026-07-06 — `SENSORBASE-007` closed: found and fixed a real, previously-missed
 `Extra-unmarked` API bug.** All `*ForTesting()`/`InjectSynthetic*`/
 `SetBackendForTesting()` hooks were already correctly tagged `NOXNA` (verified by
@@ -634,16 +658,17 @@ own priority labels.
 `DEV-API-003`, `DEV-BUILD-002`, `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`,
 `DEV-API-001`, `ANDROID-BRIDGE-002`, `READINGS-002`, `DEV-BUILD-004`, `MOTION-008`,
 `SENSORBASE-008`, `DEV-BUILD-001`, `SENSORBASE-002`, `SENSORBASE-003`,
-`SENSORBASE-004`, `SENSORBASE-005`, `SENSORBASE-006`, and `SENSORBASE-007` are now
-closed (19 of 72 total task headers) — see Section 3 and `plan_devices.md` itself (grep
-for `— CLOSED`). All of `SENSORBASE-001`–`008` are now closed.
+`SENSORBASE-004`, `SENSORBASE-005`, `SENSORBASE-006`, `SENSORBASE-007`, and
+`DEV-API-005` are now closed (20 of 72 total task headers) — see Section 3 and
+`plan_devices.md` itself (grep for `— CLOSED`). All of `SENSORBASE-001`–`008` are now
+closed.
 
-53 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
+52 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
 `VIB-010`, deliberately untouched per explicit user instruction so far), most
 Accelerometer/Gyroscope/Compass/Motion API- and hardware-verification audits
 (`ACCEL-001`–`004`/`006`/`007`, `GYRO-001`–`003`/`005`, `COMPASS-001`–`008`,
 `MOTION-001`–`007`/`009`/`010`), `DEV-API-002` (`NOXNA` boundary enforcement),
-`DEV-API-004`/`005`, `DEV-BUILD-003` (CI), `ANDROID-BRIDGE-001`/`003`/`004`,
+`DEV-API-004`, `DEV-BUILD-003` (CI), `ANDROID-BRIDGE-001`/`003`/`004`,
 `SDL-SENSOR-001`/`003`, `READINGS-001`/`003`, `DEMO-001`/`002`, and `VERIFY-001`–`003`.
 Pick the next smallest one, or ask the user to prioritize, per Section 9's existing
 rule. One concrete lead if a task is wanted: the `cna_demo_input` Android build failure
@@ -813,14 +838,14 @@ along the way, same category as `MOTION-008` earlier in this pass).
 **Next recommended task (at the time this line was first written):** `SENSORBASE-004`
 — see Section 3's entry above; it was picked up autonomously and closed the same
 session (found and fixed a real `Compass`/`Motion` data race via `devices-tsan`), then
-`SENSORBASE-005`, `SENSORBASE-006`, and `SENSORBASE-007` were picked up immediately
-after and closed the same session too — all of `SENSORBASE-001`–`008` are now closed.
-No further "next smallest task" is queued from a quick pass over `plan_devices.md`
-beyond that — the `cna_demo_input` Android build finding from `DEV-BUILD-004` remains
-open but unscoped (see Section 4) if Android example-app coverage beyond
-`cna_demo_devices` is ever wanted; otherwise, read `plan_devices.md` for its next open
-task (grep for section headers without a "— CLOSED" suffix) or ask the user to
-prioritize.
+`SENSORBASE-005`, `SENSORBASE-006`, `SENSORBASE-007`, and `DEV-API-005` were picked up
+immediately after and closed the same session too — all of `SENSORBASE-001`–`008` are
+now closed. No further "next smallest task" is queued from a quick pass over
+`plan_devices.md` beyond that — the `cna_demo_input` Android build finding from
+`DEV-BUILD-004` remains open but unscoped (see Section 4) if Android example-app
+coverage beyond `cna_demo_devices` is ever wanted; otherwise, read `plan_devices.md` for
+its next open task (grep for section headers without a "— CLOSED" suffix) or ask the
+user to prioritize.
 
 ---
 
