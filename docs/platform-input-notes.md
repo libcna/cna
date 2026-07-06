@@ -75,6 +75,31 @@ See also [`docs/input-backend.md`](input-backend.md) (architecture) and
 
 ---
 
+## Browser / Emscripten (WebAssembly)
+
+CNA builds for Emscripten (EasyGL backend = WebGL 2 / OpenGL ES 3.0). Input flows through SDL3's
+Emscripten backend, which bridges browser DOM events to the same `SdlInputBridge::ProcessEvent` path used
+everywhere else, so no browser-specific input code exists in CNA. Browser-specific behavior to be aware of:
+
+- **Exceptions are enabled.** Several input paths throw (`TouchCollection`/`TouchPanel::SetFinger` →
+  `std::out_of_range`, `TouchPanel::ReadGesture` → `System::InvalidOperationException`). Emscripten disables
+  C++ exception catching by default (an uncaught throw aborts the whole runtime), so CNA compiles/links with
+  `-fexceptions -sNO_DISABLE_EXCEPTION_CATCHING=1` (`CMakeLists.txt`) — these input exceptions unwind
+  normally instead of aborting the page.
+- **Keyboard:** the browser reserves some key combos (Ctrl+W/T/N, some F-keys) that never reach the app;
+  keycode vs scancode behaves as elsewhere, but the physical layout depends on the browser/OS.
+- **Mouse:** relative mouse mode maps to the Pointer Lock API, which **requires a user gesture** to engage
+  (a click) and can be exited by the browser (Esc); `Mouse::SetPosition`/warp is limited by pointer-lock
+  rules. Wheel deltas still normalize to the XNA 120-unit notch.
+- **Touch:** browser touch events map to `FINGER_DOWN/MOTION/UP`; multi-touch works on touch-capable
+  devices. High-DPI touch scaling depends on the canvas CSS size vs backing store (device pixel ratio).
+- **GamePad:** via the browser Gamepad API — controllers are **not visible until the user presses a button**
+  on them (a browser privacy gate), so `GAMEPAD_ADDED` may arrive late; rumble/LED/sensor support depends on
+  the browser and is typically absent.
+- **Text/IME:** SDL routes composition through a hidden DOM input; `StartTextInput`/`StopTextInput` toggle it.
+
+---
+
 ## Cross-cutting
 
 - **`SetPosition` on a scaled window** (all platforms): `Mouse::SetPosition` converts the caller's
