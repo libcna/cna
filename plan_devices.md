@@ -3961,30 +3961,59 @@ not an alternate spelling to preserve.
     `ANDROID-BRIDGE-002`)
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (edited, `ANDROID-BRIDGE-002`)
 
-### MOTION-009 — Add iOS Motion backend plan or implementation
+### MOTION-009 — Add iOS Motion backend plan or implementation — CLOSED (2026-07-06, existing plan re-confirmed and extended)
 
 - **Priority:** High
 - **Area:** iOS Backend
 - **Problem:** `Motion` is a natural fit for iOS's `CoreMotion` (`CMDeviceMotion`), but
   no iOS backend exists today (confirmed: only `Detail::AndroidMotionBackend` exists as
   a concrete `IMotionBackend`).
+- **Resolution (2026-07-06):** `docs/devices-native-backend-design.md` already had a
+  detailed iOS Motion plan from an earlier phase — re-read it in full and re-confirmed
+  it still holds: **decision is yes**, plan `CMMotionManager.deviceMotion`
+  (`startDeviceMotionUpdates(to:withHandler:)`, delivering a `CMDeviceMotion` struct)
+  mapping almost directly onto `MotionReading`: `.attitude`→`Attitude`,
+  `.gravity`→`Gravity`, `.userAcceleration`→`DeviceAcceleration`,
+  `.rotationRate`→`DeviceRotationRate` — already documented as "the cleanest of the
+  four native-backend mappings in this document," since CoreMotion already computes and
+  separates every field `MotionReading` expects, with no fusion math needed in the
+  bridge at all.
+  - **Extended with two cross-references from this session's Android-side fixes, both
+    concluding a future iOS backend needs neither corresponding fix:**
+    `MOTION-006`'s timestamp-consistency fix (anchoring `MotionReading.Timestamp` to
+    `Attitude.Timestamp`) exists only because Android fuses four independently-
+    timestamped sensor streams — `CMDeviceMotion` is a single already-fused struct with
+    one `timestamp` property, so both values would trivially be identical by
+    construction, never divergent. `MOTION-007`'s stale-sample-fusion guard (500ms
+    max-age window across four Android streams) is likewise an artifact of Android's
+    five-bridge architecture — nothing in a `CMDeviceMotion`-backed implementation
+    would ever need an equivalent staleness check, since there's nothing assembled from
+    separately-arriving pieces to go stale relative to each other.
+  - No Apple toolchain exists in this environment (re-confirmed,
+    `docs/devices-build.md` Section 5) — plan only, not implemented, matching every
+    other iOS task in this plan (`VIB-004`, `COMPASS-007`).
 - **Required work:**
   - Plan (or implement, once an Apple toolchain is available) a `CMDeviceMotion`-backed
-    `IMotionBackend`.
+    `IMotionBackend`. Done — plan already existed and re-confirmed accurate.
   - Map `attitude`, `gravity`, `userAcceleration`, and `rotationRate` to
     `AttitudeReading`/`MotionReading` fields, following the same unit-verification
-    discipline as `MOTION-003`/`MOTION-004`.
-  - Add an iOS manual test checklist entry.
+    discipline as `MOTION-003`/`MOTION-004`. Done — mapping already documented; extended
+    with the `MOTION-006`/`MOTION-007` cross-references.
+  - Add an iOS manual test checklist entry. N/A yet — no backend implemented; nothing
+    to manually test.
 - **Acceptance criteria:**
-  - iOS behavior is documented, whichever choice is made.
+  - iOS behavior is documented, whichever choice is made. Done.
   - The backend compiles behind the appropriate platform guard, or the unsupported path
-    is deterministic if not implemented.
-  - A manual checklist covers major orientations and movement patterns.
+    is deterministic if not implemented. True today (no iOS backend exists, permanent
+    stub, unaffected by this task).
+  - A manual checklist covers major orientations and movement patterns. N/A — plan
+    only, not implemented.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp`
-  - iOS build/toolchain files (none currently present — confirm before assuming a
-    location)
-  - `docs/devices-*.md`
+  - `include/Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp` (inspected, no
+    change needed — no iOS implementation to add without a toolchain)
+  - iOS build/toolchain files (confirmed still absent)
+  - `docs/devices-native-backend-design.md` (edited — `MOTION-006`/`MOTION-007`
+    cross-references)
 
 ### MOTION-010 — Harden Motion callback lifetime further
 

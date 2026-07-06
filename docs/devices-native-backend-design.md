@@ -245,6 +245,25 @@ This is the cleanest of the four native-backend mappings in this document — Co
 already computes and separates every field XNA's `MotionReading` expects, with no fusion
 math needed in the bridge at all.
 
+**Re-confirmed 2026-07-06 (Task MOTION-009):** this plan still holds; no Apple
+toolchain exists in this environment to implement or compile it
+(`docs/devices-build.md` Section 5). Two cross-references from this session's Android
+work, both concluding a future iOS backend needs **neither** of the corresponding
+Android-only fixes:
+- **`MOTION-006`'s timestamp-consistency fix** (`MotionReading.Timestamp` anchored to
+  its own nested `Attitude.Timestamp`, since Android fuses four independently-arriving
+  sensor streams with their own timestamps) has no iOS equivalent problem to fix —
+  `CMDeviceMotion` is a single, already-fused struct with its own one `timestamp`
+  property (`CFTimeInterval`), so a future iOS backend would simply use that one value
+  for both `MotionReading.Timestamp` and `Attitude.Timestamp` — they could never
+  diverge in the first place, by construction.
+- **`MOTION-007`'s stale-sample-fusion guard** (a 500ms max-age window across four
+  independently-timestamped Android sensor streams) is entirely an artifact of
+  Android's architecture (five separate `AndroidSensorBridge` instances feeding one
+  fused reading) — `CMDeviceMotion` has nothing to be stale relative to, since it is
+  never assembled from separately-arriving pieces in the bridge at all. A future iOS
+  `IMotionBackend` would need no equivalent staleness check.
+
 ---
 
 ## Permission and lifecycle notes
