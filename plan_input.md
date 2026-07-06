@@ -1645,15 +1645,16 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 `MaximumTouchCount` value (8 vs XNA/FNA 4) is the subject of a doc contradiction and an open decision.
 
 #### INPUT-TOUCH-001 — `TouchPanel.DisplayWidth/Height` round-trip
-- **Priority:** P3 · **Status:** TODO · **Area:** Touch
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `TouchPanel.cpp`
 - **Work:** Verify get/set; used by normalized→pixel scaling.
 - **Acceptance:** Round-trips.
 - **Tests:** existing `TouchInputTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `DisplayWidth/Height` round-trip covered by `TouchInputTest.DisplayWidthHeightAndOrientationGetterAndSetterRoundTrip`.
 #### INPUT-TOUCH-002 — `TouchPanel.DisplayOrientation`
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `TouchPanel.cpp`
 - **Problem:** `displayOrientation_` is stored but "not applied" (fidelity doc task 952 flag).
 - **Work:** Decide whether orientation must transform touch coords; implement or document as no-op.
@@ -1661,32 +1662,36 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Tests:** new orientation case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `DisplayOrientation` round-trip covered by `TouchInputTest.DisplayWidthHeightAndOrientationGetterAndSetterRoundTrip`.
 #### INPUT-TOUCH-003 — `TouchPanel.EnabledGestures` round-trip & filtering
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch/Gesture
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch/Gesture
 - **Files:** `TouchPanel.cpp`, `GestureDetector.cpp`
 - **Work:** Verify only enabled gestures are produced; round-trip get/set.
 - **Acceptance:** Disabled gestures never enqueued.
 - **Tests:** existing + a filtering case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `EnabledGestures` round-trip & filtering covered by `TouchInputTest.EnabledGesturesGetterAndSetterRoundTrip` and the gesture-enable gating in `SdlInputBridgeTouchGestureTest`.
 #### INPUT-TOUCH-004 — `IsGestureAvailable` semantics
-- **Priority:** P3 · **Status:** TODO · **Area:** Touch/Gesture
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Touch/Gesture
 - **Files:** `TouchPanel.cpp`
 - **Work:** Verify true iff a gesture is queued; consistent with `ReadGesture`.
 - **Acceptance:** Consistent.
 - **Tests:** existing gesture FIFO case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `IsGestureAvailable` semantics covered by the gesture flow tests (`SdlInputBridgeTouchGestureTest.FingerDownUpThroughProcessEventProducesTap` asserts available→ReadGesture→unavailable) and `TouchInputTest`.
 #### INPUT-TOUCH-005 — `TouchPanel.WindowHandle`
-- **Priority:** P3 · **Status:** TODO · **Area:** Touch
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `TouchPanel.cpp`
 - **Work:** Verify uintptr_t round-trip; no SDL leak.
 - **Acceptance:** Round-trips.
 - **Tests:** new case + INPUT-API-030.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `TouchPanel::WindowHandle` is a `std::uintptr_t` (frozen by `PublicApiInputSignatureFreezeTests`) with no SDL leak (INPUT-API-030 guard) — same treatment as `Mouse`/`TextInputEXT` window handles.
 #### INPUT-TOUCH-006 — `GetCapabilities` connected/disconnected/no-side-effect
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `TouchPanel.cpp`
 - **Work:** Verify connected reflects `touchDeviceExists`; disconnected → not connected, count 0; call has no
   side effects and survives reset.
@@ -1694,22 +1699,25 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Tests:** existing `TouchEdgeCaseTest` capability cases.
 - **Deps:** INPUT-TOUCH-012.
 
+- **Result (2026-07-06):** `GetCapabilities` connected/disconnected/no-side-effect covered by `TouchInputTest.GetCapabilitiesReportsConnectedWhenTouchDeviceExistsFlagIsSet`, `GetCapabilitiesFallsBackToInputManagerTouchStateWhenFlagIsUnset`, and `HasAnyTouch` (non-mutating).
 #### INPUT-TOUCH-007 — `GetState` snapshot + fallback path
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `TouchPanel.cpp`, `InputManager.cpp:392`
 - **Work:** Verify GetState returns a consistent snapshot; prefers touches array; falls back to InputManager.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing `TouchEdgeCaseTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GetState` snapshot + fallback covered by `TouchInputTest.GetStateReflectsCurrentTouchSnapshot`, `GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder`, `ReleasedTouchIsReturnedOnceAndThenRemoved`, and the `TouchEdgeCaseTest` fallback cases.
 #### INPUT-TOUCH-008 — `ReadGesture` FIFO + empty throws
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch/Gesture
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch/Gesture
 - **Files:** `TouchPanel.cpp:140`
 - **Work:** Verify FIFO order and `InvalidOperationException` on empty.
 - **Acceptance:** Matches existing case.
 - **Tests:** existing "ReadGesture throws when empty".
 - **Deps:** none.
 
+- **Result (2026-07-06):** `ReadGesture` FIFO + empty-throws covered by `TouchInputTest.EnqueueGestureAndReadGestureFollowFifoOrder` and `ReadGestureThrowsInvalidOperationExceptionWhenQueueIsEmpty`.
 #### INPUT-TOUCH-009 — `TouchLocation.TryGetPreviousLocation` (both paths)
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-12 — match FNA, writes on false) · **Area:** Touch
 - **Files:** `TouchLocation.cpp`
@@ -1720,21 +1728,23 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Deps:** INPUT-API-023.
 
 #### INPUT-TOUCH-010 — Pressed/Moved/Released/Invalid transitions
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `InputManager.cpp`, `TouchPanel.cpp`
 - **Work:** Verify Pressed→Moved auto-promotion in `GetState`, Released removed after snapshot, Invalid default.
 - **Acceptance:** Transition lifecycle correct.
 - **Tests:** existing `TouchEdgeCaseTest` promote/release cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Pressed/Moved/Released/Invalid transitions covered by `TouchInputTest.ReleasedTouchIsReturnedOnceAndThenRemoved`, the golden `TwoFingerScriptResolvesToExactTouchSnapshots`, and `TouchEdgeCaseTest`.
 #### INPUT-TOUCH-011 — Canceled finger handling
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch/Bridge
 - **Files:** `SdlInputBridge.cpp:1426–1433`
 - **Work:** Verify CANCELED releases like UP and frees the id; id reusable after.
 - **Acceptance:** Matches existing cancel cases.
 - **Tests:** existing `FingerCanceled*` cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Canceled-finger handling covered by `SdlInputBridgeTouchGestureTest.FingerCanceledReleasesTouchLikeFingerUp`, `FingerIdReusableAfterCancel`, and `FingerCanceledMidDragRecoversAndAllowsAFreshTap`.
 #### INPUT-TOUCH-012 — Decide `MaximumTouchCount` policy (8 vs 4) — resolves doc contradiction
 - **Priority:** P1 · **Status:** DONE (2026-07-05; DEC-09 — report 4, FNA-verified) · **Area:** Touch/Decision
 - **Files:** `TouchPanel.cpp`, `TouchPanelCapabilities.cpp`, `docs/input-fna-fidelity.md`,
@@ -1748,7 +1758,7 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Deps:** none.
 
 #### INPUT-TOUCH-013 — Sequential CNA touch IDs vs SDL finger IDs
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch/Bridge/Decision
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch/Bridge/Decision
 - **Files:** `SdlInputBridge.cpp:357–399`
 - **Problem:** CNA uses a compact counter (from 1); FNA casts the SDL finger id (§18).
 - **Work:** Confirm behavior; document deviation and its observable effects (id values differ from FNA).
@@ -1756,6 +1766,7 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Tests:** existing reset/id-reuse cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Sequential CNA touch IDs vs SDL finger IDs covered by `TouchEdgeCaseTest.FingerIdReusedAfterReleaseStartsFresh` and `SdlInputBridgeTouchGestureTest.FingerIdReusableAfterCancel`.
 #### INPUT-TOUCH-014 — Event-driven path max-touch cap decision
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-10 — cap GetState at MAX_TOUCHES) · **Area:** Touch/Decision
 - **Files:** `SdlInputBridge.cpp`, `InputManager.cpp`, `TouchPanel.cpp`
@@ -1767,45 +1778,50 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Deps:** INPUT-TOUCH-012.
 
 #### INPUT-TOUCH-015 — Display size zero behavior
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `TouchPanel.cpp` (scaling)
 - **Work:** Verify zero display size does not divide-by-zero; defined fallback.
 - **Acceptance:** Safe.
 - **Tests:** existing "zero size" scaling case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Display-size-zero behavior covered by `TouchEdgeCaseTest.ScalingProducesNoGestureWhenDisplaySizeIsZero`.
 #### INPUT-TOUCH-016 — Normalized SDL coords → pixel coords + rounding
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch/Bridge
 - **Files:** `SdlInputBridge.cpp`, `TouchPanel.cpp`
 - **Work:** Verify 0..1 → pixel using display size; rounding rule for non-integer results.
 - **Acceptance:** Matches existing scaling cases (pixel position, resized, non-integer rounding).
 - **Tests:** existing scaling cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Normalized→pixel conversion + rounding covered by `TouchEdgeCaseTest.ScalingUsesDisplaySizeForPixelPosition` and `ScalingRoundsNonIntegerNormalizedCoordinates`.
 #### INPUT-TOUCH-017 — Multi-touch deterministic ordering
-- **Priority:** P2 · **Status:** TODO · **Area:** Touch
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `InputManager.cpp:392` (sort by id)
 - **Work:** Verify `GetState` emits touches sorted by id ascending, deterministically.
 - **Acceptance:** Deterministic order.
 - **Tests:** existing multi-id order case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Multi-touch deterministic ordering covered by `TouchInputTest.GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder` and the two-finger golden snapshot.
 #### INPUT-TOUCH-018 — `TouchCollection.CopyTo` bounds & empty behavior
-- **Priority:** P3 · **Status:** TODO · **Area:** Touch
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `TouchCollection.cpp`
 - **Work:** Verify CopyTo throws out-of-range on bad index/size; empty collection safe.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing `TouchCollectionTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `TouchCollection.CopyTo` bounds & empty covered by `TouchCollectionTest.CopyToAppendsAllElementsInOrder` and `CopyToThrowsOnOutOfRangeIndexInsteadOfUndefinedBehavior`.
 #### INPUT-TOUCH-019 — Touch device capability detection
-- **Priority:** P3 · **Status:** TODO · **Area:** Touch/Bridge
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Touch/Bridge
 - **Files:** `SdlInputBridge.cpp` (`setTouchDeviceExistsProperty`)
 - **Work:** Verify first finger event marks device present; reset clears it.
 - **Acceptance:** Detection correct.
 - **Tests:** existing capability-after-reset case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Touch-device capability detection covered by `TouchInputTest.GetCapabilitiesReportsConnectedWhenTouchDeviceExistsFlagIsSet` (set on first `SDL_EVENT_FINGER_DOWN`) and the fallback case.
 #### INPUT-TOUCH-020 — Manual: real touchscreen
 - **Priority:** P2 · **Status:** TODO · **Area:** Touch/Manual
 - **Files:** `docs/input-manual-verification-results.md`
@@ -1815,21 +1831,23 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Deps:** INPUT-BUILD-004.
 
 #### INPUT-TOUCH-021 — Android/iOS touch behavior
-- **Priority:** P3 · **Status:** TODO · **Area:** Touch/Platform
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Touch/Platform
 - **Files:** `docs/platform-input-notes.md`
 - **Work:** Document mobile touch specifics (coordinate space, orientation, gesture timing).
 - **Acceptance:** Documented.
 - **Tests:** manual.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Android/iOS touch behavior documented in `docs/platform-input-notes.md` (Android/iOS sections: touch primary, TouchDeviceExists on first touch, on-screen keyboard). Real-hardware behavior is manual-gated.
 #### INPUT-TOUCH-022 — Desktop simulated touch (if available)
-- **Priority:** P3 · **Status:** TODO · **Area:** Touch/Test
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Touch/Test
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** If SDL exposes mouse-as-touch or a synthetic device, add a smoke path.
 - **Acceptance:** Documented availability; smoke test if feasible.
 - **Tests:** optional.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Desktop simulated touch is exactly what the `SdlInputBridgeTouchGestureTest` / `TouchEdgeCaseTest` suites drive — synthetic `SDL_EVENT_FINGER_DOWN/MOTION/UP/CANCELED` through the real `ProcessEvent` path.
 #### INPUT-TOUCH-023 — `TouchPanel.Update()` copy-order deviation
 - **Priority:** P3 · **Status:** DONE (2026-07-05; DEC-13 — confirmed inert) · **Area:** Touch
 - **Files:** `TouchPanel.cpp`
@@ -1849,13 +1867,14 @@ touches array and falls back to `InputManager`; previous-location recorded befor
 - **Deps:** none.
 
 #### INPUT-TOUCH-025 — `TouchPanelCapabilities` equality/ToString policy
-- **Priority:** P3 · **Status:** TODO · **Area:** Touch
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Touch
 - **Files:** `TouchPanelCapabilities.cpp`
 - **Work:** Confirm FNA lacks equality/ToString on this struct; record; no need to add unless FNA has it.
 - **Acceptance:** Policy recorded.
 - **Tests:** existing.
 - **Deps:** INPUT-API-025.
 
+- **Result (2026-07-06):** FNA `TouchPanelCapabilities.cs` declares no `operator==`/`!=`, `Equals`, `GetHashCode`, or `ToString` (plain struct), so CNA correctly declares none (parity tool flags nothing). `TouchPanelCapabilitiesTest` covers the connected/disconnected + max-count round-trip.
 ---
 
 ## 11. Gesture plan

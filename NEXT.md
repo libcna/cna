@@ -51,6 +51,11 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-TOUCH cluster verified (19 tasks):** mapped TOUCH-001..019/021/022/025 to the existing ~59-case
+  touch suites (TouchInputTest / TouchEdgeCaseTest / TouchCollectionTest / TouchLocationTest /
+  SdlInputBridgeTouchGestureTest) — all backed (display/gesture round-trips, GetState snapshot+fallback,
+  ReadGesture FIFO, transitions, cancel, ID reuse, zero-display, normalized→pixel, CopyTo bounds, caps).
+  Docs-only. Remaining: TOUCH-024 (coordinate-basis, real work — next) + TOUCH-020 (manual hardware).
 - **INPUT-MOUSE-020/022 — cursor precondition + platform matrix:** documented the `SDL_INIT_VIDEO` cursor
   precondition (graceful null when absent) and consolidated the cursor/warp caveats into a platform matrix
   (added the missing macOS section) in `docs/platform-input-notes.md`. Docs-only. (MOUSE-023 warp/relative
