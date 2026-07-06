@@ -999,11 +999,23 @@ touch tracked, gesture suppressed, then gestures resume once size is published),
 **Tests:** pass. **Behavior verified:** zero-display safety + intentional startup divergence + recovery.
 **Remaining risk:** none.
 
-## P5-015 — Verify touch coordinate scaling
-- [ ] Test normalized SDL touch coordinates to pixel coordinates.
-- [ ] Test logical/display size changes.
-- [ ] Test high-DPI behavior.
-- [ ] Add manual validation task for real devices.
+## P5-015 — Verify touch coordinate scaling `[x]`
+- [x] Test normalized SDL touch coordinates to pixel coordinates.
+- [x] Test logical/display size changes.
+- [!] Test high-DPI behavior. — headless-blocked (dummy/xvfb run at 1×1); deferred to Phase 11 manual HW.
+- [!] Add manual validation task for real devices. — deferred to Phase 11 (P11-006).
+
+**Result (2026-07-06):** Normalized→pixel scaling and display-size changes are fully covered by the
+deterministic task-828 suite: `ScalingUsesDisplaySizeForPixelPosition` (0.5×1000 → 500),
+`ScalingReflectsResizedDisplay` (0.5 under 500×400 → 250,200 — a resize), and
+`ScalingRoundsNonIntegerNormalizedCoordinates` (`Math.Round`, matching FNA's
+`Round(x*DisplayWidth)`, TouchPanel.cs:136-139), plus `GestureAndTouchStateShareTheLogicalCoordinateBasis`
+(gesture pixel == normalized state × DisplayWidth). **High-DPI is genuinely not headless-verifiable:** the
+window point→pixel density mapping needs a real high-DPI display; both the `dummy` driver and Xvfb report a
+1×1 (unscaled) surface, so a DPI-scaling assertion cannot be written deterministically. Marked `[!]` and
+folded into the Phase 11 manual checklist (**P11-006** touchscreen + display scaling). **Files changed:**
+none (automated coverage confirmed). **Behavior verified:** normalized→pixel + resize; high-DPI is HW-gated.
+**Remaining risk:** high-DPI pixel accuracy unverified until manual HW validation (Phase 11).
 
 ## P5-016 — Verify touch reset
 - [ ] Ensure reset clears active touches.
