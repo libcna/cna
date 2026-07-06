@@ -739,6 +739,8 @@ namespace Microsoft::Xna::Framework::Graphics
         Effect* currentEffect_;
         int virtualWidth_;
         int virtualHeight_;
+        int lastKnownViewportWidth_ = -1;
+        int lastKnownViewportHeight_ = -1;
         bool contextRecoveryEnabled_ = true;
         GraphicsAdapter* adapter_;
         GraphicsProfile graphicsProfile_;

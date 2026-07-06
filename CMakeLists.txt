@@ -1061,6 +1061,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 60
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 349: custom Viewport survives Present() with no resize, resets after a real one.
+        cna_easygl_test(cna_test_easygl_viewport_reset_after_resize
+                        examples/viewport_reset_after_resize_test.cpp)
+        add_test(NAME EasyGL_ViewportResetAfterResize
+                 COMMAND cna_test_easygl_viewport_reset_after_resize)
+        set_tests_properties(EasyGL_ViewportResetAfterResize PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_depth_format
                         examples/easygl_depth_format_test.cpp)
         add_test(NAME EasyGL_DepthFormat
@@ -1838,6 +1847,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_RenderTarget_ViewportScissorReset
                  COMMAND cna_test_vulkan_rendertarget_viewport_scissor_reset)
         set_tests_properties(Vulkan_RenderTarget_ViewportScissorReset PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 349: custom Viewport survives Present() with no resize, resets after a real one.
+        cna_vulkan_test(cna_test_vulkan_viewport_reset_after_resize
+                        examples/viewport_reset_after_resize_test.cpp)
+        add_test(NAME Vulkan_ViewportResetAfterResize
+                 COMMAND cna_test_vulkan_viewport_reset_after_resize)
+        set_tests_properties(Vulkan_ViewportResetAfterResize PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

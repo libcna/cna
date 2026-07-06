@@ -1349,10 +1349,20 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        if (width == viewport_.getWidthProperty() && height == viewport_.getHeightProperty())
+        // Compared against the last size *this method itself* produced, not against
+        // viewport_'s current width/height: viewport_ may hold a game-set custom
+        // sub-region Viewport (e.g. split-screen) whose dimensions legitimately differ
+        // from the backbuffer, and FNA's Present() never touches Viewport at all. Using
+        // viewport_ as the "did anything change" signal would silently stomp such a
+        // Viewport back to full-window size on the very next Present() call even though
+        // no resize occurred.
+        if (width == lastKnownViewportWidth_ && height == lastKnownViewportHeight_)
         {
             return;
         }
+
+        lastKnownViewportWidth_ = width;
+        lastKnownViewportHeight_ = height;
 
         viewport_.setXProperty(0);
         viewport_.setYProperty(0);
