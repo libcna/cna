@@ -62,7 +62,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param value New buffer duration.
          * @throws System::ArgumentOutOfRangeException if the millisecond component of
-         *         @p value is outside [100, 999] or is not a multiple of 10.
+         *         @p value is below 100, above 1000, or is not a multiple of 10.
          */
         void setBufferDurationProperty(System::TimeSpan value);
 

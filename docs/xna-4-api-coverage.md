@@ -262,6 +262,122 @@ When in doubt about which category a future finding falls into: if fixing it wou
 touching SDL3_mixer's actual capabilities, it's category 1 (document in `CHECKLIST.md`). If it's
 purely a CNA-side logic bug independent of the backend, it's category 2 (just fix it).
 
+#### Full per-member cross-reference (`P10-AUDIT-002/003`)
+
+The compatibility table above answers "is X implemented?" at class granularity. This section goes
+one level deeper: every public property/method/constructor/enum-value/exception across all 18
+files in `include/Microsoft/Xna/Framework/Audio/`, bucketed as **Implemented+Tested**,
+**Implemented, untested**, **Approximate**, or **Unsupported**, cross-referenced against the
+authoritative FNA source (`/rv/data/library/github.com/FNA-XNA/FNA/src/Audio/*.cs`) and this
+repo's test suite. Produced by five parallel audit passes (2026-07-07); every "new gap" they found
+is either fixed in this same pass (see the list at the end) or explicitly deferred with a reason.
+
+**`SoundEffect`** — every constructor overload (file / buffer / buffer+range+loop), copy-deleted +
+move ctor/assign, dtor/`Dispose`, `IsDisposed`, `Name` get/set, static `MasterVolume`/
+`DistanceScale`/`DopplerScale`/`SpeedOfSound` (incl. `ArgumentOutOfRangeException` guards),
+`CreateInstance`, both `Play` overloads, static `GetSampleDuration`/`GetSampleSizeInBytes`,
+`FromStream` (incl. 7 malformed-input paths) — all **Implemented+Tested**. `Duration` get is
+**Implemented, untested in isolation** (only exercised transitively via `FromStream`'s duration
+checks against a known buffer) — fixed this pass, see below.
+
+**`SoundEffectInstance`** — dtor/move ctor/assign, `Play`/both `Stop` overloads/`Pause`/`Resume`,
+both `Apply3D` overloads (incl. `NotSupportedException` for `listenerCount != 1`), `IsDisposed`,
+`Volume`/`Pan`/`Pitch`/`IsLooped` get/set (incl. post-`Play` `IsLooped` `InvalidOperationException`),
+`State`, and the private filter machinery (`INTERNAL_apply{Low,High,Band}PassFilter`,
+`INTERNAL_applyXactTrackFilter`, `INTERNAL_applyRpcFilterOverride`,
+`INTERNAL_calculateFilterCutoff`/`OneOverQ`, `INTERNAL_calculateListenerRight`/`calculatePan`) via
+`SoundEffectInstanceTestAccess` — all **Implemented+Tested**. `INTERNAL_applyReverb` is the one
+**Unsupported** member (documented no-op, tested for non-throw).
+
+**`DynamicSoundEffectInstance`** — ctor (permissive, no validation, matching FNA exactly,
+`P10-DYN-001/002/003`), `PendingBufferCount`, `IsLooped` (no-op override), `Dispose`,
+`GetSampleDuration`/`GetSampleSizeInBytes`, `Play`/`Stop`(both)/`Pause`/`Resume`, both
+`SubmitBuffer` overloads (incl. `int32` offset+count overflow regression), both
+`SubmitFloatBufferEXT` overloads, `State`, `BufferNeeded` (incl. reentrancy) — all
+**Implemented+Tested**.
+
+**`AudioEngine`** — `ContentVersion`, both constructors, `IsDisposed`, `GetCategory` (all 3
+exception paths), `GetGlobalVariable`/`SetGlobalVariable` (all exception paths), `Update`,
+`Dispose`/`Disposing`, internal registries (wave bank/category/cue-instance-limit bookkeeping) —
+all **Implemented+Tested**. `RendererDetails` is **Implemented, weakly tested** (the one test only
+asserts non-emptiness, not the exact single `("SDL3_mixer", "SDL3_mixer")` entry) — strengthened
+this pass, see below.
+
+**`AudioCategory`** — `Name`, `Pause`/`Resume`/`SetVolume`/`Stop` (real routing verified against
+active cues), `Equals`/`GetHashCode`/`operator==`/`operator!=` — all **Implemented+Tested**.
+`GetHashCode` uses `std::hash<std::string>`, not .NET's algorithm — already a documented, generic
+Audio-wide deviation (`CHECKLIST.md`), not new here.
+
+**`SoundBank`** — ctor (incl. null-engine/empty-filename/missing-file/corrupt-file),
+`IsDisposed`/`IsInUse` (by design only reflects fire-and-forget `PlayCue` cues, not
+`GetCue()`-obtained ones, matching its own doc comment), `GetCue`, both `PlayCue` overloads,
+`Dispose`/`Disposing` — all **Implemented+Tested**.
+
+**`WaveBank`** — non-streaming ctor — **Implemented+Tested**. Streaming ctor's `offset`/
+`packetSize` parameters are **Approximate**: parsed into the signature but never forwarded to the
+real stream-open call, matching FNA's own `WaveBank.cs` exactly (already documented,
+`CHECKLIST.md`). `IsDisposed`/`IsPrepared` (incl. corrupt-file)/`IsInUse` (incl. paused/dispose/
+natural-completion), `Dispose`/`Disposing` — **Implemented+Tested**.
+
+**`Cue`** — `Disposing`, `IsDisposed`, `IsPaused` (independent flag alongside `Playing`, matching
+real FACT's bitmask, `P9-LIFECYCLE-013`), `IsPlaying` (incl. natural-completion reconciliation),
+`IsPrepared`, `IsStopped`, `IsStopping` (real tail state — authored fade **and** RPC-only release,
+`P10-RPC-004`), `Name`, `Apply3D`, `GetVariable`/`SetVariable` (incl. every built-in variable:
+`Distance`/`DopplerPitchScalar`/`OrientationAngle` live-written by every `Apply3D` call,
+`AttackTime`/`ReleaseTime` live only through RPC curve evaluation and never through plain
+`GetVariable`, correctly matching real FACT's asymmetry), `Play`, `Pause`/`Resume` (no-op, not
+throw, after `Dispose` — deliberate, safer-than-FNA divergence), `Stop` (both
+`AudioStopOptions` values), `Dispose` — all **Implemented+Tested**. `IsCreated`/`IsPreparing` are
+**Approximate**: always `false` and permanently unreachable, since CNA's synchronous `.xsb`
+parsing skips FACT's `CREATED`→`PREPARING` phase entirely (`state_` starts at `Prepared` in the
+ctor and never regresses) — tested and commented in `CueTests.cpp`, but not previously in
+`CHECKLIST.md`/this doc — added this pass, see below.
+
+**`AudioListener`/`AudioEmitter`** — ctor, `Forward`/`Position`/`Up`/`Velocity` get/set (round-trip
+tested), `AudioEmitter::DopplerScale` (incl. negative → `ArgumentOutOfRangeException`) — all
+**Implemented+Tested**. No coordinate-flip logic vs. FNA's internal `F3DAUDIO_LISTENER`
+Z-negation, but that's an unobservable FNA-internal marshaling detail (`get(set(x)) == x` holds
+identically on both sides), not a behavioral difference.
+
+**`Microphone`** — `Name`, static `All`/`Default`, `BufferDuration` get/set (incl. both throw
+paths), `IsHeadset` (hardcoded `false` — confirmed this **matches FNA exactly**: FNA's own getter
+has a `// FIXME: I think this is just for Windows Phone?` comment and also unconditionally returns
+`false`), `SampleRate` (hardcoded 44100, matches FNA's `SAMPLERATE` constant), `State`, both
+`GetData` overloads (incl. negative offset/beyond-buffer/zero-or-negative count/integer-overflow
+guards), `GetSampleDuration`/`GetSampleSizeInBytes` (delegate to `SoundEffect`), `Start`/`Stop` —
+all **Implemented+Tested**. `BufferReady` and the internal `CheckAllBuffers` sweep are
+**Implemented, untested for the real-hardware-capture-exceeds-threshold path** (only the
+empty-subscriber-list/below-threshold cases are tested) — expected, already covered by `NEXT.md`'s
+general "device-dependent tests only run against the dummy driver" note, not a new gap.
+
+**Enums** (`AudioChannels`, `AudioStopOptions`, `MicrophoneState`, `SoundState`) and
+**`RendererDetail`** — every value/member **Implemented+Tested**, exact match to FNA.
+
+**Exceptions** — `NoAudioHardwareException`'s ctors/hierarchy are **Implemented+Tested**, and it
+**is** thrown for real from `SoundEffect`/`DynamicSoundEffectInstance` when the mixer device fails
+to open, with dedicated end-to-end coverage via the `cna_audio_no_hardware_harness` subprocess.
+`NoMicrophoneConnectedException`/`InstancePlayLimitException`'s ctors/hierarchy are
+**Implemented+Tested**, but neither is ever thrown anywhere in CNA production code — confirmed by
+grepping FNA's own `Audio/*.cs`, this is exact dead-code parity with the reference (FNA declares
+both but never throws either from its own Audio source either), not a gap.
+
+**Gaps found by this audit and their disposition:**
+- `Cue::IsCreated`/`IsPreparing` permanently unreachable — undocumented until this pass; added to
+  `CHECKLIST.md` and the compatibility table above.
+- `CueTests.cpp`'s `IsStoppingIsAlwaysFalse` test name/comment was stale (written before
+  `P9-STOP-010`/`P10-RPC-004` added real `IsStopping` tail states) — renamed and recommented to
+  describe the specific case it actually covers (immediate-stop-only, no authored tail), not a
+  blanket claim the rest of this same file's own tests already contradict.
+- `SoundEffect::Duration` had no dedicated direct test against a known buffer — added.
+- `AudioEngine::RendererDetailsNonEmpty` only asserted non-emptiness — strengthened to assert the
+  exact single SDL3_mixer entry.
+- `Microphone.hpp`'s `setBufferDurationProperty` Doxygen comment stated the valid range as
+  "[100, 999]"; the real (FNA-matching) condition is `< 100 || > 1000` — corrected the comment
+  (behavior was already correct; this was a wording-only nit).
+- Every other candidate gap the five audit passes surfaced was, on inspection, either already
+  documented in `CHECKLIST.md` or a confirmed exact match to FNA's own behavior (including two
+  cases of FNA's own dead code) — no new production behavior changes were needed.
+
 ### `Microsoft::Xna::Framework::Input::Touch`
 
 - `TouchPanel`, `TouchPanelCapabilities`, `TouchCollection`, `TouchLocation`, `TouchLocationState`, `GestureSample`, `GestureType`: headers exist, full API surface.

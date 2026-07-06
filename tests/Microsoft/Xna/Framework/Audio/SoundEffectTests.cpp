@@ -655,7 +655,9 @@ TEST(SoundEffectTest, ConstructFromBufferAndProperties)
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
     EXPECT_FALSE(fx->getIsDisposedProperty());
-    EXPECT_GT(fx->getDurationProperty().getTotalSecondsProperty(), 0.0);
+    // P10-AUDIT-002/003: exact value, not just non-zero -- makeEffect()'s 1024 stereo S16 frames
+    // at 44100Hz is 1024/44100 seconds.
+    EXPECT_NEAR(fx->getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
 }
 
 TEST(SoundEffectTest, NameGetSet)

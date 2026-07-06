@@ -22,7 +22,7 @@ framework/runtime, not a game.
   task list) is fully closed, plus 4 further user-directed follow-ups. **Phase 10**
   (`plan_audio.md`'s "Phase 10 — Audio correctness hardening and XNA/XACT parity", ~90 task IDs
   across 12 groups) is the active, intentionally open-ended task list — **not** a fixed closed
-  set like Phase 9. 25 Phase 10 items are closed so far (kickoff pass, four further self-directed
+  set like Phase 9. 26 Phase 10 items are closed so far (kickoff pass, four further self-directed
   rounds, and an autonomous unattended continuation started 2026-07-06 covering §8's ordered
   candidate list); every remaining candidate is either real feature/behavior-decision work or a
   large mechanical audit (see §8). **Autonomous session note (2026-07-06/07):** the user is away
@@ -45,16 +45,17 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P10-LOOP-003/004`, on top of
-  `P10-FILTER-002/003/004/006` and `P10-RPC-004`/`P10-RPC-007`). EasyGL backend (Linux default),
-  `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets not
-  rebuilt this pass (no Audio public API surface touched beyond internals/comments, not
-  signatures).
-- **Tests:** `CnaTests` whole-suite count is **3339 / 3341 pass** (2 skipped:
+- **Build:** clean, rebuilt and reverified this pass (`P10-AUDIT-002/003`, on top of
+  `P10-LOOP-003/004`, `P10-FILTER-002/003/004/006`, and `P10-RPC-004`/`P10-RPC-007`). EasyGL
+  backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d`
+  example targets not rebuilt this pass (no Audio public API surface touched beyond internals/
+  comments/one Doxygen wording fix, not signatures).
+- **Tests:** `CnaTests` whole-suite count is **3340 / 3342 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected — not Audio; the 1-test increase since the last sync is
-  `P10-LOOP-003/004`'s new `SoundEffectInstanceTests.cpp` real-decoded-audio regression test).
-  The audio-scoped subset (§7's `--gtest_filter` list) was previously **430 / 430 pass** under a
+  `P10-AUDIT-002/003`'s new `AudioEngineTest.RendererDetailsReportsExactlyOneSdlMixerEntry`, plus
+  one renamed-in-place `CueTest` and one tightened `SoundEffectTest` assertion, both net-zero on
+  count). The audio-scoped subset (§7's `--gtest_filter` list) was previously **430 / 430 pass** under a
   dedicated one-off ASan+UBSan build (repeat-stressed on dispose/fire-and-forget/callback-
   lifetime/stream-pause-resume risk areas — zero leaks/errors) and clean under a dedicated
   ThreadSanitizer build (see §5); not rerun under a fresh ASan/TSan build this pass (plain Debug
@@ -99,6 +100,19 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10" sections.
 
+- **`P10-AUDIT-002/003`** — the full per-member (property/method/constructor/enum-value/
+  exception) XNA 4.0 Audio API cross-reference, via five parallel audits (one per class group).
+  New "Full per-member cross-reference" subsection in `docs/xna-4-api-coverage.md`. Found 5 real,
+  previously-undocumented gaps (all doc/test-strength, zero production behavior changes):
+  `Cue::IsCreated`/`IsPreparing`'s permanent unreachability was untested-for-documentation (added
+  a `CHECKLIST.md` row); `CueTests.cpp`'s stale `IsStoppingIsAlwaysFalse` test (renamed/
+  recommented -- the claim was already contradicted by this same file's other tests since
+  `P10-RPC-004`); a `Microphone.hpp` Doxygen range nit; two loose `EXPECT_GT`/non-emptiness-only
+  assertions tightened to exact values (`SoundEffect::Duration`, `AudioEngine::RendererDetails`).
+  Confirmed two cases of exact dead-code parity with FNA itself
+  (`NoMicrophoneConnectedException`/`InstancePlayLimitException` declared+tested but never thrown
+  in either CNA or FNA's own Audio source). Full suite 3340/3342 pass (was 3339/3341), no
+  regressions. See `plan_audio.md`.
 - **`P10-LOOP-003/004`** — corrected finding, not the planned implementation. Before writing the
   user-confirmed `MIX_SetTrackRawCallback` seek-back fix, verified whether the underlying premise
   (that a bounded loop region truncates the pre-loop intro, `CP-17`) was even true -- it had only
@@ -351,19 +365,10 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 ## 8. Next smallest tasks
 
 `P10-RPC-002`/`P10-RPC-003`/`P10-RPC-004`/`P10-RPC-007`/`P10-FILTER-002/003/004/006`/
-`P10-LOOP-003/004` closed (25 Phase 10 items total; `P10-LOOP-003/004` closed with a corrected
-finding rather than the originally-planned raw-callback implementation -- see §3). The remaining
-open Phase 10 items are being worked through sequentially in this same autonomous pass, per the
-scope decision the user already confirmed on 2026-07-06: skip/reaffirm-only (no implementation)
-for `P10-PAN-002`.
+`P10-LOOP-003/004`/`P10-AUDIT-002/003` closed (26 Phase 10 items total). Only one item remains
+on the ordered candidate list, per the scope decision the user already confirmed on 2026-07-06:
 
-1. **`P10-AUDIT-002/003`** — the full per-member XNA 4.0 Audio API cross-reference at full
-   granularity (every property/method/constructor/enum-value/exception), bucketed into
-   implemented/tested/approximate/unsupported. Only a class-level table exists today
-   (`docs/xna-4-api-coverage.md`). Also the natural place to re-sync `CHECKLIST.md`'s now-stale
-   `AttackTime`/`ReleaseTime`/filter-frequency/Q rows (see §2's note).
-   *Files:* `docs/xna-4-api-coverage.md`, `plan_audio.md`, `CHECKLIST.md`.
-2. **`P10-PAN-002`** — user-confirmed to skip implementation and keep the documented accepted
+1. **`P10-PAN-002`** — user-confirmed to skip implementation and keep the documented accepted
    deviation (`CHECKLIST.md` CP-19, RFC-1); only needs reaffirming that note is still accurate, no
    code change.
 

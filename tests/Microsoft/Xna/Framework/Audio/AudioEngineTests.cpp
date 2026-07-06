@@ -543,6 +543,17 @@ TEST(AudioEngineTest, RendererDetailsNonEmpty)
     EXPECT_FALSE(engine.getRendererDetailsProperty().empty());
 }
 
+// P10-AUDIT-002/003: exact content, not just non-emptiness -- CNA has exactly one audio backend
+// (SDL3_mixer, no renderer-enumeration API), so RendererDetails is always this single entry.
+TEST(AudioEngineTest, RendererDetailsReportsExactlyOneSdlMixerEntry)
+{
+    AudioEngine engine(XgsFixturePath());
+    const auto& details = engine.getRendererDetailsProperty();
+    ASSERT_EQ(details.size(), 1u);
+    EXPECT_EQ(details[0].getFriendlyNameProperty(), "SDL3_mixer");
+    EXPECT_EQ(details[0].getRendererIdProperty(), "SDL3_mixer");
+}
+
 // ===================== GetCategory =====================
 
 TEST(AudioEngineTest, GetCategoryValidReturnsMatchingName)

@@ -2409,10 +2409,15 @@ TEST(CueTest, IsStoppedTrueAfterStop)
     EXPECT_TRUE(cue->getIsStoppedProperty());
 }
 
-TEST(CueTest, IsStoppingIsAlwaysFalse)
+// P10-AUDIT-002/003: renamed from the stale "IsStoppingIsAlwaysFalse" -- IsStopping is NOT always
+// false in general (a real Stopping tail exists for both an authored fadeOutMS_, P9-STOP-010, and
+// an RPC-only release, P10-RPC-004; see the many getIsStoppingProperty()==true assertions
+// elsewhere in this file, e.g. StopAsAuthoredEntersRpcOnlyReleasePhaseWhenMaxRpcReleaseTimeIsPositive).
+// This test only covers the specific case where it IS immediately false: an immediate Stop() on a
+// cue whose sound has no authored fade and no RPC-release time at all (MakeCue()'s "Explosion"
+// fixture), which hard-stops synchronously with no tail to enter.
+TEST(CueTest, IsStoppingIsFalseAfterImmediateStopWithNoTailToRelease)
 {
-    // StopInternal transitions straight from Playing to Stopped; there is no
-    // intermediate release/fade phase modeled (SDL3_mixer stops synchronously).
     auto cue = MakeCue();
     cue->Play();
     cue->Stop(AudioStopOptions::Immediate);
