@@ -13,8 +13,36 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–41 are complete. **Phase 42 (BasicEffect exactness,
-  `GRAPHICS_TASKS.md` Tasks 361–370) is open** — **Task 365 is done, Task 366 is next** ("Pixel
-  test: `TextureEnabled=true`, no vertex color — Texture color" — see §8). **Task 365** (the
+  `GRAPHICS_TASKS.md` Tasks 361–370) is open** — **Task 366 is done, Task 367 is next** ("Pixel
+  test: `TextureEnabled=true` and `VertexColorEnabled=true` — Texture × vertex color" — see §8).
+  **Task 366** verified `TextureEnabled=true`'s texture×diffuse multiplication is genuinely correct
+  on all 3 backends — **pure verify-only task, no bug found** (unlike Task 364's `VertexColorEnabled`
+  finding, texture sampling was never actually broken here — it's a much more heavily-exercised path
+  elsewhere, e.g. `SpriteBatch`/`Texture2D` tests). Confirmed the exact formula from FNA source:
+  `BasicEffect.cs`'s `shaderIndex` selection picks `VSBasicTxNoFog`/`PSBasicTxNoFog` for this
+  combination; `PSBasicTxNoFog` returns `SAMPLE_TEXTURE(Texture, pin.TexCoord) * pin.Diffuse`
+  verbatim, with no vertex-color multiply in this shader variant. All 3 backends' textured-3D shader
+  paths (EasyGL's `EnsureTextured3DProgram()`, Vulkan's `textured3d.vert/frag.glsl`, Bgfx's
+  `vs_textured3d.sc`/`fs_textured3d.sc`) already correctly compute `texture × diffuseColor`. Closed a
+  real coverage gap instead: Task 189's `easygl_basiceffect_combinations_test.cpp` only had
+  degenerate cases (white texture OR white diffuse, never both non-white), which couldn't actually
+  distinguish "texture ignored" from "diffuse ignored" from "correctly multiplied" — added a proper
+  discriminating test per backend reusing Task 365's exact `(200,100,50)`/`(0.8,0.4,0.6)` numeric
+  pair. Verified genuine discriminating power on all 3 backends independently (temporarily stripped
+  the diffuse multiply from each backend's shader — EasyGL's runtime GLSL string, Vulkan's
+  `textured3d.frag.glsl` + `compile_shaders.py`/libshaderc, Bgfx's `fs_textured3d.sc` +
+  `compile_shaders.py`/shaderc — confirmed each new test failed with exactly the texture-only result,
+  then reverted, confirmed byte-identical via `git diff`). **Deferred finding** (out of this task's
+  narrow scope, folded into Task 369's "ambient + emissive + specular combination" scope):
+  `EffectHelpers.SetMaterialColor`'s lighting-disabled branch is `(DiffuseColor+EmissiveColor)*Alpha`,
+  but CNA's `FillGpuDrawParams()` computes only `DiffuseColor*Alpha`, omitting `+EmissiveColor` —
+  invisible in Tasks 364-366 since all leave `EmissiveColor` at its default `(0,0,0)`, but a real
+  mismatch Task 369 needs to catch and fix. Full 3-backend regression: EasyGL 3415/3419 (3
+  pre-existing, unchanged), Vulkan 3337/3352 (13 pre-existing + 1 order-dependent
+  `Vulkan_FillMode_WireFrame` flake + 1 flaky `CueTest`, unchanged), Bgfx 3321/3322 (1 flaky
+  `CueTest`, unchanged).
+
+  **Task 365** (the
   inverse/complement of Task 364) verified `VertexColorEnabled=true`'s vertex-color multiplication
   is genuinely correct on all 3 backends — **pure new-coverage verification, no bug found**.
   Confirmed the exact expected formula from FNA source: `Common.fxh`'s `ComputeCommonVSOutput()`
@@ -589,22 +617,49 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 366 — pixel test: `TextureEnabled=true`, no vertex color — Texture
-   color (EasyGL/Vulkan/Bgfx)**
-   - Goal: real GPU pixel-readback test proving `BasicEffect` samples the bound `Texture2D` and
-     multiplies it by `DiffuseColor` (per FNA's `PSBasicTx`: `SAMPLE_TEXTURE(Texture, pin.TexCoord)
-     * pin.Diffuse`) when `TextureEnabled=true` — confirm the exact formula from FNA source rather
-     than assuming, same discipline as Tasks 364/365.
+1. **`GRAPHICS_TASKS.md` Task 367 — pixel test: `TextureEnabled=true` and `VertexColorEnabled=true`
+   — Texture × vertex color (EasyGL/Vulkan/Bgfx)**
+   - Goal: real GPU pixel-readback test proving `BasicEffect` correctly combines texture sample ×
+     vertex color × `DiffuseColor` when both `TextureEnabled` and `VertexColorEnabled` are true (per
+     FNA's `VSBasicTxVcNoFog`/`PSBasicTxNoFog`: vertex shader does `vout.Diffuse *= vin.Color` on top
+     of `ComputeCommonVSOutput()`'s `DiffuseColor`, then the pixel shader multiplies in the sampled
+     texture) — confirm the exact 3-way formula from FNA source rather than assuming, same discipline
+     as Tasks 364-366.
    - Reuse the established quad/readback pattern from
-     `examples/{easygl,vulkan,bgfx}_basiceffect_vertexcolor_enabled_test.cpp` (Task 365) —
-     `GetBackBufferData` center-pixel readback, distinctive-value discriminating-power design (pick
-     a texel color and `DiffuseColor` whose product is numerically distinct from either alone), and
-     remember the Bgfx `RasterizerState::CullNone` cull-default workaround (Task 884, §5) for the
-     standard `tl,bl,br`/`tl,br,tr` NDC quad winding.
+     `examples/{easygl,vulkan,bgfx}_basiceffect_texture_enabled_test.cpp` (Task 366) —
+     `GetBackBufferData` center-pixel readback, distinctive-value discriminating-power design (pick a
+     texel color, vertex color, and `DiffuseColor` whose 3-way product is numerically distinct from
+     any 2-of-3 partial product), and remember the Bgfx `RasterizerState::CullNone` cull-default
+     workaround (Task 884, §5) for the standard `tl,bl,br`/`tl,br,tr` NDC quad winding. This is the
+     stride-24 `VertexPositionColorTexture` path (distinct from stride-16/stride-20 which Tasks
+     364-366 already covered) — confirm which shader program/pipeline actually handles stride 24 on
+     each backend before assuming it's wired correctly.
    - Note Task 361's finding: `BasicEffect::FillGpuDrawParams()` only forwards `DirectionalLight0`
      and never `SpecularColor`/`SpecularPower`/`DirectionalLight1`/`DirectionalLight2` — likely
      irrelevant to this specific task (lighting disabled by default), but keep in mind for Tasks
-     368/369.
+     368/369. Also carry forward Task 366's deferred finding: `FillGpuDrawParams()` omits
+     `+EmissiveColor` from the disabled-lighting diffuse formula (real FNA mismatch, invisible with
+     `EmissiveColor` at its default `(0,0,0)`) — still not this task's job, but Task 369's.
+
+   **Task 366 status: done.** Verified `TextureEnabled=true`'s texture×diffuse multiplication is
+   genuinely correct on all 3 backends. **Pure verify-only task, no bug found** — unlike Task 364's
+   finding, texture sampling was never actually broken (a much more heavily-exercised path elsewhere).
+   Confirmed the exact formula from FNA source (`BasicEffect.cs`'s `shaderIndex` selects
+   `VSBasicTxNoFog`/`PSBasicTxNoFog`; `PSBasicTxNoFog` returns
+   `SAMPLE_TEXTURE(Texture,pin.TexCoord)*pin.Diffuse`, no vertex-color multiply in this variant); all
+   3 backends' textured-3D shader paths already correctly compute `texture × diffuseColor`. Closed a
+   real coverage gap: Task 189's combinations test only had degenerate white-texture-or-white-diffuse
+   cases that couldn't distinguish "ignored" from "correctly multiplied" — added a proper
+   discriminating test per backend reusing Task 365's `(200,100,50)`/`(0.8,0.4,0.6)` numeric pair.
+   Verified genuine discriminating power on all 3 backends independently (stripped the diffuse
+   multiply from each backend's shader in turn — EasyGL runtime GLSL, Vulkan `textured3d.frag.glsl` +
+   `compile_shaders.py`, Bgfx `fs_textured3d.sc` + `compile_shaders.py` — confirmed each new test
+   failed with the texture-only result, reverted, confirmed byte-identical). Deferred to Task 369:
+   `FillGpuDrawParams()` omits `+EmissiveColor` from the disabled-lighting diffuse formula (real
+   mismatch vs. FNA's `EffectHelpers.SetMaterialColor`, invisible here since `EmissiveColor` is at its
+   default). Full 3-backend regression: EasyGL 3415/3419 (3 pre-existing), Vulkan 3337/3352 (13
+   pre-existing + 1 order-dependent `Vulkan_FillMode_WireFrame` flake + 1 flaky `CueTest`), Bgfx
+   3321/3322 (1 flaky `CueTest`). Pushed as (see commit list below).
 
    **Task 365 status: done.** The inverse/complement of Task 364 — verified `VertexColorEnabled=
    true`'s vertex-color multiplication is genuinely correct on all 3 backends. **Pure new-coverage
@@ -1014,26 +1069,29 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-41 are FULLY COMPLETE. Phase 42 (BasicEffect exactness, GRAPHICS_TASKS.md
-Tasks 361-370) is now open, Task 365 is DONE, Task 366 next (pixel test: TextureEnabled=true,
-no vertex color - Texture color - EasyGL/Vulkan/Bgfx).
-Last full 3-backend regression (Task 365: the inverse/complement of Task 364 - verified
-VertexColorEnabled=true's vertex-color multiplication is genuinely correct on all 3 backends, pure
-new-coverage verification, no bug found. Confirmed from FNA source (Common.fxh's
-ComputeCommonVSOutput() + VSBasicVcNoFog's vout.Diffuse *= vin.Color) that the expected formula is
-DiffuseColor x Alpha x VertexColor component-wise including alpha, and confirmed all 3 backends'
-existing VertexColorEnabled gate (added by Task 364) already implements exactly this multiply on
-the true branch - Task 364 only needed to add/fix the false (skip) branch. Added one new pixel test
-per backend using vertex color (200,100,50,200) and DiffuseColor(0.8,0.4,0.6), chosen so the
-correct product (160,40,30) is numerically distinct from either input alone (DiffuseColor-only
-reads (204,102,153); vertex-color-only reads (200,100,50)). Verified genuine discriminating power
-on all 3 backends independently by temporarily forcing each backend's shader to output DiffuseColor
-alone and confirming the exact predicted (204,102,153) failure, then reverting - Vulkan/Bgfx
-required regenerating their embedded shader-bytecode headers via each backend's own
-compile_shaders.py):
-EasyGL 3415/3418 pass (3 documented pre-existing failures: EasyGL_MRT_TwoAttachments,
-EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests). Vulkan 3337/3351 pass (13
-documented pre-existing failures + 1 flaky CueTest). Bgfx 3320/3321 pass (1 reconfirmed-flaky,
-unrelated NetworkSessionTest.FindReturnsEmptyCollection, passed cleanly on isolated re-run).
+Tasks 361-370) is now open, Task 366 is DONE, Task 367 next (pixel test: TextureEnabled=true AND
+VertexColorEnabled=true - Texture x vertex color - EasyGL/Vulkan/Bgfx).
+Last full 3-backend regression (Task 366: verified TextureEnabled=true's texture x diffuse
+multiplication is genuinely correct on all 3 backends, pure verify-only task, no bug found - unlike
+Task 364's VertexColorEnabled finding, texture sampling was never actually broken here. Confirmed
+from FNA source (BasicEffect.cs's shaderIndex selects VSBasicTxNoFog/PSBasicTxNoFog;
+PSBasicTxNoFog returns SAMPLE_TEXTURE(Texture,pin.TexCoord)*pin.Diffuse, no vertex-color multiply
+in this variant) that all 3 backends' textured-3D shader paths already correctly compute
+texture x diffuseColor. Closed a real coverage gap instead: Task 189's combinations test only had
+degenerate white-texture-or-white-diffuse cases that couldn't distinguish "ignored" from "correctly
+multiplied" - added a proper discriminating test per backend reusing Task 365's
+(200,100,50)/(0.8,0.4,0.6) numeric pair (correct product (160,40,30)). Verified genuine
+discriminating power on all 3 backends independently by temporarily stripping the diffuse multiply
+from each backend's shader in turn (EasyGL runtime GLSL, Vulkan textured3d.frag.glsl +
+compile_shaders.py/libshaderc, Bgfx fs_textured3d.sc + compile_shaders.py/shaderc), confirming each
+new test failed with the texture-only result, then reverting (confirmed byte-identical via git diff).
+Deferred to Task 369: FillGpuDrawParams() omits +EmissiveColor from the disabled-lighting diffuse
+formula (real mismatch vs. FNA's EffectHelpers.SetMaterialColor, invisible in Tasks 364-366 since
+EmissiveColor is at its default (0,0,0))):
+EasyGL 3415/3419 pass (3 documented pre-existing failures: EasyGL_MRT_TwoAttachments,
+EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests). Vulkan 3337/3352 pass (13
+documented pre-existing failures + 1 order-dependent Vulkan_FillMode_WireFrame flake + 1 flaky
+CueTest). Bgfx 3321/3322 pass (1 flaky CueTest).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
 if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
 it as a regression.
