@@ -7,30 +7,88 @@ documentation without running it. Where a command's success is asserted, it was
 verified in this repository, on this branch, this session.
 
 **ZIP-export caveat (Task P7-6):** every claim in this document describes a real
-`git clone` of this repository with submodules initialized (Section 0 below) — it
-does **not** describe, and should not be read as implying anything about, a bare
-ZIP/tarball export of this source tree. A raw source snapshot without
-`git submodule update --init --recursive` having been run has empty
+`git clone` of this repository with submodules initialized and the sibling repositories
+below present (Section 0) — it does **not** describe, and should not be read as
+implying anything about, a bare ZIP/tarball export of this source tree. A raw source
+snapshot without `git submodule update --init` having been run has empty
 `third_party/SDL` (and `SDL_image`/`SDL_mixer`, `vendor/googletest`) directories
 and will not configure, let alone build or pass any test below.
 
 ## 0. Fresh clone / submodule setup
 
-This repository vendors SDL3 (and `SDL_image`/`SDL_mixer`) as git submodules under
-`third_party/`, plus `googletest` under `vendor/` — confirmed via `.gitmodules` and
-`cmake/ThirdPartySDL.cmake` (which hard-fails with `FATAL_ERROR` and prints the exact
-fix if a submodule is missing, rather than silently doing something else). A fresh
-clone needs:
+**Re-verified 2026-07-06 (`DEV-BUILD-001`) from an actually fresh clone** — every prior
+version of this section was written and re-confirmed only in environments that already
+had the sibling repositories below pre-provisioned, so the sibling-repo requirement had
+never actually been tested/documented until this pass. All timings below were measured
+directly in this pass, not estimated.
+
+**Step 1 — sibling repositories.** `sharp-runtime` and `easy-gl` (which itself needs
+`meta-gl`) are **separate git repositories that must be cloned next to this repo's own
+directory** — they are plain sibling checkouts referenced via `add_subdirectory(../x)`
+in `CMakeLists.txt`, **not** git submodules of this repo, so `git submodule update
+--init` cannot fetch them. Confirmed by reproducing the failure from a genuinely fresh
+clone with no siblings present: CMake now fails fast with an actionable
+`FATAL_ERROR` naming the missing sibling and the exact fix (previously a generic
+"`add_subdirectory` given source ... which is not an existing directory" with no
+indication this was a required, separate clone at all — Task `DEV-BUILD-001` fixed
+this). From this repo's own parent directory:
 
 ```bash
-git submodule update --init --recursive
+git clone https://github.com/openeggbert/sharp-runtime.git
+git clone https://github.com/openeggbert/easy-gl.git
+git clone https://github.com/openeggbert/meta-gl.git
 ```
 
-`cmake/ThirdPartySDL.cmake` then builds SDL3 into a persistent, cache-backed
-`.sdl-prebuilt/` directory the *first* time any CMake configure runs (outside any
-`cmake-build-*` directory, so deleting a build directory or running `cmake --build
---clean-first` does **not** trigger an SDL rebuild) — this step can take a few minutes
-the very first time, and is a one-time cost per checkout, not per build.
+Layout expected (all four as siblings under one parent directory):
+
+```text
+<parent>/
+├── cna_devices/      (this repo)
+├── sharp-runtime/
+├── easy-gl/
+└── meta-gl/
+```
+
+`meta-gl` has no further sibling or submodule dependencies of its own (confirmed by
+inspecting its `CMakeLists.txt`/`.gitmodules` directly) — this three-repo chain is the
+full transitive closure for an `EASYGL`-backend build. `sharp-runtime` has its own
+separate `vendor/googletest` submodule, handled automatically by its own build, not
+something this repo's setup needs to touch directly.
+
+**Step 2 — this repo's own git submodules.** This repository vendors SDL3 (and
+`SDL_image`/`SDL_mixer`) as git submodules under `third_party/`, plus `googletest`
+under `vendor/` — confirmed via `.gitmodules` and `cmake/ThirdPartySDL.cmake` (which
+hard-fails with `FATAL_ERROR` and prints the exact fix if a submodule is missing,
+rather than silently doing something else). A fresh clone needs:
+
+```bash
+git submodule update --init
+```
+
+**Deliberately non-recursive** (Task `DEV-BUILD-001` corrected this from an earlier,
+misleading `--recursive` suggestion): `SDL_image`/`SDL_mixer` each carry their own
+further nested `external/*` submodules (AVIF, JXL, WebP, libpng, GME, mod_xmp, mpg123,
+FluidSynth-MIDI, Opus, Vorbis — ~19 total), none of which this project's own
+`SDLIMAGE_*`/`SDLMIXER_*` CMake args (see `cmake/ThirdPartySDL.cmake`) actually enable.
+Measured directly: the plain, non-recursive form above took **~6.5 minutes** in this
+environment (network-bound, not CPU-bound — these are large upstream repos cloned at
+full history, no shallow-clone flag currently used); the `--recursive` form additionally
+attempts all ~19 unneeded nested clones and was observed to still be running, unfinished,
+past 2 minutes into just the *extra* nested fetches on top of that.
+
+**Step 3 — first CMake configure.** `cmake/ThirdPartySDL.cmake` then builds SDL3 (and
+`SDL_image`/`SDL_mixer`) into a persistent, cache-backed `.sdl-prebuilt-<platform>/`
+directory the *first* time any CMake configure runs (outside any `cmake-build-*`
+directory, so deleting a build directory or running `cmake --build --clean-first` does
+**not** trigger an SDL rebuild) — this step can take a few minutes the very first time,
+and is a one-time cost per checkout, not per build. Re-verified 2026-07-06: from a fresh
+clone with Steps 1-2 already done, `cmake --preset devices-ubsan` completed the full
+first-time vendored SDL3/SDL_image/SDL_mixer build and configured successfully with no
+errors. `cmake --build --preset devices-ubsan --target CnaTests -j"$(nproc)"` then
+built the full test binary from scratch in **~3m42s** (parallel build, this
+environment's core count) with zero errors — confirmed by actually running both
+commands in a genuinely fresh clone, not assumed from the existing checkout this
+document's other sections use.
 
 ## 1. Desktop debug build (Linux, `EASYGL` backend)
 

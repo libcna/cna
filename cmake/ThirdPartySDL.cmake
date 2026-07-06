@@ -33,9 +33,21 @@ function(cna_configure_vendored_sdl)
     set(_tp "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
     foreach(_dep IN ITEMS SDL SDL_image SDL_mixer)
         if(NOT EXISTS "${_tp}/${_dep}/CMakeLists.txt")
+            # Task DEV-BUILD-001: "git submodule update --init --recursive"
+            # (the previous suggestion here) also recurses into SDL_image's/
+            # SDL_mixer's own nested "external/*" codec submodules (AVIF,
+            # JXL, WebP, libpng, GME, mod_xmp, mpg123, FluidSynth-MIDI, Opus,
+            # Vorbis, ~19 total) -- none of which this project's own
+            # SDLIMAGE_*/SDLMIXER_* CMAKE_ARGS below actually enable, and
+            # cloning all of them measured 6-7x slower than the plain,
+            # non-recursive form that is actually sufficient.
             message(FATAL_ERROR
                 "Missing vendored '${_dep}' in ${_tp}. "
-                "Run: git submodule update --init --recursive")
+                "Run: git submodule update --init "
+                "(non-recursive -- this project's CMAKE_ARGS below disable "
+                "every optional codec dependency under SDL_image's/"
+                "SDL_mixer's own nested submodules, so --recursive only "
+                "adds a much slower, unnecessary fetch)")
         endif()
     endforeach()
 

@@ -99,6 +99,33 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `DEV-BUILD-001` closed: verified an actually fresh clone, found and
+fixed two real bootstrap gaps.** Every prior verification pass had only ever run in an
+environment with everything already provisioned — this pass did a genuine fresh `git
+clone` (new directory) and found:
+1. **This repo depends on `sharp-runtime`/`easy-gl` (which needs `meta-gl`) as sibling
+   repository checkouts** (`add_subdirectory(../sharp-runtime)` etc. in
+   `CMakeLists.txt`), not git submodules — completely undocumented before now, and a
+   genuinely fresh clone failed to configure at all without them. Fixed:
+   `CMakeLists.txt` now checks for each sibling and fails with an actionable message
+   (exact missing repo + exact `git clone` command) instead of CMake's generic
+   "directory does not exist"; `docs/devices-build.md` Section 0 now documents the
+   full three-repo chain.
+2. **The existing `git submodule update --init --recursive` guidance was itself
+   wrong/harmful** — `--recursive` additionally tries to clone ~19 unneeded nested
+   codec submodules (AVIF/JXL/WebP/etc.) that this project's own CMake args explicitly
+   disable; measured the correct non-recursive form at ~6.5 min vs. `--recursive` still
+   unfinished 2+ minutes past that. Fixed the error message in
+   `cmake/ThirdPartySDL.cmake` and the docs to recommend the non-recursive form.
+
+Full verification actually performed: fresh clone + fresh sibling clones + `git
+submodule update --init` (timed) + `cmake --preset devices-ubsan` (first-time vendored
+SDL3 build succeeded) + `cmake --build --preset devices-ubsan --target CnaTests`
+(~3m42s, built clean) + a spot-check test run (55 passed, 1 expected skip). Confirmed
+the existing working checkout still builds identically after the CMake changes (the
+new existence checks are no-ops when siblings are already present). Scratch clones
+cleaned up afterward.
+
 **2026-07-06 — `DEV-BUILD-004` closed: root-caused and fixed `cna_demo_devices`'s
 Android build gap.** Root cause: `CNA` links `SDL3::SDL3` `PRIVATE` (a deliberate choice
 — `CNA` hides its SDL backend behind `IGraphicsBackend`), so `cna_demo_devices` (which
@@ -471,18 +498,22 @@ These are pulled directly from the newly-rewritten `plan_devices.md` — read th
 for full context on each. Ordered smallest/cheapest first, not strictly by the plan's
 own priority labels.
 
-`DEV-API-003` (the `getStateProperty()` `NOXNA` question), `DEV-BUILD-002` (the
-Devices-only test filter), `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`
-(SDL-backed `TimeBetweenUpdates` throttling), `DEV-API-001` (the public API matrix),
-`ANDROID-BRIDGE-002` (Android-backed `TimeBetweenUpdates` while running),
-`READINGS-002` (the two event-args wrong-visibility findings), and `DEV-BUILD-004`
-(the `cna_demo_devices` Android build gap) are now closed — see Section 3.
+`DEV-API-003`, `DEV-BUILD-002`, `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`,
+`DEV-API-001`, `ANDROID-BRIDGE-002`, `READINGS-002`, `DEV-BUILD-004`, `MOTION-008`,
+`SENSORBASE-008`, and `DEV-BUILD-001` are now closed (12 of 72 total task headers) —
+see Section 3 and `plan_devices.md` itself (grep for `— CLOSED`).
 
-No further "next smallest task" is queued from a quick pass over `plan_devices.md` —
-read that file's remaining open tasks (grep for section headers without a "— CLOSED"/
-"— PARTIALLY CLOSED" suffix) and pick one, or ask the user to prioritize, per Section 9's
-existing rule. One concrete lead if a task is wanted: the newly-found `cna_demo_input`
-Android build failure (Section 4) — not yet scoped as its own plan task.
+60 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
+`VIB-010`, deliberately untouched per explicit user instruction so far), most
+Accelerometer/Gyroscope/Compass/Motion API- and hardware-verification audits
+(`ACCEL-001`–`004`/`006`/`007`, `GYRO-001`–`003`/`005`, `COMPASS-001`–`008`,
+`MOTION-001`–`007`/`009`/`010`), `DEV-API-002` (`NOXNA` boundary enforcement),
+`DEV-API-004`/`005`, `DEV-BUILD-003` (CI), `SENSORBASE-002`–`007`,
+`ANDROID-BRIDGE-001`/`003`/`004`, `SDL-SENSOR-001`/`003`, `READINGS-001`/`003`,
+`DEMO-001`/`002`, and `VERIFY-001`–`003`. Pick the next smallest one, or ask the user to
+prioritize, per Section 9's existing rule. One concrete lead if a task is wanted: the
+`cna_demo_input` Android build failure found during `DEV-BUILD-004` (Section 4) — not
+yet scoped as its own plan task.
 
 ---
 

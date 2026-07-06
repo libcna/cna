@@ -29,6 +29,19 @@ if(CNA_ENABLE_NET)
 endif()
 
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
+# sharp-runtime is a SIBLING repository checkout, not a git submodule of this
+# repo (Task DEV-BUILD-001) -- `git submodule update --init` cannot fetch it.
+# It must be cloned next to this repo's own directory, so that
+# "${CMAKE_SOURCE_DIR}/../sharp-runtime" resolves to a real checkout.
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/../sharp-runtime/CMakeLists.txt")
+    message(FATAL_ERROR
+        "CNA: Missing sibling repository 'sharp-runtime' at "
+        "${CMAKE_SOURCE_DIR}/../sharp-runtime -- this is a separate git "
+        "checkout expected next to this repo's own directory, not a git "
+        "submodule (git submodule update --init will not fetch it). Fix: "
+        "cd ${CMAKE_SOURCE_DIR}/.. && "
+        "git clone https://github.com/openeggbert/sharp-runtime.git")
+endif()
 add_subdirectory(../sharp-runtime SHARP_RUNTIME)
 
 #find_package(SDL3_ttf REQUIRED)
@@ -80,6 +93,18 @@ endif()
 if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
         message(WARNING "CNA: EASYGL backend is primarily tested on Linux. Other platforms may require additional setup.")
+    endif()
+    # easy-gl is a SIBLING repository checkout, not a git submodule of this
+    # repo (Task DEV-BUILD-001) -- see sharp-runtime's identical check above
+    # for the full rationale.
+    if(NOT EXISTS "${CMAKE_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
+        message(FATAL_ERROR
+            "CNA: Missing sibling repository 'easy-gl' at "
+            "${CMAKE_SOURCE_DIR}/../easy-gl -- this is a separate git "
+            "checkout expected next to this repo's own directory, not a git "
+            "submodule (git submodule update --init will not fetch it). Fix: "
+            "cd ${CMAKE_SOURCE_DIR}/.. && "
+            "git clone https://github.com/openeggbert/easy-gl.git")
     endif()
     add_subdirectory(../easy-gl easy-gl)
 endif()

@@ -169,7 +169,7 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
 
 ## 2. Build and verification bootstrap tasks
 
-### DEV-BUILD-001 — Restore reproducible local build
+### DEV-BUILD-001 — Restore reproducible local build — CLOSED (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** Build / CI
@@ -177,27 +177,80 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   reproducibly from a clean checkout. This environment already has submodules
   initialized, but that has not been re-verified from a genuinely fresh clone as part of
   this plan.
+- **Resolution (2026-07-06):** actually did the fresh-clone test this task calls for
+  (every prior pass had only ever run in an environment with everything already
+  provisioned) and found two real, previously-undocumented gaps:
+  - **Major finding: this repo depends on `sharp-runtime` and `easy-gl` (which itself
+    depends on `meta-gl`) as sibling repository checkouts, referenced via
+    `add_subdirectory(../sharp-runtime)`/`add_subdirectory(../easy-gl)` in
+    `CMakeLists.txt` — not git submodules.** `git submodule update --init[--recursive]`
+    cannot fetch them; a genuinely fresh clone of just this repo, even with its own
+    submodules fully initialized, **fails to configure at all**. This was completely
+    undocumented anywhere in this repo before this pass — confirmed by reproducing the
+    failure from an actual fresh clone with no siblings present. Fixed:
+    - `CMakeLists.txt` now checks for `../sharp-runtime/CMakeLists.txt` and
+      `../easy-gl/CMakeLists.txt` before each `add_subdirectory()` call, failing with an
+      actionable `FATAL_ERROR` (names the missing sibling, states it's a separate
+      checkout not a submodule, gives the exact `cd .. && git clone
+      https://github.com/openeggbert/<repo>.git` fix) instead of CMake's own generic
+      "given source ... which is not an existing directory". Verified the new message
+      actually fires correctly by reproducing the original failure with the fix in
+      place.
+    - `docs/devices-build.md` Section 0 rewritten to document the full three-repo
+      sibling chain (`sharp-runtime`, `easy-gl`, `meta-gl`), confirmed `meta-gl` has no
+      further transitive dependencies of its own.
+  - **Second finding: the existing `git submodule update --init --recursive` guidance
+    (in both `cmake/ThirdPartySDL.cmake`'s error message and `docs/devices-build.md`)
+    was itself misleading/harmful.** `--recursive` additionally attempts to clone ~19
+    unneeded nested codec submodules under `SDL_image`'s/`SDL_mixer`'s own `external/*`
+    (AVIF, JXL, WebP, libpng, GME, mod_xmp, mpg123, FluidSynth-MIDI, Opus, Vorbis) that
+    this project's own `SDLIMAGE_*`/`SDLMIXER_*` CMake args all explicitly disable —
+    measured directly: the correct, non-recursive `git submodule update --init` took
+    ~6.5 minutes in this environment; the `--recursive` form was still running,
+    unfinished, past 2 more minutes on top of that just for the extra unneeded fetches.
+    Fixed the error message in `cmake/ThirdPartySDL.cmake` to recommend the correct,
+    non-recursive form with the reasoning inline; updated `docs/devices-build.md`
+    Section 0 to match.
+  - **Full fresh-clone verification actually performed, not assumed:** fresh `git
+    clone` of this repo (new directory, not this working checkout) + fresh sibling
+    clones of `sharp-runtime`/`easy-gl`/`meta-gl` + `git submodule update --init` (timed,
+    ~6.5 min) + `cmake --preset devices-ubsan` (configured clean, first-time vendored
+    SDL3/SDL_image/SDL_mixer build succeeded) + `cmake --build --preset devices-ubsan
+    --target CnaTests -j$(nproc)` (built clean from scratch, ~3m42s) + a spot-check
+    `SensorBaseTests.*:AccelerometerTests.*` run (55 passed, 1 expected hardware skip).
+    Confirmed the main working checkout still builds/configures identically after these
+    CMake changes (existence checks are no-ops when siblings are already present).
+    Scratch clone directories cleaned up afterward.
 - **Required work:**
   - Verify required submodules and vendored dependencies from an actually fresh clone
     (`git clone --recurse-submodules`, or `git submodule update --init --recursive`
-    after a plain clone).
+    after a plain clone). Done — and found `--recursive` itself was the wrong
+    recommendation; corrected to non-recursive.
   - Add or update bootstrap instructions for SDL, SDL_image, SDL_mixer, googletest, and
     any platform-specific sensor dependencies (Android NDK path, minimum API level).
+    Done for SDL/SDL_image/SDL_mixer/googletest and the newly-found sibling-repo
+    requirement; Android NDK path/API level bootstrap instructions already existed in
+    `docs/devices-build.md` Section 4 from a prior pass, not touched by this task.
   - Make missing-dependency CMake configure errors actionable (clear message naming the
     missing submodule/package and the exact command to fix it), instead of a generic
-    "file not found" from deep inside a `third_party/` include path.
+    "file not found" from deep inside a `third_party/` include path. Done — for the
+    sibling-repo case, which turned out to be the actual blocking gap; the existing
+    `third_party/` submodule check in `cmake/ThirdPartySDL.cmake` already had an
+    actionable message (just a wrong recommended command, now fixed).
 - **Acceptance criteria:**
   - A clean checkout can be prepared with documented commands that another engineer can
-    copy-paste without guessing.
+    copy-paste without guessing. Done — `docs/devices-build.md` Section 0.
   - `cmake --preset devices-ubsan` configures successfully from that clean checkout.
-  - `CnaTests` builds successfully from that clean checkout.
+    Done, verified directly.
+  - `CnaTests` builds successfully from that clean checkout. Done, verified directly.
 - **Suggested files to inspect or edit:**
-  - `CMakeLists.txt`
-  - `CMakePresets.json`
-  - `third_party/` (submodule pointers only, never edit vendored content itself)
-  - `vendor/` (same caveat)
-  - `docs/devices-build.md`
-  - `plan_devices.md`
+  - `CMakeLists.txt` (edited)
+  - `cmake/ThirdPartySDL.cmake` (edited)
+  - `CMakePresets.json` (inspected, no change needed)
+  - `third_party/` (submodule pointers only — not edited)
+  - `vendor/` (same caveat — not edited)
+  - `docs/devices-build.md` (edited)
+  - `plan_devices.md` (edited)
 
 ### DEV-BUILD-002 — Add device-only verification commands — CLOSED (2026-07-06)
 
