@@ -442,7 +442,7 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
     internal-only, no changes needed)
   - `docs/devices-api-coverage.md` (edited)
 
-### DEV-API-002 — Enforce the `NOXNA` boundary
+### DEV-API-002 — Enforce the `NOXNA` boundary — IN PROGRESS (2026-07-06, one more real bug found and fixed; strict-mode check acceptance criterion still open)
 
 - **Priority:** Critical
 - **Area:** API Compatibility
@@ -450,6 +450,36 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   the strict XNA API. 36 `NOXNA` occurrences already exist across 13 headers under
   `include/Microsoft/Devices/` (confirmed by grep) — this task audits whether that
   marking is complete and consistently enforced, not whether `NOXNA` is used at all.
+- **Progress so far (2026-07-06):** the first bullet's audit is effectively complete —
+  every header in `include/Microsoft/Devices/` has now been read end-to-end this
+  session (across `SENSORBASE-007`, `DEV-API-004`, and this task), cross-referenced
+  against `docs/devices-api-coverage.md`. Three real, previously-unmarked
+  Extra-unmarked bugs were found and fixed across that work: `SensorBase<T>::
+  TimeBetweenUpdatesChanged` (`SENSORBASE-007`); `operator==`/`operator!=`/`ToString()`/
+  `GetHashCode()` on all five reading structs (`DEV-API-004`); and, found while
+  finishing this task's own pass, the identical pattern on
+  `AccelerometerReadingEventArgs` (a `class`, not `struct` — its real, unmodified base
+  is `System.Object`, not `ValueType`, per its own archived MSDN page `ff707998`, but
+  the same "no such member in the real API" conclusion). Fixed identically: tagged
+  `NOXNA`, doc comment cites the MSDN page. Also explicitly re-confirmed clean (no gap):
+  `VibrateController.hpp` (fully and correctly marked already — cross-checked against
+  `docs/devices-api-coverage.md`'s own table), `SensorReadingEventArgs.hpp` (generic;
+  its public setter was already independently verified real by `READINGS-002`),
+  `CalibrationEventArgs.hpp` (genuinely empty marker class, no extra members),
+  `SensorFailedException.hpp`/`AccelerometerFailedException.hpp` (constructor
+  signatures unchanged from before, not newly re-verified against MSDN this pass —
+  see remaining work below).
+- **Remaining work (why this is not marked CLOSED):** the acceptance criteria's third
+  bullet — "a test (or documented manual check) fails when an extension is
+  accidentally left unmarked" — has no such check yet, compile-time or test-time. No
+  regression mechanism currently exists to catch a *future* unmarked extension the way
+  this session caught three *existing* ones by manual, one-header-at-a-time reading.
+  This is real, un-done work, not yet designed. A plausible future direction: a single
+  test that walks `docs/devices-api-coverage.md`'s tables and asserts (via some
+  generated or hand-maintained member list) that every entry's real/`NOXNA`
+  classification still matches the header — but this needs its own design pass, not a
+  quick addition here. `SensorFailedException`/`AccelerometerFailedException`'s exact
+  constructor-signature verification against MSDN (mentioned above) is also still open.
 - **Required work:**
   - Audit every `NOXNA` declaration in Devices/Sensors headers against `DEV-API-001`'s
     matrix.

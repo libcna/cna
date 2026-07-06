@@ -99,6 +99,22 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `DEV-API-002` IN PROGRESS (not closed): one more real Extra-unmarked bug
+found and fixed, strict-mode check acceptance criterion still open.** Continuing
+directly from `DEV-API-004`'s pattern, read every remaining header in
+`include/Microsoft/Devices/` end-to-end. Found the identical bug on
+`AccelerometerReadingEventArgs` (a `class`, not `struct` — real, unmodified base is
+`System.Object` per its own archived MSDN page `ff707998`, same "no such member in the
+real API" conclusion as the reading structs): `operator==`/`operator!=`/`ToString()`/
+`GetHashCode()` had no `NOXNA` tag. Fixed identically. Explicitly re-confirmed clean:
+`VibrateController.hpp` (already fully and correctly marked), `SensorReadingEventArgs.hpp`,
+`CalibrationEventArgs.hpp`. **Not closed** — the acceptance criteria's "a test fails
+when an extension is accidentally left unmarked" has no such check yet, compile-time or
+test-time; this remains real, un-done, un-designed work. Also still open:
+`SensorFailedException`/`AccelerometerFailedException`'s exact constructor signatures
+were not re-verified against MSDN this pass. Verified: 313/313 tests (unchanged) on
+plain `cmake-build-debug` and ASan/UBSan (0 issues each).
+
 **2026-07-06 — `DEV-API-004` closed: found a systemic Extra-unmarked bug across all
 five reading structs, fixed.** Fetched each reading structure's own archived MSDN page
 directly (`AccelerometerReading` `ff403534`, `CompassReading` `hh203072`,
@@ -685,15 +701,16 @@ own priority labels.
 `SENSORBASE-004`, `SENSORBASE-005`, `SENSORBASE-006`, `SENSORBASE-007`,
 `DEV-API-005`, and `DEV-API-004` are now closed (21 of 72 total task headers) — see
 Section 3 and `plan_devices.md` itself (grep for `— CLOSED`). All of `SENSORBASE-001`–
-`008` are now closed.
+`008` are now closed. `DEV-API-002` is IN PROGRESS (not closed) — see Section 3's entry
+below for what's done and what remains.
 
-51 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
-`VIB-010`, deliberately untouched per explicit user instruction so far), most
-Accelerometer/Gyroscope/Compass/Motion API- and hardware-verification audits
-(`ACCEL-001`–`004`/`006`/`007`, `GYRO-001`–`003`/`005`, `COMPASS-001`–`008`,
-`MOTION-001`–`007`/`009`/`010`), `DEV-API-002` (`NOXNA` boundary enforcement),
-`DEV-BUILD-003` (CI), `ANDROID-BRIDGE-001`/`003`/`004`,
-`SDL-SENSOR-001`/`003`, `READINGS-001`/`003`, `DEMO-001`/`002`, and `VERIFY-001`–`003`.
+51 tasks remain open (`DEV-API-002` counted separately as in-progress), spanning: the
+entire `VibrateController` block (`VIB-001`–`VIB-010`, deliberately untouched per
+explicit user instruction so far), most Accelerometer/Gyroscope/Compass/Motion API- and
+hardware-verification audits (`ACCEL-001`–`004`/`006`/`007`, `GYRO-001`–`003`/`005`,
+`COMPASS-001`–`008`, `MOTION-001`–`007`/`009`/`010`), `DEV-BUILD-003` (CI),
+`ANDROID-BRIDGE-001`/`003`/`004`, `SDL-SENSOR-001`/`003`, `READINGS-001`/`003`,
+`DEMO-001`/`002`, and `VERIFY-001`–`003`.
 Pick the next smallest one, or ask the user to prioritize, per Section 9's existing
 rule. One concrete lead if a task is wanted: the `cna_demo_input` Android build failure
 found during `DEV-BUILD-004` (Section 4) — not yet scoped as its own plan task.
@@ -864,12 +881,12 @@ along the way, same category as `MOTION-008` earlier in this pass).
 session (found and fixed a real `Compass`/`Motion` data race via `devices-tsan`), then
 `SENSORBASE-005`, `SENSORBASE-006`, `SENSORBASE-007`, `DEV-API-005`, and `DEV-API-004`
 were picked up immediately after and closed the same session too — all of
-`SENSORBASE-001`–`008` are now closed. No further "next smallest task" is queued from a
-quick pass over `plan_devices.md` beyond that — the `cna_demo_input` Android build
-finding from `DEV-BUILD-004` remains open but unscoped (see Section 4) if Android
-example-app coverage beyond `cna_demo_devices` is ever wanted; otherwise, read
-`plan_devices.md` for its next open task (grep for section headers without a "—
-CLOSED" suffix) or ask the user to prioritize.
+`SENSORBASE-001`–`008` are now closed. `DEV-API-002` was picked up next and left
+IN PROGRESS (not closed) at the user's request to stop and report status — see its
+Section 3 entry above for exactly what remains (the strict-mode
+"unmarked-extension-fails" check, and `SensorFailedException`/
+`AccelerometerFailedException` constructor-signature re-verification). That is the
+natural resume point for the next session.
 
 ---
 
