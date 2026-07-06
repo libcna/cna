@@ -861,8 +861,17 @@ IndependentAxes per-axis `ExcludeAxisDeadZone` with LeftDeadZone/RightDeadZone /
 same numeric result). **Files changed:** none (logic verified). **Behavior verified:** all three dead-zone
 modes + clamp + circular scaling + hash match FNA exactly. **Remaining risk:** none.
 
-## L-007 — `GamePadTriggers.cpp` logic `[ ]`
-- [ ] Clamp, trigger-threshold dead-zone, WithinEpsilon equality, bit-hash vs FNA.
+## L-007 — `GamePadTriggers.cpp` logic `[x]`
+- [x] Clamp, trigger-threshold dead-zone, WithinEpsilon equality, bit-hash vs FNA.
+
+**Result (2026-07-06):** **Byte-identical to FNA `GamePadTriggers.cs`** — no fix. Public 2-arg ctor clamps
+`[0,1]` (`MathHelper.Clamp`); internal 3-arg ctor is line-for-line FNA: `None → Clamp`; else
+`Clamp(ExcludeAxisDeadZone(trigger, TriggerThreshold), 0, 1)` for both triggers (FNA's "dead zones before
+clamp"). `Equals` = `WithinEpsilon(left)` && `WithinEpsilon(right)` — FNA-faithful (FNA `operator==` uses
+`MathHelper.WithinEpsilon`, A4-004). `GetHashCode` = `Single::GetHashCode(left_) + Single::GetHashCode(right_)`
+≡ FNA `Left.GetHashCode() + Right.GetHashCode()` (float bit-hash sum), unsigned wraparound to avoid UB (same
+result). **Files changed:** none (logic verified). **Behavior verified:** clamp + trigger-threshold dead-zone
++ epsilon equality + float-hash sum all match FNA. **Remaining risk:** none.
 
 ## L-008 — `GamePadState.cpp` logic `[ ]`
 - [ ] Ctor button/trigger/thumbstick→Buttons packing (StickToButtons/TriggerToButton thresholds),
