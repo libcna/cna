@@ -2147,6 +2147,59 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   `FACT_internal.c`/`FACT.c`); and cue-level (XSB, per-cue) `instanceLimit`/`maxInstanceBehavior`
   remaining unenforced, same already-accepted scope boundary as `P9-STOP-010`'s cue-level
   `fadeOutMS` note.
+* [x] P9-CATEGORY-011 Implement cue-level (XSB, per-cue) `instanceLimit`/`maxInstanceBehavior`/
+  fade-in/fade-out enforcement, the scope boundary `P9-CATEGORY-005/010` had deliberately left
+  open. User-directed follow-up after `P9-CATEGORY-005..010` closed Phase 9 (2026-07-06);
+  confirmed scope/approach with the user before implementing, same as every other real design
+  decision on this branch.
+  *Note:* Read `FACT_internal.c`'s `play_sound()` line-by-line first: it checks
+  `cue->data->instanceLimit` (the cue's OWN definition-scoped limit) *before*
+  `sound->sound->category`'s, in that exact order -- both checks can independently trigger, and if
+  the category check ALSO triggers, its `fade_in_ms = category->fadeInMS` unconditionally
+  overwrites whatever the cue-level check set (even down to 0), it's not additive. `XsbCue` gained
+  `instanceLimit`/`fadeInMS`/`maxInstanceBehavior` fields (alongside the already-retained
+  `fadeOutMS`, `P9-STOP-010`), retained by `XactParser.cpp`'s complex-cue parsing from the same
+  15-byte block (`instanceLimit:u8, fadeInMS:u16, fadeOutMS:u16, maxInstanceBehavior:u8>>3`); a
+  simple cue's format has no such fields, defaulting to `instanceLimit=0xFF`/`fadeInMS=0`/
+  `maxInstanceBehavior=0` (FAIL), matching FAudio's own hardcoded simple-cue defaults exactly
+  (`FACT_internal.c`'s `cueSimpleCount` branch) -- since `0xFF` is never reached in practice, a
+  simple cue's cue-level check is always a silent no-op. New `AudioEngine::CheckCueInstanceLimit(
+  bank, cueIndex, newCue)`, called from `Cue::Play()` *before* `CheckCategoryInstanceLimit()`:
+  counts live (Playing or Stopping) cues sharing the *same SoundBank + same cue index* against
+  `XsbCue::instanceLimit` (matching `FACTCueData::instanceCount`'s definition-scoped lifetime), and
+  applies `maxInstanceBehavior` the same way the category check does (FAIL rejects outright;
+  REPLACE_LOWEST_PRIORITY/QUEUE/REPLACE_OLDEST/REPLACE_QUIETEST reuse the identical collapse
+  rationale as `P9-CATEGORY-010`). The one genuinely new wrinkle, found by reading
+  `handle_instance_limit(cue, NULL)` carefully: its victim-search loop's `if (category && ...)`
+  filter is unconditionally false when called for a cue-level check (category is NULL) -- so
+  **the eviction search has no category filter AND no same-cue-definition filter at all**, unlike
+  the count check just above it. It scans every live cue in the whole SoundBank and may evict a
+  completely unrelated cue instead of another instance of the same named cue. This looks like a
+  genuine oversight in real FAudio (a cue-level limit conceptually ought to compete only against
+  its own siblings), but per this project's behavior-fidelity mandate CNA replicates it exactly --
+  `CheckCueInstanceLimit()`'s victim loop filters only by `bank_` (same SoundBank), not by
+  `cueIndex_` or `categoryIdx_`. `AudioEngine::InstanceLimitDecision` gained a `triggered` field
+  (was just `{allowed, fadeInMS}`) so `Cue::Play()` can correctly implement the "category
+  unconditionally overwrites cue-level's fade-in, even down to 0" precedence -- `fadeInMS > 0`
+  isn't enough to distinguish "category didn't trigger" from "category triggered with an authored
+  fadeInMS of 0," and those two cases must behave differently.
+  Tests: `CueTests.cpp`'s new `CueInstanceLimitEngine`/`WaveBank`/`SoundBank` fixture group (reuses
+  `SharedEngine()`, whose sole category has `instanceLimit=0xFF`, so the category-level check never
+  interferes) with three COMPLEX cues -- `FailCue` (instanceLimit=1, FAIL),
+  `VictimCue` (unlimited, an unrelated definition), `TriggerCue` (instanceLimit=1,
+  REPLACE_OLDEST, real fadeInMS/fadeOutMS). Two tests:
+  `CueInstanceLimitFailRejectsSecondInstanceOfSameCueDefinition` (a second `FailCue` instance is
+  rejected outright, first instance unaffected) and
+  `CueInstanceLimitReplaceOldestEvictsOldestBankWideCueNotSameDefinitionSibling` -- plays
+  `VictimCue`, then `TriggerCue` instance A (asserting it plays at full volume with no fade,
+  proving the *count* correctly excludes `VictimCue`), then `TriggerCue` instance B, asserting
+  `VictimCue` (not instance A, despite sharing `TriggerCue`'s definition) is the one that gets
+  evicted and fades out over `TriggerCue`'s own authored `fadeOutMS`, while instance A remains
+  completely untouched throughout and instance B fades in from silence. Verified via `git stash`
+  (reverting only the five source files, keeping the two new tests): both fail against the
+  pre-fix code, pass again after restoring the fix. Full suite 3270/3270 (3268 baseline + 2 new,
+  2 pre-existing hardware-dependent skips); audio-scoped subset 394/394 clean under a full
+  ASan+UBSan build. `cna_demo_sound`/`cna_demo_2d` rebuilt clean (no source changes needed there).
 
 ## P9-VALIDATION — Constructor and argument validation
 

@@ -112,14 +112,18 @@ namespace Microsoft::Xna::Framework::Audio
 
         GetTypeNameHPP()
 
-        // P9-CATEGORY-005/006/007/008: result of a category instanceLimit check (Cue::Play()
-        // calls CheckCategoryInstanceLimit() below). `allowed` is false only for
-        // maxInstanceBehavior == FAIL once the category is already at its instanceLimit; a true
-        // `fadeInMS` (nonzero) is the category's authored fade-in the new cue should apply,
-        // matching FACT_internal.c's play_sound()/handle_instance_limit().
-        NOXNA struct CategoryInstanceLimitDecision
+        // P9-CATEGORY-005/006/007/008/011: result of a category- or cue-level instanceLimit
+        // check (Cue::Play() calls CheckCategoryInstanceLimit()/CheckCueInstanceLimit() below).
+        // `allowed` is false only for maxInstanceBehavior == FAIL once the category/cue is
+        // already at its instanceLimit. `triggered` is true whenever the limit was actually at
+        // or past capacity (whether or not that resulted in an eviction) -- matching
+        // FACT_internal.c's play_sound(), where a triggered check unconditionally overwrites
+        // fade_in_ms with the (possibly zero) authored fadeInMS, discarding whatever an earlier
+        // check set it to; `fadeInMS` is only meaningful when `triggered` is true.
+        NOXNA struct InstanceLimitDecision
         {
             bool     allowed;
+            bool     triggered;
             uint16_t fadeInMS;
         };
 
@@ -165,7 +169,17 @@ namespace Microsoft::Xna::Framework::Audio
         // FACT_internal.c-matched semantics of each value) and may fade out a victim cue via
         // Cue::ForceFadeOutForInstanceLimit(). `newCue` is excluded from its own count (it isn't
         // registered into activeCues yet at the point Play() calls this).
-        CategoryInstanceLimitDecision CheckCategoryInstanceLimit(unsigned short idx, Cue* newCue) const;
+        InstanceLimitDecision CheckCategoryInstanceLimit(unsigned short idx, Cue* newCue) const;
+
+        // P9-CATEGORY-011: called by Cue::Play() before CheckCategoryInstanceLimit() above,
+        // matching FACT_internal.c's play_sound() checking cue->data->instanceLimit before
+        // sound->sound->category's -- same shape as the category check, but scoped to this
+        // specific cue definition (same SoundBank + cueIndex) for the *count*, matching
+        // FACTCueData::instanceCount. The *victim search*, when eviction is needed, is scoped
+        // only to the same SoundBank (matching FAudio's handle_instance_limit(cue, NULL), which
+        // iterates cue->parentBank->cueList with no category or cue-definition filter at all --
+        // a real FAudio quirk, replicated here rather than "fixed", see AudioEngine.cpp).
+        InstanceLimitDecision CheckCueInstanceLimit(SoundBank* bank, unsigned short cueIndex, Cue* newCue) const;
 
         // Active-cue registration for category operations
         void RegisterCue(Cue* cue);

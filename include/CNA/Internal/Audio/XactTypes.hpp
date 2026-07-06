@@ -253,6 +253,24 @@ namespace CNA::Internal::Audio
          * (matches FAudio's FACT_internal.c, which hardcodes 0 for simple cues).
          */
         uint16_t fadeOutMS = 0;
+        /**
+         * @brief Maximum concurrent instances allowed for this specific cue definition
+         * (cue-level instanceLimit, independent of any category-level limit).
+         *
+         * Defaults to 0xFF (effectively unlimited), matching FAudio's own hardcoded default for
+         * a "simple" cue record, which has no such field at all (`FACT_internal.c`).
+         */
+        uint8_t  instanceLimit = 0xFF;
+        /** @brief Authored fade-in duration in milliseconds when this cue's own instanceLimit forces a fade-in; 0 for a simple cue. */
+        uint16_t fadeInMS = 0;
+        /**
+         * @brief Behavior applied when this cue's own instanceLimit would be exceeded: same
+         * encoding as XgsCategory::maxInstanceBehavior (0=fail, 1=queue, 2=replace oldest,
+         * 3=replace quietest, 4=replace lowest priority). Defaults to 0 (fail), matching
+         * FAudio's hardcoded default for a simple cue -- irrelevant there since instanceLimit
+         * defaults to 0xFF (never reached).
+         */
+        uint8_t  maxInstanceBehavior = 0;
     };
 
     /** @brief Parsed contents of a .XSB sound bank file. */

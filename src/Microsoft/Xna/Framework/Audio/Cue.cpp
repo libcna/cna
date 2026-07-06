@@ -419,23 +419,37 @@ namespace Microsoft::Xna::Framework::Audio
         priority_    = sound->priority;
         float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
 
-        // P9-CATEGORY-005/006/007/008: real FACT enforces a category's instanceLimit right here,
-        // before the new sound is actually allowed to start (FACT_internal.c's play_sound) --
-        // reusing categoryIdx_/priority_ just resolved above. FAIL rejects this cue outright
-        // (matches FACTCue_Stop(cue, IMMEDIATE) on the *new* cue in handle_instance_limit); any
-        // other behavior may fade out a victim cue already playing in the same category and
-        // hands back a fadeInMS to apply to this cue below.
+        // P9-CATEGORY-005/006/007/008/011: real FACT enforces the cue's OWN instanceLimit first,
+        // then the category's, right here before the new sound is actually allowed to start
+        // (FACT_internal.c's play_sound() checks cue->data->instanceLimit, then
+        // sound->sound->category's, in that exact order). FAIL at either stage rejects this cue
+        // outright (matches FACTCue_Stop(cue, IMMEDIATE) on the *new* cue in
+        // handle_instance_limit); a fade-in decided at the cue level is overwritten by the
+        // category level if that ALSO triggers, matching play_sound()'s sequential
+        // `fade_in_ms = ...` assignment (category wins if both fire), not an additive combination.
         uint16_t categoryFadeInMS = 0;
+        if (eng && bank_)
+        {
+            const AudioEngine::InstanceLimitDecision cueDecision =
+                eng->CheckCueInstanceLimit(bank_, cueIndex_, this);
+            if (!cueDecision.allowed)
+            {
+                state_ = State::Stopped;
+                return;
+            }
+            categoryFadeInMS = cueDecision.fadeInMS;
+        }
         if (eng)
         {
-            const AudioEngine::CategoryInstanceLimitDecision decision =
+            const AudioEngine::InstanceLimitDecision decision =
                 eng->CheckCategoryInstanceLimit(categoryIdx_, this);
             if (!decision.allowed)
             {
                 state_ = State::Stopped;
                 return;
             }
-            categoryFadeInMS = decision.fadeInMS;
+            if (decision.triggered)
+                categoryFadeInMS = decision.fadeInMS; // unconditional overwrite, even if 0
         }
 
         // P9-XACT-006/007: RPC (Runtime Parameter Control) volume/pitch, evaluated once here

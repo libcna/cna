@@ -363,11 +363,11 @@ namespace Microsoft::Xna::Framework::Audio
 
     // ── Category instance-limit enforcement ──────────────────────────────────
 
-    AudioEngine::CategoryInstanceLimitDecision
+    AudioEngine::InstanceLimitDecision
     AudioEngine::CheckCategoryInstanceLimit(unsigned short idx, Cue* newCue) const
     {
         if (!xactImpl_ || idx >= xactImpl_->xgs.categories.size())
-            return {true, 0};
+            return {true, false, 0};
 
         const CNA::Internal::Audio::XgsCategory& cat = xactImpl_->xgs.categories[idx];
 
@@ -383,12 +383,12 @@ namespace Microsoft::Xna::Framework::Audio
                 ++liveCount;
 
         if (liveCount < cat.instanceLimit)
-            return {true, 0};
+            return {true, false, 0};
 
         // max_instance_behavior values (FACT_internal.h): 0=FAIL, 1=QUEUE, 2=REPLACE_OLDEST,
         // 3=REPLACE_QUIETEST, 4=REPLACE_LOWEST_PRIORITY.
         if (cat.maxInstanceBehavior == 0)
-            return {false, 0}; // FAIL: reject the new cue outright, matching FACTCue_Stop(IMMEDIATE)
+            return {false, true, 0}; // FAIL: reject the new cue outright, matching FACTCue_Stop(IMMEDIATE)
 
         // P9-CATEGORY-010: FAudio's own handle_instance_limit() (FACT_internal.c) treats QUEUE
         // and REPLACE_OLDEST identically (its own source carries a "FIXME: How does QUEUE differ
@@ -425,7 +425,71 @@ namespace Microsoft::Xna::Framework::Audio
         if (victim)
             victim->ForceFadeOutForInstanceLimit(cat.fadeOutMS);
 
-        return {true, cat.fadeInMS};
+        return {true, true, cat.fadeInMS};
+    }
+
+    AudioEngine::InstanceLimitDecision
+    AudioEngine::CheckCueInstanceLimit(SoundBank* bank, unsigned short cueIndex, Cue* newCue) const
+    {
+        if (!xactImpl_ || !bank) return {true, false, 0};
+
+        const CNA::Internal::Audio::XsbData* xsb = bank->GetXsbData();
+        if (!xsb || cueIndex >= xsb->cues.size()) return {true, false, 0};
+
+        const CNA::Internal::Audio::XsbCue& cueDef = xsb->cues[cueIndex];
+
+        // P9-CATEGORY-011: matches FACT_internal.c's play_sound() -- cue->data->instanceCount is
+        // this specific cue definition's own live-instance count (same SoundBank + same cue
+        // index), incremented per Play() and only decremented once a sound instance is actually
+        // destroyed -- so, same as the category check above, a Stopping cue still counts.
+        std::size_t liveCount = 0;
+        for (const Cue* cue : xactImpl_->activeCues)
+            if (cue && cue != newCue && cue->bank_ == bank && cue->cueIndex_ == cueIndex
+                && (cue->state_ == Cue::State::Playing || cue->state_ == Cue::State::Stopping))
+                ++liveCount;
+
+        if (liveCount < cueDef.instanceLimit)
+            return {true, false, 0};
+
+        if (cueDef.maxInstanceBehavior == 0)
+            return {false, true, 0}; // FAIL: reject the new cue outright, matching FACTCue_Stop(IMMEDIATE)
+
+        // P9-CATEGORY-011: unlike the category-level victim search above, FAudio's own
+        // handle_instance_limit(cue, NULL) (FACT_internal.c) applies NO category filter and NO
+        // same-cue-definition filter when the *cue-level* limit is what triggered -- its
+        // `if (category && ...)` guard is unconditionally false here since it's called with a
+        // NULL category, so the search scans every live cue in the whole SoundBank
+        // (cue->parentBank->cueList) and may evict a cue from a completely different definition
+        // or category. This looks like a genuine oversight in FAudio (a cue-level instanceLimit
+        // conceptually ought to only compete against other instances of the same named cue), but
+        // CNA matches it exactly per this project's behavior-fidelity mandate instead of
+        // "fixing" upstream FAudio's own shipped behavior.
+        Cue* victim = nullptr;
+        uint8_t victimPriority = 0xFF;
+        for (Cue* cue : xactImpl_->activeCues)
+        {
+            if (!cue || cue == newCue || cue->bank_ != bank || cue->state_ != Cue::State::Playing)
+                continue;
+
+            if (cueDef.maxInstanceBehavior == 4) // REPLACE_LOWEST_PRIORITY
+            {
+                if (!victim || cue->priority_ < victimPriority)
+                {
+                    victim = cue;
+                    victimPriority = cue->priority_;
+                }
+            }
+            else // QUEUE / REPLACE_OLDEST / REPLACE_QUIETEST -- see CheckCategoryInstanceLimit()
+            {
+                victim = cue;
+                break;
+            }
+        }
+
+        if (victim)
+            victim->ForceFadeOutForInstanceLimit(cueDef.fadeOutMS);
+
+        return {true, true, cueDef.fadeInMS};
     }
 
     // ── Cue registration ──────────────────────────────────────────────────────

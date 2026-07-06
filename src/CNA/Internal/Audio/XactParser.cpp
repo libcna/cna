@@ -906,8 +906,10 @@ namespace CNA::Internal::Audio
                 auto it = soundCodeMap.find(sbCode);
                 result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : kInvalidSoundIndex;
                 result.cues[cueIdx].varIndex   = 0;
-                // fadeOutMS stays at its 0 default: a simple cue's format has no such field at
-                // all, matching FAudio's own hardcoded 0 for simple cues (P9-STOP-010).
+                // fadeOutMS/fadeInMS (0) and instanceLimit (0xFF)/maxInstanceBehavior (0, FAIL)
+                // all stay at their struct defaults: a simple cue's format has no such fields at
+                // all, matching FAudio's own hardcoded defaults for simple cues (P9-STOP-010,
+                // P9-CATEGORY-011).
             }
         }
 
@@ -923,14 +925,19 @@ namespace CNA::Internal::Audio
                 uint8_t  flags           = cc.u8();
                 uint32_t sbCode          = cc.u32();
                 uint32_t transitionOffset = cc.u32();
-                cc.u8();  // instanceLimit
-                cc.u16(); // fadeInMS
-                uint16_t fadeOutMS = cc.u16(); // P9-STOP-010: retained, was discarded
-                cc.u8();  // maxInstanceBehavior
+                // P9-CATEGORY-011: instanceLimit/fadeInMS/maxInstanceBehavior retained (were
+                // discarded) alongside fadeOutMS (P9-STOP-010), same 6-byte block.
+                uint8_t  instanceLimit   = cc.u8();
+                uint16_t fadeInMS        = cc.u16();
+                uint16_t fadeOutMS       = cc.u16();
+                uint8_t  maxInstanceBehavior = cc.u8() >> 3; // same bit-shift as XgsCategory's
 
                 bool isSingle = (flags & CUE_FLAG_SINGLE_SOUND) != 0;
                 result.cues[cueIdx].isSingleSound = isSingle;
                 result.cues[cueIdx].fadeOutMS = fadeOutMS;
+                result.cues[cueIdx].instanceLimit = instanceLimit;
+                result.cues[cueIdx].fadeInMS = fadeInMS;
+                result.cues[cueIdx].maxInstanceBehavior = maxInstanceBehavior;
 
                 if (isSingle)
                 {
