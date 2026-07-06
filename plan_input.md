@@ -1672,11 +1672,23 @@ include/link error. Documented in `docs/input-build-and-test.md` + the CLAUDE.md
 **Files changed:** none (diagnostics already present + verified). **Behavior verified:** configure aborts
 early with the exact recovery command for each missing dependency. **Remaining risk:** none.
 
-## P9-002 — Add optional system SDL mode if desired
-- [ ] Determine whether CNA should support system SDL for local testing.
-- [ ] If yes, add a CMake option.
-- [ ] If no, document why vendored SDL is required.
-- [ ] Keep behavior deterministic.
+## P9-002 — Add optional system SDL mode if desired `[x]`
+- [x] Determine whether CNA should support system SDL for local testing.
+- [x] If yes, add a CMake option. — N/A (decision: no)
+- [x] If no, document why vendored SDL is required.
+- [x] Keep behavior deterministic.
+
+**Decision (2026-07-06): NO system-SDL mode — vendored SDL is required.** Rationale: (1) **determinism /
+reproducibility** — CNA pins exact SDL3 / SDL_image / SDL_mixer commits as submodules under `third_party/`,
+so every developer and CI runner builds against the identical SDL, eliminating "works on my distro" skew
+from a system SDL of unknown version/patch level; (2) **version floor** — CNA targets SDL3 APIs
+(`SDL_RenderCoordinatesToWindow`, `SDL_SetTextInputArea`, `SDL_EVENT_FINGER_CANCELED`, gamepad LED/sensor)
+that many distros' packages predate; (3) **build determinism constraint** (this task's own requirement) is
+best served by one pinned source. A system-SDL toggle would add a matrix of untested SDL versions for
+marginal local convenience. The `.sdl-prebuilt` cache already makes the vendored path fast after the first
+build; the P9-001 diagnostics tell a fresh clone exactly how to fetch the submodules. **Documented** here
+and reinforced by the CLAUDE.md system-deps note (only FFmpeg is a true system dependency; SDL is vendored).
+**Files changed:** none (decision record). **Behavior verified:** n/a (policy). **Remaining risk:** none.
 
 ## P9-003 — Create focused Input test target
 - [ ] Ensure there is a simple command to run only Input tests.
