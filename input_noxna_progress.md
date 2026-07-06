@@ -36,7 +36,7 @@
 - [ ] **N-015 `CNA::Input::Sensor`** — device-level accelerometer/gyro (`SDL_sensor`).
 - [ ] **N-016 `Mouse` capture / global-position EXT** — `SetCaptureEXT`, `GetGlobalPositionEXT`, `WarpGlobalEXT`.
 - [ ] **N-017 `CNA::Input::InputDevices`** — enumeration + hot-plug (mice/keyboards/touch devices).
-- [ ] **N-018 `CNA::Input::Power`** — system battery (`SDL_GetPowerInfo`).
+- [x] **N-018 `CNA::Input::Power`** — system battery (`SDL_GetPowerInfo`) via injectable seam; reuses `PowerStateEXT`.
 
 ## Notes
 - New standalone types live in the **public `CNA::Input`** namespace (`include/CNA/Input/`, `src/CNA/Input/`),
@@ -48,6 +48,15 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-018 done (2026-07-06):** `CNA::Input::Power::GetInfoEXT(out secondsLeft, out percent) ->
+  PowerStateEXT` — host system battery/charge, reusing the shared `PowerStateEXT` from N-009b.
+  Established the "standalone CNA::Input type + injectable *system* seam" pattern (reusable for
+  N-016/N-017): new `ISystemPowerBackend` seam (`include/CNA/Internal/Input/SystemPowerBackend.hpp`
+  + `.cpp`, real = `SDL_GetPowerInfo`) with `SetSystemPowerBackendForTests`. `Power` resets the
+  out-params to -1 then maps SDL->EXT. New public type `include/CNA/Input/Power.hpp` + `src/CNA/
+  Input/Power.cpp` (whole class NOXNA, like Clipboard — additive, so no freeze pin / frozen-doc
+  entry). Tests `CnaInputPowerTest` drive a fake backend: exhaustive 6-state mapping with
+  seconds/percent forwarding + the out-param-reset default. `ctest -L input` green; ASan-clean.
 - **N-010b done (2026-07-06):** `GamePad::GetConnectionStateEXT -> CNA::Input::
   GamePadConnectionStateEXT {Unknown,Wired,Wireless}` — how the pad is attached. New enum header
   `include/CNA/Input/GamePadConnectionState.hpp`. Seam `GetGamepadConnectionState` (real =
