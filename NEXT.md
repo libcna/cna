@@ -13,11 +13,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
-  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–354 are
-  done, **Task 355 is next** ("Verify `EffectPass::Apply` updates current effect state consistently"
-  — see §8). Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks 351–354); it does
-  **not** close Phase 41 — Tasks 355–360 (`EffectPass`/`EffectTechnique`/parameter-lookup
-  verification) remain open.
+  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–355 are
+  done, **Task 356 is next** ("Verify `EffectTechnique` selection changes applied pass collection"
+  — see §8). Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks 351–354); Task 355
+  closed the `EffectPass::Apply()`-consistency sub-thread; Phase 41 itself is **not** yet closed —
+  Tasks 356–360 (`EffectTechnique`/parameter-lookup verification) remain open.
   **Task 351**
   audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
   returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
@@ -115,6 +115,27 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   `ShaderEffect` backend is a no-op stub, gives "hand-port the original HLSL to GLSL/SPIR-V today"
   as practical porting guidance, and summarizes Phase 74's 8-step roadmap without duplicating
   `docs/fx-bytecode-support-plan.md`. Docs-only, no code changed, no rebuild needed.
+  **Task 355** confirmed Task 351's deferred finding for real (FNA's `EffectPass.Apply()` throws
+  `InvalidOperationException` if the pass isn't part of the effect's `CurrentTechnique`; CNA's had
+  zero such validation, and didn't even track which technique a pass belonged to) and fixed it:
+  gave `EffectTechnique` a stable identity token (`getIdInternal()`, mirroring FNA's opaque
+  `TechniquePointer` handle) and `EffectPass` a `techniqueId_` checked in `Apply()`, throwing
+  `System::InvalidOperationException` on mismatch — including the null-`CurrentTechnique` case,
+  where FNA itself would crash with a `NullReferenceException` (CNA maps that to this same defined
+  exception, a deliberate, documented deviation from UB). **A second, more serious bug surfaced
+  while writing the interleaved-technique-switch test**: `EffectTechniqueCollection` stored
+  `EffectTechnique` by value in a `std::vector`, so `Effect::currentTechnique_` (captured at
+  construction as `&techniques_[0]`) would dangle the instant a second technique was ever added
+  (guaranteed reallocation on 1→2 capacity growth) — the same bug class as Task 345's
+  `DefaultAdapter` dangling reference. Fixed by switching to
+  `std::vector<std::unique_ptr<EffectTechnique>>` (this project's established idiom for this exact
+  problem) with a small custom iterator pair preserving range-for support. The identical hazard in
+  `EffectPassCollection` is not yet exercised by any test/production code and was left as-is,
+  tracked as new **Task 884**. 4 new tests in `EffectTests.cpp`'s `EffectApplyTest` fixture;
+  discriminating power verified (temporarily short-circuited the validation, confirmed 3 of 4 new
+  tests fail, reverted). Full 3-backend regression, zero new failures: EasyGL 3370/3375 (3
+  pre-existing + 2 reconfirmed-flaky `CueTest`). Vulkan 3294/3308 (13 pre-existing + 1 reconfirmed
+  order-dependent `Vulkan_FillMode_WireFrame` flake). Bgfx 3278/3278 (100%).
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -137,10 +158,10 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
   (`cmake-build-bgfx`): all 3 configured, build cleanly. Last actually rebuilt/re-verified for
-  Task 349 (touches shared `GraphicsDevice.hpp`/`.cpp` — a real fix, not just a test addition —
-  plus a new cross-backend test registered for EasyGL and Vulkan). Task 350 (docs-only, closes
-  Phase 40) touched no `.hpp`/`.cpp`/test files, so no rebuild was needed — matching Task 340's
-  precedent.
+  Task 355 (touches shared `Effect.hpp`/`EffectPass.hpp`/`.cpp`, `EffectTechnique.hpp`/`.cpp`,
+  `EffectTechniqueCollection.hpp`/`.cpp` — 2 real fixes, not just a test addition). Tasks 350/352/354
+  (docs-only) touched no `.hpp`/`.cpp`/test files, so no rebuild was needed for those — matching
+  Task 340's precedent.
 
 ### Test status (last verified this session)
 - **EasyGL, full `ctest -j1`:** 3353/3356 pass. 3 pre-existing/documented failures (see §5):
@@ -442,23 +463,29 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 355 — verify `EffectPass::Apply` updates current effect state consistently**
-   - Goal: unit test with a mock/test effect confirming `EffectPass::Apply()` correctly makes its
-     owning effect the device's "current" effect and updates whatever state FNA's real
-     `EffectPass.Apply()` updates. Per FNA source (check `Graphics/Effect/EffectPass.cs`), also
-     verify whether FNA throws `InvalidOperationException` when the pass being applied isn't part
-     of the effect's current `CurrentTechnique` — Task 351's audit found CNA's `EffectPass::Apply()`
-     currently has no such validation and explicitly deferred it to this task.
-   - Files: likely `EffectPass.hpp`/`.cpp`, `tests/.../EffectPassTests.cpp` (check if it exists yet).
-   - Verification: new unit test(s) with genuine discriminating power (temporarily break/omit any
-     fix and confirm the test fails).
+1. **`GRAPHICS_TASKS.md` Task 356 — verify `EffectTechnique` selection changes applied pass collection**
+   - Goal: unit test confirming that switching `Effect.CurrentTechnique` (via
+     `setCurrentTechniqueProperty()`) correctly changes which technique's `Passes` are the ones
+     that successfully `Apply()` — i.e. exercise the "selection" half of the story Task 355 already
+     built the "consistency" machinery for (Task 355's `ApplyIsConsistentAcrossInterleavedTechniqueSwitches`
+     test already covers a good chunk of this from the `EffectPass::Apply()` side; Task 356 should
+     confirm there isn't a separate, `EffectTechnique`-side gap — e.g. does selecting a technique
+     need to reset/re-upload anything else, matching FNA's `EffectTechnique`/`EffectPass` source).
+   - Files: likely `EffectTechnique.hpp`/`.cpp`, `Effect.hpp`/`.cpp`, `tests/.../EffectTests.cpp` or
+     `EffectTechniqueTests.cpp`.
+   - Verification: new unit test(s) with genuine discriminating power.
 
-   **Task 354 status: done.** Wrote `docs/shader-effect-vs-fx-bytecode.md` — the developer-facing
-   counterpart to `docs/fx-bytecode-support-plan.md`. Covers what's supported today (`ShaderEffect`
-   hand-written GLSL on EasyGL / SPIR-V on Vulkan, all 6 stock effects, Bgfx's `ShaderEffect` no-op
-   stub noted honestly), Task 353's exact thrown exception text (quoted verbatim from `Effect.cpp`),
-   practical "hand-port HLSL to GLSL/SPIR-V today" porting guidance, and a summary of Phase 74's
-   roadmap. Does not close Phase 41 (Tasks 355–360 remain). Docs-only, no rebuild needed.
+   **Task 355 status: done.** Confirmed and fixed Task 351's deferred `EffectPass::Apply()`
+   technique-validation finding (gave `EffectTechnique` a stable identity token, `EffectPass` a
+   `techniqueId_`, `Apply()` now throws `System::InvalidOperationException` on a technique
+   mismatch, matching FNA). Also fixed a second, more serious bug found while testing:
+   `EffectTechniqueCollection`'s by-value `vector<EffectTechnique>` storage could dangle
+   `Effect::currentTechnique_` on a second `Add()` — switched to
+   `vector<unique_ptr<EffectTechnique>>` (same idiom as `GraphicsAdapter::adapters_`). Opened new
+   Task 884 (identical latent hazard in `EffectPassCollection`, not yet exercised, not fixed).
+   4 new tests, discriminating power verified. Full 3-backend regression, zero new failures:
+   EasyGL 3370/3375, Vulkan 3294/3308, Bgfx 3278/3278 (100%). Does not close Phase 41
+   (Tasks 356–360 remain).
 
 2. **`GRAPHICS_TASKS.md` Task 883 — implement `Effect::Clone()` (new, opened by Task 351)**
    - Goal: FNA's `Effect` has a public virtual `Clone()` (used by every stock effect, each
@@ -710,21 +737,22 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-40 are FULLY COMPLETE. Phase 41 (Effect base class and compiled effect
-compatibility, GRAPHICS_TASKS.md Tasks 351-360) is open, Tasks 351-354 are ALL DONE, Task 355 next.
-Last full 3-backend regression (Task 353, shared GraphicsDevice/Effect code touched): EasyGL
-3368/3371 pass (3 documented pre-existing failures, unchanged). Vulkan 3290/3304 pass (13
-documented failures + 1 reconfirmed order-dependent Vulkan_RenderTargetUsage flake). Bgfx
-3274/3274 pass (100%, no flakes that run). Caution: run all 3 backends' full ctest suites
-sequentially, never concurrently (see NEXT.md §2); if a single run shows an anomaly beyond the
-documented list, re-run in isolation before treating it as a regression.
+compatibility, GRAPHICS_TASKS.md Tasks 351-360) is open, Tasks 351-355 are ALL DONE, Task 356 next.
+Last full 3-backend regression (Task 355, shared Effect/EffectPass/EffectTechnique/
+EffectTechniqueCollection code touched): EasyGL 3370/3375 pass (3 documented pre-existing failures
++ 2 reconfirmed-flaky CueTest). Vulkan 3294/3308 pass (13 documented failures + 1 reconfirmed
+order-dependent Vulkan_FillMode_WireFrame flake). Bgfx 3278/3278 pass (100%, no flakes that run).
+Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
+if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
+it as a regression.
 
-Tasks 351-354 (the Effect-base-class-audit + .fx-bytecode-policy sub-thread of Phase 41) are now
-ALL closed - see GRAPHICS_TASKS.md for detail. Summary: Task 351 audited Effect against FNA and
-fixed 3 real bugs (GetTypeName fully-qualified name, Apply() missing NOXNA, a Dispose()
-name-hiding bug that broke compilation on every concrete effect class), and deferred the
-.fx-bytecode-constructor question to Task 352 and the Clone() gap to new Task 883. Task 352 (a
-user policy decision, not inferred) chose FULL support for compiled XNA .fx bytecode; research
-found MojoShader's zlib-licensed C source already vendorable locally at
+Tasks 351-355 (the Effect-base-class-audit + .fx-bytecode-policy + EffectPass::Apply-consistency
+sub-threads of Phase 41) are now ALL closed - see GRAPHICS_TASKS.md for detail. Summary: Task 351
+audited Effect against FNA and fixed 3 real bugs (GetTypeName fully-qualified name, Apply() missing
+NOXNA, a Dispose() name-hiding bug that broke compilation on every concrete effect class), and
+deferred the .fx-bytecode-constructor question to Task 352 and the Clone() gap to new Task 883.
+Task 352 (a user policy decision, not inferred) chose FULL support for compiled XNA .fx bytecode;
+research found MojoShader's zlib-licensed C source already vendorable locally at
 /rv/data/library/github.com/u3d-community/U3D/Source/ThirdParty/MojoShader (parses XNA's
 compiled-effect container already; transpiles D3D9 SM2/3 bytecode to GLSL but has NO SPIR-V
 output, so Vulkan needs an extra GLSL->SPIR-V hop via glslang, not yet vendorable from a local
@@ -735,18 +763,31 @@ Effect(GraphicsDevice&, const std::vector<SharpRuntime::bytecs>&) constructor (m
 signature) whose body throws System::NotImplementedException naming Phase 74 and pointing at
 ShaderEffect/stock effects as today's real alternative. Task 354 wrote the developer-facing
 counterpart doc, docs/shader-effect-vs-fx-bytecode.md, covering what works today, what throws and
-why, practical hand-port-to-GLSL/SPIR-V porting guidance, and the Phase 74 roadmap summary.
+why, practical hand-port-to-GLSL/SPIR-V porting guidance, and the Phase 74 roadmap summary. Task
+355 confirmed and fixed Task 351's deferred EffectPass::Apply() technique-validation finding
+(EffectTechnique got a stable getIdInternal() identity token mirroring FNA's opaque
+TechniquePointer; EffectPass got a techniqueId_ checked in Apply(), throwing
+System::InvalidOperationException on a technique mismatch, matching FNA's own guard, including the
+null-CurrentTechnique case where FNA itself would crash with a NullReferenceException) and ALSO
+fixed a second, more serious bug found while writing the interleaved-technique-switch test:
+EffectTechniqueCollection stored EffectTechnique by value in a vector, so Effect::currentTechnique_
+(captured at construction) would dangle the instant a second technique was added (guaranteed
+reallocation on 1->2 capacity growth) - same bug class as Task 345's DefaultAdapter dangling
+reference. Fixed via vector<unique_ptr<EffectTechnique>> (matching GraphicsAdapter::adapters_'s
+established idiom) with a small custom iterator pair. Opened new Task 884 (identical latent hazard
+in EffectPassCollection, not yet exercised by any test, not fixed).
 
-Next task: GRAPHICS_TASKS.md Task 355 - verify EffectPass::Apply updates current effect state
-consistently (unit test with mock/test effect). Per Task 351's audit, check FNA's real
-EffectPass.Apply() (Graphics/Effect/EffectPass.cs) for whether it throws InvalidOperationException
-when the pass being applied isn't part of the effect's current CurrentTechnique - CNA's
-EffectPass::Apply() currently has no such validation, and Task 351 explicitly deferred this
-specific check to Task 355 rather than fixing it inline. Files: likely EffectPass.hpp/.cpp,
-tests/Microsoft/Xna/Framework/Graphics/EffectTests.cpp or a new EffectPassTests.cpp (check what
-exists first - EffectTests.cpp was created this phase by Task 351, may already have partial
-EffectPass coverage via TestEffect's fixture). As always: verify genuine discriminating power for
-any new test (temporarily break/omit any fix, confirm the test fails, then revert), full
-3-backend rebuild + regression if production code changes, update GRAPHICS_TASKS.md and NEXT.md,
-commit AND push after finishing (standing instruction - do not wait to be asked).
+Next task: GRAPHICS_TASKS.md Task 356 - verify EffectTechnique selection changes applied pass
+collection (unit test). Goal: confirm that switching Effect.CurrentTechnique via
+setCurrentTechniqueProperty() correctly changes which technique's Passes actually succeed on
+Apply() - Task 355's ApplyIsConsistentAcrossInterleavedTechniqueSwitches test in EffectTests.cpp
+already covers a good chunk of this from the EffectPass::Apply() side, so Task 356 should focus on
+confirming there isn't a separate EffectTechnique-side gap (check FNA's EffectTechnique.cs /
+EffectPass.cs again for anything selection-triggered that CNA might be missing beyond what Task 355
+already validated). Files: likely EffectTechnique.hpp/.cpp, Effect.hpp/.cpp,
+tests/Microsoft/Xna/Framework/Graphics/EffectTests.cpp or EffectTechniqueTests.cpp. As always:
+verify genuine discriminating power for any new test (temporarily break/omit any fix, confirm the
+test fails, then revert), full 3-backend rebuild + regression if production code changes, update
+GRAPHICS_TASKS.md and NEXT.md, commit AND push after finishing (standing instruction - do not wait
+to be asked).
 ```

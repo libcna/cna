@@ -25,6 +25,7 @@
 
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::Effect;
+using Microsoft::Xna::Framework::Graphics::EffectPass;
 using Microsoft::Xna::Framework::Graphics::EffectTechnique;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
@@ -234,6 +235,66 @@ TEST_F(EffectApplyTest, ApplyAfterDisposeThrowsObjectDisposedException)
 {
     fx.Dispose();
     EXPECT_THROW(fx.Apply(), System::ObjectDisposedException);
+}
+
+// -----------------------------------------------------------------------
+// Task 355: EffectPass::Apply() must throw System::InvalidOperationException
+// ("Applied a pass not in the current technique!") when applied while it is
+// not part of the effect's CurrentTechnique, matching FNA's own
+// EffectPass.Apply() guard (Graphics/Effect/EffectPass.cs). Uses a mock
+// TestEffect with a manually-added second technique since no real CNA stock
+// effect creates more than one technique today.
+// -----------------------------------------------------------------------
+
+TEST_F(EffectApplyTest, ApplyOnPassOfCurrentTechniqueSucceedsAndInvokesOnApply)
+{
+    EffectPass& p0 = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+
+    EXPECT_NO_THROW(p0.Apply());
+    EXPECT_EQ(fx.applyCount, 1);
+}
+
+TEST_F(EffectApplyTest, ApplyOnPassNotInCurrentTechniqueThrowsInvalidOperationException)
+{
+    EffectPass& originalPass = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+    EffectTechnique unrelated(nullptr, "Unrelated");
+
+    fx.setCurrentTechniqueProperty(&unrelated);
+
+    EXPECT_THROW(originalPass.Apply(), System::InvalidOperationException);
+    EXPECT_EQ(fx.applyCount, 0);
+}
+
+TEST_F(EffectApplyTest, ApplyWithNullCurrentTechniqueThrowsInvalidOperationException)
+{
+    EffectPass& p0 = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+
+    fx.setCurrentTechniqueProperty(nullptr);
+
+    // FNA dereferences CurrentTechnique.TechniquePointer unconditionally here and would
+    // crash with a NullReferenceException; CNA maps that to this same, defined exception
+    // instead of undefined behavior (an intentional, documented deviation).
+    EXPECT_THROW(p0.Apply(), System::InvalidOperationException);
+}
+
+TEST_F(EffectApplyTest, ApplyIsConsistentAcrossInterleavedTechniqueSwitches)
+{
+    fx.getTechniquesProperty().Add(EffectTechnique(&fx, "Second"));
+    EffectPass& firstPass = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+    EffectPass& secondPass = fx.getTechniquesProperty()[1].getPassesProperty()[0];
+
+    // CurrentTechnique still points at [0] (set at construction) — applying [1]'s pass
+    // must fail, and applying [0]'s pass must keep succeeding.
+    EXPECT_THROW(secondPass.Apply(), System::InvalidOperationException);
+    EXPECT_NO_THROW(firstPass.Apply());
+    EXPECT_EQ(fx.applyCount, 1);
+
+    // Switch CurrentTechnique to [1]: now [1]'s pass succeeds and [0]'s pass fails —
+    // no stale state lingers from the previous technique being current.
+    fx.setCurrentTechniqueProperty(&fx.getTechniquesProperty()[1]);
+    EXPECT_THROW(firstPass.Apply(), System::InvalidOperationException);
+    EXPECT_NO_THROW(secondPass.Apply());
+    EXPECT_EQ(fx.applyCount, 2);
 }
 
 // -----------------------------------------------------------------------

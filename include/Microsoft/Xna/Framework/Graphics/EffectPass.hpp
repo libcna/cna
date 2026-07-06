@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotationCollection.hpp"
@@ -21,10 +22,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Constructs an EffectPass owned by the given effect with the given name.
          *
-         * @param owner Pointer to the Effect that owns this pass.
-         * @param name  Name of this pass as declared in the effect.
+         * @param owner      Pointer to the Effect that owns this pass.
+         * @param name       Name of this pass as declared in the effect.
+         * @param techniqueId Identity token (EffectTechnique::getIdInternal()) of the technique
+         *                    this pass belongs to. Defaults to 0 ("no owning technique"), which
+         *                    Apply() never validates against since it is only ever compared when
+         *                    owner is non-null and the effect has a real current technique.
          */
-        EffectPass(Effect* owner, std::string name);
+        explicit EffectPass(Effect* owner, std::string name, std::uint64_t techniqueId = 0);
 
         /**
          * @brief Gets the name of this pass.
@@ -51,6 +56,13 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Applies this pass to the graphics device, making its shaders and state active.
          *
          * Must be called before issuing draw calls that should use this pass.
+         *
+         * @throws System::InvalidOperationException If owner is non-null and this pass does not
+         * belong to the owning Effect's currently-selected technique (getCurrentTechniqueProperty()),
+         * matching FNA's own "Applied a pass not in the current technique!" guard. This includes the
+         * case where CurrentTechnique has been set to null: FNA dereferences it unconditionally and
+         * crashes with a NullReferenceException, which CNA maps to this same, defined exception
+         * instead of undefined behavior.
          */
         void Apply();
 
@@ -58,5 +70,6 @@ namespace Microsoft::Xna::Framework::Graphics
         Effect* owner_;
         std::string name_;
         EffectAnnotationCollection annotations_;
+        std::uint64_t techniqueId_;
     };
 }

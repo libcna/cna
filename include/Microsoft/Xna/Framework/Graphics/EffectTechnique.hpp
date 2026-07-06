@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstdint>
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotationCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
 
@@ -64,9 +66,28 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] const EffectAnnotationCollection& getAnnotationsProperty() const;
 
+        /**
+         * @brief Gets a stable identity token for this technique.
+         *
+         * Unlike a raw `EffectTechnique*`, this value stays valid even if the owning
+         * EffectTechniqueCollection reallocates its backing storage. Used by EffectPass::Apply()
+         * to detect whether a pass belongs to the effect's currently-selected technique, mirroring
+         * FNA's opaque native `TechniquePointer` comparison without depending on C++ object
+         * addresses.
+         *
+         * @return The identity token, unique per constructed EffectTechnique instance.
+         *
+         * @note NOXNA — FNA's equivalent (`TechniquePointer`) is an internal implementation
+         * detail with no public C++ analogue needed here.
+         */
+        NOXNA [[nodiscard]] std::uint64_t getIdInternal() const;
+
     private:
+        static std::uint64_t NextId();
+
         std::string name_;
         EffectPassCollection passes_;
         EffectAnnotationCollection annotations_;
+        std::uint64_t id_ = NextId();
     };
 }
