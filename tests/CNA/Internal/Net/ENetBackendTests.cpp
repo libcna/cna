@@ -393,6 +393,118 @@ TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
     EXPECT_EQ(sender->getGamertagProperty(), "RemotePlayer");
 }
 
+// Task 5.13: every scenario above is a single host + at most one client. HandleAppData's
+// host-relay-between-two-other-peers branch (~ENetBackend.cpp lines 301-310, guarded by
+// `state.HostPeer == nullptr` and `target->getIsLocalProperty() == false`) is the single most
+// complex routing logic in the file, and was never exercised with a genuine third connected
+// party - every prior AppData test always targeted the host's own local gamer. This test adds
+// two independent fake clients (PeerA, PeerB) so PeerA can target PeerB directly, forcing the
+// real host-relay path instead of the local-delivery or drop paths.
+TEST(ENetBackendTest, HostRelaysAppDataBetweenTwoNonLocalPeers) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    struct HandshakeResult {
+        ENetPeer* peerFromClientSide;
+        uint8_t wireId;
+    };
+
+    auto connectAndHandshake = [&](ENetHostHandle& fakeClient, const std::string& gamertag) {
+        ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+        EXPECT_NE(peerFromClientSide, nullptr);
+
+        bool connected = false;
+        for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+            host.session->Update();
+            ENetEvent evt{};
+            if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+                connected = true;
+            }
+        }
+        EXPECT_TRUE(connected);
+
+        ClientHelloMessage hello;
+        hello.LocalGamertags = {gamertag};
+        auto helloBytes = NetPacketCodec::Encode(hello);
+        fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+        fakeClient.Flush();
+
+        ServerWelcomeMessage welcome;
+        bool gotWelcome = false;
+        for (int i = 0; i < 200 && !gotWelcome; ++i, PollYield()) {
+            host.session->Update();
+            ENetEvent evt{};
+            if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                if (NetPacketCodec::PeekTag(data) == MessageTag::ServerWelcome) {
+                    welcome = NetPacketCodec::DecodeServerWelcome(data);
+                    gotWelcome = true;
+                }
+                enet_packet_destroy(evt.packet);
+            }
+        }
+        EXPECT_TRUE(gotWelcome);
+        EXPECT_EQ(welcome.AssignedWireIds.size(), 1u);
+        uint8_t assigned = welcome.AssignedWireIds.empty() ? uint8_t{0xFF} : welcome.AssignedWireIds[0];
+        return HandshakeResult{peerFromClientSide, assigned};
+    };
+
+    ENetHostHandle fakeClientA = ENetHostHandle::CreateClient(2);
+    HandshakeResult a = connectAndHandshake(fakeClientA, "PeerA");
+    ASSERT_NE(a.wireId, 0xFF);
+
+    ENetHostHandle fakeClientB = ENetHostHandle::CreateClient(2);
+    HandshakeResult b = connectAndHandshake(fakeClientB, "PeerB");
+    ASSERT_NE(b.wireId, 0xFF);
+    ASSERT_NE(a.wireId, b.wireId);
+
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 3);
+
+    AppDataMessage appData;
+    appData.SenderWireId = a.wireId;
+    appData.TargetWireId = b.wireId;
+    appData.Options = SendDataOptions::Reliable;
+    appData.Payload = {7, 8, 9};
+    auto appDataBytes = NetPacketCodec::Encode(appData);
+    fakeClientA.Send(a.peerFromClientSide, 0, appDataBytes.data(), appDataBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClientA.Flush();
+
+    AppDataMessage relayed;
+    bool gotRelayed = false;
+    for (int i = 0; i < 200 && !gotRelayed; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClientB.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::AppData) {
+                relayed = NetPacketCodec::DecodeAppData(data);
+                gotRelayed = true;
+            }
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_TRUE(gotRelayed);
+    EXPECT_EQ(relayed.SenderWireId, a.wireId);
+    EXPECT_EQ(relayed.TargetWireId, b.wireId);
+    EXPECT_EQ(relayed.Payload, (std::vector<SharpRuntime::bytecs>{7, 8, 9}));
+
+    // PeerA must not receive an echo of its own relayed packet back - the host only ever
+    // forwards to the actual target peer (HandleAppData's `peerIt->second != fromPeer` guard).
+    bool sawAppDataAtA = false;
+    for (int i = 0; i < 10; ++i) {
+        ENetEvent strayEvt{};
+        if (fakeClientA.Service(0, strayEvt) > 0 && strayEvt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(strayEvt.packet->data, strayEvt.packet->data + strayEvt.packet->dataLength);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::AppData) {
+                sawAppDataAtA = true;
+            }
+            enet_packet_destroy(strayEvt.packet);
+        }
+    }
+    EXPECT_FALSE(sawAppDataAtA);
+}
+
 // Task 4.3: SimulatedLatency/SimulatedPacketLoss are stored but have no effect on actual traffic
 // timing or delivery, matching FNA's own reference (a plain get/set auto-property there too, with
 // no delay queue or synthetic-drop logic anywhere in FNA's source) - confirmed no such logic

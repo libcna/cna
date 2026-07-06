@@ -988,13 +988,26 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   appeared on the first run and was confirmed pre-existing flakiness, not a regression — it passed
   5/5 in isolation and the very next full-suite run was clean.
 
-- [ ] **Task 5.13** — Add a multi-peer (3+ node) integration test. Confirmed every existing
+- [x] **Task 5.13** — Add a multi-peer (3+ node) integration test. Confirmed every existing
   `ENetBackendTests.cpp` scenario is a single host + at most one client — the fan-out/relay logic
   built specifically for >1 peer (`HandleClientHello`'s broadcast-to-other-peers loop, ~lines
   166-176; `HandleDisconnect`'s remaining-peers broadcast, ~lines 330-337; `BroadcastStateChange`'s
   per-peer loop, ~lines 560-563; `HandleAppData`'s host-relay-between-two-other-peers branch, ~lines
   258-267, the single most complex routing logic in the file) is never exercised with a genuine
   third connected party. Add a real 3-peer test (or more) covering at minimum the relay branch.
+  Added `ENetBackendTest.HostRelaysAppDataBetweenTwoNonLocalPeers`: one real `NetworkSession` host
+  plus two independent fake `ENetHostHandle` clients (PeerA, PeerB), both completing a full
+  `ClientHello`/`ServerWelcome` handshake and getting distinct wire ids. PeerA then sends an
+  `AppDataMessage` targeting PeerB's wire id directly (neither is the host's own local gamer),
+  forcing the real host-relay branch (`state.HostPeer == nullptr` and
+  `target->getIsLocalProperty() == false`) rather than the local-delivery or drop paths every prior
+  AppData test exercised. Asserts PeerB receives the relayed message with the correct
+  `SenderWireId`/`Payload`, and that PeerA does not receive an echo of its own packet back
+  (`peerIt->second != fromPeer` guard).
+
+  Pure test-coverage addition (the relay logic itself is pre-existing and already correct), no
+  revert-verify applies. New test passed 5/5 on repeat. Full suite: **3285/3287 passing** (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 5.14** — Add adversarial/malformed-packet tests for `NetPacketCodecTests.cpp` and
   `NetDiscoveryProtocolTests.cpp`. Confirmed neither file currently exercises a negative/oversized
