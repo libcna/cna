@@ -7,7 +7,7 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    AudioCategory::AudioCategory(AudioEngine* engine, unsigned short index, std::string name)
+    AudioCategory::AudioCategory(AudioEngine* engine, SharpRuntime::ushortcs index, std::string name)
         : parent_(engine), index_(index), name_(std::move(name))
     {
     }

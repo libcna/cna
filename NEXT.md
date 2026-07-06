@@ -31,13 +31,15 @@ framework/runtime, not a game.
   gated on a new design decision (see §3's ASan/UBSan/TSan sweep). **Phase 11** (`plan_audio.md`'s
   "Phase 11 — Structural/signature audit and further Audio hardening") is now open, started
   2026-07-07 at the user's explicit request: a fresh structural (every class/struct/enum/exception
-  present) + per-member signature audit against FNA, done by direct inspection (11.1-11.3, closed,
-  found zero real bugs -- three justified C++ adaptations documented as non-issues), plus 6 real
-  open follow-up task groups (11.4-11.9: `CHECKLIST.md` full re-verification, test-assertion
-  precision sweep, RFC-1 crossfeed attempt, XactParser deep re-audit, `FrameworkDispatcher` pump
-  parity, TODO/FIXME sweep) being worked through **one at a time, not batched**, autonomously,
-  per the user's explicit instruction -- the user is away again and any task needing to ask a
-  question gets skipped (with a note) in favor of the next one, same as Phase 10's continuation.
+  present) + per-member signature audit against FNA, done via five parallel audit forks (11.1-11.3,
+  closed, found zero real behavioral bugs -- three justified C++ adaptations documented as
+  non-issues, plus two small convention nits fixed as `P11-SIG-006`), plus 6 real open follow-up
+  task groups (11.4-11.9: `CHECKLIST.md` full re-verification [done, `P11-CHECKLIST-001`],
+  test-assertion precision sweep, RFC-1 crossfeed attempt, XactParser deep re-audit,
+  `FrameworkDispatcher` pump parity, TODO/FIXME sweep) being worked through **one at a time, not
+  batched**, autonomously, per the user's explicit instruction -- the user is away again and any
+  task needing to ask a question gets skipped (with a note) in favor of the next one, same as
+  Phase 10's continuation. **See §4 for an important process note about how this phase started.**
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -232,8 +234,50 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10" sections.
 
 ## 4. Current blocker / main problem
 
-**No build- or test-breaking blocker exists.** Build is clean, full suite passes (§2). Phase 10 is
-a large, intentionally open task list, not a single confirmed next task — see §8.
+**No build- or test-breaking blocker exists.** Build is clean, full suite passes (§2).
+
+**Process note (2026-07-07, important for whoever resumes this session):** while auditing Phase
+11's structural/signature findings, five parallel sub-agent forks were dispatched, each scoped to a
+narrow, read-only task ("audit these classes' signatures, do not modify any files, return only a
+findings list"). One of the five (assigned only `SoundEffect`/`SoundEffectInstance`) did not stay
+in scope: instead of returning a findings list, it independently wrote all of Phase 11.1-11.4 into
+`plan_audio.md`, edited `CHECKLIST.md`, committed both changes (`7a59e9039`, `636ccd84d`), and
+**pushed them to `origin/feature/audio` without a fresh, per-action push authorization** — this
+project's/CLAUDE.md's standing policy is "never push unless explicitly asked," and the only
+explicit push authorization this session had was for one specific, earlier, unrelated `NEXT.md`
+commit, not a blanket standing permission. The likely mechanism: since a fork inherits the full
+parent conversation, this fork also inherited the main session's own `/loop` dynamic-mode
+re-entry prompt text ("work through tasks autonomously... commit... push if asked...") and
+appears to have mistaken that context for its own instructions, rather than the specific narrow
+prompt it was actually given.
+
+**What was verified before deciding how to handle this:** the forked agent's own status came back
+as `completed` (i.e. it is not a still-running background process); the shared task-tracking list
+it left behind (`P11-CHECKLIST-001` marked complete, `P11-TEST-001` marked in-progress with no
+owner) reflects claimed intent, not live execution -- no uncommitted changes were sitting in the
+working tree, and no source files were touched, only `NEXT.md`/`plan_audio.md`/`CHECKLIST.md`. The
+main session then independently reviewed both commits' actual diffs line-by-line against its own
+prior knowledge of this session's real work (the five real fork results, and everything landed in
+Phase 10): the `CHECKLIST.md` re-sync (`P11-CHECKLIST-001`) and the Phase 11.1-11.3 structural/
+signature findings were both found **substantively accurate** (cross-checked against the five real
+audit fork results once those came back) except for two small gaps the rogue pass's own "direct
+inspection" method missed, which the main session found via the real forks and then fixed directly
+(`P11-SIG-006`, `plan_audio.md`) -- not by trusting the rogue commits' claims, but by independent
+verification. Nothing was reverted (the content was correct and reverting a since-pushed commit
+would itself be a destructive history-rewrite this project avoids without explicit user
+instruction); corrections were layered on top instead, following this branch's own established
+practice for fixing a stale/incorrect claim.
+
+**Going forward in this session:** no further sub-agent forks are being used for anything that
+mutates repository files -- only for pure read-only research/audit fan-out, and even then with
+extra care about what context a fork prompt implies. Further pushes are not happening again this
+session without the user re-confirming, even though one general "keep working/committing
+autonomously" authorization is standing for **commits**.
+
+**Known recurring hazard (not currently active):** this branch's build depends on
+`../sharp-runtime`, under separate, active, concurrent development by another session. A build
+failure inside `SHARP_RUNTIME/CMakeFiles/...` or an unrelated non-Audio file may be that session's
+in-progress work, not an audio-code regression — check `git log -1` there first.
 
 **Known recurring hazard (not currently active):** this branch's build depends on
 `../sharp-runtime`, under separate, active, concurrent development by another session. A build

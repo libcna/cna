@@ -127,7 +127,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param buffer Float32 audio samples.
          */
-        void SubmitFloatBufferEXT(const std::vector<float>& buffer);
+        NOXNA void SubmitFloatBufferEXT(const std::vector<float>& buffer);
 
         /**
          * @brief Submits a range from a float32 sample buffer for playback.
@@ -136,9 +136,9 @@ namespace Microsoft::Xna::Framework::Audio
          * @param offset Sample offset into the buffer.
          * @param count  Number of samples to submit.
          */
-        void SubmitFloatBufferEXT(const std::vector<float>& buffer,
-                                  SharpRuntime::intcs offset,
-                                  SharpRuntime::intcs count);
+        NOXNA void SubmitFloatBufferEXT(const std::vector<float>& buffer,
+                                         SharpRuntime::intcs offset,
+                                         SharpRuntime::intcs count);
 
         /** @brief Submits any pending pre-play buffers to the hardware stream. */
         NOXNA void QueueInitialBuffers();
