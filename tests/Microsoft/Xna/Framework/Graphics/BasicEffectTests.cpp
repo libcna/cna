@@ -174,3 +174,98 @@ TEST_F(BasicEffectDefaultsTest, TextureDefaultsToNull)
 {
     EXPECT_EQ(fx.getTextureProperty(), nullptr);
 }
+
+// -----------------------------------------------------------------------
+// Task 363: EnableDefaultLighting() exact constants, cross-checked literal-
+// for-literal against FNA's Graphics/Effect/StockEffects/EffectHelpers.cs
+// (EnableDefaultLighting) and BasicEffect.cs (EnableDefaultLighting, which
+// additionally sets LightingEnabled = true). Complements Task 194's existing
+// EasyGL integration test (examples/easygl_basiceffect_default_lighting_test.cpp),
+// which already caught and fixed 2 literal-value bugs in this same rig
+// (Light2.SpecularColor, Light2.DiffuseColor.Y) — this is the GTest-level,
+// GPU-independent lock-in for the same 3-light rig, using a tight epsilon
+// since every value here is a hardcoded literal, not a computed approximation.
+
+TEST_F(BasicEffectDefaultsTest, EnableDefaultLightingSetsLightingEnabled)
+{
+    fx.EnableDefaultLighting();
+    EXPECT_TRUE(fx.getLightingEnabledProperty());
+}
+
+TEST_F(BasicEffectDefaultsTest, EnableDefaultLightingSetsAmbientLightColor)
+{
+    fx.EnableDefaultLighting();
+    constexpr float kEps = 1e-6f;
+    const Vector3 ambient = fx.getAmbientLightColorProperty();
+    EXPECT_NEAR(ambient.X, 0.05333332f, kEps);
+    EXPECT_NEAR(ambient.Y, 0.09882354f, kEps);
+    EXPECT_NEAR(ambient.Z, 0.1819608f, kEps);
+}
+
+TEST_F(BasicEffectDefaultsTest, EnableDefaultLightingSetsKeyLightExactConstants)
+{
+    fx.EnableDefaultLighting();
+    constexpr float kEps = 1e-6f;
+    const DirectionalLight& light0 = fx.getDirectionalLight0Property();
+    EXPECT_TRUE(light0.getEnabledProperty());
+
+    const Vector3 dir = light0.getDirectionProperty();
+    EXPECT_NEAR(dir.X, -0.5265408f, kEps);
+    EXPECT_NEAR(dir.Y, -0.5735765f, kEps);
+    EXPECT_NEAR(dir.Z, -0.6275069f, kEps);
+
+    const Vector3 diffuse = light0.getDiffuseColorProperty();
+    EXPECT_NEAR(diffuse.X, 1.0f, kEps);
+    EXPECT_NEAR(diffuse.Y, 0.9607844f, kEps);
+    EXPECT_NEAR(diffuse.Z, 0.8078432f, kEps);
+
+    const Vector3 specular = light0.getSpecularColorProperty();
+    EXPECT_NEAR(specular.X, 1.0f, kEps);
+    EXPECT_NEAR(specular.Y, 0.9607844f, kEps);
+    EXPECT_NEAR(specular.Z, 0.8078432f, kEps);
+}
+
+TEST_F(BasicEffectDefaultsTest, EnableDefaultLightingSetsFillLightExactConstants)
+{
+    fx.EnableDefaultLighting();
+    constexpr float kEps = 1e-6f;
+    const DirectionalLight& light1 = fx.getDirectionalLight1Property();
+    EXPECT_TRUE(light1.getEnabledProperty());
+
+    const Vector3 dir = light1.getDirectionProperty();
+    EXPECT_NEAR(dir.X, 0.7198464f, kEps);
+    EXPECT_NEAR(dir.Y, 0.3420201f, kEps);
+    EXPECT_NEAR(dir.Z, 0.6040227f, kEps);
+
+    const Vector3 diffuse = light1.getDiffuseColorProperty();
+    EXPECT_NEAR(diffuse.X, 0.9647059f, kEps);
+    EXPECT_NEAR(diffuse.Y, 0.7607844f, kEps);
+    EXPECT_NEAR(diffuse.Z, 0.4078432f, kEps);
+
+    // FNA sets light1.SpecularColor = Vector3.Zero explicitly (fill light has
+    // no specular contribution) — distinct from light0/light2, which do.
+    EXPECT_EQ(light1.getSpecularColorProperty(), Vector3::Zero);
+}
+
+TEST_F(BasicEffectDefaultsTest, EnableDefaultLightingSetsBackLightExactConstants)
+{
+    fx.EnableDefaultLighting();
+    constexpr float kEps = 1e-6f;
+    const DirectionalLight& light2 = fx.getDirectionalLight2Property();
+    EXPECT_TRUE(light2.getEnabledProperty());
+
+    const Vector3 dir = light2.getDirectionProperty();
+    EXPECT_NEAR(dir.X, 0.4545195f, kEps);
+    EXPECT_NEAR(dir.Y, -0.7660444f, kEps);
+    EXPECT_NEAR(dir.Z, 0.4545195f, kEps);
+
+    const Vector3 diffuse = light2.getDiffuseColorProperty();
+    EXPECT_NEAR(diffuse.X, 0.3231373f, kEps);
+    EXPECT_NEAR(diffuse.Y, 0.3607844f, kEps);
+    EXPECT_NEAR(diffuse.Z, 0.3937255f, kEps);
+
+    const Vector3 specular = light2.getSpecularColorProperty();
+    EXPECT_NEAR(specular.X, 0.3231373f, kEps);
+    EXPECT_NEAR(specular.Y, 0.3607844f, kEps);
+    EXPECT_NEAR(specular.Z, 0.3937255f, kEps);
+}

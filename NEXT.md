@@ -13,8 +13,20 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–41 are complete. **Phase 42 (BasicEffect exactness,
-  `GRAPHICS_TASKS.md` Tasks 361–370) is open** — **Task 362 is done, Task 363 is next** ("Unit
-  test `EnableDefaultLighting()` exact constants" — see §8). **Task 362** built a new, centralized
+  `GRAPHICS_TASKS.md` Tasks 361–370) is open** — **Task 363 is done, Task 364 is next** ("Pixel
+  test: `VertexColorEnabled=false`, no texture, diffuse color only" — EasyGL/Vulkan/Bgfx — see
+  §8). **Task 363** cross-checked `BasicEffect::EnableDefaultLighting()`'s exact 3-light-rig
+  constants (key/fill/back + ambient) literal-for-literal against FNA's
+  `EffectHelpers.EnableDefaultLighting`/`BasicEffect.EnableDefaultLighting` and confirmed they
+  already matched exactly (including Task 194's old `Light2` corrections) — a verify-only task,
+  no code fix needed. Added 5 new tests to `BasicEffectTests.cpp` with a tight `1e-6f` epsilon
+  (these are hardcoded literals, not computed approximations), complementing Task 194's existing
+  EasyGL GPU-integration test with a GPU-independent GTest-level lock-in. Verified genuine
+  discriminating power (temporarily perturbed `DirectionalLight1`'s diffuse-color Y, confirmed the
+  new test failed with the exact expected diff, reverted). Full 3-backend regression, zero new
+  failures: EasyGL 3413/3416 (3 pre-existing), Vulkan 3333/3349 (13 pre-existing + 2 flaky
+  `CueTest` + 1 order-dependent `Vulkan_FillMode_WireFrame` flake), Bgfx 3319/3319 (100%).
+  **Task 362** built a new, centralized
   GTest fixture (`tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp`, 22 tests, one per
   Task 361's audited property) and found **a 3rd real default-value bug** beyond Task 361's 2:
   CNA's `DirectionalLight::DirectionalLight()` initialized `direction_` to `Vector3::Forward`
@@ -534,14 +546,27 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 363 — unit test `EnableDefaultLighting()` exact constants**
-   - Goal: complements Task 194; Task 361/362 already cross-checked `EnableDefaultLighting()`'s
-     key/fill/back-light + ambient constants byte-for-byte against FNA's
-     `EffectHelpers.EnableDefaultLighting` and confirmed them exact — this task is about locking that
-     in with dedicated unit tests (check Task 194's prior work first to avoid duplicating).
-   - Files: likely `tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp` (new in Task 362) or
-     a sibling file.
-   - Verification: genuine discriminating power for any new assertion.
+1. **`GRAPHICS_TASKS.md` Task 364 — pixel test: `VertexColorEnabled=false`, no texture, diffuse
+   color only (EasyGL/Vulkan/Bgfx)**
+   - Goal: real GPU pixel-readback test proving `BasicEffect` renders the correct flat diffuse
+     color when only `DiffuseColor`/`Alpha` are set (no texture, no vertex color, matching FNA's
+     shader-selection logic for this exact combination of enabled flags).
+   - Files: likely a new `examples/*basic_effect*pixel*` test per backend, following this
+     project's established pixel-readback test conventions (see e.g. Task 132's
+     `easygl_shader_effect_test.cpp` or Phase 35's texture-sampling pixel tests for the pattern).
+   - Note Task 361's finding: `BasicEffect::FillGpuDrawParams()` only forwards `DirectionalLight0`
+     and never `SpecularColor`/`SpecularPower`/`DirectionalLight1`/`DirectionalLight2` — likely
+     irrelevant to this specific task (lighting disabled by default, diffuse-only case), but keep
+     in mind for Tasks 368/369.
+
+   **Task 363 status: done.** Cross-checked `EnableDefaultLighting()`'s exact constants
+   literal-for-literal against FNA's `EffectHelpers.EnableDefaultLighting`/`BasicEffect.cs` —
+   already exact, no fix needed (verify-only, complements Task 194's existing EasyGL
+   integration test). Added 5 new GTest cases to `BasicEffectTests.cpp` with a tight `1e-6f`
+   epsilon; verified genuine discriminating power (temporarily perturbed a constant, confirmed
+   the test failed, reverted). Full 3-backend regression, zero new failures: EasyGL 3413/3416
+   (3 pre-existing), Vulkan 3333/3349 (13 pre-existing + 2 flaky `CueTest` + 1 order-dependent
+   `Vulkan_FillMode_WireFrame` flake), Bgfx 3319/3319 (100%). Pushed as (see commit list below).
 
    **Task 362 status: done.** Re-derived Task 361's 22-property list directly from FNA source and
    built a new, centralized `tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp` (22
@@ -908,14 +933,15 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-41 are FULLY COMPLETE. Phase 42 (BasicEffect exactness, GRAPHICS_TASKS.md
-Tasks 361-370) is now open, Task 362 is DONE, Task 363 next.
-Last full 3-backend regression (Task 362: new tests/.../BasicEffectTests.cpp added, 22 default-value
-tests; found and fixed a 3rd real default-value bug beyond Task 361's 2 -
-DirectionalLight::direction_ wrongly defaulted to Vector3::Forward instead of FNA's Vector3.Zero):
-EasyGL 3408/3411 pass (3 documented pre-existing failures that run: EasyGL_MRT_TwoAttachments,
-EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests). Vulkan 3329/3344 pass (13
-documented pre-existing failures + 1 flaky CueTest + 1 order-dependent Vulkan_RenderTargetUsage
-flake). Bgfx 3314/3314 pass (100%, no flakes this run).
+Tasks 361-370) is now open, Task 363 is DONE, Task 364 next (pixel test: VertexColorEnabled=false,
+no texture, diffuse color only - EasyGL/Vulkan/Bgfx).
+Last full 3-backend regression (Task 363: cross-checked EnableDefaultLighting()'s exact constants
+literal-for-literal against FNA - already exact, no fix needed; added 5 new GTest cases to
+BasicEffectTests.cpp with a tight 1e-6f epsilon):
+EasyGL 3413/3416 pass (3 documented pre-existing failures: EasyGL_MRT_TwoAttachments,
+EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests). Vulkan 3333/3349 pass (13
+documented pre-existing failures + 2 flaky CueTest + 1 order-dependent Vulkan_FillMode_WireFrame
+flake). Bgfx 3319/3319 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
 if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
 it as a regression.
@@ -1053,12 +1079,28 @@ fails, reverted back; plus a lighter spot-check on the already-correct SpecularP
 Full 3-backend regression, zero new failures: EasyGL 3408/3411, Vulkan 3329/3344 (13 pre-existing +
 1 flaky CueTest + 1 order-dependent Vulkan_RenderTargetUsage flake), Bgfx 3314/3314 (100%).
 
-Next task: GRAPHICS_TASKS.md Task 363 - unit test EnableDefaultLighting() exact constants
-(complements Task 194). Goal: Task 361/362 already cross-checked the key/fill/back-light + ambient
-constants byte-for-byte against FNA's EffectHelpers.EnableDefaultLighting and confirmed them exact -
-this task is about locking that in with dedicated unit tests (check Task 194's prior work first to
-avoid duplicating). Files: likely tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp (new
-in Task 362) or a sibling file.
+Task 363 (unit test EnableDefaultLighting() exact constants) is now DONE. Read FNA's
+EffectHelpers.cs (EnableDefaultLighting) and BasicEffect.cs's own EnableDefaultLighting()
+(additionally sets LightingEnabled = true) literal-for-literal; confirmed CNA's
+BasicEffect::EnableDefaultLighting() already matches every constant exactly (key/fill/back-light +
+ambient, including Task 194's old Light2 corrections) - verify-only, no code fix needed. Added 5 new
+GTest cases to BasicEffectTests.cpp (LightingEnabled, AmbientLightColor, and one per light's
+Direction/DiffuseColor/SpecularColor/Enabled), tight 1e-6f epsilon since these are hardcoded
+literals not computed approximations; explicitly locked in DirectionalLight1.SpecularColor ==
+Vector3::Zero (fill light has no specular contribution, unlike light0/light2) as its own
+assertion. Complements Task 194's existing EasyGL GPU-integration test with a GPU-independent
+GTest-level lock-in. Discriminating power verified (temporarily perturbed DirectionalLight1's
+diffuse-color Y from 0.7607844f to 0.9f in BasicEffect.cpp, confirmed the new test failed with the
+exact expected diff, reverted). Full 3-backend regression, zero new failures: EasyGL 3413/3416 (3
+pre-existing), Vulkan 3333/3349 (13 pre-existing + 2 flaky CueTest + 1 order-dependent
+Vulkan_FillMode_WireFrame flake), Bgfx 3319/3319 (100%).
+
+Next task: GRAPHICS_TASKS.md Task 364 - pixel test: VertexColorEnabled=false, no texture, diffuse
+color only (EasyGL/Vulkan/Bgfx). Goal: a real GPU pixel-readback test proving BasicEffect renders
+the correct flat diffuse color when only DiffuseColor/Alpha are set (no texture, no vertex color).
+Files: likely a new examples/*basic_effect*pixel* test per backend, following this project's
+established pixel-readback test conventions (see e.g. Task 132's easygl_shader_effect_test.cpp or
+Phase 35's texture-sampling pixel tests for the pattern).
 As always: verify genuine discriminating power for any new test (temporarily break/omit any fix,
 confirm the test fails, then revert), full 3-backend rebuild + regression if production code
 changes, update GRAPHICS_TASKS.md and NEXT.md, commit AND push after finishing (standing
