@@ -206,6 +206,26 @@ TEST(AccelerometerTests, StartThenDisposeDoesNotCrash)
     EXPECT_NO_THROW(a.Dispose());
 }
 
+// Task SENSORBASE-006: StartThenDisposeDoesNotCrash above only exercises the
+// real started_ cleanup path inside Dispose(bool) when genuine sensor
+// hardware is present -- getIsSupportedProperty() is false in this
+// container, so it silently takes the else branch instead and never
+// actually reaches that code. SetStartedForTesting(true) forces the same
+// wasStarted-true branch deterministically, regardless of hardware,
+// confirming Stop()'s own subsystem bookkeeping
+// (UnregisterStartedInstanceLocked()/UnregisterEventWatchIfNeededLocked())
+// tolerates an instance that was never actually registered with the real
+// subsystem -- both are safe no-ops in that case (verified here, not just
+// reasoned about from reading the code).
+TEST(AccelerometerTests, DisposeWhileStartedForTestingDoesNotCrash)
+{
+    Accelerometer a;
+    a.SetSupportedForTesting(true);
+    a.SetStartedForTesting(true);
+
+    EXPECT_NO_THROW(a.Dispose());
+}
+
 TEST(AccelerometerTests, EleventhSimultaneousInstanceThrows)
 {
     std::vector<std::unique_ptr<Accelerometer>> instances;

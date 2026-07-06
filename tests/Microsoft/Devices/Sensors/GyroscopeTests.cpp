@@ -146,6 +146,19 @@ TEST(GyroscopeTests, DisposeSucceedsAndSecondDisposeThrows)
     EXPECT_THROW(g.Dispose(), System::ObjectDisposedException);
 }
 
+// Task SENSORBASE-006: mirrors AccelerometerTests.
+// DisposeWhileStartedForTestingDoesNotCrash -- see that test for the full
+// rationale. This exact scenario (Dispose() while started_) had no test at
+// all for Gyroscope before this task, not even a hardware-conditional one.
+TEST(GyroscopeTests, DisposeWhileStartedForTestingDoesNotCrash)
+{
+    Gyroscope g;
+    g.SetSupportedForTesting(true);
+    g.SetStartedForTesting(true);
+
+    EXPECT_NO_THROW(g.Dispose());
+}
+
 // Task P3-11: Stop()-after-Dispose() is a distinct, separately guarded code
 // path (ObjectDisposedException::ThrowIf at the top of Stop()).
 TEST(GyroscopeTests, StopAfterDisposeThrows)

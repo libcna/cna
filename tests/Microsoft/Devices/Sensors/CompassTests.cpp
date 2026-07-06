@@ -120,6 +120,29 @@ TEST(CompassTests, DisposeSucceedsAndSecondDisposeThrows)
     EXPECT_THROW(c.Dispose(), System::ObjectDisposedException);
 }
 
+// Task SENSORBASE-006: no test anywhere confirmed that Dispose() itself
+// (without an explicit Stop() call first) actually stops a running backend
+// -- StopCallsBackendStop below only tests an explicit Stop() call.
+// Dispose(bool)'s own wasStarted-then-Stop() branch (Compass.cpp) is
+// exercised here directly via the fake backend, confirming no backend
+// resources are left running across a Start()->Dispose() cycle (this
+// task's acceptance criteria; also covered under devices-asan as part of
+// this task's standard verification pass).
+TEST(CompassTests, DisposeWhileStartedCallsBackendStopWithoutExplicitStopFirst)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    ASSERT_FALSE(fake->StopCalled);
+
+    EXPECT_NO_THROW(c.Dispose());
+
+    EXPECT_TRUE(fake->StopCalled);
+}
+
 // Task P3-11: Stop()-after-Dispose() is a distinct, separately guarded code
 // path (ObjectDisposedException::ThrowIf at the top of Stop()).
 TEST(CompassTests, StopAfterDisposeThrows)

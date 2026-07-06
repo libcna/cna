@@ -1221,13 +1221,52 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
 
-### SENSORBASE-006 — Verify `Dispose` semantics
+### SENSORBASE-006 — Verify `Dispose` semantics — CLOSED (2026-07-06, verified consistent, real coverage gaps closed, no behavior change)
 
 - **Priority:** High
 - **Area:** `SensorBase<T>`
 - **Problem:** Double-`Dispose()` and `Dispose()`-while-started behavior must match
   .NET `IDisposable` expectations exactly, and must be identical across all four sensor
   classes.
+- **What was found:**
+  - **Repeated `Dispose()`:** this codebase's `SensorBase<T>::Dispose()` (the public,
+    no-arg `IDisposable` override) throws `ObjectDisposedException` on a second call —
+    not the more common .NET "silent no-op" convention, but a deliberate choice per the
+    existing code comment ("just like the decompiled source" — i.e. verified against a
+    decompiled real WP7 assembly in an earlier session, a stronger source than the
+    archived MSDN pages, which document no `Dispose()`-specific page at all for this
+    type). Already implemented identically for all four classes (all inherit
+    `SensorBase<T>::Dispose()` unchanged) and already tested per class
+    (`DisposeSucceedsAndSecondDisposeThrows`, all four). No gap, no change needed.
+  - **`Stop()` called safely as part of `Dispose()`:** confirmed by reading all four
+    `Dispose(bool)` overrides that each already follows the identical pattern (read
+    `started_`/`wasStarted` under its own lock scope, release the lock, call `Stop()`
+    outside it to avoid a non-recursive-mutex deadlock) — `Accelerometer`/`Gyroscope`
+    had this from an earlier task; `Compass`/`Motion` gained it from this session's own
+    `SENSORBASE-004` fix. No gap, no change needed.
+  - **Real coverage gap found and closed:** no test anywhere actually confirmed
+    `Dispose()` (without an explicit prior `Stop()` call) genuinely stops a *running*
+    backend. `Gyroscope` had no started-then-disposed test at all;
+    `Accelerometer`'s only such test (`StartThenDisposeDoesNotCrash`) silently
+    degrades to testing the *never-started* path in this container, since
+    `getIsSupportedProperty()` is false here (no real sensor hardware) — it never
+    actually exercises `Dispose(bool)`'s `wasStarted`-true branch on this host. Added
+    `DisposeWhileStartedForTestingDoesNotCrash` to both, using
+    `SetSupportedForTesting(true)`/`SetStartedForTesting(true)` to force that branch
+    deterministically regardless of hardware — confirms `Stop()`'s subsystem
+    bookkeeping (`UnregisterStartedInstanceLocked()`/
+    `UnregisterEventWatchIfNeededLocked()`) safely no-ops for an instance that was
+    never actually registered with the real subsystem. For `Compass`/`Motion` (which
+    have a fake-backend seam precisely for this), added
+    `DisposeWhileStartedCallsBackendStopWithoutExplicitStopFirst`, asserting the fake's
+    `StopCalled` flag directly — genuine proof, not just "doesn't crash," that
+    `Dispose()` alone (no `Stop()` call first) stops the backend.
+- **Verified — no backend resource leak across a `Start()`→`Dispose()` cycle:** all
+  four new/expanded tests pass under `devices-asan` with `detect_leaks=1` explicitly set
+  (0 issues).
+- **Verified overall:** 313/313 tests (up from 309) on plain `cmake-build-debug` and all
+  three sanitizer presets. ASan: 0 issues. UBSan: 0 issues. TSan: 39 reports, all the
+  same pre-existing, unrelated `sharp-runtime` `TimeSpan::copy_count` race.
 - **Required work:**
   - Verify whether repeated `Dispose()` should throw or silently no-op (the .NET
     convention is typically "no-op," but confirm this is actually what's implemented

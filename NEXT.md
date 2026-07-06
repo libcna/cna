@@ -99,6 +99,27 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `SENSORBASE-006` closed: `Dispose` semantics verified consistent, two
+real coverage gaps closed, no behavior change.** Repeated-`Dispose()` behavior (throws
+`ObjectDisposedException` on the second call, per this codebase's existing
+decompiled-source-verified choice) and `Stop()`-called-safely-inside-`Dispose()` were
+both already correct and already identical across all four classes — no gap, no code
+change needed for either. Found a real, previously-unclosed test gap instead: nothing
+actually confirmed `Dispose()` (without an explicit prior `Stop()` call) genuinely
+stops a *running* backend. `Gyroscope` had no started-then-disposed test at all;
+`Accelerometer`'s only one (`StartThenDisposeDoesNotCrash`) silently degrades to
+testing the never-started path in this container, since there's no real sensor
+hardware here — it never actually exercised `Dispose(bool)`'s `wasStarted`-true branch.
+Added `DisposeWhileStartedForTestingDoesNotCrash` to both (using
+`SetSupportedForTesting`/`SetStartedForTesting` to force that branch deterministically),
+and `DisposeWhileStartedCallsBackendStopWithoutExplicitStopFirst` to `Compass`/`Motion`
+(asserting the fake backend's `StopCalled` flag directly — genuine proof, not just
+"doesn't crash"). Verified no backend resource leak across a `Start()`→`Dispose()`
+cycle under `devices-asan` with `detect_leaks=1` explicitly set (0 issues). Verified:
+313/313 tests (up from 309) on plain `cmake-build-debug` and all three sanitizer
+presets. ASan/UBSan: 0 issues. TSan: 39 reports, all the same pre-existing, unrelated
+`sharp-runtime` `TimeSpan::copy_count` race.
+
 **2026-07-06 — `SENSORBASE-005` closed: `CurrentValue`/`IsDataValid` behavior verified
 consistent across all four sensor classes, no code change.** Found that both getters
 are defined exactly once, on `SensorBase<T>` itself — none of `Accelerometer`/
@@ -590,23 +611,21 @@ own priority labels.
 `DEV-API-003`, `DEV-BUILD-002`, `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`,
 `DEV-API-001`, `ANDROID-BRIDGE-002`, `READINGS-002`, `DEV-BUILD-004`, `MOTION-008`,
 `SENSORBASE-008`, `DEV-BUILD-001`, `SENSORBASE-002`, `SENSORBASE-003`,
-`SENSORBASE-004`, and `SENSORBASE-005` are now closed (17 of 72 total task headers) —
-see Section 3 and `plan_devices.md` itself (grep for `— CLOSED`).
+`SENSORBASE-004`, `SENSORBASE-005`, and `SENSORBASE-006` are now closed (18 of 72 total
+task headers) — see Section 3 and `plan_devices.md` itself (grep for `— CLOSED`).
 
-55 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
+54 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
 `VIB-010`, deliberately untouched per explicit user instruction so far), most
 Accelerometer/Gyroscope/Compass/Motion API- and hardware-verification audits
 (`ACCEL-001`–`004`/`006`/`007`, `GYRO-001`–`003`/`005`, `COMPASS-001`–`008`,
 `MOTION-001`–`007`/`009`/`010`), `DEV-API-002` (`NOXNA` boundary enforcement),
-`DEV-API-004`/`005`, `DEV-BUILD-003` (CI), `SENSORBASE-006`/`007`,
+`DEV-API-004`/`005`, `DEV-BUILD-003` (CI), `SENSORBASE-007`,
 `ANDROID-BRIDGE-001`/`003`/`004`, `SDL-SENSOR-001`/`003`, `READINGS-001`/`003`,
 `DEMO-001`/`002`, and `VERIFY-001`–`003`. Pick the next smallest one, or ask the user to
 prioritize, per Section 9's existing rule. One concrete lead if a task is wanted: the
 `cna_demo_input` Android build failure found during `DEV-BUILD-004` (Section 4) — not
-yet scoped as its own plan task. `SENSORBASE-006` (Dispose semantics) is a natural next
-pick — `SENSORBASE-005`'s closing note found that `getCurrentValueProperty()`/
-`getIsDataValidProperty()` don't check `disposed_` at all, unlike `Start()`/`Stop()`,
-and deliberately left that question for `SENSORBASE-006` to answer.
+yet scoped as its own plan task. `SENSORBASE-007` (audit protected/internal extension
+hooks) is the last remaining `SENSORBASE` task and a natural next pick.
 
 ---
 
@@ -772,16 +791,16 @@ along the way, same category as `MOTION-008` earlier in this pass).
 **Next recommended task (at the time this line was first written):** `SENSORBASE-004`
 — see Section 3's entry above; it was picked up autonomously and closed the same
 session (found and fixed a real `Compass`/`Motion` data race via `devices-tsan`), then
-`SENSORBASE-005` was picked up immediately after and closed the same session too
-(`CurrentValue`/`IsDataValid` behavior verified consistent, no code change). No further
-"next smallest task" is queued from a quick pass over `plan_devices.md` beyond that —
-the `cna_demo_input` Android build finding from `DEV-BUILD-004` remains open but
-unscoped (see Section 4) if Android example-app coverage beyond `cna_demo_devices` is
-ever wanted; otherwise, read `plan_devices.md` for its next open task (grep for section
-headers without a "— CLOSED" suffix; `SENSORBASE-006` — Dispose semantics — is a
-natural next pick, since `SENSORBASE-005`'s closing note explicitly left the
-"should `CurrentValue`/`IsDataValid` throw `ObjectDisposedException`?" question for it)
-or ask the user to prioritize.
+`SENSORBASE-005` and `SENSORBASE-006` were picked up immediately after and closed the
+same session too (`CurrentValue`/`IsDataValid` behavior verified consistent; `Dispose`
+semantics verified consistent with two real coverage gaps closed). No further "next
+smallest task" is queued from a quick pass over `plan_devices.md` beyond that — the
+`cna_demo_input` Android build finding from `DEV-BUILD-004` remains open but unscoped
+(see Section 4) if Android example-app coverage beyond `cna_demo_devices` is ever
+wanted; otherwise, read `plan_devices.md` for its next open task (grep for section
+headers without a "— CLOSED" suffix; `SENSORBASE-007` — the last remaining
+`SENSORBASE` task, auditing protected/internal extension hooks — is a natural next
+pick) or ask the user to prioritize.
 
 ---
 

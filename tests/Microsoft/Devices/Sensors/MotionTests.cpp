@@ -124,6 +124,24 @@ TEST(MotionTests, DisposeSucceedsAndSecondDisposeThrows)
     EXPECT_THROW(m.Dispose(), System::ObjectDisposedException);
 }
 
+// Task SENSORBASE-006: mirrors CompassTests.
+// DisposeWhileStartedCallsBackendStopWithoutExplicitStopFirst -- see that
+// test for the full rationale.
+TEST(MotionTests, DisposeWhileStartedCallsBackendStopWithoutExplicitStopFirst)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    ASSERT_FALSE(fake->StopCalled);
+
+    EXPECT_NO_THROW(m.Dispose());
+
+    EXPECT_TRUE(fake->StopCalled);
+}
+
 // Task P3-11: Stop()-after-Dispose() is a distinct, separately guarded code
 // path (ObjectDisposedException::ThrowIf at the top of Stop()).
 TEST(MotionTests, StopAfterDisposeThrows)
