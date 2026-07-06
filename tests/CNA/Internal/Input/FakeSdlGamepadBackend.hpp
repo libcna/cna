@@ -50,7 +50,9 @@ namespace CNA::Internal::Input::test_support
         int rumbleCalls = 0;             // total RumbleGamepad calls (used to prove GetCapabilities doesn't rumble)
         int triggerRumbleCalls = 0;
         int ledCalls = 0;
+        int setSensorEnabledCalls = 0;   // total SetGamepadSensorEnabled calls (proves lazy enable-once)
         Uint16 lastRumbleLow = 0, lastRumbleHigh = 0;
+        Uint16 lastTriggerLow = 0, lastTriggerHigh = 0;
         Uint8 lastLedR = 0, lastLedG = 0, lastLedB = 0;
 
         ~FakeSdlGamepadBackend() override
@@ -157,12 +159,14 @@ namespace CNA::Internal::Input::test_support
             return d->cfg.rumble;
         }
 
-        bool RumbleGamepadTriggers(SDL_Gamepad* gamepad, Uint16, Uint16, Uint32) override
+        bool RumbleGamepadTriggers(SDL_Gamepad* gamepad, Uint16 leftFreq, Uint16 rightFreq, Uint32) override
         {
             FakeDevice* d = dev(gamepad);
             if (d == nullptr)
                 return false;
             ++triggerRumbleCalls;
+            lastTriggerLow = leftFreq;
+            lastTriggerHigh = rightFreq;
             return d->cfg.triggerRumble;
         }
 
@@ -189,6 +193,7 @@ namespace CNA::Internal::Input::test_support
             FakeDevice* d = dev(gamepad);
             if (d == nullptr)
                 return false;
+            ++setSensorEnabledCalls;
             if (enabled)
                 d->enabledSensors.insert(type);
             else

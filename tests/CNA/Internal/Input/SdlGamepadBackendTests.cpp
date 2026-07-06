@@ -9,11 +9,17 @@
 
 #include <SDL3/SDL.h>
 
+#include <cmath>
+#include <limits>
+
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlGamepadBackend.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 
 #include "FakeSdlGamepadBackend.hpp"
 
@@ -23,9 +29,12 @@ using CNA::Internal::Input::SetSdlGamepadBackendForTests;
 using CNA::Internal::Input::test_support::FakeGamepadConfig;
 using CNA::Internal::Input::test_support::FakeSdlGamepadBackend;
 using CNA::Internal::Input::test_support::FullyFeaturedGamepad;
+using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::PlayerIndex;
+using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Input::Buttons;
 using Microsoft::Xna::Framework::Input::GamePad;
+using Microsoft::Xna::Framework::Input::GamePadType;
 
 namespace
 {
@@ -433,6 +442,315 @@ TEST_F(FakeGamepadTest, SensorReadFailsGracefullyWhenUnavailable)
     Microsoft::Xna::Framework::Vector3 gyro(9, 9, 9);
     EXPECT_FALSE(SdlInputBridge::GetGyro(PlayerIndex::One, gyro));
     EXPECT_NEAR(gyro.X, 0.0f, 1e-5f) << "failed read must zero the out param";
+}
+
+// --- vibration (P4-014) via the public GamePad::SetVibration surface ---
+
+// P4-014(a): SetVibration maps [0,1] motor levels to SDL's 16-bit intensity as FNA does —
+// (ushort)(Clamp(level,0,1) * 0xFFFF) — clamping out-of-range values first. 0.5 truncates to 32767.
+TEST_F(FakeGamepadTest, SetVibrationClampsMotorLevelsToSdlIntensity)
+{
+    fake.Register(10, FullyFeaturedGamepad()); // rumble = true
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_TRUE(GamePad::SetVibration(PlayerIndex::One, 0.5f, 1.0f));
+    EXPECT_EQ(fake.lastRumbleLow, 32767);   // 0.5 * 0xFFFF = 32767.5 -> truncated
+    EXPECT_EQ(fake.lastRumbleHigh, 65535);  // 1.0 * 0xFFFF
+
+    // Over-range and negative are clamped to [0,1] before scaling.
+    EXPECT_TRUE(GamePad::SetVibration(PlayerIndex::One, 2.0f, -1.0f));
+    EXPECT_EQ(fake.lastRumbleLow, 65535);
+    EXPECT_EQ(fake.lastRumbleHigh, 0);
+
+    EXPECT_TRUE(GamePad::SetVibration(PlayerIndex::One, 0.0f, 0.0f));
+    EXPECT_EQ(fake.lastRumbleLow, 0);
+    EXPECT_EQ(fake.lastRumbleHigh, 0);
+}
+
+// P4-014(d): NaN/Inf handling. std::clamp propagates NaN and casting NaN->integer is UB in C++, so
+// SetVibration maps NaN to 0 (matching C#'s well-defined (ushort)NaN == 0). +Inf clamps to full, -Inf
+// to zero. This proves the motor_level guard, not just the happy path.
+TEST_F(FakeGamepadTest, SetVibrationHandlesNaNAndInfinity)
+{
+    fake.Register(10, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    EXPECT_TRUE(GamePad::SetVibration(PlayerIndex::One, nan, nan));
+    EXPECT_EQ(fake.lastRumbleLow, 0) << "NaN motor level must resolve to 0, not UB";
+    EXPECT_EQ(fake.lastRumbleHigh, 0);
+
+    EXPECT_TRUE(GamePad::SetVibration(PlayerIndex::One, inf, -inf));
+    EXPECT_EQ(fake.lastRumbleLow, 65535) << "+Inf clamps to full intensity";
+    EXPECT_EQ(fake.lastRumbleHigh, 0) << "-Inf clamps to zero";
+}
+
+// P4-014(b): a disconnected player index never reaches the backend and reports failure.
+TEST_F(FakeGamepadTest, SetVibrationReturnsFalseForDisconnectedPlayer)
+{
+    fake.Register(10, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(10)); // -> player One only
+
+    EXPECT_FALSE(GamePad::SetVibration(PlayerIndex::Two, 1.0f, 1.0f));
+    EXPECT_EQ(fake.rumbleCalls, 0) << "no backend rumble call for a disconnected slot";
+}
+
+// P4-014(c): a connected device without rumble support still forwards the call (matching FNA, which
+// unconditionally calls SDL_RumbleGamepad and returns its result) but reports false.
+TEST_F(FakeGamepadTest, SetVibrationReturnsFalseWhenDeviceHasNoRumble)
+{
+    FakeGamepadConfig cfg = FullyFeaturedGamepad();
+    cfg.rumble = false;
+    fake.Register(10, cfg);
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_FALSE(GamePad::SetVibration(PlayerIndex::One, 1.0f, 1.0f));
+    EXPECT_EQ(fake.rumbleCalls, 1) << "the call is still made; only the return reflects no support";
+}
+
+// --- trigger vibration extension (P4-015) via GamePad::SetTriggerVibrationEXT ---
+
+// P4-015(a)+(d): the trigger-rumble extension shares the same motor_level clamping and drives the
+// fake backend's RumbleGamepadTriggers seam. Duration-based rumble (P4-015 (b)) has no public API —
+// the SDL duration argument is fixed at 0 — so it is intentionally not covered (documented in plan).
+TEST_F(FakeGamepadTest, TriggerVibrationSucceedsAndClampsForCapableDevice)
+{
+    fake.Register(10, FullyFeaturedGamepad()); // triggerRumble = true
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_TRUE(GamePad::SetTriggerVibrationEXT(PlayerIndex::One, 0.5f, 2.0f));
+    EXPECT_EQ(fake.triggerRumbleCalls, 1);
+    EXPECT_EQ(fake.lastTriggerLow, 32767);
+    EXPECT_EQ(fake.lastTriggerHigh, 65535) << "2.0 clamps to full intensity";
+}
+
+TEST_F(FakeGamepadTest, TriggerVibrationReturnsFalseWhenUnsupportedOrDisconnected)
+{
+    FakeGamepadConfig cfg = FullyFeaturedGamepad();
+    cfg.triggerRumble = false;
+    fake.Register(10, cfg);
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_FALSE(GamePad::SetTriggerVibrationEXT(PlayerIndex::One, 1.0f, 1.0f))
+        << "unsupported device reports false";
+    EXPECT_EQ(fake.triggerRumbleCalls, 1) << "call still forwarded";
+
+    EXPECT_FALSE(GamePad::SetTriggerVibrationEXT(PlayerIndex::Two, 1.0f, 1.0f))
+        << "disconnected slot reports false";
+    EXPECT_EQ(fake.triggerRumbleCalls, 1) << "no forward for a disconnected slot";
+}
+
+// --- light bar extension (P4-016) via GamePad::SetLightBarEXT ---
+
+// P4-016(a)+(c): the light-bar extension forwards the Color's R/G/B bytes to the backend LED seam.
+// Color components are bytes, so there is no "invalid" color to reject (P4-016 (c) is N/A) — every
+// value from black to white passes through unchanged.
+TEST_F(FakeGamepadTest, LightBarForwardsColorRgbToBackend)
+{
+    fake.Register(10, FullyFeaturedGamepad()); // rgbLed = true
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    GamePad::SetLightBarEXT(PlayerIndex::One, Color(10, 20, 30));
+    EXPECT_EQ(fake.ledCalls, 1);
+    EXPECT_EQ(fake.lastLedR, 10);
+    EXPECT_EQ(fake.lastLedG, 20);
+    EXPECT_EQ(fake.lastLedB, 30);
+
+    GamePad::SetLightBarEXT(PlayerIndex::One, Color(255, 255, 255));
+    EXPECT_EQ(fake.lastLedR, 255);
+    EXPECT_EQ(fake.lastLedG, 255);
+    EXPECT_EQ(fake.lastLedB, 255);
+
+    GamePad::SetLightBarEXT(PlayerIndex::One, Color(0, 0, 0));
+    EXPECT_EQ(fake.ledCalls, 3);
+    EXPECT_EQ(fake.lastLedR, 0);
+}
+
+// P4-016(b): the no-support path. A disconnected slot never touches the backend; a connected device
+// without an RGB LED still forwards the call (matching FNA's unconditional SDL_SetGamepadLED).
+TEST_F(FakeGamepadTest, LightBarNoOpsForDisconnectedButForwardsForConnectedNonLedDevice)
+{
+    FakeGamepadConfig cfg = FullyFeaturedGamepad();
+    cfg.rgbLed = false;
+    fake.Register(10, cfg);
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    GamePad::SetLightBarEXT(PlayerIndex::Two, Color(1, 2, 3)); // disconnected slot
+    EXPECT_EQ(fake.ledCalls, 0) << "no backend call for a disconnected slot";
+
+    GamePad::SetLightBarEXT(PlayerIndex::One, Color(1, 2, 3)); // connected but no LED
+    EXPECT_EQ(fake.ledCalls, 1) << "call forwarded; hardware simply ignores it";
+}
+
+// --- sensor enable/disable (P4-017) ---
+
+// P4-017(c): reading a sensor lazily enables it exactly once. The first GetGyroEXT enables SDL_SENSOR_GYRO;
+// a second read sees it already enabled and does not re-enable. Reading the accelerometer enables a
+// second, distinct sensor. This proves the enable-once guard in read_gamepad_sensor.
+TEST_F(FakeGamepadTest, ReadingSensorEnablesItOnceThenReadsWithoutReEnabling)
+{
+    fake.Register(10, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    Vector3 gyro;
+    ASSERT_TRUE(GamePad::GetGyroEXT(PlayerIndex::One, gyro));
+    EXPECT_EQ(fake.setSensorEnabledCalls, 1) << "first gyro read enables the gyro sensor";
+
+    ASSERT_TRUE(GamePad::GetGyroEXT(PlayerIndex::One, gyro));
+    EXPECT_EQ(fake.setSensorEnabledCalls, 1) << "already-enabled sensor must not be re-enabled";
+
+    Vector3 accel;
+    ASSERT_TRUE(GamePad::GetAccelerometerEXT(PlayerIndex::One, accel));
+    EXPECT_EQ(fake.setSensorEnabledCalls, 2) << "accelerometer is a separate sensor, enabled once";
+}
+
+// --- slot lifecycle: reuse + stale-state clear (P4-009) ---
+
+// P4-009(d): a slot freed by disconnect is reused by the next connect (lowest free slot first), rather
+// than advancing to a higher player index.
+TEST_F(FakeGamepadTest, FreedSlotIsReusedByNextConnect)
+{
+    fake.Register(10, FullyFeaturedGamepad());
+    fake.Register(20, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(10)); // -> One
+    SdlInputBridge::ProcessEvent(removedEvent(10)); // One freed
+
+    SdlInputBridge::ProcessEvent(addedEvent(20)); // must reuse One, not advance to Two
+    EXPECT_TRUE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
+    EXPECT_FALSE(GamePad::GetState(PlayerIndex::Two).getIsConnectedProperty());
+    EXPECT_EQ(fake.openCount, 2);
+    EXPECT_EQ(fake.closeCount, 1);
+}
+
+// P4-009(f): disconnect wipes the slot's accumulated button/axis state, so a later device in the same
+// slot never inherits a stale "button held" from its predecessor.
+TEST_F(FakeGamepadTest, StaleButtonStateIsClearedOnDisconnect)
+{
+    fake.Register(10, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+    SdlInputBridge::ProcessEvent(buttonEvent(true, 10, SDL_GAMEPAD_BUTTON_SOUTH)); // A held
+    ASSERT_TRUE(GamePad::GetState(PlayerIndex::One).IsButtonDown(Buttons::A));
+
+    SdlInputBridge::ProcessEvent(removedEvent(10));
+    EXPECT_FALSE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
+
+    fake.Register(20, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(20)); // reuses One
+    EXPECT_FALSE(GamePad::GetState(PlayerIndex::One).IsButtonDown(Buttons::A))
+        << "the new device must not inherit the old device's held button";
+}
+
+// --- packet number: no bump on repeated identical events (P4-013) ---
+
+// P4-013(c)+(d): the packet number advances only on a real state change. Repeated identical button
+// events (already-down / already-up) leave it unchanged.
+TEST_F(FakeGamepadTest, PacketNumberIsStableAcrossRepeatedIdenticalButtonEvents)
+{
+    fake.Register(10, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(10)); // connect bumps packet once
+
+    const int afterConnect = GamePad::GetState(PlayerIndex::One).getPacketNumberProperty();
+
+    SdlInputBridge::ProcessEvent(buttonEvent(true, 10, SDL_GAMEPAD_BUTTON_SOUTH));
+    const int afterDown = GamePad::GetState(PlayerIndex::One).getPacketNumberProperty();
+    EXPECT_GT(afterDown, afterConnect) << "a real press advances the packet";
+
+    SdlInputBridge::ProcessEvent(buttonEvent(true, 10, SDL_GAMEPAD_BUTTON_SOUTH)); // already down
+    SdlInputBridge::ProcessEvent(buttonEvent(true, 10, SDL_GAMEPAD_BUTTON_SOUTH));
+    EXPECT_EQ(GamePad::GetState(PlayerIndex::One).getPacketNumberProperty(), afterDown)
+        << "redundant press events must not advance the packet";
+
+    SdlInputBridge::ProcessEvent(buttonEvent(false, 10, SDL_GAMEPAD_BUTTON_SOUTH));
+    const int afterUp = GamePad::GetState(PlayerIndex::One).getPacketNumberProperty();
+    EXPECT_GT(afterUp, afterDown);
+    SdlInputBridge::ProcessEvent(buttonEvent(false, 10, SDL_GAMEPAD_BUTTON_SOUTH)); // already up
+    EXPECT_EQ(GamePad::GetState(PlayerIndex::One).getPacketNumberProperty(), afterUp)
+        << "redundant release events must not advance the packet";
+}
+
+// P4-013(d): axis jitter — re-sending the identical raw axis value does not advance the packet, but a
+// genuinely different value does.
+TEST_F(FakeGamepadTest, PacketNumberIsStableAcrossRepeatedIdenticalAxisEvents)
+{
+    fake.Register(10, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    SdlInputBridge::ProcessEvent(axisEvent(10, SDL_GAMEPAD_AXIS_LEFTX, 16000));
+    const int afterFirst = GamePad::GetState(PlayerIndex::One).getPacketNumberProperty();
+
+    SdlInputBridge::ProcessEvent(axisEvent(10, SDL_GAMEPAD_AXIS_LEFTX, 16000)); // identical
+    EXPECT_EQ(GamePad::GetState(PlayerIndex::One).getPacketNumberProperty(), afterFirst)
+        << "an unchanged axis value must not advance the packet";
+
+    SdlInputBridge::ProcessEvent(axisEvent(10, SDL_GAMEPAD_AXIS_LEFTX, 20000)); // moved
+    EXPECT_GT(GamePad::GetState(PlayerIndex::One).getPacketNumberProperty(), afterFirst)
+        << "a changed axis value advances the packet";
+}
+
+// --- extended GamePadType mapping (P4-019) ---
+
+// P4-019(b): the SDL joystick-type -> XNA GamePadType map beyond the four already covered, plus the
+// safe fallback: unknown/unmapped SDL types resolve to GamePadType::Unknown (FNA does the same, and
+// SDL3-only THROTTLE has no XNA equivalent). Uses a single slot, disconnecting between each case.
+TEST_F(FakeGamepadTest, ExtendedSdlJoystickTypesMapToXnaGamePadType)
+{
+    struct Case { SDL_JoystickType sdl; GamePadType expected; const char* name; };
+    const Case cases[] = {
+        {SDL_JOYSTICK_TYPE_DANCE_PAD,    GamePadType::DancePad,     "DancePad"},
+        {SDL_JOYSTICK_TYPE_GUITAR,       GamePadType::Guitar,       "Guitar"},
+        {SDL_JOYSTICK_TYPE_DRUM_KIT,     GamePadType::DrumKit,      "DrumKit"},
+        {SDL_JOYSTICK_TYPE_ARCADE_PAD,   GamePadType::BigButtonPad, "ArcadePad->BigButtonPad"},
+        {SDL_JOYSTICK_TYPE_THROTTLE,     GamePadType::Unknown,      "Throttle->Unknown"},
+        {SDL_JOYSTICK_TYPE_UNKNOWN,      GamePadType::Unknown,      "Unknown"},
+    };
+
+    SDL_JoystickID id = 10;
+    for (const Case& c : cases)
+    {
+        FakeGamepadConfig cfg = FullyFeaturedGamepad();
+        cfg.joystickType = c.sdl;
+        fake.Register(id, cfg);
+        SdlInputBridge::ProcessEvent(addedEvent(id));
+        EXPECT_EQ(SdlInputBridge::GetCapabilities(PlayerIndex::One).getGamePadTypeProperty(), c.expected) << c.name;
+        SdlInputBridge::ProcessEvent(removedEvent(id));
+        ++id;
+    }
+}
+
+// --- gamepad reset (P4-020) ---
+
+// P4-020: ResetAllForTests clears every gamepad slot and its packet number, and restores the real
+// backend (so the fake's slot maps do not leak into the next test). Reinstalling the fake and adding a
+// fresh pad shows the packet counter starts clean (no cross-test leak).
+TEST_F(FakeGamepadTest, ResetClearsAllGamepadSlotsAndPacketNumbers)
+{
+    fake.Register(10, FullyFeaturedGamepad());
+    fake.Register(20, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(10)); // One
+    SdlInputBridge::ProcessEvent(addedEvent(20)); // Two
+    SdlInputBridge::ProcessEvent(buttonEvent(true, 10, SDL_GAMEPAD_BUTTON_SOUTH));
+    SdlInputBridge::ProcessEvent(axisEvent(20, SDL_GAMEPAD_AXIS_LEFTX, 20000));
+    ASSERT_TRUE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
+    ASSERT_GT(GamePad::GetState(PlayerIndex::One).getPacketNumberProperty(), 0);
+    ASSERT_GT(GamePad::GetState(PlayerIndex::Two).getPacketNumberProperty(), 0);
+
+    InputManager::ResetAllForTests(); // uninstalls the fake + clears all slots
+
+    for (PlayerIndex p : {PlayerIndex::One, PlayerIndex::Two, PlayerIndex::Three, PlayerIndex::Four})
+    {
+        const auto s = GamePad::GetState(p);
+        EXPECT_FALSE(s.getIsConnectedProperty());
+        EXPECT_EQ(s.getPacketNumberProperty(), 0) << "no packet leak after reset";
+    }
+
+    // Reinstall the fake and connect a fresh pad: the packet counter restarts, proving no leak.
+    SetSdlGamepadBackendForTests(&fake);
+    fake.Register(30, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(30));
+    EXPECT_EQ(GamePad::GetState(PlayerIndex::One).getPacketNumberProperty(), 1)
+        << "a fresh connection after reset starts its packet count at 1";
 }
 
 // --- startup gamepad-subsystem init (the invariant Game::DoInitialize establishes) ---

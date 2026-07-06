@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -374,6 +375,16 @@ namespace
     float normalize_trigger_axis(const Sint16 value)
     {
         return std::clamp(static_cast<float>(value) / 32767.0f, 0.0f, 1.0f);
+    }
+
+    // Converts a caller-supplied motor level [0,1] to SDL's 16-bit intensity, exactly as FNA does:
+    // (ushort)(Clamp(level, 0, 1) * 0xFFFF). std::clamp propagates NaN unchanged (every NaN
+    // comparison is false), and casting a NaN float to an integer is undefined behavior in C++, so
+    // map NaN to 0 first — matching C#'s well-defined (ushort)NaN == 0. +Inf clamps to 1, -Inf to 0.
+    Uint16 motor_level(const float level)
+    {
+        const float clamped = std::isnan(level) ? 0.0f : std::clamp(level, 0.0f, 1.0f);
+        return static_cast<Uint16>(clamped * 0xFFFF);
     }
 
     std::unordered_map<SDL_FingerID, int>& get_finger_id_to_touch_id_map()
@@ -960,9 +971,7 @@ namespace CNA::Internal::Input
         SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
         if (gamepad == nullptr)
             return false;
-        const auto left  = static_cast<Uint16>(std::clamp(leftMotor,  0.0f, 1.0f) * 0xFFFF);
-        const auto right = static_cast<Uint16>(std::clamp(rightMotor, 0.0f, 1.0f) * 0xFFFF);
-        return sdl_gamepad_backend().RumbleGamepad(gamepad, left, right, 0);
+        return sdl_gamepad_backend().RumbleGamepad(gamepad, motor_level(leftMotor), motor_level(rightMotor), 0);
     }
 
     bool SdlInputBridge::SetTriggerVibration(
@@ -974,9 +983,7 @@ namespace CNA::Internal::Input
         SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
         if (gamepad == nullptr)
             return false;
-        const auto left  = static_cast<Uint16>(std::clamp(leftTrigger,  0.0f, 1.0f) * 0xFFFF);
-        const auto right = static_cast<Uint16>(std::clamp(rightTrigger, 0.0f, 1.0f) * 0xFFFF);
-        return sdl_gamepad_backend().RumbleGamepadTriggers(gamepad, left, right, 0);
+        return sdl_gamepad_backend().RumbleGamepadTriggers(gamepad, motor_level(leftTrigger), motor_level(rightTrigger), 0);
     }
 
     void SdlInputBridge::SetLightBar(
