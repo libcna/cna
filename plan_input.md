@@ -766,9 +766,22 @@ the next phase below.
 > re-run the gate (and ASan if behavior changed). Genuine FNA divergences are either fixed or documented as
 > `DEC-*`.
 
-## L-001 — `KeyboardState.cpp` logic `[ ]`
-- [ ] Line-by-line vs FNA `KeyboardState.cs`: indexer/IsKeyDown/IsKeyUp lookup, GetPressedKeys ordering,
+## L-001 — `KeyboardState.cpp` logic `[x]`
+- [x] Line-by-line vs FNA `KeyboardState.cs`: indexer/IsKeyDown/IsKeyUp lookup, GetPressedKeys ordering,
   the 8×32-bit XOR GetHashCode + `InternalSetKey` bounds, Equals set-compare. Fix/doc any divergence.
+
+**Result (2026-07-06):** Read every method vs FNA — **logic is FNA-faithful; no divergence to fix.**
+`IsKeyDown` = `pressedKeys_.contains(key)` (≡ FNA bitfield test); `IsKeyUp` = `!IsKeyDown` (≡ FNA);
+`getItem`/`operator[]` = Down/Up (≡ FNA `this[key]`); `GetPressedKeys` copies the set and **sorts ascending
+numeric** = FNA's keys0..keys7 bit-0-upward walk order; `Equals` = set equality (≡ FNA's per-word compare —
+same pressed set ⇒ equal); `GetHashCode` rebuilds the 8×32-bit words with the `value < 256u` bounds guard
+(matches FNA `InternalSetKey`'s `switch(((int)key)>>5)` cases 0..7 with no default — out-of-range keys map
+to no word) and XORs all 8 (≡ FNA `keys0 ^ … ^ keys7`); `ToString` = fully-qualified type name (≡ FNA
+`ValueType` default — FNA never overrides it). **The one deviation is the accepted, documented one**
+(P2-002): CNA's `unordered_set` *can store* an out-of-range `Keys` so `IsKeyDown((Keys)999)` differs from
+FNA's bitfield store — not producible from hardware, memory-safe (GetHashCode ignores it exactly like FNA).
+**Files changed:** none (logic verified, no fix needed). **Behavior verified:** all methods match FNA
+computation. **Remaining risk:** none.
 
 ## L-002 — `MouseState.cpp` logic `[ ]`
 - [ ] vs FNA `MouseState.cs`: field packing, `==` field-by-field compare, ToString format, hash choice.
