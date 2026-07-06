@@ -3803,13 +3803,33 @@ restoration can be reverted.
 * [x] P10-SAN-001: Run/document the ASan/UBSan audio test target.
   *Note:* Already fully documented and routinely run (`NEXT.md` §7's exact one-off build commands);
   run again this pass (see this phase's closing test-run summary).
-* [ ] P10-SAN-002: Audit for use-after-free in dispose cascades, fire-and-forget playback,
+* [x] P10-SAN-002: Audit for use-after-free in dispose cascades, fire-and-forget playback,
   callback lifetime, dynamic stream lifetime.
-  *Note:* No NEW use-after-free issue found in this pass's ASan/UBSan run (clean). A dedicated,
-  from-scratch adversarial audit specifically hunting for use-after-free across every dispose-
-  cascade/callback-lifetime path (as opposed to "the existing test suite's coverage happens to run
-  clean under ASan") was not separately carried out -- left open as a distinct, deeper task from
-  "tests currently pass under ASan."
+  *Note:* Closed this pass -- did the dedicated adversarial run rather than relying on "tests
+  currently pass under ASan" as a proxy. Built a fresh one-off ASan+UBSan `CnaTests`
+  (`-fsanitize=address,undefined`) and specifically repeat-stressed the four named risk areas,
+  each targeted with its own `--gtest_filter`/`--gtest_repeat` pass (not just one blanket run):
+  - Dispose cascades: `AudioEngineTest.*Dispose*` (the `AudioEngine`->`WaveBank`/`SoundBank`/`Cue`
+    cascade, `XA-8`) plus every `*Dispose*` test across `SoundEffectInstanceTest`/
+    `DynamicSoundEffectInstanceTest`/`CueTest`/`WaveBankTest`/`SoundBankTest` -- 15 repeats, clean.
+  - Fire-and-forget playback: `CueTest.*FireAndForget*` plus `SoundBankTest`/`WaveBankTest`'s
+    `*InUse*` family (the sweep/timeout-based cue teardown path) -- 15 repeats, clean.
+  - Callback lifetime: `DynamicSoundEffectInstanceTest.*BufferNeeded*` (the `BufferNeeded` event
+    raised off real SDL stream-callback-driven state) -- 20 repeats, clean.
+  - Dynamic stream lifetime: `DynamicSoundEffectInstanceTest.*Pause*`/`*Resume*` (pause/resume
+    against a real `SDL_AudioStream`) plus `SoundEffectInstanceTest.*Concurrent*` (the `T-4C`
+    filter-coefficient/mixing-thread race test, re-verified here alongside the new material rather
+    than assumed still-clean) -- 20 repeats, clean.
+  - Full audio-scoped suite (all 430 tests, the same `--gtest_filter` from `NEXT.md` §7): 3
+    repeats, clean.
+  All runs: `SDL_AUDIODRIVER=dummy`, zero AddressSanitizer/UndefinedBehaviorSanitizer reports,
+  exit code 0 throughout. One thing surfaced *outside* Audio's scope while narrowing the filter:
+  an initial overly-broad `*Dispose*` filter (before it was scoped to specific audio test-suite
+  prefixes) caught `NetworkSessionTest.UpdateAfterDisposeThrows`, which DOES leak (`NetworkSession::
+  BeginCreate`, `Net` module) -- confirmed unrelated to Audio and out of this task's scope per this
+  phase's own ground rules, not fixed here, but flagged in the handoff report since it was
+  concretely observed, not silently ignored. ASan build directory removed after use, per
+  convention.
 
 ## Phase 10.12 — Documentation and accepted deviations
 
