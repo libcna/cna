@@ -18,8 +18,6 @@ namespace CNA::Internal::Input
      * @brief Bridge between SDL3 events and CNA internal input state.
      *
      * This bridge knows SDL types, but exposes them only internally.
-     *
-     * @note Status: PARTIAL
      */
     class SdlInputBridge
     {

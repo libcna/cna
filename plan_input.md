@@ -164,25 +164,28 @@ citation recorded in `docs/input-fna-fidelity.md`.
 ### Area: Docs (21 tasks)
 
 #### INP-0001 — Establish canonical API-tier definitions (STRICT/FNAEXT/NOXNA/INTERNAL)
-- **Priority:** P0 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P0 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-public-api-frozen.md`
 - **Steps:** Write one authoritative glossary: STRICT (XNA 4.0), FNA-compatible, FNAEXT (EXT suffix), NOXNA (CNA-only), INTERNAL (CNA::Internal, not public). Cross-link from every input doc.
 - **Acceptance:** Each tier defined once; every input doc links to it.
 - **Verify:** Grep each input doc for a link to the glossary section.
+- **Result:** Expanded the Classification section of docs/input-public-api-frozen.md into the single canonical 5-tier glossary (STRICT / FNA-compatible / FNAEXT / NOXNA / INTERNAL), defined once with examples; INP-0003 wires the cross-links from the other docs.
 
 #### INP-0002 — Make plan_input.md the single canonical active Input plan
-- **Priority:** P0 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P0 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `plan_input.md, NEXT.md, docs/*`
 - **Steps:** Ensure NEXT.md and all input docs reference plan_input.md (this file) as the active backlog; remove references to any deleted/old plan file.
 - **Acceptance:** No doc references a non-existent plan file; all point here.
 - **Verify:** `grep -rn 'plan.*\.md' docs/ NEXT.md` resolves only to plan_input.md.
+- **Result:** Verified all input docs + NEXT.md reference plan_input.md; no dangling INPUT-plan file. (The only non-existent-plan reference in the repo is 'plan_audio.md' cited by the AUDIO docs coverage.md/xna-4-api-coverage.md — out of this Input task's scope; noted for the audio track.)
 
 #### INP-0003 — Cross-link the seven input docs into a doc index
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-*.md`
 - **Steps:** Add a short 'Related docs' header block to each input doc listing the others (backend, fidelity, parity-matrix, public-api-frozen, test-coverage, build-and-test, manual-results, platform-notes).
 - **Acceptance:** Every input doc has a related-docs block.
 - **Verify:** Grep each doc for the related-docs block.
+- **Result:** Added a 'Related input docs' cross-link block (linking plan + all input docs + the tier glossary) to the 7 hand-maintained input docs (backend, fidelity, public-api-frozen, build-and-test, manual-results, platform-notes, demo-checklist). The two generated docs (member-parity-matrix, test-coverage) are tool-owned and not hand-edited.
 
 #### INP-0193 — Document required sibling repos and submodules in the build doc
 - **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
@@ -313,11 +316,12 @@ citation recorded in `docs/input-fna-fidelity.md`.
 ### Area: Cleanup (10 tasks)
 
 #### INP-0004 — Resolve any stale 'Status: PARTIAL' comments in headers/sources
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Cleanup
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
 - **Files:** `include/**/Input/**, src/**/Input/**`
 - **Steps:** Grep for '@note Status:' / 'PARTIAL' in input headers and sources; for each, verify the true state and replace with an accurate status or remove.
 - **Acceptance:** No misleading PARTIAL/IMPLEMENTED status comment remains unverified.
 - **Verify:** `grep -rniE 'Status:.*(PARTIAL|IMPLEMENTED)' include/**/Input src/**/Input` — each hit justified or removed.
+- **Result:** Removed the 5 stale '@note Status: PARTIAL/IMPLEMENTED' comments from the internal input headers (SdlInputBridge.hpp, InputManager.hpp x4) — those internal classes/enums are complete and covered by tests; the misleading scaffolding status notes are gone. Build clean; ctest -L input 100% green.
 
 #### INP-0219 — Extend demo_input to exercise relative mouse mode + cursor warp
 - **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Cleanup
@@ -385,18 +389,20 @@ citation recorded in `docs/input-fna-fidelity.md`.
 ### Area: Tests (13 tasks)
 
 #### INP-0005 — Regenerate the member-parity matrix and confirm zero STRICT gaps
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tools/input_parity/gen_input_parity_matrix.py, docs/input-member-parity-matrix.md`
 - **Steps:** Run the generator; confirm the review summary reports 0 STRICT/EXT members without an FNA counterpart.
 - **Acceptance:** Matrix regenerates; 0 STRICT/EXT gaps.
 - **Verify:** `python3 tools/input_parity/gen_input_parity_matrix.py --out docs/input-member-parity-matrix.md`
+- **Result:** Regenerated docs/input-member-parity-matrix.md via gen_input_parity_matrix.py: 26 types, 0 STRICT/EXT gaps, 0 FNA-only members.
 
 #### INP-0006 — Regenerate the source->test coverage report and confirm no orphans
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tools/input_parity/check_input_test_coverage.py, docs/input-test-coverage.md`
 - **Steps:** Run the coverage tool; confirm every Input type has a dedicated suite or a documented sibling cover.
 - **Acceptance:** 0 orphaned/untested types.
 - **Verify:** `python3 tools/input_parity/check_input_test_coverage.py --out docs/input-test-coverage.md`
+- **Result:** Regenerated docs/input-test-coverage.md via check_input_test_coverage.py: 26 public + 8 internal types, 0 orphaned/untested types.
 
 #### INP-0180 — Document the canonical input test command and make it work from a fresh clone
 - **Priority:** P0 · **Status:** `TODO` [ ] · **Area:** Tests

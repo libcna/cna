@@ -1,5 +1,7 @@
 # Frozen public Input API surface (INPUT-API-031)
 
+> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+
 This is the **golden signature snapshot** of the public `Microsoft::Xna::Framework::Input` (and
 `…::Input::Touch`) surface. It is the human-readable companion to the enforced compile-time guard
 `tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp`, which pins every entry
@@ -9,11 +11,27 @@ renamed member, a changed signature, a changed constructor parameter list — fa
 **Keep the two in lock-step.** When you intentionally add, remove, or change a public member, update
 **both** this document and the freeze test in the same commit.
 
-## Classification
+## Classification — canonical API-tier glossary (INP-0001)
 
-- **STRICT** — part of the XNA 4.0 API; must match XNA/FNA exactly (values, names, signatures).
-- **EXT** — FNA-compatible extension (name ends in `EXT`); consumer-visible, not in stock XNA.
-- **NOXNA** — CNA/MonoGame convenience that is public but has no XNA equivalent.
+This is the **single canonical definition** of CNA Input API tiers. Every input doc refers here rather
+than re-defining them. A member/type belongs to exactly one tier:
+
+- **STRICT** — part of the **XNA 4.0** public API. Must match XNA/FNA exactly: names, signatures, enum
+  values, and behavior (modulo the documented C++ property convention `getXProperty`/`setXProperty` and
+  the accepted-deviations list in `input-fna-fidelity.md`).
+- **FNA-compatible** — a STRICT member whose *behavior* intentionally follows **FNA** (the reference SDL
+  platform layer) where XNA left it platform-defined. Same API as STRICT; the FNA source is the authority.
+- **FNAEXT** (`EXT` name suffix) — an **FNA extension** beyond stock XNA 4.0 that FNA/MonoGame expose to
+  consumers (e.g. `Keyboard::GetKeyFromScancodeEXT`, `Mouse::…IsRelativeMouseModeEXT`, the gamepad
+  `GetGUIDEXT`/`SetLightBarEXT`/`SetTriggerVibrationEXT`/`GetGyroEXT`/`GetAccelerometerEXT`, `TextInputEXT`,
+  `GestureSample::FingerId(2)EXT`). Consumer-visible; carries the `EXT` suffix and (for non-enum members)
+  the `NOXNA` marker.
+- **NOXNA** — a **CNA/MonoGame convenience** that is public but has **no** XNA/FNA equivalent (e.g.
+  `MouseCursor` as a whole, `KeyboardState::ToString`, value-struct default constructors, `FromButtonArray`).
+  Tagged with the `NOXNA` marker macro.
+- **INTERNAL** — `CNA::Internal::*` implementation (`SdlInputBridge`, `InputManager`, `GestureDetector`,
+  `ISdlGamepadBackend`, …). **Not public API**; must never appear in a public XNA header or signature
+  (enforced by the `PublicApiInputCompileTests` SDL/Internal-leak guard).
 
 ## Freeze scope
 

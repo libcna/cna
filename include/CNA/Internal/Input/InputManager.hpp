@@ -30,8 +30,6 @@ namespace CNA::Internal::Input
 
     /**
      * @brief Internal identification of supported mouse buttons.
-     *
-     * @note Status: IMPLEMENTED
      */
     enum class MouseButton
     {
@@ -44,8 +42,6 @@ namespace CNA::Internal::Input
 
     /**
      * @brief Internal identification of supported gamepad buttons.
-     *
-     * @note Status: PARTIAL
      */
     enum class GamePadButton
     {
@@ -74,8 +70,6 @@ namespace CNA::Internal::Input
 
     /**
      * @brief Internal identification of supported gamepad axes.
-     *
-     * @note Status: PARTIAL
      */
     enum class GamePadAxis
     {
@@ -107,8 +101,6 @@ namespace CNA::Internal::Input
      *       `Game::PollEvents()`, reads from game `Update()`/`Draw()`, all on the same thread
      *       (matching XNA/FNA and required by SDL's event model). See `docs/input-backend.md` §6.
      *       Do not call `Set*`/`Get*` from a background thread. No locking is added.
-     *
-     * @note Status: PARTIAL
      */
     class InputManager
     {

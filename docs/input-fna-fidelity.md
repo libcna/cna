@@ -1,6 +1,8 @@
 <!-- SPDX-License-Identifier: MS-PL -->
 # CNA Input — FNA Fidelity Notes
 
+> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+
 CNA's `Input` namespace uses **FNA** (`Microsoft.Xna.Framework.Input` + its SDL platform layer) as
 the authoritative behavioral reference. This document records, per input area: (a) behavior that
 matches FNA, (b) **intentional** CNA deviations (with the reason), and (c) known **gaps / TODO**.

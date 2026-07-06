@@ -1,6 +1,8 @@
 <!-- SPDX-License-Identifier: MS-PL -->
 # Building and Testing CNA Input
 
+> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+
 This document explains how to build and run the CNA `Input` unit tests from a **complete** checkout,
 and — importantly — what **cannot** be verified from a source-only archive or in a headless CI
 environment. (Phase I13/I14, tasks 883/884.)

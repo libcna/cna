@@ -1,5 +1,7 @@
 # `demo_input` — Manual Input Verification Checklist
 
+> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+
 `examples/demo_input` (`cna_demo_input`) is the interactive input demo. The unit suite
 (`CnaTests`) exercises the input pipeline headlessly, but some behavior can only be confirmed with
 real hardware and a real window — that's what this checklist is for (INPUT-TEST-018 / the manual-verification tasks in plan_input.md). Work through it on
