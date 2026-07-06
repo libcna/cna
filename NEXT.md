@@ -13,13 +13,17 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
-  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–356 are
-  done, **Task 357 is next** ("Verify effect parameter lookup by name and semantic — FNA semantics"
-  — see §8). Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks 351–354); Task 355
-  closed the `EffectPass::Apply()`-consistency sub-thread; Task 356 confirmed `EffectTechnique`
-  selection is already correct by construction (verify-only, no code fix); Phase 41 itself is
-  **not** yet closed — Tasks 357–360 (parameter-lookup/enumeration/lifecycle verification) remain
-  open.
+  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–357 are
+  done, **Task 358 is next** ("Verify effect parameter collection enumeration order — Important for
+  compatibility" — see §8). Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks
+  351–354); Task 355 closed the `EffectPass::Apply()`-consistency sub-thread; Task 356 confirmed
+  `EffectTechnique` selection is already correct by construction (verify-only, no code fix); Task
+  357 confirmed CNA's `EffectParameterCollection` name/semantic lookup already matches FNA exactly
+  (verify-only, no code fix — added the missing case-sensitivity/duplicate-tie-breaking test
+  coverage instead), and widened Task 884 (the `EffectTechniqueCollection`-class dangling-pointer
+  hazard Task 355 fixed) to also cover `EffectParameterCollection`, which has the identical
+  currently-unexercised by-value-`vector` hazard. Phase 41 itself is **not** yet closed — Tasks
+  358–360 (enumeration order/missing-lookup/lifecycle verification) remain open.
   **Task 351**
   audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
   returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
@@ -481,25 +485,30 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 357 — verify effect parameter lookup by name and semantic**
-   - Goal: confirm CNA's `EffectParameterCollection` parameter lookup (by name, and by HLSL
-     semantic if CNA tracks semantics at all) matches FNA's semantics — read FNA's
-     `EffectParameterCollection.cs` (`this[string name]`/`this[string semantic]` indexers) and
-     compare against CNA's `EffectParameterCollection.hpp`/`.cpp`.
-   - Files: likely `EffectParameterCollection.hpp`/`.cpp`, `EffectParameter.hpp`/`.cpp`,
-     `tests/.../EffectParameterTests.cpp` or a new `EffectParameterCollectionTests.cpp`.
+1. **`GRAPHICS_TASKS.md` Task 358 — verify effect parameter collection enumeration order**
+   - Goal: confirm `EffectParameterCollection`'s iteration order (`begin()`/`end()`, range-for)
+     matches FNA's `List<EffectParameter>`-backed enumerator — insertion order preserved, no
+     reordering/sorting anywhere. Important for compatibility per the task's own Notes column.
+   - Files: likely `EffectParameterCollection.hpp`/`.cpp`,
+     `tests/.../EffectCollectionTests.cpp`.
    - Verification: new unit test(s) with genuine discriminating power.
 
-   **Task 356 status: done — verify-only, no code fix needed.** Re-read FNA's `CurrentTechnique`
-   setter and `EffectPass.Apply()`; confirmed the setter is a plain pointer swap (its native
-   `FNA3D_SetEffectTechnique` call has no C#-observable effect) and all real enforcement already
-   lives in `EffectPass.Apply()`'s live comparison, which Task 355 already ported correctly.
-   Added `CurrentTechniquePropertyPassCollectionTracksSelectedTechnique` to `EffectTests.cpp`
-   (re-fetches `getCurrentTechniqueProperty()->getPassesProperty()[0]` after each switch, proving
-   the live selection resolves bidirectionally), discriminating power verified (temporarily made
-   the setter a no-op, confirmed failure, reverted). Full 3-backend regression, zero new failures:
-   EasyGL 3373/3376, Vulkan 3295/3309, Bgfx 3277/3279. Does not close Phase 41 (Tasks 357–360
-   remain).
+   **Task 357 status: done — verify-only, no code fix needed.** Re-read FNA's
+   `EffectParameterCollection.cs`/`EffectParameter.cs`; confirmed `this[int]`/`this[string name]`
+   (ordinal, case-sensitive, first-match-wins, null-if-missing) and the separate
+   `GetParameterBySemantic(string)` *method* (FNA has no by-semantic collection indexer) both
+   already matched CNA exactly. Added 4 new tests to `EffectCollectionTests.cpp`
+   (`IndexByNameIsCaseSensitive`, `IndexByNameFirstMatchWinsOnDuplicateNames`,
+   `GetParameterBySemanticIsCaseSensitive`, `GetParameterBySemanticFirstMatchWinsOnDuplicates`) —
+   the only genuinely new coverage, since basic found/not-found cases already existed from Task
+   185. Discriminating power verified (temporarily made lookup case-insensitive + last-match-wins,
+   confirmed both new tests fail, reverted). Found `EffectParameterCollection` has the same
+   by-value-`vector` dangling-pointer hazard class Task 355 fixed for `EffectTechniqueCollection` —
+   confirmed currently unexercised (all 4 stock effects populate then cache pointers, never
+   interleaved) and widened Task 884 to cover it alongside `EffectPassCollection`, rather than
+   fixing inline (out of this task's narrow scope) or opening a duplicate task. Full 3-backend
+   regression, zero new failures: EasyGL 3377/3380, Vulkan 3300/3313, Bgfx 3283/3283. Does not
+   close Phase 41 (Tasks 358–360 remain).
 
    **Task 355 status: done.** Confirmed and fixed Task 351's deferred `EffectPass::Apply()`
    technique-validation finding (gave `EffectTechnique` a stable identity token, `EffectPass` a
@@ -762,12 +771,12 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-40 are FULLY COMPLETE. Phase 41 (Effect base class and compiled effect
-compatibility, GRAPHICS_TASKS.md Tasks 351-360) is open, Tasks 351-356 are ALL DONE, Task 357 next.
-Last full 3-backend regression (Task 356, test-file-only addition to EffectTests.cpp; Effect.cpp was
-temporarily edited for a discriminating-power check and reverted to its exact Task 355 state):
-EasyGL 3373/3376 pass (3 documented pre-existing failures, no CueTest flake that run). Vulkan
-3295/3309 pass (13 documented failures + 1 reconfirmed-flaky CueTest). Bgfx 3277/3279 pass (2
-reconfirmed-flaky CueTest failures that run).
+compatibility, GRAPHICS_TASKS.md Tasks 351-360) is open, Tasks 351-357 are ALL DONE, Task 358 next.
+Last full 3-backend regression (Task 357, test-file-only addition to EffectCollectionTests.cpp;
+EffectParameterCollection.cpp was temporarily edited for a discriminating-power check and reverted
+to its exact pre-Task-357 state): EasyGL 3377/3380 pass (3 documented pre-existing failures, no
+CueTest flake that run). Vulkan 3300/3313 pass (13 documented pre-existing failures, no flake that
+run). Bgfx 3283/3283 pass (100%, no flakes that run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
 if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
 it as a regression.
@@ -814,14 +823,28 @@ itself resolves to each technique's own pass collection, bidirectionally), discr
 verified (temporarily made setCurrentTechniqueProperty() a no-op, confirmed the new test + Task
 355's technique-switch tests all fail, reverted).
 
-Next task: GRAPHICS_TASKS.md Task 357 - verify effect parameter lookup by name and semantic (FNA
-semantics). Goal: read FNA's EffectParameterCollection.cs (this[string name] / this[string
-semantic] indexers, if CNA tracks semantics at all) and compare against CNA's
-EffectParameterCollection.hpp/.cpp; confirm lookup behavior (case sensitivity, not-found behavior -
-null vs throw, matching FNA) matches exactly. Files: likely EffectParameterCollection.hpp/.cpp,
-EffectParameter.hpp/.cpp, tests/.../EffectParameterTests.cpp or a new
-EffectParameterCollectionTests.cpp. As always: verify genuine discriminating power for any new test
-(temporarily break/omit any fix, confirm the test fails, then revert), full 3-backend rebuild +
-regression if production code changes, update GRAPHICS_TASKS.md and NEXT.md, commit AND push after
-finishing (standing instruction - do not wait to be asked).
+Task 357 (verify effect parameter lookup by name and semantic) is now DONE - verify-only, no code
+fix needed. Re-read FNA's EffectParameterCollection.cs/EffectParameter.cs: this[int]/this[string
+name] (ordinal, case-sensitive, first-match-wins, null-if-missing) and the separate
+GetParameterBySemantic(string) *method* (FNA has NO by-semantic collection indexer) both already
+matched CNA exactly. Added 4 new tests to EffectCollectionTests.cpp (IndexByNameIsCaseSensitive,
+IndexByNameFirstMatchWinsOnDuplicateNames, GetParameterBySemanticIsCaseSensitive,
+GetParameterBySemanticFirstMatchWinsOnDuplicates) - the only genuinely new coverage; basic
+found/not-found cases already existed from Task 185's EffectCollectionTests.cpp (discovered mid-task
+- avoid duplicating those). Discriminating power verified (temporarily made lookup case-insensitive
++ last-match-wins, confirmed both new tests fail, reverted). Found EffectParameterCollection has the
+same by-value-vector dangling-pointer hazard class Task 355 fixed for EffectTechniqueCollection -
+confirmed currently unexercised (all 4 stock effects populate then cache pointers, never
+interleaved) and widened Task 884 to cover it alongside EffectPassCollection instead of fixing
+inline or opening a duplicate task.
+
+Next task: GRAPHICS_TASKS.md Task 358 - verify effect parameter collection enumeration order
+(important for compatibility). Goal: confirm EffectParameterCollection's begin()/end()/range-for
+iteration order matches FNA's List<EffectParameter>-backed enumerator (insertion order preserved,
+no reordering) - read FNA's EffectParameterCollection.cs GetEnumerator() and compare against CNA's
+begin()/end(). Files: likely EffectParameterCollection.hpp/.cpp, tests/.../EffectCollectionTests.cpp.
+As always: verify genuine discriminating power for any new test (temporarily break/omit any fix,
+confirm the test fails, then revert), full 3-backend rebuild + regression if production code
+changes, update GRAPHICS_TASKS.md and NEXT.md, commit AND push after finishing (standing
+instruction - do not wait to be asked).
 ```

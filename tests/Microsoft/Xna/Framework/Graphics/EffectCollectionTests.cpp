@@ -200,6 +200,47 @@ TEST(EffectParameterCollectionTest, IterationVisitsAllParameters)
     EXPECT_EQ(count, 3);
 }
 
+// Task 357: FNA's this[string name] does a plain `name.Equals(elem.Name)` scan — ordinal,
+// case-sensitive, first match wins on duplicates (foreach loop, no dedup/ambiguity check).
+// GetParameterBySemantic uses the identical pattern over Semantic instead of Name. Neither
+// was previously verified for case-sensitivity or duplicate-name/-semantic tie-breaking.
+
+TEST(EffectParameterCollectionTest, IndexByNameIsCaseSensitive)
+{
+    EffectParameterCollection col;
+    col.Add(MakeParam("Alpha"));
+    EXPECT_EQ(col["alpha"], nullptr);
+    EXPECT_NE(col["Alpha"], nullptr);
+}
+
+TEST(EffectParameterCollectionTest, IndexByNameFirstMatchWinsOnDuplicateNames)
+{
+    EffectParameterCollection col;
+    col.Add(EffectParameter("Dup", "", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Single));
+    col.Add(EffectParameter("Dup", "", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single));
+    EffectParameter* p = col["Dup"];
+    ASSERT_NE(p, nullptr);
+    EXPECT_EQ(p->getParameterClassProperty(), EffectParameterClass::Scalar);
+}
+
+TEST(EffectParameterCollectionTest, GetParameterBySemanticIsCaseSensitive)
+{
+    EffectParameterCollection col;
+    col.Add(MakeParam("Proj", "PROJECTION"));
+    EXPECT_EQ(col.GetParameterBySemantic("projection"), nullptr);
+    EXPECT_NE(col.GetParameterBySemantic("PROJECTION"), nullptr);
+}
+
+TEST(EffectParameterCollectionTest, GetParameterBySemanticFirstMatchWinsOnDuplicates)
+{
+    EffectParameterCollection col;
+    col.Add(MakeParam("first", "TEXCOORD"));
+    col.Add(MakeParam("second", "TEXCOORD"));
+    EffectParameter* p = col.GetParameterBySemantic("TEXCOORD");
+    ASSERT_NE(p, nullptr);
+    EXPECT_EQ(p->getNameProperty(), "first");
+}
+
 // ============================================================
 // EffectPassCollection (standalone, beyond EffectTechniqueTests)
 // ============================================================
