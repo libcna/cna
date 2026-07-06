@@ -796,9 +796,23 @@ P3-003) vs FNA's non-deterministic `base.GetHashCode()`; note it hashes position
 states, which still affect `Equals`) — a valid hash (equal⇒equal). **Files changed:** none (logic verified).
 **Behavior verified:** field compare + exact ToString + deterministic hash. **Remaining risk:** none.
 
-## L-003 — `Mouse.cpp` logic `[ ]`
-- [ ] vs FNA `Mouse.cs`: GetState assembly, SetPosition (relative-mode guard + warp), WindowHandle
+## L-003 — `Mouse.cpp` logic `[x]`
+- [x] vs FNA `Mouse.cs`: GetState assembly, SetPosition (relative-mode guard + warp), WindowHandle
   resolution, relative-mode get/set, ClickedEXT dispatch.
+
+**Result (2026-07-06):** Logic verified vs FNA — **faithful, no fix needed.** `SetPosition` opens with the
+same relative-mode short-circuit as FNA (`Mouse.cs:99-103`, "meaningless in relative mode → return"), then
+updates the InputManager logical position and warps the OS cursor — adding the **P3-001 null-window guard**
+(never hands SDL a null window) and the **a-0001 logical→window** conversion (generalizes FNA's fixed
+back-buffer ratio through the graphics backend / `SDL_RenderCoordinatesToWindow`). `getIsRelativeMouseModeEXT`
+reads SDL **live** (`SDL_GetWindowRelativeMouseMode`, DEC-14 — ≡ FNA `GetRelativeMouseMode`), false with no
+window; the setter calls `SDL_SetWindowRelativeMouseMode` + mirrors the flag into InputManager to gate delta
+accumulation (DEC-14). `GetState` delegates to the event-driven `InputManager::GetMouseState()` (coords are
+converted window→logical at event time, a-0001 — ≡ FNA's GetState scaling). `INTERNAL_onClicked` dispatches
+`ClickedEXT` if subscribed (≡ FNA `ClickedEXT?.Invoke`). `SetCursor` (NOXNA) guards a disposed/null handle
+(SDL_SetCursor(NULL) would redraw not clear) — matches MonoGame. **Files changed:** none (logic verified;
+deviations are the documented a-0001 coordinate model + DEC-14 relative-mode + P3-001 null guard).
+**Behavior verified:** SetPosition guard+warp, live relative-mode, click dispatch. **Remaining risk:** none.
 
 ## L-004 — `MouseCursor.cpp` logic `[ ]`
 - [ ] Cursor ownership/move/dispose lifecycle; FromTexture2D surface build + format validation + hotspot.
