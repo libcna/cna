@@ -26,6 +26,7 @@ void main() {
     vec4 texColor = texture(uTexture,  vUV);
     vec3 reflDir  = reflect(-E, N);
     vec3 envColor = texture(uEnvMap, reflDir).rgb;
-    vec3 rgb = litRGB * texColor.rgb + envColor * ep.emissive_em.w + ep.envMapSpec_pad.xyz;
+    vec3 baseColor = litRGB * texColor.rgb;
+    vec3 rgb = mix(baseColor, envColor, ep.emissive_em.w) + ep.envMapSpec_pad.xyz;
     outColor = vec4(rgb, ep.diffuseColor.a * texColor.a);
 }

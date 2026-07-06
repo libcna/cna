@@ -20,7 +20,8 @@ void main()
     vec3 litRGB   = (u_emissiveColor.xyz + u_light0Diffuse.xyz * NdotL) * u_diffuseColor.xyz;
     vec4 texColor = texture2D(s_texColor, v_texcoord0);
     vec3 reflDir  = reflect(-E, N);
-    vec3 envColor = textureCube(s_envMap, reflDir).xyz;
-    vec3 rgb      = litRGB * texColor.xyz + envColor * u_envMapAmount.x + u_envMapSpecular.xyz;
+    vec3 envColor  = textureCube(s_envMap, reflDir).xyz;
+    vec3 baseColor = litRGB * texColor.xyz;
+    vec3 rgb       = mix(baseColor, envColor, u_envMapAmount.x) + u_envMapSpecular.xyz;
     gl_FragColor  = vec4(rgb, u_diffuseColor.w * texColor.w);
 }
