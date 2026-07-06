@@ -779,5 +779,14 @@ namespace Microsoft::Xna::Framework::Net
 
         static NetworkSessionAction* activeAction_;
         static NetworkSession* activeSession_;
+
+        // Task 2.15: the connect address/port BeginJoin captured from its AvailableNetworkSession
+        // argument, consumed by EndJoin to actually call ENetBackend::ConnectToHost once the
+        // joined session exists - NetworkSessionAction (shared by every Begin*/End* pair) has no
+        // room for these without also touching Create/Find/JoinInvited's own call sites, so they
+        // get the same single-pending-action static treatment as activeAction_/activeSession_
+        // above rather than growing that shared class for just one caller.
+        NOXNA static std::string pendingJoinAddress_;
+        NOXNA static uint16_t pendingJoinPort_;
     };
 }

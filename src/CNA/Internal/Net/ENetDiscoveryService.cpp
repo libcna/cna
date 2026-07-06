@@ -174,7 +174,14 @@ namespace CNA::Internal::Net
                                     announce.Properties,
                                     QualityOfService::CreateInternal(),
                                     address,
-                                    announce.ConnectPort
+                                    announce.ConnectPort,
+                                    // Task 2.15: explicit, even though it's also the default -
+                                    // FindSessions() (the only caller that can ever reach this
+                                    // code path) itself early-returns {} for any non-SystemLink
+                                    // filter before a single byte goes on the wire, so every
+                                    // AvailableNetworkSession discovered this way really is
+                                    // SystemLink.
+                                    NetworkSessionType::SystemLink
                                 ));
                             }
                         }

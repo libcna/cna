@@ -21,6 +21,8 @@ namespace Microsoft::Xna::Framework::Net
     NetworkSession::NetworkSessionAction* NetworkSession::activeAction_ = nullptr;
     NetworkSession* NetworkSession::activeSession_ = nullptr;
     System::EventHandler<GamerServices::InviteAcceptedEventArgs> NetworkSession::InviteAccepted;
+    std::string NetworkSession::pendingJoinAddress_;
+    uint16_t NetworkSession::pendingJoinPort_ = 0;
 
     // --- NetworkSessionAction ---
 
@@ -789,12 +791,20 @@ namespace Microsoft::Xna::Framework::Net
             throw System::InvalidOperationException();
         }
 
+        // Task 2.15: FNA hardcodes NetworkSessionType.PlayerMatch here (marked FIXME upstream) -
+        // harmless in FNA itself (networking is entirely stubbed out there regardless of session
+        // type), but a real functional gap in CNA, whose ENet transport is gated specifically on
+        // SystemLink: every session produced via the real public Join() entry point would
+        // otherwise permanently have real networking disabled. Derive the real type (and stash
+        // the connect address/port for EndJoin below) from availableSession instead.
+        pendingJoinAddress_ = availableSession->GetConnectAddress();
+        pendingJoinPort_ = availableSession->GetConnectPort();
         activeAction_ = new NetworkSessionAction(
             std::move(asyncState), std::move(callback), 4, std::nullopt, 0,
             // FNA passes null for SessionProperties here (marked FIXME upstream); substituted
             // with a default instance since this port's SessionProperties isn't nullable.
             NetworkSessionProperties{},
-            NetworkSessionType::PlayerMatch // FIXME upstream: hardcoded rather than derived from availableSession.
+            availableSession->GetSessionType()
         );
         return activeAction_;
     }
@@ -808,19 +818,33 @@ namespace Microsoft::Xna::Framework::Net
 
         int actionMaxLocalGamers = activeAction_->MaxLocalGamers;
         auto actionLocalGamers = activeAction_->LocalGamers;
+        NetworkSessionType actionSessionType = activeAction_->SessionType;
         activeAction_ = nullptr;
 
         activeSession_ = new NetworkSession(
             // FNA passes null for properties here (marked FIXME upstream); substituted with a
             // default instance since this port's SessionProperties isn't nullable.
             NetworkSessionProperties{},
-            NetworkSessionType::PlayerMatch, // FIXME upstream
-            MaxSupportedGamers,              // FIXME upstream
-            4,                                // FIXME upstream
+            actionSessionType,   // Task 2.15: the real type derived in BeginJoin, not a hardcoded one
+            MaxSupportedGamers,  // FIXME upstream
+            4,                    // FIXME upstream
             actionMaxLocalGamers,
             actionLocalGamers,
             false // EndJoin: this machine is joining someone else's session (see DEFERRED.md item #20)
         );
+
+        // Task 2.15: the constructor above only starts activeSession_'s own ENet host (see its
+        // own RealNetworkingEnabled-gated StartHosting call) - actually connecting out to the
+        // session being joined is this call's own responsibility, same as ConnectToHost's other
+        // production caller. Skipped for a manually-constructed AvailableNetworkSession with no
+        // real discovery-sourced connect info (GetConnectAddress() empty).
+        if (!pendingJoinAddress_.empty())
+        {
+            CNA::Internal::Net::ENetBackend::ConnectToHost(activeSession_, pendingJoinAddress_, pendingJoinPort_);
+        }
+        pendingJoinAddress_.clear();
+        pendingJoinPort_ = 0;
+
         return activeSession_;
     }
 

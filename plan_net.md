@@ -521,16 +521,63 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   fix and reran (3x) — passes every time. Full suite: **3256/3258 passing** (2 expected
   accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.15** — Investigate and fix `NetworkSession::Join()`'s real handshake being
-  unreachable from the public API. Confirmed: `BeginJoin`/`EndJoin` hardcode
+- [x] **Task 2.15** — Investigate and fix `NetworkSession::Join()`'s real handshake being
+  unreachable from the public API. Confirmed: `BeginJoin`/`EndJoin` hardcoded
   `NetworkSessionType::PlayerMatch` rather than deriving it from the `AvailableNetworkSession` being
-  joined (an acknowledged in-source FIXME), and `ENetBackend::RealNetworkingEnabled` only returns
-  `true` for `SystemLink` — so every session produced by the real public `Join()` entry point has
-  real networking *disabled*. Only tests that call `ConnectToHost` directly (bypassing `Join()`)
-  exercise the real handshake at all. Fix: derive the correct `NetworkSessionType` from the
-  `AvailableNetworkSession` (or otherwise resolve the FIXME correctly) so `Join()` produces a
-  session with real networking enabled when appropriate. Add a test that calls the real public
-  `Join()` (not `ConnectToHost` directly) and asserts real networking actually activates.
+  joined, and `ENetBackend::RealNetworkingEnabled` only returns `true` for `SystemLink` — so every
+  session produced by the real public `Join()` entry point had real networking permanently
+  *disabled*. Checked the FNA reference: this hardcoding (with an upstream `// FIXME` comment) is
+  genuinely inherited from real FNA, harmless there since FNA's entire networking layer is stubbed
+  out regardless of session type — but a real functional gap in CNA, whose ENet transport is gated
+  specifically on `SystemLink`. Also confirmed a *second*, compounding gap: even with the correct
+  type, nothing in `EndJoin` ever called `ENetBackend::ConnectToHost` — the joined session would
+  start its own ENet host but never actually connect out to the session being joined.
+  **Fixed, in two parts:**
+  1. Added `NetworkSessionType GetSessionType()` to `AvailableNetworkSession` (a new trailing
+     defaulted `NetworkSessionType sessionType = NetworkSessionType::SystemLink` constructor/
+     `CreateInternal` parameter, so every existing call site keeps working unchanged);
+     `ENetDiscoveryService.cpp` now passes `NetworkSessionType::SystemLink` explicitly (the only
+     type `FindSessions()` can ever produce a listing for, since it early-returns `{}` for any
+     other filter before a single byte goes on the wire).
+  2. `BeginJoin` now derives `NetworkSessionType` from `availableSession->GetSessionType()` instead
+     of the hardcoded value, and stashes `GetConnectAddress()`/`GetConnectPort()` in two new
+     `NetworkSession` static members (`pendingJoinAddress_`/`pendingJoinPort_` — a `NetworkSessionAction`
+     field would ripple into `Create`/`Find`/`JoinInvited`'s own call sites for no benefit to them,
+     so these follow the same single-pending-action static pattern as `activeAction_`/`activeSession_`
+     instead). `EndJoin` reads the action's real `SessionType` and, after constructing the session,
+     calls `ENetBackend::ConnectToHost` with the stashed address/port (skipped if empty, e.g. a
+     manually-built `AvailableNetworkSession` with no real discovery-sourced connect info).
+  **Added `NetworkSessionTest.JoinActivatesRealNetworkingForTheCorrectSessionType`**: a real,
+  full-round-trip test of the public `Join()` API (not `ConnectToHost` directly) — installs a
+  one-gamer temporary global (RAII, same technique as Task 2.3/2.4) so `EndJoin`'s
+  fallback-to-global-list constructor path doesn't hit the documented empty-list throw trap, joins
+  a raw fake `ENetHostHandle` host, and confirms: the joined session reports
+  `NetworkSessionType::SystemLink`; it has a real bound ENet port (false under the old
+  hardcoded-`PlayerMatch` bug, since `RealNetworkingEnabled(PlayerMatch)` is false); and — the
+  strongest proof — the fake host actually observes a real `CONNECT` event followed by a decodable
+  `ClientHello` naming the joining gamer, over several pumped `Update()` calls.
+  **Discovered and fixed a real, reproducible double-free while building this test**: the
+  Task 2.3/2.4 global-swap RAII pattern captured `Gamer::getSignedInGamersProperty()`'s return
+  value as "the previous global" and restored it via `setSignedInGamersProperty(previous)` on
+  teardown — but `setSignedInGamersProperty` unconditionally `delete`s whatever it's replacing, so
+  the very first swap already destroyed the object `previous` pointed to; restoring it later
+  handed the global back a dangling pointer, and the *next* test anywhere in the process to touch
+  this global would double-free it. Reproduced deterministically (`double free or corruption (out)`,
+  every run) once this task's test became the next thing in sequence to touch the poisoned global
+  after Tasks 2.3/2.4's tests ran. Fixed all three tests' teardown to install a brand-new empty
+  `SignedInGamerCollection` instead of reusing the captured (and by-then-already-freed) pointer.
+  **Verified the bug is real, not theoretical:** reverted just the 5 source-fix files (keeping the
+  fixed tests) and reran — the test file failed to even **compile**
+  (`no matching function for call to AvailableNetworkSession::CreateInternal(...)`), since the
+  9-argument overload and `GetSessionType()` didn't exist before this fix. Restored the fix and
+  reran — `NetworkSessionTest.*` (42 tests) passes cleanly 3x in a row with no corruption, and the
+  full suite: **3257/3259 passing** (2 expected accelerometer/gyroscope skips), no regressions.
+
+---
+
+**Phase 2 complete** — all 15 Net correctness/gap tasks (Tasks 2.1-2.15) fixed, tested, and
+verified via revert-verify-restore (or documented where a fix wasn't the right call). Continuing
+to Phase 3 (Net memory ownership model).
 
 ---
 

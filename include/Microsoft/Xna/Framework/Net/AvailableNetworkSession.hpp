@@ -2,6 +2,7 @@
 #pragma once
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
 #include "Microsoft/Xna/Framework/Net/QualityOfService.hpp"
 #include <cstdint>
 #include <string>
@@ -96,6 +97,20 @@ namespace Microsoft::Xna::Framework::Net
          */
         NOXNA [[nodiscard]] uint16_t GetConnectPort() const;
 
+        /**
+         * @brief Gets the NetworkSessionType this listing was discovered under.
+         *
+         * Not part of FNA's original design (FNA's Find() never actually discovers anything, so
+         * its own AvailableNetworkSession has no need to remember this). Task 2.15: Join()/
+         * BeginJoin()/EndJoin() need this to derive the real session type to construct instead of
+         * a hardcoded value (an acknowledged upstream FNA FIXME that's otherwise harmless there,
+         * since FNA's networking is entirely stubbed out regardless of session type - but matters
+         * for CNA, whose real ENet transport is gated specifically on SystemLink).
+         *
+         * @return The session type this listing was found under.
+         */
+        NOXNA [[nodiscard]] NetworkSessionType GetSessionType() const;
+
         /** @brief Creates an AvailableNetworkSession for CNA internal use. */
         NOXNA static AvailableNetworkSession CreateInternal(
             int numGamers,
@@ -105,7 +120,8 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSessionProperties properties,
             QualityOfService qos,
             const std::string& hostAddress = "",
-            uint16_t hostPort = 0
+            uint16_t hostPort = 0,
+            NetworkSessionType sessionType = NetworkSessionType::SystemLink
         );
 
     private:
@@ -117,7 +133,8 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSessionProperties properties,
             QualityOfService qos,
             const std::string& hostAddress = "",
-            uint16_t hostPort = 0
+            uint16_t hostPort = 0,
+            NetworkSessionType sessionType = NetworkSessionType::SystemLink
         );
 
         int currentGamerCount_;
@@ -128,5 +145,6 @@ namespace Microsoft::Xna::Framework::Net
         QualityOfService qualityOfService_;
         std::string hostAddress_;
         uint16_t hostPort_{0};
+        NetworkSessionType sessionType_{NetworkSessionType::SystemLink};
     };
 }

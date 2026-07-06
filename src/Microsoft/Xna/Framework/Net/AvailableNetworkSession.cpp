@@ -11,7 +11,8 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSessionProperties properties,
         QualityOfService qos,
         const std::string& hostAddress,
-        uint16_t hostPort
+        uint16_t hostPort,
+        NetworkSessionType sessionType
     )
         : currentGamerCount_(numGamers)
         , hostGamertag_(host)
@@ -21,6 +22,7 @@ namespace Microsoft::Xna::Framework::Net
         , qualityOfService_(std::move(qos))
         , hostAddress_(hostAddress)
         , hostPort_(hostPort)
+        , sessionType_(sessionType)
     {
     }
 
@@ -32,10 +34,12 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSessionProperties properties,
         QualityOfService qos,
         const std::string& hostAddress,
-        uint16_t hostPort
+        uint16_t hostPort,
+        NetworkSessionType sessionType
     ) {
         return AvailableNetworkSession(
-            numGamers, host, privateSlots, publicSlots, std::move(properties), std::move(qos), hostAddress, hostPort
+            numGamers, host, privateSlots, publicSlots, std::move(properties), std::move(qos),
+            hostAddress, hostPort, sessionType
         );
     }
 
@@ -56,6 +60,7 @@ namespace Microsoft::Xna::Framework::Net
 
     const std::string& AvailableNetworkSession::GetConnectAddress() const { return hostAddress_; }
     uint16_t AvailableNetworkSession::GetConnectPort() const { return hostPort_; }
+    NetworkSessionType AvailableNetworkSession::GetSessionType() const { return sessionType_; }
 
     bool AvailableNetworkSession::operator==(const AvailableNetworkSession& other) const
     {
@@ -64,7 +69,8 @@ namespace Microsoft::Xna::Framework::Net
             && openPrivateGamerSlots_ == other.openPrivateGamerSlots_
             && openPublicGamerSlots_ == other.openPublicGamerSlots_
             && hostAddress_ == other.hostAddress_
-            && hostPort_ == other.hostPort_;
+            && hostPort_ == other.hostPort_
+            && sessionType_ == other.sessionType_;
     }
 
     bool AvailableNetworkSession::operator!=(const AvailableNetworkSession& other) const

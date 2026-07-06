@@ -2,6 +2,8 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Net/ENetBackend.hpp"
+#include "CNA/Internal/Net/ENetHostHandle.hpp"
+#include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -251,15 +253,22 @@ TEST(NetworkSessionTest, JoinInvitedMakesLocalGamersReportIsHostFalse) {
 // A handler already subscribed before AddLocalGamer ran never learned about the newly-added local
 // gamer (no replay, no queued event).
 TEST(NetworkSessionTest, AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler) {
-    SignedInGamerCollection* previousGlobal = Gamer::getSignedInGamersProperty();
+    // Task 2.15 fixed a latent double-free here (and in the two other tests using this same
+    // pattern): Gamer::setSignedInGamersProperty(value) unconditionally deletes whatever
+    // signedInGamers_ previously pointed to - capturing that pointer via getSignedInGamersProperty()
+    // and later trying to setSignedInGamersProperty() back to it re-deletes an already-freed
+    // object. Installing a brand-new empty collection on teardown avoids ever reusing a pointer
+    // the setter has already freed - restoring the observable "no one signed in" default state
+    // other tests rely on without resurrecting a dangling pointer.
     SignedInGamer extraGamer = MakeSignedInGamer("ExtraTag");
     Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
         SignedInGamerCollection::CreateInternal({&extraGamer})
     ));
     struct RestoreGlobalGuard {
-        SignedInGamerCollection* previous;
-        ~RestoreGlobalGuard() { Gamer::setSignedInGamersProperty(previous); }
-    } restoreGuard{previousGlobal};
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
 
     // maxLocalGamers=2, but only 1 gamer (extraGamer) is actually signed in globally, so the
     // constructor only fills 1 of the 2 local-gamer slots - leaving room for AddLocalGamer below.
@@ -294,7 +303,9 @@ TEST(NetworkSessionTest, AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHan
 // (once Task 2.2 fixed it to prune localGamers_ too), a remove-then-add sequence could hand a new
 // gamer the same id already owned by a still-present gamer, corrupting FindGamerById.
 TEST(NetworkSessionTest, RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision) {
-    SignedInGamerCollection* previousGlobal = Gamer::getSignedInGamersProperty();
+    // See Task 2.15's fix note above (AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler)
+    // for why this installs a fresh empty collection on teardown rather than restoring a captured
+    // "previous" pointer - Gamer::setSignedInGamersProperty deletes the old value unconditionally.
     SignedInGamer gamerA = MakeSignedInGamer("A");
     SignedInGamer gamerB = MakeSignedInGamer("B");
     SignedInGamer gamerC = MakeSignedInGamer("C");
@@ -302,9 +313,10 @@ TEST(NetworkSessionTest, RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision)
         SignedInGamerCollection::CreateInternal({&gamerA, &gamerB, &gamerC})
     ));
     struct RestoreGlobalGuard {
-        SignedInGamerCollection* previous;
-        ~RestoreGlobalGuard() { Gamer::setSignedInGamersProperty(previous); }
-    } restoreGuard{previousGlobal};
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
 
     NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 3, 8);
     ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 3);
@@ -551,18 +563,97 @@ TEST(NetworkSessionTest, EndFindWithMismatchedResultThrows) {
 
 // --- Static Join/BeginJoin/EndJoin family ---
 //
-// NOTE: Join(...) and EndJoin(...) beyond argument validation are not exercised here.
-// BeginJoin's NetworkSessionAction always carries a std::nullopt LocalGamers list (FNA passes
-// null unconditionally, marked FIXME upstream — see NetworkSession.cpp), so completing via
-// EndJoin always reaches the empty-global-SignedInGamers constructor throw described above the
-// Create family tests, and there is no way to call BeginJoin successfully and later reclaim
-// activeAction_ without hitting that throw. Only the null-check path below is safe to test.
+// NOTE: Join(...)/EndJoin(...) completing successfully needs the same temporary one-gamer global
+// SignedInGamers swap Task 2.3's AddLocalGamer test uses (BeginJoin's NetworkSessionAction always
+// carries a std::nullopt LocalGamers list - FNA passes null unconditionally, marked FIXME
+// upstream - so the constructor's fallback-to-global-list path is the only one EndJoin can ever
+// reach; an empty list there throws and permanently corrupts activeAction_ for the rest of the
+// process). See JoinActivatesRealNetworkingForTheCorrectSessionType below for the real,
+// full-round-trip Join() test this makes possible (Task 2.15).
 
 TEST(NetworkSessionTest, BeginJoinRejectsNullAvailableSession) {
     EXPECT_THROW(
         NetworkSession::BeginJoin(nullptr, System::AsyncCallback{}, std::any{}),
         System::ArgumentNullException
     );
+}
+
+// Task 2.15: BeginJoin/EndJoin hardcoded NetworkSessionType::PlayerMatch instead of deriving it
+// from the AvailableNetworkSession being joined (an acknowledged upstream FNA FIXME - harmless in
+// FNA itself since its networking is entirely stubbed out regardless of session type, but a real
+// functional gap in CNA, whose ENet transport is gated specifically on SystemLink). Every session
+// produced via the real public Join() entry point used to have real networking permanently
+// disabled; only tests calling ConnectToHost directly (bypassing Join()) ever exercised the real
+// handshake. This test calls the real public Join() - not ConnectToHost directly - and confirms
+// real networking actually activates end-to-end: the joined session reports the correct session
+// type, gets its own real ENet host bound, and actually connects out to (and completes a full
+// ClientHello/ServerWelcome handshake with) the session described by the AvailableNetworkSession.
+TEST(NetworkSessionTest, JoinActivatesRealNetworkingForTheCorrectSessionType) {
+    CNA::Internal::Net::ENetHostHandle fakeHostBeingJoined = CNA::Internal::Net::ENetHostHandle::CreateHost(0, 4, 2);
+    uint16_t fakeHostPort = fakeHostBeingJoined.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    // See Task 2.15's fix note on AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler
+    // (above) for why this installs a fresh empty collection on teardown rather than restoring a
+    // captured "previous" pointer - Gamer::setSignedInGamersProperty deletes the old value
+    // unconditionally, so reusing a captured "previous" pointer here is what actually surfaced
+    // this as a reproducible double-free in the first place.
+    SignedInGamer joiningGamer = MakeSignedInGamer("Joiner");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&joiningGamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    AvailableNetworkSession availableSession = AvailableNetworkSession::CreateInternal(
+        1, "FakeHost", 0, 8, NetworkSessionProperties{}, QualityOfService::CreateInternal(),
+        "127.0.0.1", fakeHostPort, NetworkSessionType::SystemLink
+    );
+
+    NetworkSession* joined = NetworkSession::Join(&availableSession);
+    ASSERT_NE(joined, nullptr);
+    EXPECT_EQ(joined->getSessionTypeProperty(), NetworkSessionType::SystemLink);
+    // Real networking activated at all - false under the old hardcoded-PlayerMatch bug, since
+    // RealNetworkingEnabled(PlayerMatch) is false and StartHosting is never called.
+    EXPECT_GT(CNA::Internal::Net::ENetBackend::GetBoundPort(joined), 0);
+
+    // The stronger, full round-trip proof: Join() actually called ConnectToHost with the right
+    // address/port, and the fake host on the other end sees a real CONNECT plus a ClientHello.
+    bool connected = false;
+    ENetPeer* peerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !connected; ++i) {
+        joined->Update();
+        ENetEvent evt{};
+        if (fakeHostBeingJoined.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+            peerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    CNA::Internal::Net::ClientHelloMessage* receivedHello = nullptr;
+    CNA::Internal::Net::ClientHelloMessage helloStorage;
+    for (int i = 0; i < 200 && !receivedHello; ++i) {
+        joined->Update();
+        ENetEvent evt{};
+        if (fakeHostBeingJoined.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            if (CNA::Internal::Net::NetPacketCodec::PeekTag(data) == CNA::Internal::Net::MessageTag::ClientHello) {
+                helloStorage = CNA::Internal::Net::NetPacketCodec::DecodeClientHello(data);
+                receivedHello = &helloStorage;
+            }
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_NE(receivedHello, nullptr);
+    ASSERT_EQ(receivedHello->LocalGamertags.size(), 1u);
+    EXPECT_EQ(receivedHello->LocalGamertags[0], "Joiner");
+    (void) peerFromHostSide;
+
+    joined->Dispose();
 }
 
 // --- Static JoinInvited/BeginJoinInvited/EndJoinInvited family ---
