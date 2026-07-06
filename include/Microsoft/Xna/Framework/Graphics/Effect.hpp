@@ -18,6 +18,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class Effect : public GraphicsResource
     {
     public:
+        using GraphicsResource::Dispose;
+
         /**
          * @brief Constructs an Effect for the given graphics device.
          *
@@ -80,8 +82,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Applies the effect state to the graphics device ready for rendering.
          *
          * Calls OnApply() on the active technique's current pass.
+         *
+         * @note NOXNA — FNA has no public Effect::Apply(); it only exposes
+         * EffectPass::Apply() (which internally calls Effect.OnApply()).
          */
-        void Apply();
+        NOXNA void Apply();
 
         /**
          * @brief Returns the fully-qualified .NET type name of this object.

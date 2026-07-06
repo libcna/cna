@@ -66,7 +66,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     const std::string& Effect::GetTypeName() const
     {
-        static const std::string name = "Effect";
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.Effect";
         return name;
     }
 }

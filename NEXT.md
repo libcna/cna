@@ -13,9 +13,26 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
-  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — **Task 351 is
-  next** (audit `Effect` base class against FNA — constructors, clone, parameters, techniques; see
-  §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent closed phases have synthesis
+  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Task 351 is done,
+  **Task 352 is next** (decide explicit support policy for XNA `.fx`/compiled effect bytecode —
+  this is a policy decision for the user, not something to auto-decide; see §8). **Task 351**
+  audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
+  returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
+  subclass uses; the CNA-only `Effect::Apply()` wasn't wrapped in `NOXNA`; and — found while writing
+  tests — `Effect` was missing `using GraphicsResource::Dispose;`, so `Dispose(bool)` **hid** the
+  inherited public zero-arg `Dispose()` (C++ name-hiding), meaning `effect.Dispose()` failed to
+  **compile** on any concrete effect class unless called through a base-class pointer (confirmed:
+  no existing code anywhere called it directly, so this was live and undiscovered).
+  `Texture`/`Texture2D`/`RenderTarget2D` already had the fix for this exact pattern; `Effect`
+  didn't. Also confirmed, deliberately NOT fixed here: CNA's `Effect` has no FNA-equivalent
+  `.fx`-bytecode constructor or `Clone()`/protected-clone-constructor at all (root cause:
+  `Effect::OnApply()` is pure virtual — CNA has no MojoShader/bytecode pipeline at the base-class
+  level) — the bytecode-constructor question is Task 352's job; the `Clone()` gap is tracked as new
+  **Task 883** (needs a C++ ownership-model decision plus fixing a discovered aliasing hazard where
+  `EffectPass::Apply()`'s `owner_` pointer would keep pointing at the original effect after a naive
+  clone, plus `Clone()` overrides in all 7 stock-effect subclasses — too large for a base-class-only
+  audit). New `tests/.../EffectTests.cpp` (13 tests; previously zero direct base-class coverage
+  existed). Full phase history is in `GRAPHICS_TASKS.md`; the most recent closed phases have synthesis
   docs: `docs/rasterizerstate-support.md` (Phase 38), `docs/rendertarget-support.md` (Phase 39),
   `docs/viewport-displaymode-adapter-support.md` (Phase 40). **Phase 40 connected directly to
   Task 880** (found in Phase 39): `Viewport` has zero
@@ -378,23 +395,41 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 351 — audit `Effect` base class against FNA**
-   - Goal: **opens Phase 41** (Effect base class and compiled effect compatibility, Tasks 351–360).
-     Read FNA's `Graphics/Effect.cs` line-by-line and compare against CNA's `Effect.hpp`/`.cpp`:
-     constructors (including the copy-constructor-driven `Clone()`), `Parameters`/`Techniques`
-     collections, `CurrentTechnique`, `Dispose`, and the `OnApply()` virtual hook FNA gives
-     subclasses. This phase's later tasks (352–354) hinge on this audit's finding for how CNA
-     currently handles (or doesn't) real XNA `.fx` compiled-bytecode constructors — check whether
-     CNA's `Effect(GraphicsDevice, byte[])`-shaped constructor exists at all, and if so what it
-     actually does with the bytecode (parse it for real, silently ignore it, or throw).
-   - Files: `include/Microsoft/Xna/Framework/Graphics/Effect.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/Effect.cpp`, `tests/.../EffectTests.cpp` (or wherever
-     existing `Effect` tests live — check first).
-   - Verification: standard audit-task shape — no new test required if everything already matches
-     FNA; if a real gap is found, fix it with tests proving genuine discriminating power, following
-     this project's established per-task pattern (see Task 341/345 for the template depth).
+1. **`GRAPHICS_TASKS.md` Task 352 — decide explicit support policy for XNA `.fx`/compiled effect bytecode**
+   - Goal: Task 351's audit confirmed CNA's `Effect` base class has **no** FNA-equivalent
+     `Effect(GraphicsDevice, byte[] effectCode)` bytecode constructor at all — `Effect::OnApply()`
+     is pure virtual, and there is no MojoShader (or any) `.fx`-bytecode parsing pipeline anywhere
+     in CNA. This is a genuine policy decision, not something to auto-decide: does CNA (a) fully
+     support compiled `.fx` bytecode (would need a MojoShader-equivalent parser — large effort),
+     (b) partially support it (e.g. parse parameters/techniques metadata but not arbitrary
+     shader assembly, redirecting actual rendering through CNA's existing GLSL `ShaderEffect`
+     path), or (c) explicitly not support it, with any bytecode constructor throwing a clear,
+     documented exception (feeds directly into Task 353's "no silent fake effects" requirement)?
+     **Surface this choice to the user before implementing** — don't pick unilaterally.
+   - Files: likely just a decision recorded in `GRAPHICS_TASKS.md`/`docs/`; implementation is
+     Tasks 353–354's job once the policy is chosen.
 
-2. **`GRAPHICS_TASKS.md` Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`**
+2. **`GRAPHICS_TASKS.md` Task 883 — implement `Effect::Clone()` (new, opened by Task 351)**
+   - Goal: FNA's `Effect` has a public virtual `Clone()` (used by every stock effect, each
+     overriding it to return `new XxxEffect(this)`); CNA's `Effect` has none. Needs: (1) a C++
+     ownership-model decision (FNA returns a GC-managed `Effect`; CNA likely wants
+     `std::unique_ptr<Effect>` or similar), (2) fixing a real aliasing hazard found during Task
+     351's audit — `EffectPass::Apply()` calls `owner_->Apply()` where `owner_` is bound to the
+     *original* `Effect*` at construction time, so a naive copy-based clone would leave the
+     clone's passes silently operating on the original effect's state instead of its own; cloned
+     passes/techniques must be re-bound to the new clone (`this`), not copied verbatim, and (3)
+     `Clone()` overrides + copy constructors in all 7 concrete stock-effect subclasses
+     (`BasicEffect`, `SkinnedEffect`, `AlphaTestEffect`, `DualTextureEffect`,
+     `EnvironmentMapEffect`, `SpriteEffect`, `ShaderEffect`), mirroring FNA's own per-subclass
+     `Clone()` pattern, so subclass-specific state (matrices, lighting, texture bindings, GLSL
+     source) isn't silently dropped.
+   - Files: `Effect.hpp`/`.cpp` plus all 7 stock-effect `.hpp`/`.cpp` pairs.
+   - Verification: clone independence tests (mutating a clone's parameter doesn't affect the
+     original and vice versa), a regression test that would have caught the `owner_`-aliasing
+     hazard (e.g. clone a technique, call the clone's pass `Apply()`, confirm it's the *clone*
+     — not the original — that becomes the device's current effect).
+
+3. **`GRAPHICS_TASKS.md` Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`**
    - Goal: found this session (Task 339) — FNA's real MRT limit is 4 simultaneous targets
      (implicitly enforced via a fixed-size array that throws past 4); CNA's EasyGL/Bgfx silently
      cap at 8 with no error, Vulkan has no CNA-level cap at all.
@@ -405,7 +440,7 @@ In priority order:
    - Verification: new unit test constructing 5 `RenderTargetBinding`s and asserting
      `SetRenderTargets` throws, plus confirming 1–4 still work.
 
-3. **`GRAPHICS_TASKS.md` Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends**
+4. **`GRAPHICS_TASKS.md` Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends**
    - Goal: found this session (Task 338) — `GraphicsDevice.setViewportProperty()` has zero backend
      wiring; every backend hardcodes its actual viewport to the full render-target/window size,
      ignoring `Viewport` entirely. A sub-region viewport (split-screen, atlas-subrect rendering)
@@ -424,7 +459,7 @@ In priority order:
      background-colored (this would almost certainly FAIL on all 3 backends today, confirming
      the gap precisely before fixing it).
 
-4. **`GRAPHICS_TASKS.md` Task 878 — implement `RenderTarget2D`/`RenderTargetCube` mip support on Vulkan and Bgfx**
+5. **`GRAPHICS_TASKS.md` Task 878 — implement `RenderTarget2D`/`RenderTargetCube` mip support on Vulkan and Bgfx**
    - Goal: found in Task 336 — EasyGL now has a real, pixel-verified mip chain for render targets
      (pre-allocated storage + auto-`glGenerateMipmap`-on-unbind); Vulkan/Bgfx accept-and-ignore the
      `mipMap` parameter. `LevelCount` is already correct everywhere (shared C++ computation) —
@@ -440,7 +475,7 @@ In priority order:
    - Verification: port `easygl_rendertarget2d_mip_test.cpp`'s `TextureFilter::Anisotropic`
      black/blue methodology to Vulkan.
 
-5. **`GRAPHICS_TASKS.md` Task 879 — implement `RenderTarget2D`/`RenderTargetCube` MSAA support on Vulkan and Bgfx**
+6. **`GRAPHICS_TASKS.md` Task 879 — implement `RenderTarget2D`/`RenderTargetCube` MSAA support on Vulkan and Bgfx**
    - Goal: found this session (Task 337) — EasyGL now has real MSAA-for-RT (multisampled
      renderbuffer + `glBlitFramebuffer` resolve-on-unbind, pixel-verified via a genuine
      anti-aliasing differential test); Vulkan/Bgfx accept-and-ignore `multiSampleCount` and
@@ -459,7 +494,7 @@ In priority order:
    - Verification: port `easygl_rendertarget2d_msaa_test.cpp`'s diagonal-edge differential
      anti-aliasing methodology to Vulkan.
 
-6. **`GRAPHICS_TASKS.md` Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil attachments**
+7. **`GRAPHICS_TASKS.md` Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil attachments**
    - Goal: found this session (Task 335) — all 3 backends allocate a render target's depth/stencil
      attachment with a hardcoded/coarse choice instead of the actual requested `DepthFormat`:
      EasyGL always uses `DepthComponent24` (no stencil bits, ever); Vulkan ignores `hasDepth`
@@ -474,7 +509,7 @@ In priority order:
      gates a stencil-enabled draw inside a render target (currently would fail — no stencil bits
      exist there today).
 
-7. **`GRAPHICS_TASKS.md` Task 875 — fix Vulkan: `Clear()` alone never records a render pass for a bound RT**
+8. **`GRAPHICS_TASKS.md` Task 875 — fix Vulkan: `Clear()` alone never records a render pass for a bound RT**
    - Goal: `VulkanGraphicsBackend::Clear()` only records a global clear-colour scalar and never
      registers the currently-bound RT in `RecordCommandBuffer`'s `usedRTs` list — only an actual
      draw call does. A `SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);` pattern with
@@ -488,7 +523,7 @@ In priority order:
    - Verification: port `easygl_rt_roundtrip_test.cpp` (Task 180, EasyGL-only, Clear-only pattern)
      to Vulkan as a new regression test.
 
-8. **`GRAPHICS_TASKS.md` Task 876 — investigate why `RenderTargetCube` sampled via `EnvironmentMapEffect` renders black on Vulkan**
+9. **`GRAPHICS_TASKS.md` Task 876 — investigate why `RenderTargetCube` sampled via `EnvironmentMapEffect` renders black on Vulkan**
    - Goal: even with a real `SpriteBatch` draw into each of a `RenderTargetCube`'s 6 faces (working
      around Task 875), sampling it back via `EnvironmentMapEffect` renders black instead of the
      actual rendered colour (found this session, Task 334, see NEXT.md §5). The sampling path
@@ -507,7 +542,7 @@ In priority order:
      `EnvironmentMapEffect`, before attempting a fix. See `examples/vulkan_rendertargetcube_sample_test.cpp`
      for the existing failing repro.
 
-9. **`GRAPHICS_TASKS.md` Tasks 873/874 — fix Bgfx's wrong-handle-type casts for `RenderTarget2D`/`RenderTargetCube` sampling**
+10. **`GRAPHICS_TASKS.md` Tasks 873/874 — fix Bgfx's wrong-handle-type casts for `RenderTarget2D`/`RenderTargetCube` sampling**
    - Goal: `BgfxSpriteBatchBackend::Draw` and `BgfxGraphicsBackend`'s `envMapping` branch each cast
      any `ITextureBackend`/`ITextureCubeBackend` to the plain-texture concrete type via
      `static_cast`, but `RenderTarget2D`/`RenderTargetCube`'s backends are unrelated sibling
@@ -526,14 +561,14 @@ In priority order:
      framebuffer handle, after the fix). See `examples/bgfx_render_target_sample_test.cpp`/
      `bgfx_render_target_cube_sample_test.cpp` for the existing doesn't-crash smoke tests to extend.
 
-10. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
+11. **`GRAPHICS_TASKS.md` Task 663 — implement `TextureCube::DDSFromStreamEXT` for real**
    - Goal: replace the current stub with a real DDS cube-map parser (header parsing incl. `isCube`
      flag, reuse `Texture2D.cpp`'s DXT decode helpers, 6×`levelCount` `SetData` calls).
    - Files: `src/Microsoft/Xna/Framework/Graphics/TextureCube.cpp`, `TextureCubeTests.cpp`.
    - Verification: build a real/hand-built DDS cube-map test fixture **first**, then implement
      against it — do not mark done on "compiles and doesn't throw" alone (see §9).
 
-11. **`GRAPHICS_TASKS.md` Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+12. **`GRAPHICS_TASKS.md` Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
    - Goal: `vkCmdCopyImageToBuffer` + host-visible staging buffer, mirroring the existing upload
      path's staging-buffer pattern in reverse.
    - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
@@ -541,7 +576,7 @@ In priority order:
    - Verification: new Vulkan pixel-readback test analogous to the EasyGL ones in
      `easygl_texture3d_partial_box_readback_test.cpp`.
 
-12. **`GRAPHICS_TASKS.md` Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug**
+13. **`GRAPHICS_TASKS.md` Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug**
    - Goal: confirm (via a failing test first, matching the Task 276 methodology) that `Texture3D`/
      `TextureCube` mip levels >0 silently fail on Vulkan and Bgfx, then fix by pre-allocating every
      mip level at image/texture creation time.
