@@ -55,7 +55,7 @@ findings" below.
 | `getIsDataValidProperty()` | Real | High | Defaults `false` |
 | `getTimeBetweenUpdatesProperty()`/`set...` | Real | High | Default 2ms. **Fixed 2026-07-06 (`SENSORBASE-001`/`ACCEL-005`/`GYRO-004`):** now really throttles `Accelerometer`/`Gyroscope` dispatch (`SensorBase<T>::ShouldAcceptUpdateAt()`, called from each class's `ProcessSensorUpdateEvent()`). **Also fixed 2026-07-06 (`ANDROID-BRIDGE-002`, closed):** `Compass`/`Motion` forward a live change to `Detail::AndroidSensorBridge::SetSampleInterval()`, which re-applies `ASensorEventQueue_setEventRate()` on the already-running queue — no longer applied only once at `Start()` time. All four sensor classes now honor a running `TimeBetweenUpdates` change without `Stop()`/`Start()`. |
 | `CurrentValueChanged` | Real | High | Public event |
-| `TimeBetweenUpdatesChanged` | Real | High | Protected event |
+| `TimeBetweenUpdatesChanged` | `NOXNA` | High | **Fixed 2026-07-06 (`SENSORBASE-007`):** was wrongly marked `Real` here — the real `SensorBase(TSensorReading)`'s own archived MSDN page (`hh239315(v=vs.105)`) lists exactly one event, `CurrentValueChanged`; no such member exists in the real API (confirmed by a dedicated web search finding zero hits). Was a genuine, previously-unflagged **Extra-unmarked** finding: a CNA-only extension (protected, used to forward a live `TimeBetweenUpdates` change to `Compass`/`Motion`'s Android backend) declared without the `NOXNA` marker. Now tagged `NOXNA` in `SensorBase.hpp`. |
 | `Start()`/`Stop()` | Real (abstract) | High | |
 | `Dispose()` | Real | High | Second call throws `ObjectDisposedException` |
 
@@ -253,15 +253,22 @@ Read every public header in scope end-to-end (`VibrateController.hpp`; `SensorBa
 file's prior content, rather than assuming the file was still current.
 
 - **Missing (real XNA/WP7 API absent here): none found.**
-- **Extra-unmarked (CNA extension not tagged `NOXNA`): none found.** This includes
-  re-checking the exact drift this task's acceptance criteria names as the example case
-  to catch — `Accelerometer::getStateProperty()`'s missing `NOXNA` marker vs.
-  `Gyroscope`/`Compass`/`Motion`'s marked ones — which `DEV-API-003` (2026-07-06, see
-  `plan_devices.md`) had already independently re-investigated and closed as **not** a
-  bug: `Accelerometer.State` is real WP7 API (MSDN `ff707930`), the other three
-  correctly have no such property (MSDN `hh239201`/`hh220912`/`hh239189`), so the
-  asymmetric marking is the *correct* state, not drift this matrix needed to newly
-  catch — it had already been caught and resolved.
+- **Extra-unmarked (CNA extension not tagged `NOXNA`): none found** in this original
+  pass. This includes re-checking the exact drift this task's acceptance criteria names
+  as the example case to catch — `Accelerometer::getStateProperty()`'s missing `NOXNA`
+  marker vs. `Gyroscope`/`Compass`/`Motion`'s marked ones — which `DEV-API-003`
+  (2026-07-06, see `plan_devices.md`) had already independently re-investigated and
+  closed as **not** a bug: `Accelerometer.State` is real WP7 API (MSDN `ff707930`), the
+  other three correctly have no such property (MSDN `hh239201`/`hh220912`/`hh239189`),
+  so the asymmetric marking is the *correct* state, not drift this matrix needed to
+  newly catch — it had already been caught and resolved.
+  **Update 2026-07-06 (`SENSORBASE-007`): one genuine Extra-unmarked finding was missed
+  by this original pass and caught later** — `SensorBase<T>::TimeBetweenUpdatesChanged`
+  was marked `Real` in this file's own `SensorBase<TSensorReading>` table above, with no
+  citation, and declared with no `NOXNA` tag in `SensorBase.hpp`. The real class's own
+  archived MSDN page (`hh239315(v=vs.105)`) lists exactly one event
+  (`CurrentValueChanged`) — no such member exists in the real API. Fixed: tagged `NOXNA`
+  in `SensorBase.hpp`, corrected in this file's table above.
 - **Wrong signature/visibility (unverified): 2 found**, both newly recorded in "Flagged
   findings" above (`AccelerometerReadingEventArgs`'s and `SensorReadingEventArgs<T>`'s
   public setters, vs. every reading struct's `private`+`friend` convention) —

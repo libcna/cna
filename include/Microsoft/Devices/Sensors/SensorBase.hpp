@@ -13,6 +13,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
@@ -106,9 +107,22 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Event raised when TimeBetweenUpdates changes.
          *
-         * In the original .NET version this event is protected.
+         * Task SENSORBASE-007: this is a CNA-only extension, not real XNA/WP7
+         * API — the real `SensorBase(TSensorReading)` class's own archived
+         * MSDN reference page (`hh239315(v=vs.105)`) lists exactly one event,
+         * `CurrentValueChanged`; no `TimeBetweenUpdatesChanged` or equivalent
+         * exists (confirmed by a dedicated web search finding zero hits for
+         * the exact member name anywhere). A prior doc comment here claimed
+         * "In the original .NET version this event is protected" with no
+         * citation — that claim was incorrect and has been removed. This
+         * hook exists purely so `Compass`/`Motion`'s Android backend
+         * (`ANDROID-BRIDGE-002`) can forward a live `TimeBetweenUpdates`
+         * change to the running native sensor queue without requiring
+         * `Stop()`/`Start()`; kept `protected` (not made `public`) since
+         * only a derived sensor class, not game code, needs to subscribe to
+         * it.
          */
-        System::EventHandler<System::EventArgs> TimeBetweenUpdatesChanged;
+        NOXNA System::EventHandler<System::EventArgs> TimeBetweenUpdatesChanged;
 
         /**
          * @brief Gets whether this instance has already been disposed.

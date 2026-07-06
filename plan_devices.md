@@ -1291,13 +1291,39 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
 
-### SENSORBASE-007 — Audit protected/internal extension hooks
+### SENSORBASE-007 — Audit protected/internal extension hooks — CLOSED (2026-07-06, real Extra-unmarked bug found and fixed)
 
 - **Priority:** Medium
 - **Area:** API Design
 - **Problem:** Hooks like `TimeBetweenUpdatesChanged` (a public `System::EventHandler`
   member on `SensorBase<T>`, confirmed present) may be useful CNA-internal plumbing but
   must not be confused with real XNA API surface.
+- **What was found:** this task's own problem statement named the exact bug. All
+  `*ForTesting()`/`InjectSynthetic*`/`SetBackendForTesting()` hooks across
+  `SensorBase<T>`/`Accelerometer`/`Gyroscope`/`Compass`/`Motion` were already correctly
+  tagged `NOXNA` (verified by grep — no gap). `TimeBetweenUpdatesChanged`, however, was
+  declared in `SensorBase.hpp` with **no `NOXNA` tag**, and its doc comment claimed "In
+  the original .NET version this event is protected" with no citation. Fetched the real
+  class's own archived MSDN reference page (`SensorBase(TSensorReading)`,
+  `hh239315(v=vs.105)`): its Events table lists exactly one event, `CurrentValueChanged`
+  — no `TimeBetweenUpdatesChanged` or equivalent. A dedicated web search for the exact
+  member name found zero hits anywhere. **Conclusion: this is a genuine, real
+  Extra-unmarked finding** — a CNA-only extension (added to let `Compass`/`Motion`'s
+  Android backend forward a live `TimeBetweenUpdates` change, `ANDROID-BRIDGE-002`)
+  that had never been tagged `NOXNA`, and had also been mis-recorded as `Real` in
+  `docs/devices-api-coverage.md`'s own `SensorBase<TSensorReading>` table — ironically
+  the exact bug pattern `DEV-API-001`'s "zero Extra-unmarked" claim was supposed to have
+  already caught, but missed.
+- **Fix:** tagged `TimeBetweenUpdatesChanged` `NOXNA` in `SensorBase.hpp` (added
+  `#include "CNA/CNAHelper.hpp"`, per this project's checklist rule for any file that
+  uses the marker), rewrote its doc comment to cite the MSDN page and remove the
+  unsourced claim, and corrected `docs/devices-api-coverage.md`'s entry (both the
+  per-member table row and the "DEV-API-001 verification result" section's now-inaccurate
+  "zero Extra-unmarked" claim, updated with this finding).
+- **Verified:** 313/313 tests (unchanged — this was a marker/doc-only change, no
+  behavior change, so no new tests were needed) on plain `cmake-build-debug` and all
+  three sanitizer presets. ASan/UBSan: 0 issues. TSan: 40 reports, all the same
+  pre-existing, unrelated `sharp-runtime` `TimeSpan::copy_count` race.
 - **Required work:**
   - Review all protected/public hooks on `SensorBase<T>` and each derived class's own
     `NOXNA`-tagged testing hooks (e.g. `InjectSyntheticSensorUpdate`,

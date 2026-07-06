@@ -99,6 +99,29 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `SENSORBASE-007` closed: found and fixed a real, previously-missed
+`Extra-unmarked` API bug.** All `*ForTesting()`/`InjectSynthetic*`/
+`SetBackendForTesting()` hooks were already correctly tagged `NOXNA` (verified by
+grep — no gap). `SensorBase<T>::TimeBetweenUpdatesChanged`, however, was declared with
+**no `NOXNA` tag**, and its doc comment claimed "In the original .NET version this
+event is protected" with no citation. Fetched the real class's own archived MSDN
+reference page (`hh239315(v=vs.105)`): its Events table lists exactly one event,
+`CurrentValueChanged` — no `TimeBetweenUpdatesChanged` or equivalent exists in the real
+API (confirmed further by a dedicated web search finding zero hits for the exact member
+name anywhere). This is a genuine CNA-only extension (added to let `Compass`/`Motion`'s
+Android backend forward a live `TimeBetweenUpdates` change) that had never been tagged
+`NOXNA`, and had also been mis-recorded as `Real` in `docs/devices-api-coverage.md`'s
+own table — ironically the exact bug pattern `DEV-API-001`'s "zero Extra-unmarked"
+claim was supposed to have already caught, but missed. Fixed: tagged `NOXNA` in
+`SensorBase.hpp` (added the required `#include "CNA/CNAHelper.hpp"`), rewrote the doc
+comment to cite the MSDN page instead of an unsourced claim, corrected
+`docs/devices-api-coverage.md`'s per-member row and its now-inaccurate "zero
+Extra-unmarked" verification-result claim. Marker/doc-only change, no behavior change,
+so no new tests were needed. Verified: 313/313 tests (unchanged) on plain
+`cmake-build-debug` and all three sanitizer presets. ASan/UBSan: 0 issues. TSan: 40
+reports, all the same pre-existing, unrelated `sharp-runtime` `TimeSpan::copy_count`
+race. **All of `SENSORBASE-001`–`008` are now closed.**
+
 **2026-07-06 — `SENSORBASE-006` closed: `Dispose` semantics verified consistent, two
 real coverage gaps closed, no behavior change.** Repeated-`Dispose()` behavior (throws
 `ObjectDisposedException` on the second call, per this codebase's existing
@@ -611,21 +634,20 @@ own priority labels.
 `DEV-API-003`, `DEV-BUILD-002`, `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`,
 `DEV-API-001`, `ANDROID-BRIDGE-002`, `READINGS-002`, `DEV-BUILD-004`, `MOTION-008`,
 `SENSORBASE-008`, `DEV-BUILD-001`, `SENSORBASE-002`, `SENSORBASE-003`,
-`SENSORBASE-004`, `SENSORBASE-005`, and `SENSORBASE-006` are now closed (18 of 72 total
-task headers) — see Section 3 and `plan_devices.md` itself (grep for `— CLOSED`).
+`SENSORBASE-004`, `SENSORBASE-005`, `SENSORBASE-006`, and `SENSORBASE-007` are now
+closed (19 of 72 total task headers) — see Section 3 and `plan_devices.md` itself (grep
+for `— CLOSED`). All of `SENSORBASE-001`–`008` are now closed.
 
-54 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
+53 tasks remain open, spanning: the entire `VibrateController` block (`VIB-001`–
 `VIB-010`, deliberately untouched per explicit user instruction so far), most
 Accelerometer/Gyroscope/Compass/Motion API- and hardware-verification audits
 (`ACCEL-001`–`004`/`006`/`007`, `GYRO-001`–`003`/`005`, `COMPASS-001`–`008`,
 `MOTION-001`–`007`/`009`/`010`), `DEV-API-002` (`NOXNA` boundary enforcement),
-`DEV-API-004`/`005`, `DEV-BUILD-003` (CI), `SENSORBASE-007`,
-`ANDROID-BRIDGE-001`/`003`/`004`, `SDL-SENSOR-001`/`003`, `READINGS-001`/`003`,
-`DEMO-001`/`002`, and `VERIFY-001`–`003`. Pick the next smallest one, or ask the user to
-prioritize, per Section 9's existing rule. One concrete lead if a task is wanted: the
-`cna_demo_input` Android build failure found during `DEV-BUILD-004` (Section 4) — not
-yet scoped as its own plan task. `SENSORBASE-007` (audit protected/internal extension
-hooks) is the last remaining `SENSORBASE` task and a natural next pick.
+`DEV-API-004`/`005`, `DEV-BUILD-003` (CI), `ANDROID-BRIDGE-001`/`003`/`004`,
+`SDL-SENSOR-001`/`003`, `READINGS-001`/`003`, `DEMO-001`/`002`, and `VERIFY-001`–`003`.
+Pick the next smallest one, or ask the user to prioritize, per Section 9's existing
+rule. One concrete lead if a task is wanted: the `cna_demo_input` Android build failure
+found during `DEV-BUILD-004` (Section 4) — not yet scoped as its own plan task.
 
 ---
 
@@ -791,16 +813,14 @@ along the way, same category as `MOTION-008` earlier in this pass).
 **Next recommended task (at the time this line was first written):** `SENSORBASE-004`
 — see Section 3's entry above; it was picked up autonomously and closed the same
 session (found and fixed a real `Compass`/`Motion` data race via `devices-tsan`), then
-`SENSORBASE-005` and `SENSORBASE-006` were picked up immediately after and closed the
-same session too (`CurrentValue`/`IsDataValid` behavior verified consistent; `Dispose`
-semantics verified consistent with two real coverage gaps closed). No further "next
-smallest task" is queued from a quick pass over `plan_devices.md` beyond that — the
-`cna_demo_input` Android build finding from `DEV-BUILD-004` remains open but unscoped
-(see Section 4) if Android example-app coverage beyond `cna_demo_devices` is ever
-wanted; otherwise, read `plan_devices.md` for its next open task (grep for section
-headers without a "— CLOSED" suffix; `SENSORBASE-007` — the last remaining
-`SENSORBASE` task, auditing protected/internal extension hooks — is a natural next
-pick) or ask the user to prioritize.
+`SENSORBASE-005`, `SENSORBASE-006`, and `SENSORBASE-007` were picked up immediately
+after and closed the same session too — all of `SENSORBASE-001`–`008` are now closed.
+No further "next smallest task" is queued from a quick pass over `plan_devices.md`
+beyond that — the `cna_demo_input` Android build finding from `DEV-BUILD-004` remains
+open but unscoped (see Section 4) if Android example-app coverage beyond
+`cna_demo_devices` is ever wanted; otherwise, read `plan_devices.md` for its next open
+task (grep for section headers without a "— CLOSED" suffix) or ask the user to
+prioritize.
 
 ---
 
