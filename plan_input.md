@@ -1527,11 +1527,23 @@ intentionally isolated (golden tests are headless/no-gamepad) — each subsystem
 **Files changed:** none (coverage confirmed). **Behavior verified:** ordered sequences resolve to exact
 final state across all five subsystems. **Remaining risk:** none.
 
-## P8-003 — Verify SDL initialization ownership
-- [ ] Ensure input code initializes only the SDL subsystems it owns.
-- [ ] Ensure repeated init/shutdown is safe.
-- [ ] Ensure tests do not depend on global hidden state.
-- [ ] Add tests.
+## P8-003 — Verify SDL initialization ownership `[x]`
+- [x] Ensure input code initializes only the SDL subsystems it owns.
+- [x] Ensure repeated init/shutdown is safe.
+- [x] Ensure tests do not depend on global hidden state.
+- [x] Add tests.
+
+**Result (2026-07-06):** The bridge initializes **only** `SDL_INIT_GAMEPAD` (SdlInputBridge.cpp:1214-1224,
+via `EnsureGamepadSubsystemInitialized`) — it never inits VIDEO/etc. (relies on video already up). **Init is
+idempotent** and pinned by `SdlGamepadSubsystemInit.EnsureIsIdempotentAndInitializesSubsystem` (calls twice;
+`SDL_WasInit(SDL_INIT_GAMEPAD)` true; SDL ref-counts). **Repeated shutdown is N/A** — the bridge deliberately
+never `SDL_QuitSubSystem`s the gamepad subsystem (nothing to make unsafe); `ResetForTests` idempotence is
+covered by `InputResetAllForTests.IsIdempotent`. **No global-hidden-state dependence:** every bridge fixture
+resets via `ResetAllForTests()`/`ResetForTests()` in SetUp/TearDown, and the scancode-mode / gamepad-count
+env caches are driven through test-only override hooks (`SetScancodeModeForTests`/`SetGamepadCountForTests`)
+rather than real env; `parse_gamepad_count` is unit-tested directly. **Files changed:** none (coverage
+confirmed). **Behavior verified:** owns only the gamepad subsystem, idempotent init, order-independent tests.
+**Remaining risk:** none.
 
 ## P8-004 — Verify fake backend coverage
 - [ ] Ensure fake keyboard/mouse/touch/gamepad paths exist or are testable.
