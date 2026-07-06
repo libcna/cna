@@ -1222,6 +1222,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 377: AlphaTestEffect vertex color x diffuse color interaction
+        cna_easygl_test(cna_test_easygl_alphatest_vertexcolor_diffuse
+                        examples/easygl_alphatest_vertexcolor_diffuse_test.cpp)
+        add_test(NAME EasyGL_AlphaTest_VertexColorDiffuse
+                 COMMAND cna_test_easygl_alphatest_vertexcolor_diffuse)
+        set_tests_properties(EasyGL_AlphaTest_VertexColorDiffuse PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_dualtexture
                         examples/easygl_dualtexture_test.cpp)
         add_test(NAME EasyGL_DualTexture
