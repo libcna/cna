@@ -1004,7 +1004,7 @@ not an alternate spelling to preserve.
     location)
   - `docs/devices-*.md`
 
-### VIB-005 — Fix `IsSupported` semantics
+### VIB-005 — Fix `IsSupported` semantics — CLOSED (2026-07-06, re-examined with fresh eyes, no change from the prior decision; resolved together with VIB-002/003/009)
 
 - **Priority:** High
 - **Area:** Vibration API
@@ -1016,24 +1016,71 @@ not an alternate spelling to preserve.
   `SDL_InitHapticRumble()` has a real, unverifiable-without-hardware side effect
   (uploads an effect onto the physical device). This task must re-examine that decision
   with fresh eyes, not just re-assert it.
+- **Resolution (2026-07-06):** re-examined with the backend split now in place
+  (`VIB-002`) — `IsSupported()` now lives on `Detail::SdlHapticVibrateBackend`
+  (`AcquireHapticDeviceForProbe()`/`openedTemporary` logic moved verbatim from the old
+  `VibrateController.cpp`, unchanged), with its full "why not also call
+  `SDL_InitHapticRumble()` here" rationale preserved as that method's own doc comment.
+  **No change to the underlying decision** — re-confirmed it still holds even with a
+  phone-vibrator-vs-generic-SDL-haptic-device distinction now conceptually possible
+  post-`VIB-002`: `Detail::SdlHapticVibrateBackend` is the *only* concrete backend in
+  play on every platform (Android's phone vibrator and desktop's generic haptic device
+  both go through the identical `IsSupported()` implementation, per `VIB-003`'s
+  re-confirmation that no dedicated Android-specific backend exists or is warranted),
+  so there is no "simpler phone-only support semantics" to carve out separately — the
+  premise in this task's own required-work bullet (that a future phone-specific backend
+  might want different, simpler semantics) doesn't apply because no such separate
+  backend exists or is planned to exist (`VIB-003`, `VIB-004`'s iOS plan would introduce
+  one eventually, at which point its own `IsSupported()` would naturally use
+  `CHHapticEngine.capabilitiesForHardware().supportsHaptics` — a real, cheap,
+  side-effect-free capability query, so this concern doesn't recur there either).
+  - **No side effects confirmed, by re-reading the exact logic, not by assuming the
+    prior pass's conclusion:** `AcquireHapticDeviceForProbe()` only opens a device
+    temporarily (`openedTemporary = true`) when none is already open from a prior
+    `Start()` call, and `IsSupported()`/`GetDeviceName()` both close it again
+    immediately afterward if so — confirmed unchanged in the moved code.
+  - **Tests:** `VIB-002`/`VIB-009`'s fake-backend tests already cover
+    `GetIsSupportedPropertyForwardsBackendResultTrue`/`...False` — proving
+    `VibrateController::getIsSupportedProperty()` forwards the backend's answer exactly,
+    for both outcomes. A distinct "backend-failure path" test (this task's own
+    acceptance criterion) has no separate scenario to exercise beyond
+    `SupportedResult = false` — `IVibrateBackend::IsSupported()` is a plain `bool`
+    return with no distinct "failed to probe" vs. "definitively unsupported" state in
+    the interface (matching `VIB-009`'s identical finding for `Start()`/`Stop()` — this
+    interface is fire-and-forget/no-fault-signaling by design, mirroring the original
+    SDL-direct code's own contract).
+  - **Known-imprecise case, re-confirmed still accepted, not silently re-asserted:**
+    "device opens but rumble capability itself is unconfirmed" remains exactly as
+    before — `SdlHapticVibrateBackend::IsSupported()`'s own doc comment (moved from the
+    old free function, `AcquireHapticDeviceForProbe`'s caller) explains why
+    `SDL_InitHapticRumble()` is deliberately not also called here.
 - **Required work:**
   - Re-decide exact `NOXNA` semantics for `getIsSupportedProperty()` given the backend
     split introduced in `VIB-002`/`VIB-003` (a phone vibrator backend may have different,
-    simpler support semantics than a generic SDL haptic device).
+    simpler support semantics than a generic SDL haptic device). Done — re-decided; no
+    change, since no such separate backend exists (see Resolution above).
   - Ensure probing checks genuinely usable vibration capability for whichever backend is
-    selected.
+    selected. Done, re-confirmed unchanged.
   - Avoid side effects such as leaving devices open or changing global haptic/backend
-    state as a side effect of probing.
+    state as a side effect of probing. Done, re-confirmed unchanged.
 - **Acceptance criteria:**
   - `getIsSupportedProperty()` returns false when no usable vibration backend exists,
-    for every backend in play after `VIB-002`/`VIB-003`.
+    for every backend in play after `VIB-002`/`VIB-003`. Done — only one backend is in
+    play (`SdlHapticVibrateBackend`), confirmed correct.
   - Tests cover supported, unsupported, and backend-failure paths via a fake backend.
+    Done for supported/unsupported (`VIB-009`); "backend-failure" isn't a distinct
+    scenario this interface models — see Resolution above.
   - Any remaining known-imprecise case (e.g. "device opens but rumble capability itself
-    is unconfirmed") is explicitly documented, not silently accepted.
+    is unconfirmed") is explicitly documented, not silently accepted. Done — re-confirmed
+    and re-documented, not silently re-asserted.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/VibrateController.hpp`
-  - `src/Microsoft/Devices/VibrateController.cpp`
-  - `tests/Microsoft/Devices/VibrateControllerTests.cpp`
+  - `include/Microsoft/Devices/VibrateController.hpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/Detail/SdlHapticVibrateBackend.hpp` (inspected, no
+    change needed beyond the `VIB-002` move)
+  - `src/Microsoft/Devices/Detail/SdlHapticVibrateBackend.cpp` (inspected, no change
+    needed beyond the `VIB-002` move)
+  - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (inspected, coverage already
+    added by `VIB-009`)
 
 ### VIB-006 — Validate duration compatibility
 
