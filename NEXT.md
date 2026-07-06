@@ -12,12 +12,13 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
-- **Current development phase:** Phases 1–39 are complete. **Phase 40 (Viewport, DisplayMode, and
-  adapter behavior, `GRAPHICS_TASKS.md` Tasks 341–350) is open** — Tasks 341–349 are all now done,
-  **Task 350 is next** (docs-only closer, see §8). Full phase history is in `GRAPHICS_TASKS.md`;
-  the most recent closed phases have synthesis docs: `docs/depthstencilstate-support.md`
-  (Phase 37), `docs/rasterizerstate-support.md` (Phase 38), `docs/rendertarget-support.md`
-  (Phase 39). **Phase 40 connects directly to Task 880** (found in Phase 39): `Viewport` has zero
+- **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
+  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — **Task 351 is
+  next** (audit `Effect` base class against FNA — constructors, clone, parameters, techniques; see
+  §8). Full phase history is in `GRAPHICS_TASKS.md`; the most recent closed phases have synthesis
+  docs: `docs/rasterizerstate-support.md` (Phase 38), `docs/rendertarget-support.md` (Phase 39),
+  `docs/viewport-displaymode-adapter-support.md` (Phase 40). **Phase 40 connected directly to
+  Task 880** (found in Phase 39): `Viewport` has zero
   GPU backend wiring on all 3 backends — Tasks 341–344 were all pure math/unit tests against the
   `Viewport` class in isolation (no `GraphicsDevice` involved), so none of them touched it.
   **Task 348** traced the real window-resize chain end-to-end and confirmed a related, deliberate
@@ -42,7 +43,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   indexer to `DisplayModeCollection`). Task 346 (skipped one round, then picked up) verified
   `GraphicsAdapter`'s existing headless-CI fallback chain is structurally complete, fixed one
   small leak, and added a genuine (non-mocked) regression test for the "SDL video subsystem not
-  initialized" enumeration-failure path.
+  initialized" enumeration-failure path. **Task 350 closed Phase 40**: wrote
+  `docs/viewport-displaymode-adapter-support.md`, synthesizing Tasks 341–349 plus a dedicated
+  non-desktop-platform section — confirmed FNA has zero Android/mobile platform branching in this
+  entire API area, confirmed CNA's Android support is compile-only (never executed, no APK
+  packaging integration, blocked emulator run — see `docs/devices-build.md` §4.1) and its
+  Emscripten/Web support is unstarted scaffolding (tracked separately as Phase 69), and documented
+  SDL3's own anticipated-but-unverified Android/Web display-enumeration caveats. Docs-only, no
+  code changed, no new bug found.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -64,10 +72,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly, rebuilt and fully re-verified this
-  session (Task 349 touches shared `GraphicsDevice.hpp`/`.cpp` — a real fix, not just a test
-  addition — plus a new cross-backend test registered for EasyGL and Vulkan; all 3 backends were
-  reconfigured/rebuilt/tested).
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last actually rebuilt/re-verified for
+  Task 349 (touches shared `GraphicsDevice.hpp`/`.cpp` — a real fix, not just a test addition —
+  plus a new cross-backend test registered for EasyGL and Vulkan). Task 350 (docs-only, closes
+  Phase 40) touched no `.hpp`/`.cpp`/test files, so no rebuild was needed — matching Task 340's
+  precedent.
 
 ### Test status (last verified this session)
 - **EasyGL, full `ctest -j1`:** 3353/3356 pass. 3 pre-existing/documented failures (see §5):
@@ -183,6 +192,7 @@ task below) is in `GRAPHICS_TASKS.md` and `git log`.
 
 | Commit / Task | Change |
 |---|---|
+| Task 350 | **Closes Phase 40.** Wrote `docs/viewport-displaymode-adapter-support.md`, a full Phase 40 synthesis (mirroring `docs/rendertarget-support.md`'s Phase 39 closer) covering Tasks 341–349, plus this task's own non-desktop-platform section. Re-audited FNA's `GraphicsAdapter.cs`/`DisplayMode.cs`/`DisplayModeCollection.cs`/`Viewport.cs`/`SDL3_FNAPlatform.cs` for Android/mobile platform branching and found **zero** — FNA is a thin, unconditional wrapper over plain SDL3 display calls, and CNA's `GraphicsAdapter.cpp` mirrors that with no platform guards of its own. Checked actual non-desktop build/run reality instead of assuming: Android — `CNA` cross-compiles for `arm64-v8a` via NDK (`docs/devices-build.md` §4) but has **never actually executed** any display/adapter code (no APK packaging integration, blocked emulator run — `docs/devices-build.md` §4.1); Web/Emscripten — real build scaffolding exists in `CMakeLists.txt` but **no `emcc` build has ever been performed** (unstarted, tracked separately as Phase 69). Documented SDL3's own anticipated (explicitly labeled not-locally-verified) Android/Web display-enumeration caveats, and concluded CNA's existing headless-fallback path (Task 346) isn't the path Android would actually take (a real single display would go through the normal per-display loop) but no code change is anticipated to be necessary either way. No new bug found — pure documentation/synthesis, matching Task 340's precedent exactly: docs-only, no code changed, no rebuild/regression needed. |
 | Task 349 | Read FNA's `GraphicsDevice.Reset()` line-by-line: it unconditionally resets `Viewport` to `(0,0,newW,newH)` regardless of any previously-set custom `Viewport`, and `GraphicsDeviceManager.ApplyChanges()` always calls it; FNA's `Present()` never touches `Viewport` at all. **Found and fixed a real bug in CNA's equivalent mechanism**: `GraphicsDevice::UpdateViewportFromWindow()` (called every frame via `Present()`, per Task 348) decided "did the size change?" by comparing against `Viewport`'s own current width/height — so a game-set custom sub-region `Viewport` (legal FNA usage, e.g. split-screen) was silently stomped back to full-window size on the very next frame, even with no resize at all. Fixed by adding dedicated `lastKnownViewportWidth_`/`Height_` fields to `GraphicsDevice` that track the backend-derived size independently of whatever `Viewport` is currently set to. **Second finding, documented not fixed (self-healing, not a persistent bug)**: `GraphicsDeviceManager::ApplyChanges()` queries the window size immediately after `SDL_SetWindowSize()` with no event pump in between; on X11/Xvfb this can transiently observe a stale size, but it self-corrects within a frame or two since `Present()` re-derives `Viewport` every frame. New shared test `examples/viewport_reset_after_resize_test.cpp` (EasyGL + Vulkan, mirroring Task 338's cross-backend precedent): sets a custom `Viewport(10,20,100,60)`, confirms it survives a frame's `Present()` with no resize, then triggers a real resize via GDM and polls (mirroring Task 348's polling precedent) until `Viewport` settles to `(0,0,640,360)`. **Verified genuine discriminating power**: reverting the fix made exactly the 4 "survives Present()" assertions fail, while the 4 post-resize assertions still passed, before restoring. Full 3-backend rebuild + regression (shared `GraphicsDevice.hpp`/`.cpp` touched): EasyGL 3353/3356 (3 pre-existing, no `CueTest` flake this run). Vulkan 3275/3289 (13 pre-existing + 1 reconfirmed-flaky `CueTest`). Bgfx 3258/3259 (1 reconfirmed-flaky `CueTest`). |
 | Task 348 | Opened Phase 40's third sub-area. Traced the real window-resize chain end-to-end: `SDL_EVENT_WINDOW_RESIZED` → `Game`'s event loop → `GameWindow::updateFromSDL()` → `GameWindow.ClientSizeChanged` → `GraphicsDeviceManager::INTERNAL_OnClientSizeChanged` → `GraphicsDevice::UpdateViewportFromWindow()`. **Confirmed a real, deliberate FNA divergence, correctly not "fixed"**: FNA's `INTERNAL_OnClientSizeChanged` forwards the new window size into `PresentationParameters.BackBufferWidth`/`Height` (full device Reset on every resize); CNA's doesn't, by design (an existing accurate comment explains why — would corrupt `FixedHeightDynamicWidth`'s virtual-resolution scaling). **Genuine discovery while verifying the new test's discriminating power**: `Viewport` tracking doesn't actually depend on the `ClientSizeChanged` event at all — `GraphicsDevice::Present()` unconditionally refreshes it every frame, a stronger guarantee than FNA's — so the event chain itself needed its own separately-discriminating check. **Closed a real test-coverage gap**: Task 227's existing test only covers the GDM-API-driven resize path; new `examples/easygl_real_window_resize_test.cpp` (`EasyGL_RealWindowResize`) calls `SDL_SetWindowSize()` directly on the live window and verifies 4 things: Viewport height pinned, Viewport width changes, `BackBufferWidth`/`Height` unchanged (regression marker), and `ClientSizeChanged` fires. EasyGL-only (matches Task 227's precedent — Vulkan/Bgfx have no virtual-resolution scaling to pin). **New findings deferred to Task 882**: `PresentationMode::Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer` aren't distinctly implemented on EasyGL (only `FixedHeightDynamicWidth` has real logic); Vulkan/Bgfx implement no virtual-resolution scaling at all. Full 3-backend rebuild + regression (new EasyGL-only test, inert `CMakeLists.txt` change): EasyGL 3351/3355 (3 pre-existing + 1 reconfirmed-flaky `CueTest`). Vulkan 3274/3288 (13 pre-existing + 1 reconfirmed-flaky `CueTest`, no order-dependent flake this run). Bgfx 3259/3259 (100%). |
 | Task 346 | Verified the headless-CI fallback chain already present in `GraphicsAdapter.cpp` is structurally complete: `AdaptersChanged()` falls back to a synthetic 800×480 "Default Display" adapter when `SDL_GetDisplays()` fails; `queryDisplayModes()`/`queryCurrentDisplayMode()` fall back similarly for a display that enumerates but whose modes/current-mode queries fail (including the all-null-pointers edge case, already correctly handled). **Fixed one real small bug**: the no-displays branch never called `SDL_free(displays)` before returning — a latent leak when SDL returns a non-null array with `count<=0` — fixed with an unconditional (documented-safe-on-null) `SDL_free(displays)`. **Added a genuine, non-fabricated regression test**: confirmed via a standalone probe that `SDL_GetDisplays()` reliably fails with "Video subsystem has not been initialized" whenever `SDL_INIT_VIDEO` isn't initialized — the real headless-CI scenario, not a mocked one. New `HeadlessFallback_NoVideoSubsystemProducesSingleSyntheticAdapter` test: skips if something else left video initialized (every other SDL-touching test in this project balances its own init/quit calls, so this reliably holds), otherwise calls `AdaptersChanged()` directly and verifies the synthetic adapter's exact values, then restores a real enumeration afterward. Verified it exercises the real path both standalone and interleaved with `GameWindowTests.cpp`. Full 3-backend rebuild + regression: EasyGL 3351/3354 (3 pre-existing, unchanged). Vulkan 3274/3288 (13 pre-existing + 1 reconfirmed order-dependent flake — `Vulkan_FillMode_WireFrame` this run). Bgfx 3258/3259 (1 reconfirmed-flaky `CueTest`). |
@@ -368,18 +378,21 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 350 — document adapter/display limitations for non-desktop platforms**
-   - Goal: closes Phase 40 (the last task in the phase; a docs-only closer, mirroring Task 340's
-     `docs/rendertarget-support.md` precedent for Phase 39). Write a synthesis doc summarizing
-     Tasks 341–349: `Viewport` audit/tests (341–344), `GraphicsAdapter`/`DisplayModeCollection`
-     audit (345–347), backbuffer/window resize behavior (348–349). Scope column says
-     "Android/Web notes" — cover what's actually implemented vs. stubbed for non-desktop targets
-     (`GraphicsAdapter`'s SDL-display-enumeration assumptions, `DeviceId`/`VendorId`'s Linux-only
-     PCI sysfs query returning 0 elsewhere, whether `GraphicsDeviceManager`'s window-resize/
-     orientation-change assumptions hold on Android/Web at all).
-   - Files: new `docs/viewport-adapter-support.md` (or similar name matching the
-     `docs/rendertarget-support.md` convention), `GRAPHICS_TASKS.md` (mark 350 done).
-   - Verification: docs-only, no code change, no regression risk (matches Task 340's precedent).
+1. **`GRAPHICS_TASKS.md` Task 351 — audit `Effect` base class against FNA**
+   - Goal: **opens Phase 41** (Effect base class and compiled effect compatibility, Tasks 351–360).
+     Read FNA's `Graphics/Effect.cs` line-by-line and compare against CNA's `Effect.hpp`/`.cpp`:
+     constructors (including the copy-constructor-driven `Clone()`), `Parameters`/`Techniques`
+     collections, `CurrentTechnique`, `Dispose`, and the `OnApply()` virtual hook FNA gives
+     subclasses. This phase's later tasks (352–354) hinge on this audit's finding for how CNA
+     currently handles (or doesn't) real XNA `.fx` compiled-bytecode constructors — check whether
+     CNA's `Effect(GraphicsDevice, byte[])`-shaped constructor exists at all, and if so what it
+     actually does with the bytecode (parse it for real, silently ignore it, or throw).
+   - Files: `include/Microsoft/Xna/Framework/Graphics/Effect.hpp`,
+     `src/Microsoft/Xna/Framework/Graphics/Effect.cpp`, `tests/.../EffectTests.cpp` (or wherever
+     existing `Effect` tests live — check first).
+   - Verification: standard audit-task shape — no new test required if everything already matches
+     FNA; if a real gap is found, fix it with tests proving genuine discriminating power, following
+     this project's established per-task pattern (see Task 341/345 for the template depth).
 
 2. **`GRAPHICS_TASKS.md` Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`**
    - Goal: found this session (Task 339) — FNA's real MRT limit is 4 simultaneous targets
