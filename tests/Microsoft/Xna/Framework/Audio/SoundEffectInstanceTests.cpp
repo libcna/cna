@@ -105,6 +105,54 @@ TEST_F(SoundEffectInstanceTest, VolumePassesThroughUnclamped)
     EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.3f);
 }
 
+// P10-SEI-002: FNA's Volume setter (SoundEffectInstance.cs) has no IsDisposed/hasStarted guard
+// at all -- it always accepts the new value and only conditionally pushes it to the live voice.
+// The remaining tests below lock this down at every lifecycle stage the property matrix calls
+// for (during play / after pause / after stop / after dispose), matching the same pattern the
+// Pitch tests below use.
+TEST_F(SoundEffectInstanceTest, VolumeSetWhilePlayingDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+    inst.setVolumeProperty(0.4f);
+    EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.4f);
+}
+
+TEST_F(SoundEffectInstanceTest, VolumeSetAfterPauseDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.Pause();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Paused);
+    inst.setVolumeProperty(0.6f);
+    EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.6f);
+}
+
+TEST_F(SoundEffectInstanceTest, VolumeSetAfterStopDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.Stop();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    inst.setVolumeProperty(0.7f);
+    EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.7f);
+}
+
+TEST_F(SoundEffectInstanceTest, VolumeSetAfterDisposeDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.Dispose();
+    ASSERT_TRUE(inst.getIsDisposedProperty());
+    inst.setVolumeProperty(0.8f); // unlike Pan, FNA's Volume setter has no IsDisposed check
+    EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.8f);
+}
+
 TEST_F(SoundEffectInstanceTest, PanRangeAndDisposed)
 {
     REQUIRE_DEVICE();
@@ -119,6 +167,41 @@ TEST_F(SoundEffectInstanceTest, PanRangeAndDisposed)
     EXPECT_THROW(inst.setPanProperty(0.0f), System::ObjectDisposedException);
 }
 
+// P10-SEI-002: unlike Volume/Pitch, FNA's Pan setter (SoundEffectInstance.cs) is gated only by
+// IsDisposed -- never by hasStarted -- so it must keep working across every other lifecycle
+// stage (during play / after pause / after stop), with only the disposed case above throwing.
+TEST_F(SoundEffectInstanceTest, PanSetWhilePlayingDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+    inst.setPanProperty(0.25f);
+    EXPECT_FLOAT_EQ(inst.getPanProperty(), 0.25f);
+}
+
+TEST_F(SoundEffectInstanceTest, PanSetAfterPauseDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.Pause();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Paused);
+    inst.setPanProperty(-0.25f);
+    EXPECT_FLOAT_EQ(inst.getPanProperty(), -0.25f);
+}
+
+TEST_F(SoundEffectInstanceTest, PanSetAfterStopDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.Stop();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    inst.setPanProperty(0.6f);
+    EXPECT_FLOAT_EQ(inst.getPanProperty(), 0.6f);
+}
+
 TEST_F(SoundEffectInstanceTest, PitchClampsToRange)
 {
     REQUIRE_DEVICE();
@@ -129,6 +212,51 @@ TEST_F(SoundEffectInstanceTest, PitchClampsToRange)
     EXPECT_FLOAT_EQ(inst.getPitchProperty(), 1.0f);
     inst.setPitchProperty(-2.0f); // move overload
     EXPECT_FLOAT_EQ(inst.getPitchProperty(), -1.0f);
+}
+
+// P10-SEI-002: like Volume, FNA's Pitch setter has no IsDisposed/hasStarted guard at all -- it
+// always accepts and clamps the new value, only conditionally pushing it to the live voice.
+TEST_F(SoundEffectInstanceTest, PitchSetWhilePlayingDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+    inst.setPitchProperty(0.3f);
+    EXPECT_FLOAT_EQ(inst.getPitchProperty(), 0.3f);
+}
+
+TEST_F(SoundEffectInstanceTest, PitchSetAfterPauseDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.Pause();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Paused);
+    inst.setPitchProperty(-0.3f);
+    EXPECT_FLOAT_EQ(inst.getPitchProperty(), -0.3f);
+}
+
+TEST_F(SoundEffectInstanceTest, PitchSetAfterStopDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.Stop();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    inst.setPitchProperty(0.2f);
+    EXPECT_FLOAT_EQ(inst.getPitchProperty(), 0.2f);
+}
+
+TEST_F(SoundEffectInstanceTest, PitchSetAfterDisposeDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.Dispose();
+    ASSERT_TRUE(inst.getIsDisposedProperty());
+    inst.setPitchProperty(-0.1f); // unlike Pan, FNA's Pitch setter has no IsDisposed check
+    EXPECT_FLOAT_EQ(inst.getPitchProperty(), -0.1f);
 }
 
 TEST_F(SoundEffectInstanceTest, IsLoopedBeforePlay)
@@ -147,6 +275,43 @@ TEST_F(SoundEffectInstanceTest, IsLoopedAfterPlayThrows)
     SoundEffectInstance inst = instance();
     inst.Play();
     EXPECT_THROW(inst.setIsLoopedProperty(true), System::InvalidOperationException);
+}
+
+// P10-SEI-002: FNA's IsLooped setter (SoundEffectInstance.cs) is gated purely by `hasStarted`,
+// a one-way latch set the moment Play() first succeeds and never reset -- not by Pause()/Stop(),
+// and (unlike Pan) not by IsDisposed either. These lock down the two lifecycle stages that
+// IsLoopedAfterPlayThrows above doesn't reach on its own.
+TEST_F(SoundEffectInstanceTest, IsLoopedAfterPauseStillThrows)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.Pause();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Paused);
+    EXPECT_THROW(inst.setIsLoopedProperty(true), System::InvalidOperationException);
+}
+
+TEST_F(SoundEffectInstanceTest, IsLoopedAfterStopStillThrows)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.Stop();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    EXPECT_THROW(inst.setIsLoopedProperty(true), System::InvalidOperationException);
+}
+
+// The converse asymmetry: an instance that is disposed *without ever having played* has never
+// set the hasStarted latch, so IsLooped's setter -- having no IsDisposed check of its own --
+// does not throw at all here, unlike Pan's ObjectDisposedException in PanRangeAndDisposed above.
+TEST_F(SoundEffectInstanceTest, IsLoopedAfterDisposeWithoutEverPlayingDoesNotThrow)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Dispose();
+    ASSERT_TRUE(inst.getIsDisposedProperty());
+    inst.setIsLoopedProperty(true);
+    EXPECT_TRUE(inst.getIsLoopedProperty());
 }
 
 TEST_F(SoundEffectInstanceTest, PlayStopTransitions)

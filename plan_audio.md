@@ -3587,12 +3587,25 @@ restoration can be reverted.
 * [x] P10-SEI-001: Audit `Volume`/`Pitch`/`Pan`/`IsLooped`/`State`/`Play`/`Pause`/`Resume`/`Stop`.
   *Note:* Already extensively audited across Fáze 9 -- `Resume()`-plays-if-never-started quirk
   matching FNA (`P9-VALIDATION-010`), `IsLooped` setter semantics, real `State` reconciliation.
-* [ ] P10-SEI-002: Tests for setting properties before play/during play/after pause/after
+* [x] P10-SEI-002: Tests for setting properties before play/during play/after pause/after
   stop/after dispose.
-  *Note:* Partially covered by existing tests scattered across `SoundEffectInstanceTests.cpp`
-  (e.g. `VolumePassesThroughUnclamped`, `PanRangeAndDisposed`), but not organized as one
-  systematic before/during/after-pause/after-stop/after-dispose matrix per property -- not
-  audited to that exhaustive a grid in this pass; left open.
+  *Note:* Closed this pass. Read FNA's real setters (`SoundEffectInstance.cs`) line-by-line to
+  determine each property's actual gate, rather than guessing: `Volume`/`Pitch` have **no**
+  `IsDisposed`/`hasStarted` guard at all (always accepted, only conditionally pushed to the live
+  voice); `Pan` is gated **only** by `IsDisposed` (never `hasStarted`); `IsLooped` is gated
+  **only** by `hasStarted` -- a one-way latch set the moment `Play()` first succeeds and never
+  reset by `Pause()`/`Stop()`/`Dispose()` (confirmed identically implemented in CNA's
+  `SoundEffectInstance.cpp`). Added the missing matrix cells in `SoundEffectInstanceTests.cpp`:
+  `Volume`/`Pitch` each get `...SetWhilePlayingDoesNotThrow`/`...SetAfterPauseDoesNotThrow`/
+  `...SetAfterStopDoesNotThrow`/`...SetAfterDisposeDoesNotThrow` (4 each); `Pan` gets
+  `...SetWhilePlayingDoesNotThrow`/`...SetAfterPauseDoesNotThrow`/`...SetAfterStopDoesNotThrow`
+  (3; after-dispose already covered by `PanRangeAndDisposed`); `IsLooped` gets
+  `IsLoopedAfterPauseStillThrows`/`IsLoopedAfterStopStillThrows` (proving the latch survives
+  Pause/Stop, not just Play) and `IsLoopedAfterDisposeWithoutEverPlayingDoesNotThrow` (the
+  converse case -- disposing *before* ever playing leaves `hasStarted` false, so unlike `Pan` it
+  does **not** throw `ObjectDisposedException`, a real, non-obvious asymmetry now locked down by
+  a test instead of left implicit). 14 new tests total, all passing; no production code change
+  needed -- every setter already matched FNA exactly.
 * [x] P10-SEI-003: Tests for repeated `Play`/`Pause`/`Resume`/`Stop` calls matching XNA/FNA.
   *Note:* Covered, e.g. `Cue`-level `PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`
   and `Pause()`'s own idempotency guard (`P9-LIFECYCLE-013`'s note: "idempotent, like
