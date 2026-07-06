@@ -26,7 +26,7 @@ independent task instead of guessing.
 
 ## 0. Setup
 
-### DEVICES-CNA-000 — CMake scaffold: `CNA_DEVICES` option + directory wiring
+### DEVICES-CNA-000 — CMake scaffold: `CNA_DEVICES` option + directory wiring — CLOSED (2026-07-07)
 
 - **Priority:** Critical (blocks every other task)
 - **Problem:** No `CNA::Devices` namespace, directory, or build option exists yet.
@@ -48,6 +48,21 @@ independent task instead of guessing.
   `CNA_DEVICES=OFF` (default) is completely unaffected (no new symbols, no new
   warnings).
 - **Suggested files:** `CMakeLists.txt`.
+- **Resolution:** Added `option(CNA_DEVICES ...)` right after `CNA_NOXNA`
+  (`CMakeLists.txt:21`) and its `PUBLIC` compile-definition propagation on the `CNA`
+  target (`$<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>`, right after `CNA_NOXNA`'s own line)
+  — byte-for-byte the same pattern, deliberately no divergence. Verified
+  `-DCNA_DEVICES` reaches `CMakeFiles/CNA.dir/flags.make` when ON and is absent when
+  OFF (checked both directions via `grep`, not assumed from the CMake generator
+  expression alone). Rebuilt the full `CNA` target with `CNA_DEVICES=ON`: clean, no new
+  warnings (no new source files exist yet, so this is expected, but confirms the flag
+  itself introduces no side effects). Did not create an empty
+  `include/CNA/Devices/`/`src/CNA/Devices/` directory in this task — git does not track
+  empty directories, and the first real header lands in the very next task
+  (`DEVICES-CNA-001`), so a separate empty-directory commit would add no value. Left
+  the local `cmake-build-debug` cache configured with `CNA_DEVICES=ON` for the
+  remainder of this plan's implementation work (default for new/consumer builds stays
+  `OFF`, unchanged).
 
 ---
 
@@ -248,4 +263,6 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
-- Plan created (this file), Task DEVICES-CNA-000 next.
+- **2026-07-07 — DEVICES-CNA-000 CLOSED.** `CNA_DEVICES` CMake option added and
+  verified in both directions. Next: `DEVICES-CNA-001` (`PowerInfo`).
+- Plan created (this file).

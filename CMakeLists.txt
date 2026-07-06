@@ -18,6 +18,7 @@ endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
 option(CNA_NOXNA "Enable CNA NOXNA extended graphics layer (beyond XNA 4.0)" OFF)
+option(CNA_DEVICES "Enable CNA-specific device/sensor extensions beyond XNA 4.0 (battery, camera, clipboard, ...)" OFF)
 option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
 
 include(cmake/ThirdPartySDL.cmake)
@@ -237,6 +238,7 @@ target_compile_definitions(CNA
         SOUND_ENABLED
         XNA5
         $<$<BOOL:${CNA_NOXNA}>:CNA_NOXNA>
+        $<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>
 )
 
 target_link_libraries(CNA
