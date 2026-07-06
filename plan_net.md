@@ -1009,11 +1009,34 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   revert-verify applies. New test passed 5/5 on repeat. Full suite: **3285/3287 passing** (2
   expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 5.14** — Add adversarial/malformed-packet tests for `NetPacketCodecTests.cpp` and
+- [x] **Task 5.14** — Add adversarial/malformed-packet tests for `NetPacketCodecTests.cpp` and
   `NetDiscoveryProtocolTests.cpp`. Confirmed neither file currently exercises a negative/oversized
   property index (Tasks 1.1/1.2) or a truncated buffer (Task 1.4) — none of the highest-severity
   bugs found in this audit has any regression coverage today. Add tests for each, asserting clean
-  rejection (post-fix) rather than crash/corruption.
+  rejection (post-fix) rather than crash/corruption. Re-confirmed on inspection: the
+  negative/oversized property-index coverage (Tasks 1.1/1.2) **already existed** in
+  `NetDiscoveryProtocolTests.cpp` (`DecodeAnnounceRejectsNegativePropertyIndex`,
+  `DecodeAnnounceRejectsHugePropertyIndex`, added when those tasks were originally fixed) — this
+  task's own text pre-dated that work and was stale by the time it was reached. The genuinely
+  missing piece was truncated-buffer coverage at the codec-unit level: existing integration tests
+  (`ENetBackendTest.HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward`,
+  `ENetDiscoveryServiceTest.PollIgnoresMalformedAnnounceWhileIdlingAndDiscoveryKeepsWorking`) only
+  prove the outer `try`/`catch` resilience layer survives a truncated wire packet, never that each
+  `Decode*` function itself throws cleanly (vs. reading out of bounds) in isolation.
+
+  Added 6 tests to `NetPacketCodecTests.cpp` (`DecodeClientHelloThrowsOnTruncatedBuffer`,
+  `DecodeServerWelcomeThrowsOnTruncatedBuffer`, `DecodeGamerJoinBroadcastThrowsOnTruncatedBuffer`,
+  `DecodeGamerLeaveBroadcastThrowsOnTruncatedBuffer`,
+  `DecodeStateChangeBroadcastThrowsOnTruncatedBuffer`, `DecodeAppDataThrowsOnTruncatedBuffer`) and
+  2 to `NetDiscoveryProtocolTests.cpp` (`DecodeQueryThrowsOnTruncatedBuffer`,
+  `DecodeAnnounceThrowsOnTruncatedBuffer`) — each encodes a well-formed message, truncates the
+  byte vector down to just its tag byte, and asserts the corresponding `Decode*` throws
+  `std::runtime_error` (from `BinaryReader::ReadBytes`' own underflow guard) instead of reading
+  past the buffer.
+
+  Pure test-coverage addition (all decode paths are pre-existing and already correct post-Task
+  1.1/1.2/1.4), no revert-verify applies. New tests: 8/8 passing. Full suite: **3293/3295 passing**
+  (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 5.15** — Add error-path tests for `ENetHostHandle`: `Connect()` with an unresolvable
   hostname (should throw a clear, catchable exception), `Send()`/`Broadcast()` targeting zero

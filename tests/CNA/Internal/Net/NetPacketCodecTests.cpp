@@ -154,6 +154,67 @@ TEST(NetPacketCodecTest, AppDataRoundtripEmptyPayload) {
     EXPECT_TRUE(decoded.Payload.empty());
 }
 
+// Task 5.14: adversarial/truncated-buffer coverage at the codec-unit level. Task 1.4 already
+// proved the *system* survives a truncated packet arriving over the wire (ENetBackendTest's
+// HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward, via HandleReceive's own
+// try/catch), but that only exercises the outer resilience layer - nothing directly asserted
+// that each Decode* function itself throws a clean, catchable exception (rather than reading out
+// of bounds) when hand it a buffer truncated mid-field. These truncate a well-formed encoded
+// message down to just its tag byte, forcing every subsequent field read to hit
+// BinaryReader::ReadBytes' own underflow guard.
+
+TEST(NetPacketCodecTest, DecodeClientHelloThrowsOnTruncatedBuffer) {
+    ClientHelloMessage message;
+    message.LocalGamertags = {"alice"};
+    auto bytes = NetPacketCodec::Encode(message);
+    bytes.resize(1); // keep only the tag byte
+    EXPECT_THROW(NetPacketCodec::DecodeClientHello(bytes), std::runtime_error);
+}
+
+TEST(NetPacketCodecTest, DecodeServerWelcomeThrowsOnTruncatedBuffer) {
+    ServerWelcomeMessage message;
+    message.AssignedWireIds = {3, 4};
+    message.ExistingRoster = {{1, "host"}};
+    auto bytes = NetPacketCodec::Encode(message);
+    bytes.resize(1);
+    EXPECT_THROW(NetPacketCodec::DecodeServerWelcome(bytes), std::runtime_error);
+}
+
+TEST(NetPacketCodecTest, DecodeGamerJoinBroadcastThrowsOnTruncatedBuffer) {
+    GamerJoinBroadcastMessage message;
+    message.NewGamers = {{5, "newgamer"}};
+    auto bytes = NetPacketCodec::Encode(message);
+    bytes.resize(1);
+    EXPECT_THROW(NetPacketCodec::DecodeGamerJoinBroadcast(bytes), std::runtime_error);
+}
+
+TEST(NetPacketCodecTest, DecodeGamerLeaveBroadcastThrowsOnTruncatedBuffer) {
+    GamerLeaveBroadcastMessage message;
+    message.WireIds = {7, 8, 9};
+    auto bytes = NetPacketCodec::Encode(message);
+    bytes.resize(1);
+    EXPECT_THROW(NetPacketCodec::DecodeGamerLeaveBroadcast(bytes), std::runtime_error);
+}
+
+TEST(NetPacketCodecTest, DecodeStateChangeBroadcastThrowsOnTruncatedBuffer) {
+    StateChangeBroadcastMessage message;
+    message.NewState = Microsoft::Xna::Framework::Net::NetworkSessionState::Playing;
+    auto bytes = NetPacketCodec::Encode(message);
+    bytes.resize(1);
+    EXPECT_THROW(NetPacketCodec::DecodeStateChangeBroadcast(bytes), std::runtime_error);
+}
+
+TEST(NetPacketCodecTest, DecodeAppDataThrowsOnTruncatedBuffer) {
+    AppDataMessage message;
+    message.SenderWireId = 1;
+    message.TargetWireId = 2;
+    message.Options = SendDataOptions::Reliable;
+    message.Payload = {10, 20, 30};
+    auto bytes = NetPacketCodec::Encode(message);
+    bytes.resize(1);
+    EXPECT_THROW(NetPacketCodec::DecodeAppData(bytes), std::runtime_error);
+}
+
 TEST(NetPacketCodecTest, SendDataOptionsToEnetFlagsMapping) {
     EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::None), static_cast<uint32_t>(ENET_PACKET_FLAG_UNSEQUENCED));
     EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::InOrder), 0u);

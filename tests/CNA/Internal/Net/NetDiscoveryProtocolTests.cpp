@@ -141,3 +141,29 @@ TEST(NetDiscoveryProtocolTest, DecodeAnnounceRejectsMismatchedProtocolVersion) {
     auto bytes = NetDiscoveryProtocol::Encode(message);
     EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), std::runtime_error);
 }
+
+// Task 5.14: adversarial/truncated-buffer coverage at the codec-unit level, complementing
+// ENetDiscoveryServiceTest's own PollIgnoresMalformedAnnounceWhileIdlingAndDiscoveryKeepsWorking
+// (which proves the *system* survives a truncated packet via HandleReceived's try/catch) with a
+// direct assertion that DecodeQuery/DecodeAnnounce themselves throw cleanly - rather than reading
+// out of bounds - when handed a buffer truncated down to just its tag byte.
+
+TEST(NetDiscoveryProtocolTest, DecodeQueryThrowsOnTruncatedBuffer) {
+    DiscoveryQueryMessage message;
+    message.ProtocolVersion = kDiscoveryProtocolVersion;
+    message.SessionTypeFilter = NetworkSessionType::SystemLink;
+
+    auto bytes = NetDiscoveryProtocol::Encode(message);
+    bytes.resize(1); // keep only the tag byte
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeQuery(bytes), std::runtime_error);
+}
+
+TEST(NetDiscoveryProtocolTest, DecodeAnnounceThrowsOnTruncatedBuffer) {
+    DiscoveryAnnounceMessage message;
+    message.ConnectPort = 12345;
+    message.HostGamertag = "hostplayer";
+
+    auto bytes = NetDiscoveryProtocol::Encode(message);
+    bytes.resize(1);
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), std::runtime_error);
+}
