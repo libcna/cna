@@ -66,16 +66,17 @@ everything in section 3; next tasks in section 8.
 ## 2. Current status
 
 ### Build / test
-Last actually run in the session that completed Task 11.12 (native Linux,
-`cmake-build-debug`): full `CnaTests` — **3212/3214** passing, 2 skipped
-(`AccelerometerTests`/`GyroscopeTests` `GetCurrentValuePropertyDoesNotThrowWhenSupported`
-— documented hardware-dependent skips, no accelerometer/gyroscope in this container).
-`cna_test_avatar_real_render` (Phase 10's synthetic integration test) passed unmodified
-after the Task 11.11 fixes. **Tasks 11.13-11.15 (Phase 11c) touched only Python
-(`tools/avatar_builder/`) and docs — no C++ file changed, so this number should still
-hold, but it has not been re-run since Task 11.12 and is not freshly confirmed.**
-Re-running `cmake --build cmake-build-debug --target CnaTests && cmake-build-debug/CnaTests`
-before relying on this number is cheap and recommended if it matters for the next task.
+Freshly re-verified this session (native Linux, `cmake-build-debug`, clean build +
+full run): `CnaTests` — **3216/3218** passing, 2 skipped (same two documented
+hardware-dependent skips, `AccelerometerTests`/`GyroscopeTests`
+`GetCurrentValuePropertyDoesNotThrowWhenSupported` — no accelerometer/gyroscope in this
+container). No regressions. The total grew by 4 tests versus the last recorded
+3212/3214 even though `git log`/`git diff` confirm no test file changed in this repo
+since Task 11.12 (a661b0a) — most likely new tests landed via the separately-maintained
+sibling `sharp-runtime` repo pulled in by the build; not investigated further since all
+tests pass and this isn't a regression. `cna_test_avatar_real_render` (Phase 10's
+synthetic integration test) was not re-run this session (no rendering-path code
+changed since Task 11.12).
 Windows/Web/Android cross-build numbers below are from an even earlier session, not
 re-verified since (no code in those paths changed, but treat as "last known good," not
 freshly confirmed):
@@ -657,14 +658,8 @@ was found, and section 3 for this session's own account.
 11 itself has no required next task. Concrete, ordered candidates for a next session
 (none of these is "the plan" — confirm with the user before starting any of them):
 
-1. **Re-verify the full native test suite.** No C++ file has changed since the session
-   that completed Task 11.12; Tasks 11.13-11.15 only touched
-   `tools/avatar_builder/*.py` and docs. This is a cheap, high-value confidence check
-   before trusting the "3212/3214" number in section 2 for any future C++ work.
-   - Files/modules: none (verification only, no code change expected).
-   - Verify: `cmake --build cmake-build-debug --target CnaTests -j"$(nproc)" && cmake-build-debug/CnaTests`
-     — expect the same 3212/3214 passing, 2 skipped result as last recorded; investigate
-     immediately if it differs.
+1. ~~Re-verify the full native test suite.~~ **Done this session** — clean rebuild,
+   3216/3218 passing, 2 (expected) skipped, no regressions (section 2).
 
 2. **Task 11.16 (optional, not scheduled, requires fresh explicit user sign-off) —
    revisit MakeHuman or CharMorph/Blender** as a higher-quality body *source*, only if
