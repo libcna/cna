@@ -960,9 +960,25 @@ the `MAX_TOUCHES` cap (DEC-10, P5-006). `GetCapabilities` reports `MaximumTouchC
 changed:** none (logic verified). **Behavior verified:** gesture queue FIFO + FNA coordinate scaling +
 SetFinger branches + dual GetState. **Remaining risk:** none.
 
-## L-013 — `GestureDetector.cpp` logic `[ ]`
-- [ ] The full gesture state machine vs FNA `GestureDetector.cs`: every OnPressed/OnMoved/OnReleased/OnUpdate
+## L-013 — `GestureDetector.cpp` logic `[x]`
+- [x] The full gesture state machine vs FNA `GestureDetector.cs`: every OnPressed/OnMoved/OnReleased/OnUpdate
   branch, thresholds, velocity low-pass, pinch/drag/tap/hold/flick transitions. Deepest logic file.
+
+**Result (2026-07-06):** Compared vs FNA `GestureDetector.cs` — CNA is a **faithful port of FNA's gesture
+state machine** (not merely behavior-equivalent): FNA also uses a `GestureState` enum (HOLDING/HELD/…), which
+CNA mirrors. **Every constant is byte-identical to FNA:** `MOVE_THRESHOLD = 35` (FNA:74), `MIN_FLICK_VELOCITY
+= 100` (FNA:80), Hold fires at `timeSincePress >= FromSeconds(1)` (FNA:521), Tap requires `timeHeld <
+FromSeconds(1)` (FNA:212), double-tap window `<= FromMilliseconds(300)` (FNA:146) with distance `<=
+MOVE_THRESHOLD` (FNA:150). **The flick velocity low-pass is byte-identical:** `instVelocity = delta /
+(0.001f + dt); velocity += (instVelocity - velocity) * 0.45f` (FNA:506-507 ≡ CNA:406-409); flick gate
+`velocity.Length() >= MIN_FLICK_VELOCITY` (FNA:253). The drag-axis classification (`ax>ay`→H, `ay>ax`→V,
+else Free), pinch promotion, and DragComplete/PinchComplete transitions match FNA and are pinned by the
+**35-test** `GestureDetectorTest` suite (every gesture + threshold + negative path, Phase 6). **One
+documented difference:** the clock source — `std::chrono::steady_clock` + an injectable test clock
+(`EnableTestClock`/`AdvanceTestClockMilliseconds`, using `TimePoint{}` as FNA's `DateTime.MinValue`
+"no prior update" sentinel) vs FNA's `DateTime.UtcNow` — behaviorally equivalent (no test hooks in FNA).
+**Files changed:** none (logic verified). **Behavior verified:** the full state machine + byte-identical
+constants + flick filter match FNA. **Remaining risk:** none.
 
 ## L-014 — `InputManager.cpp` logic `[ ]`
 - [ ] Accumulated-state mutation/read for each subsystem; touch previous-location + Pressed→Moved promotion
