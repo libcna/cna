@@ -67,11 +67,11 @@ No `IsSupported`/`State` on the base class (those are per-subclass statics/prope
 |---|---|---|---|
 | Constructor | Real | High | Throws `SensorFailedException` past 10 simultaneous instances |
 | `getIsSupportedProperty()` (static) | Real | High | Real SDL3-backed (`SDL_SENSOR_ACCEL`) |
-| `getStateProperty()` | Real | High | The one sensor class with a real `State` |
+| `getStateProperty()` | Real | High | The one sensor class with a real `State` (MSDN `ff707531`, confirmed `ACCEL-001`) |
 | `Start()` | Real | High | Throws `AccelerometerFailedException` on failure |
 | `Stop()` | Real | High | |
 | `CurrentValueChanged` | Real | High | Fires from the SDL sensor thread — treat as unknown-thread |
-| `ReadingChanged` (legacy) | Real | High | WP7 7.0; raised alongside `CurrentValueChanged` |
+| `ReadingChanged` (legacy) | Real | High | WP7 7.0, `[Obsolete]` since 7.1/8.0/8.1 but still present and raised (MSDN `ff707930`, confirmed `ACCEL-001`); raised alongside `CurrentValueChanged` |
 | Unit conversion | Real | High | m/s² → g (`÷ 9.80665f`), confirmed correct and tested |
 | Android axis remap | `NOXNA`-adjacent internal | Medium | `Detail::ConvertAndroidPortraitToXnaLandscape()`; unit-tested, **never hardware-verified** |
 | 8 `*ForTesting()`/`InjectSynthetic*` hooks | `NOXNA` | — | Test-only |
@@ -258,10 +258,14 @@ file's prior content, rather than assuming the file was still current.
   as the example case to catch — `Accelerometer::getStateProperty()`'s missing `NOXNA`
   marker vs. `Gyroscope`/`Compass`/`Motion`'s marked ones — which `DEV-API-003`
   (2026-07-06, see `plan_devices.md`) had already independently re-investigated and
-  closed as **not** a bug: `Accelerometer.State` is real WP7 API (MSDN `ff707930`), the
-  other three correctly have no such property (MSDN `hh239201`/`hh220912`/`hh239189`),
-  so the asymmetric marking is the *correct* state, not drift this matrix needed to
-  newly catch — it had already been caught and resolved.
+  closed as **not** a bug: `Accelerometer.State` is real WP7 API (MSDN `ff707531` —
+  corrected `ACCEL-001`, 2026-07-06: every prior citation of `ff707930` for this
+  property was a mix-up with `Accelerometer.ReadingChanged`'s own, differently-numbered
+  page; both pages were independently re-fetched to confirm which ID belongs to which
+  member, see `ACCEL-001`'s closing note in `plan_devices.md`), the other three
+  correctly have no such property (MSDN `hh239201`/`hh220912`/`hh239189`), so the
+  asymmetric marking is the *correct* state, not drift this matrix needed to newly
+  catch — it had already been caught and resolved.
   **Update 2026-07-06 (`SENSORBASE-007`): one genuine Extra-unmarked finding was missed
   by this original pass and caught later** — `SensorBase<T>::TimeBetweenUpdatesChanged`
   was marked `Real` in this file's own `SensorBase<TSensorReading>` table above, with no

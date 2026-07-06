@@ -83,8 +83,11 @@ stated as unverified rather than assumed.
   plan's Section 1 draft (written before that re-check) flagged the shape difference as
   unexplained drift, but a prior pass (`plan_devices_phase2.md` Task P2-17, 2026-07-02)
   had already resolved the underlying question against archived MSDN "previous-versions"
-  pages: `Accelerometer.State` is real WP7 API (MSDN `ff707930`, cited in `AUDIT.md`'s
-  `Accelerometer` row and `docs/devices-api-coverage.md`), while `Gyroscope.State`
+  pages: `Accelerometer.State` is real WP7 API (MSDN `ff707531` — corrected 2026-07-06,
+  `ACCEL-001`: every prior citation of `ff707930` here was actually
+  `Accelerometer.ReadingChanged`'s page, not `State`'s; both were independently
+  re-fetched to disambiguate. Cited in `AUDIT.md`'s `Accelerometer` row and
+  `docs/devices-api-coverage.md`), while `Gyroscope.State`
   (`hh239201`), `Compass.State` (`hh220912`), and `Motion.State` (`hh239189`) do not exist
   on the real classes — so their `getStateProperty()` is correctly a CNA symmetry
   extension. No code change needed; see `DEV-API-003`'s closing note.
@@ -552,7 +555,10 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   and answered by an earlier pass, `plan_devices_phase2.md` Task P2-17 (2026-07-02),
   against archived MSDN "previous-versions" pages (cited in `AUDIT.md`'s per-class rows
   and `docs/devices-api-coverage.md`):
-  - `Accelerometer.State` is real WP7 API — confirmed against MSDN `ff707930`. Its
+  - `Accelerometer.State` is real WP7 API — confirmed against MSDN `ff707531` (corrected
+    2026-07-06, `ACCEL-001`: this citation was previously mis-recorded as `ff707930`,
+    which is actually `Accelerometer.ReadingChanged`'s own page — same underlying
+    conclusion, wrong page ID; both re-fetched independently to disambiguate). Its
     `getStateProperty()` correctly has **no** `NOXNA` marker.
   - `Gyroscope.State` (`hh239201`), `Compass.State` (`hh220912`), and `Motion.State`
     (`hh239189`) do **not** exist on the real classes. Their `getStateProperty()` is a
@@ -1967,7 +1973,7 @@ not an alternate spelling to preserve.
 
 ## 6. Accelerometer tasks
 
-### ACCEL-001 — Verify XNA/WP public surface
+### ACCEL-001 — Verify XNA/WP public surface — CLOSED (2026-07-06, real citation bug found and fixed across 4 files)
 
 - **Priority:** Critical
 - **Area:** Accelerometer API
@@ -1976,21 +1982,76 @@ not an alternate spelling to preserve.
   the header with a doc comment describing the dual-event design. Whether both are
   correctly scoped to their respective XNA/WP7 API versions needs verification against
   an authoritative reference, not just against this codebase's own comments.
+- **Resolution (2026-07-06):** independently fetched the archived MSDN pages for both
+  `Accelerometer.State` and `Accelerometer.ReadingChanged` directly, rather than
+  trusting the existing citations at face value — **and found a real, previously
+  undetected citation bug in the process**: every existing citation of MSDN `ff707930`
+  for `Accelerometer.State` (in `plan_devices.md`'s Section 1 and `DEV-API-003`,
+  `docs/devices-api-coverage.md`, and `AUDIT.md`'s `Accelerometer` row) was **actually
+  citing `Accelerometer.ReadingChanged`'s own, differently-numbered page** —
+  `ff707930` is titled "Accelerometer.ReadingChanged Event", not "Accelerometer.State
+  Property". The real `Accelerometer.State` page is `ff707531`. Confirmed by fetching
+  both pages directly and reading their own `TOCTitle`/`ms:assetid` frontmatter
+  (`E:Microsoft.Devices.Sensors.Accelerometer.ReadingChanged` vs.
+  `P:Microsoft.Devices.Sensors.Accelerometer.State`), not by assumption. **The
+  underlying conclusion every one of those citations supported (`Accelerometer.State`
+  is real WP7 API, correctly un-tagged `NOXNA`) remains correct** — this was a wrong
+  citation, not a wrong conclusion — but it needed fixing everywhere it had propagated,
+  which this task did (all 4 files above).
+  - `Accelerometer.ReadingChanged`'s own page (`ff707930`, `v=vs.105`) confirms exactly
+    what this codebase's existing doc comment already claimed, now with a citation:
+    `[ObsoleteAttribute("use CurrentValueChanged")]`, "Supported in: 7.0. Obsolete
+    (compiler warning) in 8.1, 8.0, 7.1" — i.e. it is real WP7 7.0 API, formally
+    deprecated (not removed) starting WP7.1, and real WP7 games targeting 7.1+ would see
+    a compiler warning but the event still exists and still fires. CNA's choice to keep
+    raising it unconditionally alongside `CurrentValueChanged` (not gated behind any
+    "targeting 7.0 only" switch, since C++ has no equivalent to a per-project WP7 target
+    version) is the only sensible interpretation — matches the header's own existing
+    doc comment, now cross-referenced with the exact citation.
+  - `Accelerometer.CurrentValueChanged` is inherited unchanged from
+    `SensorBase<TSensorReading>` (no override in `Accelerometer.hpp`) — already cited
+    elsewhere (`hh239315`) for that base class, not re-cited per-subclass.
+  - Updated `docs/devices-api-coverage.md`'s `Accelerometer` table (`getStateProperty()`
+    and `ReadingChanged` rows, now both cited), `plan_devices.md`'s Section 1 and
+    `DEV-API-003`'s own closing note (both corrected), and `AUDIT.md`'s `Accelerometer`
+    row (corrected).
+  - **Compile-level shape verification:** `AccelerometerTests.cpp` already compiles
+    against and exercises every public member (constructor, `getIsSupportedProperty()`,
+    `getStateProperty()`, `Start()`/`Stop()`/`Dispose()`, `CurrentValueChanged`,
+    `ReadingChanged`, all 8 `NOXNA` test hooks) — confirmed by reading the file, not a
+    new mechanism added (a dedicated "strict XNA surface" compile check is
+    `DEV-API-002`/`VERIFY-003`'s separate, still-open concern, not this task's).
+  - **Both event paths tested together, already true before this task:**
+    `AccelerometerTests.ReadingChangedReceivesMatchingXYZ` (confirmed present) proves
+    `ReadingChanged` and `CurrentValueChanged` fire together from the same dispatch call
+    with matching converted X/Y/Z — no new test needed for this acceptance criterion.
 - **Required work:**
   - Verify which events/properties belong to which XNA 4.0/Windows Phone API version.
+    Done, with corrected citations.
   - Mark any genuinely obsolete/legacy API clearly (beyond the existing doc-comment
-    note).
-  - Add or confirm compile-level tests for the expected public API shape.
+    note). Done — `docs/devices-api-coverage.md`'s table now states the exact WP7
+    version range (`[Obsolete]` since 7.1/8.0/8.1) with a citation.
+  - Add or confirm compile-level tests for the expected public API shape. Confirmed —
+    already comprehensive, no new mechanism needed here.
 - **Acceptance criteria:**
-  - `DEV-API-001`'s matrix covers `Accelerometer` completely.
+  - `DEV-API-001`'s matrix covers `Accelerometer` completely. Confirmed, and its two
+    wrong citations fixed.
   - `ReadingChanged`'s exact compatibility status (kept for compatibility vs. CNA
-    convenience) is documented with a rationale.
+    convenience) is documented with a rationale. Done — real WP7 7.0 API, `[Obsolete]`
+    since 7.1, kept and raised unconditionally for full-lifecycle compatibility with
+    real WP7 content, now cited.
   - Tests cover both event paths given both are currently supported simultaneously.
+    Confirmed, already true.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Accelerometer.hpp`
-  - `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp`
-  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
-  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (inspected, no change needed
+    — existing doc comment was already accurate)
+  - `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp` (inspected,
+    no change needed)
+  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (inspected, no change
+    needed — already comprehensive)
+  - `docs/devices-api-coverage.md` (edited — citation fixes)
+  - `AUDIT.md` (edited — citation fix)
 
 ### ACCEL-002 — Audit `ReadingChanged`-related comments for accuracy
 
