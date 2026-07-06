@@ -1294,6 +1294,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 389: DualTextureEffect cross-backend image comparison suite (closes Phase 44 pixel work)
+        cna_easygl_test(cna_test_easygl_dualtextureeffect_combined
+                        examples/easygl_dualtextureeffect_combined_test.cpp)
+        add_test(NAME EasyGL_DualTextureEffect_Combined
+                 COMMAND cna_test_easygl_dualtextureeffect_combined)
+        set_tests_properties(EasyGL_DualTextureEffect_Combined PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_dualtexture
                         examples/easygl_dualtexture_test.cpp)
         add_test(NAME EasyGL_DualTexture
@@ -2139,6 +2148,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 389: DualTextureEffect cross-backend image comparison suite (closes Phase 44 pixel work)
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_combined
+                        examples/vulkan_dualtextureeffect_combined_test.cpp)
+        add_test(NAME Vulkan_DualTextureEffect_Combined
+                 COMMAND cna_test_vulkan_dualtextureeffect_combined)
+        set_tests_properties(Vulkan_DualTextureEffect_Combined PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()
@@ -2338,6 +2356,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_DualTextureEffect_NullTexture2
              COMMAND cna_test_bgfx_dualtextureeffect_null_texture2)
     set_tests_properties(Bgfx_DualTextureEffect_NullTexture2 PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 389: DualTextureEffect cross-backend image comparison suite (closes Phase 44 pixel work)
+    cna_bgfx_test(cna_test_bgfx_dualtextureeffect_combined
+                  examples/bgfx_dualtextureeffect_combined_test.cpp)
+    add_test(NAME Bgfx_DualTextureEffect_Combined
+             COMMAND cna_test_bgfx_dualtextureeffect_combined)
+    set_tests_properties(Bgfx_DualTextureEffect_Combined PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
