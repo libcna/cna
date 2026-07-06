@@ -259,7 +259,7 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
 
 ## 3. Public API compatibility audit tasks
 
-### DEV-API-001 — Create official XNA public API matrix
+### DEV-API-001 — Create official XNA public API matrix — CLOSED (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** API Compatibility
@@ -267,28 +267,49 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   this area to XNA 4.0 / Windows Phone 7's actual API surface. `docs/devices-api-coverage.md`
   exists but was not written against a fresh, from-scratch audit for this plan and must
   be re-verified, not assumed current.
+- **Resolution (2026-07-06):** read every public header in scope end-to-end
+  (`VibrateController.hpp`; `SensorBase.hpp`; `Accelerometer`/`Gyroscope`/`Compass`/
+  `Motion.hpp`; all five reading structs; `CalibrationEventArgs`/
+  `AccelerometerReadingEventArgs`/`SensorReadingEventArgs.hpp`; `SensorState`/
+  `ISensorReading.hpp`; `SensorFailedException`/`AccelerometerFailedException.hpp`) and
+  cross-checked every public member against `docs/devices-api-coverage.md`'s existing
+  content rather than trusting it. Result: **zero Missing, zero Extra-unmarked, 2
+  Wrong-visibility (unverified)** findings — see that file's new "DEV-API-001
+  verification result" section for the full accounting. Added two new "Cross-cutting
+  members" tables (previously-implicit boilerplate — destructor/`Dispose()`/
+  `Dispose(bool)`/`GetTypeName()` for the four sensor classes; constructor/getter/
+  setter/equality/`ToString()`/`GetHashCode()`/`GetTypeName()` for the five reading
+  structs — now explicitly tabulated instead of assumed), a "Flagged findings" section
+  (the 2 wrong-visibility findings, cross-referenced to the already-existing
+  `READINGS-002` task rather than fixed here), and extended the `Detail::` internals
+  table with `SdlSensorSubsystem<TSensor>`/`GetGlobalSdlSensorMutex()`/`ScopeExit<F>`
+  (existed in code, missing from that table). Explicitly re-confirmed this task's named
+  example case — `getStateProperty()`'s `NOXNA` asymmetry — is not a bug (already
+  resolved by `DEV-API-003`), not something this pass needed to newly catch.
 - **Required work:**
   - Build a table with one row per public class, struct, method, property, enum, event,
-    and exception in this plan's scope (Section 0).
+    and exception in this plan's scope (Section 0). Done.
   - Mark each row as: strict XNA 4.0, Windows Phone 7 legacy (e.g. `ReadingChanged`),
-    CNA `NOXNA` extension, or internal-only (should not be public at all).
+    CNA `NOXNA` extension, or internal-only (should not be public at all). Done.
   - Include `VibrateController` explicitly — not "VibrationController" — as its own
-    section of the table.
+    section of the table. Done (already present; verified still correct).
 - **Acceptance criteria:**
   - The matrix exists (in `docs/devices-api-coverage.md` or a new file this task
     creates) and covers every public member currently declared in the headers listed
-    below.
+    below. Done — `docs/devices-api-coverage.md`, extended, not duplicated.
   - The matrix identifies at least the known drift already found in Section 1
     (`getStateProperty()`'s inconsistent `NOXNA` marking) as a concrete example of
-    something it must catch.
+    something it must catch. Done — explicitly re-checked and confirmed already
+    resolved (`DEV-API-003`), not re-flagged as open drift.
   - The matrix distinguishes missing API (present in real XNA/WP7 but absent here),
     extra API (present here but not in XNA/WP7 and not marked `NOXNA`), and wrong
-    signatures.
+    signatures. Done — explicit legend + per-finding classification added.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/VibrateController.hpp`
-  - `include/Microsoft/Devices/Sensors/*.hpp`
-  - `include/Microsoft/Devices/Sensors/Detail/*.hpp`
-  - `docs/devices-api-coverage.md`
+  - `include/Microsoft/Devices/VibrateController.hpp` (inspected, no changes needed)
+  - `include/Microsoft/Devices/Sensors/*.hpp` (inspected, no changes needed)
+  - `include/Microsoft/Devices/Sensors/Detail/*.hpp` (inspected, confirmed still
+    internal-only, no changes needed)
+  - `docs/devices-api-coverage.md` (edited)
 
 ### DEV-API-002 — Enforce the `NOXNA` boundary
 

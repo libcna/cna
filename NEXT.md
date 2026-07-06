@@ -93,6 +93,21 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `DEV-API-001` closed: public API matrix re-verified.** Read every public
+header under `include/Microsoft/Devices/` end-to-end and cross-checked every public
+member against `docs/devices-api-coverage.md`'s existing content. Result: **0 Missing,
+0 Extra-unmarked, 2 Wrong-visibility (unverified)** — `AccelerometerReadingEventArgs`'s
+and `SensorReadingEventArgs<T>`'s setters are fully `public`, unlike every reading
+struct's `private`+`friend` convention (Task P3-2); recorded as findings for the
+already-existing `READINGS-002` task, not fixed here. Explicitly re-confirmed this
+task's named example case — `getStateProperty()`'s `NOXNA` asymmetry — is not a bug
+(already resolved by `DEV-API-003`, see below), not new drift this pass needed to catch.
+Added "Cross-cutting members" tables (destructor/`Dispose()`/`Dispose(bool)`/
+`GetTypeName()` for the four sensor classes; constructor/getter/setter/equality/
+`ToString()`/`GetHashCode()`/`GetTypeName()` for the five reading structs) and extended
+the `Detail::` internals table with `SdlSensorSubsystem<TSensor>`/
+`GetGlobalSdlSensorMutex()`/`ScopeExit<F>`. No production code changed — doc-only.
+
 **2026-07-06 — `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002` closed
 (Accelerometer/Gyroscope only): `TimeBetweenUpdates` now really throttles.** SDL3 has no
 per-sensor polling-rate control API for `SDL_SENSOR_ACCEL`/`SDL_SENSOR_GYRO`, so added
@@ -378,9 +393,9 @@ for full context on each. Ordered smallest/cheapest first, not strictly by the p
 own priority labels.
 
 `DEV-API-003` (the `getStateProperty()` `NOXNA` question), `DEV-BUILD-002` (the
-Devices-only test filter), and `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`
-(SDL-backed `TimeBetweenUpdates` throttling) are now closed — see Section 3. Next
-smallest remaining tasks:
+Devices-only test filter), `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`
+(SDL-backed `TimeBetweenUpdates` throttling), and `DEV-API-001` (the public API matrix)
+are now closed — see Section 3. Next smallest remaining tasks:
 
 1. **Apply `TimeBetweenUpdates` to the Android-backed sensors while running**
    (plan task `ANDROID-BRIDGE-002`). Goal: `Compass`/`Motion`'s
@@ -392,10 +407,14 @@ smallest remaining tasks:
    `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`. Verify with
    `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` (the existing
    fake/non-Android-path tests) plus the corrected Devices-only `ctest` filter (Section 7).
-2. **Start the public API matrix** (plan task `DEV-API-001`). Goal: one table row per
-   public class/method/property/event/exception in scope, marked strict-XNA/WP7-legacy/
-   `NOXNA`/internal-only. Files: `docs/devices-api-coverage.md` (extend/verify, don't
-   duplicate). Verify by cross-checking a sample of rows against the actual headers.
+2. **Resolve the two `DEV-API-001` wrong-visibility findings** (plan task
+   `READINGS-002`, already existed before `DEV-API-001`). Goal: check an authoritative
+   WP7 7.0 reference for whether `AccelerometerReadingEventArgs`'s and
+   `SensorReadingEventArgs<T>`'s setters are genuinely public in the real API, or should
+   be `private`+`friend` like every reading struct (Task P3-2). Files:
+   `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp`,
+   `include/Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp`,
+   `docs/devices-api-coverage.md` (update the "Flagged findings" section once resolved).
 3. **Investigate the `cna_demo_devices` Android `SDL3/SDL_main.h` build gap**
    (Section 4 above; not yet a plan task — scope it as one first). Goal: find why this
    specific target's Android include paths lack an Android-arch SDL3 header set the
