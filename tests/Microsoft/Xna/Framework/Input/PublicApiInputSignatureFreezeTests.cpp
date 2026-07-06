@@ -262,6 +262,8 @@ namespace
     [[maybe_unused]] constexpr auto z_Keyboard_GetState_1 = static_cast<KeyboardState(*)()>(&Keyboard::GetState);
     [[maybe_unused]] constexpr auto z_Keyboard_GetState_2 = static_cast<KeyboardState(*)(PlayerIndex)>(&Keyboard::GetState);
     [[maybe_unused]] constexpr auto z_Keyboard_GetKeyFromScancodeEXT_3 = static_cast<Keys(*)(Keys)>(&Keyboard::GetKeyFromScancodeEXT);
+    // NOXNA/EXT (input_noxna.md N-003): active keyboard modifier/lock state.
+    [[maybe_unused]] constexpr auto z_Keyboard_GetModStateEXT = static_cast<CNA::Input::KeyModifiersEXT(*)()>(&Keyboard::GetModStateEXT);
 
     // ----- KeyboardState (struct, XNA) -----
     static_assert(std::is_default_constructible_v<KeyboardState>, "KeyboardState()");

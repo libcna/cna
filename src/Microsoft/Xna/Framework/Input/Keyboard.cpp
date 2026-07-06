@@ -24,4 +24,9 @@ namespace Microsoft::Xna::Framework::Input
     {
         return CNA::Internal::Input::SdlInputBridge::GetKeyFromScancode(scancode);
     }
+
+    CNA::Input::KeyModifiersEXT Keyboard::GetModStateEXT()
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetModState();
+    }
 }

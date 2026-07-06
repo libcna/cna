@@ -8,6 +8,7 @@
 
 #include "CNA/Input/GamePadButtonLabel.hpp"
 #include "CNA/Input/GamePadConnectionState.hpp"
+#include "CNA/Input/KeyModifiers.hpp"
 #include "CNA/Input/PowerState.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
@@ -201,5 +202,8 @@ namespace CNA::Internal::Input
         static Microsoft::Xna::Framework::Input::Keys GetKeyFromScancode(
             Microsoft::Xna::Framework::Input::Keys scancode
         );
+
+        /** @brief NOXNA/EXT: the currently active keyboard modifier/lock keys (SDL_GetModState). */
+        static CNA::Input::KeyModifiersEXT GetModState();
     };
 }

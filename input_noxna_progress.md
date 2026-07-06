@@ -11,7 +11,7 @@
 ## Phase P1 — pure/deterministic, broadly supported, headless-testable
 - [x] **N-001 `CNA::Input::Clipboard`** — text Get/Set/Has (`SDL_GetClipboardText`/`SetClipboardText`/`HasClipboardText`).
 - [ ] **N-002 `Keyboard` name helpers EXT** — `GetKeyNameEXT`/`GetScancodeNameEXT`/`GetKeyFromNameEXT`/`GetScancodeFromNameEXT`.
-- [ ] **N-003 `Keyboard::GetModStateEXT` + `KeyModifiersEXT`** — modifier flags (Shift/Ctrl/Alt/Gui + Caps/Num/Scroll lock).
+- [x] **N-003 `Keyboard::GetModStateEXT` + `KeyModifiersEXT`** — modifier flags (Shift/Ctrl/Alt/Gui + Caps/Num/Scroll/Mode) via `SDL_GetModState` seam.
 - [!] **N-004 `Mouse` cursor visibility EXT** — **SKIPPED (superseded, would conflict).** CNA `Game::IsMouseVisible`
   (`Game.hpp:128`) already owns cursor visibility and calls `SDL_ShowCursor()`/`SDL_HideCursor()` with its own
   cached `IsMouseVisible_`. A `Mouse::SetCursorVisibleEXT` would be a second path to the same global SDL state
@@ -48,6 +48,15 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-003 done (2026-07-06):** `Keyboard::GetModStateEXT() -> CNA::Input::KeyModifiersEXT`
+  {None,Shift,Ctrl,Alt,Gui,Caps,Num,Scroll,Mode} — active modifier + lock state. New flags enum
+  header `include/CNA/Input/KeyModifiers.hpp` (constexpr |,&,~,|=,&= like Buttons/GestureType).
+  New injectable `ISystemKeyboardBackend` seam (`SDL_GetModState`) with `SetSystemKeyboardBackend
+  ForTests`, so tests inject mod state deterministically (SDL's real mod state only updates on real
+  key events). Bridge `GetModState` collapses SDL's L/R variants (KMOD_SHIFT/CTRL/ALT/GUI) into one
+  flag each + the 4 lock/mode bits; Keyboard delegates (same pattern as GetKeyFromScancodeEXT).
+  Pinned in the freeze test + documented. Tests `KeyboardModStateEXTTest` (fake seam): None,
+  per-bit mapping incl. L/R collapse, and a combined state. `ctest -L input` green; ASan-clean.
 - **N-006 done (2026-07-06):** `TouchLocation::getPressureEXT()` restores SDL finger pressure (0..1)
   that XNA 4.0 dropped. Added a NOXNA `pressure_` field (default 0) + two NOXNA pressure-carrying
   ctors (4-arg and 6-arg); the XNA ctors leave it 0. **Excluded from Equals/GetHashCode/ToString**

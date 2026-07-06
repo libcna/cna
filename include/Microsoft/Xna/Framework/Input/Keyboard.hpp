@@ -4,6 +4,7 @@
 #include "KeyboardState.hpp"
 #include "Keys.hpp"
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Input/KeyModifiers.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
 namespace Microsoft::Xna::Framework::Input
@@ -35,5 +36,11 @@ namespace Microsoft::Xna::Framework::Input
          * @return The corresponding Keys value.
          */
         NOXNA static Keys GetKeyFromScancodeEXT(Keys scancode);
+
+        /**
+         * @brief NOXNA/EXT: returns the currently active keyboard modifier and lock keys.
+         * @return A bit set of active modifiers (Shift/Ctrl/Alt/Gui) and lock states (Caps/Num/Scroll/Mode).
+         */
+        NOXNA static CNA::Input::KeyModifiersEXT GetModStateEXT();
     };
 }
