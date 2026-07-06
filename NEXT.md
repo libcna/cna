@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-KBD-014 — non-US layout keys tested + documented:** empirically confirmed German/French/Czech
+  accented keys (`ä ö ü ß é è à ç ě š č`) drop in keycode mode (no XNA Keys); the Nordic `æ`/`ø` map to
+  `OemQuotes`/`OemSemicolon` (FNA-faithful). Two new tests + a "Non-US keyboard layouts" section in
+  `docs/platform-input-notes.md`. No code change.
 - **INPUT-KBD-010 — scancode map completeness audited:** mechanically diffed `try_convert_sdl_scancode`
   (122 mapped) vs FNA `INTERNAL_scanMap` (125) — all 122 shared scancodes map identically; only
   differences are the 3 CNA drops (UNKNOWN/NONUSHASH/NONUSBACKSLASH, INPUT-KBD-011). Broadened the scancode

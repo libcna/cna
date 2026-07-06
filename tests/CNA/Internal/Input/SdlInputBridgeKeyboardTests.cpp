@@ -169,6 +169,43 @@ TEST_F(SdlInputBridgeKeyboardTest, LocaleUnmappedKeycodeIsDroppedNotMarkedNone)
     }
 }
 
+// INPUT-KBD-014: non-US layout keys. In keycode mode SDL delivers the layout's symbol as a keycode;
+// accented / non-ASCII letters (German ä ö ü ß, French é è à ç, Czech ě š č) have no XNA Keys value and
+// are DROPPED (never pollute the pressed set — the DEC-16 policy). This is a fundamental XNA limitation
+// (its Keys enum is US-centric); such text reaches games via TextInputEXT, not Keyboard.
+TEST_F(SdlInputBridgeKeyboardTest, NonUsLayoutAccentedKeysAreUnmappedInKeycodeMode)
+{
+    struct Case { SDL_Keycode cp; const char* name; };
+    const Case dropped[] = {
+        {SDL_Keycode{0xE4}, "de:a-diaeresis"}, {SDL_Keycode{0xF6}, "de:o-diaeresis"},
+        {SDL_Keycode{0xFC}, "de:u-diaeresis"}, {SDL_Keycode{0xDF}, "de:sharp-s"},
+        {SDL_Keycode{0xE9}, "fr:e-acute"},     {SDL_Keycode{0xE8}, "fr:e-grave"},
+        {SDL_Keycode{0xE0}, "fr:a-grave"},     {SDL_Keycode{0xE7}, "fr:c-cedilla"},
+        {SDL_Keycode{0x11B}, "cz:e-caron"},    {SDL_Keycode{0x161}, "cz:s-caron"},
+        {SDL_Keycode{0x10D}, "cz:c-caron"},
+    };
+    for (const Case& c : dropped)
+    {
+        InputManager::ResetForTests();
+        SdlInputBridge::ProcessEvent(keyDownWithKeycode(c.cp));
+        EXPECT_FALSE(Keyboard::GetState().IsKeyDown(Keys::None)) << c.name;
+        EXPECT_EQ(Keyboard::GetState().GetPressedKeys().size(), 0u) << c.name << " must be dropped";
+    }
+}
+
+// INPUT-KBD-014: the Nordic exception — a few non-ASCII keys whose physical position is a US OEM key
+// still resolve to that OEM key (matching FNA), rather than dropping. Pins that FNA-faithful behavior.
+TEST_F(SdlInputBridgeKeyboardTest, NordicOemKeysMapToTheirOemKeyMatchingFna)
+{
+    InputManager::ResetForTests();
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDL_Keycode{0xE6})); // æ
+    EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::OemQuotes));
+
+    InputManager::ResetForTests();
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDL_Keycode{0xF8})); // ø
+    EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::OemSemicolon));
+}
+
 // DEC-17: SDLK_AC_BACK (the Android/browser Back button) maps to Keys::Escape. This is a CNA-only
 // convenience (FNA has no AC_BACK mapping) so "back" acts as cancel/exit on those platforms.
 TEST_F(SdlInputBridgeKeyboardTest, AndroidBackButtonMapsToEscape)

@@ -945,12 +945,20 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Deps:** none.
 
 #### INPUT-KBD-014 — Non-US layout keys (Czech, German, French)
-- **Priority:** P2 · **Status:** TODO · **Area:** Keyboard
-- **Files:** `SdlInputBridge.cpp`, tests, `docs/platform-input-notes.md`
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Keyboard
+- **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`, `docs/platform-input-notes.md`
 - **Work:** Add table-driven tests for representative non-US keys; document mapping gaps (e.g. é/BÉPO).
 - **Acceptance:** Representative keys tested; gaps documented.
 - **Tests:** new parameterized keyboard test.
 - **Deps:** INPUT-KBD-009.
+- **Result (2026-07-06):** Empirically probed representative non-US keys and documented the actual
+  behavior. In keycode mode SDL delivers the layout's symbol; accented/non-ASCII letters have no XNA
+  `Keys` value and are **dropped** (DEC-16 policy). Added `NonUsLayoutAccentedKeysAreUnmappedInKeycodeMode`
+  (German `ä ö ü ß`, French `é è à ç`, Czech `ě š č` — all dropped) and
+  `NordicOemKeysMapToTheirOemKeyMatchingFna` (the exception: `æ`/`ø` resolve to `Keys::OemQuotes` /
+  `OemSemicolon` because their physical position is a US OEM key — FNA-faithful). Documented the full
+  keycode-vs-scancode layout behavior + the accented-key gap (games use `TextInputEXT` for such text) in a
+  new "Non-US keyboard layouts" section of `docs/platform-input-notes.md`. `ctest -L input` 100% green.
 
 #### INPUT-KBD-015 — IME-related keys (ImeConvert/NoConvert/Kana/Kanji/ProcessKey)
 - **Priority:** P3 · **Status:** TODO · **Area:** Keyboard

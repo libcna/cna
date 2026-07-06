@@ -87,6 +87,27 @@ See also [`docs/input-backend.md`](input-backend.md) (architecture) and
   (read once at startup) for layout-independent physical-position key bindings. 40 XNA `Keys`
   (IME/browser/media/ChatPad/OEM) have no SDL scancode and cannot map — see the list in
   `SdlInputBridge.cpp`'s `try_convert_keys_to_sdl_scancode` (task 819).
+
+### Non-US keyboard layouts (INPUT-KBD-014)
+
+CNA's key mapping mirrors FNA exactly (verified byte-for-byte: INPUT-KBD-009 keycodes, INPUT-KBD-010
+scancodes). How a non-US layout behaves depends on the mode:
+
+- **Keycode mode (default).** SDL delivers the keycode = the symbol the key produces on the *active*
+  layout, so the mapping is inherently layout-dependent. A key that produces an ASCII letter/digit/OEM
+  symbol maps to the matching XNA `Keys`. On a German QWERTZ board the physical `Z` position produces
+  `y`, so it reports `Keys::Y` (you get the letter on the keycap, not the US position).
+- **Scancode mode (`FNA_KEYBOARD_USE_SCANCODES=1`).** The physical position maps to the US-equivalent
+  XNA `Keys` regardless of layout, so bindings stay put across layouts.
+
+**Mapping gap — accented / non-ASCII keys have no XNA `Keys`.** XNA's `Keys` enum is US-centric, so any
+key whose keycode is a non-ASCII Unicode codepoint has no XNA value. In keycode mode CNA **drops** such a
+key (it never enters the pressed set — the DEC-16 policy; FNA maps it to `Keys.None` and adds it, which
+CNA deliberately avoids). Confirmed dropped: German `ä ö ü ß`, French `é è à ç`, Czech `ě š č`. This is
+a fundamental XNA limitation, not a CNA bug — games needing these must read `TextInputEXT` (which delivers
+the composed Unicode text), not `Keyboard`. Exceptions: a few Nordic keys whose *physical position* is a
+US OEM key still map to that OEM key (e.g. the codepoints for `æ`/`ø` resolve to `Keys::OemQuotes` /
+`Keys::OemSemicolon`), matching FNA. Tested by `NonUsLayoutAccentedKeysAreUnmappedInKeycodeMode`.
 - **No horizontal scroll wheel** (all platforms): XNA 4.0 / this FNA `MouseState` expose only the
   vertical `ScrollWheelValue`; `event.wheel.x` is intentionally dropped (task 805).
 - **Input is main-thread only** (all platforms): SDL requires event pumping on the video/window
