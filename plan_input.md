@@ -1428,12 +1428,21 @@ discriminating test** `TextEditingStartLengthAreRawByteOffsetsNotUtf16Indices`: 
 **Behavior verified:** IME composition callback + byte-offset semantics. **Remaining risk:** byte offsets are
 not code-point indices — callers must index multibyte composition carefully (documented).
 
-## P7-008 — Verify start/stop text input
-- [ ] Test start with valid window.
-- [ ] Test stop with valid window.
-- [ ] Test no-window behavior.
-- [ ] Ensure no crash.
-- [ ] Document no-op behavior if that is intended.
+## P7-008 — Verify start/stop text input `[x]`
+- [x] Test start with valid window.
+- [x] Test stop with valid window.
+- [x] Test no-window behavior.
+- [x] Ensure no crash.
+- [x] Document no-op behavior if that is intended.
+
+**Result (2026-07-06):** Fully covered. **Real window:** `StartStopAndIsActiveRoundTripThroughRealWindow`
+(hidden SDL window → `StartTextInput` makes `IsTextInputActive()` true, `StopTextInput` makes it false; a
+`GTEST_SKIP` fallback keeps it non-flaky on IME-less headless setups). **No window:**
+`StartStopAndSetRectangleWithoutWindowAreSafeNoOps` + `IsTextInputActiveIsFalseWithoutWindow` +
+`IsScreenKeyboardShownIsFalseWithoutWindow` — every call is null-guarded (TextInputEXT.cpp:31-70) so it is a
+safe no-op with no crash. The no-op-without-window behavior is intentional and documented in the source.
+**Files changed:** none (coverage confirmed). **Behavior verified:** start/stop toggles activation with a
+window; no-ops safely without one. **Remaining risk:** none.
 
 ## P7-009 — Verify input rectangle
 - [ ] Test setting input rectangle.
