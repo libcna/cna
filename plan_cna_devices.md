@@ -104,7 +104,7 @@ independent task instead of guessing.
   `PowerInfoTests.*` together — 347 tests, 345 passed, 2 pre-existing expected
   hardware-gated skips, zero regressions.
 
-### DEVICES-CNA-002 — `Locale`
+### DEVICES-CNA-002 — `Locale` — CLOSED (2026-07-07)
 
 - **Priority:** Medium
 - **SDL3 API:** `SDL_locale.h`, `SDL_GetPreferredLocales(int* count)`.
@@ -120,6 +120,30 @@ independent task instead of guessing.
     `devices-asan` explicitly for this one, since it's a manual malloc/free boundary).
 - **Acceptance criteria:** builds/tests pass; ASan clean.
 - **Suggested files:** new files only.
+- **Resolution:** Created `LocaleInfo.hpp` (struct) and `Locale.hpp`/`.cpp` (static
+  class, one property). **Deviation from this task's own text, noted deliberately:**
+  used `std::string` for `Language`/`Country` rather than `System::String`/
+  `SharpRuntime::String` — checked `VibrateController.hpp`'s existing
+  `getDeviceNameProperty()` (already-established `Microsoft::Devices` precedent for a
+  string-returning property) and confirmed it already returns plain `std::string`
+  directly, not the `SharpRuntime` alias, despite `SharpRuntime::String` being merely
+  `using String = std::string;` — a type alias, not a distinct type. Followed the
+  existing local precedent rather than the plan text's own (slightly generic)
+  suggestion, for consistency with code already in this repository. `Country` is
+  documented and handled as possibly-empty (SDL3's own `SDL_Locale::country` doc
+  comment: "Can be NULL") — mapped to `""`, never a null-pointer dereference.
+  `getPreferredLocalesProperty()` copies every `language`/`country` C-string into
+  CNA-owned `std::string`s before calling `SDL_free()` on SDL's one single allocation
+  (per `SDL_GetPreferredLocales()`'s own documented ownership contract), so no
+  SDL-owned pointer is ever returned past this function. Added
+  `tests/CNA/Devices/LocaleTests.cpp` (3 tests). Build: `cmake --build cmake-build-debug
+  --target CNA`/`--target CnaTests` (both clean). Ran `LocaleTests.*` (3/3 pass) and,
+  per this task's own acceptance criterion, explicitly re-ran under `devices-asan`
+  (`cmake -DCNA_DEVICES=ON` reconfigure + rebuild) with `ASAN_OPTIONS=detect_leaks=1`:
+  `LocaleTests.*:PowerInfoTests.*` — 7/7 pass, **zero ASan reports** (confirms the
+  manual `SDL_free()` boundary is leak-free). Full existing Devices/Sensors filter plus
+  both new `CNA::Devices` suites together: 350 tests, 348 passed, 2 pre-existing
+  expected skips, zero regressions.
 
 ### DEVICES-CNA-003 — `Clipboard`
 
@@ -281,6 +305,10 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — DEVICES-CNA-002 CLOSED.** `CNA::Devices::Locale` implemented
+  (`LocaleInfo`/`Locale`), 3 tests, verified leak-free under `devices-asan` explicitly
+  (manual `SDL_free()` boundary). Full suite 350/350 (348 pass + 2 expected skips).
+  Next: `DEVICES-CNA-003` (`Clipboard`).
 - **2026-07-07 — DEVICES-CNA-001 CLOSED.** `CNA::Devices::PowerInfo` implemented
   (`PowerState`/`PowerInfo`), 4 tests, full suite at 347/347 (345 pass + 2 expected
   skips). Next: `DEVICES-CNA-002` (`Locale`).
