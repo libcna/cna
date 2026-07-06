@@ -782,6 +782,27 @@ TEST(NetworkSessionTest, AddRemoteGamerJoinsRostersAndRaisesGamerJoined) {
     session->Dispose();
 }
 
+// Task 2.5: AddRemoteGamer used to add any remote gamer unconditionally, regardless of maxGamers_,
+// silently violating the documented "maximum players allowed" contract.
+TEST(NetworkSessionTest, AddRemoteGamerThrowsWhenSessionIsAlreadyAtMaxGamers) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    ASSERT_EQ(session->getAllGamersProperty().getCountProperty(), 1);
+    // Create() hardcodes MaxGamers to 69 regardless of the caller's argument (a real, preserved
+    // FNA quirk - see EndCreate's own comment), so setMaxGamersProperty is used directly to force
+    // the host's own local gamer to already fill the only slot.
+    session->setMaxGamersProperty(1);
+
+    NetworkGamer remote = NetworkGamer::CreateInternal(session, "RemotePlayer");
+    EXPECT_THROW(session->AddRemoteGamer(&remote), System::InvalidOperationException);
+    EXPECT_EQ(session->getRemoteGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 1);
+
+    session->Dispose();
+}
+
 TEST(NetworkSessionTest, RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPrevious) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(

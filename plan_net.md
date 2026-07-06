@@ -294,13 +294,22 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   passes. Full suite: **3242/3244 passing** (2 expected accelerometer/gyroscope skips), no
   regressions.
 
-- [ ] **Task 2.5** — Add capacity enforcement to `NetworkSession::AddRemoteGamer` against
-  `MaxGamers`/`PrivateGamerSlots`. Confirmed (`NetworkSession.cpp`, ~lines 396-405):
-  `AddRemoteGamer` unconditionally adds any remote gamer regardless of `maxGamers_`/`privateGamerSlots_`,
-  silently violating the documented "maximum players allowed" contract. Decide and implement the
-  correct XNA-faithful behavior (check FNA's own equivalent path, if any, for the expected
-  behavior/exception type when a session is full) and add a test asserting a session at capacity
-  rejects (or otherwise correctly handles) an additional remote gamer.
+- [x] **Task 2.5** — Add capacity enforcement to `NetworkSession::AddRemoteGamer` against
+  `MaxGamers`. Confirmed (`NetworkSession.cpp`, ~lines 396-405): `AddRemoteGamer` unconditionally
+  added any remote gamer regardless of `maxGamers_`, silently violating the documented "maximum
+  players allowed" contract. No FNA equivalent exists to match — `AddRemoteGamer` is a CNA-internal
+  `NOXNA` extension (real FNA's networking is entirely stubbed out) — so the decision was a
+  sensible design choice, not a fidelity fix.
+  **Fixed:** added `if (allGamers_.getCountProperty() >= maxGamers_) { throw System::InvalidOperationException("Session is full!"); }`
+  at the top of `AddRemoteGamer`, for symmetry with `AddLocalGamer`'s existing max-limit guard.
+  **Added `NetworkSessionTest.AddRemoteGamerThrowsWhenSessionIsAlreadyAtMaxGamers`**: `Create()`
+  hardcodes `MaxGamers` to 69 regardless of the caller's argument (a real, preserved FNA quirk — see
+  `EndCreate`'s own comment), so the test uses the existing public `setMaxGamersProperty` setter
+  directly to force the host's own local gamer to already fill the only slot, then asserts
+  `AddRemoteGamer` throws and neither `RemoteGamers` nor `AllGamers` grow.
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with "throws
+  nothing" and both counts incrementing past capacity. Restored the fix and reran — passes. Full
+  suite: **3243/3245 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.6** — Investigate and either implement or explicitly document-as-unsupported real
   host migration. Confirmed dead/unwired end-to-end: `AllowHostMigration`'s setter

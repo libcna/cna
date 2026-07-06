@@ -414,6 +414,15 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::AddRemoteGamer(NetworkGamer* gamer)
     {
+        // Task 2.5: AddRemoteGamer used to add any remote gamer unconditionally, silently
+        // violating the documented "maximum players allowed" contract - no FNA equivalent exists
+        // to match (AddRemoteGamer is a CNA-internal, NOXNA extension; real FNA's networking is
+        // entirely stubbed out), so InvalidOperationException is used for symmetry with
+        // AddLocalGamer's own existing max-limit guard just above.
+        if (allGamers_.getCountProperty() >= maxGamers_)
+        {
+            throw System::InvalidOperationException("Session is full!");
+        }
         remoteGamers_.Add(gamer);
         allGamers_.Add(gamer);
 
