@@ -1721,11 +1721,23 @@ were *written* to be reset-first precisely because the wheel/gesture-clock state
 the mouse-reset and gesture-reset tests). **Files changed:** none (gate already enforces this).
 **Behavior verified:** the input subset is order-independent under shuffle×5. **Remaining risk:** none.
 
-## P9-005 — Run sanitizer builds
-- [ ] Run AddressSanitizer if supported.
-- [ ] Run UndefinedBehaviorSanitizer if supported.
-- [ ] Fix sanitizer findings.
-- [ ] Record unsupported sanitizer/platform cases.
+## P9-005 — Run sanitizer builds `[x]`
+- [x] Run AddressSanitizer if supported.
+- [x] Run UndefinedBehaviorSanitizer if supported.
+- [x] Fix sanitizer findings.
+- [x] Record unsupported sanitizer/platform cases.
+
+**Result (2026-07-06):** The `cmake-build-input-asan` config builds `CnaTests` with **ASan + UBSan** (g++).
+Ran the **full input filter shuffled** under
+`ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`
+(`xvfb-run … SDL_VIDEODRIVER=x11`): **374 input tests PASSED, zero sanitizer reports** (no
+`ERROR: AddressSanitizer`, no UBSan `runtime error`). This covers every test added in Phases 5–8. **No
+findings to fix.** Earlier phases' real bug fixes were each ASan-verified when landed (P2-002 keyboard-hash
+OOB guard, P4-014 vibration NaN→int UB). **Recorded unsupported/env cases:** LeakSanitizer is disabled
+(`detect_leaks=0`) because Mesa `libGLX`/driver allocations are freed at process exit outside our control
+(third-party, not input leaks); the run needs a real X server (Xvfb) for the MouseCursor tests. **Files
+changed:** none (sanitizer run + record). **Behavior verified:** full input suite is ASan+UBSan-clean under
+shuffle. **Remaining risk:** none.
 
 ## P9-006 — Add fuzz-style SDL bridge tests
 - [ ] Feed randomized but valid SDL-like events.
