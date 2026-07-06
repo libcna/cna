@@ -109,9 +109,15 @@ renumber fails loudly. Consumers (`MouseState` 5 button props, `GamePadButtons`/
 use it and are tested in their own suites. **Members reviewed:** 2/2. **Files changed:** none (perfect,
 no gap). **Behavior verified:** value parity + downstream usage. **Remaining risk:** none.
 
-## A1-002 — `KeyState` `[ ]`
-- [ ] FNA `Input/KeyState.cs`; CNA `KeyState.hpp`; test `KeyStateTests.cpp`.
-- [ ] Verify `Up=0, Down=1`; freeze test covers both.
+## A1-002 — `KeyState` `[x]`
+- [x] FNA `Input/KeyState.cs`; CNA `KeyState.hpp`; test `KeyStateTests.cpp`.
+- [x] Verify `Up=0, Down=1`; freeze test covers both.
+
+**Result (2026-07-06):** `KeyState` is **byte-identical to FNA**: `enum class KeyState { Up, Down }` →
+`Up=0, Down=1` (FNA `KeyState.cs:20,25`). Enum + both members carry Doxygen `@brief`. **Test:**
+`KeyStateTest.ValuesMatchXnaNumericConstants` pins both values (0/1). `KeyState` is the return type of
+`KeyboardState::operator[]`/`getItem`, exercised in `KeyboardInputTests`. **Members reviewed:** 2/2. **Files
+changed:** none (perfect, no gap). **Behavior verified:** value parity. **Remaining risk:** none.
 
 ## A1-003 — `Keys` `[ ]`
 - [ ] FNA `Input/Keys.cs`; CNA `Keys.hpp`; test `KeyboardInputTests.cpp` (value table).
