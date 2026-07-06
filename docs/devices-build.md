@@ -48,26 +48,43 @@ git checkout; see the ZIP-export caveat above for what this does not claim.
 
 ## 2. Devices-only test filter
 
-```bash
-# Via ctest, matching every Devices/Sensors/VibrateController test suite by name
-# (this also matches the Reading/EventArgs/FailedException-type test suites, e.g.
-# AccelerometerReadingTests, SensorFailedExceptionTests — anything with these
-# substrings in its suite name, which is more than just the 12 "main" suites below.
-# Does NOT match SensorBaseTests or ScopeExitTests — add them explicitly to a
-# gtest_filter, or use ctest -R "SensorBase|ScopeExit" separately, if you need
-# those suites too):
-cd cmake-build-debug && ctest --output-on-failure \
-    -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase|ScopeExit|AndroidSensorBridge|AndroidCompassMath|AndroidMotionMath"
-# 273 tests, 100% passing (2 expected hardware skips), as of plan_devices.md Phase 10
-# (2026-07-05) — Task DEVICES-0136 added the trailing 3 terms (AndroidSensorBridge/
-# AndroidCompassMath/AndroidMotionMath, Phases 6-8), which the pre-Phase-10 version
-# of this filter silently did not match at all.
+**Re-verified 2026-07-06 (`DEV-BUILD-002`) against the full, current
+`tests/Microsoft/Devices/` tree** — every `.cpp` file under that directory was listed
+and every `TEST(...)` suite name extracted directly (21 suites, 283 `TEST()` cases
+total, confirmed by a plain `grep -rE '^(TEST|TEST_F|TEST_P)\(' tests/Microsoft/Devices`
+count; no `TEST_F`/`TEST_P` fixtures exist in this scope, only plain `TEST`). The
+substring-based filter this section previously documented (e.g. bare `Accelerometer`,
+`Motion`) had **two real problems**, both confirmed by diffing its actual `ctest -N`
+match list against the 283-case ground truth above:
+- **Silently dropped `CalibrationEventArgsTests`** (3 tests) — its suite name contains
+  none of the old filter's substrings.
+- **Matched 2 unrelated false positives outside `Microsoft::Devices`** —
+  `GamePadTest.GetAccelerometerEXTReturnsFalseAndZeroesOutputWhenNoGamePadConnected`
+  (via the bare `Accelerometer` substring) and
+  `SdlInputBridgeTouchGestureTest.FingerMotionThroughProcessEventProducesFlick` (via the
+  bare `Motion` substring).
 
-# Or directly via the test binary's own gtest filter — narrower: only the 12
-# "main" per-class suites, not the Reading/EventArgs/FailedException ones:
-./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:VibrateControllerTests.*:SensorSubsystemOwnershipTests.*:AndroidSensorOrientationTests.*:SensorBaseTests.*:ScopeExitTests.*:AndroidSensorBridgeTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*"
-# 191 tests, 189 passing (2 expected hardware skips), as of plan_devices.md Phase 10 (2026-07-05).
+The corrected filter below uses the 21 full suite names instead of loose substrings —
+this is both complete (matches all 283 cases, confirmed) and precise (zero
+cross-namespace false positives, confirmed by diff):
+
+```bash
+# Via ctest — matches exactly the 283 current Devices/Sensors/VibrateController
+# TEST() cases, nothing more, nothing less (confirmed 2026-07-06):
+cd cmake-build-debug && ctest --output-on-failure \
+    -R "AccelerometerFailedExceptionTests|AccelerometerReadingEventArgsTests|AccelerometerReadingTests|AccelerometerTests|AndroidSensorOrientationTests|AttitudeReadingTests|CalibrationEventArgsTests|CompassReadingTests|CompassTests|AndroidCompassMathTests|AndroidMotionMathTests|AndroidSensorBridgeTests|GyroscopeReadingTests|GyroscopeTests|MotionReadingTests|MotionTests|ScopeExitTests|SensorBaseTests|SensorFailedExceptionTests|SensorSubsystemOwnershipTests|VibrateControllerTests"
+# 283 tests, 281 passing, 2 expected hardware skips, as of 2026-07-06 (feature/devices).
+
+# Or directly via the test binary's own gtest filter — same 21 suites, same coverage:
+./cmake-build-debug/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
+# Same 283 tests, 281 passing, 2 expected hardware skips.
 ```
+
+If a new file is added under `tests/Microsoft/Devices/` with a new suite name, add that
+suite name to both filters above — re-verify with the same diff technique (compare
+`ctest -N -R "<filter>"`'s match list against a fresh `grep -rE
+'^(TEST|TEST_F|TEST_P)\(' tests/Microsoft/Devices` count) rather than assuming the
+filter still covers everything.
 
 Both commands' 2 skips are the same pair: `AccelerometerTests`/`GyroscopeTests`'
 `GetCurrentValuePropertyDoesNotThrowWhenSupported` — these `GTEST_SKIP()` themselves
@@ -330,24 +347,28 @@ sanitizer is stronger evidence than either alone.
 (`plan_devices_phase8.md` Task P8-4 — configured, built, and run against the full
 Devices-only test suite, not just written and assumed):
 
+These use the same corrected, exact-suite-name filter as Section 2 above (a bare
+`Accelerometer*`/`Motion*` glob here would pick up the same `GamePadTest`/
+`SdlInputBridgeTouchGestureTest` false positives noted there):
+
 ```bash
 # AddressSanitizer — catches use-after-free, heap corruption, buffer overflows.
 # Does NOT catch data races; use ThreadSanitizer for that.
 cmake --preset devices-asan
 cmake --build --preset devices-asan
-./cmake-build-devices-asan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*:AndroidSensorBridge*:AndroidCompassMath*:AndroidMotionMath*"
+./cmake-build-devices-asan/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
 
 # ThreadSanitizer — catches data races. This is the one that actually validates
 # Microsoft::Devices's own locking discipline.
 cmake --preset devices-tsan
 cmake --build --preset devices-tsan
-./cmake-build-devices-tsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*:AndroidSensorBridge*:AndroidCompassMath*:AndroidMotionMath*"
+./cmake-build-devices-tsan/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
 
 # UndefinedBehaviorSanitizer — catches signed overflow, misaligned access,
 # invalid enum values, null-pointer-arithmetic UB, etc.
 cmake --preset devices-ubsan
 cmake --build --preset devices-ubsan
-./cmake-build-devices-ubsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*:AndroidSensorBridge*:AndroidCompassMath*:AndroidMotionMath*"
+./cmake-build-devices-ubsan/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
 ```
 
 **Actual results as of `plan_devices_phase8.md` (2026-07-04), all three presets
@@ -405,6 +426,21 @@ passed, 2 expected skips):
   holds — verified by actually reading all 40 reports' location lines, not by pattern-matching
   the call stacks alone (which looked different enough at a glance to warrant checking).
 - **UBSan:** clean (0 issues).
+
+**Re-verified 2026-07-06 (`DEV-BUILD-002`), all three presets rebuilt and re-run against
+the corrected, exact-suite-name filter above** (283 tests, 281 passed, 2 expected
+skips — matches the ground-truth 283 `TEST()` count exactly, unlike every prior
+session's filter):
+- **ASan:** clean (0 issues).
+- **TSan:** 41 reports, all confirmed the identical known finding — every report's
+  `Location is global 'System::TimeSpan::copy_count'` line matches exactly (checked
+  directly, not assumed); this is the same pre-existing, out-of-scope `sharp-runtime`
+  race documented above, not a new `Microsoft::Devices` finding.
+- **UBSan:** 3 reports, all pre-existing and confirmed 0 in any `Microsoft::Devices`
+  file — 2× `Vector3.cpp:117` and 1× `Matrix.cpp:249`, both `GetHashCode()` signed
+  integer overflow, triggered indirectly by `AccelerometerReadingTests`/
+  `AttitudeReadingTests` hashing a `Vector3`/`Matrix` member, not a bug in the reading
+  struct's own code.
 
 **Throwaway, non-preset builds used during development** (e.g.
 `/tmp/cmake-build-asan-check`) are equally valid if you'd rather not create a build

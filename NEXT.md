@@ -65,6 +65,14 @@ single pre-existing, out-of-scope race in `sharp-runtime`'s
 pre-existing findings, all in `Vector3::GetHashCode()`/`Matrix::GetHashCode()` (signed
 integer overflow), 0 in any `Microsoft::Devices` file.
 
+**2026-07-06 re-verification (`DEV-BUILD-002`), with the corrected exact-suite-name
+filter (see Section 7):** 283 tests (up from the 280/280 figure above, which used the
+old, buggy substring filter — see Section 3), 281 passed, 2 expected hardware skips, on
+plain `cmake-build-debug`, and again identically on all three of
+`devices-asan`/`devices-tsan`/`devices-ubsan`. Sanitizer findings unchanged from the
+paragraph above (0/41-all-known/3-all-known respectively) — re-confirmed, not just
+carried forward.
+
 **Working:** `Accelerometer`/`Gyroscope` — real, SDL3-backed. `Compass`/`Motion` — real
 on Android only (`Detail::AndroidCompassBackend`/`AndroidMotionBackend`, pure NDK, no
 JNI), permanent stub on every other platform. `VibrateController` — real, SDL3
@@ -84,6 +92,20 @@ verify anything in this scope, in any session.
 ---
 
 ## 3. Recent changes
+
+**2026-07-06 — `DEV-BUILD-002` closed: Devices-only test filter corrected.** Extracted
+every `TEST(...)` suite name directly from `tests/Microsoft/Devices/` (21 suites, 283
+cases, no `TEST_F`/`TEST_P` in this scope) and diffed that ground truth against the
+filter this project had been using. Found the old substring filter (`Accelerometer`,
+`Motion`, etc.) **silently dropped `CalibrationEventArgsTests`** (3 tests, no matching
+substring) **and matched 2 unrelated false positives** outside `Microsoft::Devices`
+(`GamePadTest.GetAccelerometerEXT...`, `SdlInputBridgeTouchGestureTest.FingerMotion...`).
+Replaced it with an exact-suite-name filter in `docs/devices-build.md` (Sections 2 and
+6) and this file's Section 7 — verified to match all 283 cases, nothing more. Re-ran the
+corrected filter on plain `cmake-build-debug` and all three sanitizer presets
+(`devices-asan`/`-tsan`/`-ubsan`): 283/283 (281 passed + 2 expected skips) on all four,
+sanitizer findings unchanged from previously known (0 ASan, 41-all-known-`TimeSpan`-race
+TSan, 3-all-known-`Vector3`/`Matrix`-hash UBSan). No production code changed.
 
 **2026-07-06 — `DEV-API-003` investigated and closed, no code change.** The
 `getStateProperty()` `NOXNA` split (`Accelerometer` unmarked, `Gyroscope`/`Compass`/
@@ -290,8 +312,13 @@ cmake --build cmake-build-debug --target CnaTests -j$(nproc)
 # Run all tests:
 cd cmake-build-debug && ctest --output-on-failure
 
-# Devices-only filter (last verified as 280 tests, 278 passing + 2 expected hardware skips):
-cd cmake-build-debug && ctest --output-on-failure -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase|ScopeExit|AndroidSensorBridge|AndroidCompassMath|AndroidMotionMath"
+# Devices-only filter — corrected 2026-07-06 (DEV-BUILD-002) to use exact suite names;
+# the old substring filter silently dropped CalibrationEventArgsTests (3 tests) and
+# picked up 2 unrelated false positives (GamePadTest/SdlInputBridgeTouchGestureTest).
+# Verified to match exactly the 283 current TEST() cases under tests/Microsoft/Devices/,
+# no more, no less. Last run: 283 tests, 281 passing + 2 expected hardware skips.
+# Full detail, including the sanitizer variants, in docs/devices-build.md Section 2/6.
+cd cmake-build-debug && ctest --output-on-failure -R "AccelerometerFailedExceptionTests|AccelerometerReadingEventArgsTests|AccelerometerReadingTests|AccelerometerTests|AndroidSensorOrientationTests|AttitudeReadingTests|CalibrationEventArgsTests|CompassReadingTests|CompassTests|AndroidCompassMathTests|AndroidMotionMathTests|AndroidSensorBridgeTests|GyroscopeReadingTests|GyroscopeTests|MotionReadingTests|MotionTests|ScopeExitTests|SensorBaseTests|SensorFailedExceptionTests|SensorSubsystemOwnershipTests|VibrateControllerTests"
 
 # Build and run the Devices demo (needs a real display):
 cmake --build cmake-build-debug --target cna_demo_devices -j$(nproc)
@@ -324,15 +351,11 @@ These are pulled directly from the newly-rewritten `plan_devices.md` — read th
 for full context on each. Ordered smallest/cheapest first, not strictly by the plan's
 own priority labels.
 
-`DEV-API-003` (the `getStateProperty()` `NOXNA` question) is now closed — see Section 3.
-Next smallest remaining tasks:
+`DEV-API-003` (the `getStateProperty()` `NOXNA` question) and `DEV-BUILD-002` (the
+Devices-only test filter) are now closed — see Section 3. Next smallest remaining
+tasks:
 
-1. **Write the exact Devices-only verification command doc** (plan task
-   `DEV-BUILD-002`). Goal: confirm the filter in Section 7 above still matches every
-   current test suite under `tests/Microsoft/Devices/` (none silently dropped), and
-   record normal/ASan/TSan/UBSan variants in `docs/devices-build.md`. Files:
-   `docs/devices-build.md`. Verify by actually running each documented command once.
-2. **Apply `TimeBetweenUpdates` to the SDL-backed sensors** (plan tasks
+1. **Apply `TimeBetweenUpdates` to the SDL-backed sensors** (plan tasks
    `SENSORBASE-001`, `ACCEL-005`, `GYRO-004`, `SDL-SENSOR-002`). Goal: make
    `Accelerometer`/`Gyroscope` actually throttle their event rate to the requested
    interval — currently a confirmed no-op. Files:
@@ -341,11 +364,11 @@ Next smallest remaining tasks:
    `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`. Verify with a new
    fake-clock/fake-backend test proving throttling, plus
    `ctest -R "Accelerometer|Gyroscope"`.
-3. **Start the public API matrix** (plan task `DEV-API-001`). Goal: one table row per
+2. **Start the public API matrix** (plan task `DEV-API-001`). Goal: one table row per
    public class/method/property/event/exception in scope, marked strict-XNA/WP7-legacy/
    `NOXNA`/internal-only. Files: `docs/devices-api-coverage.md` (extend/verify, don't
    duplicate). Verify by cross-checking a sample of rows against the actual headers.
-4. **Investigate the `cna_demo_devices` Android `SDL3/SDL_main.h` build gap**
+3. **Investigate the `cna_demo_devices` Android `SDL3/SDL_main.h` build gap**
    (Section 4 above; not yet a plan task — scope it as one first). Goal: find why this
    specific target's Android include paths lack an Android-arch SDL3 header set the
    `CNA` library target itself doesn't need. Files: whichever `CMakeLists.txt` defines

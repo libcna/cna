@@ -197,7 +197,7 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   - `docs/devices-build.md`
   - `plan_devices.md`
 
-### DEV-BUILD-002 — Add device-only verification commands
+### DEV-BUILD-002 — Add device-only verification commands — CLOSED (2026-07-06)
 
 - **Priority:** High
 - **Area:** Build / Tests
@@ -206,21 +206,32 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   exists but must be checked against the actual current test-suite filter (a stale
   filter that silently drops new test suites has happened before in this repository's
   history).
-- **Required work:**
-  - Document exact configure/build/test commands for Devices/Sensors only.
-  - Include a `gtest_filter`/`ctest -R` pattern covering every current Devices/Sensors
-    test suite by name (verify the full current list from `tests/Microsoft/Devices/`
-    rather than copying an old filter forward).
-  - Include normal, `devices-asan`, `devices-tsan`, and `devices-ubsan` variants.
-- **Acceptance criteria:**
-  - `docs/devices-build.md` (or `plan_devices.md`, cross-linked) contains copy-pasteable
-    commands.
-  - The documented filter is verified to actually match every current Devices/Sensors
-    test suite (no silently-dropped suite).
-- **Suggested files to inspect or edit:**
-  - `docs/devices-build.md`
-  - `CMakePresets.json`
-  - `tests/Microsoft/Devices/` (full recursive listing, to build the filter from)
+- **Resolution (2026-07-06):** the concern was justified — the filter documented in
+  `docs/devices-build.md`/`NEXT.md` *was* stale. Ground truth was established directly:
+  every `TEST(...)` in `tests/Microsoft/Devices/` (21 suites, 283 cases, no
+  `TEST_F`/`TEST_P` in this scope), via
+  `grep -rE '^(TEST|TEST_F|TEST_P)\(' tests/Microsoft/Devices`. Diffing that against the
+  old substring filter (`Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|...`)
+  found two real problems:
+  - **Silently dropped `CalibrationEventArgsTests`** (3 tests — no substring in the old
+    filter matched its suite name).
+  - **Matched 2 unrelated false positives outside `Microsoft::Devices`:**
+    `GamePadTest.GetAccelerometerEXTReturnsFalseAndZeroesOutputWhenNoGamePadConnected`
+    and `SdlInputBridgeTouchGestureTest.FingerMotionThroughProcessEventProducesFlick`.
+  - Replaced with an exact-suite-name filter (`docs/devices-build.md` Sections 2/6,
+    `NEXT.md` Section 7) — verified via diff to match all 283 cases, zero false
+    positives. Re-ran the corrected filter on plain `cmake-build-debug` and all three
+    sanitizer presets: 283/283 (281 passed + 2 expected hardware skips) on all four;
+    sanitizer findings unchanged from previously known (0 ASan; 41 TSan reports, all
+    the same pre-existing `sharp-runtime` `TimeSpan::copy_count` race; 3 UBSan reports,
+    all the same pre-existing `Vector3`/`Matrix::GetHashCode()` signed-overflow finding,
+    0 in `Microsoft::Devices` itself).
+  - No production code changed — this task was documentation/verification-only.
+- **Suggested files inspected/edited:**
+  - `docs/devices-build.md` (edited)
+  - `NEXT.md` (edited)
+  - `CMakePresets.json` (inspected, unchanged)
+  - `tests/Microsoft/Devices/` (full recursive listing, used to build the filter)
 
 ### DEV-BUILD-003 — Add CI job for Devices/Sensors
 
