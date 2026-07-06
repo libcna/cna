@@ -2434,6 +2434,124 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (edited)
   - `docs/devices-api-coverage.md` (edited)
 
+### ACCEL-008 — NEW (found 2026-07-06, while researching `COMPASS-001`): re-examine whether the Android landscape axis remap should exist at all — OPEN, needs a decision, not implemented
+
+- **Priority:** Critical
+- **Area:** Sensor Math / Architecture — affects `Accelerometer`, `Gyroscope`, and
+  (per `MOTION-002`) likely `Motion` too
+- **Problem, found while independently researching `CompassReading.MagnetometerReading`'s
+  coordinate system for `COMPASS-001`:** fetched the archived MSDN Magazine article
+  "Touch and Go - Getting Oriented with the Windows Phone Compass" (Charles Petzold,
+  June 2012, `learn.microsoft.com/en-us/archive/msdn-magazine/2012/june/touch-and-go-getting-oriented-with-the-windows-phone-compass`)
+  while looking for `MagnetometerReading`'s documented coordinate frame, and found a
+  statement with much broader implications than the question it was fetched to answer:
+
+  > "When the phone is held still, the accelerometer measures gravity and provides a 3D
+  > vector pointing toward the center of the earth. This vector is relative to a 3D
+  > coordinate system, as shown in Figure 1. **This coordinate system is the same
+  > whether you're coding a Silverlight or XNA program, or running in portrait or
+  > landscape mode.**"
+
+  The article's own example program then works around this directly: *"Normally XNA
+  programs on the phone run in landscape mode, and that can be an issue because it
+  doesn't match the coordinate system used by the sensors. To make things easy for
+  myself, I reoriented the XNA coordinate system for portrait mode..."* — i.e. the real
+  WP7 `Accelerometer` **never remaps its axes based on the app's actual display
+  orientation**; it always reports the same fixed, device-relative frame, and it is
+  explicitly the *game's own responsibility* to handle the mismatch when running in
+  landscape (this example program sidesteps it entirely by just running in portrait
+  instead of remapping).
+
+  The same article states `CompassReading.MagnetometerReading` uses *the identical*
+  Figure-1 coordinate system ("another Vector3 relative to the coordinate system shown
+  in Figure 1") — i.e. **not landscape-corrected either**, consistent with
+  `TrueHeading`/`MagneticHeading` being defined as "angles... measured counterclockwise
+  from the positive Y axis shown in Figure 1" — also a fixed reference, not a
+  landscape-relative one.
+
+  **This directly contradicts the premise behind `Detail::ConvertAndroidPortraitToXnaLandscape()`**
+  (`AndroidSensorOrientation.hpp`, used by both `Accelerometer.cpp`'s and
+  `Gyroscope.cpp`'s `#ifdef __ANDROID__` blocks): that function exists specifically to
+  remap raw portrait-frame sensor values into a landscape-relative convention,
+  reasoning that "the game expects landscape-relative axes." But per this documentation,
+  **the real WP7 `Accelerometer`/`Gyroscope` never performs any such remap at all,
+  regardless of display orientation** — it always reports the same fixed device frame.
+  This is not merely a "sign convention still needs hardware verification" gap
+  (`ACCEL-004`/`GYRO-003`'s scope) — it potentially means the entire remap step is a
+  CNA-invented behavior with no real-WP7 counterpart, currently presented as if it were
+  required XNA-compatible behavior rather than a `NOXNA` convenience.
+
+  **Corroborating evidence from a source already used elsewhere in this plan:** SDL3's
+  own header (`third_party/SDL/include/SDL3/SDL_sensor.h`, already cited by `ACCEL-003`/
+  `GYRO-002`) states independently, for its own `SDL_SENSOR_ACCEL`/`SDL_SENSOR_GYRO`:
+  *"The accelerometer axis data is not changed when the device is rotated"* / *"The
+  gyroscope axis data is not changed when the device is rotated."* Both the real WP7 API
+  and the underlying SDL3 API this project is built on agree: raw sensor axes are
+  device-fixed, not display-orientation-relative. CNA's own Android-only remap step
+  appears to be layered on top of both, matching neither.
+
+  **Compass, by contrast, is very likely unaffected:** `Detail::AndroidCompassMath`'s
+  heading computation (`ConvertRotationVectorToMagneticHeadingDegrees()`) derives
+  `MagneticHeading`/`TrueHeading` from Android's own **world-frame** rotation-vector
+  sensor (East/North/Up, already orientation-corrected by the platform itself, an
+  entirely different computation from the raw portrait-frame remap) — not from
+  `Detail::ConvertAndroidPortraitToXnaLandscape()` at all. Its `MagnetometerReading`
+  (the raw vector, separate from the heading angles) is currently reported unremapped
+  (confirmed by reading `AndroidCompassBackend.cpp` — no orientation remap applied),
+  which — per this same finding — is actually the *correct* behavior, not the open
+  question `docs/devices-api-coverage.md` previously flagged it as.
+- **Why this was not fixed in this pass:** this is a request for a significant
+  architectural reconsideration of already-shipped, already-tested behavior across two
+  sensor classes (and likely a third, `Motion` — see `MOTION-002`), based on a single
+  (albeit authoritative-seeming, Microsoft-published) magazine article read without a
+  real device available to cross-check either the current behavior or a prospective
+  fix against. Given:
+  - No hardware exists in this environment to verify either interpretation empirically.
+  - Every existing accelerometer/gyroscope axis test (`AndroidSensorOrientationTests.cpp`,
+    `ACCEL-004`, `GYRO-003`) was written and passed against the *current* (possibly
+    wrong) remap assumption — "fixing" this would mean rewriting those tests' expected
+    values based on the same un-verifiable-here reasoning, not empirical confirmation.
+  - Removing the remap would be a breaking behavior change for any existing CNA
+    Android game/demo code that currently relies on receiving landscape-corrected axes.
+  - This plan's own operating instructions call for documenting significant findings
+    like this as a follow-up task rather than unilaterally making a large, unverifiable
+    architectural change mid-session.
+- **Required work (not yet started):**
+  - Independently re-confirm the Petzold article's claim against at least one more
+    authoritative source (e.g. the official WP7 SDK documentation's own `Accelerometer`
+    remarks, if an archived copy states the same thing) before treating it as settled —
+    a single magazine article, however Microsoft-published, is not the same tier of
+    evidence as an official class/property reference page.
+  - Decide, with the project maintainer's input given the scope: (a) keep the current
+    remap but explicitly mark it `NOXNA` and document it as a deliberate CNA convenience
+    deviation (with a way for a game to opt out and get raw device-fixed axes instead,
+    if strict compatibility matters to that game), or (b) remove the remap entirely so
+    `Accelerometer`/`Gyroscope` report the same fixed device-relative frame on Android
+    that the real WP7 API and SDL3 both document, pushing any orientation-relative
+    interpretation to game code (matching the Petzold article's own example).
+  - Whichever direction is chosen, update `AndroidSensorOrientationTests.cpp`,
+    `docs/devices-hardware-checklist.md` Sections 1-2, and the `ACCEL-004`/`GYRO-003`
+    closing notes to reflect the decision.
+  - Apply the same decision consistently to `Motion`'s Android attitude/gravity/rotation-
+    rate remapping (`MOTION-002`), which likely has the identical question.
+- **Acceptance criteria (for whoever picks this up):**
+  - The claim is corroborated by a second authoritative source or explicitly marked as
+    single-source pending further confirmation.
+  - A decision is made and documented with rationale, not left as an unexamined
+    contradiction between this finding and the existing remap code.
+  - Whichever behavior is chosen is consistently applied across
+    `Accelerometer`/`Gyroscope`/`Motion`, not decided differently per class without a
+    stated reason.
+- **Suggested files to inspect or edit:**
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`
+  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
+  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp`
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (cross-reference,
+    `MOTION-002`)
+  - `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp`
+  - `docs/devices-hardware-checklist.md`
+  - `docs/devices-api-coverage.md`
+
 ---
 
 ## 7. Gyroscope tasks
@@ -2596,6 +2714,15 @@ not an alternate spelling to preserve.
     the existing checklist Section 2 already honestly states ("no single authoritative
     WP7 sign convention documented for gyroscope... use internal consistency... as the
     primary correctness bar").
+  - **Addendum (2026-07-06, found afterward while researching `COMPASS-001`, not yet
+    reflected in the "Progress"/"Required work" text above — see `ACCEL-008`, new):**
+    an archived MSDN Magazine article states the real WP7 `Accelerometer`'s raw
+    coordinate system "is the same whether you're coding a Silverlight or XNA program,
+    or running in portrait or landscape mode" — i.e. the real API may never perform
+    this landscape remap at all, on either sensor. This is a more fundamental question
+    than this task's own "is the sign correct" scope and is tracked separately in
+    `ACCEL-008` (open, needs a decision, single-source finding not yet corroborated) —
+    not resolved or acted on here.
 - **Required work:**
   - Define expected axis behavior for rotation around each of the three axes. Already
     defined as "internal consistency, no absolute documented sign" — re-confirmed,

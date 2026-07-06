@@ -105,7 +105,7 @@ event in the real API).
 |---|---|---|
 | `HeadingAccuracy` | High (member exists) / N/A (CNA's degree scale is a project choice) | Android: mapped from magnetic-field accuracy status |
 | `MagneticHeading` | High | Android: from rotation-vector azimuth, **never hardware-verified** |
-| `MagnetometerReading` | High | Android: raw µT vector, no axis remap applied (open question) |
+| `MagnetometerReading` | High | Android: raw µT vector, no axis remap applied — **now believed correct, not an open question** (`COMPASS-001`, 2026-07-06): an archived MSDN Magazine article ("Touch and Go - Getting Oriented with the Windows Phone Compass", Petzold, 2012) states `MagnetometerReading` shares the same device-fixed coordinate system as `Accelerometer.Acceleration`, which the same article says "is the same whether... running in portrait or landscape mode" — i.e. no landscape remap should apply to either. This same finding raises a much larger question about whether `Accelerometer`/`Gyroscope`'s own existing landscape remap should exist at all — tracked separately in `ACCEL-008` (open, needs a decision), not resolved here. |
 | `TrueHeading` | High (member) | Android: **always equals `MagneticHeading`** — honest limitation, no `System.Device.Location` |
 
 ## Cross-cutting members — reading structs (`DEV-API-001`, added 2026-07-06)
