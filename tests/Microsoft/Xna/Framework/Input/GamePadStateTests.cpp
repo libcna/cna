@@ -89,6 +89,20 @@ TEST(GamePadStateTest, IsButtonDownRequiresAllRequestedFlagsToBePressed)
     EXPECT_TRUE(state.IsButtonUp(Buttons::A | Buttons::B));
 }
 
+// A4-006: dedicated IsButtonUp coverage. FNA IsButtonUp(b) == `(buttons & b) != b` — true UNLESS every
+// requested bit is set (NOT simply "all up"). So a partially-down combined query is Up. CNA is byte-identical.
+TEST(GamePadStateTest, IsButtonUpIsTrueUnlessAllRequestedButtonsAreDown)
+{
+    const GamePadState aDown(Vector2::Zero, Vector2::Zero, 0.0f, 0.0f, {Buttons::A});
+    EXPECT_FALSE(aDown.IsButtonUp(Buttons::A));               // A is down -> not up
+    EXPECT_TRUE(aDown.IsButtonUp(Buttons::B));                // B unpressed -> up
+    EXPECT_TRUE(aDown.IsButtonUp(Buttons::A | Buttons::B));   // A down but B up -> not all down -> up
+
+    const GamePadState bothDown(Vector2::Zero, Vector2::Zero, 0.0f, 0.0f, {Buttons::A, Buttons::B});
+    EXPECT_FALSE(bothDown.IsButtonUp(Buttons::A | Buttons::B)); // all requested down -> not up
+    EXPECT_FALSE(bothDown.IsButtonUp(Buttons::A));
+}
+
 TEST(GamePadStateTest, EqualityOperatorsForEqualAndDifferingInstances)
 {
     const GamePadState a(Vector2::Zero, Vector2::Zero, 0.0f, 0.0f, {Buttons::A});

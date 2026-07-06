@@ -400,10 +400,26 @@ false; `static_assert(n==35)`) that catches any getter↔field mis-wiring. Exist
 ctor = all. **Files changed:** `tests/…/GamePadTests.cpp` (+1 isolation test). **Behavior verified:** every
 getter reflects exactly its own field; full FNA property parity. **Remaining risk:** none.
 
-## A4-006 — `GamePadState` (struct) `[ ]`
-- [ ] FNA `Input/GamePadState.cs`; CNA `GamePadState.hpp`/`.cpp`; test `GamePadStateTests.cpp`.
-- [ ] Members: ctors (default + full), IsConnected, PacketNumber, Buttons/DPad/ThumbSticks/Triggers,
-  `IsButtonDown`/`IsButtonUp`, `Equals`/`==`/`!=`, `GetHashCode`. Per-member.
+## A4-006 — `GamePadState` (struct) `[x]`
+- [x] FNA `Input/GamePadState.cs`; CNA `GamePadState.hpp`/`.cpp`; test `GamePadStateTests.cpp`.
+- [x] Members: ctors (default + full), IsConnected, PacketNumber, Buttons/DPad/ThumbSticks/Triggers,
+  `IsButtonDown`/`IsButtonUp`, `Equals`/`==`/`!=`, `GetHashCode`, `ToString`. Per-member.
+
+**Result (2026-07-06):** **Members match FNA `GamePadState.cs`:** IsConnected, PacketNumber (get + NOXNA set
+= FNA internal set), Buttons/DPad/ThumbSticks/Triggers accessors, default ctor (NOXNA) + 4-arg + 5-arg ctors,
+IsButtonDown, IsButtonUp, Equals/`==`/`!=`, GetHashCode, ToString. **Verified `IsButtonUp` is byte-identical
+to FNA:** `(buttons & button) != button` (true unless ALL requested bits are set — not simply "all up").
+`IsButtonDown` = `(buttons & button) == button`. `ToString` returns the fully-qualified type name, matching
+FNA's `base.ToString()`. **Test map:** default → `DefaultConstructorProducesDisconnectedStateAtRest`; 4-arg →
+`FourArgConstructor{MarksConnectedAndPacksExplicitButtons,PacksTriggersPastThresholdAsButtons,PacksThumbstick
+DirectionsAsButtons}`; 5-arg → `FiveArgConstructorBuildsEquivalentPackedState`; IsButtonDown →
+`IsButtonDownRequiresAllRequestedFlagsToBePressed`; Equals/PacketNumber →
+`EqualityOperatorsForEqualAndDifferingInstances` + `EqualityConsidersPacketNumber`; hash →
+`GetHashCodeMatchesButtonsHashXorPacketFormula`; ToString → `ToStringReturnsFullyQualifiedTypeNameRegardlessOfState`.
+`IsButtonUp` was only asserted incidentally — **added dedicated** `IsButtonUpIsTrueUnlessAllRequestedButtons
+AreDown` (single down→false, unpressed→true, partial-combined→true, all-down→false). **Members reviewed:**
+all. **Files changed:** `tests/…/GamePadStateTests.cpp` (+1 test). **Behavior verified:** ctor packing +
+IsButtonDown/Up FNA semantics + equality-with-packet + hash. **Remaining risk:** none.
 
 ## A4-007 — `GamePad` (static class) `[ ]`
 - [ ] FNA `Input/GamePad.cs`; CNA `GamePad.hpp`/`.cpp`; tests `GamePadTests.cpp` + `GamePadInputTests.cpp`.
