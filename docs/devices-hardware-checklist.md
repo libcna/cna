@@ -23,6 +23,12 @@ controller attached — to close the gap between "compiles and dispatches correc
 None of the items below can be verified by an AI agent in a headless container. This is
 a plain checklist, not a task with its own build/test cycle.
 
+**Recording results (Task `DEMO-002`, 2026-07-06):** this file is "what to check" —
+`docs/devices_sensor_hardware_qa_template.md` is the companion "how to record a
+specific run's results" template, with one section per numbered section below, plus
+device/OS/commit-hash metadata fields, so results stay comparable across different
+testers, devices, and sessions instead of each tester inventing their own format.
+
 ---
 
 ## Phase 9 (2026-07-04) execution results — honest status per case
@@ -434,6 +440,10 @@ for any item above that asks "does this feel/read correct on a real device":
 ---
 
 ## Reporting results
+
+Use `docs/devices_sensor_hardware_qa_template.md` to record what you actually observed
+for each section above, in a reusable, comparable format — copy it to a new file per
+test session rather than editing the template in place.
 
 If any item above reveals an actual bug (wrong sign, no vibration, gamepad conflict),
 file it the same way as any other confirmed bug in this project: root-cause it against

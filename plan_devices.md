@@ -860,6 +860,8 @@ not an alternate spelling to preserve.
 
 ### VIB-003 — Implement Android phone vibrator backend — CLOSED (2026-07-06, re-verified with a fresh, independent read; one real new finding documented, no code change)
 
+**Hardware verification:** record real-device results in `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) — see `docs/devices-hardware-checklist.md` Sections 3-5a.
+
 - **Priority:** Critical
 - **Area:** Android Backend
 - **Problem:** Confirmed (Section 1): there is no dedicated Android vibrator backend
@@ -1343,6 +1345,8 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Detail/` (new, from `VIB-002`)
 
 ### VIB-010 — Add manual hardware vibration checklist — CLOSED (2026-07-06)
+
+**Hardware verification:** record real-device results in `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) — mirrors the matrix this task added to `docs/devices-hardware-checklist.md` Section 5a.
 
 - **Priority:** Medium
 - **Area:** QA
@@ -2184,6 +2188,8 @@ not an alternate spelling to preserve.
 
 ### ACCEL-004 — Verify axis orientation on real hardware — hardware verification still outstanding; real doc/log bugs found and fixed (2026-07-06)
 
+**Hardware verification:** record real-device results in `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) — see `docs/devices-hardware-checklist.md` Section 1; that template's Section 1 also has a dedicated field for the `ACCEL-008` open question.
+
 - **Priority:** Critical
 - **Area:** Sensor Math / Hardware QA
 - **Problem:** Confirmed (Section 1 and this repository's own `NEXT.md`): Android
@@ -2436,6 +2442,8 @@ not an alternate spelling to preserve.
 
 ### ACCEL-008 — NEW (found 2026-07-06, while researching `COMPASS-001`): re-examine whether the Android landscape axis remap should exist at all — OPEN, needs a decision, not implemented
 
+**Hardware verification:** `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) Section 1 has a dedicated field for recording whether the coordinate convention changes between portrait and landscape on real hardware — the direct evidence needed to resolve this question.
+
 - **Priority:** Critical
 - **Area:** Sensor Math / Architecture — affects `Accelerometer`, `Gyroscope`, and
   (per `MOTION-002`) likely `Motion` too
@@ -2670,6 +2678,8 @@ not an alternate spelling to preserve.
     vendored, not edited)
 
 ### GYRO-003 — Verify gyroscope axes and Android orientation remap — hardware verification still outstanding; existing coverage re-confirmed (2026-07-06)
+
+**Hardware verification:** record real-device results in `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) — see `docs/devices-hardware-checklist.md` Section 2.
 
 - **Priority:** Critical
 - **Area:** Sensor Math / Hardware QA
@@ -3020,6 +3030,8 @@ not an alternate spelling to preserve.
 
 ### COMPASS-004 — Verify Android heading math on hardware — hardware verification still outstanding; existing coverage re-confirmed, checklist updated (2026-07-06)
 
+**Hardware verification:** record real-device results in `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) — see `docs/devices-hardware-checklist.md` Section 7; that template's Section 7 also has a dedicated field for the `COMPASS-009` open question.
+
 - **Priority:** Critical
 - **Area:** Compass Math / Hardware QA
 - **Problem:** `Detail::AndroidCompassMath`'s rotation-vector-to-heading conversion is
@@ -3267,6 +3279,8 @@ not an alternate spelling to preserve.
 
 ### COMPASS-008 — Harden Android compass callback lifetime further — CLOSED (2026-07-06, real use-after-free ordering bug found and fixed by pure code review; deeper risk remains open, hardware-only)
 
+**Hardware verification:** record real-device results in `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) — see `docs/devices-hardware-checklist.md` Section 6 for the concurrent-use lifecycle checks this task's remaining risk needs.
+
 - **Priority:** Critical
 - **Area:** Lifecycle / Android
 - **Problem:** `Detail::AndroidCompassBackend`'s callbacks run on
@@ -3356,6 +3370,8 @@ not an alternate spelling to preserve.
     fake backend cannot reach this exact call chain)
 
 ### COMPASS-009 — NEW (found 2026-07-06, while researching `COMPASS-001`/`COMPASS-002`): implement the real Compass's device-tilt-dependent axis switch — OPEN, not implemented
+
+**Hardware verification:** `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) Section 7 has a dedicated field for recording whether heading behavior visibly changes/misbehaves between held-upright and lying-flat orientations on real hardware — the direct evidence needed to resolve this question.
 
 - **Priority:** High
 - **Area:** Compass Math / Android Backend
@@ -3505,6 +3521,8 @@ not an alternate spelling to preserve.
   - `docs/devices-api-coverage.md` (edited — citations added)
 
 ### MOTION-002 — Verify quaternion and attitude coordinate mapping — hardware verification still outstanding; test coverage extended, cross-referenced with `ACCEL-008` (2026-07-06)
+
+**Hardware verification:** record real-device results in `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) — see `docs/devices-hardware-checklist.md` Section 8.
 
 - **Priority:** Critical
 - **Area:** Motion Math
@@ -4016,6 +4034,8 @@ not an alternate spelling to preserve.
     cross-references)
 
 ### MOTION-010 — Harden Motion callback lifetime further — CLOSED (2026-07-06, re-confirmed structurally safe from `COMPASS-008`'s bug class; deeper risk remains open, hardware-only)
+
+**Hardware verification:** record real-device results in `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) — see `docs/devices-hardware-checklist.md` Section 6 for the concurrent-use lifecycle checks this task's remaining risk needs.
 
 - **Priority:** Critical
 - **Area:** Lifecycle / Android
@@ -4904,7 +4924,7 @@ not an alternate spelling to preserve.
   cross-compile was needed to verify it (the demo's own Android packaging is a
   separate Gradle build, `examples/demo_devices/android/`, not exercised this task).
 
-### DEMO-002 — Add a hardware QA report template
+### DEMO-002 — Add a hardware QA report template — CLOSED (2026-07-06)
 
 - **Priority:** Medium
 - **Area:** QA
@@ -4928,6 +4948,32 @@ not an alternate spelling to preserve.
   - `docs/devices_sensor_hardware_qa_template.md` (new)
   - `docs/devices-hardware-checklist.md` (cross-link, do not duplicate)
   - `plan_devices.md`
+- **Resolution:** Created `docs/devices_sensor_hardware_qa_template.md` with one
+  section per numbered section in `docs/devices-hardware-checklist.md` (1 through 9,
+  matched exactly so a completed report reads side-by-side with the checklist step it
+  answers), a session-metadata table (date, tester, device model, OS/API level,
+  physical-vs-emulator, CNA commit hash, graphics backend, build type, test app used),
+  and expected/observed/pass-fail table rows for every check the checklist describes —
+  covering all four sensors plus vibration, per the required-work list. Cross-linked
+  both directions rather than merging: added a paragraph to the checklist's intro
+  pointing to the template, and a line in its "Reporting results" section; the
+  template's own header explains the relationship and instructs testers to copy it
+  per-session rather than edit it in place. Also gave `ACCEL-008` and `COMPASS-009`
+  (this session's two intentionally-left-OPEN findings) their own dedicated fields in
+  the template's Section 1 and Section 7 respectively, since a real hardware QA session
+  is exactly what would produce the evidence needed to resolve either. **Linked from
+  every hardware-verification task in this plan file**, not just described in prose:
+  added a one-line "Hardware verification" pointer (naming the specific checklist
+  section it maps to) to `VIB-003`, `VIB-010`, `ACCEL-004`, `ACCEL-008`, `GYRO-003`,
+  `COMPASS-004`, `COMPASS-008`, `COMPASS-009`, `MOTION-002`, and `MOTION-010` — every
+  task in this plan whose own closing status says "hardware verification still
+  outstanding," "hardware-only" remaining risk, or is itself an OPEN hardware-dependent
+  question. No build/test cycle applies to this task (pure new documentation file plus
+  cross-links in two existing markdown files) — verified by proofreading the new file
+  and re-checking every one of the 10 added cross-link lines resolves to the actual
+  section numbers they claim (re-read `docs/devices-hardware-checklist.md`'s current
+  Section 1/2/6/7/8 headers against each link while writing them, not assumed from
+  memory).
 
 ---
 
