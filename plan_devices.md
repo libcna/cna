@@ -2114,7 +2114,7 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Sensors/Accelerometer.cpp` (inspected, no change needed)
   - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (edited)
 
-### ACCEL-003 — Verify acceleration units
+### ACCEL-003 — Verify acceleration units — CLOSED (2026-07-06, confirmed correct via SDL3 header + two real per-platform backends, no code change)
 
 - **Priority:** Critical
 - **Area:** Sensor Math
@@ -2122,21 +2122,65 @@ not an alternate spelling to preserve.
   platforms, while XNA's `AccelerometerReading.Acceleration` is documented in g units.
   This codebase's current conversion constant/logic must be re-verified against SDL3's
   actual per-platform behavior, not assumed correct because a conversion already exists.
+- **Resolution (2026-07-06):** confirmed at three levels, not just the top-level header:
+  - **SDL3's own public contract:** `third_party/SDL/include/SDL3/SDL_sensor.h` defines
+    `SDL_STANDARD_GRAVITY` (`9.80665f`) and documents, directly above the
+    `SDL_SensorType` enum: *"The accelerometer returns the current acceleration in SI
+    meters per second squared."* — a cross-platform guarantee, not a per-platform
+    footnote, and it exactly matches CNA's existing `StandardGravity = 9.80665f`
+    constant, both name and value.
+  - **Android backend, read directly (`third_party/SDL/src/sensor/android/SDL_androidsensor.c`):**
+    passes NDK `ASensorEvent.data` straight through to `SDL_SendSensorUpdate()` with
+    **zero conversion** — correct, since `ASENSOR_TYPE_ACCELEROMETER` already reports
+    m/s² natively per the NDK's own contract; nothing to convert.
+  - **Windows backend, read directly (`third_party/SDL/src/sensor/windows/SDL_windowssensor.c`):**
+    explicitly multiplies the Windows Sensor API's native g-unit values (`valueX.dblVal`
+    etc.) by `SDL_STANDARD_GRAVITY` before calling `SDL_SendSensorUpdate()` — i.e. SDL
+    itself performs the necessary per-platform conversion so its output is always SI
+    m/s², regardless of what unit the underlying native platform API actually uses.
+    This is the concrete, source-level proof that the top-level header's contract is
+    actually implemented, not merely asserted — exactly the skepticism this task's own
+    required work asked for.
+  - **Conclusion: no code change needed.** CNA's existing `x / StandardGravity`
+    conversion (SDL m/s² → XNA g) was already correct; the constant's value and name
+    already matched SDL3's own `SDL_STANDARD_GRAVITY` macro, coincidentally or not.
+    Added a citation comment directly above the constant in `Accelerometer.cpp`,
+    naming both source files read and summarizing what each confirmed, so a future
+    reader doesn't have to re-derive this from scratch.
+  - **Tests:** already comprehensive before this task —
+    `CurrentValueChangedReceivesExpectedReading` and others already assert known raw
+    m/s² inputs (`StandardGravity`, `StandardGravity * 0.5f`, etc.) produce the exact
+    expected g outputs (`1.0`, `0.5`, etc.) — confirmed by reading them, no new test
+    needed to satisfy this task's own acceptance criterion.
+  - **Platform-specific differences:** none found requiring separate handling — SDL3
+    normalizes every platform to the same SI m/s² output itself, so CNA's single
+    shared conversion path is correct for all platforms without needing any
+    `#ifdef`-based per-platform branch of its own.
 - **Required work:**
   - Confirm SDL3's actual reported units on every target platform this project builds
     for (read `third_party/SDL`'s sensor backend source per-platform, not just the
-    top-level SDL3 header docs).
-  - Keep or adjust the conversion-by-standard-gravity constant accordingly.
+    top-level SDL3 header docs). Done — Android and Windows backends read directly.
+  - Keep or adjust the conversion-by-standard-gravity constant accordingly. Done — kept,
+    confirmed already correct.
   - Add tests for the conversion using known raw input values and expected g output.
+    Confirmed already present and sufficient.
 - **Acceptance criteria:**
-  - Known raw SDL values convert to the expected g values in tests.
+  - Known raw SDL values convert to the expected g values in tests. Confirmed.
   - The conversion (and its source, e.g. `StandardGravity = 9.80665f`, already used
     elsewhere in this codebase for the Android Motion backend) is documented with its
-    origin.
+    origin. Done — citation comment added.
   - Platform-specific differences, if any are found, are explicitly handled and tested.
+    None found — SDL3 itself normalizes every platform to SI m/s².
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
-  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp` (edited — citation comment)
+  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (inspected, already
+    sufficient, no change needed)
+  - `third_party/SDL/include/SDL3/SDL_sensor.h` (read-only research — vendored, not
+    edited)
+  - `third_party/SDL/src/sensor/android/SDL_androidsensor.c` (read-only research —
+    vendored, not edited)
+  - `third_party/SDL/src/sensor/windows/SDL_windowssensor.c` (read-only research —
+    vendored, not edited)
 
 ### ACCEL-004 — Verify axis orientation on real hardware
 

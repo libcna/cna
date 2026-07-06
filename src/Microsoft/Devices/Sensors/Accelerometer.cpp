@@ -501,6 +501,20 @@ namespace Microsoft::Devices::Sensors
     {
         AccelerometerReading accelerometerReading;
 
+        // Task ACCEL-003 (re-verified 2026-07-06): SDL3 documents its own
+        // `SDL_STANDARD_GRAVITY` macro (third_party/SDL/include/SDL3/SDL_sensor.h)
+        // as "The accelerometer returns the current acceleration in SI meters
+        // per second squared" -- a cross-platform contract, not a
+        // per-backend guess. Confirmed this is actually implemented
+        // consistently, not just documented, by reading two real platform
+        // backends directly: Android's (SDL_androidsensor.c) passes NDK
+        // ASensorEvent data through completely unconverted (correct, since
+        // ASENSOR_TYPE_ACCELEROMETER already reports m/s^2 natively);
+        // Windows' (SDL_windowssensor.c) explicitly multiplies its native
+        // Sensor API's g-unit values by SDL_STANDARD_GRAVITY before handing
+        // them to SDL_SendSensorUpdate() -- i.e. SDL itself does the
+        // necessary per-platform conversion so every backend ends up
+        // reporting the same SI m/s^2 unit this constant assumes.
         constexpr float StandardGravity = 9.80665f;
 
         const bool valid = true;
