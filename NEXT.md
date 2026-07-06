@@ -13,8 +13,17 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–41 are complete. **Phase 42 (BasicEffect exactness,
-  `GRAPHICS_TASKS.md` Tasks 361–370) is open** — **Task 361 is done, Task 362 is next** ("Unit
-  test default values for every `BasicEffect` property" — see §8). **Task 361 opened Phase 42**:
+  `GRAPHICS_TASKS.md` Tasks 361–370) is open** — **Task 362 is done, Task 363 is next** ("Unit
+  test `EnableDefaultLighting()` exact constants" — see §8). **Task 362** built a new, centralized
+  GTest fixture (`tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp`, 22 tests, one per
+  Task 361's audited property) and found **a 3rd real default-value bug** beyond Task 361's 2:
+  CNA's `DirectionalLight::DirectionalLight()` initialized `direction_` to `Vector3::Forward`
+  ((0,0,-1)); FNA's equivalent field has no initializer at all (defaults to `Vector3.Zero`) —
+  fixed, with the constructor's Doxygen comment corrected too. Verified genuine discriminating
+  power (reverted the fix, confirmed the new test fails, reverted back; also spot-checked
+  `SpecularPower` the same way). Full 3-backend regression, zero new failures: EasyGL 3408/3411,
+  Vulkan 3329/3344 (13 pre-existing + 1 flaky `CueTest` + 1 order-dependent `Vulkan_RenderTargetUsage`
+  flake), Bgfx 3314/3314 (100%). **Task 361 opened Phase 42**:
   audited `BasicEffect` against FNA's `BasicEffect.cs` (22 properties/defaults compared) and found
   2 real, fixed default-value bugs: CNA's `VertexColorEnabled` field defaulted to `true` (FNA's
   `vertexColorEnabled` has no initializer, i.e. defaults to `false`) — fixed to `false`; and FNA's
@@ -525,14 +534,29 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 362 — unit test default values for every `BasicEffect` property**
-   - Goal: lock in the default values Task 361 just audited/fixed (`Diffuse, emissive, specular,
-     fog, lighting` per the Notes hint) with exhaustive unit tests — `examples/basic_effect_test.cpp`
-     already has most of these (and now correctly asserts `VertexColorEnabled` defaults `false` and
-     `DirectionalLight0` defaults enabled/`DirectionalLight1`+`DirectionalLight2` default disabled),
-     so check what's still missing before adding a parallel test file.
-   - Files: likely `examples/basic_effect_test.cpp` or a new dedicated `tests/.../BasicEffectTests.cpp`.
+1. **`GRAPHICS_TASKS.md` Task 363 — unit test `EnableDefaultLighting()` exact constants**
+   - Goal: complements Task 194; Task 361/362 already cross-checked `EnableDefaultLighting()`'s
+     key/fill/back-light + ambient constants byte-for-byte against FNA's
+     `EffectHelpers.EnableDefaultLighting` and confirmed them exact — this task is about locking that
+     in with dedicated unit tests (check Task 194's prior work first to avoid duplicating).
+   - Files: likely `tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp` (new in Task 362) or
+     a sibling file.
    - Verification: genuine discriminating power for any new assertion.
+
+   **Task 362 status: done.** Re-derived Task 361's 22-property list directly from FNA source and
+   built a new, centralized `tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp` (22
+   `TEST_F` cases, one `BasicEffectDefaultsTest` fixture) — no such dedicated unit-test file existed
+   before (`examples/basic_effect_test.cpp` is a separate GPU-integration-style check). **Found a
+   3rd real default-value bug** beyond Task 361's 2: CNA's `DirectionalLight::DirectionalLight()`
+   initialized `direction_` to `Vector3::Forward` ((0,0,-1)); FNA's `INTERNAL_direction` field has no
+   initializer at all (defaults to `Vector3.Zero`, confirmed from `DirectionalLight.cs`) — fixed in
+   `DirectionalLight.cpp`, plus corrected the constructor's Doxygen comment. Grepped the whole
+   codebase and confirmed nothing relied on the old nonzero default (every real usage sets
+   `Direction` explicitly before reading it). Verified genuine discriminating power (reverted the fix,
+   confirmed the new test fails, reverted back; plus a lighter spot-check reverting `SpecularPower`'s
+   already-correct default, confirmed its test fails too). Full 3-backend regression, zero new
+   failures: EasyGL 3408/3411 (3 pre-existing), Vulkan 3329/3344 (13 pre-existing + 1 flaky `CueTest`
+   + 1 order-dependent `Vulkan_RenderTargetUsage` flake), Bgfx 3314/3314 (100%).
 
    **Task 361 status: done — opened Phase 42.** Read FNA's
    `Graphics/Effect/StockEffects/BasicEffect.cs` line-by-line against CNA's `BasicEffect.hpp`/`.cpp`;
@@ -884,12 +908,14 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-41 are FULLY COMPLETE. Phase 42 (BasicEffect exactness, GRAPHICS_TASKS.md
-Tasks 361-370) is now open, Task 361 is DONE, Task 362 next.
-Last full 3-backend regression (Task 361, BasicEffect.hpp/.cpp fixed + 2 existing wrong-default
-assertions in examples/basic_effect_test.cpp corrected): EasyGL 3386/3389 pass (3 documented
-pre-existing failures that run: EasyGL_MRT_TwoAttachments, EasyGL_GraphicsDevice_ReferenceStencil,
-easy-gl-resource-smoke-tests). Vulkan 3309/3322 pass (13 documented pre-existing failures that
-run). Bgfx 3292/3292 pass (100%, no flakes this run).
+Tasks 361-370) is now open, Task 362 is DONE, Task 363 next.
+Last full 3-backend regression (Task 362: new tests/.../BasicEffectTests.cpp added, 22 default-value
+tests; found and fixed a 3rd real default-value bug beyond Task 361's 2 -
+DirectionalLight::direction_ wrongly defaulted to Vector3::Forward instead of FNA's Vector3.Zero):
+EasyGL 3408/3411 pass (3 documented pre-existing failures that run: EasyGL_MRT_TwoAttachments,
+EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests). Vulkan 3329/3344 pass (13
+documented pre-existing failures + 1 flaky CueTest + 1 order-dependent Vulkan_RenderTargetUsage
+flake). Bgfx 3314/3314 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
 if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
 it as a regression.
@@ -1014,12 +1040,25 @@ DirectionalLight1/DirectionalLight2 - both real pixel-fidelity gaps, squarely Ta
 not this task's. Clone() gap remains tracked as Task 883 (not duplicated). Full 3-backend regression,
 zero new failures: EasyGL 3386/3389, Vulkan 3309/3322, Bgfx 3292/3292 (100%).
 
-Next task: GRAPHICS_TASKS.md Task 362 - unit test default values for every BasicEffect property
-(Diffuse, emissive, specular, fog, lighting per the Notes hint). Goal: lock in the defaults Task 361
-just audited/fixed with exhaustive unit tests - examples/basic_effect_test.cpp already covers most of
-these now (including the corrected VertexColorEnabled/DirectionalLight0-3 defaults), so check what's
-genuinely still missing before adding a parallel test file. Files: likely
-examples/basic_effect_test.cpp or a new tests/.../BasicEffectTests.cpp.
+Task 362 (unit test default values for every BasicEffect property) is now DONE. Re-derived Task
+361's 22-property list directly from FNA source and built a new, centralized
+tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp (22 TEST_F cases, one
+BasicEffectDefaultsTest fixture) - no dedicated unit-test file existed before. Found a 3rd real
+default-value bug beyond Task 361's 2: CNA's DirectionalLight::DirectionalLight() initialized
+direction_ to Vector3::Forward ((0,0,-1)); FNA's INTERNAL_direction field has no initializer at all
+(defaults to Vector3.Zero, confirmed from DirectionalLight.cs) - fixed in DirectionalLight.cpp, plus
+corrected the constructor's Doxygen comment. Grepped the whole codebase and confirmed nothing relied
+on the old nonzero default. Discriminating power verified (reverted the fix, confirmed the new test
+fails, reverted back; plus a lighter spot-check on the already-correct SpecularPower default).
+Full 3-backend regression, zero new failures: EasyGL 3408/3411, Vulkan 3329/3344 (13 pre-existing +
+1 flaky CueTest + 1 order-dependent Vulkan_RenderTargetUsage flake), Bgfx 3314/3314 (100%).
+
+Next task: GRAPHICS_TASKS.md Task 363 - unit test EnableDefaultLighting() exact constants
+(complements Task 194). Goal: Task 361/362 already cross-checked the key/fill/back-light + ambient
+constants byte-for-byte against FNA's EffectHelpers.EnableDefaultLighting and confirmed them exact -
+this task is about locking that in with dedicated unit tests (check Task 194's prior work first to
+avoid duplicating). Files: likely tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp (new
+in Task 362) or a sibling file.
 As always: verify genuine discriminating power for any new test (temporarily break/omit any fix,
 confirm the test fails, then revert), full 3-backend rebuild + regression if production code
 changes, update GRAPHICS_TASKS.md and NEXT.md, commit AND push after finishing (standing

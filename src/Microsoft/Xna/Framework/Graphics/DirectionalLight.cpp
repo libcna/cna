@@ -5,7 +5,7 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     DirectionalLight::DirectionalLight()
         : diffuseColor_(Vector3::Zero)
-        , direction_(Vector3::Forward)
+        , direction_(Vector3::Zero)
         , specularColor_(Vector3::Zero)
         , enabled_(false)
     {
