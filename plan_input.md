@@ -1017,11 +1017,30 @@ folded into the Phase 11 manual checklist (**P11-006** touchscreen + display sca
 none (automated coverage confirmed). **Behavior verified:** normalized→pixel + resize; high-DPI is HW-gated.
 **Remaining risk:** high-DPI pixel accuracy unverified until manual HW validation (Phase 11).
 
-## P5-016 — Verify touch reset
-- [ ] Ensure reset clears active touches.
-- [ ] Ensure reset clears previous touches.
-- [ ] Ensure reset clears gesture queue.
-- [ ] Add regression tests.
+## P5-016 — Verify touch reset `[x]`
+- [x] Ensure reset clears active touches.
+- [x] Ensure reset clears previous touches.
+- [x] Ensure reset clears gesture queue.
+- [x] Add regression tests.
+
+**Result (2026-07-06):** `TouchPanel::ResetForTests` (fanned out by `InputManager::ResetAllForTests`,
+InputManager.cpp:131) clears `touches_`, `previousTouches_`, `validTouches_`, the `gestures_` queue,
+`touchDeviceExists_`, `enabledGestures_`, display metrics, and window handle (TouchPanel.cpp:293-312).
+Active-touch + display-metric clearing was already pinned by `ClearsTouchPanelDisplayMetricsAndTouches`;
+the two genuine gaps were the gesture queue and previous-touch slot continuity. **Added two tests:**
+`ClearsQueuedGesturesOnReset` (enqueue a gesture → available → reset → `getIsGestureAvailableProperty()`
+== false) and `ClearsPreviousTouchSlotContinuityOnReset` (a Pressed finger committed to `previousTouches_`
+via `Update()`, then reset, then the same slot/finger re-appears and reads **Pressed** not Moved — proving
+no stale previous-frame slot state survives). **Files changed:**
+`tests/CNA/Internal/Input/InputResetTests.cpp` (+2 tests, +3 includes). **Tests:** both pass; full
+`ctest -L input` 100% green (shuffle×5). **Behavior verified:** reset clears active + previous touches +
+gesture queue. **Remaining risk:** none.
+
+---
+
+**Phase 5 complete (2026-07-06):** all 16 tasks `[x]` (P5-015 high-DPI sub-item `[!]` → Phase 11 P11-006).
+Three real behavior verifications documented as deviations (DEC-20 ordering, GetCapabilities-after-touch,
+zero-display startup); +10 tests added this phase; no public API change; `ctest -L input` green.
 
 ---
 

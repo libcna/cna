@@ -15,10 +15,13 @@
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/GestureType.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/TimeSpan.hpp"
 
 using CNA::Internal::Input::InputManager;
 using SharpRuntime::charcs;
@@ -50,6 +53,42 @@ TEST(InputResetAllForTests, ClearsTouchPanelDisplayMetricsAndTouches)
     EXPECT_EQ(TouchPanel::getDisplayWidthProperty(), 0);
     EXPECT_EQ(TouchPanel::getDisplayHeightProperty(), 0);
     EXPECT_EQ(TouchPanel::GetState().getCountProperty(), 0);
+}
+
+// P5-016: reset must empty the gesture queue. Enqueue a gesture, confirm it is available, then
+// ResetAllForTests (fans out to TouchPanel::ResetForTests, which drains gestures_) — queue is empty.
+TEST(InputResetAllForTests, ClearsQueuedGesturesOnReset)
+{
+    InputManager::ResetAllForTests();
+    TouchPanel::EnqueueGesture(GestureSample(GestureType::Tap, System::TimeSpan::FromMilliseconds(1.0),
+                                             Vector2(1.0f, 2.0f), Vector2::Zero, Vector2::Zero, Vector2::Zero));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+
+    InputManager::ResetAllForTests();
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty())
+        << "ResetAllForTests must empty the gesture queue";
+    InputManager::ResetAllForTests();
+}
+
+// P5-016: reset must clear previousTouches_ slot continuity. After a Pressed finger is committed to
+// previousTouches_ via Update(), a reset wipes it, so the SAME slot/finger moving again reads Pressed
+// (a fresh touch), not Moved-with-previous — proving no stale previous-frame slot state survives.
+TEST(InputResetAllForTests, ClearsPreviousTouchSlotContinuityOnReset)
+{
+    InputManager::ResetAllForTests();
+    TouchPanel::SetFinger(0, 7, Vector2(10.0f, 20.0f));                 // Pressed in slot 0
+    ASSERT_EQ(TouchPanel::GetState()[0].getStateProperty(), TouchLocationState::Pressed);
+    TouchPanel::Update();                                              // touches_ -> previousTouches_
+
+    InputManager::ResetAllForTests();                                  // wipes previousTouches_
+
+    TouchPanel::SetFinger(0, 7, Vector2(30.0f, 40.0f));                 // same slot/finger appears again
+    const TouchCollection s = TouchPanel::GetState();
+    ASSERT_EQ(s.getCountProperty(), 1);
+    EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Pressed)
+        << "after reset, a re-appearing finger must read as a fresh Pressed, not Moved-with-previous";
+    InputManager::ResetAllForTests();
 }
 
 TEST(InputResetAllForTests, ClearsMouseAndTextInputCallbacks)
