@@ -135,9 +135,9 @@ in "Exceptions / Enums" below.)
 |---|---|---|---|
 | Constructor | Real | High | 10-instance cap; does **not** require a live `Accelerometer`/`Compass`/`Gyroscope` instance |
 | `getIsSupportedProperty()` (static) | Real | High | **Real on Android** (`Detail::AndroidMotionBackend`); `false` stub everywhere else |
-| `getStateProperty()` | `NOXNA` | High | Real `Motion` has no `State` |
+| `getStateProperty()` | `NOXNA` | High | Real `Motion` has no `State` (MSDN `hh239189`, re-confirmed `MOTION-001`) |
 | `Start()` | Real | High | Real on Android; throws `SensorFailedException` elsewhere |
-| `Calibrate` | Real | High | **Never raised by any backend** — `IMotionBackend` has no calibration callback at all |
+| `Calibrate` | Real | High | Confirmed real (MSDN `hh239189`'s Events table: "Occurs when the operating system detects that the compass needs calibration", `MOTION-001`) — **but never raised by any backend today** — `IMotionBackend` has no calibration callback at all |
 | `SetBackendForTesting()` | `NOXNA` | — | Test-only hook |
 
 ## Cross-cutting members (`DEV-API-001`, added 2026-07-06)

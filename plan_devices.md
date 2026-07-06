@@ -3440,30 +3440,69 @@ not an alternate spelling to preserve.
 
 ## 9. Motion tasks
 
-### MOTION-001 — Verify Motion public API
+### MOTION-001 — Verify Motion public API — CLOSED (2026-07-06, shape confirmed correct; Calibrate gap re-confirmed real, deferred to new `MOTION-011`)
 
 - **Priority:** Critical
 - **Area:** Motion API
 - **Problem:** `Motion` is the most complex class in this scope (`MotionReading` nests
   an `AttitudeReading`) and must expose exactly the intended XNA/WP7 API plus clearly
   marked extensions. Its `getStateProperty()` is already `NOXNA` (confirmed Section 1).
+- **Resolution (2026-07-06):** fetched `Motion`'s own archived MSDN class page directly
+  (`hh239189(v=vs.105)`, `ms:assetid` confirmed `T:Microsoft.Devices.Sensors.Motion`).
+  Properties (`CurrentValue`/`IsDataValid`/`IsSupported`/`TimeBetweenUpdates`), Methods
+  (`Dispose`/`Start`/`Stop`, all inherited from `SensorBase<T>`), and Events
+  (`Calibrate`, `CurrentValueChanged`) all match `Motion.hpp`'s shape exactly.
+  `getStateProperty()`'s `NOXNA` marking re-confirmed correct (no `State` property
+  listed). `MotionReading`/`AttitudeReading`'s fields (`Attitude`/`DeviceAcceleration`/
+  `DeviceRotationRate`/`Gravity`/`Timestamp`; `Pitch`/`Roll`/`Yaw`/`Quaternion`/
+  `RotationMatrix`/`Timestamp`) match the class's own documented shape (per
+  `docs/devices-api-coverage.md`'s already-existing, already-thorough
+  `MotionReading`/`AttitudeReading` table). No missing or extra strict-XNA member
+  found; `SetBackendForTesting()` confirmed `NOXNA`, test-only, as already documented.
+  - **`Motion.IsSupported`'s real syntax, confirmed via the equivalent
+    `Gyroscope.IsSupported` property page (`hh203005(v=vs.105)`, same documented
+    pattern applies to all four sensor classes): `public static bool IsSupported {
+    get; internal set; }`** — the "Gets or sets" wording in these MSDN summaries refers
+    to the `internal set` (assembly-internal only, never a public API surface), not a
+    publicly-settable property — CNA's existing getter-only
+    `static bool getIsSupportedProperty()` (no public setter) already correctly matches
+    this, mirroring the same `internal set` → "no public C++ setter" convention already
+    established for `CompassReading.Timestamp` (`READINGS-002`).
+  - **`Calibrate` re-confirmed real API** (Events table: "Occurs when the operating
+    system detects that the compass needs calibration") **but still never raised by any
+    backend today** — `docs/devices-api-coverage.md`'s table already flagged this as a
+    known gap; re-confirmed still accurate, not newly found. Given `Motion`'s own
+    rotation-vector-based attitude fusion internally depends on the same magnetometer
+    data `Compass`'s own `Calibrate` logic already reacts to, wiring `Motion::Calibrate`
+    to fire under the same conditions is a real, legitimate, actionable gap — but
+    implementing it requires an `IMotionBackend` interface change (adding a calibration
+    callback) plus `AndroidMotionBackend` independently tracking magnetic-field sensor
+    accuracy (which it does not currently read at all — `MotionReading` has no
+    magnetometer field to expose, so this bridge never had a reason to listen to that
+    sensor type before). Real, substantive feature work, not a quick fix alongside this
+    task's own "verify the surface" scope — split out to new task `MOTION-011` (added
+    at the end of this section, after `MOTION-010`).
+  - **Tests:** `MotionTests.cpp` already compiles against and exercises the confirmed
+    shape — no new mechanism needed here.
 - **Required work:**
   - Compare `Motion.hpp`, `MotionReading.hpp`, and `AttitudeReading.hpp` to the expected
-    API.
+    API. Done, with a direct, independent MSDN re-fetch.
   - Verify `Calibrate`, `getIsSupportedProperty()`, `CurrentValueChanged`,
-    `Start()`/`Stop()`/`Dispose()`, and every reading property.
+    `Start()`/`Stop()`/`Dispose()`, and every reading property. Done, all confirmed
+    correct in shape; `Calibrate`'s *firing* gap re-confirmed and split to `MOTION-011`.
   - Verify whether any currently-exposed property is a non-XNA addition that needs
-    `NOXNA` marking.
+    `NOXNA` marking. Done — none found beyond the already-marked `getStateProperty()`.
 - **Acceptance criteria:**
-  - `DEV-API-001`'s matrix covers `Motion` completely.
-  - Tests compile against expected signatures.
-  - Any extra API is marked `NOXNA` or removed.
+  - `DEV-API-001`'s matrix covers `Motion` completely. Confirmed, citations added.
+  - Tests compile against expected signatures. Confirmed, already true.
+  - Any extra API is marked `NOXNA` or removed. Confirmed, none found.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Motion.hpp`
-  - `include/Microsoft/Devices/Sensors/MotionReading.hpp`
-  - `include/Microsoft/Devices/Sensors/AttitudeReading.hpp`
-  - `src/Microsoft/Devices/Sensors/Motion.cpp`
-  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Motion.hpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/Sensors/MotionReading.hpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/Sensors/AttitudeReading.hpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/Sensors/Motion.cpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (inspected, no change needed)
+  - `docs/devices-api-coverage.md` (edited — citations added)
 
 ### MOTION-002 — Verify quaternion and attitude coordinate mapping
 
