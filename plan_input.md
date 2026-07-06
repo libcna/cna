@@ -1270,10 +1270,20 @@ DragComplete. **Files changed:** `tests/CNA/Internal/Input/GestureDetectorTests.
 pass. **Behavior verified:** multi-finger arbitration (tap suppression + drag→pinch promotion).
 **Remaining risk:** none.
 
-## P6-015 — Verify gesture queue reset
-- [ ] Ensure reset clears queued gestures.
-- [ ] Ensure reset clears detector state.
-- [ ] Add regression tests.
+## P6-015 — Verify gesture queue reset `[x]`
+- [x] Ensure reset clears queued gestures.
+- [x] Ensure reset clears detector state.
+- [x] Add regression tests.
+
+**Result (2026-07-06):** Two distinct resets. **Queue:** `TouchPanel::ResetForTests` drains `gestures_`
+(covered by `InputResetAllForTests.ClearsQueuedGesturesOnReset`, added in P5-016). **Detector internal
+state:** `GestureDetector::ResetForTests` clears `activeFingerId`/`secondFingerId`/`fingerIds`/`state`
+(GestureDetector.cpp:433-454) — note the two live in different objects (queue in TouchPanel, finger/state in
+the detector). **Added** `ResetForTestsClearsDetectorInternalState`: drive two fingers into PINCHING, call
+`GestureDetector::ResetForTests()` mid-gesture, then a brand-new finger taps cleanly (proving no stale
+finger/state survived). **Files changed:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+1 test).
+**Tests:** GestureDetector suite 35/35 pass shuffled×5; `ctest -L input` green. **Behavior verified:** both
+the queue reset and the detector-state reset. **Remaining risk:** none.
 
 ## P6-016 — Manual gesture validation
 - [ ] Create manual test checklist for real touchscreen.

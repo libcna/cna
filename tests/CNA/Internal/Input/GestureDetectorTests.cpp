@@ -671,3 +671,28 @@ TEST_F(GestureDetectorTest, GestureStateRecoversAfterADragEndsSoAFreshTapStillFi
     EXPECT_EQ(tap.getGestureTypeProperty(), GestureType::Tap);
     EXPECT_EQ(tap.getFingerIdEXTProperty(), 45);
 }
+
+// P6-015(b): GestureDetector::ResetForTests must clear the detector's internal state (activeFingerId,
+// secondFingerId, fingerIds, state). Drive it into a non-idle two-finger PINCHING state, reset mid-gesture,
+// then a brand-new finger must produce a clean Tap — which only holds if the stale fingers/state were wiped
+// (otherwise the fresh press would be mistaken for a continuation / a second finger).
+TEST_F(GestureDetectorTest, ResetForTestsClearsDetectorInternalState)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap | GestureType::Pinch);
+
+    Press(90, 0.4f, 0.5f);
+    Press(91, 0.6f, 0.5f); // two tracked fingers -> PINCHING (a decidedly non-idle state)
+
+    GestureDetector::ResetForTests();   // wipe detector state...
+    GestureDetector::EnableTestClock(); // ...ResetForTests returns to the real clock; restore determinism
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap);
+    DrainGestures();
+
+    Press(92, 0.2f, 0.2f);
+    Release(92, 0.2f, 0.2f);
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample tap = TouchPanel::ReadGesture();
+    EXPECT_EQ(tap.getGestureTypeProperty(), GestureType::Tap)
+        << "after ResetForTests a fresh finger must tap cleanly, proving stale state was cleared";
+    EXPECT_EQ(tap.getFingerIdEXTProperty(), 92);
+}
