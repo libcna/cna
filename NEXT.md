@@ -25,14 +25,18 @@ framework/runtime, not a game.
   (`P9-LIFECYCLE`, `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, `P9-STOP`, `P9-XACT`,
   `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`, `P9-AUDIT`). **All 11 groups are now fully closed** —
   `P9-CATEGORY`'s last 6 deferred sub-items (real XACT category `instanceLimit`/
-  `maxInstanceBehavior`/fade in/out enforcement) closed in `d3b66dea`. A further user-directed
-  follow-up beyond Phase 9's original fixed list, **`P9-CATEGORY-011`** (real cue-level, as
-  opposed to category-level, `instanceLimit`/`maxInstanceBehavior`/fade enforcement), was also
-  completed in `effc3626` after the user explicitly chose to continue in that specific
-  area. Five genuine open design decisions came up on this branch and were all asked-and-resolved
-  with the user's explicit input (XACT filter `OneOverQ` fidelity, `Cue::IsPlaying`/`IsPaused`
-  coexistence, `Cue::Stop(AsAuthored)` fade timing, category `instanceLimit`/fade scope+approach,
-  and choosing cue-level `instanceLimit` as the next area to continue in) — none remain open.
+  `maxInstanceBehavior`/fade in/out enforcement) closed in `d3b66dea`. Two further user-directed
+  follow-ups beyond Phase 9's original fixed list were also completed after the user was asked
+  which of several remaining candidate areas to continue in: **`P9-CATEGORY-011`** (real
+  cue-level, as opposed to category-level, `instanceLimit`/`maxInstanceBehavior`/fade
+  enforcement), `effc3626`; and a **ThreadSanitizer stress test** for `SoundEffectInstance`'s
+  filter-coefficient locking (`T-4C`'s previously-open "not empirically stress-tested" gap), 
+  `3ebec7db` — ran clean, zero races found. Six genuine open design decisions came up on
+  this branch and were all asked-and-resolved with the user's explicit input (XACT filter
+  `OneOverQ` fidelity, `Cue::IsPlaying`/`IsPaused` coexistence, `Cue::Stop(AsAuthored)` fade
+  timing, category `instanceLimit`/fade scope+approach, choosing cue-level `instanceLimit` as a
+  follow-up area, and choosing the ThreadSanitizer stress test as the next follow-up area) — none
+  remain open.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -49,13 +53,14 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean as of commit `effc3626` (last verified). EasyGL backend (Linux default),
+- **Build:** clean as of commit `3ebec7db` (last verified). EasyGL backend (Linux default),
   `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets also
   rebuild clean as of their last touch.
-- **Tests:** `CnaTests` whole-suite count was **3268 / 3270 pass** as of the last full run (2
+- **Tests:** `CnaTests` whole-suite count was **3269 / 3271 pass** as of the last full run (2
   skipped: `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected). The audio-scoped subset (§7's `--gtest_filter` audio suite list)
-  was **394 / 394 pass** under ASan+UBSan, with no audio-related leaks or errors. Two unrelated,
+  was **395 / 395 pass** under ASan+UBSan, with no audio-related leaks or errors, and also clean
+  (zero races) under a dedicated one-off ThreadSanitizer build (see §5's `T-4C` row). Two unrelated,
   pre-existing, full-suite-load-only flakes have been observed and confirmed non-reproducing in
   isolation (not regressions): `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`
   (un-seeded RNG) and `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`
@@ -94,6 +99,15 @@ framework/runtime, not a game.
 Newest first. One line each; full rationale, FNA/FAudio citations, and `git stash` verification
 notes for every item are in `plan_audio.md`'s "Phase 9" section.
 
+- `3ebec7db` — **`T-4C` ThreadSanitizer stress test** (user-directed follow-up, no
+  behavior change): new `SoundEffectInstanceTests.cpp::ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`
+  hammers the real production `INTERNAL_apply{Low,High,Band}PassFilter` setters from a second
+  thread against a real background mixing thread (even the SDL `dummy` driver spins one up) for
+  400ms straight. Run 10x plus once across the whole audio suite under a dedicated one-off
+  ThreadSanitizer build — zero races reported, closing `T-4C`'s previously-open "not empirically
+  stress-tested" gap (full detail, including the two-different-locks finding in
+  `MIX_SetTrackCookedCallback` vs `MIX_LockMixer`, is in `plan_audio.md`'s `T-4C` entry, not the
+  Phase 9 section).
 - `effc3626` — **`P9-CATEGORY-011`** (user-directed follow-up beyond Phase 9's original
   list): real cue-level (XSB, per-cue) `instanceLimit`/`maxInstanceBehavior`/fade enforcement via
   new `AudioEngine::CheckCueInstanceLimit()`, called from `Cue::Play()` *before* the category-level
@@ -181,7 +195,7 @@ fresh clone/pull of `sharp-runtime` ever lacks this commit, that one CNA test wi
 | **Internal-only, documented** | `ParseXgs`/`ParseXsb` accept a big-endian magic cosmetically only — no byte-swap logic exists, so a real BE file would silently misparse, not throw | `XactParser.cpp` comments, `P9-AUDIT-003` |
 | **Internal-only, documented** | `AudioMixer::DestroyMixer()` is dead code — nothing calls it | `AudioMixer.hpp` comment, `P9-AUDIT-003` |
 | **Internal-only, documented** | `g_mixer`'s lazy-init has no mutex — assumed (not enforced) main-thread-only contract | `AudioMixer.cpp` comment, `P9-AUDIT-003` |
-| **Needs verification** | `SoundEffectInstance` filter coefficient locking follows SDL3_mixer's documented practice but was never stress-tested under real concurrency (no ThreadSanitizer run) | `T-4C` |
+| **Verified clean (2026-07-06)** | `SoundEffectInstance` filter coefficient locking stress-tested under real concurrency: a new test hammers the real production filter setters from a second thread against a real background mixing thread for 400ms, run 10x plus once across the whole audio suite under a dedicated ThreadSanitizer build — zero races reported | `T-4C`, `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread` |
 | **Needs verification** | Device-dependent tests only ever run against the SDL `dummy` driver (aside from the dedicated no-hardware harness); real-hardware runs are manual/ad-hoc | — |
 
 Full list with FNA/FAudio line citations: `plan_audio.md`. `CHECKLIST.md` is the authoritative,
@@ -281,6 +295,19 @@ cmake --build cmake-build-asan --target CnaTests -j"$(nproc)"
 SDL_AUDIODRIVER=dummy ./cmake-build-asan/CnaTests
 rm -rf cmake-build-asan
 
+# One-off ThreadSanitizer verification (delete the build dir after use) -- used to confirm
+# SoundEffectInstance's filter-coefficient locking under real concurrent mixing-thread load
+# (T-4C's ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread); check for a genuinely-linked
+# TSan runtime with `nm cmake-build-tsan/CnaTests | grep __tsan_init` if a run looks suspiciously
+# clean.
+cmake -B cmake-build-tsan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+      -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON \
+      -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -g" \
+      -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+cmake --build cmake-build-tsan --target CnaTests -j"$(nproc)"
+SDL_AUDIODRIVER=dummy ./cmake-build-tsan/CnaTests --gtest_filter='SoundEffectInstanceTest.ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread' --gtest_repeat=10
+rm -rf cmake-build-tsan
+
 # git-stash regression-verification pattern used for every fix on this branch:
 #   1. git stash push -- <changed source files>   (keep the new test, revert just the fix)
 #   2. rebuild, run the new test, confirm it FAILS against the pre-fix code
@@ -302,18 +329,20 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 **No confirmed next task is recorded.** Phase 9's fixed, user-specified task list (`plan_audio.md`)
 is now fully closed (§1/§4) — every group, including `P9-CATEGORY`'s previously-deferred
-`instanceLimit`/fade sub-items — and its user-directed follow-up, `P9-CATEGORY-011` (cue-level
-instanceLimit), is also closed. There is no Phase 10 defined anywhere in `plan_audio.md`.
+`instanceLimit`/fade sub-items — and its two user-directed follow-ups, `P9-CATEGORY-011`
+(cue-level instanceLimit) and the `T-4C` ThreadSanitizer stress test (§5), are also closed. There
+is no Phase 10 defined anywhere in `plan_audio.md`.
 
 If asked "what's next" with no further user direction, the candidates are the remaining
 `CHECKLIST.md` **accepted deviations** (§5) — none are bugs, so none should be "fixed" without the
 user explicitly deciding to revisit one and accept the scope/risk (most of them trade off against
 the SDL3_mixer backend choice itself, e.g. no reverb bus, no per-source 3D graph, stereo hard-pan
-instead of crossfeed — see §1's "Key architectural decision"). The last time this question was
-asked, the user picked cue-level `instanceLimit` from that same candidate list (§9's ThreadSanitizer
-stress test, RPC continuous re-evaluation, and `Apply3D` pan orientation remain unpicked options).
-Do not start any of these unprompted; ask first, the same way every real design decision in this
-file was asked before implementation.
+instead of crossfeed — see §1's "Key architectural decision"). Two candidates from a prior round of
+this same question remain unpicked: **RPC continuous re-evaluation** (the largest/most invasive —
+touches `Cue`/`AudioEngine::Update()` broadly) and **`Apply3D` pan orientation** (`Forward`/`Up`,
+a smaller, more contained math change in `SoundEffectInstance::Apply3D`). Do not start either
+unprompted; ask first, the same way every real design decision in this file was asked before
+implementation.
 
 ---
 
@@ -324,14 +353,16 @@ file was asked before implementation.
 - **No inventing a "Phase 10".** Phase 9 is now fully closed (§1/§4/§8) — don't start new feature
   work without the user asking for it first (§8 lists the only candidates, and even those need to
   be asked about before starting).
-- **No re-litigating a resolved open decision without the user asking first.** All five that ever
+- **No re-litigating a resolved open decision without the user asking first.** All six that ever
   came up on this branch are resolved: XACT filter `OneOverQ` fidelity vs. narrowing
   (`P9-XACT-011`); `Cue::IsPlaying`/`IsPaused` coexistence (`P9-LIFECYCLE-013`);
   `Cue::Stop(AsAuthored)`'s authored `fadeOutMS` timing (`P9-STOP-010`); category
   `instanceLimit`/`maxInstanceBehavior`/fade scope (`P9-CATEGORY-005..010`, `d3b66dea` — including
-  the QUEUE/REPLACE_OLDEST/REPLACE_QUIETEST collapse, matching FAudio's own shipped behavior); and
+  the QUEUE/REPLACE_OLDEST/REPLACE_QUIETEST collapse, matching FAudio's own shipped behavior);
   cue-level `instanceLimit`/`maxInstanceBehavior`/fade scope (`P9-CATEGORY-011` — including the
-  bank-wide-unfiltered victim search quirk, also matching FAudio's own shipped behavior).
+  bank-wide-unfiltered victim search quirk, also matching FAudio's own shipped behavior); and
+  which follow-up area to continue in next after that, twice (cue-level `instanceLimit`, then the
+  `T-4C` ThreadSanitizer stress test).
 - **No Media namespace work** — explicitly out of scope for this branch.
 - **No FAudio/FACT migration** — the backend is SDL3_mixer by design.
 - **No real 3D HRTF, Doppler-beyond-what's-implemented, or reverb implementation** — SDL3_mixer
@@ -351,9 +382,9 @@ file was asked before implementation.
 ```
 Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state -- Phase 9
 is now fully closed (all 11 groups, including P9-CATEGORY's last 6 sub-items, d3b66dea), and its
-user-directed follow-up P9-CATEGORY-011 (cue-level instanceLimit) is also closed. There is no
-confirmed next task recorded (see §8) -- ask the user what they want done next rather than
-inventing new feature work.
+two user-directed follow-ups (P9-CATEGORY-011 cue-level instanceLimit; T-4C's ThreadSanitizer
+stress test) are also closed. There is no confirmed next task recorded (see §8) -- ask the user
+what they want done next rather than inventing new feature work.
 
 1. If the user names a specific task, inspect only the files needed for it -- do not refactor
    unrelated code. Confirm scope/approach with the user first if it's real feature work rather
