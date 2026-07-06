@@ -1218,7 +1218,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   this test spawns a real child process): **3301/3303 passing** both times (2 expected
   accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 6.4** — Investigate whether `ENetBackend::Sessions()`'s function-local static map and
+- [x] **Task 6.4** — Investigate whether `ENetBackend::Sessions()`'s function-local static map and
   `ENetDiscoveryService`'s file-static `registeredHost_`/`socket_`/`currentResults_` need real
   synchronization, and document the thread-safety contract explicitly either way. Confirmed
   currently safe only because `PumpSession`/`Poll()` are exclusively driven from
@@ -1227,6 +1227,18 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   doc comment on the thread-safety contract (single-threaded-only, must be called from the same
   thread every time) if that remains the design, or add real synchronization if multi-threaded use
   is ever intended.
+
+  Documented (single-threaded-only remains the correct design, matching real XNA's own
+  single-threaded `Game`/`Update()` loop contract — adding real synchronization here would be
+  solving a problem XNA itself doesn't have). Added an explicit thread-safety paragraph to both
+  `ENetBackend`'s and `ENetDiscoveryService`'s class-level doc comments in their headers, stating
+  the constraint plainly: every method must be called from the same thread, since neither class
+  has any internal synchronization and every real call path reaches them exclusively through
+  `NetworkSession::Update()`.
+
+  Documentation-only change (no behavior modified, no new stub/type needed), no revert-verify
+  applies. Full suite: **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no
+  regressions.
 
 - [ ] **Task 6.5** — Investigate whether `SO_REUSEADDR` (used for the shared discovery UDP port
   61190, which two independent OS processes both bind in `TwoProcessLoopbackTest.cpp`) actually

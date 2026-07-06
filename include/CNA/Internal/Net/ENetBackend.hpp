@@ -31,6 +31,16 @@ namespace CNA::Internal::Net
      * backend interface, since ENet is this project's only networking implementation. Keeps all
      * ENet C-API types out of Microsoft::Xna::Framework::Net headers: per-session transport state
      * lives entirely in ENetBackend.cpp, keyed by NetworkSession* in a private registry.
+     *
+     * Task 6.4: single-threaded only, by design and by contract - every method here (and the
+     * process-wide session registry backing them) must always be called from the same thread,
+     * matching the same expectation real XNA's own single-threaded Game/Update loop already
+     * places on NetworkSession itself. There is no internal synchronization (no
+     * std::mutex/std::atomic anywhere in this module); every real call path drives this class
+     * exclusively through NetworkSession::Update() on whatever thread the game itself calls
+     * Update() from. A caller that invokes NetworkSession::Update() from more than one thread, or
+     * calls any of these methods directly off-thread, would race silently - this is an explicit,
+     * intentional constraint, not an oversight, and matches XNA's own single-threaded design.
      */
     class ENetBackend
     {
