@@ -40,6 +40,19 @@ namespace Microsoft::Xna::Framework::Net
         , SessionProperties(std::move(properties))
         , SessionType(type)
         , asyncState_(std::move(state))
+        // Deviation from FNA: FNA's NetworkSessionAction sets IsCompleted = false here and relies
+        // on GamerServicesDispatcher.Update() to eventually complete it. GamerServicesDispatcher's
+        // Update() is a permanently empty no-op in both FNA and CNA, so once a
+        // GamerServicesComponent exists (isInitialized == true, i.e. every real sample's own
+        // constructor), UpdateAsync() unconditionally returns true forever and nothing ever
+        // completes the pending action - Create()/Find()/Join()'s synchronous polling loop spins
+        // forever (confirmed to reproduce identically against the real FNA reference source, not
+        // just CNA's port). CNA's Create/Find/Join/JoinInvited already perform all of their real
+        // work synchronously inside EndCreate/EndFind/EndJoin/EndJoinInvited (constructing the
+        // NetworkSession or calling into ENetBackend/ENetDiscoveryService directly, no multi-frame
+        // deferred I/O), so there is no real pending operation for the loop to ever be waiting on;
+        // marking every action completed immediately is a correctness fix, not a design change.
+        , isCompleted_(true)
         , asyncWaitHandle_(true, System::Threading::EventResetMode::ManualReset)
     {
     }

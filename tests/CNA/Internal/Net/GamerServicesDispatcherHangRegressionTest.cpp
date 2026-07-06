@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) Robert Vokac and contributors
+//
+// Task 12.1 regression test for DEFERRED.md item #19 (../cna-samples), confirmed live while
+// porting ClientServerSample: NetworkSession::Create()/Find()/Join() used to spin forever
+// (99% CPU) whenever GamerServicesDispatcher::Initialize() had already run — i.e. whenever a
+// GamerServicesComponent exists, exactly what every real XNA sample's own constructor does.
+//
+// Runs the reproduction in tools/net/gamerservices_dispatcher_harness.cpp as a genuinely separate
+// OS process (not a TEST() body here) so that GamerServicesDispatcher::Initialize()'s
+// process-lifetime static never contaminates this binary's other tests — see that harness file's
+// own top-of-file comment, and the same caveat already documented in
+// tests/Microsoft/Xna/Framework/GamerServices/GamerServicesServiceTests.cpp. Structurally mirrors
+// tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp's spawn+watchdog helpers (Task 6.1), scaled
+// down to one role and no cross-process handshake.
+#include <gtest/gtest.h>
+
+#include <chrono>
+#include <cstring>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <thread>
+
+extern char** environ;
+
+namespace {
+    // Local (not SystemLink) means the harness never touches a real socket, so this should
+    // complete in well under a second once the fix is in place; generous margin for slow/loaded
+    // CI machines. If the bug regresses, the harness spins forever and this watchdog kills it.
+    constexpr int kWatchdogSeconds = 10;
+
+    // Polls non-blockingly for pid to exit, up to deadline; SIGKILLs and reaps it on timeout.
+    bool WaitWithWatchdog(pid_t pid, std::chrono::steady_clock::time_point deadline, int* exitCode) {
+        for (;;) {
+            int status = 0;
+            pid_t rv = waitpid(pid, &status, WNOHANG);
+            if (rv == pid) {
+                *exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+                return true;
+            }
+            if (std::chrono::steady_clock::now() >= deadline) {
+                kill(pid, SIGKILL);
+                waitpid(pid, &status, 0);
+                *exitCode = -1;
+                return false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }
+}
+
+TEST(GamerServicesDispatcherHangRegressionTest, CreateDoesNotHangWhenGamerServicesIsInitialized) {
+    pid_t pid = -1;
+    char* argv[] = {const_cast<char*>(CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH), nullptr};
+    int rc = posix_spawn(&pid, CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH, nullptr, nullptr, argv, environ);
+    ASSERT_EQ(rc, 0) << "posix_spawn(" << CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH << ") failed: " << strerror(rc);
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
+    int exitCode = -1;
+    bool finished = WaitWithWatchdog(pid, deadline, &exitCode);
+
+    EXPECT_TRUE(finished) << "harness did not exit before the watchdog deadline and was killed — "
+                             "this is exactly the DEFERRED.md item #19 hang regressing";
+    EXPECT_EQ(exitCode, 0) << "harness exited with unexpected code " << exitCode;
+}

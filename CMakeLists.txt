@@ -1893,6 +1893,23 @@ if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
     )
 endif()
 
+# --- Task 12.1: GamerServicesDispatcher hang regression harness ---
+# A tiny standalone (non-GTest) executable that calls GamerServicesDispatcher::Initialize() then
+# NetworkSession::Create(), reproducing DEFERRED.md item #19 (../cna-samples) if it regresses.
+# Must be a separate process, same reasoning as cna_net_two_process_harness above but for a
+# different process-global-state hazard — see the harness file's own top-of-file comment.
+if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
+    add_executable(cna_net_gamerservices_dispatcher_harness
+        tools/net/gamerservices_dispatcher_harness.cpp
+    )
+    target_link_libraries(cna_net_gamerservices_dispatcher_harness
+        PRIVATE
+        CNA_GamerServices
+        CNA_Net
+        SHARP_RUNTIME
+    )
+endif()
+
 if(CNA_BUILD_TESTS)
     add_subdirectory(vendor/googletest)
 
@@ -1912,6 +1929,10 @@ if(CNA_BUILD_TESTS)
     # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
     if(WIN32 OR EMSCRIPTEN OR ANDROID)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/TwoProcessLoopbackTest\\.cpp$")
+        # GamerServicesDispatcherHangRegressionTest.cpp (Task 12.1) uses the same POSIX-only
+        # posix_spawn/sys-wait process APIs, for the same reasons — see TwoProcessLoopbackTest's
+        # own exclusion comment just above.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest\\.cpp$")
     endif()
 
     add_executable(CnaTests
@@ -1964,6 +1985,14 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_net_two_process_harness)
         target_compile_definitions(CnaTests PRIVATE
             CNA_NET_HARNESS_PATH="$<TARGET_FILE:cna_net_two_process_harness>"
+        )
+    endif()
+
+    if(TARGET cna_net_gamerservices_dispatcher_harness)
+        # Same reasoning as cna_net_two_process_harness just above.
+        add_dependencies(CnaTests cna_net_gamerservices_dispatcher_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH="$<TARGET_FILE:cna_net_gamerservices_dispatcher_harness>"
         )
     endif()
 

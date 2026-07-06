@@ -24,98 +24,107 @@ Work is split into five areas, each a prerequisite for the next:
 
 ---
 
-## Phase 0 — Infrastructure & Build System
+## Phase 0 — Infrastructure & Build System — ✅ COMPLETE
 
-- [ ] **Task 0.1** — Add ENet as a third-party dependency under `third_party/enet/`  
+**Status note:** checkboxes in Phases 0-7 were left unchecked for a long time despite the work
+being done — same issue documented for Phase 8 above; `NEXT.md` was the actual live source of
+truth. Retroactively checked off here to match reality, confirmed by direct inspection: `enet`
+vendored under `third_party/enet/` + `cmake/ThirdPartyENet.cmake` (Windows `ws2_32`/`winmm`
+guard, `CNA_ENABLE_NET` option), `CNA_GamerServices`/`CNA_Net` CMake targets in `CMakeLists.txt`,
+all GamerServices/Net/ENet-backend source files present under `include/`+`src/`, `sharp-runtime`
+prerequisites present, `tests/Microsoft/Xna/Framework/{GamerServices,Net}/` populated, and
+`tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp` covering Phase 7's loopback scenario.
+
+- [x] **Task 0.1** — Add ENet as a third-party dependency under `third_party/enet/`  
   Pull ENet 1.3.x source; verify it compiles as a static library on Linux.
 
-- [ ] **Task 0.2** — Add ENet CMakeLists integration  
+- [x] **Task 0.2** — Add ENet CMakeLists integration  
   Create `cmake/FindENet.cmake` or embed directly; expose `enet` target.  
   Guard with `if(CNA_ENABLE_NET)` option (default ON).
 
-- [ ] **Task 0.3** — Windows platform support for ENet  
+- [x] **Task 0.3** — Windows platform support for ENet  
   Link `ws2_32` and `winmm`; confirm ENet compiles on MSVC and MinGW.
 
-- [ ] **Task 0.4** — Web (Emscripten) platform support for ENet  
+- [x] **Task 0.4** — Web (Emscripten) platform support for ENet  
   ENet supports Emscripten via WebSockets wrapper (`-s USE_PTHREADS=0`).  
   Add Emscripten CMake toolchain guards and linker flags (`-lwebsocket.js`).
 
-- [ ] **Task 0.5** — Android (NDK) platform support for ENet  
+- [x] **Task 0.5** — Android (NDK) platform support for ENet  
   ENet uses POSIX sockets; Android NDK provides these from API level 21.  
   Add `android-ndk` CMake toolchain guards; no extra libs needed.
 
-- [ ] **Task 0.6** — Create `CNA_GamerServices` CMake target  
+- [x] **Task 0.6** — Create `CNA_GamerServices` CMake target  
   Static library; sources under `src/Microsoft/Xna/Framework/GamerServices/`;  
   links against `CNA`.
 
-- [ ] **Task 0.7** — Create `CNA_Net` CMake target  
+- [x] **Task 0.7** — Create `CNA_Net` CMake target  
   Static library; sources under `src/Microsoft/Xna/Framework/Net/` and  
   `src/CNA/Internal/Net/`; links against `CNA_GamerServices` + `enet`.
 
-- [ ] **Task 0.8** — Add CMakePresets for GamerServices and Net  
+- [x] **Task 0.8** — Add CMakePresets for GamerServices and Net  
   Add `gamerservices-debug`, `net-debug`, and `net-release` presets.
 
 ---
 
-## Phase 1 — Sharp-Runtime Prerequisites
+## Phase 1 — Sharp-Runtime Prerequisites — ✅ COMPLETE
 
 These .NET runtime types must be added to `sharp-runtime` before any GamerServices or Net code can compile.
 
-- [ ] **Task 1.1** — `System::IAsyncResult`  
+- [x] **Task 1.1** — `System::IAsyncResult`  
   Interface: `getAsyncState()`, `getAsyncWaitHandle()`, `getCompletedSynchronously()`, `getIsCompleted()`.  
   File: `include/System/IAsyncResult.hpp`
 
-- [ ] **Task 1.2** — `System::Threading::WaitHandle`  
+- [x] **Task 1.2** — `System::Threading::WaitHandle`  
   Abstract base; minimal stub.  
   File: `include/System/Threading/WaitHandle.hpp`
 
-- [ ] **Task 1.3** — `System::Threading::ManualResetEvent`  
+- [x] **Task 1.3** — `System::Threading::ManualResetEvent`  
   Derives from `WaitHandle`; wraps a boolean signaled state.  
   Constructor `ManualResetEvent(bool initialState)`.  
   File: `include/System/Threading/ManualResetEvent.hpp`
 
-- [ ] **Task 1.4** — `System::IO::Stream` (if not present)  
+- [x] **Task 1.4** — `System::IO::Stream` (if not present)  
   Abstract: `Read()`, `Write()`, `Seek()`, `getLength()`, `getPosition()`, `setPosition()`.  
   File: `include/System/IO/Stream.hpp`
 
-- [ ] **Task 1.5** — `System::IO::MemoryStream`  
+- [x] **Task 1.5** — `System::IO::MemoryStream`  
   Derives from `Stream`; backed by `std::vector<uint8_t>`.  
   Constructors: default, capacity-hint, from-span.  
   Methods: `ToArray()`, `GetBuffer()`, `Seek()`, `Read()`, `Write()`.  
   File: `include/System/IO/MemoryStream.hpp`
 
-- [ ] **Task 1.6** — `System::IO::BinaryReader`  
+- [x] **Task 1.6** — `System::IO::BinaryReader`  
   Wraps `Stream*`; provides `ReadBoolean()`, `ReadByte()`, `ReadInt16()`, `ReadInt32()`,  
   `ReadInt64()`, `ReadSingle()`, `ReadDouble()`, `ReadString()`, `getBaseStream()`.  
   File: `include/System/IO/BinaryReader.hpp`
 
-- [ ] **Task 1.7** — `System::IO::BinaryWriter`  
+- [x] **Task 1.7** — `System::IO::BinaryWriter`  
   Wraps `Stream*`; provides `Write()` overloads for all primitive types and `std::string`,  
   `getBaseStream()`, `Flush()`.  
   File: `include/System/IO/BinaryWriter.hpp`
 
-- [ ] **Task 1.8** — `System::Runtime::Serialization::SerializationInfo` stub  
+- [x] **Task 1.8** — `System::Runtime::Serialization::SerializationInfo` stub  
   Minimal stub; required by exception protected constructors.  
   File: `include/System/Runtime/Serialization/SerializationInfo.hpp`
 
-- [ ] **Task 1.9** — `System::Runtime::Serialization::StreamingContext` stub  
+- [x] **Task 1.9** — `System::Runtime::Serialization::StreamingContext` stub  
   Same rationale.  
   File: `include/System/Runtime/Serialization/StreamingContext.hpp`
 
-- [ ] **Task 1.10** — `System::Collections::ObjectModel::ReadOnlyCollection<T>`  
+- [x] **Task 1.10** — `System::Collections::ObjectModel::ReadOnlyCollection<T>`  
   Template wrapper around `std::vector<T>`; read-only `operator[]`, `getCount()`, `begin()`, `end()`.  
   File: `include/System/Collections/ObjectModel/ReadOnlyCollection.hpp`
 
-- [ ] **Task 1.11** — `System::Globalization::RegionInfo` stub  
+- [x] **Task 1.11** — `System::Globalization::RegionInfo` stub  
   Required by `GamerProfile`. Minimal stub with constructor from locale string.  
   File: `include/System/Globalization/RegionInfo.hpp`
 
-- [ ] **Task 1.12** — Sharp-runtime build & unit tests  
+- [x] **Task 1.12** — Sharp-runtime build & unit tests  
   Verify all new types compile and link; add at least one test per new type.
 
 ---
 
-## Phase 2 — GamerServices: Complete Port
+## Phase 2 — GamerServices: Complete Port — ✅ COMPLETE
 
 All 39 source files in `GamerServices/`. Three files already have stub headers  
 (`GamerServicesComponent.hpp`, `GamerServicesNotAvailableException.hpp`, `Guide.hpp`);  
@@ -123,77 +132,77 @@ these must be completed/verified against FNA source.
 
 ### 2a — Enums (no dependencies, port first)
 
-- [ ] **Task 2.1** — `ControllerSensitivity` (enum)  
+- [x] **Task 2.1** — `ControllerSensitivity` (enum)  
   Values: `Low`, `Medium`, `High`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/ControllerSensitivity.hpp`
 
-- [ ] **Task 2.2** — `GameDifficulty` (enum)  
+- [x] **Task 2.2** — `GameDifficulty` (enum)  
   Values: `Easy`, `Normal`, `Hard`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GameDifficulty.hpp`
 
-- [ ] **Task 2.3** — `GamerPresenceMode` (enum, 62 values)  
+- [x] **Task 2.3** — `GamerPresenceMode` (enum, 62 values)  
   Copy all values from FNA verbatim.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerPresenceMode.hpp`
 
-- [ ] **Task 2.4** — `GamerPrivilegeSetting` (enum)  
+- [x] **Task 2.4** — `GamerPrivilegeSetting` (enum)  
   Values: `Blocked`, `FriendsOnly`, `Everyone`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerPrivilegeSetting.hpp`
 
-- [ ] **Task 2.5** — `GamerZone` (enum)  
+- [x] **Task 2.5** — `GamerZone` (enum)  
   Values: `Unknown`, `Recreation`, `Pro`, `Family`, `Underground`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerZone.hpp`
 
-- [ ] **Task 2.6** — `LeaderboardKey` (enum)  
+- [x] **Task 2.6** — `LeaderboardKey` (enum)  
   Values: `BestScoreLifeTime`, `BestScoreRecent`, `BestTimeLifeTime`, `BestTimeRecent`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/LeaderboardKey.hpp`
 
-- [ ] **Task 2.7** — `LeaderboardOutcome` (enum)  
+- [x] **Task 2.7** — `LeaderboardOutcome` (enum)  
   Values: `None`, `Win`, `Loss`, `Tie`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/LeaderboardOutcome.hpp`
 
-- [ ] **Task 2.8** — `MessageBoxIcon` (enum)  
+- [x] **Task 2.8** — `MessageBoxIcon` (enum)  
   Values: `None`, `Error`, `Warning`, `Alert`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/MessageBoxIcon.hpp`
 
-- [ ] **Task 2.9** — `NotificationPosition` (enum)  
+- [x] **Task 2.9** — `NotificationPosition` (enum)  
   9 values: `TopLeft` … `BottomRight`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/NotificationPosition.hpp`
 
-- [ ] **Task 2.10** — `RacingCameraAngle` (enum)  
+- [x] **Task 2.10** — `RacingCameraAngle` (enum)  
   Values: `Back`, `Front`, `Inside`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/RacingCameraAngle.hpp`
 
 ### 2b — Exceptions
 
-- [ ] **Task 2.11** — `NetworkException`  
+- [x] **Task 2.11** — `NetworkException`  
   FNA: `GamerServices/NetworkException.cs`  
   Derives from `std::runtime_error` (or `System::Exception` if present).  
   4 constructors: default, message, message+inner, protected serialization.  
   File: `include/Microsoft/Xna/Framework/GamerServices/NetworkException.hpp`
 
-- [ ] **Task 2.12** — `NetworkNotAvailableException`  
+- [x] **Task 2.12** — `NetworkNotAvailableException`  
   Derives from `NetworkException`; same 4-constructor pattern.  
   File: `include/Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp`
 
-- [ ] **Task 2.13** — `GamerPrivilegeException`  
+- [x] **Task 2.13** — `GamerPrivilegeException`  
   Derives from `std::runtime_error`; 4 constructors.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp`
 
-- [ ] **Task 2.14** — `GamerServicesNotAvailableException` (complete existing stub)  
+- [x] **Task 2.14** — `GamerServicesNotAvailableException` (complete existing stub)  
   Verify existing `.hpp` against FNA; add `.cpp` if needed.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp`
 
-- [ ] **Task 2.15** — `GameUpdateRequiredException`  
+- [x] **Task 2.15** — `GameUpdateRequiredException`  
   Derives from `std::runtime_error`; 4 constructors.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GameUpdateRequiredException.hpp`
 
-- [ ] **Task 2.16** — `GuideAlreadyVisibleException`  
+- [x] **Task 2.16** — `GuideAlreadyVisibleException`  
   Derives from `std::runtime_error`; 4 constructors.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp`
 
 ### 2c — Data Structures and Simple Classes
 
-- [ ] **Task 2.17** — `PropertyDictionary`  
+- [x] **Task 2.17** — `PropertyDictionary`  
   FNA: `GamerServices/PropertyDictionary.cs`  
   Implements `IDictionary<std::string, System::Object*>`.  
   Backed by `std::unordered_map<std::string, std::shared_ptr<System::Object>>`.  
@@ -201,26 +210,26 @@ these must be completed/verified against FNA source.
   Internal constructor.  
   File: `include/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp`
 
-- [ ] **Task 2.18** — `LeaderboardIdentity` (struct)  
+- [x] **Task 2.18** — `LeaderboardIdentity` (struct)  
   FNA: `GamerServices/LeaderboardIdentity.cs`  
   Properties: `Key` (String), `GameMode` (intcs).  
   Static factory: `Create(LeaderboardKey)`, `Create(LeaderboardKey, int)`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp`
 
-- [ ] **Task 2.19** — `GamerPresence`  
+- [x] **Task 2.19** — `GamerPresence`  
   FNA: `GamerServices/GamerPresence.cs`  
   Properties: `PresenceMode` (get+set triggers string update), `PresenceValue` (get+set).  
   Internal: `presenceModeStrings[]` static array; `SetPresenceModeStringEXT()` no-op stub.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerPresence.hpp`
 
-- [ ] **Task 2.20** — `GamerPrivileges`  
+- [x] **Task 2.20** — `GamerPrivileges`  
   FNA: `GamerServices/GamerPrivileges.cs`  
   Properties (read-only external): `AllowCommunication`, `AllowOnlineSessions`, `AllowPremiumContent`,  
   `AllowProfileViewing`, `AllowPurchaseContent`, `AllowTradeContent`, `AllowUserCreatedContent`.  
   Internal constructor with stub defaults.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerPrivileges.hpp`
 
-- [ ] **Task 2.21** — `GameDefaults`  
+- [x] **Task 2.21** — `GameDefaults`  
   FNA: `GamerServices/GameDefaults.cs`  
   Properties (read-only external): `GameDifficulty`, `ControllerSensitivity`, `PrimaryColor`,  
   `SecondaryColor`, `AutoAim`, `AutoCenter`, `MoveWithRightThumbStick`, `InvertYAxis`,  
@@ -228,28 +237,28 @@ these must be completed/verified against FNA source.
   Internal constructor.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GameDefaults.hpp`
 
-- [ ] **Task 2.22** — `Achievement`  
+- [x] **Task 2.22** — `Achievement`  
   FNA: `GamerServices/Achievement.cs`  
   Properties (read-only external): `Description`, `DisplayBeforeEarned`, `EarnedDateTime`,  
   `EarnedOnline`, `GamerScore`, `HowToEarn`, `IsEarned`, `Key`, `Name`.  
   Internal constructor (all fields).  
   File: `include/Microsoft/Xna/Framework/GamerServices/Achievement.hpp`
 
-- [ ] **Task 2.23** — `SignedInEventArgs`  
+- [x] **Task 2.23** — `SignedInEventArgs`  
   Derives from `System::EventArgs`; property `Gamer` (`SignedInGamer*`).  
   File: `include/Microsoft/Xna/Framework/GamerServices/SignedInEventArgs.hpp`
 
-- [ ] **Task 2.24** — `SignedOutEventArgs`  
+- [x] **Task 2.24** — `SignedOutEventArgs`  
   Derives from `System::EventArgs`; property `Gamer` (`SignedInGamer*`).  
   File: `include/Microsoft/Xna/Framework/GamerServices/SignedOutEventArgs.hpp`
 
-- [ ] **Task 2.25** — `InviteAcceptedEventArgs`  
+- [x] **Task 2.25** — `InviteAcceptedEventArgs`  
   Derives from `System::EventArgs`; properties `Gamer` (`SignedInGamer*`), `IsCurrentSession` (`bool`).  
   File: `include/Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.hpp`
 
 ### 2d — Collection Classes
 
-- [ ] **Task 2.26** — `GamerCollection<T>`  
+- [x] **Task 2.26** — `GamerCollection<T>`  
   FNA: `GamerServices/GamerCollection.cs`  
   Template; derives from `System::Collections::ObjectModel::ReadOnlyCollection<T*>`.  
   `T` constrained to `Gamer` subclasses.  
@@ -257,7 +266,7 @@ these must be completed/verified against FNA source.
   Custom enumerator struct `GamerCollectionEnumerator` with `Current`, `MoveNext()`, `Reset()`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerCollection.hpp`
 
-- [ ] **Task 2.27** — `AchievementCollection`  
+- [x] **Task 2.27** — `AchievementCollection`  
   FNA: `GamerServices/AchievementCollection.cs`  
   Implements `IList<Achievement*>`, `IDisposable`.  
   `operator[](int)`, `operator[](std::string)` (throws `std::out_of_range` if not found).  
@@ -265,7 +274,7 @@ these must be completed/verified against FNA source.
   Internal constructor.  
   File: `include/Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp`
 
-- [ ] **Task 2.28** — `FriendGamer`  
+- [x] **Task 2.28** — `FriendGamer`  
   FNA: `GamerServices/FriendGamer.cs`  
   `sealed` → `final`; derives from `Gamer`.  
   Properties (read-only external): `FriendRequestReceivedFrom`, `FriendRequestSentTo`, `HasVoice`,  
@@ -273,14 +282,14 @@ these must be completed/verified against FNA source.
   `IsJoinable`, `IsOnline`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/FriendGamer.hpp`
 
-- [ ] **Task 2.29** — `FriendCollection`  
+- [x] **Task 2.29** — `FriendCollection`  
   FNA: `GamerServices/FriendCollection.cs`  
   `sealed` → `final`; derives from `GamerCollection<FriendGamer>`; implements `IDisposable`.  
   Property `IsDisposed`; method `Dispose()`.  
   Internal constructor.  
   File: `include/Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp`
 
-- [ ] **Task 2.30** — `SignedInGamerCollection`  
+- [x] **Task 2.30** — `SignedInGamerCollection`  
   FNA: `GamerServices/SignedInGamerCollection.cs`  
   `sealed` → `final`; derives from `GamerCollection<SignedInGamer>`.  
   `operator[](PlayerIndex)` → returns `SignedInGamer*` (null if out of range).  
@@ -289,7 +298,7 @@ these must be completed/verified against FNA source.
 
 ### 2e — Core Gamer Classes
 
-- [ ] **Task 2.31** — `Gamer` (abstract base class)  
+- [x] **Task 2.31** — `Gamer` (abstract base class)  
   FNA: `GamerServices/Gamer.cs`  
   Abstract; derives from `System::Object`.  
   Properties: `DisplayName`, `Gamertag`, `IsDisposed`, `LeaderboardWriter`, `Tag`.  
@@ -298,7 +307,7 @@ these must be completed/verified against FNA source.
     fields `AsyncState`, `CompletedSynchronously`, `IsCompleted`, `AsyncWaitHandle`, `Callback`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/Gamer.hpp`
 
-- [ ] **Task 2.32** — `GamerProfile`  
+- [x] **Task 2.32** — `GamerProfile`  
   FNA: `GamerServices/GamerProfile.cs`  
   `sealed` → `final`; implements `IDisposable`.  
   Properties (read-only external): `GamerScore`, `GamerZone`, `Motto`, `Region` (`RegionInfo`),  
@@ -306,20 +315,20 @@ these must be completed/verified against FNA source.
   Internal constructor with stub defaults.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp`
 
-- [ ] **Task 2.33** — `LeaderboardEntry`  
+- [x] **Task 2.33** — `LeaderboardEntry`  
   FNA: `GamerServices/LeaderboardEntry.cs`  
   `sealed` → `final`.  
   Properties: `Columns` (`PropertyDictionary`), `Gamer*`, `Rating` (get+set, `longcs`), `RankingEXT`.  
   Internal constructor.  
   File: `include/Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.hpp`
 
-- [ ] **Task 2.34** — `LeaderboardWriter`  
+- [x] **Task 2.34** — `LeaderboardWriter`  
   FNA: `GamerServices/LeaderboardWriter.cs`  
   `sealed` → `final`.  
   Method `GetLeaderboard(LeaderboardIdentity)` → throws `std::runtime_error("NotSupportedException")`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp`
 
-- [ ] **Task 2.35** — `LeaderboardReader`  
+- [x] **Task 2.35** — `LeaderboardReader`  
   FNA: `GamerServices/LeaderboardReader.cs`  
   `sealed` → `final`; implements `IDisposable`.  
   Properties: `IsDisposed`, `CanPageDown`, `CanPageUp`, `Entries` (`ReadOnlyCollection<LeaderboardEntry*>`),  
@@ -329,7 +338,7 @@ these must be completed/verified against FNA source.
   Internal state: `entryCache`, `pageSize`, `isFriendBoard`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp`
 
-- [ ] **Task 2.36** — `SignedInGamer`  
+- [x] **Task 2.36** — `SignedInGamer`  
   FNA: `GamerServices/SignedInGamer.cs`  
   `sealed` → `final`; derives from `Gamer`.  
   Properties: `GameDefaults`, `IsGuest`, `IsSignedInToLive`, `PartySize` (get+set), `PlayerIndex`,  
@@ -342,7 +351,7 @@ these must be completed/verified against FNA source.
 
 ### 2f — Static Service Classes
 
-- [ ] **Task 2.37** — `GamerServicesDispatcher` (static class)  
+- [x] **Task 2.37** — `GamerServicesDispatcher` (static class)  
   FNA: `GamerServices/GamerServicesDispatcher.cs`  
   Static properties: `IsInitialized`, `WindowHandle` (`intptr_t`).  
   Static event: `InstallingTitleUpdate` (`EventHandler<EventArgs>`).  
@@ -352,7 +361,7 @@ these must be completed/verified against FNA source.
     `UpdateAsync() → bool` — returns `false` (signals completion).  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp`
 
-- [ ] **Task 2.38** — `GamerServicesComponent` (complete existing stub)  
+- [x] **Task 2.38** — `GamerServicesComponent` (complete existing stub)  
   FNA: `GamerServices/GamerServicesComponent.cs`  
   Derives from `GameComponent`.  
   `Initialize()` → sets `GamerServicesDispatcher::WindowHandle`, calls `GamerServicesDispatcher::Initialize()`.  
@@ -360,7 +369,7 @@ these must be completed/verified against FNA source.
   Verify existing `.hpp` is correct; add `.cpp`.  
   File: `include/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp`
 
-- [ ] **Task 2.39** — `Guide` (static class, complete existing stub)  
+- [x] **Task 2.39** — `Guide` (static class, complete existing stub)  
   FNA: `GamerServices/Guide.cs`  
   Static properties: `IsScreenSaverEnabled` (maps to SDL3 screensaver), `IsTrialMode`, `IsVisible`,  
   `NotificationPosition`, `SimulateTrialMode`.  
@@ -370,7 +379,7 @@ these must be completed/verified against FNA source.
   Verify existing `.hpp` is complete; add `.cpp` with SDL3-based screensaver calls.  
   File: `include/Microsoft/Xna/Framework/GamerServices/Guide.hpp`
 
-- [ ] **Task 2.40** — Unit tests for Phase 2 types  
+- [x] **Task 2.40** — Unit tests for Phase 2 types  
   Test all enum values.  
   Test exception constructors (all four variants).  
   Test `GamerCollection<T>` iteration and `operator[]`.  
@@ -380,36 +389,36 @@ these must be completed/verified against FNA source.
 
 ---
 
-## Phase 3 — Net XNA API: Enums and Simple Types
+## Phase 3 — Net XNA API: Enums and Simple Types — ✅ COMPLETE
 
-- [ ] **Task 3.1** — `NetworkSessionEndReason` (enum)  
+- [x] **Task 3.1** — `NetworkSessionEndReason` (enum)  
   Values: `ClientSignedOut`, `HostEndedSession`, `RemovedByHost`, `Disconnected`.  
   File: `include/Microsoft/Xna/Framework/Net/NetworkSessionEndReason.hpp`
 
-- [ ] **Task 3.2** — `NetworkSessionJoinError` (enum)  
+- [x] **Task 3.2** — `NetworkSessionJoinError` (enum)  
   Values: `SessionNotFound`, `SessionNotJoinable`, `SessionFull`.  
   File: `include/Microsoft/Xna/Framework/Net/NetworkSessionJoinError.hpp`
 
-- [ ] **Task 3.3** — `NetworkSessionState` (enum)  
+- [x] **Task 3.3** — `NetworkSessionState` (enum)  
   Values: `Lobby`, `Playing`, `Ended`.  
   File: `include/Microsoft/Xna/Framework/Net/NetworkSessionState.hpp`
 
-- [ ] **Task 3.4** — `NetworkSessionType` (enum)  
+- [x] **Task 3.4** — `NetworkSessionType` (enum)  
   Values: `Local`, `SystemLink`, `PlayerMatch`, `Ranked`, `LocalWithLeaderboards`.  
   File: `include/Microsoft/Xna/Framework/Net/NetworkSessionType.hpp`
 
-- [ ] **Task 3.5** — `SendDataOptions` (enum, flags)  
+- [x] **Task 3.5** — `SendDataOptions` (enum, flags)  
   Values: `None=0`, `Reliable=1`, `InOrder=2`, `ReliableInOrder=3`, `Chat=4`.  
   Use `enum class` with bitwise operator overloads (`|`, `&`, `~`).  
   File: `include/Microsoft/Xna/Framework/Net/SendDataOptions.hpp`
 
-- [ ] **Task 3.6** — `QualityOfService`  
+- [x] **Task 3.6** — `QualityOfService`  
   Properties (read-only): `AverageRoundtripTime` (`TimeSpan`), `BytesPerSecondDownstream` (`intcs`),  
   `BytesPerSecondUpstream` (`intcs`), `IsAvailable` (`bool`), `MinimumRoundtripTime` (`TimeSpan`).  
   Internal constructor only.  
   File: `include/Microsoft/Xna/Framework/Net/QualityOfService.hpp`
 
-- [ ] **Task 3.7** — `NetworkSessionProperties`  
+- [x] **Task 3.7** — `NetworkSessionProperties`  
   Implements `IList<std::optional<intcs>>`, `ICollection`, `IEnumerable`.  
   Backed by `std::vector<std::optional<intcs>>`.  
   Public `operator[]`, `getCount()`, `GetEnumerator()`.  
@@ -417,56 +426,56 @@ these must be completed/verified against FNA source.
   ICollection: `IsReadOnly`, `Add()`, `Remove()`, `Contains()`, `Clear()`, `CopyTo()`.  
   File: `include/Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp`
 
-- [ ] **Task 3.8** — `GameEndedEventArgs`  
+- [x] **Task 3.8** — `GameEndedEventArgs`  
   Derives from `System::EventArgs`; default constructor only.  
   File: `include/Microsoft/Xna/Framework/Net/GameEndedEventArgs.hpp`
 
-- [ ] **Task 3.9** — `GameStartedEventArgs`  
+- [x] **Task 3.9** — `GameStartedEventArgs`  
   Derives from `System::EventArgs`; default constructor only.  
   File: `include/Microsoft/Xna/Framework/Net/GameStartedEventArgs.hpp`
 
-- [ ] **Task 3.10** — `GamerJoinedEventArgs`  
+- [x] **Task 3.10** — `GamerJoinedEventArgs`  
   Derives from `System::EventArgs`; property `Gamer` (`NetworkGamer*`).  
   File: `include/Microsoft/Xna/Framework/Net/GamerJoinedEventArgs.hpp`
 
-- [ ] **Task 3.11** — `GamerLeftEventArgs`  
+- [x] **Task 3.11** — `GamerLeftEventArgs`  
   Derives from `System::EventArgs`; property `Gamer` (`NetworkGamer*`).  
   File: `include/Microsoft/Xna/Framework/Net/GamerLeftEventArgs.hpp`
 
-- [ ] **Task 3.12** — `HostChangedEventArgs`  
+- [x] **Task 3.12** — `HostChangedEventArgs`  
   Derives from `System::EventArgs`; properties `OldHost`, `NewHost` (`NetworkGamer*`).  
   File: `include/Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp`
 
-- [ ] **Task 3.13** — `NetworkSessionEndedEventArgs`  
+- [x] **Task 3.13** — `NetworkSessionEndedEventArgs`  
   Derives from `System::EventArgs`; property `EndReason` (`NetworkSessionEndReason`).  
   File: `include/Microsoft/Xna/Framework/Net/NetworkSessionEndedEventArgs.hpp`
 
-- [ ] **Task 3.14** — `WriteLeaderboardsEventArgs`  
+- [x] **Task 3.14** — `WriteLeaderboardsEventArgs`  
   Derives from `System::EventArgs`; properties `Gamer` (`NetworkGamer*`), `IsLeaving` (`bool`).  
   Internal constructor.  
   File: `include/Microsoft/Xna/Framework/Net/WriteLeaderboardsEventArgs.hpp`
 
-- [ ] **Task 3.15** — `NetworkSessionJoinException`  
+- [x] **Task 3.15** — `NetworkSessionJoinException`  
   Derives from `GamerServices::NetworkException`.  
   Property `JoinError` (`NetworkSessionJoinError`).  
   4 constructors: default, message, message+error, message+inner; protected serialization ctor.  
   File: `include/Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp`
 
-- [ ] **Task 3.16** — Unit tests for Phase 3 types  
+- [x] **Task 3.16** — Unit tests for Phase 3 types  
   All constructors, enum values, `NetworkSessionProperties` indexer and collection interface,  
   `SendDataOptions` bitwise operations.
 
 ---
 
-## Phase 4 — Net XNA API: Core Classes
+## Phase 4 — Net XNA API: Core Classes — ✅ COMPLETE
 
-- [ ] **Task 4.1** — `NetworkMachine`  
+- [x] **Task 4.1** — `NetworkMachine`  
   Property `Gamers` (`GamerCollection<NetworkGamer>`).  
   Method `RemoveFromSession()` → throws `std::runtime_error("NotImplementedException")`.  
   Internal constructor.  
   File: `include/Microsoft/Xna/Framework/Net/NetworkMachine.hpp`
 
-- [ ] **Task 4.2** — `NetworkGamer`  
+- [x] **Task 4.2** — `NetworkGamer`  
   Derives from `GamerServices::Gamer`.  
   Properties: `HasLeftSession`, `HasVoice`, `getId()` (`bytecs`, returns 0), `IsGuest`,  
   `IsHost` (returns true), `IsLocal` (returns `dynamic_cast<LocalNetworkGamer*>(this) != nullptr`),  
@@ -475,7 +484,7 @@ these must be completed/verified against FNA source.
   Internal constructor.  
   File: `include/Microsoft/Xna/Framework/Net/NetworkGamer.hpp`
 
-- [ ] **Task 4.3** — `LocalNetworkGamer` (`final`)  
+- [x] **Task 4.3** — `LocalNetworkGamer` (`final`)  
   Derives from `NetworkGamer`.  
   Properties: `IsDataAvailable` (queue non-empty), `SignedInGamer` (`GamerServices::SignedInGamer*`).  
   Internal: `packetQueue` (`std::queue<NetworkSession::NetworkEvent>`).  
@@ -491,7 +500,7 @@ these must be completed/verified against FNA source.
   `SendData(PacketWriter&, SendDataOptions, NetworkGamer*)`.  
   File: `include/Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp`
 
-- [ ] **Task 4.4** — `PacketReader`  
+- [x] **Task 4.4** — `PacketReader`  
   Derives from `System::IO::BinaryReader`.  
   Properties: `getLength()`, `getPosition()`, `setPosition()`.  
   Constructors: default, capacity-hint.  
@@ -499,7 +508,7 @@ these must be completed/verified against FNA source.
   Override `ReadSingle()`, `ReadDouble()`.  
   File: `include/Microsoft/Xna/Framework/Net/PacketReader.hpp`
 
-- [ ] **Task 4.5** — `PacketWriter`  
+- [x] **Task 4.5** — `PacketWriter`  
   Derives from `System::IO::BinaryWriter`.  
   Properties: `getLength()`, `getPosition()`, `setPosition()`.  
   Constructors: default, capacity-hint.  
@@ -507,13 +516,13 @@ these must be completed/verified against FNA source.
   Override `Write(float)`, `Write(double)`.  
   File: `include/Microsoft/Xna/Framework/Net/PacketWriter.hpp`
 
-- [ ] **Task 4.6** — `AvailableNetworkSession`  
+- [x] **Task 4.6** — `AvailableNetworkSession`  
   Properties (read-only): `CurrentGamerCount`, `HostGamertag`, `OpenPrivateGamerSlots`,  
   `OpenPublicGamerSlots`, `QualityOfService`, `SessionProperties`.  
   Internal constructor (all fields).  
   File: `include/Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp`
 
-- [ ] **Task 4.7** — `AvailableNetworkSessionCollection` (`final`)  
+- [x] **Task 4.7** — `AvailableNetworkSessionCollection` (`final`)  
   Derives from `System::Collections::ObjectModel::ReadOnlyCollection<AvailableNetworkSession*>`.  
   Implements `System::IDisposable`.  
   Property `IsDisposed`.  
@@ -521,56 +530,56 @@ these must be completed/verified against FNA source.
   Internal constructor.  
   File: `include/Microsoft/Xna/Framework/Net/AvailableNetworkSessionCollection.hpp`
 
-- [ ] **Task 4.8** — `NetworkSession` — internal types  
+- [x] **Task 4.8** — `NetworkSession` — internal types  
   Internal `NetworkEventType` enum: `PacketSend`, `GamerJoin`, `GamerLeave`, `HostChange`, `StateChange`.  
   Internal `NetworkEvent` struct: `Type`, `Gamer*`, `Packet` (`std::vector<bytecs>`),  
   `Reliable` (`SendDataOptions`), `State`, `Reason`.  
   Internal `NetworkSessionAction` class implementing `IAsyncResult`.  
   (Private section of `NetworkSession.hpp`.)
 
-- [ ] **Task 4.9** — `NetworkSession` — public properties  
+- [x] **Task 4.9** — `NetworkSession` — public properties  
   Constants `MaxSupportedGamers = 31`, `MaxPreviousGamers = 100`.  
   Properties: `IsDisposed`, `AllGamers`, `LocalGamers`, `RemoteGamers`, `PreviousGamers`,  
   `AllowHostMigration`, `AllowJoinInProgress`, `BytesPerSecondReceived`, `BytesPerSecondSent`,  
   `Host`, `IsEveryoneReady`, `IsHost`, `MaxGamers`, `PrivateGamerSlots`, `SessionProperties`,  
   `SessionState`, `SessionType`, `SimulatedLatency`, `SimulatedPacketLoss`.
 
-- [ ] **Task 4.10** — `NetworkSession` — public events  
+- [x] **Task 4.10** — `NetworkSession` — public events  
   Instance events: `GameStarted`, `GameEnded`, `GamerJoined`, `GamerLeft`, `HostChanged`,  
   `SessionEnded`, `WriteArbitratedLeaderboard`, `WriteUnarbitratedLeaderboard`, `WriteTrueSkill`.  
   Static event: `InviteAccepted`.
 
-- [ ] **Task 4.11** — `NetworkSession` — constructor and `Dispose()`  
+- [x] **Task 4.11** — `NetworkSession` — constructor and `Dispose()`  
   Internal constructor; initialise gamer lists, event queue, host pointer.  
   `Dispose()`: flush packet queues, clear static `activeSession_`.
 
-- [ ] **Task 4.12** — `NetworkSession` — `Update()` method  
+- [x] **Task 4.12** — `NetworkSession` — `Update()` method  
   Drain `networkEvents_` queue; dispatch events by type.
 
-- [ ] **Task 4.13** — `NetworkSession` — session management methods  
+- [x] **Task 4.13** — `NetworkSession` — session management methods  
   `AddLocalGamer()`, `FindGamerById()`, `ResetReady()`, `StartGame()`, `EndGame()`.  
   Internal `SendNetworkEvent()`.
 
-- [ ] **Task 4.14** — `NetworkSession` — static Create methods  
+- [x] **Task 4.14** — `NetworkSession` — static Create methods  
   `Create(type, maxLocal, maxGamers)`.  
   `Create(type, maxLocal, maxGamers, privateSlots, props)`.  
   `Create(type, localGamers, maxGamers, privateSlots, props)`.  
   All poll `GamerServicesDispatcher::UpdateAsync()`.
 
-- [ ] **Task 4.15** — `NetworkSession` — static BeginCreate / EndCreate  
+- [x] **Task 4.15** — `NetworkSession` — static BeginCreate / EndCreate  
   Three `BeginCreate` overloads; validate args; populate `activeAction_`.  
   `EndCreate` constructs session; clears action.
 
-- [ ] **Task 4.16** — `NetworkSession` — static Find methods  
+- [x] **Task 4.16** — `NetworkSession` — static Find methods  
   `Find(type, maxLocal, props)`, `Find(type, localGamers, props)`.  
   `BeginFind` (2 overloads), `EndFind`.
 
-- [ ] **Task 4.17** — `NetworkSession` — static Join methods  
+- [x] **Task 4.17** — `NetworkSession` — static Join methods  
   `Join(availableSession)`, `BeginJoin`, `EndJoin`.  
   `JoinInvited(maxLocal)`, `JoinInvited(localGamers)`.  
   `BeginJoinInvited` (2 overloads), `EndJoinInvited`.
 
-- [ ] **Task 4.18** — Unit tests for Phase 4 types  
+- [x] **Task 4.18** — Unit tests for Phase 4 types  
   PacketReader/PacketWriter round-trip for each XNA type.  
   `NetworkSessionProperties` indexer and IList interface.  
   `NetworkSession` state machine: Create → StartGame → EndGame → Dispose.  
@@ -581,83 +590,83 @@ these must be completed/verified against FNA source.
 
 ---
 
-## Phase 5 — ENet Backend (CNA Internal Layer)
+## Phase 5 — ENet Backend (CNA Internal Layer) — ✅ COMPLETE
 
 All backend code under `src/CNA/Internal/Net/` and `include/CNA/Internal/Net/`.
 
 ### 5a — Backend Contract
 
-- [ ] **Task 5.1** — Define `CNA::Internal::Net::INetworkBackend` interface  
+- [x] **Task 5.1** — Define `CNA::Internal::Net::INetworkBackend` interface  
   Methods: `Initialize()`, `Shutdown()`, `HostSession()`, `FindSessions()`, `JoinSession()`,  
   `SendPacket()`, `Poll()`, `GetRTT()`, `DisconnectPeer()`, `DestroySession()`.  
   File: `include/CNA/Internal/Net/INetworkBackend.hpp`
 
-- [ ] **Task 5.2** — Define supporting data types  
+- [x] **Task 5.2** — Define supporting data types  
   `NetworkSessionConfig`, `SessionQuery`, `DiscoveredSession`, `NetEvent`, `SessionHandle`, `PeerHandle`.  
   File: `include/CNA/Internal/Net/NetTypes.hpp`
 
 ### 5b — ENet Implementation
 
-- [ ] **Task 5.3** — `ENetBackend::Initialize()` / `Shutdown()`  
+- [x] **Task 5.3** — `ENetBackend::Initialize()` / `Shutdown()`  
   `enet_initialize()` / `enet_deinitialize()`.
 
-- [ ] **Task 5.4** — Session advertisement for `SystemLink` (LAN UDP broadcast)  
+- [x] **Task 5.4** — Session advertisement for `SystemLink` (LAN UDP broadcast)  
   Host sends broadcast on port 3074; heartbeat every 2 s.  
   Find listens for replies; collects `DiscoveredSession` list.
 
-- [ ] **Task 5.5** — Session advertisement for `PlayerMatch` (relay/direct)  
+- [x] **Task 5.5** — Session advertisement for `PlayerMatch` (relay/direct)  
   Use relay server address from `CNA_NET_RELAY_HOST` env var; LAN fallback if unset.
 
-- [ ] **Task 5.6** — `ENetBackend::JoinSession()`  
+- [x] **Task 5.6** — `ENetBackend::JoinSession()`  
   Connect ENet client to host; assign `PeerHandle`; send gamer-list on connect.
 
-- [ ] **Task 5.7** — `ENetBackend::SendPacket()` with channel mapping  
+- [x] **Task 5.7** — `ENetBackend::SendPacket()` with channel mapping  
   `None` → unreliable ch0; `Reliable` → reliable ch0; `InOrder` → unreliable-sequenced ch1;  
   `ReliableInOrder` → reliable ch1; `Chat` → reliable ch2.
 
-- [ ] **Task 5.8** — `ENetBackend::Poll()`  
+- [x] **Task 5.8** — `ENetBackend::Poll()`  
   Non-blocking `enet_host_service()`; translate ENet events → `NetEvent` list.
 
-- [ ] **Task 5.9** — Host migration  
+- [x] **Task 5.9** — Host migration  
   On host disconnect: elect new host (lowest peer ID); fire `HostChanged`; update `Host`.
 
-- [ ] **Task 5.10** — Latency simulation  
+- [x] **Task 5.10** — Latency simulation  
   `enet_peer_throttle_configure()` for loss; delay queue for latency.
 
-- [ ] **Task 5.11** — QoS measurement  
+- [x] **Task 5.11** — QoS measurement  
   Populate `QualityOfService` from `enet_peer->roundTripTime` and bandwidth counters.
 
 ### 5c — Wire XNA API to ENet Backend
 
-- [ ] **Task 5.12** — Wire `EndCreate` → `INetworkBackend::HostSession()`
-- [ ] **Task 5.13** — Wire `EndFind` → `INetworkBackend::FindSessions()` → `AvailableNetworkSession` list
-- [ ] **Task 5.14** — Wire `EndJoin` → `INetworkBackend::JoinSession()`
-- [ ] **Task 5.15** — Wire `NetworkSession::Update()` → `INetworkBackend::Poll()` → enqueue events
-- [ ] **Task 5.16** — Wire `LocalNetworkGamer::SendData()` → `INetworkBackend::SendPacket()`
-- [ ] **Task 5.17** — Wire incoming data → `LocalNetworkGamer::packetQueue`
-- [ ] **Task 5.18** — Wire `NetworkSession::Dispose()` → `INetworkBackend::DestroySession()`
+- [x] **Task 5.12** — Wire `EndCreate` → `INetworkBackend::HostSession()`
+- [x] **Task 5.13** — Wire `EndFind` → `INetworkBackend::FindSessions()` → `AvailableNetworkSession` list
+- [x] **Task 5.14** — Wire `EndJoin` → `INetworkBackend::JoinSession()`
+- [x] **Task 5.15** — Wire `NetworkSession::Update()` → `INetworkBackend::Poll()` → enqueue events
+- [x] **Task 5.16** — Wire `LocalNetworkGamer::SendData()` → `INetworkBackend::SendPacket()`
+- [x] **Task 5.17** — Wire incoming data → `LocalNetworkGamer::packetQueue`
+- [x] **Task 5.18** — Wire `NetworkSession::Dispose()` → `INetworkBackend::DestroySession()`
 
 ---
 
-## Phase 6 — Platform-Specific Work
+## Phase 6 — Platform-Specific Work — ✅ COMPLETE
 
-- [ ] **Task 6.1** — Linux: two-process loopback test (host + client, same machine)
-- [ ] **Task 6.2** — Windows: ENet with WinSock2; same loopback test
-- [ ] **Task 6.3** — Web (Emscripten): ENet WebSocket adaptation; disable `SystemLink`; relay only
-- [ ] **Task 6.4** — Android (NDK): add `INTERNET` permission to manifest; test on emulator
-- [ ] **Task 6.5** — Multiplatform CMake guards (`if(EMSCRIPTEN)`, `if(ANDROID)`, `if(WIN32)`)
+- [x] **Task 6.1** — Linux: two-process loopback test (host + client, same machine)
+- [x] **Task 6.2** — Windows: ENet with WinSock2; same loopback test
+- [x] **Task 6.3** — Web (Emscripten): ENet WebSocket adaptation; disable `SystemLink`; relay only
+- [x] **Task 6.4** — Android (NDK): add `INTERNET` permission to manifest; test on emulator
+- [x] **Task 6.5** — Multiplatform CMake guards (`if(EMSCRIPTEN)`, `if(ANDROID)`, `if(WIN32)`)
 
 ---
 
-## Phase 7 — Integration Tests
+## Phase 7 — Integration Tests — ✅ COMPLETE
 
-- [ ] **Task 7.1** — Two-endpoint loopback: host + join in same process; PacketWriter/Reader round-trip
-- [ ] **Task 7.2** — State machine: Create → StartGame → EndGame → Dispose; verify events fire
-- [ ] **Task 7.3** — GamerJoined / GamerLeft event dispatch
-- [ ] **Task 7.4** — FindSessions returns discovered host entry
-- [ ] **Task 7.5** — SendDataOptions channel mapping (unreliable vs reliable)
-- [ ] **Task 7.6** — ResetReady clears all gamer ready flags
-- [ ] **Task 7.7** — NetworkSessionJoinException round-trip through all 4 constructors
+- [x] **Task 7.1** — Two-endpoint loopback: host + join in same process; PacketWriter/Reader round-trip
+- [x] **Task 7.2** — State machine: Create → StartGame → EndGame → Dispose; verify events fire
+- [x] **Task 7.3** — GamerJoined / GamerLeft event dispatch
+- [x] **Task 7.4** — FindSessions returns discovered host entry
+- [x] **Task 7.5** — SendDataOptions channel mapping (unreliable vs reliable)
+- [x] **Task 7.6** — ResetReady clears all gamer ready flags
+- [x] **Task 7.7** — NetworkSessionJoinException round-trip through all 4 constructors
 
 ---
 
@@ -1450,22 +1459,181 @@ open-ended, ambitious future work — not all of it needs to land in one sitting
 
 ---
 
+## Phase 12 — cna-samples-Driven Networking Fixes
+
+Opened after the sibling `cna-samples` repo (`../cna-samples`) ported **ClientServerSample**
+(#091) — the first real, non-synthetic caller of `NetworkSession`/`GamerServices` outside CNA's own
+unit tests — and hit three real, live-reproduced bugs that no existing `NetworkSessionTests.cpp`
+case exercises (because those tests never construct a `GamerServicesComponent` and never check
+multi-gamer `Id`/`IsHost` state). Fully documented, root-caused, and each independently confirmed
+live in `../cna-samples/DEFERRED.md` items #19–21 and
+`../cna-samples/samples/ClientServerSample/missing.md`; ClientServerSample currently ports around
+all three at the sample level (documented deviations, not silent hacks). Fixing these in `cna`
+removes the need for that workaround and unblocks NetworkPrediction (#100), PeerToPeer (#103), and
+NetRumble (#062) — all four `cna-samples` networking samples call `NetworkSession::Create`/`Find`/
+`Join` the same way and construct a `GamerServicesComponent` in their original C# constructors.
+
+- [x] **Task 12.1** — Fix `GamerServicesDispatcher::Update()` no-op hanging
+  `NetworkSession::Create`/`Find`/`Join` forever whenever a `GamerServicesComponent` exists
+  (`DEFERRED.md` item #19). Root cause, confirmed live: `NetworkSession::Create()`'s synchronous
+  polling loop (`src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:406-461`, mirrored in the
+  `Find`/`Join`/`JoinInvited` overloads) is
+  ```cpp
+  while (!result->getIsCompletedProperty())
+  {
+      if (!GamerServices::GamerServicesDispatcher::UpdateAsync())
+          activeAction_->setIsCompletedProperty(true);
+  }
+  ```
+  `GamerServicesDispatcher::Update()` (`src/Microsoft/Xna/Framework/GamerServices/
+  GamerServicesDispatcher.cpp`) is a completely empty function body, and none of
+  `BeginCreate`/`BeginFind`/`BeginJoin`/`BeginJoinInvited` (all in `NetworkSession.cpp`) ever mark
+  `activeAction_` completed themselves. With no `GamerServicesComponent`, `UpdateAsync()` returns
+  `false` on the very first iteration, forcing completion — masking the bug for every existing
+  unit test. With one present (`isInitialized_ == true`, matching every real sample's own
+  constructor), `UpdateAsync()` unconditionally returns `true` forever and nothing ever completes
+  the action — infinite busy-loop, 99% CPU.
+  **Confirmed this is a genuine upstream FNA/XNA bug, not just a CNA porting defect:** the real FNA
+  reference source (`/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/Net/NetworkSession.cs`,
+  `NetworkSessionAction` constructor) sets `IsCompleted = false` explicitly, and
+  `GamerServicesDispatcher.cs`'s `Update()` is likewise a permanently empty method body in FNA
+  itself — real XNA/FNA would hang identically given a real `GamerServicesComponent`, which every
+  actual XNA 4.0 networking sample constructs. Documented as an intentional, in-source-commented
+  deviation from FNA per `CHECKLIST.md`'s "every intentional deviation from FNA logic has a `//`
+  comment" rule, rather than silently preserving a defect that makes the real API unusable.
+  **Fix applied:** `NetworkSession::NetworkSessionAction`'s constructor
+  (`src/Microsoft/Xna/Framework/Net/NetworkSession.cpp`) now initializes `isCompleted_(true)`
+  instead of relying on the in-class default `{false}` — every `Begin*`-constructed action is
+  complete the instant it's returned, matching the fact that all of CNA's own "real" work
+  (`ENetBackend::StartHosting`/`ENetDiscoveryService::FindSessions`, etc.) already runs
+  synchronously inside the constructor/`EndFind`, not across multiple polls. This is a genuine
+  one-line, minimal fix: the constructor's own pre-existing doc comment ("Constructs a
+  NetworkSessionAction already positioned to complete") already described this exact intended
+  behavior; the implementation had simply never matched it. Every synchronous wrapper's polling
+  loop is left untouched (now unreachable dead code, but byte-for-byte faithful to FNA's own
+  line-by-line structure) rather than touched for cosmetic simplification, per the "a bug fix
+  doesn't need surrounding cleanup" principle.
+  **Regression test:** since `GamerServicesDispatcher::Initialize()` sets a process-lifetime static
+  with no reset (would contaminate every other test in the `CnaTests` binary — the same hazard
+  already documented at the top of `GamerServicesServiceTests.cpp`), the reproduction runs as a
+  genuinely separate OS process: new `tools/net/gamerservices_dispatcher_harness.cpp` (standalone,
+  non-GTest executable, mirroring Task 6.1's `cna_net_two_process_harness` isolation pattern) calls
+  `GamerServicesDispatcher::Initialize()` then `NetworkSession::Create(NetworkSessionType::Local, ...)`
+  and exits 0 if it returns; spawned and watchdog-timed (10s) by new
+  `tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp`. **Verified the test
+  actually catches the regression, not just passes vacuously:** temporarily reverted the
+  `isCompleted_(true)` fix and reran — the standalone harness hung until `timeout(1)` killed it
+  (confirmed exit code 124), and the gtest wrapper correctly failed via its own watchdog (10017ms,
+  not a silent pass) instead of hanging `CnaTests` itself; restored the fix and reran — harness
+  exits in ~50ms, gtest wrapper passes. Full regression check: all 3226 non-skipped `CnaTests`
+  pass (3228 total, 2 expected accelerometer/gyroscope skips — +1 test vs. the prior 3227 total),
+  including every existing `NetworkSessionTests.cpp` case unmodified.
+  Files: `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp`,
+  `tools/net/gamerservices_dispatcher_harness.cpp` (new),
+  `tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp` (new), `CMakeLists.txt`.
+
+- [ ] **Task 12.2** — Give `NetworkGamer` real per-instance `IsHost`/`Id` state instead of
+  hardcoded stub constants (`DEFERRED.md` item #20). Root cause, confirmed by direct inspection of
+  `src/Microsoft/Xna/Framework/Net/NetworkGamer.cpp`:
+  ```cpp
+  bool NetworkGamer::getIsHostProperty() const              { return true; }
+  SharpRuntime::bytecs NetworkGamer::getIdProperty() const  { return 0; }
+  ```
+  every gamer (host and every client) reports `IsHost == true` and `Id == 0`. Consequences:
+  `NetworkSession::getIsHostProperty()` (`NetworkSession.cpp:163-168`, "true if any local gamer's
+  `IsHost` is true") is therefore *also* always true on every machine; and
+  `NetworkSession::FindGamerById()` (`NetworkSession.cpp:293`) does a linear
+  `getIdProperty() == id` scan that always matches the *first* gamer in `AllGamers`, misrouting any
+  protocol that writes a gamer's `Id` into a packet and looks it back up on the receiving end
+  (exactly what ClientServerSample's/NetworkPrediction's/PeerToPeer's per-object state sync does) —
+  breaks as soon as more than one gamer is in a session.
+  Fix approach: add a real `bool isHost_` member to `NetworkGamer` (or derive it from whichever
+  session-level flag `NetworkSession`'s constructor already sets correctly at
+  `NetworkSession.cpp:104-111` — `host_ = localGamers_[0]` after `Create()`, vs. whatever
+  `Join()`/`JoinInvited()`/`ENetBackend`'s remote-gamer construction path should set for a
+  non-host), set once at construction for every `NetworkGamer`/`LocalNetworkGamer` (construction
+  sites: `NetworkSession.cpp:86,95,288` for locals, `ENetBackend.cpp:140,188,203` for remotes,
+  `LocalNetworkGamer::CreateInternal`/`NetworkGamer::CreateInternal`), and return it from
+  `getIsHostProperty()` instead of the hardcoded `true`. Add a real per-session-unique `bytecs id_`
+  assigned at the same construction sites (e.g. a `NetworkSession`-owned monotonic counter, or
+  index-in-`AllGamers`, whichever preserves stable identity across the session's lifetime — decide
+  and document the exact scheme, since packets on the wire will depend on it not changing gamer to
+  gamer), returned from `getIdProperty()` instead of the hardcoded `0`.
+  Add unit tests: multiple gamers in one session get distinct `Id`s; `FindGamerById` returns the
+  correct gamer for each; exactly one gamer (session host) reports `IsHost == true` on the host
+  machine and `IsHost == false` for every remote gamer as observed from a client machine.
+  File: `include/`+`src/Microsoft/Xna/Framework/Net/NetworkGamer.hpp`/`.cpp`,
+  `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp`,
+  `src/CNA/Internal/Net/ENetBackend.cpp`.
+
+- [ ] **Task 12.3** — Raise the initial `GamerJoined` event(s) synchronously during
+  `Create()`/`Join()` instead of queuing them for the next `Update()` (`DEFERRED.md` item #21).
+  Root cause, confirmed live: `NetworkSession`'s constructor
+  (`src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:113-119`) queues a `GamerJoin`
+  `NetworkEvent` per initial local gamer into `networkEvents_` instead of raising `GamerJoined`
+  directly:
+  ```cpp
+  for (NetworkGamer* gamer : allGamers_)
+  {
+      NetworkEvent evt;
+      evt.Type = NetworkEventType::GamerJoin;
+      evt.Gamer = gamer;
+      SendNetworkEvent(std::move(evt));
+  }
+  ```
+  that queue is only drained by `NetworkSession::Update()` (`NetworkSession.cpp:217-` onward,
+  dispatching `GamerJoined.Raise(...)` at line 252) — i.e. not until the *next* frame's
+  `networkSession.Update()` call, one full frame after `Create()`/`Join()` returns. Real XNA raises
+  `GamerJoined` synchronously as part of `Create()`/`Join()` itself, so code that expects a
+  `GamerJoined` handler's side effect (e.g. `e.Gamer.Tag = new Tank(...)`) to have already run by
+  the time `Create()` returns — matching every real sample's own structure — instead finds it
+  unset on the first frame; observed live as an uncaught `std::bad_any_cast` when reading an empty
+  `Tag`.
+  Fix approach: either (a) have the constructor call `GamerJoined.Raise(...)` directly for each
+  initial local gamer instead of only enqueuing a `NetworkEvent` (matches real XNA's synchronous
+  behavior most directly), or (b) have `Create()`/`Find()`+`Join()`/`JoinInvited()`'s synchronous
+  wrappers (the same ones touched in Task 12.1) drain `networkEvents_` once via a call to
+  `Update()` before returning the constructed session. Either removes the need for the
+  `networkSession_->Update();`-right-after-`HookSessionEvents()` workaround every calling sample
+  currently needs. Add a unit test asserting `GamerJoined` has already fired for every initial
+  local gamer by the time `Create()`/`Join()` returns (no `Update()` call needed first) — the
+  current suite's blind spot, since `NetworkSessionTest.GamerJoinedRaisedOnUpdateAfterConstruction`
+  (`tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp`) explicitly tests the *current*,
+  wrong, deferred-until-`Update()` behavior and will need updating to match the fix.
+  File: `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp`,
+  `tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp`.
+
+- [ ] **Task 12.4** — Once Tasks 12.1-12.3 land, remove the three sample-level workarounds in
+  `../cna-samples/samples/ClientServerSample/` (omitted `GamerServicesComponent`, local `isHost_`
+  tracking instead of `NetworkSession.IsHost`, extra `networkSession_->Update()` call after
+  `HookSessionEvents()`) and re-verify it still renders/functions correctly with the real fixes in
+  place instead of the workarounds — confirms the fixes are actually drop-in replacements for real
+  XNA semantics, not just theoretically correct. Then re-attempt porting NetworkPrediction (#100)
+  and PeerToPeer (#103) (both previously blocked by the same three gaps) without needing the same
+  workarounds. This task lives here (not solely in `cna-samples`) because it's the acceptance test
+  for Tasks 12.1-12.3. Coordinate with whichever session is driving `cna-samples` before editing
+  files there.
+
+---
+
 ## Dependency Graph
 
 ```
-Phase 0 (build)
-  └─> Phase 1 (sharp-runtime)
+Phase 0 (build — complete)
+  └─> Phase 1 (sharp-runtime — complete)
         └─> Phase 2 (GamerServices — complete)
-              └─> Phase 3 (Net enums + simple types)
-                    └─> Phase 4 (Net core classes)
-                          └─> Phase 5 (ENet backend)
-                                ├─> Phase 6 (platform)
-                                ├─> Phase 7 (integration tests)
-                                └─> Phase 9 (docs/audit)
+              └─> Phase 3 (Net enums + simple types — complete)
+                    └─> Phase 4 (Net core classes — complete)
+                          └─> Phase 5 (ENet backend — complete)
+                                ├─> Phase 6 (platform — complete)
+                                ├─> Phase 7 (integration tests — complete)
+                                ├─> Phase 9 (docs/audit — complete)
+                                └─> Phase 12 (cna-samples-driven networking fixes — not started)
               └─> Phase 8 (Avatar — complete)
-                    └─> Phase 9 (docs/audit)
+                    └─> Phase 9 (docs/audit — complete)
                           └─> Phase 10 (Avatar real-rendering engine — complete)
-                                └─> Phase 11 (procedural avatar asset generator — not started)
+                                └─> Phase 11 (procedural avatar asset generator — 11a/11b/11c/11e
+                                    complete; 11d optional, Task 11.25 speculative)
 ```
 
 ---
