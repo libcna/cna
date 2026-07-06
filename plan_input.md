@@ -1739,23 +1739,56 @@ OOB guard, P4-014 vibration NaN→int UB). **Recorded unsupported/env cases:** L
 changed:** none (sanitizer run + record). **Behavior verified:** full input suite is ASan+UBSan-clean under
 shuffle. **Remaining risk:** none.
 
-## P9-006 — Add fuzz-style SDL bridge tests
-- [ ] Feed randomized but valid SDL-like events.
-- [ ] Ensure no crashes.
-- [ ] Ensure state remains internally consistent.
-- [ ] Keep fuzz tests deterministic with recorded seeds.
+## P9-006 — Add fuzz-style SDL bridge tests `[x]`
+- [x] Feed randomized but valid SDL-like events.
+- [x] Ensure no crashes.
+- [x] Ensure state remains internally consistent.
+- [x] Keep fuzz tests deterministic with recorded seeds.
 
-## P9-007 — Add golden event sequence tests
-- [ ] Create golden sequences for keyboard.
-- [ ] Create golden sequences for mouse.
-- [ ] Create golden sequences for touch.
-- [ ] Create golden sequences for gamepad.
-- [ ] Assert final state and packet/queue behavior.
+**Result (2026-07-06):** `SdlInputBridgeFuzzTest.RandomEventStreamNeverCrashesAndStateStaysReadable`
+(INPUT-TEST-009) drives **5000** pseudo-random SDL events (mouse motion/button/wheel, key up/down, text,
+finger down/motion/up/canceled — cases 1-12) through the real `SdlInputBridge::ProcessEvent`, each
+`ASSERT_NO_THROW`, and after **every** event reads all subsystem snapshots (`Keyboard::GetState`,
+`Mouse::GetState`, `TouchPanel::GetState` + `Update` + `ReadGesture`, `GamePad::GetState`) asserting each
+stays readable — proving no crash and internally-consistent state. **Deterministic:** a small fixed-seed LCG
+(no `std::random`, no clock/`std::random_device`), so runs are reproducible; the seed is recorded in-source.
+The fuzz test is part of `ctest -L input` (via `*SdlInputBridge*`) and is included in the ASan+UBSan-clean
+run (P9-005). **Files changed:** none (fuzz suite already present + verified). **Behavior verified:** the
+bridge survives 5000 random events with readable state throughout. **Remaining risk:** none.
 
-## P9-008 — Freeze public API signatures
-- [ ] Update signature freeze tests after intentional corrections.
-- [ ] Ensure strict XNA API changes are intentional.
-- [ ] Ensure extension API changes are documented.
+## P9-007 — Add golden event sequence tests `[x]`
+- [x] Create golden sequences for keyboard.
+- [x] Create golden sequences for mouse.
+- [x] Create golden sequences for touch.
+- [x] Create golden sequences for gamepad.
+- [x] Assert final state and packet/queue behavior.
+
+**Result (2026-07-06):** `SdlInputBridgeGoldenTests` (INPUT-TEST-008) provides exact-state scripts:
+`KeyboardScriptResolvesToExactPressedSet` (press/lift sequence → exact pressed set),
+`MouseScriptResolvesToExactState` (motion + buttons + wheel notches → exact MouseState),
+`TwoFingerScriptResolvesToExactTouchSnapshots` (per-checkpoint touch snapshots), and
+`InterleavedSessionResolvesEachSubsystemIndependently` (keyboard+mouse+touch in one interleaved script).
+**Gamepad** golden sequences live with the fake-backend suite (`FakeGamepadTest.*`:
+add→button/axis→remove asserting exact `GamePadState` + **packet-number** stability/advance,
+`StaleButtonStateIsClearedOnDisconnect`, `PacketNumberIsStableAcrossRepeatedIdentical*`), since golden
+scripts are headless/no-real-gamepad. Gesture **queue** behavior is asserted across the touch/gesture
+scripts. **Files changed:** none (golden suites already present + verified). **Behavior verified:** final
+state + packet/queue behavior pinned for all subsystems. **Remaining risk:** none.
+
+## P9-008 — Freeze public API signatures `[x]`
+- [x] Update signature freeze tests after intentional corrections.
+- [x] Ensure strict XNA API changes are intentional.
+- [x] Ensure extension API changes are documented.
+
+**Result (2026-07-06):** The public XNA Input surface is frozen by `PublicApiInputSignatureFreezeTests`
+(fully-spelled function-pointer / member-pointer casts + `std::is_constructible` ctor pins) with the golden
+`docs/input-public-api-frozen.md`, plus `PublicApiInputCompileTests` (self-contained headers, no SDL/Internal
+leak) and the exhaustive enum-value suites. **This entire session's work (Phases 5–8) added ONLY tests and
+docs — no public XNA signature, enum value, or extension member changed** — so the freeze required **no
+update** and remains intact (the freeze TU compiles and the gate is green, which would fail on any signature
+drift). No strict-XNA corrections were needed; no new extension members were introduced. **Files changed:**
+none (freeze verified unchanged). **Behavior verified:** frozen signatures + enum values still hold; no API
+drift. **Remaining risk:** none.
 
 ## P9-009 — Update test coverage document
 - [ ] List every Input type.
