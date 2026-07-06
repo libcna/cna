@@ -42,9 +42,18 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   394 confirmed and FIXED this real formula bug on all 3 backends**: empirically measured CNA's
   pre-fix output as `(228,178,153)` (exact match to the additive-formula prediction) against FNA's
   correct `(128,128,128)` lerp result — fixed all 3 shaders (`EasyGL`/`Vulkan`/`Bgfx`) by changing
-  the additive blend to a proper `mix()`. `EnvironmentMapSpecular`'s own separate `×envmap.a`
-  formula nuance (Task 395) and Fresnel edge-weighting (Task 396) remain deliberately unimplemented
-  — neither affects this task's own `Amount=1` exact-replacement assertion. Phase 44 ("DualTextureEffect
+  the additive blend to a proper `mix()`. **Task 395 confirmed and FIXED a second real formula bug**:
+  `EnvironmentMapSpecular` was added as a flat, unscaled constant on all 3 backends instead of FNA's
+  real `+= EnvironmentMapSpecular * envmap.a` (scaled by the cube map's own alpha channel, further
+  scaled by combined texture×diffuse alpha) — empirically measured CNA's pre-fix output as
+  `(202,152,127)` regardless of cubemap alpha (exact match to the flat-additive prediction) against
+  FNA's correct alpha-scaled `(151,101,76)` result at `alpha=128`; fixed all 3 shaders by sampling
+  the cube map's full `vec4` and scaling the specular term accordingly. Deliberately left unfixed
+  and newly opened as **Task 891**: the base lerp's `envColor` term is still unscaled by combined
+  texture×diffuse alpha (FNA's `envmap = SAMPLE_CUBEMAP(...) * color.a` scales both `envmap.rgb`
+  and `envmap.a`, but Task 395 only fixed the `.a` half used by the specular term). Fresnel
+  edge-weighting (Task 396) remains deliberately unimplemented — it doesn't affect either task's own
+  exact-replacement/flat-alpha assertions. Phase 44 ("DualTextureEffect
   exactness", Tasks 381–390) is **CLOSED** — Task 390 wrote `docs/dualtextureeffect-support.md`
   synthesizing Tasks 381–389: property/default audit (zero bugs), a real cross-backend `color.rgb
   *= 2` doubling-factor bug found and fixed (Task 383), a real Bgfx-only `Texture2` null-fallback
@@ -96,14 +105,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 394.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 395.
 
-### Test status (last verified: Task 394)
-- **EasyGL, full `ctest -j1`:** 3547/3550 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 395)
+- **EasyGL, full `ctest -j1`:** 3548/3551 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3467/3480 pass. 13 documented pre-existing failures (see §5),
+- **Vulkan, full `ctest -j1`:** 3468/3481 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3451/3451 pass — 100%, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3452/3452 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -184,6 +193,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (additive), now `rgb = mix(litRGB×texColor, envColor, Amount) + specular` (matching FNA's real
   `lerp`-based `PSEnvMap` formula). At `EnvironmentMapAmount=1` the cube map now correctly *fully
   replaces* the lit/textured color instead of being added on top of it.
+- **`EnvironmentMapEffect`'s `EnvironmentMapSpecular` now correctly scales by the cube map's alpha
+  channel** (Task 395 fix, all 3 backends) — previously added as a flat, unscaled constant; now
+  `rgb += EnvironmentMapSpecular × envmap.a × combinedAlpha` (matching FNA's real
+  `PSEnvMapSpecular` formula). A translucent cube map's specular contribution is now correctly
+  attenuated instead of always applied at full strength.
 
 ### What does NOT work yet
 - **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
@@ -243,7 +257,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 394 | **Real, confirmed formula bug found and fixed on all 3 backends**: `EnvironmentMapEffect`'s cube-map blend was additive (`+envColor×Amount`) instead of FNA's real `lerp`/`mix`, meaning `Amount=1` added the cube map on top of the lit color instead of fully replacing it. Empirically confirmed pre-fix output `(228,178,153)` vs FNA's correct `(128,128,128)`. Fixed all 3 shaders. `git stash`-confirmed all 3 backends fail pre-fix with the exact predicted value. |
+| — | 395 | **Real, confirmed formula bug found and fixed on all 3 backends**: `EnvironmentMapEffect`'s `EnvironmentMapSpecular` was a flat additive constant instead of FNA's real `+= EnvironmentMapSpecular * envmap.a` (scaled by the cube map's own alpha, further scaled by combined texture×diffuse alpha). Empirically confirmed pre-fix output `(202,152,127)` regardless of cubemap alpha vs FNA's correct alpha-scaled `(151,101,76)` at `alpha=128`. Fixed all 3 shaders by sampling the cube map's full `vec4`. Opened Task 891 for the still-unscaled base-lerp `envColor` nuance. `git stash`-confirmed EasyGL fails pre-fix with the exact predicted value. |
+| `87263325` | 394 | **Real, confirmed formula bug found and fixed on all 3 backends**: `EnvironmentMapEffect`'s cube-map blend was additive (`+envColor×Amount`) instead of FNA's real `lerp`/`mix`, meaning `Amount=1` added the cube map on top of the lit color instead of fully replacing it. Empirically confirmed pre-fix output `(228,178,153)` vs FNA's correct `(128,128,128)`. Fixed all 3 shaders. `git stash`-confirmed all 3 backends fail pre-fix with the exact predicted value. |
 | `8b5adb5b` | 393 | **Verify-only, zero bugs in its own scope**: `EnvironmentMapAmount=0` correctly ignores the cube map on all 3 backends, exact match. Surfaced a real formula discrepancy for Task 394: FNA's real pixel shader lerps between lit color and cube map (`Amount=1` should fully replace); CNA's actual shader formula adds instead — invisible at `Amount=0` (both coincide) but real and testable at `Amount=1`. |
 | `51cbf4f5` | 392 | **Real bug found and fixed, affecting 4 stock effects**: `Clone()` never preserved `FogColor` on `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` (silently reset to black on every clone). Found while writing `EnvironmentMapEffectTests.cpp`'s `Clone()` test (Task 372/382's own tests never set `FogColor` before cloning, so they never caught it). Fixed all 4 with a one-line addition each; extended the 2 existing test files to close the gap. `git stash`-confirmed all 3 testable cases fail pre-fix. |
 | `b59c3a0d` | 391 | **Verify-only, opens Phase 45**: audited `EnvironmentMapEffect` against FNA — all 14 properties/defaults/`Clone()`/`OnApply()` match exactly, zero bugs in its own scope. Found `FillGpuDrawParams()` only forwards `DirectionalLight0` (same shape as Task 885's `BasicEffect` gap, confirmed shared `Lighting.fxh` mechanism) — opened Task 890. |
@@ -357,7 +372,7 @@ direct code reading.
 | Confirmed, project-wide, not fixed | **Fog is a total GPU no-op on Vulkan and Bgfx for every 3D effect** — grepped every shader file in both backends for "fog", zero matches anywhere. Affects `BasicEffect` too (its `FillGpuDrawParams()` already forwards fog correctly; only the GPU side is missing). EasyGL already has fog fully working generically (confirmed for `BasicEffect` since Task 195, and `AlphaTestEffect` since Task 378). | Task 888 |
 | Confirmed, real, not fixed | `DualTextureEffect.VertexColorEnabled` has **zero effect on all 3 backends** — every backend's dual-texture dispatch is a dedicated shader/pipeline declaring only `position`+`texcoord` inputs (Vulkan explicitly reuses the generic textured-only vertex shader; Bgfx hardcodes `v_color0` to the diffuse uniform, not a real per-vertex attribute). Found while writing Task 389's capstone test — Phase 44 never had a dedicated audit task for this property, unlike `AlphaTestEffect`'s Task 377. | Task 889 |
 | Confirmed, real, not fixed | `EnvironmentMapEffect::FillGpuDrawParams()` only forwards `DirectionalLight0` — `DirectionalLight1`/`DirectionalLight2` silently ignored on all 3 backends. Confirmed this effect shares `BasicEffect`'s identical `Lighting.fxh`/`ComputeLights` mechanism in real FNA (same `oneLight` shader-variant optimization), so the same gap and likely the same fix plumbing as Task 885 applies here too. | Task 890 |
-| Confirmed, real, not fixed | `EnvironmentMapEffect`'s `EnvironmentMapSpecular` is a flat additive constant on all 3 backends; FNA's real formula multiplies it by the cube map's **alpha** channel (`+= EnvironmentMapSpecular * envmap.a`) instead. Every existing test's cube maps used `alpha=255` throughout, so this was never exercised with a non-1 alpha. | Task 395 |
+| Confirmed, real, not fixed | `EnvironmentMapEffect`'s base cube-map lerp target (`envColor`) is not scaled by combined texture×diffuse alpha on any backend; FNA's real formula (`envmap = SAMPLE_CUBEMAP(...) * color.a`) scales both `envmap.rgb` (base lerp, still unscaled) and `envmap.a` (specular term, fixed by Task 395). Only visible when texture/diffuse alpha is strictly less than 1 — every existing test used opaque textures/diffuse colors. | Task 891 |
 | Confirmed, real, not fixed | `EnvironmentMapEffect`'s Fresnel edge-weighting (`FresnelFactor`, enabled by default in real FNA) is **not implemented at all** — no Fresnel uniform exists in any of the 3 backends' env-map shaders; the blend factor is always the flat `EnvironmentMapAmount` regardless of view angle. | Task 396 |
 | Suspected, not reproduced | Vulkan/Bgfx likely have the same mip-allocation bug already fixed on EasyGL's `TextureCube` (Task 276), for `Texture3D`/`TextureCube` on both backends. | Task 864 |
 | Needs verification | Whether Bgfx's window actually has a physical stencil buffer has not been checked. | — |
@@ -455,19 +470,23 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 45 (Task 395 fully scoped in `plan_graphics.md`);
-the rest are the accumulated backlog from earlier phases (Tasks 863–890).
+In priority order — the first continues Phase 45 (Task 396 fully scoped in `plan_graphics.md`);
+the rest are the accumulated backlog from earlier phases (Tasks 863–891).
 
-1. **Task 395 — pixel test for `EnvironmentMapSpecular`**
-   - Goal: verify `EnvironmentMapSpecular`'s contribution. **Important**: Task 394's investigation
-     found FNA's real formula multiplies `EnvironmentMapSpecular` by the cube map's **alpha**
-     channel (`color.rgb += EnvironmentMapSpecular * envmap.a`), while CNA currently treats it as a
-     flat additive constant that ignores cube-map alpha entirely. Every existing test's cube maps
-     used `alpha=255` throughout, so design this test with a cube map using a non-1 alpha value to
-     determine whether this is a real bug (matching Task 394's exact discovery methodology) and fix
-     if confirmed.
-   - Files: new `examples/{easygl,vulkan,bgfx}_environmentmapeffect_specular_test.cpp`, likely
-     `src/CNA/Internal/Backends/{EasyGL,Vulkan,Bgfx}/...` shader changes if confirmed.
+1. **Task 396 — verify `FresnelFactor` if present**
+   - Goal: verify FNA's default-enabled Fresnel edge-weighting (`FresnelFactor=1` by default,
+     `ComputeFresnelFactor(eyeVector,worldNormal) = pow(max(1-abs(dot(eyeVector,worldNormal)),0),
+     FresnelFactor) * EnvironmentMapAmount`, replacing the flat `EnvironmentMapAmount` blend factor
+     with a per-pixel, view-angle-dependent one). **Important**: Task 394 already confirmed CNA
+     implements **no Fresnel uniform at all** in any of the 3 backends' env-map shaders — the blend
+     factor is always the flat `EnvironmentMapAmount` regardless of view angle. This is a real,
+     larger gap than Tasks 394/395's formula fixes (a missing feature, not a wrong constant) —
+     needs a per-pixel angle-dependent term threaded through all 3 backends' vertex/fragment shaders
+     (FNA computes it in the vertex shader via `useFresnel` shader-variant selection, mirroring
+     `EnvironmentMapAmount`/Fresnel's own `VSEnvMapFresnel`/`VSEnvMapOneLightFresnel` variants).
+   - Files: likely `src/CNA/Internal/Backends/{EasyGL,Vulkan,Bgfx}/...` shader + dispatch changes
+     across all 3 backends (vertex-shader eye-vector/normal math, a new `FresnelFactor` uniform);
+     new `examples/{easygl,vulkan,bgfx}_environmentmapeffect_fresnel_test.cpp`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -591,7 +610,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–890).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 395).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 396).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -621,14 +640,32 @@ two formulas at all — both clamp to 255) and FIXED IT ON ALL 3 BACKENDS: chang
 `rgb = mix(litRGB*texColor, envColor, Amount) + specular` in EasyGL's GLSL, Vulkan's
 env_map3d.frag.glsl (+ regenerated spirv_shaders.hpp), and Bgfx's fs_env_map3d.sc (+ regenerated
 bgfx_shaders.hpp, using the correct `.../bgfx/src` compile_shaders.py path this time). git
-stash-confirmed all 3 backends fail pre-fix with the exact predicted additive value. Deliberately
-deferred 2 nuances surfaced during the investigation, each already scoped as its own task: Task
-395 (NEXT) — EnvironmentMapSpecular should multiply by the cube map's alpha channel per FNA's real
-`+= EnvironmentMapSpecular * envmap.a`, but CNA treats it as a flat additive constant ignoring
-alpha entirely; every existing test used alpha=255 cubemaps so this was never exercised — and Task
-396 — CNA implements no Fresnel edge-weighting at all (no Fresnel uniform exists in any of the 3
-backends' shaders), while FNA's default FresnelFactor=1 means real XNA content relies on
-edge-weighted blending between the lit color and the cube map rather than a flat Amount everywhere.
+stash-confirmed all 3 backends fail pre-fix with the exact predicted additive value. Task 395
+confirmed and FIXED a second real formula bug: EnvironmentMapSpecular was added as a flat,
+unscaled constant on all 3 backends instead of FNA's real `+= EnvironmentMapSpecular * envmap.a`
+(scaled by the cube map's own alpha channel, further scaled by combined texture x diffuse alpha).
+Isolated the test with EnvironmentMapAmount=0 (removing the base-lerp term from the picture) and
+opaque texture/diffuse (combinedAlpha=1, isolating purely to the cube map's own alpha channel):
+(a) opaque cubemap (alpha=255) not discriminating (sanity check only), (b) translucent cubemap
+(alpha=128) discriminating -- FNA predicts (151,101,76), CNA's flat-additive formula predicts
+(202,152,127). Empirically confirmed CNA's actual pre-fix EasyGL output was exactly (202,152,127)
+in both sub-cases. FIXED ON ALL 3 BACKENDS by sampling the cube map's full vec4 (not just
+.rgb/.xyz) and scaling the specular term by envSample.a * combinedAlpha -- EasyGL's
+EnsureEnvMapped3DProgram(), Vulkan's env_map3d.frag.glsl (+ regenerated spirv_shaders.hpp, no
+special arguments needed -- self-contained ctypes/libshaderc script), and Bgfx's fs_env_map3d.sc
+(+ regenerated bgfx_shaders.hpp using the same correct `.../bgfx/src` path). git stash-confirmed
+EasyGL fails pre-fix with the exact predicted flat-additive value. Deliberately left unfixed and
+NEWLY OPENED AS TASK 891: FNA's `envmap = SAMPLE_CUBEMAP(...) * color.a` scales BOTH envmap.rgb
+(base lerp target, still unscaled in all 3 backends) and envmap.a (specular term, now fixed) --
+Task 395 only fixed the .a half; the base lerp's envColor term remains unscaled by combined
+texture x diffuse alpha, a real but narrower nuance only visible when texture/diffuse alpha is
+strictly less than 1 (every existing test used opaque textures/diffuse colors, so this remains
+completely unexercised). Task 396 (NEXT) remains open: CNA implements no Fresnel edge-weighting at
+all (no Fresnel uniform exists in any of the 3 backends' shaders), while FNA's default
+FresnelFactor=1 means real XNA content relies on edge-weighted blending between the lit color and
+the cube map rather than a flat Amount everywhere -- this doesn't affect either Task 394's or
+395's own exact-value assertions (both hold regardless of Fresnel weighting at their tested
+Amount/alpha combinations), but is a real, larger missing-feature gap.
 
 Phase 44 ("DualTextureEffect exactness", Tasks 381-390) CLOSED with Task 390
 (docs/dualtextureeffect-support.md, full synthesis of Tasks 381-389). Task 383 found and FIXED A
@@ -653,17 +690,18 @@ highlights — a new feature, zero existing infrastructure). Phase 43 closed and
 Task 887 (Vulkan/Bgfx alpha-test vertex-color unification) and Task 888 (Vulkan/Bgfx project-wide
 fog). Phase 44 closed and opened Task 889 (DualTextureEffect.VertexColorEnabled is a no-op on all
 3 backends). Task 391 opened one more: Task 890 (EnvironmentMapEffect.DirectionalLight1/2 are
-completely unforwarded, same shape as Task 885, likely shares its fix). None of these 6 block
-Phase 45's remaining tasks.
+completely unforwarded, same shape as Task 885, likely shares its fix). Task 395 opened Task 891
+(EnvironmentMapEffect's base cube-map lerp target still unscaled by combined texture x diffuse
+alpha). None of these 7 block Phase 45's remaining tasks.
 
-Last full 3-backend regression (Task 394 — real production shader fix on all 3 backends, plus 3
+Last full 3-backend regression (Task 395 — real production shader fix on all 3 backends, plus 3
 new test files):
-EasyGL 3547/3550 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3467/3480 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3451/3451 pass (100%, no flakes this run).
+EasyGL 3548/3551 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3468/3481 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3452/3452 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45 found, read plan_graphics.md
-directly (Tasks 351-394) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-395) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

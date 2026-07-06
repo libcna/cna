@@ -23,10 +23,11 @@ void main() {
     vec3 E      = normalize(vEyeDir);
     float NdotL = max(dot(N, -ep.light0Dir_pad.xyz), 0.0);
     vec3 litRGB = (ep.emissive_em.xyz + ep.light0Diff_pad.xyz * NdotL) * ep.diffuseColor.rgb;
-    vec4 texColor = texture(uTexture,  vUV);
-    vec3 reflDir  = reflect(-E, N);
-    vec3 envColor = texture(uEnvMap, reflDir).rgb;
+    vec4 texColor  = texture(uTexture,  vUV);
+    vec3 reflDir   = reflect(-E, N);
+    vec4 envSample = texture(uEnvMap, reflDir);
     vec3 baseColor = litRGB * texColor.rgb;
-    vec3 rgb = mix(baseColor, envColor, ep.emissive_em.w) + ep.envMapSpec_pad.xyz;
-    outColor = vec4(rgb, ep.diffuseColor.a * texColor.a);
+    float combinedAlpha = ep.diffuseColor.a * texColor.a;
+    vec3 rgb = mix(baseColor, envSample.rgb, ep.emissive_em.w) + ep.envMapSpec_pad.xyz * envSample.a * combinedAlpha;
+    outColor = vec4(rgb, combinedAlpha);
 }

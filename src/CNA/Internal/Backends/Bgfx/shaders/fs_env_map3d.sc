@@ -18,10 +18,11 @@ void main()
     vec3 E        = normalize(v_eyeDir);
     float NdotL   = max(dot(N, -normalize(u_light0Dir.xyz)), 0.0);
     vec3 litRGB   = (u_emissiveColor.xyz + u_light0Diffuse.xyz * NdotL) * u_diffuseColor.xyz;
-    vec4 texColor = texture2D(s_texColor, v_texcoord0);
-    vec3 reflDir  = reflect(-E, N);
-    vec3 envColor  = textureCube(s_envMap, reflDir).xyz;
+    vec4 texColor  = texture2D(s_texColor, v_texcoord0);
+    vec3 reflDir   = reflect(-E, N);
+    vec4 envSample = textureCube(s_envMap, reflDir);
     vec3 baseColor = litRGB * texColor.xyz;
-    vec3 rgb       = mix(baseColor, envColor, u_envMapAmount.x) + u_envMapSpecular.xyz;
-    gl_FragColor  = vec4(rgb, u_diffuseColor.w * texColor.w);
+    float combinedAlpha = u_diffuseColor.w * texColor.w;
+    vec3 rgb = mix(baseColor, envSample.xyz, u_envMapAmount.x) + u_envMapSpecular.xyz * envSample.w * combinedAlpha;
+    gl_FragColor  = vec4(rgb, combinedAlpha);
 }
