@@ -156,7 +156,7 @@ namespace Microsoft::Xna::Framework::Net
         {
             for (NetworkGamer* gamer : allGamers_)
             {
-                handler(nullptr, GamerJoinedEventArgs(gamer));
+                handler(this, GamerJoinedEventArgs(gamer));
             }
         });
 
@@ -243,6 +243,12 @@ namespace Microsoft::Xna::Framework::Net
         isDisposed_ = true;
     }
 
+    const std::string& NetworkSession::GetTypeName() const
+    {
+        static const std::string typeName = "Microsoft.Xna.Framework.Net.NetworkSession";
+        return typeName;
+    }
+
     void NetworkSession::Update()
     {
         if (isDisposed_)
@@ -291,30 +297,30 @@ namespace Microsoft::Xna::Framework::Net
             }
             else if (evt.Type == NetworkEventType::GamerJoin)
             {
-                GamerJoined.Raise(nullptr, GamerJoinedEventArgs(evt.Gamer));
+                GamerJoined.Raise(this, GamerJoinedEventArgs(evt.Gamer));
             }
             else if (evt.Type == NetworkEventType::GamerLeave)
             {
-                GamerLeft.Raise(nullptr, GamerLeftEventArgs(evt.Gamer));
+                GamerLeft.Raise(this, GamerLeftEventArgs(evt.Gamer));
             }
             else if (evt.Type == NetworkEventType::HostChange)
             {
-                HostChanged.Raise(nullptr, HostChangedEventArgs(host_, evt.Gamer));
+                HostChanged.Raise(this, HostChangedEventArgs(host_, evt.Gamer));
                 host_ = evt.Gamer;
             }
             else // NetworkEventType::StateChange
             {
                 if (evt.State == NetworkSessionState::Playing)
                 {
-                    GameStarted.Raise(nullptr, GameStartedEventArgs());
+                    GameStarted.Raise(this, GameStartedEventArgs());
                 }
                 else if (evt.State == NetworkSessionState::Lobby)
                 {
-                    GameEnded.Raise(nullptr, GameEndedEventArgs());
+                    GameEnded.Raise(this, GameEndedEventArgs());
                 }
                 else
                 {
-                    SessionEnded.Raise(nullptr, NetworkSessionEndedEventArgs(evt.Reason));
+                    SessionEnded.Raise(this, NetworkSessionEndedEventArgs(evt.Reason));
                 }
                 sessionState_ = evt.State;
             }

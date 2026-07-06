@@ -284,8 +284,16 @@ TEST(NetworkSessionTest, GamerJoinedReplaysImmediatelyOnSubscriptionForConstruct
     );
 
     int joinCount = 0;
-    session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
+    // Task 2.1: sender must be the raising NetworkSession itself (real XNA passes the raising
+    // instance for every event; NetworkSession used to hardcode nullptr since it didn't inherit
+    // System::Object at all, leaving no `this`-as-Object* to pass).
+    System::Object* observedSender = nullptr;
+    session->GamerJoined += [&joinCount, &observedSender](System::Object* sender, const GamerJoinedEventArgs&) {
+        ++joinCount;
+        observedSender = sender;
+    };
     EXPECT_EQ(joinCount, 1); // fired synchronously by the += itself, before any Update() call
+    EXPECT_EQ(observedSender, session);
 
     session->Update();
     EXPECT_EQ(joinCount, 1); // nothing left queued for Update() to drain
@@ -690,7 +698,12 @@ TEST(NetworkSessionTest, RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPre
     session->Update();
 
     int leftCount = 0;
-    session->GamerLeft += [&leftCount](System::Object*, const GamerLeftEventArgs&) { ++leftCount; };
+    // Task 2.1: sender must be the raising NetworkSession itself, not nullptr.
+    System::Object* observedSender = nullptr;
+    session->GamerLeft += [&leftCount, &observedSender](System::Object* sender, const GamerLeftEventArgs&) {
+        ++leftCount;
+        observedSender = sender;
+    };
 
     session->RemoveGamer(&remote, NetworkSessionEndReason::Disconnected);
     EXPECT_TRUE(remote.getHasLeftSessionProperty());
@@ -701,6 +714,7 @@ TEST(NetworkSessionTest, RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPre
 
     session->Update();
     EXPECT_EQ(leftCount, 1);
+    EXPECT_EQ(observedSender, session);
 
     session->Dispose();
 }

@@ -200,18 +200,29 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
 
 ## Phase 2 — Net: Correctness Bugs
 
-- [ ] **Task 2.1** — Fix `NetworkSession`'s event dispatch always passing `nullptr` as `sender`
+- [x] **Task 2.1** — Fix `NetworkSession`'s event dispatch always passing `nullptr` as `sender`
   instead of the session itself. Confirmed: `GamerJoined.Raise(nullptr,...)` /
   `GamerLeft.Raise(nullptr,...)` / `HostChanged.Raise(nullptr,...)` / `GameStarted.Raise(nullptr,...)` /
   `GameEnded.Raise(nullptr,...)` / `SessionEnded.Raise(nullptr,...)` (`NetworkSession.cpp`, ~lines
-  294-317), and the `GamerJoined.SetReplayHook` closure also invokes `handler(nullptr, ...)`. Root
-  cause: `NetworkSession` doesn't inherit `System::Object`, so there's no `this`-as-`Object*` to
-  pass. Any game code reading the `sender` parameter of a `NetworkSession` event handler gets
-  `nullptr` always, unlike real XNA where `sender` is the raising `NetworkSession` instance. Fix:
-  make `NetworkSession` inherit `System::Object` (with a `NOXNA GetTypeName()` override per
-  `CHECKLIST.md`'s convention for `System::Object`-derived concrete classes) and pass `this`
-  everywhere events are raised. Add tests asserting `sender` is the actual session instance for at
-  least `GamerJoined` and one other event.
+  294-317), and the `GamerJoined.SetReplayHook` closure also invoked `handler(nullptr, ...)`. Root
+  cause: `NetworkSession` didn't inherit `System::Object`, so there was no `this`-as-`Object*` to
+  pass. Any game code reading the `sender` parameter of a `NetworkSession` event handler got
+  `nullptr` always, unlike real XNA where `sender` is the raising `NetworkSession` instance.
+  **Fixed:** `NetworkSession` now inherits `System::Object` (alongside its existing
+  `System::IDisposable`), with a `NOXNA GetTypeName()` override returning
+  `"Microsoft.Xna.Framework.Net.NetworkSession"` per `CHECKLIST.md`'s convention; every `Raise(nullptr, ...)`
+  call site and the `GamerJoined.SetReplayHook` closure's `handler(nullptr, ...)` now pass `this`.
+  **Extended two existing tests** with a captured `sender` and an assertion it equals the session:
+  `GamerJoinedReplaysImmediatelyOnSubscriptionForConstructionTimeGamers` (`GamerJoined`) and
+  `RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPrevious` (`GamerLeft`).
+  **Verified the bug is real, not theoretical** — and more strongly than the usual runtime
+  revert-check: reverting just the `NetworkSession.hpp`/`.cpp` fix (keeping the updated tests) makes
+  the test file **fail to compile**, not just fail at runtime — `error: comparison between distinct
+  pointer types 'System::Object*' and 'Microsoft::Xna::Framework::Net::NetworkSession*' lacks a
+  cast` on the `EXPECT_EQ(observedSender, session)` line, since old `NetworkSession` had no
+  relationship to `System::Object` at all for the compiler to even attempt the comparison. Restored
+  the fix — compiles and passes again. Full suite: **3240/3242 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.2** — Fix `NetworkSession::RemoveGamer` never removing a departing gamer from
   `localGamers_`. Confirmed (`NetworkSession.cpp`, ~lines 407-446): `isLocal` is computed by

@@ -22,6 +22,7 @@
 #include "System/EventHandler.hpp"
 #include "System/IAsyncResult.hpp"
 #include "System/IDisposable.hpp"
+#include "System/Object.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include "System/TimeSpan.hpp"
 #include <any>
@@ -42,7 +43,7 @@ namespace Microsoft::Xna::Framework::Net
     /**
      * @brief Manages the properties and gamers of a network gaming session.
      */
-    class NetworkSession final : public System::IDisposable
+    class NetworkSession final : public System::Object, public System::IDisposable
     {
     public:
         /** @brief The maximum number of gamers supported by any session. */
@@ -316,6 +317,12 @@ namespace Microsoft::Xna::Framework::Net
          * @brief Disposes the session, flushing queued packets on all local gamers.
          */
         void Dispose() override;
+
+        /**
+         * @brief Returns the fully-qualified .NET type name of this class.
+         * @return A const reference to the type name string.
+         */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Processes queued network events, raising the corresponding public events.
