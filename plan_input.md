@@ -905,11 +905,21 @@ transitioned) and that a fresh Pressed carries no previous location. **Files cha
 `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp` (test hardened). **Tests:** pass. **Behavior verified:**
 repeated down = replace, single Pressed touch, last position wins. **Remaining risk:** none.
 
-## P5-010 — Verify touch cancel behavior
-- [ ] Test SDL canceled finger event.
-- [ ] Ensure it becomes Released or documented cancellation behavior.
-- [ ] Ensure cleanup happens exactly once.
-- [ ] Add tests.
+## P5-010 — Verify touch cancel behavior `[x]`
+- [x] Test SDL canceled finger event.
+- [x] Ensure it becomes Released or documented cancellation behavior.
+- [x] Ensure cleanup happens exactly once.
+- [x] Add tests.
+
+**Result (2026-07-06):** Verified against FNA `SDL3_FNAPlatform.cs` (`FINGER_UP || FINGER_CANCELED` →
+Released) and `SdlInputBridge.cpp:1465-1490` (both events share the Released branch + finger-id release).
+Fully covered by existing tests: `FingerCanceledReleasesTouchLikeFingerUp` (a canceled finger reports
+Released **exactly once**, not stuck Pressed/Moved, then disappears — cleanup happens once);
+`FingerIdReusableAfterCancel` (the internal finger→touch mapping is freed, so the same SDL id pressed again
+is a fresh Pressed, proving cleanup completed); and `FingerCanceledMidDragRecoversAndAllowsAFreshTap` +
+`GestureDetectorTests`'s mid-drag-cancel case (the gesture state machine is not wedged — a cancel is a
+Release at the detector). **Files changed:** none (coverage confirmed). **Behavior verified:** cancel ==
+release, one-shot cleanup, id + gesture recovery. **Remaining risk:** none.
 
 ## P5-011 — Verify max touch count
 - [ ] Test more touches than maximum supported by current storage.
