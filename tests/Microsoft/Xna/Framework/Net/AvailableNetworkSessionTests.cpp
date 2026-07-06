@@ -117,6 +117,32 @@ TEST(AvailableNetworkSessionCollectionTest, Dispose) {
     EXPECT_TRUE(col.getIsDisposedProperty());
 }
 
+// Task 5.7: the test above disposes an *empty* collection, so it can never actually distinguish
+// "Dispose() cleared the contents" from "Dispose() left them alone" (0 either way) - missing the
+// entire point of this class's own documented FNA deviation (FNA's Dispose() clears the
+// underlying shared List<T>; this port's ReadOnlyCollection<T> copies into private storage with no
+// mutator exposed, so Dispose() here only flips IsDisposed and the contents remain readable
+// afterward). A genuinely non-empty collection is required to prove that.
+TEST(AvailableNetworkSessionCollectionTest, DisposeDoesNotClearContentsUnlikeFNA) {
+    std::vector<AvailableNetworkSession> sessions;
+    sessions.push_back(MakeSession(1, "hostA"));
+    sessions.push_back(MakeSession(2, "hostB"));
+    auto col = AvailableNetworkSessionCollection::CreateInternal(sessions);
+    ASSERT_EQ(2, col.getCountProperty());
+
+    col.Dispose();
+
+    // operator[] on a non-const ReadOnlyCollection<T> resolves to the non-const overload, which
+    // always throws NotSupportedException ("Collection is read-only.") - matching real .NET's
+    // explicit IList<T>.this[int] setter. A const reference is needed to reach the real getter,
+    // same as IndexingAndCount's own `const auto col` above.
+    const AvailableNetworkSessionCollection& constCol = col;
+    EXPECT_TRUE(col.getIsDisposedProperty());
+    EXPECT_EQ(2, constCol.getCountProperty());
+    EXPECT_EQ("hostA", constCol[0].getHostGamertagProperty());
+    EXPECT_EQ("hostB", constCol[1].getHostGamertagProperty());
+}
+
 TEST(AvailableNetworkSessionCollectionTest, RangeFor) {
     std::vector<AvailableNetworkSession> sessions;
     sessions.push_back(MakeSession(1, "hostA"));

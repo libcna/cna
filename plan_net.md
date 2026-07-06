@@ -877,11 +877,23 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   correct constructor and reran — passes. Full suite: **3267/3269 passing** (2 expected
   accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 5.7** — Add a test proving `AvailableNetworkSessionCollection::Dispose()`'s actual,
+- [x] **Task 5.7** — Add a test proving `AvailableNetworkSessionCollection::Dispose()`'s actual,
   documented deviation from FNA (FNA clears its collection on `Dispose()`; this port intentionally
-  doesn't). Confirmed the existing test (`AvailableNetworkSessionTests.cpp`, ~lines 96-102) only
-  checks `IsDisposed` becomes `true`, never that `Count`/contents are unchanged afterward — the
-  actual documented behavior has zero regression coverage.
+  doesn't). Confirmed the existing `Dispose` test only checked `IsDisposed` becomes `true` on an
+  *empty* collection — 0 items either way regardless of whether `Dispose()` actually clears
+  anything, so the documented behavior had zero real regression coverage.
+  **Added `AvailableNetworkSessionCollectionTest.DisposeDoesNotClearContentsUnlikeFNA`**: a
+  genuinely non-empty (2-entry) collection, disposed, then asserting `Count` and both entries'
+  contents are unchanged. **Incidental finding while writing this test** (not a bug — confirms
+  correct, faithful behavior): a *non-const* `AvailableNetworkSessionCollection`'s `operator[]`
+  resolves to `ReadOnlyCollection<T>`'s non-const overload, which unconditionally throws
+  `System::NotSupportedException("Collection is read-only.")`, matching real .NET's explicit
+  `IList<T>.this[int]` setter — only a `const` reference reaches the real getter (same reason the
+  pre-existing `IndexingAndCount` test above already used `const auto col`). Adjusted the new test
+  to read through a `const&` after disposing via the non-const one. Full suite:
+  **3268/3270 passing** (2 expected accelerometer/gyroscope skips), no regressions. Pure
+  test-coverage addition (`Dispose()` itself is unchanged and already correct), no revert-verify
+  applies.
 
 - [ ] **Task 5.8** — Add a test exercising `AvailableNetworkSession::operator==` through
   `AvailableNetworkSessionCollection`'s `IndexOf`/`Contains` (the entire reason the operator was
