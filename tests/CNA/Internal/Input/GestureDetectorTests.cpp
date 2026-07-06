@@ -488,6 +488,14 @@ TEST_F(GestureDetectorTest, PinchAndPinchCompleteFireForTwoFingerGesture)
     EXPECT_EQ(pinchComplete.getGestureTypeProperty(), GestureType::PinchComplete);
     EXPECT_EQ(pinchComplete.getFingerIdEXTProperty(), 20);
     EXPECT_EQ(pinchComplete.getFingerId2EXTProperty(), 21);
+    // P6-013(b): PinchComplete carries no position or delta — all four vectors are zeroed (it is a
+    // terminal marker, like DragComplete).
+    EXPECT_FLOAT_EQ(pinchComplete.getPositionProperty().X, 0.0f);
+    EXPECT_FLOAT_EQ(pinchComplete.getPositionProperty().Y, 0.0f);
+    EXPECT_FLOAT_EQ(pinchComplete.getPosition2Property().X, 0.0f);
+    EXPECT_FLOAT_EQ(pinchComplete.getPosition2Property().Y, 0.0f);
+    EXPECT_FLOAT_EQ(pinchComplete.getDeltaProperty().X, 0.0f);
+    EXPECT_FLOAT_EQ(pinchComplete.getDelta2Property().X, 0.0f);
     EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 
     Release(21, 0.6f, 0.5f);

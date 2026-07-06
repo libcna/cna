@@ -1237,11 +1237,21 @@ FingerIds 20/21), complete (reads PinchComplete after `Release(20)`), and **one 
 NotDragComplete` exercises the pinch-from-drag path. **Files changed:** none (coverage confirmed).
 **Behavior verified:** two-finger pinch start/delta/complete/single-release. **Remaining risk:** none.
 
-## P6-013 — Verify pinch-complete gesture
-- [ ] Test pinch-complete queue entry.
-- [ ] Verify position and delta fields.
-- [ ] Verify ordering relative to final pinch event.
-- [ ] Add tests.
+## P6-013 — Verify pinch-complete gesture `[x]`
+- [x] Test pinch-complete queue entry.
+- [x] Verify position and delta fields.
+- [x] Verify ordering relative to final pinch event.
+- [x] Add tests.
+
+**Result (2026-07-06):** Queue entry + ordering already covered by
+`PinchAndPinchCompleteFireForTwoFingerGesture` (the `Pinch` from the Move is read first, queue empties, then
+`Release(20)` produces the `PinchComplete` — proving Pinch precedes PinchComplete). **Closed the fields gap:**
+strengthened that test to assert PinchComplete carries **no position or delta** — all four vectors
+(Position, Position2, Delta, Delta2) are zeroed, matching the detector's `OnReleased_Pinch` (it is a terminal
+marker like DragComplete). The finger ids (20/21) were already asserted. **Files changed:**
+`tests/CNA/Internal/Input/GestureDetectorTests.cpp` (test strengthened). **Tests:** pass. **Behavior
+verified:** PinchComplete is a zeroed terminal marker carrying only the two finger ids, ordered after the
+last Pinch. **Remaining risk:** none.
 
 ## P6-014 — Verify multi-touch interactions
 - [ ] Test tap while second finger appears.
