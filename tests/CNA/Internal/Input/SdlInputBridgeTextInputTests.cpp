@@ -191,6 +191,19 @@ TEST_F(SdlInputBridgeTextInputTest, ControlKeysSynthesizeTextInputCharacters)
     }
 }
 
+// P7-006(b): a repeated (non-control) TEXT_INPUT stream is delivered per event — text input is decoded
+// independently per SDL event and is NOT de-duplicated, so two identical events yield two code units.
+TEST_F(SdlInputBridgeTextInputTest, RepeatedTextInputEventsAreEachDelivered)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("a"));
+    SdlInputBridge::ProcessEvent(textInputEvent("a"));
+
+    EXPECT_EQ(captured, u"aa");
+}
+
 TEST_F(SdlInputBridgeTextInputTest, KeyRepeatReemitsControlCharacter)
 {
     std::u16string captured;

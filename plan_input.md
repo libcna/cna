@@ -1395,10 +1395,19 @@ the source (`handle_text_input_key_up`) and `docs/input-fna-fidelity.md`. **File
 confirmed). **Behavior verified:** paste char emitted once, literal echo suppressed, suppression self-clears.
 **Remaining risk:** none.
 
-## P7-006 — Verify key repeat and text repeat
-- [ ] Ensure repeated keydown does not corrupt keyboard state.
-- [ ] Ensure repeated text input is delivered where intended.
-- [ ] Add tests.
+## P7-006 — Verify key repeat and text repeat `[x]`
+- [x] Ensure repeated keydown does not corrupt keyboard state.
+- [x] Ensure repeated text input is delivered where intended.
+- [x] Add tests.
+
+**Result (2026-07-06):** Repeated-keydown-no-corruption already covered by
+`SdlInputBridgeKeyboardTest.KeyRepeatKeepsKeyDownWithoutSpuriousTransitions` (P2-007 — 5 repeat KEY_DOWNs
+keep the pressed set exactly {A}; DEC-19 skip-on-repeat). Repeated **control-char** text is covered by
+`KeyRepeatReemitsControlCharacter` (FNA re-emits on `key.repeat`). **Added**
+`RepeatedTextInputEventsAreEachDelivered` (two identical `TEXT_INPUT("a")` events → `u"aa"`, since text input
+is decoded per-event and never de-duplicated). **Files changed:**
+`tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp` (+1 test). **Tests:** pass. **Behavior
+verified:** repeat neither corrupts keyboard state nor drops text input. **Remaining risk:** none.
 
 ## P7-007 — Verify text editing / IME composition
 - [ ] Test text editing callback.
