@@ -961,29 +961,44 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
   new "Non-US keyboard layouts" section of `docs/platform-input-notes.md`. `ctest -L input` 100% green.
 
 #### INPUT-KBD-015 — IME-related keys (ImeConvert/NoConvert/Kana/Kanji/ProcessKey)
-- **Priority:** P3 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Keyboard
 - **Files:** `Keys.hpp`, `SdlInputBridge.cpp`
 - **Work:** Confirm these values exist and are intentionally unmapped from SDL (documented like FNA).
 - **Acceptance:** Presence + intentional-omission documented.
 - **Tests:** value test only.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `Kana` (21), `Kanji` (25), `ImeConvert` (28), `ImeNoConvert` (29), `ProcessKey`
+  (229) are present in `Keys.hpp` (exhaustively value-pinned by INPUT-KBD-001) and are **intentionally
+  unmapped** from SDL — they are Windows IME virtual keys with no SDL keycode/scancode, exactly as FNA (the
+  FNA-identical keyMap/scanMap of INPUT-KBD-009/010 omits them). IME text reaches games via `TextInputEXT`.
+  Pinned by `ImeAndChatPadKeysExistAndAreConsoleOrImeOnly`; documented in `docs/input-fna-fidelity.md`.
 #### INPUT-KBD-016 — Browser/media/system keys mapping
-- **Priority:** P3 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Keyboard
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify media/browser keycodes map where FNA maps them; document the ones FNA intentionally omits.
 - **Acceptance:** Mapping table matches FNA.
 - **Tests:** extend keyboard bridge tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Verified against FNA (the keyMap is byte-identical, INPUT-KBD-009): the **only**
+  media/browser keys CNA maps from SDL are `VolumeUp`/`VolumeDown`. All other media/browser keys SDL delivers
+  (`SDLK_MEDIA_NEXT_TRACK`/`PREVIOUS_TRACK`/`PLAY_PAUSE`, `SDLK_AC_HOME`/`SEARCH`, …) have no keyMap entry and
+  are dropped, even though XNA defines `Keys::MediaNextTrack`/`BrowserHome`/etc. — those Keys have no desktop
+  SDL source, matching FNA's intentional omission. Tested (`SdlMediaBrowserKeysAreUnmappedExceptVolumeMatchingFna`);
+  documented in `docs/input-fna-fidelity.md`.
 #### INPUT-KBD-017 — ChatPad keys (ChatPadGreen/Orange) policy
-- **Priority:** P3 · **Status:** TODO · **Area:** Keyboard
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Keyboard
 - **Files:** `Keys.hpp`
 - **Work:** Confirm values present; document that they are XNA-only console keys with no desktop SDL source.
 - **Acceptance:** Documented.
 - **Tests:** value test.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `ChatPadGreen` (202) and `ChatPadOrange` (203) are present in `Keys.hpp`
+  (value-pinned by INPUT-KBD-001) and are XNA-only Xbox 360 ChatPad console keys with no desktop hardware or
+  SDL source — never produced on desktop, matching FNA. Pinned by `ImeAndChatPadKeysExistAndAreConsoleOrImeOnly`;
+  documented in `docs/input-fna-fidelity.md`.
 #### INPUT-KBD-018 — Android back key mapping (`SDLK_AC_BACK→Escape`)
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-17) · **Area:** Keyboard/Platform
 - **Files:** `SdlInputBridge.cpp`, `docs/platform-input-notes.md`

@@ -54,6 +54,20 @@ not exactly identical.
   `repeat` flag — **the same gate FNA uses** (`else if (evt.key.repeat)`, `SDL3_FNAPlatform.cs:923`), so
   this is not a deviation. Tested (`KeyRepeatReemitsControlCharacter`).
 
+**XNA `Keys` with no desktop SDL source (INPUT-KBD-015 / -016 / -017 — matches FNA):** several `Keys`
+values exist in the enum (exhaustively value-pinned by INPUT-KBD-001 / INPUT-API-034) but are never
+produced by a desktop SDL event, exactly as in FNA (whose `keyMap`/`scanMap` omit them too — confirmed
+byte-for-byte by INPUT-KBD-009/010):
+- **IME keys** — `Kana` (21), `Kanji` (25), `ImeConvert` (28), `ImeNoConvert` (29), `ProcessKey` (229):
+  Windows IME virtual keys with no SDL keycode/scancode; IME text reaches games via `TextInputEXT`.
+- **ChatPad keys** — `ChatPadGreen` (202), `ChatPadOrange` (203): Xbox 360 ChatPad console-only keys with
+  no desktop hardware/SDL source.
+- **Browser / media keys** — `BrowserBack`…`BrowserHome` (166–172), `MediaNextTrack`…`MediaPlayPause`
+  (176–179), `LaunchMail`/`SelectMedia`/`LaunchApplication1|2` (180–183), etc.: present in the enum, but
+  the **only** media keys CNA/FNA map from SDL are `VolumeUp`/`VolumeDown`. The rest (SDL delivers
+  `SDLK_MEDIA_*`, `SDLK_AC_HOME/SEARCH`, …) are dropped. Tested
+  (`SdlMediaBrowserKeysAreUnmappedExceptVolumeMatchingFna`, `ImeAndChatPadKeysExistAndAreConsoleOrImeOnly`).
+
 ---
 
 ## Mouse

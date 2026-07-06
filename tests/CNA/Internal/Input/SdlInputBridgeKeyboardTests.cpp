@@ -206,6 +206,45 @@ TEST_F(SdlInputBridgeKeyboardTest, NordicOemKeysMapToTheirOemKeyMatchingFna)
     EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::OemSemicolon));
 }
 
+// INPUT-KBD-016: among media/browser keys, CNA maps ONLY VolumeUp/VolumeDown from SDL — exactly like
+// FNA's keyMap (INPUT-KBD-009 proved the whole map is FNA-identical). The other media/browser keys SDL
+// delivers (next/prev track, play/pause, AC_HOME/SEARCH, …) have no keyMap entry and are dropped, even
+// though XNA defines Keys::MediaNextTrack / BrowserHome / etc. — those Keys have no desktop SDL source.
+TEST_F(SdlInputBridgeKeyboardTest, SdlMediaBrowserKeysAreUnmappedExceptVolumeMatchingFna)
+{
+    // Mapped:
+    InputManager::ResetForTests();
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDLK_VOLUMEUP));
+    EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::VolumeUp));
+    InputManager::ResetForTests();
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDLK_VOLUMEDOWN));
+    EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::VolumeDown));
+
+    // Unmapped (dropped) — FNA has no keyMap entry for these:
+    for (const SDL_Keycode kc : {SDLK_MEDIA_NEXT_TRACK, SDLK_MEDIA_PREVIOUS_TRACK,
+                                 SDLK_MEDIA_PLAY_PAUSE, SDLK_AC_HOME, SDLK_AC_SEARCH})
+    {
+        InputManager::ResetForTests();
+        SdlInputBridge::ProcessEvent(keyDownWithKeycode(kc));
+        EXPECT_EQ(Keyboard::GetState().GetPressedKeys().size(), 0u)
+            << "SDL media/browser keycode " << static_cast<unsigned>(kc) << " must be dropped";
+    }
+}
+
+// INPUT-KBD-015 / INPUT-KBD-017: the IME keys (Kana/Kanji/ImeConvert/ImeNoConvert/ProcessKey) and the
+// ChatPad keys (Green/Orange) exist in the XNA Keys enum (exhaustively value-pinned by INPUT-KBD-001) but
+// have no desktop SDL source — IME keys are Windows IME virtual keys, ChatPad keys are Xbox console-only.
+// FNA maps none of them either. This compiles the values (presence) and documents the intentional omission;
+// the "never produced by SDL" side is implied by the FNA-identical keyMap/scanMap (INPUT-KBD-009/010).
+TEST_F(SdlInputBridgeKeyboardTest, ImeAndChatPadKeysExistAndAreConsoleOrImeOnly)
+{
+    static_assert(static_cast<int>(Keys::Kana) == 21 && static_cast<int>(Keys::Kanji) == 25);
+    static_assert(static_cast<int>(Keys::ImeConvert) == 28 && static_cast<int>(Keys::ImeNoConvert) == 29);
+    static_assert(static_cast<int>(Keys::ProcessKey) == 229);
+    static_assert(static_cast<int>(Keys::ChatPadGreen) == 202 && static_cast<int>(Keys::ChatPadOrange) == 203);
+    SUCCEED() << "IME + ChatPad Keys present; intentionally unmapped from SDL (see docs/input-fna-fidelity.md)";
+}
+
 // DEC-17: SDLK_AC_BACK (the Android/browser Back button) maps to Keys::Escape. This is a CNA-only
 // convenience (FNA has no AC_BACK mapping) so "back" acts as cancel/exit on those platforms.
 TEST_F(SdlInputBridgeKeyboardTest, AndroidBackButtonMapsToEscape)

@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-KBD-015/016/017 — Keys with no desktop SDL source:** confirmed IME (`Kana`/`Kanji`/`Ime*`/
+  `ProcessKey`), ChatPad (`Green`/`Orange`), and most browser/media Keys exist in the enum but are
+  intentionally unmapped from SDL (only `VolumeUp`/`VolumeDown` map), matching FNA. Two tests + a
+  fidelity-doc section. No code change.
 - **INPUT-KBD-014 — non-US layout keys tested + documented:** empirically confirmed German/French/Czech
   accented keys (`ä ö ü ß é è à ç ě š č`) drop in keycode mode (no XNA Keys); the Nordic `æ`/`ø` map to
   `OemQuotes`/`OemSemicolon` (FNA-faithful). Two new tests + a "Non-US keyboard layouts" section in
