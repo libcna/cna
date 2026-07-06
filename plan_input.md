@@ -999,10 +999,26 @@ verified 8-arg ctor order. `GetTouchState`'s previous-location + Pressed→Moved
 **Files changed:** none (logic verified). **Behavior verified:** change-gated packet bump + relative
 drain-on-read + touch promotion + 1:1 button/axis mapping. **Remaining risk:** none.
 
-## L-015 — `SdlInputBridge.cpp` logic `[ ]`
-- [ ] Every ProcessEvent case's translation vs FNA `SDL3_FNAPlatform.cs`: axis normalization/Y-inversion,
+## L-015 — `SdlInputBridge.cpp` logic `[x]`
+- [x] Every ProcessEvent case's translation vs FNA `SDL3_FNAPlatform.cs`: axis normalization/Y-inversion,
   button/key maps, UTF-8 decode, control-char + Ctrl+V, finger-id mapping, coordinate scaling, gamepad
   slot lifecycle. Largest bridge logic.
+
+**Result (2026-07-06): FOUND + FIXED one real divergence.** **Fix:** `normalize_stick_axis` divided the
+**negative** SDL stick half by `32768` while the positive half used `32767`; FNA divides the **whole** range
+by `32767` (`SDL3_FNAPlatform.cs:1814-1822`). Endpoints agreed (±1 after clamp) but every non-endpoint
+negative sample diverged (`-16384` → CNA `-0.5` vs FNA `-0.50001`). Changed it to `clamp(value/32767, -1, 1)`
+for the full range — **now byte-identical to FNA**. Added `StickAxisNormalizationMatchesFnaDivisor` (pins the
+FNA divisor at a mid-value, tolerance 1e-6, strictly `>0.5`), documented as the L-015 fidelity fix in
+`docs/input-fna-fidelity.md`. `ctest -L input` 100% green + ASan-clean after the change.
+**Everything else verified faithful:** Y-inversion (Y axes use `-normalize_stick_axis`, ≡ FNA `/-32767`);
+`normalize_trigger_axis` = `clamp(value/32767, 0, 1)` (≡ FNA); the keycode/scancode maps
+(byte-identical to FNA `INTERNAL_keyMap`/`INTERNAL_scanMap`, P2-005/006); UTF-8 decode (`Encoding.UTF8`,
+P7-002); control chars + Ctrl+V (byte-identical to FNA, P7-004/005); touch coordinate scaling (P5-014);
+finger-id mapping + gamepad slot lifecycle (P4-009); the 17 ProcessEvent cases (P8-001). **Files changed:**
+`src/CNA/Internal/Input/SdlInputBridge.cpp` (the fix), `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+(+1 test), `docs/input-fna-fidelity.md`. **Behavior verified:** stick normalization now byte-identical to
+FNA; all other translations already faithful. **Remaining risk:** none.
 
 ## L-016 — `TextInputEXT.cpp` / `SdlGamepadBackend.cpp` logic `[ ]`
 - [ ] TextInputEXT window-guarded SDL calls + INTERNAL dispatch; SdlGamepadBackend real SDL wrappers.

@@ -365,11 +365,13 @@ namespace
 
     float normalize_stick_axis(const Sint16 value)
     {
-        if (value >= 0)
-        {
-            return std::clamp(static_cast<float>(value) / 32767.0f, 0.0f, 1.0f);
-        }
-        return std::clamp(static_cast<float>(value) / 32768.0f, -1.0f, 0.0f);
+        // Match FNA exactly: it divides the whole Sint16 stick range by 32767 for both the positive
+        // (0..32767) and the negative (-32768..0) halves (SDL3_FNAPlatform.cs:1814-1822 — `axis / 32767`,
+        // and `axis / -32767` for the inverted Y). The -32768 endpoint yields -1.00003, which FNA resolves
+        // to -1.0 via GamePadThumbSticks' clamp; clamping to [-1,1] here gives the byte-identical final
+        // value. (An earlier CNA build divided the negative half by 32768, which diverged from FNA at every
+        // non-endpoint negative sample, e.g. -16384 → -0.5 instead of FNA's -0.50001.)
+        return std::clamp(static_cast<float>(value) / 32767.0f, -1.0f, 1.0f);
     }
 
     float normalize_trigger_axis(const Sint16 value)

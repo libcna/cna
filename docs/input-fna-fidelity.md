@@ -111,11 +111,18 @@ byte-for-byte by INPUT-KBD-009/010):
 | Aspect | Status |
 |---|---|
 | Dead-zone constants + math (independent/circular/none) | **Matches FNA exactly** (`7849`/`8689`/`30`). |
-| Thumbstick Y-sign, trigger normalization | Matches FNA (`/-axis`, `/32767`). |
+| Thumbstick Y-sign, trigger + stick normalization | **Matches FNA exactly** (`/32767` over the whole Sint16 range, `/-32767` for the inverted Y — see the L-015 fix below). |
 | SDL button → `Buttons` mapping (all 21, incl. paddles/touchpad/guide) | **Matches FNA exactly.** |
 | Duplicate add / unknown remove / no-free-slot | Safe; duplicate-add is **safer** than FNA (no leak). |
 | `SetVibration`/`SetTriggerVibration`/`SetLightBar`/`GetGyro`/`GetAccelerometer`/`GetGUID` | **Faithful ports.** |
 | `ToString()` | Matches FNA (type name). |
+
+**Fidelity fix (L-015, source-logic audit 2026-07-06):** `normalize_stick_axis` divided the **negative**
+half of the SDL stick range by **32768** while the positive half used 32767. FNA divides the **whole** range
+by 32767 (`SDL3_FNAPlatform.cs:1814-1822`: `axis / 32767`, `axis / -32767` for Y). The endpoints agreed
+(both give ±1 after clamping) but every non-endpoint negative sample diverged (e.g. `-16384` → `-0.5` in CNA
+vs FNA's `-0.50001`). Now `normalize_stick_axis` = `clamp(value / 32767, -1, 1)` for the full range —
+byte-identical to FNA. Pinned by `StickAxisNormalizationMatchesFnaDivisor`.
 
 **Real bugs fixed in Phase I13/I14:**
 - **`SDL_INIT_GAMEPAD` was never initialized** → no gamepad events were ever delivered. The gamepad

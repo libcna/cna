@@ -256,6 +256,25 @@ TEST_F(FakeGamepadTest, AxisMappingHandlesYInversionAndTriggerNormalization)
     EXPECT_NEAR(InputManager::GetRawGamePadState(PlayerIndex::One).leftY, -1.0f, 1e-3f);
 }
 
+// L-015: stick-axis normalization must match FNA's `axis / 32767` over the WHOLE Sint16 range (both the
+// positive and the negative half), NOT `/32768` for negatives. At a non-endpoint sample the divisors
+// diverge: 16384/32767 = 0.500015 vs 16384/32768 = 0.5. Pin the FNA divisor so a regression to /32768 is
+// caught (the endpoint test above tolerates 1e-3, which is coarser than the ~3e-5 divisor difference).
+TEST_F(FakeGamepadTest, StickAxisNormalizationMatchesFnaDivisor)
+{
+    fake.Register(10, FullyFeaturedGamepad());
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    SdlInputBridge::ProcessEvent(axisEvent(10, SDL_GAMEPAD_AXIS_LEFTX, 16384));   // positive half
+    SdlInputBridge::ProcessEvent(axisEvent(10, SDL_GAMEPAD_AXIS_RIGHTX, -16384)); // negative half
+
+    const auto raw = InputManager::GetRawGamePadState(PlayerIndex::One);
+    EXPECT_NEAR(raw.leftX,  16384.0f / 32767.0f, 1e-6f) << "positive half uses FNA /32767";
+    EXPECT_NEAR(raw.rightX, -16384.0f / 32767.0f, 1e-6f) << "negative half must ALSO use /32767, not /32768";
+    EXPECT_GT(raw.leftX, 0.5f);   // strictly > 0.5 (would be exactly 0.5 under /32768)
+    EXPECT_LT(raw.rightX, -0.5f);
+}
+
 // --- capabilities (922/923) ---
 
 TEST_F(FakeGamepadTest, CapabilitiesReflectConnectedDevice)
