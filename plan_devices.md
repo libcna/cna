@@ -3848,7 +3848,7 @@ not an alternate spelling to preserve.
     needed)
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
 
-### MOTION-007 — Prevent stale sample fusion
+### MOTION-007 — Prevent stale sample fusion — CLOSED (2026-07-06, implemented)
 
 - **Priority:** High
 - **Area:** Motion Fusion
@@ -3857,22 +3857,57 @@ not an alternate spelling to preserve.
   confirmed present) — it does not check whether those four most-recent samples were
   taken close together in time. A fast-changing gyroscope value could be fused with a
   stale gravity sample from much earlier.
+- **Resolution (2026-07-06):** implemented directly, building on `MOTION-006`'s own
+  per-source timestamp tracking (which already added `attitude_.getTimestampProperty()`
+  as a real, meaningful per-source timestamp):
+  - Added `gravityTimestamp_`/`linearAccelerationTimestamp_`/`gyroscopeTimestamp_`
+    (`AndroidMotionBackend.hpp`), set from each sample's own
+    `AndroidSensorSample::Timestamp` in `HandleGravitySample()`/
+    `HandleLinearAccelerationSample()`/`HandleGyroscopeSample()` respectively —
+    `attitude_.getTimestampProperty()` already covers the fourth source.
+  - Added `static const System::TimeSpan MaxFusionAgeWindow` = 500ms — deliberately
+    generous relative to this project's actual `TimeBetweenUpdates` values (default
+    2ms), since its purpose is catching a source that has stopped delivering samples
+    entirely (sensor failure, registration problem), not enforcing sub-frame
+    synchronization between four independently-rated physical sensors, which
+    legitimately deliver samples at different real times even in normal, healthy
+    operation.
+  - `PublishReading()` now computes `newest - oldest` across all four sources'
+    timestamps (via `std::min`/`std::max` over an initializer list) and returns early
+    — publishing nothing — if that span exceeds `MaxFusionAgeWindow`, in addition to
+    the pre-existing "all four have delivered at least one sample, ever" check.
+  - **Chosen behavior: drop-and-wait, not publish-with-a-caveat** — returning early
+    without publishing means the next sample from *any* source re-triggers the check,
+    so a fused reading still publishes as soon as all four are recent again; no new
+    `MotionReading` field was added to carry a "some data may be stale" flag, since
+    that would be a real API-shape change with no real-WP7 precedent to justify it,
+    disproportionate to this specific fix.
+  - **Tests:** not addable at the host level — same standing limitation as every other
+    `AndroidMotionBackend`-internal fix this session (`MOTION-003`/`MOTION-004`/
+    `MOTION-006`): `Motion`'s fake `IMotionBackend` bypasses this class entirely, so
+    "simulate stale gravity/acceleration/gyroscope/attitude samples independently" (this
+    task's own acceptance criterion) has no host-testable seam to exercise. Verified
+    instead by direct code reading (the staleness check is a deterministic comparison,
+    not a timing-dependent race) and a successful Android NDK cross-compile of the
+    `CNA` target.
 - **Required work:**
-  - Track a per-source last-sample timestamp.
+  - Track a per-source last-sample timestamp. Done.
   - Define a maximum acceptable age window across the four sources for them to be
-    considered a valid fused reading.
+    considered a valid fused reading. Done — 500ms, with rationale.
   - Decide behavior when sources are outside that window (drop the stale one and wait,
-    or publish anyway with a documented caveat) and implement that decision.
+    or publish anyway with a documented caveat) and implement that decision. Done —
+    drop-and-wait, implemented.
 - **Acceptance criteria:**
   - Fused readings only combine samples that are fresh relative to each other, per the
-    defined window.
+    defined window. Done.
   - Tests simulate stale gravity, stale acceleration, stale gyroscope, and stale
-    attitude samples independently.
-  - The chosen behavior (drop/wait vs. publish-with-caveat) is documented.
+    attitude samples independently. Not possible at the host level — no test seam;
+    documented as such rather than silently claimed done.
+  - The chosen behavior (drop/wait vs. publish-with-caveat) is documented. Done.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
-  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (inspected, no change possible)
 
 ### MOTION-008 — Apply `TimeBetweenUpdates` — CLOSED (2026-07-06, via `ANDROID-BRIDGE-002`)
 

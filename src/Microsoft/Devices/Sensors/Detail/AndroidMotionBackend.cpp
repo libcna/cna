@@ -4,6 +4,8 @@
 
 #ifdef __ANDROID__
 
+#include <algorithm>
+
 #include <android/sensor.h>
 
 #include "Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp"
@@ -13,6 +15,13 @@ namespace Microsoft::Devices::Sensors::Detail
     using Microsoft::Xna::Framework::Matrix;
     using Microsoft::Xna::Framework::Quaternion;
     using Microsoft::Xna::Framework::Vector3;
+
+    // Task MOTION-007: 500ms is generous relative to any of this project's
+    // actual TimeBetweenUpdates values (default 2ms), deliberately -- this
+    // exists to catch a source that has stopped delivering samples
+    // entirely, not to enforce tight synchronization between four
+    // independently-rated physical sensors.
+    const System::TimeSpan AndroidMotionBackend::MaxFusionAgeWindow = System::TimeSpan::FromMilliseconds(500);
 
     AndroidMotionBackend::AndroidMotionBackend()
         : rotationVectorBridge_(ASENSOR_TYPE_ROTATION_VECTOR),
@@ -162,6 +171,7 @@ namespace Microsoft::Devices::Sensors::Detail
                 sample.Values[0] / StandardGravity,
                 sample.Values[1] / StandardGravity,
                 sample.Values[2] / StandardGravity);
+            gravityTimestamp_ = sample.Timestamp;
             hasGravitySample_ = true;
         }
         PublishReading();
@@ -175,6 +185,7 @@ namespace Microsoft::Devices::Sensors::Detail
                 sample.Values[0] / StandardGravity,
                 sample.Values[1] / StandardGravity,
                 sample.Values[2] / StandardGravity);
+            linearAccelerationTimestamp_ = sample.Timestamp;
             hasLinearAccelerationSample_ = true;
         }
         PublishReading();
@@ -192,6 +203,7 @@ namespace Microsoft::Devices::Sensors::Detail
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
             deviceRotationRate_ = Vector3(sample.Values[0], sample.Values[1], sample.Values[2]);
+            gyroscopeTimestamp_ = sample.Timestamp;
             hasGyroscopeSample_ = true;
         }
         PublishReading();
@@ -209,6 +221,29 @@ namespace Microsoft::Devices::Sensors::Detail
             // one sample -- a reading built from a subset would be
             // half-default data, not a real fused reading.
             if (!hasAttitudeSample_ || !hasGravitySample_ || !hasLinearAccelerationSample_ || !hasGyroscopeSample_)
+            {
+                return;
+            }
+
+            // Task MOTION-007: also require the four sources' most recent
+            // samples to be within MaxFusionAgeWindow of each other --
+            // "each source has delivered at least one sample, ever" isn't
+            // enough on its own; a source that stopped updating minutes ago
+            // would otherwise keep getting fused with fresh data from the
+            // other three forever. Drop-and-wait (return without
+            // publishing) rather than publish-with-a-caveat: this backend
+            // has no existing field to carry a "some data is stale" flag,
+            // and inventing one would be a MotionReading shape change with
+            // no real-API precedent, out of proportion to this specific
+            // fix. The next sample from *any* source re-triggers this
+            // check, so a fused reading still publishes as soon as all
+            // four are recent again.
+            const System::DateTimeOffset& attitudeTimestamp = attitude_.getTimestampProperty();
+            const System::DateTimeOffset oldest = std::min(
+                {attitudeTimestamp, gravityTimestamp_, linearAccelerationTimestamp_, gyroscopeTimestamp_});
+            const System::DateTimeOffset newest = std::max(
+                {attitudeTimestamp, gravityTimestamp_, linearAccelerationTimestamp_, gyroscopeTimestamp_});
+            if ((newest - oldest) > MaxFusionAgeWindow)
             {
                 return;
             }

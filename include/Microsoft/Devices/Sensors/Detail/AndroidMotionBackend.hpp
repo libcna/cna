@@ -85,6 +85,33 @@ namespace Microsoft::Devices::Sensors::Detail
         bool hasLinearAccelerationSample_ = false;
         bool hasGyroscopeSample_ = false;
 
+        /**
+         * @brief Wall-clock arrival time of each source's most recent sample (Task MOTION-007).
+         *
+         * `attitude_.getTimestampProperty()` already tracks the attitude
+         * source's own timestamp (`MOTION-006`) — these three cover the
+         * other three sources, so `PublishReading()` can confirm all four
+         * are recent relative to each other before fusing them, instead of
+         * only checking that each has delivered *some* sample, ever.
+         */
+        System::DateTimeOffset gravityTimestamp_;
+        System::DateTimeOffset linearAccelerationTimestamp_;
+        System::DateTimeOffset gyroscopeTimestamp_;
+
+        /**
+         * @brief Maximum age gap allowed between the four sources' most recent samples for a fused reading to publish (Task MOTION-007).
+         *
+         * Deliberately generous (not a tight frame-sync budget): this
+         * exists to catch a source that has stopped delivering samples
+         * entirely (e.g. a sensor failure, or a permission/registration
+         * problem affecting one of the five underlying bridges) while the
+         * other three keep going — not to enforce sub-frame synchronization
+         * between four independently-rated physical sensors, which
+         * legitimately deliver samples at different times even in normal,
+         * healthy operation.
+         */
+        static const System::TimeSpan MaxFusionAgeWindow;
+
         ReadingCallback onReading_;
     };
 } // namespace Microsoft::Devices::Sensors::Detail
