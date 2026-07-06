@@ -59,6 +59,7 @@ namespace
 namespace Microsoft::Xna::Framework::Input
 {
     std::uintptr_t           Mouse::windowHandle_           = 0;
+    // DEC-06: ClickedEXT is multicast (MulticastAction<int>), matching FNA's Action<int>.
     System::MulticastAction<int> Mouse::ClickedEXT;
 
     std::uintptr_t Mouse::getWindowHandleProperty()
@@ -127,6 +128,8 @@ namespace Microsoft::Xna::Framework::Input
         {
             return false;
         }
+        // DEC-14: read SDL live at the API boundary (no cache); InputManager keeps its own flag,
+        // written by the setter, to gate relative-delta accumulation without depending on SDL.
         return SDL_GetWindowRelativeMouseMode(window);
     }
 

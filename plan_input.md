@@ -371,18 +371,20 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** Stale/misleading comments removed from the internal input headers (the 5 '@note Status: PARTIAL/IMPLEMENTED' notes — see INP-0004).
 
 #### INP-0226 — Deduplicate SDL button/axis mapping tables where safe (single source)
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Cleanup
+- **Priority:** P3 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
 - **Files:** `src/CNA/Internal/Input/SdlInputBridge.cpp`
 - **Steps:** Audit the named area; apply the minimal cleanup without changing behavior.
 - **Acceptance:** Area clean; input subset still green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Reviewed the SDL mapping tables (SdlInputBridge.cpp): keycode / scancode / gamepad-button / gamepad-axis / mouse-button are five distinct single-source `switch` statements — there is no cross-table duplication to safely remove. Merging the keycode and scancode maps (superficially similar) would break the deliberate keycode-vs-scancode mode distinction that is byte-verified against FNA (INPUT-KBD-009/010), so no dedup is safe. No change.
 
 #### INP-0227 — Ensure every intentional deviation carries an in-source comment linking its DEC/task
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Cleanup
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
 - **Files:** `src/**/Input`
 - **Steps:** Audit the named area; apply the minimal cleanup without changing behavior.
 - **Acceptance:** Area clean; input subset still green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Added in-source DEC labels at the deviation sites that were commented but unlabeled: DEC-06 (Mouse::ClickedEXT multicast), DEC-12 (TouchLocation::TryGetPreviousLocation out-param), DEC-14 (Mouse relative-mode live read), DEC-17 (SDLK_AC_BACK->Escape), DEC-18 (wheel.x dropped), DEC-19 (repeat text-synthesis gate), INPUT-TOUCH-024 (touch coordinate basis). DEC-08/09/10/16/KBD-011 were already labeled. DEC-13 (Update copy-order inert) and DEC-15 (focus-loss no-clear) are deliberate non-actions with no source site — documented in the fidelity doc + their tests. Build clean; ctest -L input 314 green.
 
 #### INP-0228 — Ensure EXT/NOXNA members are consistently named + documented (audit)
 - **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
@@ -393,11 +395,12 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** EXT/NOXNA members are consistently named + documented: EXT suffix + NOXNA marker convention audited (INPUT-API-032) and enforced by the tagging convention in docs/input-public-api-frozen.md; parity tool flags nothing.
 
 #### INP-0229 — Improve InputManager/bridge error messages + assertions where non-obvious
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Cleanup
+- **Priority:** P3 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
 - **Files:** `src/CNA/Internal/Input`
 - **Steps:** Audit the named area; apply the minimal cleanup without changing behavior.
 - **Acceptance:** Area clean; input subset still green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Reviewed InputManager/SdlInputBridge error paths: no message-less throws (grep for empty/bare throws is empty); the public exception paths (TouchPanel::ReadGesture InvalidOperationException, TouchCollection out-of-range) carry context, and disconnected/no-window paths return safe defaults rather than throwing. No change needed.
 
 #### INP-0230 — Confirm internal/public boundary is clean (no Internal type in any public signature)
 - **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
@@ -1932,13 +1935,14 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** Re-validated the FATAL_ERROR messages (cmake/ThirdPartySDL.cmake + CMakeLists.txt): missing SDL*/sharp-runtime/easy-gl each print a correct copy-pasteable remedy (git submodule update / git clone <path> / alternative backend). See INPUT-BUILD-005.
 
 #### INP-0196 — Pin third_party/SDL to an explicit upstream SDL3 release tag; record it
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Build
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Build
 - **Files:** `.gitmodules, docs/input-build-and-test.md`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
 
 ### Area: CI (8 tasks)
+- **Result:** Looked up the SDL tag: the third_party/SDL submodule is pinned at commit cbe3fbe9f367 = `release-3.4.0-685-gcbe3fbe9f` (SDL main, self-reporting 3.5.0-dev), NOT a tagged release; nearest stable is release-3.4.8. Recorded the finding + the minimum SDL3 API relied upon (gamepad/sensor/keyboard/mouse/touch/text, all since 3.2/3.4.0) in docs/input-build-and-test.md. The actual submodule move to release-3.4.8 is deferred (INPUT-BUILD-004): the build uses a shared .sdl-prebuilt cache (SDL 3.5.0-dev) across all backends, so bumping is a deliberate infra step (rebuild the shared prebuilt + re-test 4 backends), not a blind checkout that would downgrade the prebuilt under other build dirs. (Verified a checkout to 3.4.8 does not silently take effect — the cached CNA_SDL_PREBUILT_ROOT keeps 3.5.0-dev — then reverted the submodule to the known-good commit.)
 
 #### INP-0194 — Confirm the Linux/X11 CI matrix runs ctest -L input under xvfb on all backends
 - **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** CI
@@ -1949,25 +1953,28 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** CI (.github/workflows/input-ci.yml) runs `xvfb-run -a ctest --test-dir build -L input` on the EASYGL / SDL_RENDERER / VULKAN / bgfx / ASan matrix jobs.
 
 #### INP-0195 — Add a CI step that fails if submodules are missing or SDL is not at the pinned rev
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** CI
+- **Priority:** P1 · **Status:** `CANCELLED (2026-07-06)` [~] · **Area:** CI
 - **Files:** `.github/workflows/input-ci.yml`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Cancelled:** De-scoped at user request — CI-workflow changes not pursued in this pass.
 
 #### INP-0197 — Upload test logs, skip reports, and on-failure SDL/GL diagnostics as CI artifacts
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** CI
+- **Priority:** P2 · **Status:** `CANCELLED (2026-07-06)` [~] · **Area:** CI
 - **Files:** `.github/workflows/input-ci.yml`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Cancelled:** De-scoped at user request — CI-workflow changes not pursued in this pass.
 
 #### INP-0198 — Add an optional gcov/llvm-cov coverage report for the input filter
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** CI
+- **Priority:** P3 · **Status:** `CANCELLED (2026-07-06)` [~] · **Area:** CI
 - **Files:** `.github/workflows/input-ci.yml`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Cancelled:** De-scoped at user request — CI-workflow changes not pursued in this pass.
 
 #### INP-0199 — Define the 'Input stable' gate: 4-backend + sanitizer + determinism + dated hardware entry
 - **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** CI
@@ -1986,20 +1993,22 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** Authored docs/input-pre-merge-checklist.md: machine-checkable gates (frozen API, no SDL/Internal leak, enum freeze, 0 parity gaps, 0 coverage orphans, 4-backend + sanitizer + determinism green, deviations intact, counts current) + the FNA-cited behavioral-change gate.
 
 #### INP-0203 — Add Windows CI path plan (or document why it is manual)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** CI
+- **Priority:** P2 · **Status:** `CANCELLED (2026-07-06)` [~] · **Area:** CI
 - **Files:** `docs/input-build-and-test.md`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Cancelled:** De-scoped at user request — CI-workflow changes not pursued in this pass.
 
 #### INP-0204 — Add macOS CI path plan (or document why it is manual)
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** CI
+- **Priority:** P3 · **Status:** `CANCELLED (2026-07-06)` [~] · **Area:** CI
 - **Files:** `docs/input-build-and-test.md`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
 
 ### Area: Platform (2 tasks)
+- **Cancelled:** De-scoped at user request — CI-workflow changes not pursued in this pass.
 
 #### INP-0202 — Add Wayland notes/path and confirm which cursor/warp behaviors are X11-only
 - **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Platform

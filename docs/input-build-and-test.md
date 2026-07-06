@@ -84,12 +84,29 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 Recorded **2026-07-06** in this checkout: Debian 13, g++ 14.2.0, CMake 3.31.6, Ninja 1.12.1. Input is
 backend-agnostic — the input-filter count is identical on EasyGL / Vulkan / bgfx / SDL_RENDERER.
 
-**Pinned versions (INPUT-DOC-014).** Reference toolchain as above (g++ 14.2.0 / CMake 3.31.6 /
-Ninja 1.12.1, Debian 13). The **SDL** dependency is the `third_party/SDL` git submodule
-(`libsdl-org/SDL`), pinned at commit **`cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`** in this checkout
-(alongside the `SDL_image`/`SDL_mixer` submodules); `git submodule update --init --recursive` restores
-that exact revision. (Pinning the submodule to a named upstream *tag* rather than a raw commit is tracked
-by INPUT-BUILD-004.)
+**Pinned versions (INPUT-DOC-014 / INP-0196).** Reference toolchain as above (g++ 14.2.0 / CMake 3.31.6 /
+Ninja 1.12.1, Debian 13).
+
+The **SDL** dependency is the `third_party/SDL` git submodule (`libsdl-org/SDL`), pinned at commit
+**`cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`** (alongside `SDL_image`/`SDL_mixer`);
+`git submodule update --init --recursive` restores it. **Tag lookup:**
+`git -C third_party/SDL describe --tags` = **`release-3.4.0-685-gcbe3fbe9f`** — 685 commits past the
+`release-3.4.0` tag on SDL `main`, self-reporting as SDL **3.5.0** (in-development). It is **not** a tagged
+release; the nearest **stable release tags** are the `release-3.4.x` line (latest **`release-3.4.8`**).
+
+**Minimum SDL3 API relied upon:** standard SDL3 gamepad (`SDL_Gamepad*` + hotplug events), keyboard
+(scancode/keycode), mouse (relative mode, warp), touch (`SDL_EVENT_FINGER_*`), text-input, and gamepad
+sensor/rumble/trigger-rumble — all present since SDL **3.2 / 3.4.0**, so a `release-3.4.x` build has
+everything the input layer uses.
+
+> **Before bumping to the tag:** the build does **not** compile SDL from the submodule directly —
+> `CNA_SDL_PREBUILT_ROOT` points at a shared **`.sdl-prebuilt`** cache (currently SDL 3.5.0-dev, built from
+> the commit above and shared by every `cmake-build-*` dir + all backends). Moving the submodule to
+> `release-3.4.8` is a *deliberate* infra step: it also needs the shared prebuilt rebuilt
+> (`rm -rf .sdl-prebuilt* && reconfigure`) and `ctest -L input` re-run on all four backends to confirm the
+> main→release-branch change is behavior-neutral. It is intentionally **not** done as a blind checkout
+> (that would silently downgrade the shared prebuilt under other build dirs). The submodule move is tracked
+> by INPUT-BUILD-004; INP-0196 records the tag/version/min-API findings above.
 
 ### Headless run inventory (INPUT-BUILD-008)
 

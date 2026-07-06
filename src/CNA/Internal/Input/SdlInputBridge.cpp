@@ -450,6 +450,9 @@ namespace
         return Microsoft::Xna::Framework::Vector2(windowX, windowY);
     }
 
+    // INPUT-TOUCH-024: touch-state coord basis. Scales the normalized SDL coord by the SDL window size
+    // then maps to logical space; the gesture path scales by DisplayWidth/Height (linear, FNA-matching).
+    // Both target the logical space; they differ only inside letterbox bars (accepted).
     Microsoft::Xna::Framework::Vector2 to_touch_pixel_position(const SDL_TouchFingerEvent& touchEvent)
     {
         SDL_Window* window = nullptr;
@@ -480,7 +483,7 @@ namespace
         using Microsoft::Xna::Framework::Input::Keys;
         switch (keycode)
         {
-        case SDLK_AC_BACK: return Keys::Escape;
+        case SDLK_AC_BACK: return Keys::Escape; // DEC-17: CNA-only Android/browser Back -> Escape (no FNA mapping)
         case SDLK_LEFT: return Keys::Left;
         case SDLK_RIGHT: return Keys::Right;
         case SDLK_UP: return Keys::Up;
@@ -1277,7 +1280,7 @@ namespace CNA::Internal::Input
         case SDL_EVENT_MOUSE_WHEEL:
             // Only the vertical wheel is surfaced: XNA 4.0's MouseState and this FNA MouseState
             // expose a single cumulative ScrollWheelValue (vertical) and no horizontal member, so
-            // event.wheel.x is intentionally dropped (task 805 / former task 749 — closed as
+            // event.wheel.x is intentionally dropped (DEC-18; task 805 / former task 749 — closed as
             // won't-implement; adding a horizontal wheel would be a non-XNA NOXNA extension with
             // no current consumer). FNA truncates the SDL wheel delta to whole notches BEFORE
             // scaling by 120 (`(int) evt.wheel.y * 120`, SDL3_FNAPlatform.cs) — the cast binds
@@ -1335,7 +1338,7 @@ namespace CNA::Internal::Input
                 const bool pressed  = event.type == SDL_EVENT_KEY_DOWN;
                 const bool isRepeat = pressed && event.key.repeat;
 
-                // Repeats keep the key down (state already set); FNA only re-emits text
+                // DEC-19: repeats keep the key down (state already set); FNA only re-emits text
                 // input on repeat, so skip the pressed-key state update for repeats.
                 if (!isRepeat)
                 {
