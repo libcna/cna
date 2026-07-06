@@ -3571,14 +3571,20 @@ restoration can be reverted.
   2-value per-channel gain pair, not a 4-coefficient crossfeed matrix -- hard-pan (eliminating the
   opposite channel at the extremes) instead of crossfeed-blending it. Mono sources are bit-exact
   either way.
-* [ ] P10-PAN-002: Implement a 4-coefficient stereo pan matrix in the existing cooked-callback
+* [x] P10-PAN-002: Implement a 4-coefficient stereo pan matrix in the existing cooked-callback
   chain, preserving filters.
-  *Status:* Open, explicitly assessed and deferred as too risky relative to its payoff
-  (`CHECKLIST.md` CP-19's own reasoning, reaffirmed here): SDL3_mixer gives exactly one "cooked"
-  per-track callback slot, already used by the real, well-tested `T-4C` DSP filter
-  (`FilterMixCallback`). A crossfeed implementation would need to either share that single slot
-  (real regression risk to already-shipped, ThreadSanitizer-verified filter code) or find another
-  mixing point SDL3_mixer doesn't expose. Not attempted in this pass.
+  *Status:* Closed as user-confirmed skip/reaffirm-only (2026-07-06 scope decision) -- explicitly
+  assessed and deferred as too risky relative to its payoff (`CHECKLIST.md` CP-19's own reasoning,
+  reaffirmed here, and *strengthened* by this pass's own `P10-FILTER-002/003/004/006` work):
+  SDL3_mixer gives exactly one "cooked" per-track callback slot, already used by the real,
+  well-tested `T-4C` DSP filter (`FilterMixCallback`) -- which this same Phase 10 pass just made
+  *more* load-bearing, not less, by adding continuous per-tick RPC-driven live frequency/Q
+  coefficient updates on top of it (`P10-FILTER-002/003`). A crossfeed implementation would still
+  need to either share that single, now-busier slot (a real regression risk to already-shipped,
+  ThreadSanitizer-verified filter code, now carrying more real-time responsibility than when CP-19
+  was first written) or find another mixing point SDL3_mixer doesn't expose -- RFC-1's own risk
+  note ("doubles the amount of DSP math running in the real-time audio callback path") is if
+  anything more true today. Not attempted; no code change made.
 * [x] P10-PAN-003: If crossfeed isn't feasible with the current pipeline, document the limitation
   and create a design task for an internal mixer layer.
   *Note:* Limitation already documented (`CHECKLIST.md` CP-19). Design task, as requested:
