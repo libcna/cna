@@ -3018,7 +3018,7 @@ not an alternate spelling to preserve.
   - `docs/location-future-plan.md` (edited — new consumption-plan section)
   - `plan_devices.md` (this entry)
 
-### COMPASS-004 — Verify Android heading math on hardware
+### COMPASS-004 — Verify Android heading math on hardware — hardware verification still outstanding; existing coverage re-confirmed, checklist updated (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** Compass Math / Hardware QA
@@ -3027,25 +3027,54 @@ not an alternate spelling to preserve.
   0°, monotonic response to a known yaw) — confirmed by its own doc comment stating it
   has "never been checked against real hardware." Physical validation is still
   outstanding.
+- **Progress (2026-07-06):** physical-device verification remains genuinely
+  outstanding — same standing limitation as `ACCEL-004`/`GYRO-003`, no Android hardware
+  available this session. What was done:
+  - Re-confirmed `AndroidCompassMathTests.cpp`'s existing 4 heading self-consistency
+    tests (`IdentityQuaternionProducesZeroHeading`, `NinetyDegreeYawProducesConsistentNonZeroHeading`,
+    `OneEightyDegreeYawDiffersFromNinetyDegreeYaw`, `HeadingIsAlwaysInZeroToThreeSixtyRange`)
+    are still present and passing — no regression, no change needed.
+  - **"Portrait and landscape device orientation" (this task's own required-work
+    wording) re-scoped to reflect `COMPASS-001`'s finding:** the real API's
+    orientation-dependence is about physical device *tilt* (upright vs. flat), not
+    screen rotation/landscape-lock — `docs/devices-hardware-checklist.md` Section 7
+    updated with an explicit note that the current implementation has no tilt-mode
+    switch at all yet (`COMPASS-009`, new), so today's checklist steps test whichever
+    single mode the current fixed-axis implementation happens to produce, not
+    confirmed to be either the "upright" or "flat" case specifically — to be re-run
+    once `COMPASS-009` is implemented, covering both modes explicitly.
+  - No change to `Detail::ConvertRotationVectorToMagneticHeadingDegrees()`'s actual
+    math or to its existing tests — nothing found contradicted the single-axis
+    formula itself; the newly-found gap is that only one axis-mode exists at all
+    (`COMPASS-009`), not that the existing one is wrong.
 - **Required work:**
   - Test known real-world orientations against a real compass reference (e.g. a phone
-    compass app, or a known magnetic-north reference) on real Android hardware.
+    compass app, or a known magnetic-north reference) on real Android hardware. **Still
+    not run** — no hardware available.
   - Validate north/east/south/west headings, and both portrait and landscape device
-    orientation.
+    orientation. Re-scoped: "orientation" here means physical tilt, not screen
+    rotation — see `COMPASS-009` for the actual tilt-mode-switch implementation this
+    validation would need to cover.
   - Adjust the sign/axis convention in `Detail::AndroidCompassMath` if hardware results
-    disagree.
+    disagree. N/A yet — no hardware results exist to compare against.
 - **Acceptance criteria:**
   - Hardware results are recorded (device, OS version, orientation, expected vs.
-    observed heading).
+    observed heading). Not yet — hardware unavailable.
   - Math tests reflect verified-correct behavior, not merely "whatever the current
-    implementation happens to output."
+    implementation happens to output." Confirmed already true for the single-axis case
+    that exists today; the tilt-mode switch itself doesn't exist yet to test
+    (`COMPASS-009`).
   - Code comments describe the confirmed coordinate convention, replacing the current
-    "never checked" caveat once real verification has occurred.
+    "never checked" caveat once real verification has occurred. Not yet possible
+    without hardware — caveat remains accurate and unchanged.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
-  - `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp`
-  - `docs/devices-hardware-checklist.md`
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp` (inspected, no
+    change needed)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp` (inspected, no
+    change needed)
+  - `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp` (inspected, no
+    change needed)
+  - `docs/devices-hardware-checklist.md` (edited — tilt-mode scope note)
 
 ### COMPASS-005 — Revisit the rotation-vector-plus-magnetometer support requirement
 

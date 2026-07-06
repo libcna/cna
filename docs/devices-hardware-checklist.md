@@ -318,6 +318,15 @@ axis-sign saga for `Accelerometer`/`Gyroscope`) shows this exact kind of math is
 get subtly wrong in a way unit tests against self-derived expected values cannot catch —
 only comparing against a real device's own compass app can.
 
+**Note added 2026-07-06 (`COMPASS-004`/`COMPASS-009`):** the real WP7 `Compass` API
+documents switching which axis it reads based on the phone's physical tilt (upright
+vs. flat, MSDN `hh220912`/`hh202974`) — `Detail::AndroidCompassMath` currently
+implements only one fixed axis extraction, with no tilt-mode switch at all
+(`COMPASS-009`, new, not yet implemented). The steps below should therefore be treated
+as testing whichever single mode the current implementation happens to produce, not
+confirmed to be "flat mode" specifically — re-run once `COMPASS-009` is implemented,
+covering both tilt modes explicitly.
+
 **Steps:**
 1. On a real Android device with a magnetometer, run a game/demo using `Compass`, holding
    the device flat and facing a known direction (compare against the device's own,
