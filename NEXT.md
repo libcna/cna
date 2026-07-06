@@ -31,7 +31,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   `fogColorParam_` to a fresh, zero-valued parameter in the clone, and nothing copied the source's
   actual value across. Tasks 372/382's own `Clone()` tests never caught this because neither set
   `FogColor` before cloning; extended both to close the gap. Fixed all 4 effects with a one-line
-  `fogColorParam_->SetValue(src.getFogColorProperty())` addition each. Phase 44 ("DualTextureEffect
+  `fogColorParam_->SetValue(src.getFogColorProperty())` addition each. **Task 393 verified
+  `EnvironmentMapAmount=0` correctly ignores the cube map** — zero bugs in its own scope, exact
+  match on all 3 backends — but surfaced a real formula-level discrepancy for Task 394 to
+  investigate: FNA's real pixel shader **lerps** between the lit/textured color and the cube map
+  (`EnvironmentMapAmount=1` should *fully replace* the lit color), while CNA's actual shader
+  formula **adds** the cube map on top instead — a difference invisible at `Amount=0` (where both
+  formulas coincide) but real and testable at `Amount=1`, which every pre-existing test happened to
+  never expose since they all zeroed the lit/textured term in their `Amount=1` sub-cases. Phase 44 ("DualTextureEffect
   exactness", Tasks 381–390) is **CLOSED** — Task 390 wrote `docs/dualtextureeffect-support.md`
   synthesizing Tasks 381–389: property/default audit (zero bugs), a real cross-backend `color.rgb
   *= 2` doubling-factor bug found and fixed (Task 383), a real Bgfx-only `Texture2` null-fallback
@@ -83,16 +90,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 392.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 393.
 
-### Test status (last verified: Task 392)
-- **EasyGL, full `ctest -j1`:** 3545/3548 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 393)
+- **EasyGL, full `ctest -j1`:** 3546/3549 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3465/3478 pass. 13 documented pre-existing failures (see §5),
+- **Vulkan, full `ctest -j1`:** 3466/3479 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3448/3449 pass — 1 reconfirmed-flaky
-  `NetworkSessionTest.FindReturnsEmptyCollection` (3/3 isolated reruns passed — network-timing
-  flake, unrelated to graphics changes).
+- **Bgfx, full `ctest -j1`:** 3450/3450 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -227,7 +232,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 392 | **Real bug found and fixed, affecting 4 stock effects**: `Clone()` never preserved `FogColor` on `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` (silently reset to black on every clone). Found while writing `EnvironmentMapEffectTests.cpp`'s `Clone()` test (Task 372/382's own tests never set `FogColor` before cloning, so they never caught it). Fixed all 4 with a one-line addition each; extended the 2 existing test files to close the gap. `git stash`-confirmed all 3 testable cases fail pre-fix. |
+| — | 393 | **Verify-only, zero bugs in its own scope**: `EnvironmentMapAmount=0` correctly ignores the cube map on all 3 backends, exact match. Surfaced a real formula discrepancy for Task 394: FNA's real pixel shader lerps between lit color and cube map (`Amount=1` should fully replace); CNA's actual shader formula adds instead — invisible at `Amount=0` (both coincide) but real and testable at `Amount=1`. |
+| `51cbf4f5` | 392 | **Real bug found and fixed, affecting 4 stock effects**: `Clone()` never preserved `FogColor` on `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` (silently reset to black on every clone). Found while writing `EnvironmentMapEffectTests.cpp`'s `Clone()` test (Task 372/382's own tests never set `FogColor` before cloning, so they never caught it). Fixed all 4 with a one-line addition each; extended the 2 existing test files to close the gap. `git stash`-confirmed all 3 testable cases fail pre-fix. |
 | `b59c3a0d` | 391 | **Verify-only, opens Phase 45**: audited `EnvironmentMapEffect` against FNA — all 14 properties/defaults/`Clone()`/`OnApply()` match exactly, zero bugs in its own scope. Found `FillGpuDrawParams()` only forwards `DirectionalLight0` (same shape as Task 885's `BasicEffect` gap, confirmed shared `Lighting.fxh` mechanism) — opened Task 890. |
 | `3eb10974` | 390 | **Doc, closes Phase 44**: wrote `docs/dualtextureeffect-support.md` synthesizing Tasks 381–389 (mirrors `docs/alphatesteffect-support.md`'s style) — per-task summaries, full 3-backend support matrix, "Open, tracked follow-up work" listing Tasks 887/888/889. No code changed. |
 | `fcaa1950` | 389 | **Capstone, zero new bugs**: combined Tasks 383–388's fixes (doubling factor, two-texture multiply, diffuse) into one scene, first `DualTextureEffect` test with a real 2×2 multi-texel texture. All 3 backends byte-identical, exact match. Found and opened Task 889 while writing it: `VertexColorEnabled` is a total no-op for `DualTextureEffect` on all 3 backends (dedicated shaders/pipelines on every backend lack a color attribute entirely) — Phase 44 never had a dedicated audit task for this property. |
@@ -435,15 +441,21 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 45 (Task 393 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 45 (Task 394 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–890).
 
-1. **Task 393 — pixel test with `EnvironmentMapAmount=0`**
-   - Goal: verify that `EnvironmentMapAmount=0` causes the cube-map's RGB contribution to be
-     completely ignored (per `plan_graphics.md`'s own note), leaving only the base `Texture` ×
-     lighting result. Use a distinctive, non-white `EnvironmentMap` cube-map color so a nonzero
-     leak would be immediately visible.
-   - Files: new `examples/{easygl,vulkan,bgfx}_environmentmapeffect_amount_zero_test.cpp`.
+1. **Task 394 — pixel test with `EnvironmentMapAmount=1` and white cubemap**
+   - Goal: verify strong env-map contribution at `EnvironmentMapAmount=1`. **Important**: Task 393
+     found a real formula discrepancy to resolve here — FNA's real pixel shader `lerp`s (at
+     `Amount=1`, the cube map should *fully replace* the lit/textured color), while CNA's actual
+     shader formula *adds* the cube map on top of the still-present lit color instead. Design the
+     test with a genuinely nonzero lit/textured contribution (unlike every pre-existing env-map
+     test, which always zeroed it in their `Amount=1` sub-cases, coincidentally hiding this
+     divergence) so the two formulas produce distinguishably different results — then determine
+     whether CNA's additive formula is a bug to fix or a deliberate/acceptable deviation.
+   - Files: new `examples/{easygl,vulkan,bgfx}_environmentmapeffect_amount_one_test.cpp`, likely
+     `src/CNA/Internal/Backends/{EasyGL,Vulkan,Bgfx}/...` shader/dispatch changes if the additive
+     formula is confirmed to need fixing.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -567,7 +579,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–890).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 393).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 394).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -585,9 +597,17 @@ DualTextureEffect/EnvironmentMapEffect/SkinnedEffect — CacheEffectParameters()
 fogColorParam_ to a fresh, zero-valued parameter in the clone, and nothing copied the source's
 actual value across. Tasks 372/382's own Clone() tests never caught this because neither set
 FogColor before cloning; extended both existing test files to close the gap. Fixed all 4 effects
-with a one-line addition each. git stash-confirmed all 3 testable cases fail pre-fix. Task 393 is
-NEXT: pixel test with EnvironmentMapAmount=0 (should completely ignore the cubemap's RGB
-contribution).
+with a one-line addition each. git stash-confirmed all 3 testable cases fail pre-fix. Task 393
+verified EnvironmentMapAmount=0 correctly ignores the cube map — zero bugs in its own scope, exact
+match on all 3 backends — but surfaced a REAL FORMULA DISCREPANCY for Task 394: FNA's real pixel
+shader lerps between the lit/textured color and the cube map (Amount=1 should fully REPLACE the
+lit color), while CNA's actual shader formula ADDS the cube map on top instead — invisible at
+Amount=0 (both formulas coincide there) but real and testable at Amount=1, which every
+pre-existing test happened to never expose since they always zeroed the lit/textured term in
+their own Amount=1 sub-cases. Task 394 is NEXT: pixel test with EnvironmentMapAmount=1 and white
+cubemap — design it with a genuinely nonzero lit/textured contribution (unlike prior tests) so the
+lerp-vs-additive divergence is actually exercised, then determine whether CNA's additive formula
+needs fixing or is an acceptable deviation.
 
 Phase 44 ("DualTextureEffect exactness", Tasks 381-390) CLOSED with Task 390
 (docs/dualtextureeffect-support.md, full synthesis of Tasks 381-389). Task 383 found and FIXED A
@@ -615,15 +635,14 @@ fog). Phase 44 closed and opened Task 889 (DualTextureEffect.VertexColorEnabled 
 completely unforwarded, same shape as Task 885, likely shares its fix). None of these 6 block
 Phase 45's remaining tasks.
 
-Last full 3-backend regression (Task 392 — fixed the 4-effect FogColor Clone() bug, shared C++
-files compiled into all 3 backends):
-EasyGL 3545/3548 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3465/3478 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3448/3449 pass (1 reconfirmed-flaky NetworkSessionTest.FindReturnsEmptyCollection,
-network-timing flake unrelated to graphics, 3/3 isolated reruns passed).
+Last full 3-backend regression (Task 393 — pure verification, new tests only, no production code
+changed):
+EasyGL 3546/3549 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3466/3479 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3450/3450 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44 found, read plan_graphics.md
-directly (Tasks 351-392) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-393) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

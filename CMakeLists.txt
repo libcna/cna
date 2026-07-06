@@ -731,6 +731,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 393: EnvironmentMapEffect EnvironmentMapAmount=0 should ignore the cube map
+        cna_easygl_test(cna_test_easygl_environmentmapeffect_amount_zero
+                        examples/easygl_environmentmapeffect_amount_zero_test.cpp)
+        add_test(NAME EasyGL_EnvironmentMapEffect_AmountZero
+                 COMMAND cna_test_easygl_environmentmapeffect_amount_zero)
+        set_tests_properties(EasyGL_EnvironmentMapEffect_AmountZero PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_easygl_test(cna_test_easygl_rendertargetcube_sample
                         examples/easygl_rendertargetcube_sample_test.cpp)
@@ -1907,6 +1916,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 393: EnvironmentMapEffect EnvironmentMapAmount=0 should ignore the cube map
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_amount_zero
+                        examples/vulkan_environmentmapeffect_amount_zero_test.cpp)
+        add_test(NAME Vulkan_EnvironmentMapEffect_AmountZero
+                 COMMAND cna_test_vulkan_environmentmapeffect_amount_zero)
+        set_tests_properties(Vulkan_EnvironmentMapEffect_AmountZero PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_sample
                         examples/vulkan_rendertargetcube_sample_test.cpp)
@@ -2211,6 +2229,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_EnvironmentMapEffect_Smoke
              COMMAND cna_test_bgfx_env_map)
     set_tests_properties(Bgfx_EnvironmentMapEffect_Smoke PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 393: EnvironmentMapEffect EnvironmentMapAmount=0 should ignore the cube map
+    cna_bgfx_test(cna_test_bgfx_environmentmapeffect_amount_zero
+                  examples/bgfx_environmentmapeffect_amount_zero_test.cpp)
+    add_test(NAME Bgfx_EnvironmentMapEffect_AmountZero
+             COMMAND cna_test_bgfx_environmentmapeffect_amount_zero)
+    set_tests_properties(Bgfx_EnvironmentMapEffect_AmountZero PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
