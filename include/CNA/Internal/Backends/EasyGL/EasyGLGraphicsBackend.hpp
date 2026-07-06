@@ -399,6 +399,7 @@ namespace CNA::Internal::Backends::EasyGL
             int loc_fog_color     = -1;  ///< vec3 RGB fog colour
             int loc_fog_start     = -1;  ///< float fog start depth
             int loc_fog_end       = -1;  ///< float fog end depth
+            int loc_vertexcolor   = -1;  ///< float 0=ignore vertex color, 1=multiply by it (BasicEffect.VertexColorEnabled)
             void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; }
         };
 

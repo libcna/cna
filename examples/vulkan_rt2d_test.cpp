@@ -68,12 +68,16 @@ protected:
         // --- Phase 1: queue red quad into RT ---
         device.SetRenderTarget(rt_.get());
 
-        // BasicEffect with vertex colour enabled (default) — required so DrawUserPrimitives
-        // sees a currentEffect_ and actually queues the draw.
+        // BasicEffect with vertex colour enabled — required so DrawUserPrimitives sees a
+        // currentEffect_ and actually queues the draw. VertexColorEnabled defaults to false
+        // (Task 361), so it must be set explicitly for the red per-vertex colour below to
+        // reach the fragment (previously masked by a since-fixed Vulkan bug — Task 364 —
+        // where the colored3D pipeline ignored this flag and always used vertex color).
         BasicEffect fx(device);
         fx.setWorldProperty(Matrix::getIdentityProperty());
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());
+        fx.VertexColorEnabled = true;
         fx.Apply();
 
         // Full-screen NDC quad in red (VertexPositionColor, stride=16 → colored3d pipeline).

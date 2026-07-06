@@ -135,6 +135,11 @@ protected:
         fx.setWorldProperty(Matrix::getIdentityProperty());
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());
+        // VertexColorEnabled defaults to false (Task 361); this test's drawFullScreen()
+        // quads carry the desired colour as a per-vertex attribute, so it must be
+        // explicitly enabled here (previously masked by a since-fixed Vulkan bug — Task
+        // 364 — where the colored3D pipeline ignored this flag and always used vertex color).
+        fx.VertexColorEnabled = true;
         fx.Apply();
 
         if (frame_ == 0)

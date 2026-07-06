@@ -2297,7 +2297,9 @@ namespace CNA::Internal::Backends::Vulkan
     {
         // Create layout once
         if (pipelineLayout3D_ == VK_NULL_HANDLE) {
-            VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT, 0, 64 };
+            // 128 bytes: colored3d.vert.glsl's PC struct mirrors FillExtPushConst()'s full
+            // 32-float layout (Task 364) so diffuseColor/vertexColorEnabled reach the shader.
+            VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT, 0, 128 };
             VkPipelineLayoutCreateInfo pli{};
             pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
@@ -4136,7 +4138,10 @@ namespace CNA::Internal::Backends::Vulkan
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 pipelineLayoutExt3D_, 0, 1, &ds, 0, nullptr);
                 } else {
-                    vkCmdPushConstants(cb, pipelineLayout3D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, draw.pushConst);
+                    // 128 bytes: see pipelineLayout3D_ creation comment (Task 364) — draw.pushConst
+                    // already holds diffuseColor/vertexColorEnabled at the same float offsets
+                    // FillExtPushConst() uses, filled by DrawPrimitivesEx for stride==16 draws.
+                    vkCmdPushConstants(cb, pipelineLayout3D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 128, draw.pushConst);
                 }
                 vkCmdBindVertexBuffers(cb, 0, 1, &frame3DVB_[currentFrame_], &vbOff);
                 if (draw.useInstanced && !draw.instVbData.empty()) {
@@ -4577,6 +4582,11 @@ namespace CNA::Internal::Backends::Vulkan
         Pending3DDraw d{};
         const Matrix wvp = world * view * projection;
         wvp.ToColumnMajor(d.pushConst);
+        // This path carries no BasicEffect diffuse/VertexColorEnabled (no GpuDrawParams at
+        // all); preserve the historical behavior of outputting the raw vertex colors
+        // unmodified (diffuseColor=white, vertexColorEnabled=true — Task 364).
+        d.pushConst[16] = 1.0f; d.pushConst[17] = 1.0f; d.pushConst[18] = 1.0f; d.pushConst[19] = 1.0f;
+        d.pushConst[31] = 1.0f;
 
         d.vbData.resize(drawCount * stride);
         std::memcpy(d.vbData.data(), vulkanVB.GetMappedPtr(), drawCount * stride);
@@ -4609,6 +4619,10 @@ namespace CNA::Internal::Backends::Vulkan
         Pending3DDraw d{};
         const Matrix wvp = world * view * projection;
         wvp.ToColumnMajor(d.pushConst);
+        // See DrawColoredPrimitives above: preserve the historical raw-vertex-color output
+        // for this no-GpuDrawParams legacy path (Task 364).
+        d.pushConst[16] = 1.0f; d.pushConst[17] = 1.0f; d.pushConst[18] = 1.0f; d.pushConst[19] = 1.0f;
+        d.pushConst[31] = 1.0f;
 
         d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
         std::memcpy(d.vbData.data(), vulkanVB.GetMappedPtr(),

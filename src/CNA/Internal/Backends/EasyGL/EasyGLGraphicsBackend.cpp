@@ -2256,9 +2256,11 @@ void main()
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
+"uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
-"    FragColor=vColor*uDiffuseColor;\n"
+"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
+"    FragColor=vc*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -2272,6 +2274,7 @@ void main()
         prog_colored_.loc_fog_color   = prog_colored_.prog.uniform_location("uFogColor");
         prog_colored_.loc_fog_start   = prog_colored_.prog.uniform_location("uFogStart");
         prog_colored_.loc_fog_end     = prog_colored_.prog.uniform_location("uFogEnd");
+        prog_colored_.loc_vertexcolor = prog_colored_.prog.uniform_location("uVertexColorEnabled");
         prog_colored_.ready           = true;
         CNA_RENDER_LOG("colored3D ready loc_wvp=" << prog_colored_.loc_wvp);
     }
@@ -2682,6 +2685,10 @@ void main()
                 params.diffuseColor[0], params.diffuseColor[1],
                 params.diffuseColor[2], params.diffuseColor[3]);
 
+        // VertexColorEnabled gate (colored3D / BasicEffect no-texture path only — Task 364).
+        if (p.loc_vertexcolor >= 0)
+            p.prog.set_uniform(p.loc_vertexcolor, params.vertexColorEnabled ? 1.0f : 0.0f);
+
         // Ambient + light0 (lit shader / BasicEffect path only)
         if (p.loc_ambient >= 0)
         {
@@ -2931,6 +2938,10 @@ void main()
         // (uDiffuseColor would otherwise default to 0 and render everything black).
         if (prog_colored_.loc_diffuse >= 0)
             prog_colored_.prog.set_uniform(prog_colored_.loc_diffuse, 1.0f, 1.0f, 1.0f, 1.0f);
+        // Same reasoning for uVertexColorEnabled: it would otherwise default to 0 (uninitialized
+        // GLSL uniform) and force vColor out of the multiply, turning every pixel constant white.
+        if (prog_colored_.loc_vertexcolor >= 0)
+            prog_colored_.prog.set_uniform(prog_colored_.loc_vertexcolor, 1.0f);
 
         const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawColoredPrimitives: prim=" << static_cast<int>(primitive)
@@ -2967,6 +2978,10 @@ void main()
         // (uDiffuseColor would otherwise default to 0 and render everything black).
         if (prog_colored_.loc_diffuse >= 0)
             prog_colored_.prog.set_uniform(prog_colored_.loc_diffuse, 1.0f, 1.0f, 1.0f, 1.0f);
+        // Same reasoning for uVertexColorEnabled: it would otherwise default to 0 (uninitialized
+        // GLSL uniform) and force vColor out of the multiply, turning every pixel constant white.
+        if (prog_colored_.loc_vertexcolor >= 0)
+            prog_colored_.prog.set_uniform(prog_colored_.loc_vertexcolor, 1.0f);
 
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedColoredPrimitives: prim=" << static_cast<int>(primitive)

@@ -735,6 +735,7 @@ namespace CNA::Internal::Backends::Bgfx
                 light0Dir3DUnif_    = bgfx::createUniform("u_light0Dir",      bgfx::UniformType::Vec4);
                 light0Diff3DUnif_   = bgfx::createUniform("u_light0Diffuse",  bgfx::UniformType::Vec4);
                 lightingEn3DUnif_   = bgfx::createUniform("u_lightingEnabled",bgfx::UniformType::Vec4);
+                vertexColorEn3DUnif_= bgfx::createUniform("u_vertexColorEnabled3D", bgfx::UniformType::Vec4);
                 texColor3DSampler_  = bgfx::createUniform("s_texColor",       bgfx::UniformType::Sampler);
                 alphaTestUnif_      = bgfx::createUniform("u_alphaTest",      bgfx::UniformType::Vec4);
                 texColor3DSampler2_ = bgfx::createUniform("s_texColor2",      bgfx::UniformType::Sampler);
@@ -793,6 +794,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyU(ambientColor3DUnif_);
         destroyU(light0Dir3DUnif_);
         destroyU(light0Diff3DUnif_);
+        destroyU(vertexColorEn3DUnif_);
         destroyU(lightingEn3DUnif_);
         destroyU(texColor3DSampler_);
         destroyU(alphaTestUnif_);
@@ -1373,6 +1375,13 @@ namespace CNA::Internal::Backends::Bgfx
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         bgfx::setUniform(wvpUniform_, wvp_col);
+        // This path carries no BasicEffect diffuse/VertexColorEnabled (no GpuDrawParams at
+        // all); preserve the historical behavior of outputting the raw vertex colors
+        // unmodified (diffuseColor=white, vertexColorEnabled=true — Task 364).
+        const float whiteDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        bgfx::setUniform(diffuseColor3DUnif_, whiteDiffuse);
+        const float vceOn[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+        bgfx::setUniform(vertexColorEn3DUnif_, vceOn);
 
         bgfx::setVertexBuffer(0, vb.handle);
         bgfx::setStencil(stencilFront_, stencilBack_);
@@ -1397,6 +1406,12 @@ namespace CNA::Internal::Backends::Bgfx
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         bgfx::setUniform(wvpUniform_, wvp_col);
+        // See DrawColoredPrimitives above: preserve the historical raw-vertex-color output
+        // for this no-GpuDrawParams legacy path (Task 364).
+        const float whiteDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        bgfx::setUniform(diffuseColor3DUnif_, whiteDiffuse);
+        const float vceOn[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+        bgfx::setUniform(vertexColorEn3DUnif_, vceOn);
 
         bgfx::setVertexBuffer(0, vb.handle);
         bgfx::setIndexBuffer(ib.handle);
@@ -1552,6 +1567,12 @@ namespace CNA::Internal::Backends::Bgfx
         else
         {
             if (!bgfx::isValid(colored3DProgram_)) return;
+            // BasicEffect no-texture path (Task 364): honor DiffuseColor and gate the
+            // per-vertex color multiply on VertexColorEnabled, matching FNA's
+            // ComputeCommonVSOutput()/`vout.Diffuse *= vin.Color` semantics.
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vce[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vce);
             bgfx::submit(currentViewId_, colored3DProgram_);
         }
     }
