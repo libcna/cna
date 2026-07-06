@@ -1468,10 +1468,18 @@ case exercises (because those tests never construct a `GamerServicesComponent` a
 multi-gamer `Id`/`IsHost` state). Fully documented, root-caused, and each independently confirmed
 live in `../cna-samples/DEFERRED.md` items #19–21 and
 `../cna-samples/samples/ClientServerSample/missing.md`; ClientServerSample currently ports around
-all three at the sample level (documented deviations, not silent hacks). Fixing these in `cna`
-removes the need for that workaround and unblocks NetworkPrediction (#100), PeerToPeer (#103), and
-NetRumble (#062) — all four `cna-samples` networking samples call `NetworkSession::Create`/`Find`/
-`Join` the same way and construct a `GamerServicesComponent` in their original C# constructors.
+all three at the sample level (documented deviations, not silent hacks).
+
+**Status: Tasks 12.1 and 12.2 are fixed, tested, and merged. Task 12.3 was investigated in depth
+and found to have no safe fix achievable within `cna_net` alone** — see its own write-up below for
+the full reasoning (traced against the real XNA reference source); it needs either a `sharp-runtime`
+change requiring the user's direct sign-off, or acceptance that the sample-level workaround is the
+correct, permanent pattern. Fixing 12.1/12.2 in `cna` removes two of the three workarounds
+`ClientServerSample`/`../cna-samples/DEFERRED.md` needed and unblocks NetworkPrediction (#100) and
+PeerToPeer (#103) using the (now smaller) remaining workaround set — all `cna-samples` networking
+samples call `NetworkSession::Create`/`Find`/`Join` the same way and construct a
+`GamerServicesComponent` in their original C# constructors. NetRumble (#062) remains separately
+blocked by item #11 (custom shaders), unrelated to this phase.
 
 - [x] **Task 12.1** — Fix `GamerServicesDispatcher::Update()` no-op hanging
   `NetworkSession::Create`/`Find`/`Join` forever whenever a `GamerServicesComponent` exists
@@ -1602,53 +1610,85 @@ NetRumble (#062) — all four `cna-samples` networking samples call `NetworkSess
   `tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp`,
   `tests/CNA/Internal/Net/ENetBackendTests.cpp`.
 
-- [ ] **Task 12.3** — Raise the initial `GamerJoined` event(s) synchronously during
-  `Create()`/`Join()` instead of queuing them for the next `Update()` (`DEFERRED.md` item #21).
-  Root cause, confirmed live: `NetworkSession`'s constructor
-  (`src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:113-119`) queues a `GamerJoin`
-  `NetworkEvent` per initial local gamer into `networkEvents_` instead of raising `GamerJoined`
-  directly:
-  ```cpp
-  for (NetworkGamer* gamer : allGamers_)
-  {
-      NetworkEvent evt;
-      evt.Type = NetworkEventType::GamerJoin;
-      evt.Gamer = gamer;
-      SendNetworkEvent(std::move(evt));
-  }
-  ```
-  that queue is only drained by `NetworkSession::Update()` (`NetworkSession.cpp:217-` onward,
-  dispatching `GamerJoined.Raise(...)` at line 252) — i.e. not until the *next* frame's
-  `networkSession.Update()` call, one full frame after `Create()`/`Join()` returns. Real XNA raises
-  `GamerJoined` synchronously as part of `Create()`/`Join()` itself, so code that expects a
-  `GamerJoined` handler's side effect (e.g. `e.Gamer.Tag = new Tank(...)`) to have already run by
-  the time `Create()` returns — matching every real sample's own structure — instead finds it
-  unset on the first frame; observed live as an uncaught `std::bad_any_cast` when reading an empty
-  `Tag`.
-  Fix approach: either (a) have the constructor call `GamerJoined.Raise(...)` directly for each
-  initial local gamer instead of only enqueuing a `NetworkEvent` (matches real XNA's synchronous
-  behavior most directly), or (b) have `Create()`/`Find()`+`Join()`/`JoinInvited()`'s synchronous
-  wrappers (the same ones touched in Task 12.1) drain `networkEvents_` once via a call to
-  `Update()` before returning the constructed session. Either removes the need for the
-  `networkSession_->Update();`-right-after-`HookSessionEvents()` workaround every calling sample
-  currently needs. Add a unit test asserting `GamerJoined` has already fired for every initial
-  local gamer by the time `Create()`/`Join()` returns (no `Update()` call needed first) — the
-  current suite's blind spot, since `NetworkSessionTest.GamerJoinedRaisedOnUpdateAfterConstruction`
-  (`tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp`) explicitly tests the *current*,
-  wrong, deferred-until-`Update()` behavior and will need updating to match the fix.
-  File: `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp`,
-  `tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp`.
+- [ ] **Task 12.3** — **Investigated in depth; NOT implemented — both originally-planned fix
+  approaches were proven, via the real XNA reference source, to not solve the actual problem, and
+  the deeper real fix is blocked on a decision only the user can make.** Original ask: raise the
+  initial `GamerJoined` event(s) synchronously during `Create()`/`Join()` instead of queuing them
+  for the next `Update()` (`DEFERRED.md` item #21). Root cause as originally diagnosed still
+  stands: `NetworkSession`'s constructor (`NetworkSession.cpp:113-119`ish) queues a `GamerJoin`
+  event per initial local gamer instead of raising `GamerJoined` directly, and that queue is only
+  drained by the *next* `Update()` call.
+  **Why neither of the plan's two suggested fix approaches actually works — traced against the
+  real C# reference** (`/rv/tmp/XNAGameStudio/Samples/ClientServerSample_4_0/ClientServer/
+  ClientServerGame.cs`, the exact source `../cna-samples` ported from): `CreateSession()` calls
+  `NetworkSession.Create(...)` and *then* `HookSessionEvents()` (`networkSession.GamerJoined +=
+  GamerJoinedEventHandler;`) — subscription unconditionally happens **after** `Create()`/`Join()`
+  has already returned control to the caller. `UpdateNetworkSession()` (the very next frame) reads
+  `gamer.Tag` in `UpdateLocalGamer()` **before** its own call to `networkSession.Update()` later in
+  the same method — so `Tag` must already be populated by the time that first frame runs, with **no
+  intervening call to `Update()` anywhere in the sample's own code** between subscribing and that
+  first read. That means:
+  - **(a) "raise inside the constructor" cannot work**: the constructor runs and returns *before*
+    the caller has the `NetworkSession*` back to subscribe a handler to. A `Raise()` call with zero
+    subscribers is a no-op — firing here would fire into a void, identical in effect to not firing
+    at all.
+  - **(b) "drain the queue in `Create()`/`Join()`'s wrapper before returning" cannot work either**,
+    for the exact same reason: that also happens *before* the caller has a chance to call
+    `HookSessionEvents()`.
+  - **Worse: implementing either (a) or (b) would be an active regression**, not just ineffective.
+    `../cna-samples/samples/ClientServerSample/missing.md`'s own real, live-verified workaround is
+    to call `networkSession_->Update();` once, manually, immediately *after* `HookSessionEvents()`
+    — i.e. after subscribing. That call currently works *because* the join event is still sitting
+    unfired in `networkEvents_` at that point. If the constructor (or `Create()`/`Join()`) had
+    already consumed/fired it into a void beforehand, that same manual `Update()` call would find
+    an empty queue and do nothing — breaking the one thing that currently makes the sample work.
+  **What real XNA's `NetworkSession.GamerJoined` actually does** (well-documented XNA-community
+  behavior, and the only explanation consistent with the real sample's own code needing zero
+  manual pump calls): subscribing to `GamerJoined` via `+=` **immediately, synchronously replays**
+  it once for every gamer already present in `AllGamers` at the moment of subscription — not merely
+  "fires once, whenever, as long as it's before the first read." This is a "replay a hot event's
+  backlog on subscribe" semantic that plain multicast-delegate-style events don't have by default.
+  **Why this can't be implemented purely inside `cna_net`:** `NetworkSession::GamerJoined` is a
+  public `System::EventHandler<GamerJoinedEventArgs>` field — callers subscribe via
+  `session->GamerJoined += handler`, which is `EventHandler<T>::operator+=`, defined in
+  **sharp-runtime** (`include/System/EventHandler.hpp`), not `cna_net`. `EventHandler<T>` is a
+  plain handler-list container (`Add`/`Remove`/`Raise`/`Invoke`) with no hook for "run this
+  callback immediately upon subscription" — read in full this session; confirmed there is
+  genuinely no existing mechanism to repurpose. Implementing replay-on-subscribe semantics needs
+  either (i) a generic addition to `EventHandler<T>` itself (a `sharp-runtime` change — per this
+  repo's own architectural note, `sharp-runtime` "is maintained by a separate, concurrent session —
+  only add new files there; never modify existing files ... without asking the user first, for
+  every single commit"; not something this autonomous run may do unattended), or (ii) giving
+  `NetworkSession::GamerJoined` a different, CNA-invented event type instead of the uniform
+  `System::EventHandler<TEventArgs>` — directly forbidden by this file's own conventions ("This is
+  the project-wide pattern; do not invent a different event mechanism").
+  **Net effect: no code change made for this task.** `NetworkSession.cpp`'s constructor is
+  unchanged from before this investigation — correctly so, since the current deferred-queue design
+  is exactly what makes `ClientServerSample`'s own real, working, already-applied
+  `networkSession_->Update();`-after-`HookSessionEvents()` pattern function. That sample-level
+  pattern is not a stopgap to remove; given the `EventHandler<T>` constraint above, it is the
+  **correct, currently-necessary way** to call this API from C++, and should be documented as such
+  (e.g. a doc-comment note on `NetworkSession::GamerJoined`/`Create()`/`Join()`) rather than treated
+  as a gap to eliminate — future work only if the user decides to invest in a `sharp-runtime`
+  change (see below), coordinated directly with them first.
+  **If the user wants to pursue the real fix later:** the concrete `sharp-runtime` change would be
+  a generic, opt-in replay hook on `EventHandler<T>` (e.g. an optional `std::function<void(EventHandler&)>`
+  invoked once from `Add()`/`operator+=` for events that want backlog-replay semantics), *not* a
+  one-off special case — needs design discussion with whoever is driving `sharp-runtime`, not a
+  unilateral change from this session.
 
-- [ ] **Task 12.4** — Once Tasks 12.1-12.3 land, remove the three sample-level workarounds in
-  `../cna-samples/samples/ClientServerSample/` (omitted `GamerServicesComponent`, local `isHost_`
-  tracking instead of `NetworkSession.IsHost`, extra `networkSession_->Update()` call after
-  `HookSessionEvents()`) and re-verify it still renders/functions correctly with the real fixes in
-  place instead of the workarounds — confirms the fixes are actually drop-in replacements for real
-  XNA semantics, not just theoretically correct. Then re-attempt porting NetworkPrediction (#100)
-  and PeerToPeer (#103) (both previously blocked by the same three gaps) without needing the same
-  workarounds. This task lives here (not solely in `cna-samples`) because it's the acceptance test
-  for Tasks 12.1-12.3. Coordinate with whichever session is driving `cna-samples` before editing
-  files there.
+- [ ] **Task 12.4** — Once Task 12.1/12.2 land (Task 12.3 has no code change to land — see above),
+  remove the two now-real sample-level workarounds in `../cna-samples/samples/ClientServerSample/`
+  that Tasks 12.1/12.2 actually fix (omitted `GamerServicesComponent`; local `isHost_` tracking
+  instead of `NetworkSession.IsHost`) and re-verify it still renders/functions correctly with the
+  real fixes in place — confirms the fixes are actually drop-in replacements for real XNA
+  semantics, not just theoretically correct. **Keep** the third workaround (extra
+  `networkSession_->Update()` call right after `HookSessionEvents()`) — per Task 12.3's findings,
+  that one is not a stopgap, it is the correct, still-necessary pattern given `EventHandler<T>`'s
+  current design. Then re-attempt porting NetworkPrediction (#100) and PeerToPeer (#103) (both
+  previously blocked by the same gaps) using the same (now smaller) set of workarounds. This task
+  lives here (not solely in `cna-samples`) because it's the acceptance test for Tasks 12.1/12.2.
+  Coordinate with whichever session is driving `cna-samples` before editing files there.
 
 ---
 

@@ -279,7 +279,22 @@ namespace Microsoft::Xna::Framework::Net
         System::EventHandler<GameStartedEventArgs> GameStarted;
         /** @brief Raised when a hosted game ends. */
         System::EventHandler<GameEndedEventArgs> GameEnded;
-        /** @brief Raised when a gamer joins the session. */
+        /**
+         * @brief Raised when a gamer joins the session.
+         *
+         * The initial local gamer(s) established by `Create()`/`Join()`/`JoinInvited()` are
+         * queued internally at construction time, not raised into this event directly (a caller
+         * cannot possibly have subscribed yet at that point - the session pointer doesn't exist
+         * until the static factory method returns). Real XNA's `GamerJoined` is documented to
+         * replay itself immediately upon `+=` subscription for every gamer already in the session
+         * - `System::EventHandler<T>` (sharp-runtime) has no such "replay on subscribe" hook, so
+         * this port cannot reproduce that automatically (see `plan_net.md`'s Task 12.3 for the
+         * full investigation). **Call `Update()` once, immediately after subscribing, to receive
+         * the initial join event(s) for this session's own local gamers** - this is the
+         * intentional, permanent, correct pattern (not a temporary workaround) given the above
+         * constraint; see `../cna-samples/samples/ClientServerSample`'s `HookSessionEvents()`
+         * call site for a real, working example.
+         */
         System::EventHandler<GamerJoinedEventArgs> GamerJoined;
         /** @brief Raised when a gamer leaves the session. */
         System::EventHandler<GamerLeftEventArgs> GamerLeft;
