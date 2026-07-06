@@ -162,8 +162,8 @@ sibling aborts with the exact `git clone …` command (`cmake/ThirdPartySDL.cmak
   - `TouchPanelCapabilities`
   - `GestureSample`
   - `GestureType`
-- [ ] Mark each type present/missing.
-- [ ] Mark each type implemented/tested/partially tested.
+- [x] Mark each type present/missing. — all 24 present (see Result above; 24/24 headers, 0 orphans).
+- [x] Mark each type implemented/tested/partially tested. — all implemented + tested (dedicated suites; Phases 2–8 verified per-behavior).
 
 ## P1-002 — Compare public constructors `[x]`
 - [x] For every Input public type, compare constructors against XNA/FNA.
