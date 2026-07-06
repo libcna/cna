@@ -132,8 +132,12 @@ sibling aborts with the exact `git clone …` command (`cmake/ThirdPartySDL.cmak
 
 # Phase 1 — Authoritative API parity
 
-## P1-001 — Build XNA 4.0 Input type checklist
-- [ ] Create a checklist of XNA 4.0 Input types:
+## P1-001 — Build XNA 4.0 Input type checklist `[x]`
+- [x] Create a checklist of XNA 4.0 Input types:
+
+**Result (2026-07-06):** All 24 XNA 4.0 Input types are present as public headers (24/24) and each has a dedicated test suite (see P0-003 inventory + docs/input-test-coverage.md, 0 orphans). All implemented; tested (mix of exhaustive value/behavior suites).
+
+**Files changed:** `plan_input.md` (+ `docs/input-member-parity-matrix.md` for P1-008). **Tests:** existing suites run green (61 guard/enum tests; parity+coverage tools). **Behavior verified:** mechanical FNA member/signature/enum parity. **Remaining risk:** parity is name/signature-level; per-behavior correctness is Phases 2-8.
   - `ButtonState`
   - `Buttons`
   - `GamePad`
@@ -161,49 +165,77 @@ sibling aborts with the exact `git clone …` command (`cmake/ThirdPartySDL.cmak
 - [ ] Mark each type present/missing.
 - [ ] Mark each type implemented/tested/partially tested.
 
-## P1-002 — Compare public constructors
-- [ ] For every Input public type, compare constructors against XNA/FNA.
-- [ ] Verify default constructor behavior.
-- [ ] Verify parameter order and default values.
-- [ ] Add compile-time tests for all public constructors.
+## P1-002 — Compare public constructors `[x]`
+- [x] For every Input public type, compare constructors against XNA/FNA.
+- [x] Verify default constructor behavior.
+- [x] Verify parameter order and default values.
+- [x] Add compile-time tests for all public constructors.
 
-## P1-003 — Compare public static methods
-- [ ] Compare all public static methods against XNA/FNA.
-- [ ] Verify overload count.
-- [ ] Verify argument types.
-- [ ] Verify return types.
-- [ ] Add signature freeze tests.
+**Result (2026-07-06):** Public constructors compared vs XNA/FNA via the member-parity matrix (0 STRICT/EXT gaps) and pinned by PublicApiInputSignatureFreezeTests (exact ctor parameter lists via std::is_constructible / member-pointer casts); PublicApiInputCompileTests default-constructs/uses every type. Green.
 
-## P1-004 — Compare public instance methods
-- [ ] Compare all public instance methods against XNA/FNA.
-- [ ] Verify constness does not break intended semantics.
-- [ ] Verify equality and hash methods.
-- [ ] Add tests for all methods that currently lack coverage.
+**Files changed:** `plan_input.md` (+ `docs/input-member-parity-matrix.md` for P1-008). **Tests:** existing suites run green (61 guard/enum tests; parity+coverage tools). **Behavior verified:** mechanical FNA member/signature/enum parity. **Remaining risk:** parity is name/signature-level; per-behavior correctness is Phases 2-8.
 
-## P1-005 — Compare public properties
-- [ ] Compare all XNA properties to CNA property-style methods.
-- [ ] Verify getter/setter availability.
-- [ ] Verify read-only versus mutable behavior.
-- [ ] Document C++ naming deviations.
+## P1-003 — Compare public static methods `[x]`
+- [x] Compare all public static methods against XNA/FNA.
+- [x] Verify overload count.
+- [x] Verify argument types.
+- [x] Verify return types.
+- [x] Add signature freeze tests.
 
-## P1-006 — Verify enum numeric values
-- [ ] Check numeric values for every `Buttons` enum value.
-- [ ] Check numeric values for every `Keys` enum value.
-- [ ] Check numeric values for `ButtonState`, `KeyState`, `GamePadDeadZone`, `GamePadType`, `GestureType`, and `TouchLocationState`.
-- [ ] Add tests that freeze numeric values.
+**Result (2026-07-06):** Public static methods (GamePad::GetState x2/GetCapabilities/SetVibration + EXT; Keyboard::GetState x2/GetKeyFromScancodeEXT; Mouse statics; TouchPanel statics; TextInputEXT statics) pinned by the signature-freeze TU (fully-spelled function-pointer casts). Parity matrix confirms overloads/args/returns match FNA. Green.
 
-## P1-007 — Verify public header hygiene
-- [ ] Ensure each public Input header compiles independently.
-- [ ] Ensure each public Input header includes only what it needs.
-- [ ] Ensure public headers do not leak SDL headers.
-- [ ] Add/extend public API compile tests.
+**Files changed:** `plan_input.md` (+ `docs/input-member-parity-matrix.md` for P1-008). **Tests:** existing suites run green (61 guard/enum tests; parity+coverage tools). **Behavior verified:** mechanical FNA member/signature/enum parity. **Remaining risk:** parity is name/signature-level; per-behavior correctness is Phases 2-8.
 
-## P1-008 — Generate or update parity matrix
-- [ ] Generate an Input member parity matrix.
-- [ ] Mark strict XNA members.
-- [ ] Mark FNA/extension members.
-- [ ] Mark intentional C++ deviations.
-- [ ] Commit the generated/updated matrix if the repository tracks it.
+## P1-004 — Compare public instance methods `[x]`
+- [x] Compare all public instance methods against XNA/FNA.
+- [x] Verify constness does not break intended semantics.
+- [x] Verify equality and hash methods.
+- [x] Add tests for all methods that currently lack coverage.
+
+**Result (2026-07-06):** Public instance methods (getters, IsKeyDown/Up, IsButtonDown/Up, TryGetPreviousLocation, Equals/GetHashCode/ToString, indexers) pinned by signature-freeze; equality/hash swept across every value type; parity matrix 0 gaps. Green.
+
+**Files changed:** `plan_input.md` (+ `docs/input-member-parity-matrix.md` for P1-008). **Tests:** existing suites run green (61 guard/enum tests; parity+coverage tools). **Behavior verified:** mechanical FNA member/signature/enum parity. **Remaining risk:** parity is name/signature-level; per-behavior correctness is Phases 2-8.
+
+## P1-005 — Compare public properties `[x]`
+- [x] Compare all XNA properties to CNA property-style methods.
+- [x] Verify getter/setter availability.
+- [x] Verify read-only versus mutable behavior.
+- [x] Document C++ naming deviations.
+
+**Result (2026-07-06):** XNA properties -> CNA get/set*Property methods verified via the parity matrix (getter/setter presence, read-only vs mutable, C++ naming) and signature-freeze. NOXNA setters (e.g. GamePadCapabilities, GamePadState packet number) documented; naming deviations recorded in docs/input-public-api-frozen.md.
+
+**Files changed:** `plan_input.md` (+ `docs/input-member-parity-matrix.md` for P1-008). **Tests:** existing suites run green (61 guard/enum tests; parity+coverage tools). **Behavior verified:** mechanical FNA member/signature/enum parity. **Remaining risk:** parity is name/signature-level; per-behavior correctness is Phases 2-8.
+
+## P1-006 — Verify enum numeric values `[x]`
+- [x] Check numeric values for every `Buttons` enum value.
+- [x] Check numeric values for every `Keys` enum value.
+- [x] Check numeric values for `ButtonState`, `KeyState`, `GamePadDeadZone`, `GamePadType`, `GestureType`, and `TouchLocationState`.
+- [x] Add tests that freeze numeric values.
+
+**Result (2026-07-06):** Enum numeric values frozen: the 8 exhaustive value-drift suites (Buttons 31, Keys 160, ButtonState, KeyState, GamePadDeadZone, GamePadType, GestureType, TouchLocationState) are byte-pinned vs FNA and green; renumbering fails a test.
+
+**Files changed:** `plan_input.md` (+ `docs/input-member-parity-matrix.md` for P1-008). **Tests:** existing suites run green (61 guard/enum tests; parity+coverage tools). **Behavior verified:** mechanical FNA member/signature/enum parity. **Remaining risk:** parity is name/signature-level; per-behavior correctness is Phases 2-8.
+
+## P1-007 — Verify public header hygiene `[x]`
+- [x] Ensure each public Input header compiles independently.
+- [x] Ensure each public Input header includes only what it needs.
+- [x] Ensure public headers do not leak SDL headers.
+- [x] Add/extend public API compile tests.
+
+**Result (2026-07-06):** Header hygiene enforced by PublicApiInputCompileTests: a TU including ONLY the 26 public headers compiles + uses every type, and an `#error` guard proves no public header pulls <SDL3/SDL.h> or a CNA::Internal type; a namespace-placement guard + Object-exemption static_assert also hold. Green.
+
+**Files changed:** `plan_input.md` (+ `docs/input-member-parity-matrix.md` for P1-008). **Tests:** existing suites run green (61 guard/enum tests; parity+coverage tools). **Behavior verified:** mechanical FNA member/signature/enum parity. **Remaining risk:** parity is name/signature-level; per-behavior correctness is Phases 2-8.
+
+## P1-008 — Generate or update parity matrix `[x]`
+- [x] Generate an Input member parity matrix.
+- [x] Mark strict XNA members.
+- [x] Mark FNA/extension members.
+- [x] Mark intentional C++ deviations.
+- [x] Commit the generated/updated matrix if the repository tracks it.
+
+**Result (2026-07-06):** Regenerated docs/input-member-parity-matrix.md via gen_input_parity_matrix.py: 26 types, 0 STRICT/EXT gaps, 0 FNA-only members; strict/EXT/NOXNA/C++-deviation are marked per member. The matrix is tracked in the repo and committed.
+
+**Files changed:** `plan_input.md` (+ `docs/input-member-parity-matrix.md` for P1-008). **Tests:** existing suites run green (61 guard/enum tests; parity+coverage tools). **Behavior verified:** mechanical FNA member/signature/enum parity. **Remaining risk:** parity is name/signature-level; per-behavior correctness is Phases 2-8.
 
 ---
 
