@@ -68,7 +68,7 @@ independent task instead of guessing.
 
 ## Phase 1 — smallest, safest, synchronous, all 5 target platforms
 
-### DEVICES-CNA-001 — `PowerInfo` (battery/power status)
+### DEVICES-CNA-001 — `PowerInfo` (battery/power status) — CLOSED (2026-07-07)
 
 - **Priority:** High
 - **SDL3 API:** `SDL_power.h`, `SDL_GetPowerInfo(int* seconds, int* percent)`.
@@ -85,6 +85,24 @@ independent task instead of guessing.
 - **Acceptance criteria:** builds under `-DCNA_DEVICES=ON`; new test suite passes;
   building with `CNA_DEVICES=OFF` unaffected.
 - **Suggested files:** new files only, per above.
+- **Resolution:** Created `PowerState.hpp` (enum), `PowerInfo.hpp`/`.cpp` (static class,
+  three properties), all `#ifdef CNA_DEVICES`-gated per the established `CNA::Graphics`
+  convention. `getStateProperty()` converts `SDL_PowerState` via a small anonymous-
+  namespace switch (default case folds to `PowerState::Error`, matching SDL3's own
+  "error determining status" semantics — not a silent fallback to `Unknown`).
+  `getBatteryPercentProperty()`/`getSecondsRemainingProperty()` each call
+  `SDL_GetPowerInfo()` with the other out-param as `nullptr` (SDL3's own documented
+  contract: either pointer may be `NULL` to ignore that value) rather than one shared
+  call plus caching, since this class holds no state at all. Added
+  `tests/CNA/Devices/PowerInfoTests.cpp` (4 tests) asserting the *contract* (valid enum,
+  documented sentinel/range) rather than a specific value, since this headless
+  container's actual battery status is unknown/unverifiable ahead of time — matches the
+  `docs/devices-hardware-checklist.md` precedent of never asserting a specific
+  hardware-dependent value no test can control. Build: `cmake --build cmake-build-debug
+  --target CNA` (clean, no warnings) and `--target CnaTests` (clean); ran
+  `PowerInfoTests.*` (4/4 pass) and the full existing Devices/Sensors filter plus
+  `PowerInfoTests.*` together — 347 tests, 345 passed, 2 pre-existing expected
+  hardware-gated skips, zero regressions.
 
 ### DEVICES-CNA-002 — `Locale`
 
@@ -263,6 +281,9 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — DEVICES-CNA-001 CLOSED.** `CNA::Devices::PowerInfo` implemented
+  (`PowerState`/`PowerInfo`), 4 tests, full suite at 347/347 (345 pass + 2 expected
+  skips). Next: `DEVICES-CNA-002` (`Locale`).
 - **2026-07-07 — DEVICES-CNA-000 CLOSED.** `CNA_DEVICES` CMake option added and
   verified in both directions. Next: `DEVICES-CNA-001` (`PowerInfo`).
 - Plan created (this file).
