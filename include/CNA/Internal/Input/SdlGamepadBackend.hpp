@@ -86,6 +86,9 @@ namespace CNA::Internal::Input
         virtual Uint16 GetGamepadFirmwareVersion(SDL_Gamepad* gamepad) = 0;
         /** @brief NOXNA/EXT: Steam Input handle, or 0 if not a Steam virtual controller. SDL_GetGamepadSteamHandle. */
         virtual Uint64 GetGamepadSteamHandle(SDL_Gamepad* gamepad) = 0;
+
+        /** @brief NOXNA/EXT: wired/wireless connection state. SDL_GetGamepadConnectionState. */
+        virtual SDL_JoystickConnectionState GetGamepadConnectionState(SDL_Gamepad* gamepad) = 0;
     };
 
     /**

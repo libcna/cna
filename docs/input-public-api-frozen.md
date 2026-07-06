@@ -121,6 +121,7 @@ override must be added.
 - `static std::string GetSerialEXT(PlayerIndex);` — NOXNA/EXT (hardware serial; "" if unavailable)
 - `static std::uint16_t GetFirmwareVersionEXT(PlayerIndex);` — NOXNA/EXT (firmware version; 0 if unavailable)
 - `static std::uint64_t GetSteamHandleEXT(PlayerIndex);` — NOXNA/EXT (Steam Input handle; 0 if not a Steam controller)
+- `static CNA::Input::GamePadConnectionStateEXT GetConnectionStateEXT(PlayerIndex);` — NOXNA/EXT (wired/wireless; Unknown if disconnected)
 - `static constexpr float LeftDeadZone;` — NOXNA
 - `static constexpr float RightDeadZone;` — NOXNA
 - `static constexpr float TriggerThreshold;` — NOXNA

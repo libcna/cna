@@ -132,4 +132,9 @@ namespace Microsoft::Xna::Framework::Input
     {
         return CNA::Internal::Input::SdlInputBridge::GetSteamHandle(playerIndex);
     }
+
+    CNA::Input::GamePadConnectionStateEXT GamePad::GetConnectionStateEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetConnectionState(playerIndex);
+    }
 }

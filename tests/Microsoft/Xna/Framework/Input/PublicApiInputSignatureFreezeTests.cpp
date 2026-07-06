@@ -106,6 +106,8 @@ namespace
     [[maybe_unused]] constexpr auto z_GamePad_GetSerialEXT = static_cast<std::string(*)(PlayerIndex)>(&GamePad::GetSerialEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetFirmwareVersionEXT = static_cast<std::uint16_t(*)(PlayerIndex)>(&GamePad::GetFirmwareVersionEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetSteamHandleEXT = static_cast<std::uint64_t(*)(PlayerIndex)>(&GamePad::GetSteamHandleEXT);
+    // NOXNA/EXT (input_noxna.md N-010b): SDL gamepad wired/wireless connection state.
+    [[maybe_unused]] constexpr auto z_GamePad_GetConnectionStateEXT = static_cast<CNA::Input::GamePadConnectionStateEXT(*)(PlayerIndex)>(&GamePad::GetConnectionStateEXT);
     static_assert(std::is_same_v<decltype(GamePad::LeftDeadZone), const float>, "GamePad::LeftDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::RightDeadZone), const float>, "GamePad::RightDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::TriggerThreshold), const float>, "GamePad::TriggerThreshold : static constexpr float");

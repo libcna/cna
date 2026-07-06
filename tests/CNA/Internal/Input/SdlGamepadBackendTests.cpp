@@ -13,6 +13,7 @@
 #include <limits>
 
 #include "CNA/Input/GamePadButtonLabel.hpp"
+#include "CNA/Input/GamePadConnectionState.hpp"
 #include "CNA/Input/PowerState.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlGamepadBackend.hpp"
@@ -758,6 +759,38 @@ TEST_F(FakeGamepadTest, MetadataIsEmptyForDisconnectedSlot)
     EXPECT_EQ(GamePad::GetSerialEXT(PlayerIndex::Three), "");
     EXPECT_EQ(GamePad::GetFirmwareVersionEXT(PlayerIndex::Three), 0);
     EXPECT_EQ(GamePad::GetSteamHandleEXT(PlayerIndex::Three), 0ULL);
+}
+
+// --- gamepad connection-state extension (input_noxna.md N-010b) via GamePad::GetConnectionStateEXT ---
+
+// N-010b(a): the SDL wired/wireless/unknown/invalid states map onto the 3-value EXT enum.
+TEST_F(FakeGamepadTest, ConnectionStateMapsWiredWirelessAndUnknown)
+{
+    struct Case { SDL_JoystickConnectionState sdl; CNA::Input::GamePadConnectionStateEXT ext; };
+    const Case cases[] = {
+        {SDL_JOYSTICK_CONNECTION_WIRED,    CNA::Input::GamePadConnectionStateEXT::Wired},
+        {SDL_JOYSTICK_CONNECTION_WIRELESS, CNA::Input::GamePadConnectionStateEXT::Wireless},
+        {SDL_JOYSTICK_CONNECTION_UNKNOWN,  CNA::Input::GamePadConnectionStateEXT::Unknown},
+        {SDL_JOYSTICK_CONNECTION_INVALID,  CNA::Input::GamePadConnectionStateEXT::Unknown},
+    };
+    for (const Case& c : cases)
+    {
+        FakeGamepadConfig cfg = FullyFeaturedGamepad();
+        cfg.connectionState = c.sdl;
+        fake.Register(10, cfg);
+        SdlInputBridge::ProcessEvent(addedEvent(10));
+
+        EXPECT_EQ(GamePad::GetConnectionStateEXT(PlayerIndex::One), c.ext);
+
+        SdlInputBridge::ProcessEvent(removedEvent(10)); // reset the slot for the next case
+    }
+}
+
+// N-010b(b): a disconnected slot reports Unknown without reaching the backend.
+TEST_F(FakeGamepadTest, ConnectionStateIsUnknownForDisconnectedSlot)
+{
+    EXPECT_EQ(GamePad::GetConnectionStateEXT(PlayerIndex::Two),
+              CNA::Input::GamePadConnectionStateEXT::Unknown);
 }
 
 // --- sensor enable/disable (P4-017) ---

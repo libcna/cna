@@ -1193,6 +1193,28 @@ namespace CNA::Internal::Input
         return gamepad ? sdl_gamepad_backend().GetGamepadSteamHandle(gamepad) : 0;
     }
 
+    static CNA::Input::GamePadConnectionStateEXT sdl_connection_state_to_ext(SDL_JoystickConnectionState state)
+    {
+        using CNA::Input::GamePadConnectionStateEXT;
+        switch (state)
+        {
+        case SDL_JOYSTICK_CONNECTION_WIRED:    return GamePadConnectionStateEXT::Wired;
+        case SDL_JOYSTICK_CONNECTION_WIRELESS: return GamePadConnectionStateEXT::Wireless;
+        case SDL_JOYSTICK_CONNECTION_INVALID:
+        case SDL_JOYSTICK_CONNECTION_UNKNOWN:
+        default:                               return GamePadConnectionStateEXT::Unknown;
+        }
+    }
+
+    CNA::Input::GamePadConnectionStateEXT SdlInputBridge::GetConnectionState(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return CNA::Input::GamePadConnectionStateEXT::Unknown;
+        return sdl_connection_state_to_ext(sdl_gamepad_backend().GetGamepadConnectionState(gamepad));
+    }
+
     static Microsoft::Xna::Framework::Input::GamePadType sdl_joystick_type_to_gamepad_type(SDL_JoystickType t)
     {
         using Microsoft::Xna::Framework::Input::GamePadType;

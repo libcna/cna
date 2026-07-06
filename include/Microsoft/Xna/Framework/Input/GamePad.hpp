@@ -3,6 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Input/GamePadButtonLabel.hpp"
+#include "CNA/Input/GamePadConnectionState.hpp"
 #include "CNA/Input/PowerState.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
@@ -164,6 +165,13 @@ namespace Microsoft::Xna::Framework::Input
          * @return The Steam Input handle, or 0 if disconnected or not a Steam virtual controller.
          */
         NOXNA static std::uint64_t GetSteamHandleEXT(PlayerIndex playerIndex);
+
+        /**
+         * @brief NOXNA/EXT: how the controller is physically attached (wired vs. wireless).
+         * @param playerIndex The player index (slot) of the controller.
+         * @return The connection state, or GamePadConnectionStateEXT::Unknown if disconnected/unknown.
+         */
+        NOXNA static CNA::Input::GamePadConnectionStateEXT GetConnectionStateEXT(PlayerIndex playerIndex);
 
         /** @brief Left stick dead zone threshold (XInput-based). */
         NOXNA static constexpr float LeftDeadZone     = 7849.0f / 32768.0f;

@@ -26,7 +26,7 @@
 - [x] **N-009 `GamePad` player-index EXT** — `Get/SetPlayerIndexEXT` (SDL device player-number LED).
 - [x] **N-009b `GamePad` battery/power EXT** — `GetPowerInfoEXT` (`SDL_GetGamepadPowerInfo`) + shared `CNA::Input::PowerStateEXT`.
 - [x] **N-010 `GamePad` metadata EXT** — `Get{Name,Path,Serial,FirmwareVersion,SteamHandle}EXT`.
-- [ ] **N-010b `GamePad` connection-state EXT** — `GetConnectionStateEXT -> {Wired,Wireless,Unknown}` (split off from N-010).
+- [x] **N-010b `GamePad` connection-state EXT** — `GetConnectionStateEXT -> {Wired,Wireless,Unknown}`.
 - [x] **N-011 `GamePad` button labels EXT** — `GetButtonLabelEXT` (ABXY vs cross/circle/square/triangle).
 - [ ] **N-012 `CNA::Input::Pen`** — stylus (pressure/tilt/rotation/eraser/buttons); event-decoded.
 
@@ -48,6 +48,15 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-010b done (2026-07-06):** `GamePad::GetConnectionStateEXT -> CNA::Input::
+  GamePadConnectionStateEXT {Unknown,Wired,Wireless}` — how the pad is attached. New enum header
+  `include/CNA/Input/GamePadConnectionState.hpp`. Seam `GetGamepadConnectionState` (real =
+  `SDL_GetGamepadConnectionState`; fake = config, returns INVALID for an unknown device). Bridge
+  maps SDL {Invalid,Unknown}->Unknown, Wired->Wired, Wireless->Wireless; disconnected slot ->
+  Unknown. Pinned in the freeze test + documented. Tests: 4-state SDL->EXT mapping + disconnected
+  path. `ctest -L input` green; ASan-clean. Files: GamePadConnectionState.hpp (new),
+  SdlGamepadBackend.hpp/.cpp, FakeSdlGamepadBackend.hpp, SdlInputBridge.hpp/.cpp, GamePad.hpp/.cpp,
+  freeze test, frozen-API doc, SdlGamepadBackendTests.cpp.
 - **N-010 done (2026-07-06):** `GamePad::Get{Name,Path,Serial}EXT -> std::string` +
   `GetFirmwareVersionEXT -> uint16` + `GetSteamHandleEXT -> uint64` — device metadata via the
   gamepad seam. Seam gains `GetGamepad{Name,Path,Serial,FirmwareVersion,SteamHandle}` (real =

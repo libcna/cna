@@ -7,6 +7,7 @@
 #include <string>
 
 #include "CNA/Input/GamePadButtonLabel.hpp"
+#include "CNA/Input/GamePadConnectionState.hpp"
 #include "CNA/Input/PowerState.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
@@ -145,6 +146,10 @@ namespace CNA::Internal::Input
         static std::uint16_t GetFirmwareVersion(Microsoft::Xna::Framework::PlayerIndex playerIndex);
         /** @brief NOXNA/EXT: Steam Input handle, or 0 if disconnected/not a Steam controller. */
         static std::uint64_t GetSteamHandle(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+
+        /** @brief NOXNA/EXT: wired/wireless connection state, or Unknown if disconnected. */
+        static CNA::Input::GamePadConnectionStateEXT GetConnectionState(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex);
 
         /**
          * @brief Queries SDL for the actual hardware capabilities of the gamepad.

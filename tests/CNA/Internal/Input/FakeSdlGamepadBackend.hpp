@@ -47,6 +47,7 @@ namespace CNA::Internal::Input::test_support
         std::string serial;              // SDL_GetGamepadSerial
         Uint16 firmwareVersion = 0;      // SDL_GetGamepadFirmwareVersion
         Uint64 steamHandle = 0;          // SDL_GetGamepadSteamHandle
+        SDL_JoystickConnectionState connectionState = SDL_JOYSTICK_CONNECTION_UNKNOWN; // wired/wireless
     };
 
     class FakeSdlGamepadBackend final : public ISdlGamepadBackend
@@ -307,6 +308,11 @@ namespace CNA::Internal::Input::test_support
         {
             FakeDevice* d = dev(gamepad);
             return d ? d->cfg.steamHandle : 0;
+        }
+        SDL_JoystickConnectionState GetGamepadConnectionState(SDL_Gamepad* gamepad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d ? d->cfg.connectionState : SDL_JOYSTICK_CONNECTION_INVALID;
         }
 
         SDL_JoystickID lastClosedId = 0;

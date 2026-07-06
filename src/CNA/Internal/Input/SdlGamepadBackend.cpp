@@ -124,6 +124,10 @@ namespace CNA::Internal::Input
             {
                 return SDL_GetGamepadSteamHandle(gamepad);
             }
+            SDL_JoystickConnectionState GetGamepadConnectionState(SDL_Gamepad* gamepad) override
+            {
+                return SDL_GetGamepadConnectionState(gamepad);
+            }
         };
 
         RealSdlGamepadBackend g_realBackend;
