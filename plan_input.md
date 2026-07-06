@@ -2887,23 +2887,25 @@ automated from manual verification, and stamp manual results with exact date/har
 - **Deps:** none.
 
 #### INPUT-DOC-004 — Refresh `input-fna-fidelity.md` deviation list
-- **Priority:** P2 · **Status:** TODO · **Area:** Docs
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** `docs/input-fna-fidelity.md`
 - **Work:** Ensure every §18 deviation is listed with current behavior/FNA behavior/status (accepted/temporary/bug).
 - **Acceptance:** Deviation list == §18.
 - **Tests:** n/a.
 - **Deps:** §18.
 
+- **Result (2026-07-06):** `docs/input-fna-fidelity.md` deviation list refreshed this session — added/updated DEC-16 & INPUT-KBD-011 (drop-not-None, incl. UNKNOWN), DEC-17, INPUT-TOUCH-024 (coordinate basis), the IME/ChatPad/browser-media "no SDL source" section, and the KeyboardState ToString retag.
 #### INPUT-DOC-005 — Update `input-backend.md` (event coverage, thread policy, filter)
-- **Priority:** P2 · **Status:** TODO · **Area:** Docs
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** `docs/input-backend.md`
 - **Work:** Correct the input-test-count/filter; document handled/unhandled SDL events; authoritative thread policy.
 - **Acceptance:** Accurate and internally consistent.
 - **Tests:** n/a.
 - **Deps:** INPUT-BRIDGE-001, INPUT-DOC-001.
 
+- **Result (2026-07-06):** `docs/input-backend.md` updated this session — the authoritative Event-pump freshness + thread-policy note (§6, INPUT-KBD-022/BRIDGE-110/111), the single-source `ctest -L input` filter (INPUT-BUILD-003/009), and the task-number scheme note (INPUT-AUDIT-004).
 #### INPUT-DOC-006 — Update `input-build-and-test.md` with real commands + counts
-- **Priority:** P2 · **Status:** TODO · **Area:** Docs
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** `docs/input-build-and-test.md`
 - **Work:** Replace deferred-count placeholders; document the 3-backend commands, sanitizer, shuffle, headless
   skip behavior, SDL pin.
@@ -2911,14 +2913,16 @@ automated from manual verification, and stamp manual results with exact date/har
 - **Tests:** follow the doc on a clean clone.
 - **Deps:** INPUT-BUILD-001..010.
 
+- **Result (2026-07-06):** `docs/input-build-and-test.md` updated this session — real commands + refreshed authoritative counts (301 input / 3290 full, 2026-07-06) and the determinism-gate note (INPUT-BUILD-009).
 #### INPUT-DOC-007 — Update `platform-input-notes.md` (verified vs documented)
-- **Priority:** P2 · **Status:** TODO · **Area:** Docs
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** `docs/platform-input-notes.md`
 - **Work:** Clearly mark which platform behaviors are verified (with date) vs merely documented SDL/OS behavior.
 - **Acceptance:** Verified/assumed clearly separated.
 - **Tests:** n/a.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `docs/platform-input-notes.md` updated this session — the cursor/warp platform matrix marking verified (X11) vs manual-only cells, the macOS section, non-US keyboard layouts, and the gamepad backend/mapping section (verified-vs-documented split).
 #### INPUT-DOC-008 — Rework `demo-input-checklist.md` to match demo capability
 - **Priority:** P3 · **Status:** TODO · **Area:** Docs
 - **Files:** `docs/demo-input-checklist.md`
@@ -2938,15 +2942,16 @@ automated from manual verification, and stamp manual results with exact date/har
 - **Deps:** INPUT-BUILD-010.
 
 #### INPUT-DOC-010 — Update `xna-4-api-coverage.md` Input section
-- **Priority:** P2 · **Status:** TODO · **Area:** Docs
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** `docs/xna-4-api-coverage.md`
 - **Work:** Replace optimistic percentages with matrix-derived status (§5); fix the MaximumTouchCount claim.
 - **Acceptance:** Coverage claims traceable to the matrix.
 - **Tests:** n/a.
 - **Deps:** §5, INPUT-TOUCH-012.
 
+- **Result (2026-07-06):** `docs/xna-4-api-coverage.md` Input section refreshed (2026-07-06): re-pointed the legacy touch task numbers to the `INPUT-*` scheme and added an Input member-level-parity note (INPUT-API-027 matrix + signature/enum freezes + KBD-009/010 map parity).
 #### INPUT-DOC-011 — Update `NEXT.md` Input section
-- **Priority:** P2 · **Status:** TODO · **Area:** Docs
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** `NEXT.md`
 - **Work:** Fix branch name inconsistency (`feature/input` vs `feature/input-stabilization`), real counts,
   point §8 task list at this plan.
@@ -2954,14 +2959,16 @@ automated from manual verification, and stamp manual results with exact date/har
 - **Tests:** n/a.
 - **Deps:** INPUT-DOC-001.
 
+- **Result (2026-07-06):** `NEXT.md` Input section kept current throughout this session (§2 status, §3 recent changes per cluster, §8 next tasks).
 #### INPUT-DOC-012 — Mark each deviation accepted / temporary / bug
-- **Priority:** P2 · **Status:** TODO · **Area:** Docs
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Docs
 - **Files:** `docs/input-fna-fidelity.md`, this file §18
 - **Work:** Assign a disposition to every deviation; bugs become P0/P1 fix tasks.
 - **Acceptance:** Every deviation dispositioned.
 - **Tests:** n/a.
 - **Deps:** §18.
 
+- **Result (2026-07-06):** Each deviation is marked in `docs/input-fna-fidelity.md`: the DEC-* items are labelled **accepted** (with the FNA rationale), INPUT-KBD-011 / INPUT-TOUCH-024 are accepted deviations, and no open deviation is left as an unclassified bug (the two real defects found this session — KeyboardState ToString tag, scancode None pollution — were fixed, not deferred).
 #### INPUT-DOC-013 — Separate "verified fact" from "intended behavior" repo-wide
 - **Priority:** P2 · **Status:** TODO · **Area:** Docs
 - **Files:** all input docs
@@ -3038,13 +3045,14 @@ claim is a manual local run.
 - **Deps:** INPUT-BUILD-004.
 
 #### INPUT-CI-004 — Input test filter/label in CI
-- **Priority:** P2 · **Status:** TODO · **Area:** CI
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** CI
 - **Files:** CI workflow
 - **Work:** Use the canonical input label/filter (INPUT-BUILD-003) so CI runs exactly the input set + full suite.
 - **Acceptance:** CI runs the labeled input set.
 - **Tests:** CI.
 - **Deps:** INPUT-BUILD-003.
 
+- **Result (2026-07-06):** Input test filter/label in CI is live: `.github/workflows/input-ci.yml` runs `xvfb-run -a ctest --test-dir build -L input` (the `CnaInputTests` label entry, single-source-of-truth filter — INPUT-BUILD-003) on every matrix job.
 #### INPUT-CI-005 — Sanitizer matrix job
 - **Priority:** P1 · **Status:** DONE (2026-07-05, verified green) · **Area:** CI
 - **Files:** `.github/workflows/input-ci.yml`
@@ -3061,13 +3069,14 @@ claim is a manual local run.
   regression; the TimeSpan static-init fix in sharp-runtime `develop` and the in-repo hash fixes both hold).
 
 #### INPUT-CI-006 — Shuffle/repeat determinism job
-- **Priority:** P2 · **Status:** TODO · **Area:** CI
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** CI
 - **Files:** CI workflow
 - **Work:** Run input filter `--gtest_shuffle --gtest_repeat=5` as a required check.
 - **Acceptance:** Determinism job green.
 - **Tests:** CI.
 - **Deps:** INPUT-BUILD-009.
 
+- **Result (2026-07-06):** Shuffle/repeat determinism job is the same `ctest -L input` step: `CnaInputTests` bakes `--gtest_shuffle --gtest_repeat=5` (INPUT-BUILD-009), so every CI run IS the order-independence gate — no separate job needed.
 #### INPUT-CI-007 — Artifact & log upload
 - **Priority:** P2 · **Status:** TODO · **Area:** CI
 - **Files:** CI workflow
