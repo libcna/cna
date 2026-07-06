@@ -99,6 +99,43 @@ namespace
         return wav;
     }
 
+    // Same as BuildMinimalWavBytes, but with "fmt " chunk's audioFormat set to an unsupported
+    // format tag (0x2000, a reserved/unused value -- not PCM(1), IEEE float(3), or WAVE_FORMAT_
+    // EXTENSIBLE(0xFFFE)) -- P10-SE-002 fixture for FromStream's unsupported-codec path.
+    std::vector<uint8_t> BuildWavBytesWithUnsupportedFormatTag()
+    {
+        std::vector<uint8_t> wav = BuildMinimalWavBytes();
+        constexpr std::size_t audioFormatOffset = 20; // "RIFF"+size+"WAVE"+"fmt "+size = 20
+        constexpr uint16_t unsupportedFormatTag  = 0x2000;
+        std::memcpy(wav.data() + audioFormatOffset, &unsupportedFormatTag, 2);
+        return wav;
+    }
+
+    // Same as BuildMinimalWavBytes, but the "fmt " chunk is truncated: its declared chunk size
+    // (16) is left unchanged, but the file itself ends partway through those 16 bytes, with no
+    // "data" chunk at all -- P10-SE-002 fixture for a malformed/truncated fmt chunk.
+    std::vector<uint8_t> BuildWavBytesWithTruncatedFmtChunk()
+    {
+        std::vector<uint8_t> wav;
+        tag(wav, "RIFF"); w32(wav, 4 + 8 + 16);
+        tag(wav, "WAVE");
+        tag(wav, "fmt "); w32(wav, 16); // declares 16 bytes of fmt payload
+        w16(wav, 1); w16(wav, 1); // audioFormat=PCM, channels=1 -- only 4 of the 16 bytes follow
+        return wav;
+    }
+
+    // Same as BuildMinimalWavBytes, but the "data" chunk's declared size (audioLen) is far larger
+    // than the number of sample bytes actually present in the file -- P10-SE-002 fixture for a
+    // malformed/truncated data chunk.
+    std::vector<uint8_t> BuildWavBytesWithTruncatedDataChunk()
+    {
+        std::vector<uint8_t> wav = BuildMinimalWavBytes();
+        constexpr uint32_t claimedAudioLen = 4410 * 100; // wildly exceeds what's really present
+        constexpr std::size_t dataSizeOffset = 12 + 8 + 16 + 4; // offset of "data"'s size field
+        std::memcpy(wav.data() + dataSizeOffset, &claimedAudioLen, 4);
+        return wav;
+    }
+
     // Same as BuildMinimalWavBytes, but with a trailing "smpl" chunk (one sample loop) after the
     // "data" chunk -- regression fixture for CP-17's FromStream loop-point parsing.
     std::vector<uint8_t> BuildWavBytesWithSmplChunk(uint32_t loopStartSample, uint32_t loopEndSample)
@@ -505,6 +542,81 @@ TEST(SoundEffectTest, FromStreamWithTruncatedSmplChunkDoesNotCrash)
     SoundEffectInstance instance = fx->CreateInstance();
     EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 0u);
     EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 0u);
+}
+
+// P10-SE-002: a WAV whose "fmt " chunk declares an audioFormat tag the underlying decoder does
+// not support must be rejected the same way plain garbage bytes are, not silently misread.
+TEST(SoundEffectTest, FromStreamUnsupportedFormatTagThrowsNotSupported)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto bytes = BuildWavBytesWithUnsupportedFormatTag();
+    std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    std::istringstream stream(s);
+
+    try
+    {
+        SoundEffect* loaded = SoundEffect::FromStream(stream);
+        delete loaded;
+        FAIL() << "expected an exception for an unsupported WAV format tag";
+    }
+    catch (const System::NotSupportedException&)
+    {
+        SUCCEED();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
+}
+
+// P10-SE-002: a WAV whose "fmt " chunk is truncated (declares 16 bytes of payload but the file
+// ends partway through them, with no "data" chunk at all) must be rejected, not overread.
+TEST(SoundEffectTest, FromStreamTruncatedFmtChunkThrowsNotSupported)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto bytes = BuildWavBytesWithTruncatedFmtChunk();
+    std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    std::istringstream stream(s);
+
+    try
+    {
+        SoundEffect* loaded = SoundEffect::FromStream(stream);
+        delete loaded;
+        FAIL() << "expected an exception for a truncated fmt chunk";
+    }
+    catch (const System::NotSupportedException&)
+    {
+        SUCCEED();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
+}
+
+// P10-SE-002: a WAV whose "data" chunk declares far more audio bytes than are actually present
+// in the file must be rejected, not read past the real end of the buffer.
+TEST(SoundEffectTest, FromStreamTruncatedDataChunkThrowsNotSupported)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto bytes = BuildWavBytesWithTruncatedDataChunk();
+    std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    std::istringstream stream(s);
+
+    try
+    {
+        SoundEffect* loaded = SoundEffect::FromStream(stream);
+        delete loaded;
+        FAIL() << "expected an exception for a truncated data chunk";
+    }
+    catch (const System::NotSupportedException&)
+    {
+        SUCCEED();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
 }
 
 // ===================== path constructor (NOXNA) =====================

@@ -3546,18 +3546,27 @@ restoration can be reverted.
   strictly than FNA, since C++ has no array-bounds safety net -- `P9-VALIDATION-003`, fixing a
   real segfault). `FromStream` parses WAV `fmt`/`data`/`smpl` chunks; malformed-WAV behavior see
   P10-SE-002 below.
-* [ ] P10-SE-002: Tests for invalid buffers/offsets/counts/loop starts/loop lengths/empty
+* [x] P10-SE-002: Tests for invalid buffers/offsets/counts/loop starts/loop lengths/empty
   streams/unsupported streams/malformed WAV files.
   *Note:* Offset/count overflow: covered (`P9-VALIDATION-003`, segfault-reproducing regression
   test). Loop start/length validation: **not validated by CNA or FNA** (`P9-VALIDATION-002`,
   audited and confirmed matching FNA's own unvalidated `(uint)loopStart` wraparound behavior --
   already correct, not a gap). WAV `smpl`-chunk-present/absent: covered
-  (`FromStreamParsesSmplChunkIntoLoopRegion`/`...WithoutSmplChunkLeavesLoopRegionAtZero`). **Not
-  covered, left open:** a genuinely empty stream, an unsupported (non-WAV, or WAV with an
-  unsupported codec/bit-depth) stream, and a WAV file with a malformed/truncated `fmt`/`data`
-  chunk (as opposed to just a missing optional `smpl` chunk) -- these would need new fixtures and
-  a decision on whether CNA should throw a specific exception type or whatever `FromStream`'s
-  current fallback behavior already is for bad input (not verified in this pass).
+  (`FromStreamParsesSmplChunkIntoLoopRegion`/`...WithoutSmplChunkLeavesLoopRegionAtZero`). A
+  genuinely empty stream and non-WAV garbage bytes were already covered pre-existing
+  (`FromStreamEmptyThrowsNotSupported`/`FromStreamGarbageThrowsNotSupported`, Fáze 9). Closed this
+  pass: added the three remaining fixture classes and their tests in `SoundEffectTests.cpp` --
+  `BuildWavBytesWithUnsupportedFormatTag()` (a WAV whose `fmt` chunk's `audioFormat` tag is
+  `0x2000`, a reserved/unsupported value) plus `FromStreamUnsupportedFormatTagThrowsNotSupported`;
+  `BuildWavBytesWithTruncatedFmtChunk()` (declares 16 bytes of `fmt` payload but the file ends
+  after only 4) plus `FromStreamTruncatedFmtChunkThrowsNotSupported`; and
+  `BuildWavBytesWithTruncatedDataChunk()` (the `data` chunk's declared size wildly exceeds the
+  actual sample bytes present) plus `FromStreamTruncatedDataChunkThrowsNotSupported`. All three
+  empirically confirmed (not assumed) to throw `System::NotSupportedException` -- SDL3_mixer's own
+  WAV decoder rejects each malformed case cleanly (`MIX_LoadAudio_IO` fails, converted by
+  `FromStream`'s existing error path), matching the same behavior as plain garbage bytes. No
+  production code change needed; `FromStream`'s existing catch-and-convert path already handles
+  every one of these correctly.
 * [x] P10-SE-003: Verify `MasterVolume`/`DistanceScale`/`DopplerScale`/`SpeedOfSound` against
   XNA/FNA.
   *Note:* `MasterVolume` reads/writes the real live SDL3_mixer master gain (`CP-16`, confirmed
