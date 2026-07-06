@@ -4,6 +4,7 @@
 #include <limits>
 #include <string>
 
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketReader.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 
@@ -27,6 +28,13 @@ TEST(PacketReaderTest, CapacityCtorIsEmpty) {
     PacketReader r(64);
     EXPECT_EQ(r.getLengthProperty(), 0);
     EXPECT_EQ(r.getPositionProperty(), 0);
+}
+
+// Task 5.11: real .NET's MemoryStream(int capacity) - which FNA's PacketReader(int capacity)
+// constructs internally - throws ArgumentOutOfRangeException for a negative value, regardless of
+// capacity being otherwise just a preallocation hint with no observable effect.
+TEST(PacketReaderTest, NegativeCapacityThrowsArgumentOutOfRangeException) {
+    EXPECT_THROW(PacketReader r(-1), System::ArgumentOutOfRangeException);
 }
 
 TEST(PacketReaderTest, SetPositionSeeks) {
@@ -74,6 +82,13 @@ TEST(PacketWriterTest, CapacityCtorIsEmpty) {
     PacketWriter w(64);
     EXPECT_EQ(w.getLengthProperty(), 0);
     EXPECT_EQ(w.getPositionProperty(), 0);
+}
+
+// Task 5.11: same reasoning as PacketReaderTest.NegativeCapacityThrowsArgumentOutOfRangeException -
+// FNA's PacketWriter(int capacity) constructs a MemoryStream(capacity) internally, which real .NET
+// throws ArgumentOutOfRangeException for when capacity is negative.
+TEST(PacketWriterTest, NegativeCapacityThrowsArgumentOutOfRangeException) {
+    EXPECT_THROW(PacketWriter w(-1), System::ArgumentOutOfRangeException);
 }
 
 TEST(PacketWriterTest, SetPositionSeeksForRewrite) {

@@ -952,10 +952,23 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Pure test-coverage addition, no revert-verify applies. Full suite: **3282/3284 passing** (2
   expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 5.11** — Add negative-capacity tests for `PacketReader(int)`/`PacketWriter(int)`. Real
+- [x] **Task 5.11** — Add negative-capacity tests for `PacketReader(int)`/`PacketWriter(int)`. Real
   .NET's `MemoryStream(int capacity)` throws `ArgumentOutOfRangeException` for a negative value
   regardless of whether preallocation is actually implemented — confirm/fix cna's constructors to
-  match, and add the test.
+  match, and add the test. Confirmed a genuine bug: `PacketReaderStream(int capacity)`/
+  `PacketWriterStream(int capacity)` (both entirely within this repo, not `sharp-runtime` — FNA's
+  `PacketReader(int capacity)`/`PacketWriter(int capacity)` construct `new MemoryStream(capacity)`
+  internally) silently discarded a negative `capacity` instead of throwing. Fixed both to call
+  `System::ArgumentOutOfRangeException::ThrowIfNegative(capacity, "capacity")` in their constructor
+  body — preserving the (correct) preallocation-hint-is-otherwise-a-no-op behavior for non-negative
+  values, only adding the negative-value guard. Added
+  `PacketReaderTest.NegativeCapacityThrowsArgumentOutOfRangeException` and
+  `PacketWriterTest.NegativeCapacityThrowsArgumentOutOfRangeException`.
+
+  Revert-verify-restore: reverted both constructor bodies back to `(void) capacity;` (keeping the
+  new tests) — both new tests failed with "it throws nothing", confirming they genuinely exercise
+  the fix. Restored the fix; rebuilt clean. Full suite: **3284/3286 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 5.12** — Create a dedicated `LocalNetworkGamerTests.cpp` file. Confirmed its ~14 test
   cases currently live embedded in `NetworkSessionTests.cpp` (~lines 504-605), contrary to
