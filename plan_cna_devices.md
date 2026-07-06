@@ -275,7 +275,7 @@ independent task instead of guessing.
 
 ## Phase 2 — needs one design decision first
 
-### DEVICES-CNA-007 — `DisplayInfo`
+### DEVICES-CNA-007 — `DisplayInfo` — CLOSED (2026-07-07)
 
 - **Priority:** Medium
 - **Problem:** per `noxna_devices.md` Section 4.6, this needs to reach the *same*
@@ -294,6 +294,64 @@ independent task instead of guessing.
   `include/Microsoft/Xna/Framework/GameWindow.hpp`,
   `include/CNA/Internal/Backends/*/*.hpp` (whichever backend is active) — then new
   `CNA::Devices` files.
+- **Resolution:** Read `GameWindow.hpp` first, as required. Found: `GameWindow`
+  already privately owns an `SDL_Window* window_` (constructor `GameWindow(SDL_Window*
+  window)`, `friend class Game; friend class GraphicsDeviceManager;`, no existing
+  public accessor to reach it). **Bigger finding that reshaped this task's scope:**
+  `GameWindow` already exposes `getCurrentOrientationProperty()` (real XNA
+  `DisplayOrientation`, no `NOXNA` tag) and `getClientBoundsProperty()` (real XNA
+  `Rectangle`) — i.e. orientation and window bounds, two of the four SDL3 functions
+  `noxna_devices.md` Section 4.6 originally proposed wrapping, are **already covered by
+  real XNA API** and must not be duplicated (same "don't create two competing ways to
+  ask the same question" principle `noxna_devices.md` Section 4.10 already applied to
+  storage/microphone). **Narrowed `DisplayInfo`'s actual scope to only the two
+  genuinely new capabilities:** window content scale and window safe-area insets —
+  neither has any XNA/`GameWindow` equivalent today.
+  - **Window-ownership hook:** added exactly one new method to the existing
+    `GameWindow` class — `NOXNA [[nodiscard]] SDL_Window* GetNativeSdlWindowEXT()
+    const;` (`GameWindow.hpp`/`.cpp`), returning the private `window_` directly. Tagged
+    both `NOXNA` (the project-wide, compile-time-enforced convention) and with the
+    `EXT` name suffix, matching this same class's existing sibling convention
+    (`getIsBorderlessEXTProperty()`) for a CNA-added member on an otherwise-real-XNA
+    class. This is the "new members on an existing file" pattern the user's own
+    original request for `noxna_devices.md` explicitly anticipated as one of two valid
+    approaches — not an unplanned scope expansion.
+  - **Used `SDL_GetWindowDisplayScale(window)` instead of `SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(window))`**
+    (the function `noxna_devices.md` originally named): re-reading `SDL_video.h`'s own
+    doc comment for `SDL_GetDisplayContentScale()` found it explicitly recommends the
+    per-window function instead, since "the per-window content scale factor may differ
+    from the base value of the display it is on, particularly on high-DPI and/or
+    multi-monitor desktop configurations" — a more correct choice found only by reading
+    the source directly rather than trusting the analysis document's own (slightly
+    imprecise) function name.
+  - Did **not** implement `SDL_GetCurrentDisplayOrientation`/
+    `SDL_GetNaturalDisplayOrientation` wrapping at all, per the duplication finding
+    above.
+  - `getSafeAreaProperty()` returns a `Microsoft::Xna::Framework::Rectangle` (SDL3's
+    own `SDL_GetWindowSafeArea()` returns a rect, not directional inset amounts) —
+    reused the existing `Rectangle` type rather than inventing a new insets struct.
+    Both methods return SDL3's own documented failure sentinels (`0.0f` content scale,
+    `Rectangle::Empty` safe area) for a `GameWindow` with no attached SDL window,
+    rather than an invented default that could mask a real failure (matches
+    `PowerInfo`'s `-1` sentinel precedent).
+  - Added `tests/CNA/Devices/DisplayInfoTests.cpp` (4 tests): 3 against the "no SDL
+    window" path (this test binary's normal, always-available state), plus one
+    following `GameWindowTest.SetAndGetTitle_UsingSdlWindow`'s existing precedent
+    (`tests/Microsoft/Xna/Framework/GameWindowTests.cpp`) that creates a real, hidden
+    `SDL_Window` and gracefully `GTEST_SKIP()`s if this container's video subsystem is
+    unusable. **It was not skipped** — this container's video subsystem is usable, so
+    this test genuinely exercised both real SDL3 calls end-to-end and confirmed
+    positive, non-degenerate values, not just a "didn't crash" check.
+  - Build: `cmake --build cmake-build-debug --target CNA`/`--target CnaTests` (both
+    clean, zero new warnings from the `GameWindow.hpp`/`.cpp` edit). Confirmed the
+    existing `GameWindowTest`/`GameTest` suites (12 tests) still pass unchanged — the
+    new method introduced zero regression to the class it was added to. Ran
+    `DisplayInfoTests.*` (4/4 pass, including the real-window test) and, given this
+    task touches real SDL window creation/destruction, explicitly re-ran
+    `DisplayInfoTests.*:GameWindowTest.*:GameTest.*` under `devices-asan` with
+    `ASAN_OPTIONS=detect_leaks=1`: 16/16 pass, zero reports. Full existing filter plus
+    every `CNA::Devices` suite through this task: 377 tests, 375 passed, 2 pre-existing
+    expected skips, zero regressions.
 
 ---
 
@@ -371,6 +429,13 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — DEVICES-CNA-007 CLOSED.** `CNA::Devices::DisplayInfo` implemented,
+  scope narrowed after design research found `GameWindow` already exposes real-XNA
+  orientation/bounds — only content-scale and safe-area were genuinely new. Added one
+  `NOXNA`-tagged accessor to `GameWindow` (`GetNativeSdlWindowEXT()`) as the window
+  hook. 4 tests, including one against a real (non-skipped) SDL window in this
+  container. Full suite 377/377 (375 pass + 2 expected skips), ASan clean including
+  the real-window path. Next: `DEVICES-CNA-008` (`FileDialog`, Phase 3).
 - **2026-07-07 — DEVICES-CNA-006 CLOSED. Phase 1 fully verified and complete.** All 18
   tests across 5 `CNA::Devices` suites pass under `devices-asan` (0 reports) and
   `devices-ubsan` (0 reports); `CNA_DEVICES=OFF` default confirmed unaffected in a

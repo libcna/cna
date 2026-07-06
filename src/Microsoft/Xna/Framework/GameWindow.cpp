@@ -89,6 +89,11 @@ namespace Microsoft::Xna::Framework
         return reinterpret_cast<SharpRuntime::IntPtr>(window_);
     }
 
+    SDL_Window* GameWindow::GetNativeSdlWindowEXT() const
+    {
+        return window_;
+    }
+
     const GameWindow::String& GameWindow::getScreenDeviceNameProperty() const
     {
         return screenDeviceName_;
