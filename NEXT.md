@@ -52,8 +52,20 @@
     disabled / velocity-gate / direction / reset gaps (audited vs FNA `GestureDetector.cs`); P6-016 `[!]`.
   - **Phase 7** (Text/IME, P7-001..010) — **done**; +6 tests (empty-text, subscriber order, repeated text,
     IME byte-offset, zero/neg rectangle); control chars + Ctrl+V confirmed FNA-identical; P7-010 `[!]`.
-  - **Phase 8** (SDL bridge) — **in progress** (next).
-  - **Phases 9–12** — not started (build-CI / docs / manual-HW / final gates).
+  - **Phase 8** (SDL bridge, P8-001..008) — **done**; +4 tests (ignored-event / stale-handle / mouse-
+    lifecycle / suppress-reset); 17-event consumed set enumerated; P8-006 resize/high-DPI-input `[!]`.
+  - **Phase 9** (build/CI, P9-001..009) — **done**; submodule diagnostics + focused target + shuffle×5
+    verified; ASan+UBSan-clean (374); fuzz/golden/signature-freeze confirmed; coverage doc regenerated;
+    decision: no system-SDL (vendored required).
+  - **Phase 10** (docs, P10-001..005) — **done**; added Browser/Emscripten platform-input section; strict-
+    XNA/FNA/NOXNA + platform + manual-checklist docs verified.
+  - **Phase 11** (manual hardware, P11-001..007) — **`[!]` BLOCKED** (real keyboards/mice/gamepads/
+    touchscreen/IME; not headless-executable). Logic is unit-tested; only real-device wiring pending.
+  - **Phase 12** (final gates, P12-001..005) — **done**; input gate 100% (378, 4 backends, ASan); full
+    suite 3356/3369 (11 failures all Graphics-track, zero input); parity 0 gaps; final readiness statement
+    written.
+  - **➜ `plan_input.md` automated/documentation scope is COMPLETE.** Only Phase 11 manual HW remains open.
+    Branch is merge-ready pending the user's merge-vs-hold decision (do NOT merge without explicit ask).
 - **Does NOT work / not headless-verifiable (by design, not code gaps):** real gamepad **actuation**
   (rumble, trigger haptics, live sensors, OS hot-plug/GUID); real **IME** composition; **Wayland**
   cursor-landing readback (X11-only); high-DPI touch pixel scaling (headless runs at 1×1). All documented
