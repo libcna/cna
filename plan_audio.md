@@ -4551,7 +4551,15 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
 
 ## Phase 11.9 — Remaining TODO/FIXME/HACK sweep
 
-* [ ] P11-TODO-001: Grep every Audio `src`/`include` file for `TODO`/`FIXME`/`HACK`/`XXX` comments
+* [x] P11-TODO-001: Grep every Audio `src`/`include` file for `TODO`/`FIXME`/`HACK`/`XXX` comments
   not yet resolved into either a real fix or a documented `CHECKLIST.md` accepted-deviation row.
-  *Status:* Open. Mechanical, but genuinely useful -- a leftover `TODO` is either forgotten work
-  or an undocumented deviation, and this file's own convention is "no silent stubs."
+  *Note:* Closed this pass. Grepped every Audio header/source (`include/Microsoft/Xna/Framework/
+  Audio/`, `src/Microsoft/Xna/Framework/Audio/`, `include/CNA/Internal/Audio/`,
+  `src/CNA/Internal/Audio/`, `FrameworkDispatcher.{hpp,cpp}`) plus every Audio test file
+  (`tests/Microsoft/Xna/Framework/Audio/`, `tests/CNA/Internal/Audio/`, `tools/audio/`) for
+  `TODO`/`FIXME`/`HACK`/`XXX`. Exactly one match, in `AudioEngine.cpp`'s
+  `CheckCategoryInstanceLimit()` -- and it's a citation of *FAudio's own* real source comment
+  ("its own source carries a 'FIXME: How does QUEUE differ from REPLACE_OLDEST?' comment"),
+  already fully resolved and documented (`P9-CATEGORY-010`, `CHECKLIST.md`), not a leftover CNA
+  TODO. Zero genuine unresolved markers found anywhere in Audio scope, source or tests -- a clean
+  result, not a skipped check. No code changed; no build/test needed.

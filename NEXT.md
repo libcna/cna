@@ -118,6 +118,10 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11" sections.
 
+- **`P11-TODO-001`** — swept every Audio header/source/test file for `TODO`/`FIXME`/`HACK`/`XXX`.
+  Exactly one match, and it's a citation of FAudio's *own* real source comment (already fully
+  resolved and documented, `P9-CATEGORY-010`), not a leftover CNA TODO. Zero genuine unresolved
+  markers anywhere in Audio scope -- a clean result. No code changed. See `plan_audio.md`.
 - **`P11-DISPATCH-001`** — compared FNA's real `FrameworkDispatcher.Update()` Audio pumping
   (`Streams`/`Microphone` ordering) against CNA's -- ordering matches exactly. **Found and fixed a
   real self-deadlock**: `DynamicSoundEffectInstance::Update()` synchronously raises
