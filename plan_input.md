@@ -1912,53 +1912,92 @@ added the Browser/Emscripten input section (P10-004).
 
 # Phase 11 — Manual hardware validation
 
-## P11-001 — Keyboard hardware validation
-- [ ] Validate US layout.
-- [ ] Validate CZ layout.
-- [ ] Validate at least one non-QWERTY layout if available.
-- [ ] Validate modifiers and OEM keys.
-- [ ] Record results.
+> **Phase 11 is BLOCKED `[!]` — manual hardware validation, not executable in the headless CI/agent
+> environment.** Each task below requires real hardware (physical keyboards with specific layouts, a mouse
+> with extra buttons + a high-DPI display, Xbox/PlayStation/generic controllers, a touchscreen, a desktop
+> IME / mobile soft keyboard). None can be run autonomously. The **logic** behind every item is already
+> pinned by automated tests (see the per-task notes); Phase 11 only confirms real-device wiring. Execute
+> against `docs/devices-hardware-checklist.md` + `docs/demo-input-checklist.md`, and record outcomes in
+> `docs/input-manual-verification-results.md`.
 
-## P11-002 — Mouse hardware validation
-- [ ] Validate normal mouse motion.
-- [ ] Validate wheel.
-- [ ] Validate extra buttons.
-- [ ] Validate relative mode.
-- [ ] Validate high-DPI behavior.
-- [ ] Record results.
+## P11-001 — Keyboard hardware validation `[!]`
+- [!] Validate US layout.
+- [!] Validate CZ layout.
+- [!] Validate at least one non-QWERTY layout if available.
+- [!] Validate modifiers and OEM keys.
+- [!] Record results.
 
-## P11-003 — Xbox-compatible gamepad validation
-- [ ] Validate connect/disconnect.
-- [ ] Validate buttons.
-- [ ] Validate sticks.
-- [ ] Validate triggers.
-- [ ] Validate rumble.
-- [ ] Record results.
+**Status (2026-07-06):** Blocked — needs physical keyboards with US/CZ/non-QWERTY layouts. Automated proxy:
+keycode/scancode maps diffed byte-identical to FNA and covered by the SdlInputBridge keyboard suite
+(modifiers + lock keys `ModifierAndLockKeysMapToDistinctKeysWithoutMerging`, Nordic/OEM, layout-dependent
+drop); physical per-layout OEM positions are the only untested part (P2-010 deferred here).
 
-## P11-004 — PlayStation-compatible gamepad validation
-- [ ] Validate mapping.
-- [ ] Validate GUID.
-- [ ] Validate sensors if supported.
-- [ ] Validate light bar if supported.
-- [ ] Record results.
+## P11-002 — Mouse hardware validation `[!]`
+- [!] Validate normal mouse motion.
+- [!] Validate wheel.
+- [!] Validate extra buttons.
+- [!] Validate relative mode.
+- [!] Validate high-DPI behavior.
+- [!] Record results.
 
-## P11-005 — Generic SDL gamepad validation
-- [ ] Validate a generic mapped controller.
-- [ ] Validate unknown controller fallback.
-- [ ] Record mapping issues.
+**Status (2026-07-06):** Blocked — needs a physical mouse (incl. X1/X2 buttons) and a high-DPI display.
+Automated proxy: motion/wheel/buttons/relative-mode all covered via the bridge + real-hidden-window tests;
+logical→window scaling covered by the letterbox tests. Only real high-DPI device readback (P8-006) is
+untested.
 
-## P11-006 — Touchscreen validation
-- [ ] Validate single touch.
-- [ ] Validate multi-touch.
-- [ ] Validate gestures.
-- [ ] Validate display scaling.
-- [ ] Record results.
+## P11-003 — Xbox-compatible gamepad validation `[!]`
+- [!] Validate connect/disconnect.
+- [!] Validate buttons.
+- [!] Validate sticks.
+- [!] Validate triggers.
+- [!] Validate rumble.
+- [!] Record results.
 
-## P11-007 — IME and soft keyboard validation
-- [ ] Validate desktop IME.
-- [ ] Validate mobile soft keyboard if supported.
-- [ ] Validate composition events.
-- [ ] Record results.
+**Status (2026-07-06):** Blocked — needs a physical Xbox-compatible controller. Automated proxy: the
+`FakeSdlGamepadBackend` proves connect/disconnect, button/axis/trigger mapping, and rumble *translation/
+bookkeeping*; real rumble **actuation** and live device timing are the untested part (Phase 4 note).
+
+## P11-004 — PlayStation-compatible gamepad validation `[!]`
+- [!] Validate mapping.
+- [!] Validate GUID.
+- [!] Validate sensors if supported.
+- [!] Validate light bar if supported.
+- [!] Record results.
+
+**Status (2026-07-06):** Blocked — needs a physical PS4/PS5 controller. Automated proxy: GUID formatting,
+LED (light-bar) forwarding, and gyro/accelerometer enable+read are all covered via the fake backend; real
+sensor data and visible LED changes need the hardware.
+
+## P11-005 — Generic SDL gamepad validation `[!]`
+- [!] Validate a generic mapped controller.
+- [!] Validate unknown controller fallback.
+- [!] Record mapping issues.
+
+**Status (2026-07-06):** Blocked — needs a generic/unknown physical controller. Automated proxy: the
+`sdl_joystick_type_to_gamepad_type` map (incl. `Unknown` fallback) and the SDL→XNA button map are covered by
+`ExtendedSdlJoystickTypesMapToXnaGamePadType` + `EverySdlButtonMapsToTheExpectedXnaButton`.
+
+## P11-006 — Touchscreen validation `[!]`
+- [!] Validate single touch.
+- [!] Validate multi-touch.
+- [!] Validate gestures.
+- [!] Validate display scaling.
+- [!] Record results.
+
+**Status (2026-07-06):** Blocked — needs a physical touchscreen. Automated proxy: single/multi-touch,
+previous-location, and every gesture are exhaustively covered by the deterministic `GestureDetectorTest` +
+touch suites via the real `ProcessEvent`; only real high-DPI touch pixel scaling (P5-015 / P8-006) needs the
+device.
+
+## P11-007 — IME and soft keyboard validation `[!]`
+- [!] Validate desktop IME.
+- [!] Validate mobile soft keyboard if supported.
+- [!] Validate composition events.
+- [!] Record results.
+
+**Status (2026-07-06):** Blocked — needs an installed desktop IME / mobile soft keyboard. Automated proxy:
+UTF-8 decode, TextEditing callback/start/length/empty, byte-offset semantics, and start/stop/rectangle are
+all unit-tested; the real-window text-input test already `GTEST_SKIP`s where no IME is present (P7-010).
 
 ---
 
