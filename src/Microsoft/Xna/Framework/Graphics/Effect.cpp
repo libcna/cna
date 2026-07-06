@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "System/NotImplementedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -12,6 +13,16 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         techniques_.Add(EffectTechnique(this, "Default"));
         currentTechnique_ = &techniques_[0];
+    }
+
+    Effect::Effect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& /*effectCode*/)
+        : GraphicsResource(&device)
+        , device_(&device)
+    {
+        throw System::NotImplementedException(
+            "Effect(GraphicsDevice&, const std::vector<bytecs>&): compiled XNA .fx bytecode "
+            "is not yet supported (tracked as Phase 74, see docs/fx-bytecode-support-plan.md). "
+            "Use a hand-authored ShaderEffect or one of the built-in stock effects instead.");
     }
 
     Effect::~Effect()

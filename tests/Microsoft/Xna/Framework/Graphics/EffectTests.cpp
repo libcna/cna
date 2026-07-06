@@ -20,6 +20,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/NotImplementedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
@@ -44,6 +45,8 @@ namespace
     {
     public:
         explicit TestEffect(GraphicsDevice& device) : Effect(device) {}
+        TestEffect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& effectCode)
+            : Effect(device, effectCode) {}
 
         int applyCount = 0;
 
@@ -98,6 +101,37 @@ TEST(EffectTest, GraphicsDeviceInternalReturnsOwningDevice)
     TestEffect fx(gd);
 
     EXPECT_EQ(&fx.getGraphicsDeviceInternal(), &gd);
+}
+
+// -----------------------------------------------------------------------
+// Task 353: interim safety net — the bytecode constructor exists (matching
+// FNA's public API surface) but must throw until Phase 74's real MojoShader-
+// equivalent bytecode pipeline lands, rather than silently building a
+// broken/fake Effect.
+// -----------------------------------------------------------------------
+
+TEST(EffectTest, BytecodeConstructorThrowsNotImplementedException)
+{
+    GraphicsDevice gd;
+    const std::vector<SharpRuntime::bytecs> fakeBytecode{ 1, 2, 3, 4 };
+
+    EXPECT_THROW(TestEffect(gd, fakeBytecode), System::NotImplementedException);
+}
+
+TEST(EffectTest, BytecodeConstructorMessageMentionsPhase74Roadmap)
+{
+    GraphicsDevice gd;
+    const std::vector<SharpRuntime::bytecs> fakeBytecode{ 1, 2, 3, 4 };
+
+    try
+    {
+        TestEffect fx(gd, fakeBytecode);
+        FAIL() << "Expected System::NotImplementedException";
+    }
+    catch (const System::NotImplementedException& e)
+    {
+        EXPECT_NE(std::string(e.what()).find("Phase 74"), std::string::npos);
+    }
 }
 
 // -----------------------------------------------------------------------

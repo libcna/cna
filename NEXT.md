@@ -13,9 +13,9 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
-  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–352 are
-  done, **Task 353 is next** (interim safety net: `.fx` bytecode-accepting constructors added to
-  `Effect` must throw a clear not-yet-implemented exception until Phase 74, below, lands — see §8).
+  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–353 are
+  done, **Task 354 is next** (developer-facing docs covering `ShaderEffect` vs the Task 353 interim
+  guard vs the Phase 74 roadmap — see §8).
   **Task 351**
   audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
   returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
@@ -88,7 +88,22 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   original "assume unsupported" framing to fit the full-support decision: 353 is now an interim
   throw-on-bytecode safety net until Phase 74 lands; 354's doc now needs to cover what's supported
   today, the interim guard, and the Phase 74 roadmap. Pure planning task — no code changed, no
-  rebuild needed.
+  rebuild needed. **Task 353 shipped the interim guard**: added the previously-entirely-missing
+  `Effect(GraphicsDevice&, const std::vector<SharpRuntime::bytecs>&)` constructor, matching FNA's
+  `Effect(GraphicsDevice, byte[] effectCode)` signature (FNA has no offset/count overload for this
+  one — confirmed via grep). Body immediately `throw`s `System::NotImplementedException` naming
+  Phase 74/`docs/fx-bytecode-support-plan.md` and pointing at `ShaderEffect`/the stock effects as
+  today's real alternatives — mirrors this project's existing `NotImplementedException` usage
+  elsewhere (`BoundingFrustum::Intersects(Ray)`, `NetworkMachine`, `Achievement`). Note: `Effect`
+  remains abstract in C++ (Task 351's pure-virtual-`OnApply()` finding), so this constructor is only
+  reachable via a concrete subclass's delegation — an existing, already-documented divergence from
+  FNA's concrete `Effect`, not something this task changes. 2 new tests added to `EffectTests.cpp`
+  (extended the file's `TestEffect` fixture with a matching bytecode-forwarding constructor);
+  discriminating power verified by temporarily replacing the throw with the same programmatic setup
+  the no-bytecode constructor uses and confirming both new tests fail, then reverting. Full
+  3-backend regression, zero new failures: EasyGL 3368/3371 (3 pre-existing, unchanged). Vulkan
+  3290/3304 (13 pre-existing + 1 reconfirmed order-dependent `Vulkan_RenderTargetUsage` flake).
+  Bgfx 3274/3274 (100%).
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -416,22 +431,28 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 353 — interim safety net: throw on any `.fx` bytecode constructor until Phase 74 lands**
-   - Goal: Task 352 decided CNA's XNA `.fx`/compiled-effect-bytecode policy is **full support**
-     (user's explicit choice), but the real implementation is a large, multi-task effort now
-     tracked as new **Phase 74** (`docs/fx-bytecode-support-plan.md`, Tasks 10200–10209 — vendor
-     MojoShader, container-format parsing, EasyGL/Vulkan GPU-shader-translation paths, Bgfx
-     feasibility investigation, `Effect`/`Clone()` wiring, real bytecode test fixtures). Until that
-     lands, any `.fx` bytecode-accepting constructor added to `Effect` must throw a clear,
-     documented not-yet-implemented exception rather than silently producing a broken/fake effect.
-   - Files: `Effect.hpp`/`.cpp` — add the constructor signature matching FNA's
-     `Effect(GraphicsDevice, byte[] effectCode)` (via `SharpRuntime`'s `bytecs` alias) that
-     immediately throws (e.g. `std::runtime_error` or a dedicated `NotImplementedException`-style
-     type, check `sharp-runtime` for the established convention) with a message pointing at
-     `ShaderEffect` as the currently-supported custom-shader path and at Phase 74's tracking issue.
-   - Verification: a test asserting the constructor throws with a clear, non-empty message; confirm
-     it does NOT silently construct a partially-broken `Effect` (empty `Parameters`/`Techniques`
-     would be exactly the kind of "silent fake effect" this task exists to prevent).
+1. **`GRAPHICS_TASKS.md` Task 354 — developer-facing docs: `ShaderEffect` vs XNA `Effect` bytecode**
+   - Goal: re-scoped by Task 352 from "document that bytecode is unsupported" to a roadmap doc:
+     what's supported today (`ShaderEffect`'s hand-written GLSL/SPIR-V, stock effects), the interim
+     guard shipped in Task 353 (a real `Effect(GraphicsDevice&, const std::vector<bytecs>&)`
+     constructor exists and throws `System::NotImplementedException` naming Phase 74), and the
+     Phase 74 roadmap for real compiled-`.fx` support (`docs/fx-bytecode-support-plan.md`).
+   - Files: a new developer-facing doc (check `docs/` naming convention — likely
+     `docs/shadereffect-vs-fx-bytecode.md` or similar), cross-linked from
+     `docs/fx-bytecode-support-plan.md` and `docs/xna-4-api-coverage.md`.
+   - Verification: docs-only, no rebuild needed (matching Task 340/350's precedent) — just make sure
+     it accurately reflects Task 353's real constructor signature/exception type/message wording,
+     not a stale "throws `std::runtime_error`" or "unsupported" description.
+
+   **Task 353 status: done.** Added `Effect(GraphicsDevice&, const std::vector<SharpRuntime::bytecs>&)`
+   matching FNA's `Effect(GraphicsDevice, byte[] effectCode)` signature; body throws
+   `System::NotImplementedException` naming Phase 74/`docs/fx-bytecode-support-plan.md` and pointing
+   at `ShaderEffect`/stock effects as today's alternatives. 2 new tests in `EffectTests.cpp`
+   (`TestEffect` fixture extended with a matching bytecode-forwarding constructor), discriminating
+   power verified (temporarily replaced the throw with the same programmatic setup the no-bytecode
+   constructor uses, confirmed both new tests fail, reverted). Full 3-backend regression, zero new
+   failures: EasyGL 3368/3371 (3 pre-existing, unchanged). Vulkan 3290/3304 (13 pre-existing + 1
+   reconfirmed order-dependent `Vulkan_RenderTargetUsage` flake). Bgfx 3274/3274 (100%).
 
 2. **`GRAPHICS_TASKS.md` Task 883 — implement `Effect::Clone()` (new, opened by Task 351)**
    - Goal: FNA's `Effect` has a public virtual `Clone()` (used by every stock effect, each
