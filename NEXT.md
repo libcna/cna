@@ -16,12 +16,19 @@ strict-XNA-vs-`NOXNA` boundary.
 **Current development phase:** working through `plan_devices.md`, a 72-task audit/
 implementation plan rewritten from scratch on 2026-07-05, now grown to 74 tasks (2 new
 ones found during this session's own research — `ACCEL-008`, `COMPASS-009` — see
-below). **47 of 74 tasks are closed as of 2026-07-06** (all of Section 2 `DEV-BUILD-*`,
-Section 4 `VIB-*`, Section 6 `ACCEL-*`, Section 7 `GYRO-*`, and Section 8 `COMPASS-*`
-now done, plus most of Section 3 `DEV-API-*`), the rest open. Tasks are picked up one
-at a time, each with its own build+test+sanitizer verification and its own commit.
-Working autonomously through the remaining tasks in plan order (Sections 9-14:
-Motion/Android bridge/SDL sensor/reading structs/demo/final verification).
+below). **55 of 74 tasks are closed as of 2026-07-06** (all of Section 2 `DEV-BUILD-*`,
+Section 4 `VIB-*`, Section 6 `ACCEL-*`, Section 7 `GYRO-*`, Section 8 `COMPASS-*`, and
+Section 9 `MOTION-*` now done, plus most of Section 3 `DEV-API-*`), the rest open.
+Tasks are picked up one at a time, each with its own build+test+sanitizer verification
+and its own commit. Working autonomously through the remaining tasks in plan order
+(Sections 10-14: Android bridge/SDL sensor/reading structs/demo/final verification).
+
+**Two real bugs found and fixed in `Microsoft::Devices::Sensors::Detail::AndroidMotionBackend`
+this session (Section 9), both by careful code review, neither by hardware/sanitizer:**
+`MOTION-006` fixed `MotionReading.Timestamp`/`Attitude.Timestamp` divergence (publish
+time vs. attitude-sample-arrival time); `MOTION-007` added a 500ms max-age window
+across the four fused sensor streams so a stalled source can't be fused with fresh
+data from the other three forever.
 
 **Two new open questions found this session, not yet resolved, requiring careful
 follow-up (not urgent bugs, but real architectural questions):**
