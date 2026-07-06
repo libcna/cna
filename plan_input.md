@@ -315,9 +315,22 @@ out of the public surface via an opaque forward-decl. Added `IsKeyUp` test in Ph
 
 # Phase 4 — GamePad types
 
-## A4-001 — `GamePadButtons` (struct) `[ ]`
-- [ ] FNA `Input/GamePadButtons.cs`; CNA `GamePadButtons.hpp`/`.cpp`; test `GamePadButtonsTests.cpp`.
-- [ ] Members: ctors, per-button props, EXT props, `Equals`/`==`/`!=`, `GetHashCode`. Per-member.
+## A4-001 — `GamePadButtons` (struct) `[x]`
+- [x] FNA `Input/GamePadButtons.cs`; CNA `GamePadButtons.hpp`/`.cpp`; test `GamePadButtonsTests.cpp`.
+- [x] Members: ctors, per-button props, `Equals`/`==`/`!=`, `GetHashCode`, `FromButtonArray`. Per-member.
+
+**Result (2026-07-06):** **11 button properties** (A, B, Back, X, Y, Start, LeftShoulder, LeftStick,
+RightShoulder, RightStick, BigButton) — **exactly matches FNA** `GamePadButtons.cs` (no EXT properties: FNA
+exposes none either; the EXT bits live only in the `Buttons` enum). **Ctors:** default (NOXNA) + `GamePadButtons(Buttons)`
+(→ FNA). **`FromButtonArray`**: CNA exposes it `NOXNA static` mapping FNA's `internal static FromButtonArray`
+(documented internal→NOXNA choice, used by the bridge). Equals/`==`/`!=`/GetHashCode present. All Doxygen'd.
+**Test map:** default → `DefaultConstructorHasAllButtonsReleased`; Buttons ctor → `ConstructorFromCombinedFlags
+SetsEveryMatchingGetter` (asserts **all 11 getters**) + `ConstructorFromSingleFlagLeavesOthersReleased`;
+`FromButtonArray` → `FromButtonArrayCombinesMultipleFlagsAcrossElements` + `...WithEmptyListLeavesAllButtons
+Released`; equality → `EqualityOperatorsForEqualAndDifferingInstances`; hash →
+`GetHashCodeMatchesUnderlyingFlagsValueAndIsConsistent`. **Members reviewed:** 11 props + 2 ctors +
+FromButtonArray + 4 equality/hash = all. **Files changed:** none (perfect, no gap). **Behavior verified:**
+flag→property mapping + equality/hash. **Remaining risk:** none.
 
 ## A4-002 — `GamePadDPad` (struct) `[ ]`
 - [ ] FNA `Input/GamePadDPad.cs`; CNA `GamePadDPad.hpp`/`.cpp`; test (GamePadState/mapping suites).
