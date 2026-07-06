@@ -171,9 +171,17 @@ DrumKit=8, BigButtonPad=9` (FNA `GamePadType.cs:20-56`). Enum + all 10 members c
 10/10. **Files changed:** none (perfect, no gap). **Behavior verified:** value parity + SDL mapping.
 **Remaining risk:** none.
 
-## A1-007 — `GestureType` `[ ]`
-- [ ] FNA `Input/Touch/GestureType.cs`; CNA `Touch/GestureType.hpp`; test `Touch/GestureTypeTests.cpp`.
-- [ ] Verify 11 `[Flags]` values (None..PinchComplete, 0..0x200); bitwise ops; no EXT.
+## A1-007 — `GestureType` `[x]`
+- [x] FNA `Input/Touch/GestureType.cs`; CNA `Touch/GestureType.hpp`; test `Touch/GestureTypeTests.cpp`.
+- [x] Verify 11 `[Flags]` values (None..PinchComplete, 0..0x200); bitwise ops; no EXT.
+
+**Result (2026-07-06):** Value diff vs FNA `GestureType.cs`: **11=11 members, 0 only-in-CNA, 0 only-in-FNA,
+0 mismatches** — byte-identical `[Flags]` enum `None=0, Tap=0x1, DoubleTap=0x2, Hold=0x4, HorizontalDrag=0x8,
+VerticalDrag=0x10, FreeDrag=0x20, Pinch=0x40, Flick=0x80, DragComplete=0x100, PinchComplete=0x200`; **no CNA
+extension values**. Doxygen: 0 members missing. **Test:** `GestureTypeTest.ValuesMatchXnaFlagConstants` (all
+11 pinned) + `BitwiseOperatorsCombineAndMaskFlags` (`|`,`&`,`|=`,`&=`). **Members reviewed:** 11/11. **Files
+changed:** none (perfect, no gap; re-confirms A1-audit of the earlier P6-001). **Behavior verified:** flag
+values + operators. **Remaining risk:** none.
 
 ## A1-008 — `TouchLocationState` `[ ]`
 - [ ] FNA `Input/Touch/TouchLocationState.cs`; CNA `Touch/TouchLocationState.hpp`; test `Touch/TouchLocationStateTests.cpp`.
