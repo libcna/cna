@@ -90,6 +90,38 @@ TEST_F(SdlInputBridgeKeyboardTest, WindowFocusLostDoesNotClearHeldKeysMatchingFn
         << "focus loss must not clear accumulated key state (matches FNA)";
 }
 
+// INPUT-KBD-021: window lifecycle events (minimize / restore / maximize / close-request / focus change)
+// are not keyboard events — the bridge has no case for them, so they fall through as no-ops and must not
+// touch accumulated keyboard state. Held keys survive the whole sequence unchanged (this is the same
+// event-driven consequence as DEC-15's focus-loss: CNA never clears keys; games gate on Game.IsActive).
+TEST_F(SdlInputBridgeKeyboardTest, WindowLifecycleEventsDoNotCorruptKeyboardState)
+{
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDLK_A));
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDLK_B));
+    ASSERT_EQ(Keyboard::GetState().GetPressedKeys().size(), 2u);
+
+    for (const Uint32 type : {SDL_EVENT_WINDOW_MINIMIZED, SDL_EVENT_WINDOW_RESTORED,
+                              SDL_EVENT_WINDOW_MAXIMIZED, SDL_EVENT_WINDOW_FOCUS_GAINED,
+                              SDL_EVENT_WINDOW_CLOSE_REQUESTED})
+    {
+        SDL_Event e{};
+        e.type = type;
+        e.window.windowID = 0;
+        SdlInputBridge::ProcessEvent(e);
+    }
+
+    const auto kb = Keyboard::GetState();
+    EXPECT_TRUE(kb.IsKeyDown(Keys::A));
+    EXPECT_TRUE(kb.IsKeyDown(Keys::B));
+    EXPECT_EQ(kb.GetPressedKeys().size(), 2u) << "window events must not add/remove keys";
+    EXPECT_FALSE(kb.IsKeyDown(Keys::None));
+
+    // A real KEY_UP still works normally afterwards (state machine intact).
+    SdlInputBridge::ProcessEvent(keyUpWithKeycode(SDLK_A));
+    EXPECT_TRUE(Keyboard::GetState().IsKeyUp(Keys::A));
+    EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::B));
+}
+
 // --- Task 820: keycode map (default mode) via synthetic KEY_DOWN events ---
 
 TEST_F(SdlInputBridgeKeyboardTest, KeycodeMapCoversLettersDigitsNumpadOemModifiersFunctionAndMediaKeys)

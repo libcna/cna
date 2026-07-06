@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-KBD-021/022 — window events + event-pump freshness:** window lifecycle events (minimize/restore/
+  maximize/close/focus) fall through the bridge as no-ops and don't corrupt keyboard state (new
+  `WindowLifecycleEventsDoNotCorruptKeyboardState`); added an authoritative "Event-pump freshness" note to
+  `input-backend.md` §6 (state = last `PollEvents`, single-thread). One test + docs.
 - **INPUT-KBD-015/016/017 — Keys with no desktop SDL source:** confirmed IME (`Kana`/`Kanji`/`Ime*`/
   `ProcessKey`), ChatPad (`Green`/`Orange`), and most browser/media Keys exist in the enum but are
   intentionally unmapped from SDL (only `VolumeUp`/`VolumeDown` map), matching FNA. Two tests + a

@@ -291,3 +291,12 @@ subsequent mutation is unsynchronized — which is fine under the single-thread 
 from a background thread while the game loop is pumping events — that is outside the XNA input
 contract and would be an unsynchronized data race. No locking is added because the single-thread
 model makes it unnecessary; adding it would only cost per-frame overhead.
+
+**Event-pump freshness (INPUT-KBD-022).** Because writes are event-driven, every `Get*State()`
+snapshot — keyboard, mouse, gamepad, touch — is only as fresh as the **last `Game::PollEvents()`**
+(pumped once per `Game::Tick()`, before `Update()`/`Draw()`). CNA does **not** re-query SDL inside
+`Get*State()` (FNA does poll fresh; see §3), so a key pressed between two frames is not observed
+until the next tick pumps its `SDL_EVENT_KEY_DOWN`. Within a single `Update()` the state is stable.
+This is the authoritative statement of both properties (single-thread + per-tick freshness); the
+`InputManager` class doc and [`docs/platform-input-notes.md`](platform-input-notes.md) (§Cross-cutting)
+point here.

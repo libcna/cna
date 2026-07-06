@@ -1034,21 +1034,30 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
 - **Deps:** INPUT-BRIDGE-014.
 
 #### INPUT-KBD-021 — Window close/minimize/restore behavior
-- **Priority:** P3 · **Status:** TODO · **Area:** Keyboard/Bridge
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Keyboard/Bridge
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Confirm these window events don't corrupt keyboard state; document.
 - **Acceptance:** No state corruption; documented.
 - **Tests:** synthetic window-event test.
 - **Deps:** INPUT-KBD-020.
 
+- **Result (2026-07-06):** The bridge has no `case SDL_EVENT_WINDOW_*`, so window lifecycle events fall
+  through as no-ops and cannot touch keyboard state. Added `WindowLifecycleEventsDoNotCorruptKeyboardState`:
+  holds A+B, drives MINIMIZED/RESTORED/MAXIMIZED/FOCUS_GAINED/CLOSE_REQUESTED, and asserts the pressed set
+  is unchanged (still {A,B}, no `Keys::None`) and a subsequent KEY_UP still works. Same event-driven
+  consequence as DEC-15's focus-loss (CNA never clears keys; games gate on `Game.IsActive`).
 #### INPUT-KBD-022 — Event-pump / main-thread assumptions documented
-- **Priority:** P3 · **Status:** TODO · **Area:** Keyboard/Docs
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Keyboard/Docs
 - **Files:** `docs/input-backend.md`, `InputManager.hpp`
 - **Work:** State that keyboard state is only as fresh as the last `PollEvents`; single-thread only.
 - **Acceptance:** Documented in one place, linked from others.
 - **Tests:** n/a.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Added an authoritative "Event-pump freshness" note to `docs/input-backend.md`
+  §6 stating both properties in one place: every `Get*State()` snapshot is only as fresh as the last
+  `Game::PollEvents()` (per-tick), and input is single-thread only. The `InputManager` class doc and
+  `docs/platform-input-notes.md` (§Cross-cutting) point to it. Docs-only.
 ---
 
 ## 8. Mouse plan
