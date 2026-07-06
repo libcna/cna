@@ -55,12 +55,15 @@ private:
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::SkinnedModelEXT> model_;
     std::unique_ptr<Microsoft::Xna::Framework::GamerServices::AvatarRenderer> renderer_;
 
-    // All 5 AvatarAnimationPreset clips baked into the demo's Content (Task
-    // 11.15: Stand0/Stand1/Wave/Clap/Celebrate) — Space cycles forward through
-    // this list. clipPositionSeconds_ resets to zero on every change so
-    // playback always starts from the clip's own beginning, not wherever the
-    // previous clip happened to leave off.
-    std::vector<std::string> clipNames_{"Stand0", "Stand1", "Wave", "Clap", "Celebrate"};
+    // All 11 AvatarAnimationPreset clips baked into the demo's Content (Task
+    // 11.15: Stand0/Stand1/Wave/Clap/Celebrate; Task 11.23a: Stand2-Stand7) —
+    // Space cycles forward through this list. clipPositionSeconds_ resets to
+    // zero on every change so playback always starts from the clip's own
+    // beginning, not wherever the previous clip happened to leave off.
+    std::vector<std::string> clipNames_{
+        "Stand0", "Stand1", "Stand2", "Stand3", "Stand4", "Stand5", "Stand6", "Stand7",
+        "Wave", "Clap", "Celebrate",
+    };
     std::size_t currentClipIndex_ = 0;
     double clipPositionSeconds_ = 0.0;
     bool spaceWasDown_ = false;

@@ -55,6 +55,30 @@
       "clip": "clips/Stand1.clip.bin"
     },
     {
+      "name": "Stand2",
+      "clip": "clips/Stand2.clip.bin"
+    },
+    {
+      "name": "Stand3",
+      "clip": "clips/Stand3.clip.bin"
+    },
+    {
+      "name": "Stand4",
+      "clip": "clips/Stand4.clip.bin"
+    },
+    {
+      "name": "Stand5",
+      "clip": "clips/Stand5.clip.bin"
+    },
+    {
+      "name": "Stand6",
+      "clip": "clips/Stand6.clip.bin"
+    },
+    {
+      "name": "Stand7",
+      "clip": "clips/Stand7.clip.bin"
+    },
+    {
       "name": "Wave",
       "clip": "clips/Wave.clip.bin"
     }

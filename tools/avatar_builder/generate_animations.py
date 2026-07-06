@@ -193,6 +193,100 @@ def build_stand1(armature_obj):
     return action
 
 
+def build_stand2(armature_obj):
+    """A third idle: Neck tilts side to side (local Z) with Head counter-tilting a
+    smaller amount the opposite way (also local Z) — a "curious head tilt", distinct
+    from Stand0 (Hips Z-bob + Spine1 X-rock) and Stand1 (Hips X-sway + Spine1 Y-twist)
+    by using the Neck/Head pair instead of Hips/Spine1. Loops seamlessly over 110 frames."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "Stand2")
+
+    tilt = math.radians(6.0)
+    for frame, angle in ((1, 0.0), (28, tilt), (55, 0.0), (83, -tilt), (110, 0.0)):
+        _keyframe_euler(armature_obj, "Neck", frame, (0.0, 0.0, angle))
+        _keyframe_euler(armature_obj, "Head", frame, (0.0, 0.0, -angle * 0.4))
+
+    return action
+
+
+def build_stand3(armature_obj):
+    """A fourth idle: a slow torso twist on Spine (not Spine1, which Stand1 already
+    uses) — turns the whole upper body (chest, shoulders, arms, head) left and right
+    around its own vertical axis. Loops seamlessly over 120 frames."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "Stand3")
+
+    twist = math.radians(4.0)
+    for frame, angle in ((1, 0.0), (30, twist), (60, 0.0), (90, -twist), (120, 0.0)):
+        _keyframe_euler(armature_obj, "Spine", frame, (0.0, angle, 0.0))
+
+    return action
+
+
+def build_stand4(armature_obj):
+    """A fifth idle: Stand0's own Hips Z-bob, combined with a Neck forward nod (local
+    X) timed to dip at the bottom of each bob — a "tired nod", distinct from Stand0
+    (bob alone) by the added, synchronized neck motion. Loops seamlessly over 90 frames
+    (same timing as Stand0's bob, reused deliberately so the two read as a family)."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "Stand4")
+
+    bob = 0.01
+    nod = math.radians(5.0)
+    for frame, z, angle in ((1, 0.0, 0.0), (45, bob, nod), (90, 0.0, 0.0)):
+        _keyframe_location(armature_obj, "Hips", frame, (0.0, 0.0, z))
+        _keyframe_euler(armature_obj, "Neck", frame, (angle, 0.0, 0.0))
+
+    return action
+
+
+def build_stand5(armature_obj):
+    """A sixth idle: a slow, single-bone Neck nod (local X, "looking down and back up"),
+    larger amplitude and slower than Stand4's synchronized nod, with no other bone
+    involved — the simplest of the eight Stand variants. Loops seamlessly over 130
+    frames."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "Stand5")
+
+    nod = math.radians(8.0)
+    for frame, angle in ((1, 0.0), (65, nod), (130, 0.0)):
+        _keyframe_euler(armature_obj, "Neck", frame, (angle, 0.0, 0.0))
+
+    return action
+
+
+def build_stand6(armature_obj):
+    """A seventh idle: Spine1 leans (local Z, not Stand0's local-X rock or Stand1's
+    local-Y twist — the third rotation axis on this bone) while Hips sway in X the
+    opposite phase, like a slow metronome. Loops seamlessly over 100 frames."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "Stand6")
+
+    lean = math.radians(3.0)
+    sway = 0.015
+    for frame, angle, x in ((1, 0.0, 0.0), (25, lean, -sway), (50, 0.0, 0.0), (75, -lean, sway), (100, 0.0, 0.0)):
+        _keyframe_euler(armature_obj, "Spine1", frame, (0.0, 0.0, angle))
+        _keyframe_location(armature_obj, "Hips", frame, (x, 0.0, 0.0))
+
+    return action
+
+
+def build_stand7(armature_obj):
+    """An eighth idle: Hips slowly turn in place (local Y) while Spine counter-rotates
+    the same amount the opposite way, keeping the chest/shoulders facing forward even as
+    the hips shift — a subtle "contrapposto" weight-shift stance. Loops seamlessly over
+    140 frames, the slowest of the eight Stand variants."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "Stand7")
+
+    turn = math.radians(5.0)
+    for frame, angle in ((1, 0.0), (35, turn), (70, 0.0), (105, -turn), (140, 0.0)):
+        _keyframe_euler(armature_obj, "Hips", frame, (0.0, angle, 0.0))
+        _keyframe_euler(armature_obj, "Spine", frame, (0.0, -angle, 0.0))
+
+    return action
+
+
 def build_clap(armature_obj):
     """Both arms raise together to roughly chest height (UpperArm.L/R, via
     _raise_upper_arm) and hold, while both forearms (LowerArm.L/R, via
@@ -245,7 +339,7 @@ def build_celebrate(armature_obj):
 
 
 def build_animations(armature_obj):
-    """Builds Stand0/Stand1/Wave/Clap/Celebrate actions and returns a {name: action}
+    """Builds Stand0-Stand7/Wave/Clap/Celebrate actions and returns a {name: action}
     dict. Safe to call repeatedly in the same Blender session — replaces existing
     actions of the same name rather than stacking duplicates. Leaves
     `armature_obj.animation_data.action` set to whichever was built last; callers that
@@ -253,11 +347,22 @@ def build_animations(armature_obj):
     return {
         "Stand0": build_stand0(armature_obj),
         "Stand1": build_stand1(armature_obj),
+        "Stand2": build_stand2(armature_obj),
+        "Stand3": build_stand3(armature_obj),
+        "Stand4": build_stand4(armature_obj),
+        "Stand5": build_stand5(armature_obj),
+        "Stand6": build_stand6(armature_obj),
+        "Stand7": build_stand7(armature_obj),
         "Wave": build_wave(armature_obj),
         "Clap": build_clap(armature_obj),
         "Celebrate": build_celebrate(armature_obj),
     }
 
+
+_REQUIRED_ACTIONS = {
+    "Stand0", "Stand1", "Stand2", "Stand3", "Stand4", "Stand5", "Stand6", "Stand7",
+    "Wave", "Clap", "Celebrate",
+}
 
 if __name__ == "__main__":
     armature_obj = generate_skeleton.build_skeleton()
@@ -268,8 +373,8 @@ if __name__ == "__main__":
         frame_start, frame_end = action.frame_range
         print(f"  {name}: frame_range = ({frame_start:.1f}, {frame_end:.1f})")
 
-    assert {"Stand0", "Stand1", "Wave", "Clap", "Celebrate"}.issubset(actions), "missing required actions"
+    assert _REQUIRED_ACTIONS.issubset(actions), "missing required actions"
     for name, action in actions.items():
         frame_start, frame_end = action.frame_range
         assert frame_end > frame_start, f"{name} has a zero/negative frame range"
-    print("OK: Stand0/Stand1/Wave/Clap/Celebrate actions exist with a nonzero frame range.")
+    print(f"OK: {', '.join(sorted(_REQUIRED_ACTIONS))} actions exist with a nonzero frame range.")

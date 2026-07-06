@@ -38,7 +38,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_skeleton  # noqa: E402  (bpy-free: see that module's docstring)
 
 REQUIRED_BONE_NAMES = {name for name, *_rest in generate_skeleton.BONES}
-REQUIRED_ANIMATIONS = {"Stand0", "Wave", "Stand1", "Clap", "Celebrate"}
+REQUIRED_ANIMATIONS = {
+    "Stand0", "Stand1", "Stand2", "Stand3", "Stand4", "Stand5", "Stand6", "Stand7",
+    "Wave", "Clap", "Celebrate",
+}
 REQUIRED_SHAPE_KEYS = {"Smile", "Blink"}
 
 
