@@ -138,6 +138,23 @@ TEST_F(TextInputEXTTest, WindowHandlePropertyRoundTrips)
     EXPECT_EQ(TextInputEXT::getWindowHandleProperty(), std::uintptr_t{0});
 }
 
+// P8-005(c): the framework never leaves a stale window handle behind — ResetForTests clears it to 0, so
+// after a reset every window-dependent call takes the null-guarded no-op path instead of dereferencing a
+// possibly-freed SDL_Window*. (A non-null stale handle is the caller's contract: CNA cannot validate an
+// arbitrary pointer without handing it to SDL, so it only guards handle == 0; the framework-managed
+// lifecycle avoids that by clearing the handle on reset.)
+TEST_F(TextInputEXTTest, ResetForTestsClearsWindowHandleSoLaterCallsAreNullGuarded)
+{
+    TextInputEXT::setWindowHandleProperty(0xDEADBEEFu); // a handle that must never be dereferenced
+    TextInputEXT::ResetForTests();
+    EXPECT_EQ(TextInputEXT::getWindowHandleProperty(), std::uintptr_t{0});
+
+    // With the handle cleared, these are safe no-ops (the bogus handle is never passed to SDL).
+    EXPECT_NO_THROW(TextInputEXT::StartTextInput());
+    EXPECT_NO_THROW(TextInputEXT::StopTextInput());
+    EXPECT_FALSE(TextInputEXT::IsTextInputActive());
+}
+
 TEST_F(TextInputEXTTest, IsTextInputActiveIsFalseWithoutWindow)
 {
     // No window handle -> the null guard returns false without touching SDL.

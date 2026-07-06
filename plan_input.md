@@ -1563,11 +1563,29 @@ design. **Fake kept internal:** `FakeSdlGamepadBackend` lives under `tests/` in
 verified:** all four input classes are testable; the fake never leaks into the shipped library.
 **Remaining risk:** none.
 
-## P8-005 — Verify window handle resolution
-- [ ] Audit all places resolving SDL window handle.
-- [ ] Ensure null window is safe.
-- [ ] Ensure stale window handle is safe where possible.
-- [ ] Add tests.
+## P8-005 — Verify window handle resolution `[x]`
+- [x] Audit all places resolving SDL window handle.
+- [x] Ensure null window is safe.
+- [x] Ensure stale window handle is safe where possible.
+- [x] Add tests.
+
+**Result (2026-07-06):** **Resolution sites audited:** bridge `to_touch_pixel_position` /
+MOUSE_MOTION / MOUSE_BUTTON (`SDL_GetWindowFromID(windowID)` else `SDL_GetMouseFocus()`, null → 1×1 / raw
+passthrough via `to_logical_position`); `Mouse::resolve_mouse_window` (handle else `SDL_GetMouseFocus()`,
+used by SetPosition + relative-mode, each null-guarded); `TextInputEXT` (IsTextInputActive /
+IsScreenKeyboardShown / Start / Stop / SetInputRectangle, all `if (SDL_Window* w = ToSdlWindow(handle_))`
+guarded). **Null window safe** — covered by `MouseTest.SetPositionIsSafeAndUpdatesInternalStateWithNoWindow`,
+the relative-mode no-window tests, and `TextInputEXTTest.*WithoutWindow*`; the bridge null path is covered by
+the golden/fuzz suites (windowID 0 → raw passthrough). **Stale window handle (where possible):** CNA cannot
+validate an arbitrary non-null pointer without passing it to SDL (whose `CHECK_WINDOW_MAGIC` would
+dereference a freed window — a use-after-free), so a non-null stale handle is the **caller's contract**
+(documented). The framework-managed lifecycle avoids it by clearing the handle on reset — **added**
+`ResetForTestsClearsWindowHandleSoLaterCallsAreNullGuarded` (a bogus handle is wiped to 0 by
+`ResetForTests`, so later calls take the null-guarded no-op path and never dereference it).
+`Mouse::ResetForTests` likewise zeroes its handle (pinned by the reset suite). **Files changed:**
+`tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp` (+1 test). **Behavior verified:** every
+resolution site null-guards; reset neutralizes a stale handle. **Remaining risk:** a non-null stale handle
+supplied by the app between destroy and clear is inherently the app's responsibility (documented).
 
 ## P8-006 — Verify high-DPI / logical coordinate handling
 - [ ] Test mouse logical coordinates.
