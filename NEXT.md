@@ -93,6 +93,34 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `DEV-BUILD-004` closed: root-caused and fixed `cna_demo_devices`'s
+Android build gap.** Root cause: `CNA` links `SDL3::SDL3` `PRIVATE` (a deliberate choice
+— `CNA` hides its SDL backend behind `IGraphicsBackend`), so `cna_demo_devices` (which
+only links `CNA`, never SDL3 directly) never received SDL3's include directories —
+`Main.cpp`'s `#include <SDL3/SDL_main.h>` (added for Android's
+`SDLActivity.java`/`dlsym("SDL_main")` requirement) has therefore always been broken;
+it only ever "worked" on desktop by accident, because this container's host compiler
+default include path (`/usr/local/include`) happens to carry a coincidentally-installed
+system SDL3 dev package, masking the missing project-level include path — confirmed via
+`make VERBOSE=1`'s actual compiler invocation on both platforms. Fixing the include (an
+explicit `target_link_libraries(cna_demo_devices PRIVATE SDL3::SDL3)`) then surfaced a
+second, deeper problem: the Android link then fails with `undefined symbol: main`,
+because SDL's own `<SDL3/SDL_main.h>` `#define`s `main` to `SDL_main` on Android, leaving
+no literal `main` for a plain ELF executable's C runtime startup to link against — a
+plain `add_executable()` was never a valid Android app target format for this demo at
+all; the real, working Android build (confirmed launched/screenshotted previously) is
+the entirely separate Gradle/CMake project under `examples/demo_devices/android/`,
+never this top-level target. Fixed by wrapping `cna_demo_devices`'s target definition in
+`if(NOT ANDROID)`, matching this project's existing precedent, with the full
+root-cause chain documented directly in the `CMakeLists.txt` comment. The prior "this is
+a regression" framing in this file's old Section 4 was a mix-up between this top-level
+target and the separate Gradle-based build — not an actual regression in either one.
+Verified: desktop `cna_demo_devices` still builds/links clean (unaffected); Android
+`--target CNA` still builds clean (unaffected); Android `--target cna_demo_devices` now
+reports "no work to do" instead of failing. **New finding, not fixed:** a full,
+untargeted Android build now fails on `cna_demo_input` instead, for the identical
+underlying reason — see Section 4.
+
 **2026-07-06 — `READINGS-002` closed: resolved both `DEV-API-001` wrong-visibility
 findings against real archived MSDN pages.** Fetched the archived "previous-versions"
 docs directly (classic `msdn.microsoft.com/en-us/library/<member>(v=VS.105)` URLs
@@ -245,32 +273,19 @@ prior plan generations, not repeated here):
 
 ## 4. Current blocker / main problem
 
-**No code-level blocker prevents starting the new plan's tasks** — the vast majority
-(API audits, unit fixes, test additions) need only the desktop build.
+**No code-level blocker exists.** The `cna_demo_devices` Android build gap this section
+used to track is now fixed (`DEV-BUILD-004`, 2026-07-06) — see Section 3.
 
-**One concrete, reproducible build gap, not yet root-caused:**
-- **Symptom:** `cna_demo_devices`'s Android cross-compile fails:
-  `examples/demo_devices/src/Main.cpp:1:10: fatal error: 'SDL3/SDL_main.h' file not
-  found`.
-- **Failing command:** `cmake --build cmake-build-android --target cna_demo_devices`
-  (using the Android toolchain file, `arm64-v8a`, API 24 — see Section 7).
-- **Affected files/modules:** `examples/demo_devices/src/Main.cpp` only. The `CNA`
-  library target itself (which does not include `SDL_main.h`) cross-compiles for
-  Android without issue.
-- **Suspected cause (unconfirmed):** the Android build's include paths for the
-  `cna_demo_devices` target likely don't reference an Android-architecture SDL3 header
-  set the way the `CNA` library target's own SDL discovery does. Host SDL3 headers
-  exist at `/usr/local/include` in this container, but that's the host architecture,
-  not `aarch64-none-linux-android24`.
-- **What has been tried:** this exact failure has now been reproduced identically
-  across three separate verification passes (stabilization, micro-cleanup, tiny final
-  correctness patch) — confirmed stable/reproducible, not flaky. No attempt has yet
-  been made to actually fix the include path or CMake target configuration; each pass
-  only re-confirmed the symptom was unchanged and out of that pass's scope.
-- **Historical context:** this same demo target *did* successfully cross-compile,
-  install, and launch as a real APK once, in an earlier session (before this specific
-  gap appeared) — so this is a regression in the build environment/configuration
-  somewhere between then and now, not a gap that was always present.
+**New, out-of-scope finding from that fix, not yet actioned:** a full, untargeted
+`cmake --build cmake-build-android` (building every target, not just `CNA`) still fails
+— now on `cna_demo_input` (`MouseCursor.hpp:8:10: fatal error: 'SDL3/SDL.h' file not
+found`), the identical root cause `DEV-BUILD-004` found and fixed for `cna_demo_devices`
+(only links `CNA`, which links `SDL3::SDL3` `PRIVATE`, never SDL3 directly). Likely
+affects every other demo executable (`cna_demo_2d`/`cna_demo_sound`/`cna_demo_xact`),
+unconfirmed. **Does not block anything documented** — the actual Android verification
+gate (Section 7, `--target CNA` only) never builds any demo target — but worth a
+dedicated task if Android cross-compilation of examples beyond `cna_demo_devices` is
+ever needed. No plan task exists for it yet.
 
 ---
 
@@ -446,21 +461,15 @@ own priority labels.
 `DEV-API-003` (the `getStateProperty()` `NOXNA` question), `DEV-BUILD-002` (the
 Devices-only test filter), `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`
 (SDL-backed `TimeBetweenUpdates` throttling), `DEV-API-001` (the public API matrix),
-`ANDROID-BRIDGE-002` (Android-backed `TimeBetweenUpdates` while running), and
-`READINGS-002` (the two event-args wrong-visibility findings) are now closed — see
-Section 3. Next smallest remaining task:
+`ANDROID-BRIDGE-002` (Android-backed `TimeBetweenUpdates` while running),
+`READINGS-002` (the two event-args wrong-visibility findings), and `DEV-BUILD-004`
+(the `cna_demo_devices` Android build gap) are now closed — see Section 3.
 
-1. **Investigate the `cna_demo_devices` Android `SDL3/SDL_main.h` build gap**
-   (Section 4 above; not yet a plan task — scope it as one first). Goal: find why this
-   specific target's Android include paths lack an Android-arch SDL3 header set the
-   `CNA` library target itself doesn't need. Files: whichever `CMakeLists.txt` defines
-   `cna_demo_devices`'s Android include paths. Verify with:
-   `cmake --build cmake-build-android --target cna_demo_devices`.
-
-Beyond this, no further "next smallest task" is queued from a quick pass over
-`plan_devices.md` — read that file's remaining open tasks (grep for section headers
-without a "— CLOSED"/"— PARTIALLY CLOSED" suffix) and pick one, or ask the user to
-prioritize, per Section 9's existing rule.
+No further "next smallest task" is queued from a quick pass over `plan_devices.md` —
+read that file's remaining open tasks (grep for section headers without a "— CLOSED"/
+"— PARTIALLY CLOSED" suffix) and pick one, or ask the user to prioritize, per Section 9's
+existing rule. One concrete lead if a task is wanted: the newly-found `cna_demo_input`
+Android build failure (Section 4) — not yet scoped as its own plan task.
 
 ---
 

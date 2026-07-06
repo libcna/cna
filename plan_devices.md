@@ -259,6 +259,80 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   - `tests/Microsoft/Devices/Sensors/`
   - `docs/devices-build.md`
 
+### DEV-BUILD-004 — Root-cause and fix `cna_demo_devices`'s Android build gap — CLOSED (2026-07-06)
+
+- **Priority:** High
+- **Area:** Build
+- **Problem:** `NEXT.md` Section 4 tracked a reproducible, not-yet-root-caused gap:
+  `cmake --build cmake-build-android --target cna_demo_devices` failed with
+  `examples/demo_devices/src/Main.cpp:1:10: fatal error: 'SDL3/SDL_main.h' file not
+  found`. Reproduced identically across three prior verification passes, never
+  investigated further.
+- **Root cause (confirmed 2026-07-06):** `CMakeLists.txt` links `SDL3::SDL3` to `CNA`
+  as `PRIVATE` (line ~222) — a deliberate choice, since `CNA` hides its graphics/SDL
+  backend behind `IGraphicsBackend` and should not leak SDL3 to every consumer (per
+  this project's own architecture). `cna_demo_devices` only links `CNA` (never SDL3
+  directly), so it never received SDL3's include directories transitively — yet its
+  `Main.cpp` `#include <SDL3/SDL_main.h>` directly (added for the Android
+  `SDLActivity.java`/`dlsym("SDL_main")` requirement, `plan_devices.md` Task
+  DEVICES-0125/0126). **This has always been broken** — it only ever "worked" on
+  desktop by pure accident: this container's host compiler default include path
+  (`/usr/local/include`) happens to carry a coincidentally-installed system SDL3 dev
+  package, masking the missing project-level include path. Cross-compiling for
+  Android has no such host-path fallback and surfaces the real gap. Confirmed by
+  directly inspecting the actual compiler invocation (`make VERBOSE=1`) for both
+  platforms — neither ever passed an explicit SDL3 `-I` flag for this target.
+- **A second, deeper problem, found only after fixing the first:** fixing the missing
+  include (below) revealed the real Android cross-compile then fails at the *link*
+  step instead, with `ld.lld: error: undefined symbol: main`. Root cause: SDL's own
+  `<SDL3/SDL_main.h>` `#define`s `main` to `SDL_main` on Android (`SDL_MAIN_NEEDED`),
+  which leaves no literal `main` symbol for a plain ELF executable's C runtime startup
+  (`crtbegin_dynamic.o`) to link against — that redirection is designed for a shared
+  library an `Activity` loads via JNI/`dlsym`, not a standalone native executable.
+  **A plain `add_executable()` was therefore never a valid Android app target format
+  for this demo, full stop** — independent of any include-path fix. The actual working
+  Android build of this same demo (confirmed real, launched, screenshotted —
+  `docs/devices-build.md` Section 4.1) is an entirely separate Gradle/CMake project
+  under `examples/demo_devices/android/`, which compiles the same
+  `Main.cpp`/`DevicesDemo.cpp` into a genuine shared library (`libmain.so`) via its own
+  `app/jni/src/CMakeLists.txt` — never through this top-level `cna_demo_devices` target
+  at all. `NEXT.md`'s prior "this is a regression, it worked once before" framing was
+  a mix-up between these two independent build paths, not an actual regression in
+  either one.
+- **Resolution:**
+  - Added an explicit `target_link_libraries(cna_demo_devices PRIVATE SDL3::SDL3)` —
+    fixes the include-path gap on **every** platform (not just Android), removing the
+    desktop build's reliance on host-system luck. Kept even though it alone isn't
+    sufficient for Android, since it's a genuine, independent correctness fix.
+  - Wrapped `cna_demo_devices`'s entire target definition in `if(NOT ANDROID)`,
+    matching this project's own precedent for demo targets that cannot make sense as
+    plain Android executables. Documented directly in the `CMakeLists.txt` comment why,
+    with a pointer to the real Gradle-based Android build path.
+  - Verified: desktop (`cmake-build-debug`) `cna_demo_devices` still builds and links
+    clean, unaffected. Android (`cmake-build-android`) `--target CNA` still builds
+    clean (unaffected — this task never touched `CNA`'s own target definition).
+    `--target cna_demo_devices` now reports "no work to do" (the target no longer
+    exists for this platform) instead of failing.
+  - **New, out-of-scope finding, not fixed by this task:** a full, untargeted
+    `cmake --build cmake-build-android` (i.e. building every target, not just `CNA`)
+    still fails — on `cna_demo_input` this time (`MouseCursor.hpp:8:10: fatal error:
+    'SDL3/SDL.h' file not found`), the identical root cause as above
+    (`cna_demo_input` also only links `CNA`, never `SDL3::SDL3` directly). Every
+    other demo executable (`cna_demo_2d`, `cna_demo_sound`, `cna_demo_xact`) likely has
+    the same latent gap, unconfirmed. **Not fixed here** — out of this task's scope
+    (`cna_demo_devices` specifically), and the documented Android verification gate
+    (`docs/devices-build.md` Section 4, `--target CNA` only) never exercises any demo
+    target, so this does not block that gate. Worth a dedicated future task if Android
+    example-app cross-compilation beyond `cna_demo_devices` is ever needed.
+- **Acceptance criteria:**
+  - `cmake --build cmake-build-android --target cna_demo_devices` no longer fails.
+    Done (target no longer attempted on this platform, by design).
+  - Desktop build of `cna_demo_devices` unaffected. Confirmed.
+  - Root cause documented, not just worked around. Done, in both this entry and the
+    `CMakeLists.txt` comment itself.
+- **Suggested files to inspect or edit:**
+  - `CMakeLists.txt` (edited)
+
 ---
 
 ## 3. Public API compatibility audit tasks

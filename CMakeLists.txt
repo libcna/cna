@@ -436,6 +436,20 @@ if(CNA_BUILD_EXAMPLES)
     endif()
 
     # ---- Devices (Sensors/VibrateController) demo (works with all backends) --
+    # Desktop/Emscripten only: NOT ANDROID (Task DEV-BUILD-004). A plain
+    # add_executable() cannot be a valid Android app target at all --
+    # <SDL3/SDL_main.h> #defines main to SDL_main on Android
+    # (SDL_MAIN_NEEDED, so SDLActivity.java's dlsym("SDL_main") lookup on a
+    # shared library finds a real symbol), which leaves no literal `main`
+    # symbol for a plain ELF executable's C runtime startup
+    # (crtbegin_dynamic.o) to link against -- confirmed via a real Android
+    # cross-compile attempt: FAILS at the *link* step with "undefined
+    # symbol: main", not at compile time. The real, working Android build of
+    # this same demo is the entirely separate Gradle/CMake project under
+    # examples/demo_devices/android/ (docs/devices-build.md Section 4.1),
+    # which compiles Main.cpp/DevicesDemo.cpp into a genuine shared library
+    # ("main") via its own app/jni/src/CMakeLists.txt -- not this target.
+    if(NOT ANDROID)
     add_executable(cna_demo_devices
         examples/demo_devices/src/Main.cpp
         examples/demo_devices/src/DevicesDemo.cpp
@@ -462,6 +476,21 @@ if(CNA_BUILD_EXAMPLES)
         else()
             target_link_libraries(cna_demo_devices PRIVATE CNA SHARP_RUNTIME)
         endif()
+        # examples/demo_devices/src/Main.cpp includes <SDL3/SDL_main.h>
+        # directly (needed on Android so SDLActivity.java's dlsym("SDL_main")
+        # lookup finds a real symbol) -- unlike every other demo target,
+        # which never touches an SDL3 header directly and only goes through
+        # CNA's own abstraction layer. CNA links SDL3::SDL3 PRIVATE (line
+        # ~222 above), so that include path does not propagate transitively
+        # to any executable that only links CNA. On desktop this went
+        # unnoticed because the host compiler's own default system include
+        # path (e.g. /usr/local/include on this container) happens to carry
+        # a coincidentally-installed system SDL3 dev package -- cross-
+        # compiling for Android has no such host-path fallback, and fails
+        # with "SDL3/SDL_main.h file not found". Link SDL3::SDL3 directly so
+        # this target gets its own real include path on every platform,
+        # independent of host-system luck.
+        target_link_libraries(cna_demo_devices PRIVATE SDL3::SDL3)
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_devices PRIVATE SDL3::SDL3main)
         endif()
@@ -470,6 +499,7 @@ if(CNA_BUILD_EXAMPLES)
             cna_copy_sdl_runtime(cna_demo_devices)
         endif()
     endif()
+    endif() # NOT ANDROID
 endif()
 
 # ---- Combined input smoke sample: Keyboard+Mouse+GamePad+Touch+TextInput -----
