@@ -291,13 +291,23 @@ xna-4-api-coverage.md` (+ `NEXT.md` at root).
 - **Deps:** none.
 
 #### INPUT-AUDIT-002 — Detect orphaned/untested Input source files
-- **Priority:** P2 · **Status:** TODO · **Area:** Audit
-- **Files:** all Input sources + tests
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Audit
+- **Files:** `tools/input_parity/check_input_test_coverage.py` (generator),
+  `docs/input-test-coverage.md` (generated artifact)
 - **Problem:** No automated mapping proves every Input source has a corresponding test file.
 - **Work:** Script a source→test coverage cross-check (by type name); list any type with no dedicated test.
 - **Acceptance:** A generated table; each gap becomes an `INPUT-TEST-*` task.
 - **Tests:** n/a (inspection script).
 - **Deps:** none.
+- **Result (2026-07-06):** `check_input_test_coverage.py` maps every Input type (26 public headers + 8
+  `CNA::Internal::Input` types) to whether it has a dedicated `TEST(<Type>Test, …)` suite and how many
+  test files reference it, emitting `docs/input-test-coverage.md`. **No orphaned/untested type found** —
+  0 gaps, so no new INPUT-TEST-* task is required. Every type either has a same-named suite or a verified
+  sibling-suite cover recorded in the table's `note` column (e.g. `Keys` via the exhaustive value table in
+  `KeyboardInputTests.cpp`; the internal `InputManager`/`ISdlGamepadBackend`/enums via the bridge/reset/
+  gamepad suites; `RawGamePadState` via `InputManager::GetRawGamePadState` assertions bound as `auto`,
+  which is why a name-only scan alone under-reports it — captured as a known cover so the report stays
+  honest signal).
 
 #### INPUT-AUDIT-003 — Grep-audit for stray SDL includes in public Input headers
 - **Priority:** P1 · **Status:** TODO · **Area:** Audit/API
