@@ -284,10 +284,32 @@ IsRelativeMouseModeEXT (20 refs, real-window round-trip + no-window no-op), `Set
 reviewed:** 8/8. **Files changed:** none (perfect, no gap). **Behavior verified:** FNA parity + correct NOXNA
 tagging. **Remaining risk:** none.
 
-## A3-003 — `MouseCursor` (class, NOXNA) `[ ]`
-- [ ] FNA `Input/Mouse.cs` (MouseCursor is CNA-specific — verify against XNA MouseCursor semantics);
+## A3-003 — `MouseCursor` (class, NOXNA) `[x]`
+- [x] FNA `Input/Mouse.cs` (MouseCursor is CNA-specific — verify against XNA MouseCursor semantics);
   CNA `MouseCursor.hpp`/`.cpp`; test in `MouseInputTests.cpp`.
-- [ ] Members: stock cursor statics, `FromTexture2D`, `Dispose`, move-ctor, handle. Per-member (Xvfb-gated).
+- [x] Members: stock cursor statics, `FromTexture2D`, `Dispose`, move-ctor, handle. Per-member (Xvfb-gated).
+
+**Result (2026-07-06):** Correctly **NOXNA** — confirmed FNA has no `MouseCursor.cs` (A3-002); this matches
+the MonoGame `MouseCursor` API, not XNA 4.0. **No SDL leak:** the header exposes `SDL_Cursor*` only via an
+**opaque forward declaration** `struct SDL_Cursor;` (no `#include <SDL3/SDL.h>`), and
+`PublicApiInputCompileTests` includes it under an `#error` guard proving no SDL reaches a consumer TU.
+**Members (all Doxygen'd):** default ctor, `SDL_Cursor*` ctor (owning/non-owning), `FromTexture2D`, deleted
+copy ctor/assign, move ctor + move assign, dtor, `Dispose`, handle accessor, and **12 stock-cursor statics**
+(Arrow/Crosshair/Hand/IBeam/No/SizeAll/SizeNESW/SizeNS/SizeNWSE/SizeWE/WaitArrow/Wait — all 12 referenced in
+tests). **Test map:** `StockCursorsAreNonNullWhenVideoAvailable` (all 12) + `StockCursorGetterReturnsTheSame
+InstanceOnRepeatedCalls`; `DefaultConstructorCreatesNonNullOwningCursor`; `NonOwningConstructorDoesNotDestroy…`;
+`FromTexture2D{CreatesCursorFromColorTexture,AcceptsColorSrgbTexture,RejectsNonColorSurfaceFormat,ThrowsWhen
+OriginIsOutsideTheTexture}` + `ColorCursorSurvivesSourcePixelBufferDestruction`; `MoveConstructorTransfers…`
++ `MoveAssignmentDisposesPreviousHandle…`; `DisposeReleasesHandleAndIsIdempotent` +
+`DisposingAStockSingletonIsANoOpAndKeepsItUsable`. **Members reviewed:** all. **Files changed:** none
+(perfect, no gap; stock-cursor tests are Xvfb-gated — skip under the SDL `dummy` driver, documented).
+**Remaining risk:** none.
+
+---
+
+**Phase 3 complete (2026-07-06):** `MouseState` (15), `Mouse` (8), `MouseCursor` — all members re-audited;
+confirmed `MouseCursor`/`Mouse::SetCursor` are correctly NOXNA (absent from FNA) and MouseCursor keeps SDL
+out of the public surface via an opaque forward-decl. Added `IsKeyUp` test in Phase 2; no other gaps.
 
 ---
 
