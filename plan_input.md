@@ -1461,10 +1461,25 @@ SDL retained. **Files changed:** `tests/Microsoft/Xna/Framework/Input/TextInputE
 **Tests:** pass. **Behavior verified:** rectangle set is safe for normal + degenerate values, with/without a
 window. **Remaining risk:** exact stored rect unverifiable (no SDL getter) — inherent platform limitation.
 
-## P7-010 — Manual IME validation
-- [ ] Validate with at least one IME on desktop.
-- [ ] Validate with mobile soft keyboard if supported.
-- [ ] Record OS, keyboard/IME, and result.
+## P7-010 — Manual IME validation `[!]`
+- [!] Validate with at least one IME on desktop. — Phase 11 (P11-007).
+- [!] Validate with mobile soft keyboard if supported. — Phase 11 (P11-007).
+- [!] Record OS, keyboard/IME, and result. — Phase 11 (P11-007).
+
+**Result (2026-07-06):** Genuinely hardware/environment-gated — real IME composition requires an installed
+IME + a visible window and cannot be driven deterministically headless (the real-window text-input test
+already `GTEST_SKIP`s when the environment has no IME). Deferred to **Phase 11 (P11-007)**; checklist in
+`docs/demo-input-checklist.md`. All IME *plumbing* (UTF-8 decode, TextEditing callback/start/length/empty,
+byte-offset semantics, multicast dispatch, start/stop/rectangle) is exhaustively unit-tested, so manual
+validation is confirming real IME wiring, not untested logic. **Files changed:** none. **Remaining risk:**
+real IME composition unverified until Phase 11.
+
+---
+
+**Phase 7 complete (2026-07-06):** all automated tasks (P7-001..009) `[x]`; P7-010 `[!]` (manual IME →
+Phase 11). **+6 tests** added closing the empty-text / subscriber-order / repeated-text / IME-byte-offset /
+zero-negative-rectangle gaps found by an audit vs FNA `TextInputEXT.cs` / `SDL3_FNAPlatform.cs`; control-char
+set + Ctrl+V confirmed byte-identical to FNA. No public API change; `ctest -L input` green (shuffle×5).
 
 ---
 
