@@ -400,16 +400,34 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   the missing validation is definitively confirmed). Restored the fix and reran — both pass. Full
   suite: **3247/3249 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.10** — Fix `NetworkSessionProperties`'s non-const `operator[]` silently
+- [x] **Task 2.10** — Fix `NetworkSessionProperties`'s non-const `operator[]` silently
   auto-appending on out-of-range *reads*, not just writes. Confirmed: the non-const `operator[]`
   unconditionally does `if (index >= size()) { push_back(nullopt); return back(); }` — since C++
   can't distinguish get-intent from set-intent through a plain `operator[]`, *any* out-of-range
   access through a mutable reference (including a bare read with no assignment) silently grows the
   list instead of throwing like FNA's getter always does. Only the const accessor (using `.at()`)
-  throws correctly. This is a real semantic divergence beyond the already-documented "write-only
-  auto-grow" quirk. Decide the correct fix (e.g. a proxy-object pattern to distinguish read vs.
-  write intent, matching `PropertyDictionary`'s similar issue in Phase 7) and add a test for a
-  bare out-of-range read through a non-const reference.
+  throws correctly.
+  **Investigated the proxy-object fix and found it's not viable here**: `NetworkSessionProperties::operator[]`
+  (non-const) `override`s a *pure virtual* `IList<T>::operator[]` (`sharp-runtime`'s
+  `System::Collections::Generic::IList<T>`) with a fixed `T& operator[](intcs) = 0` signature — a
+  proxy return type isn't a valid covariant override of `T&`, and changing `IList<T>`'s own
+  interface signature would ripple through every `IList<T>` implementer in the codebase, far
+  beyond this task's scope. Real XNA's C# indexer can split `get`/`set` because C# indexers are
+  full accessor pairs, not a single operator overload — this is a genuine C++/interface-fidelity
+  constraint, not a CNA oversight.
+  **Fixed via documentation instead** (matching Task 2.6's precedent): added a detailed doc-comment
+  on the non-const `operator[]` explaining exactly why this divergence exists, that it's
+  structural (not fixable without breaking `IList<T>` interface-wide), and that callers needing
+  strict bounds-checked reads should go through a `const NetworkSessionProperties&` reference
+  instead (which always resolves to the correctly-throwing const overload).
+  **Added `NetworkSessionPropertiesTest.MutableIndexerBareOutOfRangeReadAlsoAppends`**: a bare
+  read (no assignment) through a non-const reference at an out-of-range index — asserts the list
+  still grows (locking in the documented behavior so a future change can't silently regress it
+  without updating the doc comment) and contrasts it with the const overload correctly throwing
+  `std::out_of_range` for the identical index.
+  **No behavior change** — this task is documentation + a regression test proving already-existing,
+  structurally-unavoidable behavior, so there is no fix to revert-verify. Full suite:
+  **3248/3250 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.11** — Fix the wire-id wraparound/collision bug in `ENetBackend`'s
   `SessionState::NextWireId`. Confirmed: `NextWireId` is a `uint8_t` (`ENetBackend.cpp`, ~line 50),

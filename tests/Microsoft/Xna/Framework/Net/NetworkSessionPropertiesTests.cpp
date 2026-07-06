@@ -53,6 +53,26 @@ TEST(NetworkSessionPropertiesTest, MutableIndexerOutOfRangeAppendsInsteadOfExten
     EXPECT_EQ(42, props[1]);
 }
 
+// Task 2.10: a documented, structural divergence from FNA (see the non-const operator[]'s own
+// doc comment) - real XNA's separate get/set indexer accessors only auto-append on `set`; `get`
+// throws for an out-of-range index. IList<T>::operator[]'s single, fixed T& signature can't tell
+// a bare read apart from an assignment through the non-const overload, so even a read-only access
+// (no assignment at all) silently grows the list here, unlike the correctly-throwing const
+// overload. This test locks in that documented behavior so a future change doesn't silently
+// regress it back to a crash (or silently "fix" it without updating the doc comment).
+TEST(NetworkSessionPropertiesTest, MutableIndexerBareOutOfRangeReadAlsoAppends) {
+    NetworkSessionProperties props;
+    props.Add(1);
+    NetworkSessionProperties& mutableRef = props;
+    const std::optional<int>& read = mutableRef[10]; // no assignment - a bare read
+    EXPECT_EQ(props.getCountProperty(), 2);
+    EXPECT_EQ(read, std::nullopt);
+
+    // The const overload, by contrast, correctly throws for the same out-of-range index.
+    const NetworkSessionProperties& constRef = props;
+    EXPECT_THROW((void) constRef[10], std::out_of_range);
+}
+
 TEST(NetworkSessionPropertiesTest, IndexOfFoundAndNotFound) {
     NetworkSessionProperties props;
     props.Add(1);

@@ -46,6 +46,20 @@ namespace Microsoft::Xna::Framework::Net
          * to @p index — this matches FNA's own incomplete behavior (its reference
          * source carries a "TODO: Expand list to index size?" comment).
          *
+         * Known, structural divergence from FNA: real XNA's `int?[index]` indexer has separate
+         * `get`/`set` accessors — only `set` auto-appends on an out-of-range index; `get` throws
+         * (via `List<T>`'s own indexer). `IList<T>::operator[]` (the interface this overrides) has
+         * a single non-const signature returning `T&` for both reading and writing, so C++ cannot
+         * distinguish "this call is a read" from "this call is a write" the way C#'s separate
+         * accessors can — auto-append fires on *any* out-of-range access through this non-const
+         * overload, including a bare read with no assignment. A proxy-object return type could in
+         * principle disambiguate this, but `operator[]`'s return type is fixed by the pure virtual
+         * `IList<T>::operator[]` it overrides (changing that would ripple through every `IList<T>`
+         * implementer in this codebase) — this divergence is accepted as-is, not silently. Code
+         * that needs strict, non-appending bounds-checked reads should go through a
+         * `const NetworkSessionProperties&` reference instead, which always resolves to the
+         * correctly-throwing const overload above.
+         *
          * @param index Zero-based index.
          * @return Reference to the slot that will hold the assigned value.
          */
