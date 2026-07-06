@@ -47,6 +47,46 @@
       "clip": "clips/Clap.clip.bin"
     },
     {
+      "name": "MaleAngry",
+      "clip": "clips/MaleAngry.clip.bin"
+    },
+    {
+      "name": "MaleConfused",
+      "clip": "clips/MaleConfused.clip.bin"
+    },
+    {
+      "name": "MaleCry",
+      "clip": "clips/MaleCry.clip.bin"
+    },
+    {
+      "name": "MaleIdleCheckHand",
+      "clip": "clips/MaleIdleCheckHand.clip.bin"
+    },
+    {
+      "name": "MaleIdleLookAround",
+      "clip": "clips/MaleIdleLookAround.clip.bin"
+    },
+    {
+      "name": "MaleIdleShiftWeight",
+      "clip": "clips/MaleIdleShiftWeight.clip.bin"
+    },
+    {
+      "name": "MaleIdleStretch",
+      "clip": "clips/MaleIdleStretch.clip.bin"
+    },
+    {
+      "name": "MaleLaugh",
+      "clip": "clips/MaleLaugh.clip.bin"
+    },
+    {
+      "name": "MaleSurprised",
+      "clip": "clips/MaleSurprised.clip.bin"
+    },
+    {
+      "name": "MaleYawn",
+      "clip": "clips/MaleYawn.clip.bin"
+    },
+    {
       "name": "Stand0",
       "clip": "clips/Stand0.clip.bin"
     },

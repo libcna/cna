@@ -443,6 +443,155 @@ def build_female_yawn(armature_obj):
     return action
 
 
+def build_male_idle_look_around(armature_obj):
+    """MaleIdleLookAround: a single quick look to one side and back (not
+    FemaleIdleLookAround's slower look-both-ways), local-Y Neck turn. 70 frames, plays
+    once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "MaleIdleLookAround")
+
+    turn = math.radians(40.0)
+    for frame, angle in ((1, 0.0), (15, turn), (45, turn), (70, 0.0)):
+        _keyframe_euler(armature_obj, "Neck", frame, (0.0, angle, 0.0))
+
+    return action
+
+
+def build_male_idle_stretch(armature_obj):
+    """MaleIdleStretch: Spine1 leans back (negative local X) with Neck tilting up to
+    match, held briefly like a backward stretch, then released. 90 frames, plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "MaleIdleStretch")
+
+    lean = math.radians(-12.0)
+    for frame, angle in ((1, 0.0), (25, lean), (60, lean), (90, 0.0)):
+        _keyframe_euler(armature_obj, "Spine1", frame, (angle, 0.0, 0.0))
+        _keyframe_euler(armature_obj, "Neck", frame, (angle * 0.5, 0.0, 0.0))
+
+    return action
+
+
+def build_male_idle_shift_weight(armature_obj):
+    """MaleIdleShiftWeight: Hips sway in X while Spine (not FemaleIdleShiftWeight's
+    Spine1) twists the opposite phase — a different bone pairing so the two genders'
+    "shift weight" idles don't move identically. Loops seamlessly over 110 frames."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "MaleIdleShiftWeight")
+
+    sway, twist = 0.02, math.radians(4.0)
+    for frame, x, angle in ((1, 0.0, 0.0), (28, sway, -twist), (55, 0.0, 0.0), (82, -sway, twist), (110, 0.0, 0.0)):
+        _keyframe_location(armature_obj, "Hips", frame, (x, 0.0, 0.0))
+        _keyframe_euler(armature_obj, "Spine", frame, (0.0, angle, 0.0))
+
+    return action
+
+
+def build_male_idle_check_hand(armature_obj):
+    """MaleIdleCheckHand: Neck nods down with a slight sideways twist, held, as if
+    glancing at one's own hand — same idea as FemaleIdleCheckNails but a shallower nod
+    and a twist instead of a tilt, so the two read differently. 65 frames, plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "MaleIdleCheckHand")
+
+    nod, twist = math.radians(14.0), math.radians(12.0)
+    for frame, n, y in ((1, 0.0, 0.0), (14, nod, twist), (50, nod, twist), (65, 0.0, 0.0)):
+        _keyframe_euler(armature_obj, "Neck", frame, (n, y, 0.0))
+
+    return action
+
+
+def build_male_angry(armature_obj):
+    """MaleAngry: bigger, blunter Spine twists than FemaleAngry's quick huff, with a
+    stronger Hips jerk in sync — fewer repeats, more force per repeat. 36 frames, plays
+    once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "MaleAngry")
+
+    twist = math.radians(14.0)
+    jerk = 0.018
+    keys = ((1, 0.0, 0.0), (7, -twist, jerk), (16, twist, jerk), (25, -twist, jerk), (30, 0.0, 0.0), (36, 0.0, 0.0))
+    for frame, angle, z in keys:
+        _keyframe_euler(armature_obj, "Spine", frame, (0.0, angle, 0.0))
+        _keyframe_location(armature_obj, "Hips", frame, (0.0, 0.0, z))
+
+    return action
+
+
+def build_male_confused(armature_obj):
+    """MaleConfused: a held head tilt with a bigger Neck twist than FemaleConfused's
+    (twist-dominant rather than tilt-dominant) — a "did I hear that right?" pose. 80
+    frames, plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "MaleConfused")
+
+    tilt, twist = math.radians(9.0), math.radians(18.0)
+    for frame, t, y in ((1, 0.0, 0.0), (18, tilt, twist), (58, tilt, twist), (80, 0.0, 0.0)):
+        _keyframe_euler(armature_obj, "Head", frame, (0.0, y, t))
+
+    return action
+
+
+def build_male_laugh(armature_obj):
+    """MaleLaugh: a bigger, slower Spine1 Z-lean bounce than FemaleLaugh's quick shake,
+    with Hips dipping slightly on each beat — a hands-on-belly-style laugh. 48 frames,
+    plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "MaleLaugh")
+
+    lean = math.radians(9.0)
+    dip = 0.015
+    keys = ((1, 0.0, 0.0), (8, lean, dip), (16, -lean, 0.0), (24, lean, dip), (32, -lean, 0.0), (40, lean, dip), (48, 0.0, 0.0))
+    for frame, angle, z in keys:
+        _keyframe_euler(armature_obj, "Spine1", frame, (0.0, 0.0, angle))
+        _keyframe_location(armature_obj, "Hips", frame, (0.0, 0.0, -z))
+
+    return action
+
+
+def build_male_cry(armature_obj):
+    """MaleCry: a deeper Neck droop and Spine slouch than FemaleCry, held longer before
+    the slow return to rest — a heavier, more collapsed sad slump. 110 frames, plays
+    once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "MaleCry")
+
+    droop, slouch = math.radians(28.0), math.radians(14.0)
+    for frame, n, s in ((1, 0.0, 0.0), (25, droop, slouch), (90, droop, slouch), (110, 0.0, 0.0)):
+        _keyframe_euler(armature_obj, "Neck", frame, (n, 0.0, 0.0))
+        _keyframe_euler(armature_obj, "Spine", frame, (s, 0.0, 0.0))
+
+    return action
+
+
+def build_male_surprised(armature_obj):
+    """MaleSurprised: a sharper, quicker backward Spine+Neck snap than
+    FemaleShocked's, with a shorter hold before recovering — a startled jolt. 40 frames,
+    plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "MaleSurprised")
+
+    lean = math.radians(-16.0)
+    for frame, angle in ((1, 0.0), (4, lean), (14, lean), (40, 0.0)):
+        _keyframe_euler(armature_obj, "Spine", frame, (angle, 0.0, 0.0))
+        _keyframe_euler(armature_obj, "Neck", frame, (angle, 0.0, 0.0))
+
+    return action
+
+
+def build_male_yawn(armature_obj):
+    """MaleYawn: head/neck tilt back with a bigger Spine1 backward stretch than
+    FemaleYawn's, slower to rise and slower to release. 130 frames, plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "MaleYawn")
+
+    tilt, stretch = math.radians(24.0), math.radians(9.0)
+    for frame, n, s in ((1, 0.0, 0.0), (45, tilt, stretch), (85, tilt, stretch), (130, 0.0, 0.0)):
+        _keyframe_euler(armature_obj, "Neck", frame, (-n, 0.0, 0.0))
+        _keyframe_euler(armature_obj, "Spine1", frame, (-s, 0.0, 0.0))
+
+    return action
+
+
 def build_clap(armature_obj):
     """Both arms raise together to roughly chest height (UpperArm.L/R, via
     _raise_upper_arm) and hold, while both forearms (LowerArm.L/R, via
@@ -521,8 +670,18 @@ _FEMALE_BUILDERS = {
     "FemaleYawn": build_female_yawn,
 }
 
-# Populated by Task 11.23c.
-_MALE_BUILDERS = {}
+_MALE_BUILDERS = {
+    "MaleIdleLookAround": build_male_idle_look_around,
+    "MaleIdleStretch": build_male_idle_stretch,
+    "MaleIdleShiftWeight": build_male_idle_shift_weight,
+    "MaleIdleCheckHand": build_male_idle_check_hand,
+    "MaleAngry": build_male_angry,
+    "MaleConfused": build_male_confused,
+    "MaleLaugh": build_male_laugh,
+    "MaleCry": build_male_cry,
+    "MaleSurprised": build_male_surprised,
+    "MaleYawn": build_male_yawn,
+}
 
 
 def build_animations(armature_obj, gender=None):
