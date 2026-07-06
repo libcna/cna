@@ -487,6 +487,25 @@ namespace CNA::Internal::Net
 
     void ENetBackend::TeardownSession(NetworkSession* session)
     {
+        auto it = Sessions().find(session);
+        if (it != Sessions().end())
+        {
+            // Task 2.14: previously just erased from Sessions(), destroying the ENetHostHandle
+            // (-> enet_host_destroy()) with no prior enet_peer_disconnect for still-connected
+            // peers - they'd wait out ENet's internal connection timeout instead of receiving an
+            // immediate, clean disconnect notification. Disconnect every known peer first and
+            // flush so the DISCONNECT packets actually go out before the host is torn down.
+            SessionState& state = *it->second;
+            for (const auto& [peer, wireIds] : state.PeerWireIds)
+            {
+                state.Host.Disconnect(peer, 0);
+            }
+            if (state.HostPeer != nullptr)
+            {
+                state.Host.Disconnect(state.HostPeer, 0);
+            }
+            state.Host.Flush();
+        }
         Sessions().erase(session);
         ENetDiscoveryService::UnregisterHost(session);
     }

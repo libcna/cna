@@ -925,3 +925,54 @@ TEST(ENetBackendTest, DisconnectedPeerWireIdIsReclaimedAndReusedByTheNextJoiner)
     EXPECT_EQ(assignedIds[0], assignedIds[1]);
     EXPECT_EQ(assignedIds[1], assignedIds[2]);
 }
+
+// Task 2.14: TeardownSession used to just erase from Sessions(), destroying the ENetHostHandle
+// (-> enet_host_destroy()) with no prior enet_peer_disconnect for still-connected peers - they'd
+// only learn the connection is gone once ENet's own internal timeout eventually elapses, instead
+// of receiving an immediate, clean DISCONNECT event. Confirms a connected peer sees a prompt
+// DISCONNECT (within a normal, short polling window - not by waiting out a real timeout) when the
+// local session is disposed.
+TEST(ENetBackendTest, DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
+
+    host.session->Dispose();
+
+    bool disconnected = false;
+    for (int i = 0; i < 200 && !disconnected; ++i, PollYield()) {
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_DISCONNECT) {
+            disconnected = true;
+        }
+    }
+    EXPECT_TRUE(disconnected) << "peer should have seen a prompt DISCONNECT, not a timeout";
+}

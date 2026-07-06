@@ -501,14 +501,25 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   (3x) — passes every time. Full suite: **3255/3257 passing** (2 expected accelerometer/gyroscope
   skips), no regressions.
 
-- [ ] **Task 2.14** — Add graceful peer disconnect on session teardown. Confirmed:
-  `ENetBackend::TeardownSession` destroys the ENet host with no prior `enet_peer_disconnect` call
-  for still-connected peers; `ENetHostHandle::Disconnect()` is confirmed never called from
-  production code (only test fixtures use it) — remote peers wait out ENet's internal timeout
-  instead of receiving an immediate clean disconnect notification. Fix: call
-  `enet_peer_disconnect`/flush before destroying the host in `TeardownSession`. Add a test asserting
-  a remote peer receives a disconnect event promptly (not via timeout) when the local session is
-  disposed.
+- [x] **Task 2.14** — Add graceful peer disconnect on session teardown. Confirmed:
+  `ENetBackend::TeardownSession` destroyed the ENet host with no prior `enet_peer_disconnect` call
+  for still-connected peers; `ENetHostHandle::Disconnect()` was confirmed never called from
+  production code (only test fixtures used it) — remote peers would wait out ENet's internal
+  timeout instead of receiving an immediate clean disconnect notification.
+  **Fixed:** `TeardownSession` now looks up the session's `SessionState` before erasing it, calls
+  `state.Host.Disconnect(peer, 0)` for every peer in `state.PeerWireIds` (host-side: every peer
+  that completed a handshake) and for `state.HostPeer` if set (client-side: the one peer this
+  session itself connected out to), then `state.Host.Flush()` so the `DISCONNECT` packets actually
+  go out before the host is destroyed.
+  **Added `ENetBackendTest.DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout`**:
+  hosts a session, connects and completes a handshake with a fake client, calls
+  `host.session->Dispose()`, and asserts the fake client observes an `ENET_EVENT_TYPE_DISCONNECT`
+  within a normal, short polling window (not by waiting out a real multi-second-plus ENet
+  timeout, which a unit test can't practically do anyway).
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with
+  `disconnected == false` (no DISCONNECT event arrived within the polling window). Restored the
+  fix and reran (3x) — passes every time. Full suite: **3256/3258 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.15** — Investigate and fix `NetworkSession::Join()`'s real handshake being
   unreachable from the public API. Confirmed: `BeginJoin`/`EndJoin` hardcode
