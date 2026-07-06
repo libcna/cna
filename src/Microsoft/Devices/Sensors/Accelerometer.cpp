@@ -541,6 +541,24 @@ namespace Microsoft::Devices::Sensors
         // reporting the same SI m/s^2 unit this constant assumes.
         constexpr float StandardGravity = 9.80665f;
 
+        // Task SDL-SENSOR-001 (2026-07-06): axis convention for the raw x/y/z
+        // this method receives is documented directly above `SDL_SensorType`
+        // (third_party/SDL/include/SDL3/SDL_sensor.h, "Accelerometer sensor
+        // notes"): for a device in natural (portrait) orientation,
+        // -X..+X = left..right, -Y..+Y = bottom..top, -Z..+Z = farther..closer,
+        // and "the accelerometer axis data is not changed when the device is
+        // rotated" -- i.e. these are raw, device-frame axes, never
+        // display-orientation-aware, exactly what ConvertAndroidAccelerometerToXnaLandscape()
+        // below assumes it is remapping *from*. Confirmed this is what SDL
+        // actually delivers, not just documents, by reading both real
+        // backends this project targets: SDL_androidsensor.c passes the NDK
+        // ASensorEvent's raw values through with no axis reordering at all
+        // (only ACCEL-003's unit passthrough); SDL_windowssensor.c maps
+        // Windows' own SENSOR_DATA_TYPE_ACCELERATION_{X,Y,Z}_G values to
+        // values[0]/[1]/[2] in the same X/Y/Z order, only scaling by
+        // SDL_STANDARD_GRAVITY -- neither backend reorders or negates axes,
+        // so this method's x/y/z parameters are exactly SDL's documented
+        // natural-orientation axes on every platform this project builds for.
         const bool valid = true;
         setIsDataValidProperty(valid);
 

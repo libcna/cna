@@ -4383,7 +4383,7 @@ not an alternate spelling to preserve.
 
 ## 11. SDL sensor subsystem tasks
 
-### SDL-SENSOR-001 — Verify SDL3 sensor units and axes
+### SDL-SENSOR-001 — Verify SDL3 sensor units and axes — CLOSED (2026-07-06, axis convention now cited from source in both sensor classes)
 
 - **Priority:** Critical
 - **Area:** SDL Backend
@@ -4407,6 +4407,51 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
   - `src/Microsoft/Devices/Sensors/Gyroscope.cpp`
   - `third_party/SDL/src/sensor/` (read-only research — vendored, do not edit)
+- **Resolution:** Units were already cited from source by `ACCEL-003`/`GYRO-002`
+  (this session, earlier). What was missing was the *axis-convention* citation this
+  task specifically asks for. Found it directly above `SDL_SensorType`'s definition
+  in `third_party/SDL/include/SDL3/SDL_sensor.h` ("Accelerometer sensor notes"/
+  "Gyroscope sensor notes", lines ~78–131): for a device in natural (portrait)
+  orientation, both sensors use -X..+X = left..right, -Y..+Y = bottom..top,
+  -Z..+Z = farther..closer, and "the \[accelerometer/gyroscope\] axis data is not
+  changed when the device is rotated" — i.e. SDL documents these as fixed,
+  device-frame axes, never display-orientation-aware. Confirmed this is what SDL
+  actually *implements*, not merely documents, by reading the two real per-platform
+  backends this project targets end to end: `SDL_androidsensor.c` (line 82) passes
+  the NDK `ASensorEvent`'s raw `data[]` through to `SDL_SendSensorUpdate()` completely
+  unconverted — no axis reordering, no unit scaling (correct since NDK data is
+  already in the target units); `SDL_windowssensor.c` (lines 171–200) reads
+  Windows' own `SENSOR_DATA_TYPE_ACCELERATION_{X,Y,Z}_G`/
+  `SENSOR_DATA_TYPE_ANGULAR_VELOCITY_{X,Y,Z}_DEGREES_PER_SECOND` values into
+  `values[0]/[1]/[2]` in the same X/Y/Z order, only scaling units (×`SDL_STANDARD_GRAVITY`,
+  ×π/180) — neither backend reorders or negates any axis. This confirms
+  `Accelerometer::ProcessSensorUpdateEvent()`'s/`Gyroscope::ProcessSensorUpdateEvent()`'s
+  raw `x`/`y`/`z` parameters are exactly SDL's documented natural-orientation axes on
+  every platform this project currently builds for, which is precisely what
+  `Detail::ConvertAndroidAccelerometerToXnaLandscape()`/
+  `ConvertAndroidGyroscopeToXnaLandscape()`/`ConvertAndroidPortraitToXnaLandscape()`
+  (`AndroidSensorOrientation.hpp`) already assumed they were remapping *from* — no
+  mismatch found. Added the full citation (file, exact backends read, and the
+  no-reordering conclusion) as code comments directly in
+  `Accelerometer.cpp::DispatchSensorReading()` and
+  `Gyroscope.cpp::DispatchSensorReading()`, immediately before/after each method's
+  existing unit-citation comment, so both the unit and axis claims for a given raw
+  value now live together. No changes needed to `AndroidSensorOrientation.hpp` itself
+  — its existing doc comment already correctly describes "raw SDL accelerometer/
+  gyroscope data (portrait device frame)" as its input, consistent with this
+  citation. Tests: the acceptance criterion "tests cover the expected raw-to-XNA
+  mapping" was already satisfied by pre-existing tests from earlier sessions
+  (`AccelerometerTests.CurrentValueChangedReceivesExpectedReading`/
+  `InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported`, and
+  `GyroscopeTests`' equivalents) — each injects distinct non-equal x/y/z values and
+  asserts the resulting `Vector3` preserves them in the same order (the non-Android
+  build path, `Vector3(x, y, z)` direct construction), plus
+  `AndroidSensorOrientationTests.cpp`'s existing coverage of the Android remap math
+  itself; no new tests were needed, only the missing source citation this task
+  asked for. Build: `cmake --build cmake-build-debug --target CnaTests` succeeded;
+  ran `AccelerometerTests.*:GyroscopeTests.*:AndroidSensorOrientationTests.*:
+  AndroidSensorBridgeTests.*` (103 tests, 101 passed, 2 pre-existing
+  hardware-unsupported skips unrelated to this change).
 
 ### SDL-SENSOR-002 — Implement update-rate throttling — CLOSED (2026-07-06)
 

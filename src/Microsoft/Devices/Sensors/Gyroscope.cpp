@@ -390,6 +390,24 @@ namespace Microsoft::Devices::Sensors
         // radians per second" (archived MSDN `hh239090(v=vs.105)`). Both
         // sides already agree on the same unit, so a straight pass-through
         // is correct.
+        //
+        // Task SDL-SENSOR-001 (2026-07-06): axis convention for the raw
+        // x/y/z parameters is documented directly above `SDL_SensorType`
+        // (third_party/SDL/include/SDL3/SDL_sensor.h, "Gyroscope sensor
+        // notes"): values[0]/[1]/[2] are angular speed around the
+        // x/y/z axes (pitch/yaw/roll) of a device in natural (portrait)
+        // orientation, positive = counter-clockwise viewed from a positive
+        // point on that axis, and "the gyroscope axis data is not changed
+        // when the device is rotated" -- raw, device-frame axes, exactly
+        // what ConvertAndroidGyroscopeToXnaLandscape() below assumes it is
+        // remapping *from*. Confirmed by reading both real backends this
+        // project targets: SDL_androidsensor.c passes the NDK
+        // ASensorEvent's raw values through with no axis reordering;
+        // SDL_windowssensor.c maps Windows' own
+        // SENSOR_DATA_TYPE_ANGULAR_VELOCITY_{X,Y,Z}_DEGREES_PER_SECOND
+        // values to values[0]/[1]/[2] in the same X/Y/Z order, only scaling
+        // degrees-per-second to radians-per-second -- neither backend
+        // reorders or negates axes.
         const bool valid = true;
         setIsDataValidProperty(valid);
 
