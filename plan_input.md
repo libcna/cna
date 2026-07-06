@@ -1506,12 +1506,26 @@ fall through `default:` → no input mutation, no crash). **Files changed:**
 `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp` (+1 test). **Behavior verified:** consumed set is
 complete + tested; omissions are intentional and now pinned. **Remaining risk:** none.
 
-## P8-002 — Verify event ordering
-- [ ] Test keyboard event ordering.
-- [ ] Test text input ordering.
-- [ ] Test mouse motion/button ordering.
-- [ ] Test touch/gesture ordering.
-- [ ] Test gamepad connect/input ordering.
+## P8-002 — Verify event ordering `[x]`
+- [x] Test keyboard event ordering.
+- [x] Test text input ordering.
+- [x] Test mouse motion/button ordering.
+- [x] Test touch/gesture ordering.
+- [x] Test gamepad connect/input ordering.
+
+**Result (2026-07-06):** Fully covered by the golden/ordered-sequence suites. **Keyboard:**
+`SdlInputBridgeGoldenTest.KeyboardScriptResolvesToExactPressedSet` (press W/A/S/D/Space, lift A/S, press
+LShift → exact pressed set). **Text:** `ControlKeysSynthesizeTextInputCharacters`,
+`CtrlVEmitsPasteCharAndSuppressesLiteralText` (ordered KEY_DOWN→TEXT_INPUT→KEY_UP). **Mouse:**
+`MouseScriptResolvesToExactState` (motion + down/up + wheel + motion → exact MouseState). **Touch/gesture:**
+`TwoFingerScriptResolvesToExactTouchSnapshots`, `FingerDownUpThroughProcessEventProducesTap`,
+`FingerMotionThroughProcessEventProducesFlick`. **Gamepad:** `StaleButtonStateIsClearedOnDisconnect`,
+`PacketNumberIsStableAcrossRepeatedIdenticalButtonEvents`/`...AxisEvents`,
+`AxisMappingHandlesYInversionAndTriggerNormalization` (ordered add→button/axis→remove). The cross-subsystem
+`InterleavedSessionResolvesEachSubsystemIndependently` covers keyboard+mouse+touch interleaving; gamepad is
+intentionally isolated (golden tests are headless/no-gamepad) — each subsystem's state is independent.
+**Files changed:** none (coverage confirmed). **Behavior verified:** ordered sequences resolve to exact
+final state across all five subsystems. **Remaining risk:** none.
 
 ## P8-003 — Verify SDL initialization ownership
 - [ ] Ensure input code initializes only the SDL subsystems it owns.
