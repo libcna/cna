@@ -1213,6 +1213,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 373: AlphaTestEffect all CompareFunction modes — threshold sweep (below/at/above)
+        cna_easygl_test(cna_test_easygl_alphatest_comparefunction_sweep
+                        examples/easygl_alphatest_comparefunction_sweep_test.cpp)
+        add_test(NAME EasyGL_AlphaTest_CompareFunctionSweep
+                 COMMAND cna_test_easygl_alphatest_comparefunction_sweep)
+        set_tests_properties(EasyGL_AlphaTest_CompareFunctionSweep PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_dualtexture
                         examples/easygl_dualtexture_test.cpp)
         add_test(NAME EasyGL_DualTexture
@@ -2003,6 +2012,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 374: AlphaTestEffect all CompareFunction modes — threshold sweep
+        cna_vulkan_test(cna_test_vulkan_alphatest_comparefunction_sweep
+                        examples/vulkan_alphatest_comparefunction_sweep_test.cpp)
+        add_test(NAME Vulkan_AlphaTest_CompareFunctionSweep
+                 COMMAND cna_test_vulkan_alphatest_comparefunction_sweep)
+        set_tests_properties(Vulkan_AlphaTest_CompareFunctionSweep PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()
@@ -2138,6 +2156,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_BasicEffect_Combined
              COMMAND cna_test_bgfx_basiceffect_combined)
     set_tests_properties(Bgfx_BasicEffect_Combined PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 375: AlphaTestEffect all CompareFunction modes — threshold sweep
+    cna_bgfx_test(cna_test_bgfx_alphatest_comparefunction_sweep
+                  examples/bgfx_alphatest_comparefunction_sweep_test.cpp)
+    add_test(NAME Bgfx_AlphaTest_CompareFunctionSweep
+             COMMAND cna_test_bgfx_alphatest_comparefunction_sweep)
+    set_tests_properties(Bgfx_AlphaTest_CompareFunctionSweep PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
