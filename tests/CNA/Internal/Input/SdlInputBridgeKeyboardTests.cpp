@@ -216,15 +216,15 @@ TEST_F(SdlInputBridgeKeyboardTest, KeyRepeatKeepsKeyDownWithoutSpuriousTransitio
     EXPECT_EQ(Keyboard::GetState().GetPressedKeys().size(), 0u);
 }
 
-// INPUT-KBD-011: the two ISO-layout extra scancodes (NONUSHASH, NONUSBACKSLASH) have no XNA Keys
-// equivalent. FNA maps them to Keys.None (with its own "need verification" FIXME) and adds None to the
-// pressed list; CNA instead DROPS them, the same DEC-16 policy as unmapped keycodes — so IsKeyDown(None)
-// stays false and the pressed set stays empty rather than being polluted with a meaningless None.
+// INPUT-KBD-011/019: scancodes with no XNA Keys value — the no-scancode sentinel (UNKNOWN) and the two
+// ISO-layout extra keys (NONUSHASH, NONUSBACKSLASH) — are DROPPED, the same DEC-16 policy as unmapped
+// keycodes, so IsKeyDown(None) stays false and the pressed set stays empty rather than being polluted
+// with a meaningless None. (FNA maps the ISO keys to Keys.None with its own "need verification" FIXME.)
 TEST_F(SdlInputBridgeKeyboardTest, IsoLayoutExtraScancodesAreDroppedNotMarkedNone)
 {
     SdlInputBridge::SetScancodeModeForTests(true);
 
-    for (const SDL_Scancode sc : {SDL_SCANCODE_NONUSHASH, SDL_SCANCODE_NONUSBACKSLASH})
+    for (const SDL_Scancode sc : {SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_NONUSHASH, SDL_SCANCODE_NONUSBACKSLASH})
     {
         InputManager::ResetForTests();
         SdlInputBridge::ProcessEvent(keyDownWithScancode(sc));

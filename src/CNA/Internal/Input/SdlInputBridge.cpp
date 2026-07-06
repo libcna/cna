@@ -747,14 +747,15 @@ namespace
         case SDL_SCANCODE_GRAVE: return Keys::OemTilde;
         case SDL_SCANCODE_VOLUMEUP: return Keys::VolumeUp;
         case SDL_SCANCODE_VOLUMEDOWN: return Keys::VolumeDown;
-        case SDL_SCANCODE_UNKNOWN: return Keys::None;
-        // INPUT-KBD-011: the two ISO-layout extra keys (NONUSHASH on UK, NONUSBACKSLASH on most ISO
-        // boards) have no XNA Keys equivalent. FNA maps both to Keys.None with a "need verification"
-        // FIXME (SDL3_FNAPlatform.cs:2615-2617) and then adds Keys.None to its pressed list. CNA instead
-        // DROPS them (std::nullopt), the same DEC-16 policy already applied to unmapped keycodes: never
-        // pollute the pressed set with a meaningless Keys::None (which would make IsKeyDown(None) true and
-        // leak None into GetPressedKeys()). This is a deliberate, DEC-16-consistent deviation from FNA —
-        // recorded in docs/input-fna-fidelity.md and pinned by SdlInputBridgeKeyboardTest. Not an open TODO.
+        // INPUT-KBD-011/019: scancodes with no XNA Keys value are DROPPED (std::nullopt), never mapped to
+        // Keys::None — the same DEC-16 policy already applied to unmapped keycodes, so Keys::None never
+        // enters the pressed set (IsKeyDown(None) stays false; None never leaks into GetPressedKeys()).
+        // This covers the no-scancode sentinel (SDL_SCANCODE_UNKNOWN, matching the keycode path's SDLK_
+        // UNKNOWN drop) and the two ISO-layout extra keys (NONUSHASH on UK, NONUSBACKSLASH on most ISO
+        // boards), which FNA maps to Keys.None with its own unresolved "need verification" FIXME
+        // (SDL3_FNAPlatform.cs:2615-2617) and adds to its pressed list. A deliberate, DEC-16-consistent
+        // deviation from FNA — recorded in docs/input-fna-fidelity.md, pinned by SdlInputBridgeKeyboardTest.
+        case SDL_SCANCODE_UNKNOWN: return std::nullopt;
         case SDL_SCANCODE_NONUSHASH: return std::nullopt;
         case SDL_SCANCODE_NONUSBACKSLASH: return std::nullopt;
         default: return std::nullopt;

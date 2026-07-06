@@ -54,6 +54,9 @@
 - **INPUT-KBD-019 — key-repeat state case added:** the text half of the repeat gate was already covered;
   added `KeyRepeatKeepsKeyDownWithoutSpuriousTransitions` (press + 5 repeats → pressed set stays `{A}`,
   one KEY_UP releases). Verification + one test, no code change.
+- **INPUT-KBD-011 follow-up — unify scancode path:** `SDL_SCANCODE_UNKNOWN` was the third scancode still
+  returning `Keys::None`; dropped it too (matching the keycode `SDLK_UNKNOWN` drop), so the entire scancode
+  path is DEC-16-consistent. Test extended to all three scancodes.
 - **INPUT-KBD-011 — scancode FIXME resolved (behavior fix):** the ISO-layout extra scancodes
   `NONUSHASH`/`NONUSBACKSLASH` were returning `Keys::None`, which the bridge marked *pressed* — the DEC-16
   pollution the keycode path already avoids. Changed both to `std::nullopt` (drop), making the scancode

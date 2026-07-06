@@ -883,8 +883,10 @@ FIXME at SdlInputBridge.cpp:729 (NONUSHASH/NONUSBACKSLASH scancodes "need verifi
   pollution DEC-16 already rejected on the keycode path. Fixed by returning `std::nullopt` (drop) for both,
   making the scancode path DEC-16-consistent (`Keys::None` never enters the pressed set). Replaced the bare
   `FIXME` with a decision comment, added `IsoLayoutExtraScancodesAreDroppedNotMarkedNone` (asserts
-  `IsKeyDown(None)` false + empty pressed set for both), and recorded the deviation in
-  `docs/input-fna-fidelity.md`. `ctest -L input` 100% green.
+  `IsKeyDown(None)` false + empty pressed set), and recorded the deviation in `docs/input-fna-fidelity.md`.
+  Follow-up: unified the whole scancode path — `SDL_SCANCODE_UNKNOWN` was the third case still returning
+  `Keys::None`; it now drops too (matching the keycode path's `SDLK_UNKNOWN` drop), and the test covers all
+  three. `ctest -L input` 100% green.
 
 #### INPUT-KBD-012 — `FNA_KEYBOARD_USE_SCANCODES` env behavior + caching
 - **Priority:** P2 · **Status:** TODO · **Area:** Keyboard/Bridge

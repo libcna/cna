@@ -38,13 +38,15 @@ not exactly identical.
   `Keys::None`. FNA's `ToXNAKey` returns `Keys.None` and then does `Keyboard.keys.Add(Keys.None)`
   (`SDL3_FNAPlatform.cs:905-908`), leaving a meaningless "None" key marked pressed; CNA's drop is cleaner.
   Tested (`UnmappedKeycodeIsDroppedNotMarkedNone`).
-- **INPUT-KBD-011 (accepted, extends DEC-16 to the scancode path):** the ISO-layout extra scancodes
-  `SDL_SCANCODE_NONUSHASH` / `SDL_SCANCODE_NONUSBACKSLASH` have no XNA `Keys` value. FNA maps both to
-  `Keys.None` (with its own `FIXME: … need verification`, `SDL3_FNAPlatform.cs:2615-2617`) and adds `None`
-  to its pressed list; CNA **drops** them (`std::nullopt`) so, exactly as DEC-16 for keycodes, `Keys::None`
-  never enters the pressed set. FNA is the authoritative reference for the *value* (there is no better XNA
-  mapping — CNA does not invent a divergent `OemBackslash`), but the pressed-set-pollution policy follows
-  DEC-16, not FNA. Tested (`IsoLayoutExtraScancodesAreDroppedNotMarkedNone`).
+- **INPUT-KBD-011/019 (accepted, extends DEC-16 to the scancode path):** scancodes with no XNA `Keys`
+  value are **dropped** (`std::nullopt`) rather than mapped to `Keys.None`, so — exactly as DEC-16 for
+  keycodes — `Keys::None` never enters the pressed set. This covers the no-scancode sentinel
+  `SDL_SCANCODE_UNKNOWN` (matching the keycode path's `SDLK_UNKNOWN` drop) and the two ISO-layout extra
+  keys `SDL_SCANCODE_NONUSHASH` / `SDL_SCANCODE_NONUSBACKSLASH`, which FNA maps to `Keys.None` (with its
+  own `FIXME: … need verification`, `SDL3_FNAPlatform.cs:2615-2617`) and adds to its pressed list. FNA is
+  the authoritative reference for the *value* (there is no better XNA mapping — CNA does not invent a
+  divergent `OemBackslash`), but the pressed-set-pollution policy follows DEC-16, not FNA. Tested
+  (`IsoLayoutExtraScancodesAreDroppedNotMarkedNone`).
 - **DEC-17 (accepted):** `SDLK_AC_BACK` → `Keys::Escape` (Android/browser Back button) — a CNA-only
   convenience not in FNA, so "back" acts as cancel/exit on those platforms. Tested
   (`AndroidBackButtonMapsToEscape`).
