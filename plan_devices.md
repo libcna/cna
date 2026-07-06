@@ -4490,7 +4490,7 @@ not an alternate spelling to preserve.
     `SdlSensorSubsystem.hpp`, see Resolution above)
   - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` (edited)
 
-### SDL-SENSOR-003 — Strengthen SDL event lifetime tests
+### SDL-SENSOR-003 — Strengthen SDL event lifetime tests — CLOSED (2026-07-06, confirmed existing coverage sufficient; sanitizers run, one out-of-repo finding documented as SDL-SENSOR-004)
 
 - **Priority:** High
 - **Area:** Lifecycle / Tests
@@ -4510,6 +4510,101 @@ not an alternate spelling to preserve.
 - **Suggested files to inspect or edit:**
   - `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`
   - `tests/Microsoft/Devices/Sensors/SensorSubsystemOwnershipTests.cpp`
+- **Resolution:** Re-read `Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances()`'s
+  own doc comment (the shared dispatch path both `Accelerometer` and `Gyroscope` use)
+  and cross-checked it against every currently existing lifecycle test in
+  `AccelerometerTests.cpp`/`GyroscopeTests.cpp`/`SensorSubsystemOwnershipTests.cpp`
+  rather than assuming prior coverage was complete, per this task's own problem
+  statement. Confirmed coverage of every scenario the acceptance criteria call for
+  already exists, built up across this and earlier sessions: `NoDispatchAfterStop`/
+  `NoDispatchAfterDispose` (Stop()/Dispose() before dispatch), `StopPreventsSubsequentSyntheticEventFromDispatching`,
+  `DisposeFromWithinOwnCallbackDoesNotDeadlock` (self-Dispose() from a callback,
+  same-thread-exempt wait), `DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUseAfterFree`
+  and `SelfDestroyingFromOwnCallbackDuringInjectSyntheticSensorUpdateDoesNotUseAfterFree`/
+  `SelfDestroyingFromOwnCallbackDuringBatchDispatchDoesNotUseAfterFree` (destruction,
+  not just Dispose(), mid-dispatch — the exact "no sensor object touched after a
+  callback returns unless lifetime is provably valid" requirement), `ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDoesNotHangDispose`/
+  `ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent`
+  (exception safety), `ConcurrentSyntheticUpdatesDoNotCrashAndDrainBeforeDispose`/
+  `ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount`/
+  `ConcurrentDisposeLoserWaitsForWinnerCleanupToFinishBeforeStateAppearsDisposed`
+  (genuine concurrent-thread dispatch/Dispose races), plus `SensorSubsystemOwnershipTests.cpp`'s
+  own cross-class isolation and concurrent construct/destroy/probe coverage. No gap
+  was found against `DispatchToInstances()`'s current implementation, so no new test
+  was added — adding a near-duplicate of an already-covered scenario would not
+  strengthen anything. Ran both required sanitizer builds against this full set
+  (`AccelerometerTests.*:GyroscopeTests.*:SensorSubsystemOwnershipTests.*:AndroidSensorOrientationTests.*:AndroidSensorBridgeTests.*`,
+  106 tests, 104 passed + 2 pre-existing hardware-skips, both builds):
+  **`devices-asan`** (`cmake --build cmake-build-devices-asan --target CnaTests`) —
+  completely clean, zero reports. **`devices-tsan`** (`cmake --build
+  cmake-build-devices-tsan --target CnaTests`) — reported 33 warnings, but all 33
+  are the *same single* race (verified via `grep -c`/`sort -u` on the
+  `SUMMARY: ThreadSanitizer:` lines), and it is not in any CNA-owned Devices code at
+  all: `System::TimeSpan::TimeSpan(const TimeSpan&)` (`sharp-runtime/src/System/TimeSpan.cpp:55`)
+  increments a plain, non-atomic `static int copy_count` (a debug/test
+  instrumentation counter behind `TimeSpan::getCopyCount()`/`resetCopyCount()`, not
+  part of any observable `TimeSpan` value or XNA-facing behavior) with no
+  synchronization at all — any two threads copy-constructing a `TimeSpan`
+  concurrently anywhere in the *entire process* race on this one global, and
+  `SensorBase<T>`'s constructor copies its default `TimeBetweenUpdates` `TimeSpan`
+  member, so any test that constructs sensor instances from multiple threads
+  (e.g. `SensorSubsystemOwnershipTests.ConcurrentCrossClassConstructDestroyProbeDoesNotCrash`)
+  triggers it. Zero races were found in any `cna_devices`-owned dispatch, lifecycle,
+  or subsystem code — the one real race found lives entirely in the sibling
+  `sharp-runtime` repository (`../sharp-runtime`, added via
+  `add_subdirectory()`, out of this repo's/this plan's scope to fix directly) and is
+  documented as its own new follow-up task, `SDL-SENSOR-004`, immediately below,
+  rather than silently ignored — satisfying this task's own "any remaining
+  known-unsupported case is explicitly documented" acceptance criterion.
+
+### SDL-SENSOR-004 — [Cross-repo, sharp-runtime] `TimeSpan::copy_count`/`move_count` data race under ThreadSanitizer
+
+- **Priority:** Low
+- **Area:** Cross-repo (sharp-runtime), surfaced by SDL-SENSOR-003
+- **Problem:** Running `cmake-build-devices-tsan`'s `CnaTests` against the
+  Accelerometer/Gyroscope/SensorSubsystemOwnership/AndroidSensorOrientation/AndroidSensorBridge
+  test suites (Task SDL-SENSOR-003, 2026-07-06) reports 33 ThreadSanitizer data-race
+  warnings, all at the exact same location:
+  `sharp-runtime/src/System/TimeSpan.cpp:55`, inside
+  `TimeSpan::TimeSpan(const TimeSpan&)`, on the line `copy_count++;`. `copy_count`
+  (and its sibling `move_count`, incremented identically at line 59 in the move
+  constructor, though no move-constructor race happened to be hit by this
+  particular test run) is declared `static int` in `sharp-runtime/include/System/TimeSpan.hpp`
+  — a plain, non-atomic, process-wide global, incremented with no lock or atomic
+  operation anywhere it's touched. It exists purely as debug/test instrumentation
+  (`TimeSpan::getCopyCount()`/`getMoveCount()`/`resetCopyCount()`/`resetMoveCount()`
+  — presumably to let sharp-runtime's own tests assert on copy/move counts), not
+  part of `TimeSpan`'s actual value or any XNA/`System.TimeSpan`-observable
+  behavior, so this cannot corrupt a `TimeSpan`'s own state — but it is still a
+  genuine, confirmed data race (undefined behavior per the C++ memory model) the
+  instant two threads copy- or move-construct *any* `TimeSpan` concurrently,
+  anywhere in a process that links sharp-runtime. `cna_devices` triggers it
+  incidentally: `SensorBase<T>`'s constructor copy-constructs its default
+  `TimeBetweenUpdates` member, so any test/scenario constructing sensor instances
+  from multiple threads concurrently (e.g. `SensorSubsystemOwnershipTests.ConcurrentCrossClassConstructDestroyProbeDoesNotCrash`)
+  reaches it.
+- **Why not fixed directly in this task:** `sharp-runtime` is a separate sibling
+  repository (`../sharp-runtime`), included here only via `add_subdirectory()`; it
+  has its own independent plan/task-tracking workflow (`plan.sqlite3`/`plan.md`/
+  `prompt.md`) and its own `CLAUDE.md` conventions, distinct from this repo's
+  `plan_devices.md`. Editing it from within a `cna_devices`-scoped autonomous work
+  session, without that repo's own task tracking reflecting the change, was judged
+  out of scope — this is exactly the kind of cross-project decision this plan's
+  own top-level instructions ask to be raised rather than acted on unilaterally.
+- **Required work (in sharp-runtime, not here):**
+  - Make `copy_count`/`move_count` `std::atomic<int>` (relaxed ordering is
+    sufficient — they're a diagnostic tally, not a synchronization mechanism), or
+    gate the increments behind a build-time flag so release/production builds pay
+    no cost, whichever fits sharp-runtime's own existing conventions for this kind
+    of instrumentation (check whether any other SharpRuntime type has a similar
+    copy/move counter already handled one way or the other).
+- **Acceptance criteria:**
+  - `cmake-build-devices-tsan`'s `CnaTests`, run against at least the same
+    Accelerometer/Gyroscope/SensorSubsystemOwnership test suites SDL-SENSOR-003 used,
+    reports zero ThreadSanitizer warnings.
+- **Suggested files to inspect or edit (in the sharp-runtime repo):**
+  - `sharp-runtime/include/System/TimeSpan.hpp`
+  - `sharp-runtime/src/System/TimeSpan.cpp`
 
 ---
 
