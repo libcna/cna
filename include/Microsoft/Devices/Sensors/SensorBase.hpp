@@ -560,11 +560,26 @@ namespace Microsoft::Devices::Sensors
                 }
             }
 
+            // Task VERIFY-003/DEV-API-002: this class's own internal use of its
+            // own NOXNA-tagged TimeBetweenUpdatesChanged is not the kind of
+            // "leak into strict XNA API surface" the strict-mode check
+            // (CNA_STRICT_XNA_API, CNAHelper.hpp) exists to catch — only an
+            // *external* caller referencing a NOXNA member is. Suppressed
+            // here so this genuinely-real XNA method (setTimeBetweenUpdatesProperty())
+            // stays callable from tools/devices/StrictXnaApiSurfaceCheck.cpp
+            // without that check flagging this internal implementation detail.
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
             if (changed && !TimeBetweenUpdatesChanged.Empty())
             {
                 System::EventArgs args;
                 TimeBetweenUpdatesChanged.Raise(static_cast<System::Object*>(this), args);
             }
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
         }
 
         /**

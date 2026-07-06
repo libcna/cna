@@ -1900,6 +1900,23 @@ if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
     )
 endif()
 
+# --- Task VERIFY-003/DEV-API-002: strict XNA API surface compile check ---
+# Compiles tools/devices/StrictXnaApiSurfaceCheck.cpp with CNA_STRICT_XNA_API
+# defined (turns the NOXNA macro into [[deprecated]], see CNAHelper.hpp) and
+# -Werror=deprecated-declarations, so this target fails to build if that file
+# ever calls a NOXNA-tagged Microsoft::Devices/Sensors member. A standalone
+# executable, not a gtest binary — same tools/ precedent as
+# cna_net_two_process_harness above, for the same reason (its own main()).
+if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+    add_executable(cna_strict_xna_api_check
+        tools/devices/StrictXnaApiSurfaceCheck.cpp
+    )
+    target_link_libraries(cna_strict_xna_api_check PRIVATE CNA)
+    target_compile_definitions(cna_strict_xna_api_check PRIVATE CNA_STRICT_XNA_API)
+    target_compile_options(cna_strict_xna_api_check PRIVATE -Werror=deprecated-declarations)
+    add_test(NAME StrictXnaApiSurfaceCheck_Compile_Run COMMAND cna_strict_xna_api_check)
+endif()
+
 if(CNA_BUILD_TESTS)
     add_subdirectory(vendor/googletest)
 
