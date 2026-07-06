@@ -13,9 +13,12 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
-  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–358 are
-  done, **Task 359 is next** ("Add tests for missing parameter lookups — Return null vs throw as
-  FNA" — see §8). Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks
+  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–359 are
+  done, **Task 360 is next** ("Add effect lifecycle tests: dispose, clone after dispose, apply
+  after dispose — Match FNA where possible" — see §8). Note for whoever picks up Task 360:
+  `Effect::Clone()` does not exist yet in CNA (deferred to Task 883 per Task 351's finding), so the
+  "clone after dispose" sub-case should be scoped as "N/A until Task 883 lands" rather than
+  blocking the rest of that task. Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks
   351–354); Task 355 closed the `EffectPass::Apply()`-consistency sub-thread; Task 356 confirmed
   `EffectTechnique` selection is already correct by construction (verify-only, no code fix); Task
   357 confirmed CNA's `EffectParameterCollection` name/semantic lookup already matches FNA exactly
@@ -25,8 +28,13 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   currently-unexercised by-value-`vector` hazard. Task 358 confirmed `EffectParameterCollection`'s
   (and its siblings') enumeration order already matches FNA's plain insertion-order `List<T>`
   iteration exactly (verify-only, no code fix — added the missing order-specific test, since the
-  prior test only checked element *count*, not sequence). Phase 41 itself is **not** yet closed —
-  Tasks 359–360 (missing-lookup null-vs-throw / lifecycle verification) remain open.
+  prior test only checked element *count*, not sequence). Task 359 confirmed CNA's
+  `EffectParameterCollection::operator[](int)` (via `std::vector::at()`) already throws
+  `std::out_of_range` for negative/`>=Count` indices exactly like FNA's `List<T>` indexer, distinct
+  from the name/semantic lookups' `null`-return behavior already proven in Task 357 (verify-only,
+  no code fix — added the missing out-of-range and empty-collection edge-case tests for all 3
+  lookup surfaces). Phase 41 itself is **not** yet closed — Task 360 (lifecycle verification)
+  remains open.
   **Task 351**
   audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
   returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
@@ -488,13 +496,29 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 359 — add tests for missing parameter lookups (return null vs throw as FNA)**
-   - Goal: exhaustively test `EffectParameterCollection`'s not-found paths (`this[string name]`,
-     `GetParameterBySemantic`) return `nullptr`/null rather than throwing, matching FNA's confirmed
-     (Task 357) `return null;` behavior — cover edge cases like empty collection, empty search
-     string, etc.
-   - Files: likely `tests/.../EffectCollectionTests.cpp`.
+1. **`GRAPHICS_TASKS.md` Task 360 — add effect lifecycle tests (dispose, clone after dispose, apply after dispose)**
+   - Goal: match FNA where possible for `Effect` lifecycle edge cases: disposing an effect, calling
+     `Apply()` after disposal (should already throw per Task 351's `EffectTest.ApplyAfterDispose...`
+     coverage — confirm/extend, don't duplicate), and "clone after dispose". **`Effect::Clone()`
+     does not exist yet in CNA** (deferred to Task 883 below) — scope the "clone after dispose"
+     sub-case as "N/A until Task 883 lands" rather than blocking the rest of this task.
+   - Files: likely `tests/.../EffectTests.cpp`.
    - Verification: new unit test(s) with genuine discriminating power.
+
+   **Task 359 status: done — verify-only, no code fix needed.** Re-read FNA's
+   `EffectParameterCollection.cs`: `this[int index]` returns `elements[index]` on a plain
+   `List<EffectParameter>` — throws for negative/`>=Count` (standard `List<T>` indexer behavior),
+   distinct from `this[string name]`/`GetParameterBySemantic`'s `null`-return behavior already
+   confirmed in Task 357. CNA's `operator[](int)` already uses `elements_.at(index)`, which throws
+   `std::out_of_range` for the same cases — already matched FNA exactly, no code fix needed. Added
+   6 new tests to `EffectCollectionTests.cpp`: out-of-range throw coverage for the mutable/const
+   `operator[](int)` overloads (previously untested — only string/semantic not-found paths had
+   explicit tests), plus the empty-collection edge case for all 3 lookup surfaces. Discriminating
+   power verified (temporarily replaced `.at(index)` with an index-clamping non-throwing lookup,
+   confirmed exactly the 3 non-empty out-of-range tests fail with "it throws nothing", reverted).
+   Full 3-backend regression, zero new failures: EasyGL 3383/3387, Vulkan 3306/3320, Bgfx 3289/3290
+   (all match documented baseline exactly, only the known-flaky `CueTest` this run). Does not close
+   Phase 41 (Task 360 remains).
 
    **Task 358 status: done — verify-only, no code fix needed.** Re-read FNA's
    `EffectParameterCollection.cs`/`EffectTechniqueCollection.cs`/`EffectPassCollection.cs`:
@@ -790,12 +814,12 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-40 are FULLY COMPLETE. Phase 41 (Effect base class and compiled effect
-compatibility, GRAPHICS_TASKS.md Tasks 351-360) is open, Tasks 351-357 are ALL DONE, Task 358 next.
-Last full 3-backend regression (Task 357, test-file-only addition to EffectCollectionTests.cpp;
+compatibility, GRAPHICS_TASKS.md Tasks 351-360) is open, Tasks 351-359 are ALL DONE, Task 360 next.
+Last full 3-backend regression (Task 359, test-file-only addition to EffectCollectionTests.cpp;
 EffectParameterCollection.cpp was temporarily edited for a discriminating-power check and reverted
-to its exact pre-Task-357 state): EasyGL 3377/3380 pass (3 documented pre-existing failures, no
-CueTest flake that run). Vulkan 3300/3313 pass (13 documented pre-existing failures, no flake that
-run). Bgfx 3283/3283 pass (100%, no flakes that run).
+to its exact pre-Task-359 state): EasyGL 3383/3387 pass (3 documented pre-existing failures + 1
+reconfirmed-flaky CueTest that run). Vulkan 3306/3320 pass (13 documented pre-existing failures + 1
+reconfirmed-flaky CueTest that run). Bgfx 3289/3290 pass (1 reconfirmed-flaky CueTest that run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
 if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
 it as a regression.
@@ -869,12 +893,24 @@ Discriminating power verified (temporarily changed Add() to prepend instead of a
 failed along with 3 pre-existing order-sensitive tests, confirming those were genuinely
 order-sensitive too; reverted - net change is test-file-only, zero production code diff).
 
-Next task: GRAPHICS_TASKS.md Task 359 - add tests for missing parameter lookups (return null vs
-throw as FNA). Goal: exhaustively test EffectParameterCollection's not-found paths
-(this[string name], GetParameterBySemantic) return nullptr rather than throwing, matching FNA's
-confirmed (Task 357) `return null;` behavior - cover edge cases (empty collection, empty search
-string, etc.) beyond the basic found/not-found cases Task 185/357 already added. Files: likely
-tests/.../EffectCollectionTests.cpp.
+Task 359 (add tests for missing parameter lookups) is now DONE - verify-only, no code fix needed.
+Re-read FNA's EffectParameterCollection.cs: this[int index] returns elements[index] on a plain
+List<EffectParameter> - throws for negative/>=Count (standard List<T> indexer behavior), distinct
+from this[string name]/GetParameterBySemantic's null-return behavior already confirmed in Task 357.
+CNA's operator[](int) already uses elements_.at(index), which throws std::out_of_range for the same
+cases - already matched FNA exactly. Added 6 new tests to EffectCollectionTests.cpp: out-of-range
+throw coverage for the mutable/const operator[](int) overloads (previously untested), plus the
+empty-collection edge case for all 3 lookup surfaces (by-index throws, by-name/-semantic return
+null). Discriminating power verified (temporarily replaced .at(index) with an index-clamping
+non-throwing lookup - guarded to avoid a UB crash on the empty-collection case specifically -
+confirmed exactly the 3 non-empty out-of-range tests fail with "it throws nothing", reverted).
+
+Next task: GRAPHICS_TASKS.md Task 360 - add effect lifecycle tests (dispose, clone after dispose,
+apply after dispose - match FNA where possible). Goal: cover Effect lifecycle edge cases; Task 351
+already added an ApplyAfterDispose-style test to EffectTests.cpp (confirm/extend rather than
+duplicate). IMPORTANT: Effect::Clone() does NOT exist yet in CNA (deferred to new Task 883, see
+GRAPHICS_TASKS.md/§8 item 2) - scope the "clone after dispose" sub-case as "N/A until Task 883
+lands" rather than blocking the rest of this task. Files: likely tests/.../EffectTests.cpp.
 As always: verify genuine discriminating power for any new test (temporarily break/omit any fix,
 confirm the test fails, then revert), full 3-backend rebuild + regression if production code
 changes, update GRAPHICS_TASKS.md and NEXT.md, commit AND push after finishing (standing

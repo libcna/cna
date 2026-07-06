@@ -260,6 +260,54 @@ TEST(EffectParameterCollectionTest, GetParameterBySemanticFirstMatchWinsOnDuplic
     EXPECT_EQ(p->getNameProperty(), "first");
 }
 
+// Task 359: FNA's `this[int index]` returns `elements[index]` on a plain `List<EffectParameter>`,
+// which throws ArgumentOutOfRangeException for a negative or >=Count index (standard List<T>
+// indexer behavior) — distinct from `this[string name]`/GetParameterBySemantic, which return null
+// instead of throwing. CNA's operator[](int) already uses std::vector::at(), which throws
+// std::out_of_range for the same negative/>=size cases (matching this project's established
+// out-of-range convention, e.g. DisplayModeCollectionTest). These tests lock in that distinction
+// and the previously-untested empty-collection edge case for every lookup surface.
+
+TEST(EffectParameterCollectionTest, IndexByIntNegativeThrowsOutOfRange)
+{
+    EffectParameterCollection col;
+    col.Add(MakeParam("Only"));
+    EXPECT_THROW({ [[maybe_unused]] EffectParameter& p = col[-1]; }, std::out_of_range);
+}
+
+TEST(EffectParameterCollectionTest, IndexByIntEqualToCountThrowsOutOfRange)
+{
+    EffectParameterCollection col;
+    col.Add(MakeParam("Only"));
+    EXPECT_THROW({ [[maybe_unused]] EffectParameter& p = col[1]; }, std::out_of_range);
+}
+
+TEST(EffectParameterCollectionTest, ConstIndexByIntOutOfRangeThrowsOutOfRange)
+{
+    EffectParameterCollection col;
+    col.Add(MakeParam("Only"));
+    const EffectParameterCollection& cref = col;
+    EXPECT_THROW({ [[maybe_unused]] const EffectParameter& p = cref[5]; }, std::out_of_range);
+}
+
+TEST(EffectParameterCollectionTest, IndexByIntOnEmptyCollectionThrowsOutOfRange)
+{
+    EffectParameterCollection col;
+    EXPECT_THROW({ [[maybe_unused]] EffectParameter& p = col[0]; }, std::out_of_range);
+}
+
+TEST(EffectParameterCollectionTest, IndexByNameOnEmptyCollectionReturnsNull)
+{
+    EffectParameterCollection col;
+    EXPECT_EQ(col["Anything"], nullptr);
+}
+
+TEST(EffectParameterCollectionTest, GetParameterBySemanticOnEmptyCollectionReturnsNull)
+{
+    EffectParameterCollection col;
+    EXPECT_EQ(col.GetParameterBySemantic("ANYTHING"), nullptr);
+}
+
 // ============================================================
 // EffectPassCollection (standalone, beyond EffectTechniqueTests)
 // ============================================================
