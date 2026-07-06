@@ -80,11 +80,16 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /**
-         * @brief Names a single renderable part (e.g. "body", "hair", "eyebrows") of the model.
+         * @brief Names a single renderable part of the model.
          */
         NOXNA struct PartEXT
         {
-            /** @brief Human-readable part name, used for appearance tinting. */
+            /**
+             * @brief Part name, used for appearance tinting (AvatarRenderer::PartTintEXT
+             * matches by substring, e.g. "Hair"/"Shirt"/"Pants"/"Shoes" — not exact
+             * equality, since this is the source Blender object name baked straight
+             * through by the content pipeline, e.g. "CNAAvatarHair").
+             */
             std::string Name;
             /** @brief The part's geometry; SkinnedModelEXT owns the referenced buffers. */
             ModelMeshPart* Part = nullptr;
@@ -142,7 +147,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Used by SkinnedModelTypeReader while loading content; not typically called by game code.
          *
-         * @param name         Part name (e.g. "body", "hair").
+         * @param name         Part name (see PartEXT::Name).
          * @param vertexBuffer Vertex buffer for this part; ownership transfers to this model.
          * @param indexBuffer  Index buffer for this part; ownership transfers to this model.
          * @param part         Mesh part referencing the above buffers; ownership transfers to this model.

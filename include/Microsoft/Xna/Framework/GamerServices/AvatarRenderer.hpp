@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRendererState.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/IAvatarAnimation.hpp"
@@ -170,7 +171,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         NOXNA [[nodiscard]] bool IsRealRenderingEnabledEXT() const;
 
         /**
-         * @brief Sets the skin/hair tint used by DrawRealEXT.
+         * @brief Sets the skin/hair/clothing tint used by DrawRealEXT.
          *
          * @note NOXNA — CNA extension.
          * @param appearance The appearance to apply on subsequent DrawRealEXT calls.
@@ -208,6 +209,20 @@ namespace Microsoft::Xna::Framework::GamerServices
         void Dispose(bool disposing);
 
     private:
+        /**
+         * @brief Resolves the AvatarAppearanceEXT tint for a SkinnedModelEXT part, by
+         * substring match against the part's name (e.g. "CNAAvatarShirt").
+         *
+         * @note NOXNA — CNA extension helper for DrawRealEXT. Substring match, not exact
+         * equality: part names are Blender object names baked through by the content
+         * pipeline, not a fixed vocabulary CNA itself defines.
+         * @param partName The SkinnedModelEXT part's name.
+         * @return The matching hair/shirt/pants/shoes tint, or the skin tint if no
+         * garment-slot keyword is found in @p partName.
+         */
+        NOXNA [[nodiscard]] Microsoft::Xna::Framework::Color PartTintEXT(const std::string& partName) const;
+
+
         Microsoft::Xna::Framework::Matrix world_;
         Microsoft::Xna::Framework::Matrix view_;
         Microsoft::Xna::Framework::Matrix projection_;

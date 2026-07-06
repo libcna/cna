@@ -136,6 +136,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         appearance_ = appearance;
     }
 
+    Microsoft::Xna::Framework::Color AvatarRenderer::PartTintEXT(const std::string& partName) const
+    {
+        if (partName.find("Hair") != std::string::npos) { return appearance_.getHairColorProperty(); }
+        if (partName.find("Shirt") != std::string::npos) { return appearance_.getShirtColorProperty(); }
+        if (partName.find("Pants") != std::string::npos) { return appearance_.getPantsColorProperty(); }
+        if (partName.find("Shoes") != std::string::npos) { return appearance_.getShoesColorProperty(); }
+        return appearance_.getSkinColorProperty();
+    }
+
     void AvatarRenderer::DrawRealEXT(const std::string& animationClipName,
                                       System::TimeSpan position, bool loop)
     {
@@ -164,9 +173,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         for (const auto& part : realModel_->Parts)
         {
-            const bool isHair = part.Name == "hair";
-            realEffect_->setDiffuseColorProperty(
-                (isHair ? appearance_.getHairColorProperty() : appearance_.getSkinColorProperty()).ToVector3());
+            realEffect_->setDiffuseColorProperty(PartTintEXT(part.Name).ToVector3());
             realEffect_->setTextureProperty(part.Texture);
             realEffect_->Apply();
 
