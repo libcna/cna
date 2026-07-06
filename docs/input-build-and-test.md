@@ -70,20 +70,20 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 
 ## Test counts (authoritative baseline)
 
-Recorded **2026-07-05** in this checkout: Debian 13, g++ 14.2.0, CMake 3.31.6, Ninja 1.12.1. Input is
+Recorded **2026-07-06** in this checkout: Debian 13, g++ 14.2.0, CMake 3.31.6, Ninja 1.12.1. Input is
 backend-agnostic — the input-filter count is identical on EasyGL / Vulkan / bgfx / SDL_RENDERER.
 
 | Metric | Count |
 |--------|-------|
-| Full `CnaTests` suite | **3269 passed / 2 skipped** |
-| Canonical input filter (the filter above) | **280 passed** |
+| Full `CnaTests` suite | **3286 passed / 2 skipped** |
+| Canonical input filter (the filter above) | **297 passed** |
 
 Notes:
 - The 2 skipped tests are Devices sensor tests (`AccelerometerTests` / `GyroscopeTests`
   `GetCurrentValuePropertyDoesNotThrowWhenSupported`) — **not** input.
 - The canonical filter's last four tokens (`*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*`) were
   added 2026-07-05 to catch the pure-enum value suites and the public-API header-hygiene suite that the
-  older filter missed; without them the same run reports **274**.
+  older filter missed; without them the same run reports **290**.
 - **This table is the single source of truth for input test counts.** Other docs reference it rather than
   restating numbers. Re-run and update it whenever input tests are added.
 
