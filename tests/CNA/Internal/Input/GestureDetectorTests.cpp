@@ -236,6 +236,38 @@ TEST_F(GestureDetectorTest, HoldDoesNotFireBeforeOneSecondElapses)
     DrainGestures();
 }
 
+// P6-007(b): moving beyond MOVE_THRESHOLD cancels a pending hold — the finger leaves HOLDING (no drag is
+// enabled, so it goes to NONE), so even after 1s the Hold does not fire.
+TEST_F(GestureDetectorTest, HoldDoesNotFireWhenFingerMovesBeyondMoveThreshold)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Hold);
+
+    Press(55, 0.5f, 0.5f);
+    Move(55, 0.6f, 0.5f, 0.1f, 0.0f); // 100px move > MOVE_THRESHOLD (35) leaves HOLDING
+    GestureDetector::AdvanceTestClockMilliseconds(1000);
+    TouchPanel::Update();
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+
+    Release(55, 0.6f, 0.5f);
+    DrainGestures();
+}
+
+// P6-007(d): with Hold disabled, holding a finger past 1s emits nothing.
+TEST_F(GestureDetectorTest, HoldDoesNotFireWhenHoldGestureIsDisabled)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap); // Hold NOT enabled
+
+    Press(56, 0.5f, 0.5f);
+    GestureDetector::AdvanceTestClockMilliseconds(1500);
+    TouchPanel::Update();
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+
+    Release(56, 0.5f, 0.5f);
+    DrainGestures();
+}
+
 TEST_F(GestureDetectorTest, HorizontalDragFiresWhenMovementIsPredominantlyHorizontal)
 {
     TouchPanel::setEnabledGesturesProperty(GestureType::HorizontalDrag);

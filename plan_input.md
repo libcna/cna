@@ -1142,12 +1142,20 @@ verified:** tap fires only on a quick, near-stationary press+release. **Remainin
 double-tap fires only within both the timing (300ms) and distance (35px) windows and only when enabled.
 **Remaining risk:** none.
 
-## P6-007 — Verify hold detection
-- [ ] Test hold threshold.
-- [ ] Test movement cancels hold.
-- [ ] Test release before threshold.
-- [ ] Test disabled hold.
-- [ ] Add deterministic tests.
+## P6-007 — Verify hold detection `[x]`
+- [x] Test hold threshold.
+- [x] Test movement cancels hold.
+- [x] Test release before threshold.
+- [x] Test disabled hold.
+- [x] Add deterministic tests.
+
+**Result (2026-07-06):** Threshold-fires and release-before-threshold already covered
+(`HoldFiresAfterFingerIsHeldForAtLeastOneSecond`, `HoldDoesNotFireBeforeOneSecondElapses`). **Added two gap
+tests:** `HoldDoesNotFireWhenFingerMovesBeyondMoveThreshold` (a 100px move > MOVE_THRESHOLD=35 leaves
+HOLDING, so no Hold fires even after 1s) and `HoldDoesNotFireWhenHoldGestureIsDisabled` (Hold off → holding
+past 1s emits nothing). All deterministic via the test clock. **Files changed:**
+`tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+2 tests). **Tests:** pass. **Behavior verified:**
+Hold fires only when a near-stationary finger is held ≥1s and Hold is enabled. **Remaining risk:** none.
 
 ## P6-008 — Verify horizontal drag
 - [ ] Test drag start.
