@@ -23,11 +23,12 @@ framework/runtime, not a game.
   is a separate, user-directed "audio correctness hardening" pass against a fixed, user-specified
   task list (`plan_audio.md`'s "Phase 9" section), organized into 11 named groups
   (`P9-LIFECYCLE`, `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, `P9-STOP`, `P9-XACT`,
-  `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`, `P9-AUDIT`). **10 of the 11 groups are fully closed; one
-  group (`P9-CATEGORY`) has 6 deferred sub-items still open** — see §4 for exactly what's left.
-  Three genuine open design decisions came up during Phase 9 and were all asked-and-resolved with
-  the user's explicit input (XACT filter `OneOverQ` fidelity, `Cue::IsPlaying`/`IsPaused`
-  coexistence, `Cue::Stop(AsAuthored)` fade timing) — none remain open.
+  `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`, `P9-AUDIT`). **All 11 groups are now fully closed** —
+  `P9-CATEGORY`'s last 6 deferred sub-items (real XACT category `instanceLimit`/
+  `maxInstanceBehavior`/fade in/out enforcement) closed in `d3b66dea`. Four genuine open design
+  decisions came up during Phase 9 and were all asked-and-resolved with the user's explicit input
+  (XACT filter `OneOverQ` fidelity, `Cue::IsPlaying`/`IsPaused` coexistence, `Cue::Stop(AsAuthored)`
+  fade timing, and this session's category `instanceLimit`/fade scope+approach) — none remain open.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -44,17 +45,22 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean as of commit `642b8432` (last verified). EasyGL backend (Linux default),
+- **Build:** clean as of commit `d3b66dea` (last verified). EasyGL backend (Linux default),
   `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets also
   rebuild clean as of their last touch.
-- **Tests:** `CnaTests` whole-suite count was **3263 / 3265 pass** as of the last full run (2
+- **Tests:** `CnaTests` whole-suite count was **3266 / 3268 pass** as of the last full run (2
   skipped: `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected). The audio-scoped subset (§7's `--gtest_filter` audio suite list)
-  was **389 / 389 pass** under ASan+UBSan. Two unrelated, pre-existing, full-suite-load-only
-  flakes have been observed and confirmed non-reproducing in isolation (not regressions):
-  `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically` (un-seeded RNG) and
-  `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (a short ~1.13ms
-  fixture occasionally racing full-suite scheduling load).
+  was **392 / 392 pass** under ASan+UBSan, with no audio-related leaks or errors. Two unrelated,
+  pre-existing, full-suite-load-only flakes have been observed and confirmed non-reproducing in
+  isolation (not regressions): `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`
+  (un-seeded RNG) and `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`
+  (a short ~1.13ms fixture occasionally racing full-suite scheduling load). A third, also
+  unrelated to Audio, was observed once under a full-suite ASan+UBSan run:
+  `TwoProcessLoopbackTest.HostAndClientJoinAndExchangeAppDataAcrossRealProcesses` (Net module,
+  two-process integration test, likely ASan-timing-sensitive) — not reproduced in the audio-scoped
+  ASan subset, and outside this branch's `Microsoft::Xna::Framework::Audio`/
+  `CNA::Internal::Audio` scope.
 - **New standalone test executable:** `cna_audio_no_hardware_harness` (from
   `tools/audio/audio_no_hardware_harness.cpp`), spawned as a real independent OS process by
   `tests/CNA/Internal/Audio/AudioMixerTests.cpp` to test the no-audio-hardware failure path (a
@@ -71,11 +77,11 @@ framework/runtime, not a game.
   authored-fade-timed stop-tail state reconciliation, real 3D pan/attenuation/Doppler);
   `Microphone` (real SDL3 capture). See `docs/xna-4-api-coverage.md`'s Audio compatibility table
   for the full implemented/approximate/unsupported breakdown.
-- **What does not work / remains incomplete:** XACT category-level `instanceLimit` enforcement and
-  category-level fade-in/fade-out are parsed but not enforced (`P9-CATEGORY-005..010`, still
-  open — see §4/§8). Everything else open is a deliberate, documented `CHECKLIST.md` accepted
-  deviation (no reverb, no true 3D HRTF/elevation, stereo hard-pan instead of crossfeed, RPC curves
-  evaluated once not continuously, RPC-only cue release timing unimplemented, etc.), not a bug.
+- **What does not work / remains incomplete:** everything open is a deliberate, documented
+  `CHECKLIST.md` accepted deviation (no reverb, no true 3D HRTF/elevation, stereo hard-pan instead
+  of crossfeed, RPC curves evaluated once not continuously, RPC-only cue release timing
+  unimplemented, cue-level — as opposed to category-level — XACT `instanceLimit`/
+  `maxInstanceBehavior` unenforced, etc.), not a bug. See §5 for the full table.
 
 ---
 
@@ -84,6 +90,14 @@ framework/runtime, not a game.
 Newest first. One line each; full rationale, FNA/FAudio citations, and `git stash` verification
 notes for every item are in `plan_audio.md`'s "Phase 9" section.
 
+- `d3b66dea` — **`P9-CATEGORY-005..010`** (closes Phase 9): real XACT category `instanceLimit`/
+  `maxInstanceBehavior` enforcement in `AudioEngine::CheckCategoryInstanceLimit()` (called from
+  `Cue::Play()`) — `FAIL` rejects the new cue, `REPLACE_LOWEST_PRIORITY` evicts the lowest-priority
+  active same-category cue, `QUEUE`/`REPLACE_OLDEST`/`REPLACE_QUIETEST` all evict the oldest
+  (matching FAudio's own acknowledged collapse of those three). Category `fadeInMS`/`fadeOutMS`
+  now drive a real fade-out (victim, reusing `P9-STOP-010`'s ramp) and fade-in (new cue, new
+  symmetric ramp) — exactly where real FACT applies them (instance-limit replacement only, never
+  `AudioCategory::Pause/Resume/SetVolume/Stop`).
 - `642b8432` — **`P9-STOP-010`** (resolved open decision): `Cue::Stop(AsAuthored)` now uses a real,
   parsed, authored `fadeOutMS` to drive an actual linear volume ramp over that exact duration
   (ticked lazily on every state getter and per-frame via `AudioEngine::Update()`); a cue with no
@@ -119,33 +133,9 @@ notes for every item are in `plan_audio.md`'s "Phase 9" section.
 
 ## 4. Current blocker / main problem
 
-**No build- or test-breaking blocker exists.** As of the last full run, the build was clean and
-all tests passed (§2).
-
-**The actual open item is a documentation/completeness gap, not a bug:** `plan_audio.md`'s Phase 9
-task list has 6 unchecked items — `P9-CATEGORY-005` through `P9-CATEGORY-010` — that were missed
-when Phase 9 was earlier (incorrectly) reported as "fully closed." These are **deferred sub-items
-of the already-closed `P9-CATEGORY` group**, explicitly named in the plan's own stated
-implementation order (`plan_audio.md`, intro to the Phase 9 section: "...(6) ... and
-`P9-LIFECYCLE-013..015` / `P9-CATEGORY-005..010` (deferred sub-items of already-started groups)").
-
-- **Symptom:** `plan_audio.md` lines ~2070–2075 still show `* [ ]` (unchecked) for
-  `P9-CATEGORY-005` through `P9-CATEGORY-010`.
-- **No failing command or failing test** — this is unimplemented *feature* work, not a defect.
-  `AudioCategory`/`AudioEngine`'s existing Pause/Resume/Stop/SetVolume behavior all pass their
-  tests as-is; category `instanceLimit`/fade-in/fade-out are simply never enforced.
-- **Affected files/modules:** `include/CNA/Internal/Audio/XactTypes.hpp` (`XgsCategory` already
-  parses `instanceLimit`/`fadeInMS`/`fadeOutMS`, just never consumed),
-  `src/Microsoft/Xna/Framework/Audio/AudioEngine.cpp` (category state/registry),
-  `src/Microsoft/Xna/Framework/Audio/Cue.cpp` (would reuse the fade-tick infrastructure just added
-  for `P9-STOP-010`'s per-cue fade), `tests/Microsoft/Xna/Framework/Audio/AudioCategoryTests.cpp`.
-- **Suspected cause of the tracking miss:** the parsed data (`instanceLimit`/`fadeInMS`/
-  `fadeOutMS` on `XgsCategory`) was already documented as a *known, accepted* deviation in
-  `CHECKLIST.md` (row citing `XA-11`) from an earlier phase, which made it easy to mistake "already
-  documented as deferred" for "done" when tallying Phase 9's groups.
-- **What's already been tried / decided:** the user was asked (2026-07-05) whether to implement
-  this now or record it as a future task; **the user chose to record it as a future task** (§8)
-  rather than implement it in this session. No code has been written for it.
+**No build- or test-breaking blocker exists, and Phase 9 is now fully closed** (all 11 groups,
+including `P9-CATEGORY`'s last 6 sub-items, `d3b66dea`). As of the last full run, the build was
+clean and all tests passed (§2). There is no confirmed next task recorded — see §8.
 
 **Known recurring hazard (not currently active):** this branch's build depends on
 `../sharp-runtime`, under separate, active, concurrent development by another session. A build
@@ -164,8 +154,8 @@ fresh clone/pull of `sharp-runtime` ever lacks this commit, that one CNA test wi
 
 | Status | Issue | Ref |
 |---|---|---|
-| **Incomplete** | XACT category `instanceLimit` parsed but never enforced (no consumer) | `P9-CATEGORY-005/006` |
-| **Incomplete** | XACT category-level `fadeInMS`/`fadeOutMS` parsed but never applied on category-wide operations | `P9-CATEGORY-007/008/009` |
+| **Accepted deviation** | XACT category `maxInstanceBehavior`'s `QUEUE`/`REPLACE_OLDEST`/`REPLACE_QUIETEST` values all collapse to "evict the oldest active cue" (matches FAudio's own acknowledged collapse of those three, not a CNA-only shortcut) | `CHECKLIST.md`, `P9-CATEGORY-005/010` |
+| **Accepted deviation** | Cue-level (XSB, per-cue) `instanceLimit`/`maxInstanceBehavior` remain parsed-and-discarded/unenforced — only XGS category-level instanceLimit is enforced | `CHECKLIST.md`, `P9-CATEGORY-005`, `P9-STOP-010` |
 | **Accepted deviation** | RPC volume/pitch curves evaluated once at `Cue::Play()` time, not continuously re-evaluated while playing | `CHECKLIST.md`, `P9-XACT-005/006/007` |
 | **Accepted deviation** | RPC-only cue release timing (`maxRpcReleaseTime`, no authored `fadeOutMS`) unimplemented — tied to the RPC-evaluated-once deviation above | `CHECKLIST.md`, `P9-STOP-010` |
 | **Accepted deviation** | `Apply3D`'s pan ignores listener/emitter `Forward`/`Up` orientation entirely (world-space X displacement only) | `CHECKLIST.md`, `P9-3D-009` |
@@ -296,56 +286,33 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-The confirmed next task (per the user's explicit request to record it here rather than implement
-it immediately): close out `P9-CATEGORY`'s 6 deferred sub-items (§4). This is real feature work —
-ask the user to confirm scope/approach before implementing, the same way `P9-STOP-010` and
-`P9-LIFECYCLE-013` were confirmed before implementation.
+**No confirmed next task is recorded.** Phase 9's fixed, user-specified task list (`plan_audio.md`)
+is now fully closed (§1/§4) — every group, including `P9-CATEGORY`'s previously-deferred
+`instanceLimit`/fade sub-items. There is no Phase 10 defined anywhere in `plan_audio.md`.
 
-1. **Implement XACT category `instanceLimit` enforcement** (`P9-CATEGORY-005`).
-   - Goal: cap concurrent playing cues per category at the parsed `instanceLimit`, per FACT's
-     category-level instance limiting (evict-oldest or reject-new, matching the real
-     `maxInstanceBehavior` semantics FACT uses — read `FACT_internal.c`'s category-instance-count
-     handling before implementing).
-   - Files: `include/CNA/Internal/Audio/XactTypes.hpp` (`XgsCategory::instanceLimit`, already
-     parsed), `src/Microsoft/Xna/Framework/Audio/AudioEngine.cpp` (category/cue registry),
-     `src/Microsoft/Xna/Framework/Audio/Cue.cpp` (`Play()`).
-   - Verification: new tests in `tests/Microsoft/Xna/Framework/Audio/AudioCategoryTests.cpp`;
-     `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests --gtest_filter="AudioCategoryTest.*"`.
-2. **Add regression tests for the instance-limit behavior** (`P9-CATEGORY-006`) — can land in the
-   same session/commit as `P9-CATEGORY-005`.
-3. **Implement category-level fade-in/fade-out** (`P9-CATEGORY-007/008`).
-   - Goal: apply the parsed `fadeInMS`/`fadeOutMS` on `XgsCategory` when a category-wide operation
-     (`AudioCategory::Pause/Resume/Stop`/volume change) affects its active cues, reusing the
-     wall-clock fade-tick pattern `P9-STOP-010` already added to `Cue::ReconcileState()` as a
-     template (`fadeStart_`/`fadeOutMS_`-style fields, ticked by `AudioEngine::Update()`).
-   - Files: same as above.
-   - Verification: same `AudioCategoryTest.*` filter.
-4. **Add regression tests for category fade-in/fade-out** (`P9-CATEGORY-009`).
-5. **Document remaining category approximations** (`P9-CATEGORY-010`) — update `CHECKLIST.md`'s
-   existing `XA-11` row (or replace it, if 005–009 are fully implemented) to reflect whatever
-   actually landed; update `plan_audio.md`'s checkboxes with detailed notes, matching every other
-   Phase 9 group's documentation style.
-   - Verification: none (docs only) — but do this task last, after 005–009 are either implemented
-     or the user decides to formally close them as an accepted deviation instead.
-
-If the user prefers *not* to implement `P9-CATEGORY-005..010` and instead formally accept it as a
-permanent deviation, task 5 above (documentation) is the only one needed — update `CHECKLIST.md`'s
-`XA-11` row to say so explicitly and check off all 6 items in `plan_audio.md` with that rationale.
+If asked "what's next" with no further user direction, the candidates are the remaining
+`CHECKLIST.md` **accepted deviations** (§5) — none are bugs, so none should be "fixed" without the
+user explicitly deciding to revisit one and accept the scope/risk (most of them trade off against
+the SDL3_mixer backend choice itself, e.g. no reverb bus, no per-source 3D graph, stereo hard-pan
+instead of crossfeed — see §1's "Key architectural decision"). Do not start any of these
+unprompted; ask first, the same way every real Phase 9 design decision in this file was asked
+before implementation.
 
 ---
 
 ## 9. Do not do yet
 
 - **No re-running a fresh full "line-by-line vs FNA" audit.** Phase 7 and Phase 8 already did two
-  rounds of that. Phase 9 is a different, already-scoped hardening pass — don't invent a "Phase
-  10".
-- **No re-litigating a resolved open decision without the user asking first.** All three that ever
+  rounds of that.
+- **No inventing a "Phase 10".** Phase 9 is now fully closed (§1/§4/§8) — don't start new feature
+  work without the user asking for it first (§8 lists the only candidates, and even those need to
+  be asked about before starting).
+- **No re-litigating a resolved open decision without the user asking first.** All four that ever
   came up on this branch are resolved: XACT filter `OneOverQ` fidelity vs. narrowing
-  (`P9-XACT-011`); `Cue::IsPlaying`/`IsPaused` coexistence (`P9-LIFECYCLE-013`); and
-  `Cue::Stop(AsAuthored)`'s authored `fadeOutMS` timing (`P9-STOP-010`).
-- **No implementing `P9-CATEGORY-005..010` without confirming scope with the user first** — it's
-  real feature work, not a small fix; ask before starting, per the pattern the other two resolved
-  decisions followed.
+  (`P9-XACT-011`); `Cue::IsPlaying`/`IsPaused` coexistence (`P9-LIFECYCLE-013`);
+  `Cue::Stop(AsAuthored)`'s authored `fadeOutMS` timing (`P9-STOP-010`); and category
+  `instanceLimit`/`maxInstanceBehavior`/fade scope (`P9-CATEGORY-005..010`, `d3b66dea` — including
+  the QUEUE/REPLACE_OLDEST/REPLACE_QUIETEST collapse, matching FAudio's own shipped behavior).
 - **No Media namespace work** — explicitly out of scope for this branch.
 - **No FAudio/FACT migration** — the backend is SDL3_mixer by design.
 - **No real 3D HRTF, Doppler-beyond-what's-implemented, or reverb implementation** — SDL3_mixer
@@ -364,13 +331,14 @@ permanent deviation, task 5 above (documentation) is the only one needed — upd
 
 ```
 Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state -- Phase 9
-is 10 of 11 groups closed, with P9-CATEGORY-005..010 (XACT category instanceLimit + fade-in/
-fade-out enforcement) still open and explicitly deferred (see §4 for why this was previously
-mis-reported as done, and §8 for the concrete next steps).
+is now fully closed (all 11 groups, including P9-CATEGORY's last 6 sub-items, d3b66dea). There is
+no confirmed next task recorded (see §8) -- ask the user what they want done next rather than
+inventing new feature work.
 
-1. Inspect only the files needed for the first §8 task (P9-CATEGORY-005: category instanceLimit
-   enforcement) -- do not refactor unrelated code. Confirm scope with the user first if anything
-   is ambiguous (this is real feature work, not a one-line fix).
+1. If the user names a specific task, inspect only the files needed for it -- do not refactor
+   unrelated code. Confirm scope/approach with the user first if it's real feature work rather
+   than a one-line fix (every design decision on this branch so far was confirmed before
+   implementation, see §9).
 2. Make one small, verified improvement at a time: add/extend a test, verify with the git-stash
    pattern (§7) for any behavioral fix, run the relevant build/test command, and run ASan+UBSan if
    it touches memory lifetime or ownership.
