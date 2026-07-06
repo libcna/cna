@@ -30,7 +30,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   whose blend-detection thresholds only worked *because of* the missing factor. Task 384 closed
   Bgfx's last remaining basic-multiply coverage gap (magenta×yellow=red, matching Tasks 133/135 on
   EasyGL/Vulkan) — found and fixed an unrelated test-authoring mistake (a copied
-  `SetDepthTestEnabled` call that crashes on Bgfx per Task 375's known stub) along the way. Phase 43
+  `SetDepthTestEnabled` call that crashes on Bgfx per Task 375's known stub) along the way. Task 385
+  verified `Alpha`'s premultiplication end-to-end (zero bugs — already correct per Task 381), and
+  had to deliberately work around Vulkan's known-fake `BlendState` (Task 868/870) with an
+  alpha-channel-only pixel test there instead of the full RGB check EasyGL/Bgfx got, to avoid
+  misattributing that unrelated bug to `DualTextureEffect`. Phase 43
   ("AlphaTestEffect exactness", Tasks 371–380) is **CLOSED**: Task 380
   wrote `docs/alphatesteffect-support.md` synthesizing Tasks 371–379. Task 377 found
   `AlphaTestEffect.VertexColorEnabled` has zero effect on Vulkan/Bgfx by default (opened Task 887).
@@ -73,15 +77,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 384
-  (Bgfx only — Task 384 touched no EasyGL/Vulkan code; those 2 are still current as of Task 383).
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 385.
 
-### Test status (last verified: Task 384 for Bgfx, Task 383 for EasyGL/Vulkan)
-- **EasyGL, full `ctest -j1`:** 3495/3498 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 385)
+- **EasyGL, full `ctest -j1`:** 3499/3502 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3416/3429 pass. 13 documented pre-existing failures (see §5),
+- **Vulkan, full `ctest -j1`:** 3417/3430 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3400/3400 pass — 100%, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3401/3401 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -201,7 +204,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 384 | **Coverage-only (Bgfx)**: added `bgfx_dual_texture_test.cpp` (magenta×yellow=red), Bgfx's last remaining gap in basic DualTextureEffect multiply coverage (EasyGL/Vulkan already had it, Tasks 133/135). Explicitly documented as non-discriminating for Task 383's `*2` bug (saturated values). Fixed a test-authoring mistake: a copied `SetDepthTestEnabled` call crashes on Bgfx (Task 375's known stub). Bgfx ctest 3400/3400, 100%. |
+| — | 385 | **Verify-only, zero bugs**: confirmed `DualTextureEffect`'s `Alpha` correctly premultiplies the forwarded diffuse RGB (`Vector4(diffuseColor*alpha,alpha)`) via 3 new GPU-independent unit tests plus real `BlendState.AlphaBlend` pixel tests on EasyGL/Bgfx (`(128,0,128)` exact match). Vulkan's known-fake `BlendState` (Task 868/870) required a narrower alpha-channel-only pixel test there instead, to avoid misattributing that unrelated bug. |
+| `c1b80f93` | 384 | **Coverage-only (Bgfx)**: added `bgfx_dual_texture_test.cpp` (magenta×yellow=red), Bgfx's last remaining gap in basic DualTextureEffect multiply coverage (EasyGL/Vulkan already had it, Tasks 133/135). Explicitly documented as non-discriminating for Task 383's `*2` bug (saturated values). Fixed a test-authoring mistake: a copied `SetDepthTestEnabled` call crashes on Bgfx (Task 375's known stub). Bgfx ctest 3400/3400, 100%. |
 | `235b0d6c` | 383 | **Real bug found and fixed, all 3 backends**: `DualTextureEffect`'s shaders were all missing FNA's `color.rgb *= 2` doubling factor on the first texture — invisible to every prior test (saturated 0/1 values only). Fixed on EasyGL/Vulkan/Bgfx; also fixed a pre-existing `TextureFilter::Point vs Linear` test (Task 297) whose thresholds relied on the missing factor. First-ever Bgfx `DualTextureEffect` pixel test. |
 | `26907553` | 382 | **Test-only**: wrote `DualTextureEffectTests.cpp` from scratch (26 tests — Task 381 found zero prior coverage), mirroring Task 372's `AlphaTestEffectTests.cpp` style: all 9 property defaults, setter round-trips (including `Texture`/`Texture2`), `Clone()`, `GetTypeName()`. Zero bugs found. |
 | `838e1021` | 381 | **Verify-only, opens Phase 44**: audited `DualTextureEffect` against FNA — all properties, defaults, `Clone()`, `OnApply()` match exactly, zero bugs in this task's own scope. Found `FillGpuDrawParams()` never forwards fog fields at all (same bug shape as pre-Task-378 `AlphaTestEffect`); deliberately deferred to Task 388. |
@@ -399,15 +403,14 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 44 (Task 385 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 44 (Task 386 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–888).
 
-1. **Task 385 — pixel test: alpha value affects output alpha/color as FNA expects**
-   - Goal: verify `DualTextureEffect`'s `Alpha`/premultiplied-alpha behavior per
-     `plan_graphics.md`'s own note ("premultiplied considerations") — check `FillGpuDrawParams()`'s
-     `p.diffuseColor[3]=alpha_` forwarding and whether `BlendState` interaction (straight vs.
-     premultiplied) matches FNA's expected output alpha for partially-transparent draws.
-   - Files: new `examples/{easygl,vulkan,bgfx}_dualtextureeffect_alpha_test.cpp`.
+1. **Task 386 — verify first texture (`Texture`) null behavior**
+   - Goal: `DualTextureEffect` has no `TextureEnabled` flag (like `AlphaTestEffect`, unlike
+     `BasicEffect`) — verify what happens when `Texture` (slot 0) is left null while `Texture2` is
+     set, per CNA's established default-white-texture-fallback convention (Task 379's precedent).
+   - Files: new `examples/{easygl,vulkan,bgfx}_dualtextureeffect_null_texture0_test.cpp`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -531,7 +534,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–888).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 385).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 386).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -556,9 +559,12 @@ ever Bgfx DualTextureEffect pixel test written along the way. Task 384 closed Bg
 remaining basic-multiply coverage gap (magenta×yellow=red, `bgfx_dual_texture_test.cpp`, mirroring
 Tasks 133/135) — Bgfx-only change, no EasyGL/Vulkan production code touched. Also fixed an
 unrelated test-authoring mistake found while writing it: a copied `SetDepthTestEnabled` call
-crashes on Bgfx (Task 375's known throw-stub). Task 385 is NEXT: pixel test — alpha value affects
-output alpha/color as FNA expects (premultiplied-alpha considerations, per plan_graphics.md's
-note).
+crashes on Bgfx (Task 375's known throw-stub). Task 385 verified Alpha's premultiplication
+end-to-end — zero bugs (already correct per Task 381) — via 3 new GPU-independent unit tests plus
+real BlendState.AlphaBlend pixel tests on EasyGL/Bgfx; Vulkan's known-fake BlendState (Task
+868/870) required a narrower alpha-channel-only pixel test there to avoid misattributing that
+unrelated bug. Task 386 is NEXT: verify first texture (Texture, slot 0) null behavior, per CNA's
+established default-white-texture-fallback convention (Task 379's precedent).
 
 Phase 43 ("AlphaTestEffect exactness", Tasks 371-380) CLOSED with Task 380
 (docs/alphatesteffect-support.md, full synthesis of Tasks 371-379). Task 377 found
@@ -575,15 +581,14 @@ highlights — a new feature, zero existing infrastructure). Phase 43 closed and
 Task 887 (Vulkan/Bgfx alpha-test vertex-color unification) and Task 888 (Vulkan/Bgfx project-wide
 fog). None of these 4 block Phase 44.
 
-Last full 3-backend regression (Task 384 was Bgfx-only; EasyGL/Vulkan numbers below are still from
-Task 383's fix of the DualTextureEffect *2 doubling bug on all 3 backends plus the downstream
-TextureFilter::Point-vs-Linear test regression it caused):
-EasyGL 3495/3498 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3416/3429 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3400/3400 pass (100%, no flakes this run, includes Task 384's new test).
+Last full 3-backend regression (Task 385 — added 3 unit tests + 1 pixel test per backend, zero
+production code changed):
+EasyGL 3499/3502 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3417/3430 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3401/3401 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44 found, read plan_graphics.md
-directly (Tasks 351-384) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-385) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

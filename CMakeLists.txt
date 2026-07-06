@@ -1258,6 +1258,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 385: DualTextureEffect Alpha premultiplication, verified via real AlphaBlend
+        cna_easygl_test(cna_test_easygl_dualtextureeffect_alpha
+                        examples/easygl_dualtextureeffect_alpha_test.cpp)
+        add_test(NAME EasyGL_DualTextureEffect_Alpha
+                 COMMAND cna_test_easygl_dualtextureeffect_alpha)
+        set_tests_properties(EasyGL_DualTextureEffect_Alpha PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_dualtexture
                         examples/easygl_dualtexture_test.cpp)
         add_test(NAME EasyGL_DualTexture
@@ -2075,6 +2084,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 385: DualTextureEffect Alpha forwarding, alpha-channel-only (see file header for
+        # why the full RGB-premultiplication check is deliberately not done on Vulkan)
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_alpha
+                        examples/vulkan_dualtextureeffect_alpha_test.cpp)
+        add_test(NAME Vulkan_DualTextureEffect_Alpha
+                 COMMAND cna_test_vulkan_dualtextureeffect_alpha)
+        set_tests_properties(Vulkan_DualTextureEffect_Alpha PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()
@@ -2247,6 +2266,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_DualTextureEffect_Blend
              COMMAND cna_test_bgfx_dual_texture)
     set_tests_properties(Bgfx_DualTextureEffect_Blend PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 385: DualTextureEffect Alpha premultiplication, verified via real AlphaBlend
+    cna_bgfx_test(cna_test_bgfx_dualtextureeffect_alpha
+                  examples/bgfx_dualtextureeffect_alpha_test.cpp)
+    add_test(NAME Bgfx_DualTextureEffect_Alpha
+             COMMAND cna_test_bgfx_dualtextureeffect_alpha)
+    set_tests_properties(Bgfx_DualTextureEffect_Alpha PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

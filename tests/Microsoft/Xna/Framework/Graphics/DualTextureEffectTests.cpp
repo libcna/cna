@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -20,6 +21,7 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::DualTextureEffect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using CNA::Internal::Backends::GpuDrawParams;
 
 namespace
 {
@@ -231,4 +233,62 @@ TEST_F(DualTextureEffectDefaultsTest, CloneCopiesAllProperties)
 TEST_F(DualTextureEffectDefaultsTest, GetTypeNameReturnsFullyQualifiedName)
 {
     EXPECT_EQ(fx.GetTypeName(), "Microsoft.Xna.Framework.Graphics.DualTextureEffect");
+}
+
+// -----------------------------------------------------------------------
+// Task 385: Alpha's effect on the forwarded GPU diffuseColor parameter —
+// direct, GPU-independent lock-in of FNA's OnApply() formula:
+//   diffuseColorParam.SetValue(new Vector4(diffuseColor * alpha, alpha));
+// i.e. the forwarded RGB is alpha-premultiplied (DiffuseColor*Alpha) and the
+// forwarded alpha channel is the plain Alpha value. Checked directly on
+// FillGpuDrawParams()'s output rather than via a GPU pixel readback, because
+// Vulkan's BlendState support is known-fake/hardcoded (Task 868/870) and
+// would make a real blended pixel-readback test spuriously fail there for a
+// reason unrelated to DualTextureEffect itself — see the pixel-test files
+// for the real end-to-end GPU verification on EasyGL/Bgfx (and the
+// alpha-channel-only verification on Vulkan that works around that gap).
+
+TEST_F(DualTextureEffectDefaultsTest, AlphaPremultipliesForwardedDiffuseRgb)
+{
+    fx.setDiffuseColorProperty(Vector3(0.8f, 0.4f, 0.2f));
+    fx.setAlphaProperty(0.5f);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+
+    EXPECT_FLOAT_EQ(params.diffuseColor[0], 0.4f); // 0.8 * 0.5
+    EXPECT_FLOAT_EQ(params.diffuseColor[1], 0.2f); // 0.4 * 0.5
+    EXPECT_FLOAT_EQ(params.diffuseColor[2], 0.1f); // 0.2 * 0.5
+    EXPECT_FLOAT_EQ(params.diffuseColor[3], 0.5f); // alpha itself, unscaled
+}
+
+TEST_F(DualTextureEffectDefaultsTest, AlphaOneLeavesDiffuseRgbUnscaled)
+{
+    fx.setDiffuseColorProperty(Vector3(0.8f, 0.4f, 0.2f));
+    fx.setAlphaProperty(1.0f);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+
+    EXPECT_FLOAT_EQ(params.diffuseColor[0], 0.8f);
+    EXPECT_FLOAT_EQ(params.diffuseColor[1], 0.4f);
+    EXPECT_FLOAT_EQ(params.diffuseColor[2], 0.2f);
+    EXPECT_FLOAT_EQ(params.diffuseColor[3], 1.0f);
+}
+
+TEST_F(DualTextureEffectDefaultsTest, AlphaZeroZeroesDiffuseRgbButNotStored)
+{
+    fx.setDiffuseColorProperty(Vector3(0.8f, 0.4f, 0.2f));
+    fx.setAlphaProperty(0.0f);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+
+    EXPECT_FLOAT_EQ(params.diffuseColor[0], 0.0f);
+    EXPECT_FLOAT_EQ(params.diffuseColor[1], 0.0f);
+    EXPECT_FLOAT_EQ(params.diffuseColor[2], 0.0f);
+    EXPECT_FLOAT_EQ(params.diffuseColor[3], 0.0f);
+    // DiffuseColor itself is untouched by Alpha -- only the forwarded GPU
+    // parameter is premultiplied.
+    EXPECT_EQ(fx.getDiffuseColorProperty(), Vector3(0.8f, 0.4f, 0.2f));
 }
