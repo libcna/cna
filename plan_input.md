@@ -34,38 +34,99 @@ The goal is to make CNA's `Microsoft.Xna.Framework.Input` implementation faithfu
 
 # Phase 0 — Baseline and repository safety
 
-## P0-001 — Record repository baseline
-- [ ] Record current branch, commit hash, compiler, OS, and CMake version.
-- [ ] Record whether SDL submodules are present.
-- [ ] Record whether tests can be configured and built.
-- [ ] Update this plan with the exact baseline.
+## P0-001 — Record repository baseline `[x]`
+- [x] Record current branch, commit hash, compiler, OS, and CMake version.
+- [x] Record whether SDL submodules are present.
+- [x] Record whether tests can be configured and built.
+- [x] Update this plan with the exact baseline.
 
-## P0-002 — Confirm old plan was not used
-- [ ] Confirm this file was overwritten from scratch.
-- [ ] Do not copy any content from the previous `plan_input.md`.
-- [ ] Record that the old plan was intentionally ignored.
+**Baseline (2026-07-06):**
+- Branch: `feature/input` · Commit: `cafbbe10134b9207fb65d6b8418b58d273f12ea6`
+- Compiler: g++ (Debian 14.2.0-19) 14.2.0 · CMake 3.31.6 · Ninja 1.12.1
+- OS: Linux 6.12.90+deb13-amd64 / Debian GNU/Linux 13 (trixie)
+- Submodules present: `third_party/SDL`, `third_party/SDL_image`, `third_party/SDL_mixer`, `vendor/googletest`. Siblings present: `../sharp-runtime`, `../easy-gl`.
+- Tests configure + build: **yes** (`cmake --build cmake-build-input-easygl --target CnaTests` — up to date). Input tests run: **`ctest -L input` = 100% passed** (shuffle×5, under Xvfb + `SDL_VIDEODRIVER=x11`).
 
-## P0-003 — Create Input source inventory
-- [ ] List all Input public headers.
-- [ ] List all Input source files.
-- [ ] List all internal Input backend files.
-- [ ] List all Input tests.
-- [ ] Add the inventory to this plan.
+**Files changed:** `plan_input.md` (this record). **Tests:** none (baseline record). **Commands:** `git rev-parse`, `g++/cmake/ninja --version`, `uname`, `cmake --build … CnaTests`, `ctest -L input`. **Behavior verified:** environment is buildable + tests green. **Remaining risk:** none.
 
-## P0-004 — Create build preflight notes
-- [ ] Try to configure CNA with tests enabled.
-- [ ] If CMake fails because of missing vendored SDL or submodules, record the exact error.
-- [ ] Add a follow-up task to improve diagnostics.
-- [ ] Do not mark the implementation as tested unless tests actually run.
+## P0-002 — Confirm old plan was not used `[x]`
+- [x] Confirm this file was overwritten from scratch.
+- [x] Do not copy any content from the previous `plan_input.md`.
+- [x] Record that the old plan was intentionally ignored.
 
-## P0-005 — Define strict versus extension scope
-- [ ] Classify every public Input type as one of:
-  - strict XNA 4.0,
-  - FNA-compatible extension,
-  - CNA-specific extension,
-  - internal-only.
-- [ ] Record classification in this plan.
-- [ ] Ensure extension names/comments are explicit.
+**Record (2026-07-06):** The previous `plan_input.md` was **removed with `rm -f` without reading, opening, grepping, or summarizing its content**, then this file was created fresh from the supplied task list verbatim. No content was carried over from the old plan. (The old plan's history remains in git if ever needed, but was not consulted for this work.)
+
+**Files changed:** `plan_input.md`. **Tests:** none. **Commands:** `rm -f plan_input.md`, `Write plan_input.md`. **Behavior verified:** n/a (process record). **Remaining risk:** none.
+
+## P0-003 — Create Input source inventory `[x]`
+- [x] List all Input public headers.
+- [x] List all Input source files.
+- [x] List all internal Input backend files.
+- [x] List all Input tests.
+- [x] Add the inventory to this plan.
+
+**Inventory (2026-07-06):**
+
+*Public headers (26)* — `include/Microsoft/Xna/Framework/Input/`: Buttons, ButtonState, GamePad, GamePadButtons, GamePadCapabilities, GamePadDeadZone, GamePadDPad, GamePadState, GamePadThumbSticks, GamePadTriggers, GamePadType, Keyboard, KeyboardState, Keys, KeyState, Mouse, MouseCursor, MouseState, TextInputEXT; and `Touch/`: GestureSample, GestureType, TouchCollection, TouchLocation, TouchLocationState, TouchPanel, TouchPanelCapabilities.
+
+*Public sources (18)* — `src/Microsoft/Xna/Framework/Input/`: GamePad, GamePadButtons, GamePadCapabilities, GamePadDPad, GamePadState, GamePadThumbSticks, GamePadTriggers, Keyboard, KeyboardState, Mouse, MouseCursor, MouseState, TextInputEXT; and `Touch/`: GestureSample, TouchCollection, TouchLocation, TouchPanel, TouchPanelCapabilities. (Header-only types with no `.cpp`: enums + a few structs, e.g. Buttons/ButtonState/Keys/KeyState/GamePadDeadZone/GamePadType/GestureType/TouchLocationState.)
+
+*Internal backend (`CNA/Internal/Input/`, hpp+cpp each)* — `InputManager`, `SdlInputBridge`, `GestureDetector`, `SdlGamepadBackend` (incl. the `ISdlGamepadBackend` seam).
+
+*Tests (30)* — public: ButtonState, Buttons, GamePadButtons, GamePadDeadZone, GamePadInput, GamePadMapping, GamePadState, GamePad, GamePadThumbSticks, GamePadTriggers, GamePadType, KeyboardInput, KeyState, MouseInput, PublicApiInputCompile, PublicApiInputSignatureFreeze, TextInputEXT, TouchInput, Touch/GestureType, Touch/TouchLocationState; internal: GestureDetector, InputReset, SdlGamepadBackend, SdlInputBridgeFuzz, SdlInputBridgeGolden, SdlInputBridgeKeyboard, SdlInputBridgeMouse, SdlInputBridgeTextInput, SdlInputBridgeTouchGesture, TouchEdgeCase.
+
+**Counts:** 26 public headers · 18 public sources · 4 internal classes (8 files) · 30 test files.
+
+**Files changed:** `plan_input.md`. **Tests:** none. **Commands:** `find …`. **Remaining risk:** none.
+
+## P0-004 — Create build preflight notes `[x]`
+- [x] Try to configure CNA with tests enabled.
+- [x] If CMake fails because of missing vendored SDL or submodules, record the exact error.
+- [x] Add a follow-up task to improve diagnostics.
+- [x] Do not mark the implementation as tested unless tests actually run.
+
+**Preflight result (2026-07-06):** Configure **succeeds** with tests enabled
+(`cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON`),
+because all submodules + siblings are present (see P0-001). `CnaTests` builds and `ctest -L input`
+runs **100% green** — so "tested" is a real, observed result, not merely "compiles". **No missing-dependency
+error was produced** in this checkout. The actionable-error paths for a *missing* dependency are covered by
+**P9-001** (submodule-diagnostics follow-up): a missing `third_party/SDL*` submodule aborts configure with
+`Missing vendored '…' … Run: git submodule update --init --recursive`, and a missing `sharp-runtime`/`easy-gl`
+sibling aborts with the exact `git clone …` command (`cmake/ThirdPartySDL.cmake`, `CMakeLists.txt`).
+
+**Files changed:** `plan_input.md`. **Tests:** none new. **Commands:** `cmake --build … CnaTests`, `ctest -L input`. **Behavior verified:** clean configure + green tests. **Remaining risk:** the build uses a shared prebuilt SDL cache (`.sdl-prebuilt`); a truly-fresh clone rebuilds SDL at configure time (slower, not a failure).
+
+## P0-005 — Define strict versus extension scope `[x]`
+- [x] Classify every public Input type as one of: strict XNA 4.0 / FNA-compatible extension / CNA-specific extension / internal-only.
+- [x] Record classification in this plan.
+- [x] Ensure extension names/comments are explicit.
+
+**Classification (2026-07-06):**
+
+*Strict XNA 4.0 (24 types)* — `ButtonState`, `Buttons` (core bits), `GamePad`, `GamePadButtons`,
+`GamePadCapabilities`, `GamePadDeadZone`, `GamePadDPad`, `GamePadState`, `GamePadThumbSticks`,
+`GamePadTriggers`, `GamePadType`, `Keyboard`, `KeyboardState`, `Keys`, `KeyState`, `Mouse`, `MouseState`,
+`TouchCollection`, `TouchLocation`, `TouchLocationState`, `TouchPanel`, `TouchPanelCapabilities`,
+`GestureSample`, `GestureType`.
+
+*FNA-compatible extensions (`EXT` name suffix, consumer-visible, not stock XNA)* — the whole class
+`TextInputEXT`; and member-level EXT within otherwise-strict types: `Keyboard::GetKeyFromScancodeEXT`,
+`Mouse::…IsRelativeMouseModeEXT` + `Mouse::ClickedEXT`, `GamePad::GetGUIDEXT`/`SetLightBarEXT`/
+`SetTriggerVibrationEXT`/`GetGyroEXT`/`GetAccelerometerEXT`, the `Buttons` EXT flags
+(`Misc1EXT`/`Paddle1-4EXT`/`TouchPadEXT`), the `GamePadCapabilities` `Has…EXT` flags, and
+`GestureSample::FingerId(2)EXT`.
+
+*CNA-specific extensions (`NOXNA`, no XNA/FNA equivalent)* — the whole class `MouseCursor`;
+`KeyboardState::ToString`; the explicitly-declared value-struct default constructors; `FromButtonArray`.
+
+*Internal-only (`CNA::Internal::Input`, not public API)* — `SdlInputBridge`, `InputManager`,
+`GestureDetector`, `SdlGamepadBackend` / `ISdlGamepadBackend`.
+
+**Tagging is explicit:** the two extension classes are `NOXNA`-marked at the class; EXT members carry the
+`EXT` suffix (+ `NOXNA` marker for non-enum members); 147 `NOXNA` markers across the public input headers
+(verified by grep). Canonical tier glossary lives in `docs/input-public-api-frozen.md`.
+
+**Files changed:** `plan_input.md`. **Tests:** none. **Commands:** `grep -rE 'EXT|NOXNA' include/…/Input`. **Remaining risk:** none — Phase 1 re-audits each type mechanically.
 
 ---
 
