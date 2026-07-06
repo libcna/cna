@@ -347,9 +347,22 @@ hash → `GetHashCodeMatchesFnaBitWeightedFormula` (verifies FNA's exact bit-wei
 reviewed:** 4 props + 2 ctors + FromButtonArray + equality/hash = all. **Files changed:** none (perfect, no
 gap). **Behavior verified:** ctor-slot order + FNA bit-weighted hash. **Remaining risk:** none.
 
-## A4-003 — `GamePadThumbSticks` (struct) `[ ]`
-- [ ] FNA `Input/GamePadThumbSticks.cs`; CNA `GamePadThumbSticks.hpp`/`.cpp`; test `GamePadThumbSticksTests.cpp`.
-- [ ] Members: ctors, Left/Right, dead-zone application, `Equals`/`==`/`!=`, `GetHashCode`. Per-member.
+## A4-003 — `GamePadThumbSticks` (struct) `[x]`
+- [x] FNA `Input/GamePadThumbSticks.cs`; CNA `GamePadThumbSticks.hpp`/`.cpp`; test `GamePadThumbSticksTests.cpp`.
+- [x] Members: ctors, Left/Right, dead-zone application, `Equals`/`==`/`!=`, `GetHashCode`. Per-member.
+
+**Result (2026-07-06):** **Left/Right (Vector2)** properties match FNA `GamePadThumbSticks.cs`. Ctors:
+default (NOXNA), public 2-arg `(leftPosition, rightPosition)`, and the private dead-zone-applying ctor
+(mapping FNA's internal ctor). Equals/`==`/`!=`/GetHashCode present, all Doxygen'd. **Dead-zone math**
+(the behavior-heavy part) is exhaustively covered: `TwoArgConstructorAppliesSquareClamp` (None-mode square
+clamp in the ctor, FNA-faithful), `IndependentAxesModeExcludesPerAxisDeadZoneThenSquareClamps` +
+`IndependentAxesModeZeroesValuesWithinDeadZone` (IndependentAxes), and `CircularMode{ZeroesValuesWithinDead
+ZoneRadius,RescalesValueOutsideDeadZoneRadius,ClampsMagnitudeToUnitCircle}` (Circular). **GetHashCode:**
+`GetHashCodeMatchesLeftPlus37TimesRightFormula` pins FNA's exact `Left + 37*Right` formula. Equality →
+`EqualityOperatorsForEqualAndDifferingInstances`; default → `DefaultConstructorIsAtRest`. **Members
+reviewed:** 2 props + 3 ctors + equality/hash + 3 dead-zone modes = all. **Files changed:** none (perfect,
+no gap). **Behavior verified:** dead-zone (None/IndependentAxes/Circular) + FNA hash. **Remaining risk:**
+none.
 
 ## A4-004 — `GamePadTriggers` (struct) `[ ]`
 - [ ] FNA `Input/GamePadTriggers.cs`; CNA `GamePadTriggers.hpp`/`.cpp`; test `GamePadTriggersTests.cpp`.
