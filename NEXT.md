@@ -35,23 +35,25 @@
 
 ## 2. Current status
 
-- **Build:** clean. This session built `CnaTests` on **EasyGL** and under the **ASan+UBSan** config, both
-  exit 0. Backend-agnostic build across EasyGL / Vulkan / bgfx / SDL_RENDERER was established earlier and
-  is unchanged by this session's edits (source touched: `SdlInputBridge.cpp`; header doc: `TouchCollection.hpp`).
+- **Build:** clean. This session's edits are **test + doc only** (no `src/` behavior change), and were
+  confirmed **backend-agnostic**: `ctest -L input` = 100% on all four backends (**EasyGL / Vulkan / bgfx /
+  SDL_RENDERER**).
 - **Tests:** the input subset is selected by **`ctest -L input`** (baked `--gtest_shuffle --gtest_repeat=5`
-  order-independence gate). **341 input tests** (was 301; **+40** this session across Phases 2–5), all green
-  shuffled ×5. Gamepad subset **111** (was 96). New/changed behavior is ASan+UBSan-clean. The only local
-  failures remain the 3 `MouseCursor` tests that need real cursors under the SDL `dummy` driver (pass under
-  Xvfb+x11 — environmental, not a bug).
+  order-independence gate), all green shuffled ×5. **~+50 input tests this session** across Phases 5–7
+  (Touch +10, Gesture +17, Text/IME +6, plus the earlier Phase 2–5 work). The only local failures remain the
+  3 `MouseCursor` tests that need real cursors under the SDL `dummy` driver (pass under Xvfb+x11 —
+  environmental, not a bug).
 - **Plan progress (`plan_input.md`):**
-  - **Phase 0** (baseline/inventory/scope) — done.
-  - **Phase 1** (authoritative API parity) — done.
-  - **Phase 2** (Keyboard, P2-001..012) — done; **real bug fixed** (P2-002).
-  - **Phase 3** (Mouse, P3-001..012) — done; **real bug fixed** (P3-001).
-  - **Phase 4** (GamePad, P4-001..020) — done; **real bug fixed** (P4-014 vibration NaN).
-  - **Phase 5** (Touch, P5-001..016) — **audit-priority items done** (P5-001/002/006/007); P5-003/004/005/
-    008–016 verification: mostly already covered (see §8 for the 3 remaining small gaps).
-  - **Phases 6–12** — not started (Gesture / Text-IME / SDL-bridge / build-CI / docs / manual-HW / final gates).
+  - **Phases 0–4** — done (real bugs fixed: P2-002 keyboard hash OOB, P3-001 mouse null-window, P4-014
+    vibration NaN).
+  - **Phase 5** (Touch, P5-001..016) — **done**; DEC-20 (ascending touch-id order), GetCapabilities-after-
+    first-touch, zero-display startup divergence documented; P5-015 high-DPI `[!]`→Phase 11.
+  - **Phase 6** (Gesture, P6-001..016) — **done**; +17 tests closing negative-path / axis-rejection /
+    disabled / velocity-gate / direction / reset gaps (audited vs FNA `GestureDetector.cs`); P6-016 `[!]`.
+  - **Phase 7** (Text/IME, P7-001..010) — **done**; +6 tests (empty-text, subscriber order, repeated text,
+    IME byte-offset, zero/neg rectangle); control chars + Ctrl+V confirmed FNA-identical; P7-010 `[!]`.
+  - **Phase 8** (SDL bridge) — **in progress** (next).
+  - **Phases 9–12** — not started (build-CI / docs / manual-HW / final gates).
 - **Does NOT work / not headless-verifiable (by design, not code gaps):** real gamepad **actuation**
   (rumble, trigger haptics, live sensors, OS hot-plug/GUID); real **IME** composition; **Wayland**
   cursor-landing readback (X11-only); high-DPI touch pixel scaling (headless runs at 1×1). All documented
