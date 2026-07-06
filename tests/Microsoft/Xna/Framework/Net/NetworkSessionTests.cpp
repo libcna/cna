@@ -679,6 +679,24 @@ TEST(LocalNetworkGamerTest, SendDataWithOffsetAndCount) {
     fixture.gamer->SendData(payload, 1, 3, SendDataOptions::None);
 }
 
+// Task 2.9: constructing `std::vector<bytecs> mem(data.begin()+offset, data.begin()+offset+count)`
+// with no check that offset+count <= data.size() was undefined behavior where FNA's own
+// Array.Copy(data, offset, mem, 0, mem.Length) throws for the equivalent misuse.
+TEST(LocalNetworkGamerTest, SendDataThrowsWhenOffsetPlusCountExceedsBuffer) {
+    LocalGamerFixture fixture;
+    std::vector<SharpRuntime::bytecs> payload{1, 2, 3, 4, 5}; // size 5
+    EXPECT_THROW(fixture.gamer->SendData(payload, 3, 4, SendDataOptions::None), System::ArgumentException);
+}
+
+TEST(LocalNetworkGamerTest, SendDataToRecipientThrowsWhenOffsetPlusCountExceedsBuffer) {
+    LocalGamerFixture fixture;
+    std::vector<SharpRuntime::bytecs> payload{1, 2, 3, 4, 5}; // size 5
+    EXPECT_THROW(
+        fixture.gamer->SendData(payload, 3, 4, SendDataOptions::None, fixture.gamer),
+        System::ArgumentException
+    );
+}
+
 TEST(LocalNetworkGamerTest, SendDataToRecipient) {
     LocalGamerFixture fixture;
     std::vector<SharpRuntime::bytecs> payload{9, 9};

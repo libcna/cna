@@ -382,12 +382,23 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   sanitizer trap). Restored the fix and reran — passes. Full suite: **3245/3247 passing** (2
   expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.9** — Add bounds validation to both `LocalNetworkGamer::SendData(offset, count,
+- [x] **Task 2.9** — Add bounds validation to both `LocalNetworkGamer::SendData(offset, count,
   ...)` overloads. Confirmed (`LocalNetworkGamer.cpp`, ~lines 96-98, 116-118):
   `std::vector<bytecs> mem(data.begin()+offset, data.begin()+offset+count)` with no check that
-  `offset + count <= data.size()` — undefined behavior where FNA would throw. Add the missing
-  bounds check (throwing the FNA-matching exception type) and a test exercising an
-  out-of-range `offset+count` combination.
+  `offset + count <= data.size()` — undefined behavior (an out-of-bounds *read* this time, unlike
+  Task 2.8's out-of-bounds write) where FNA's own `Array.Copy(data, offset, mem, 0, mem.Length)`
+  throws for the equivalent misuse.
+  **Fixed:** added `if (offset < 0 || count < 0 || offset + count > static_cast<int>(data.size())) { throw System::ArgumentException("offset"); }`
+  to both the plain and `recipient`-taking `SendData(offset, count, ...)` overloads, before
+  constructing `mem`.
+  **Added `LocalNetworkGamerTest.SendDataThrowsWhenOffsetPlusCountExceedsBuffer`** and
+  **`SendDataToRecipientThrowsWhenOffsetPlusCountExceedsBuffer`**, both feeding `offset=3, count=4`
+  against a 5-element buffer (3+4=7 > 5) and asserting `System::ArgumentException`.
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran both new tests —
+  both failed with "throws nothing" (same class of silent, unproven UB as Task 2.8 — ASan isn't
+  configured in this repo, so this out-of-bounds *read* happened not to crash outright either, but
+  the missing validation is definitively confirmed). Restored the fix and reran — both pass. Full
+  suite: **3247/3249 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.10** — Fix `NetworkSessionProperties`'s non-const `operator[]` silently
   auto-appending on out-of-range *reads*, not just writes. Confirmed: the non-const `operator[]`

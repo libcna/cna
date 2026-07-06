@@ -106,6 +106,13 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options)
     {
+        // Task 2.9: FNA's own Array.Copy(data, offset, mem, 0, mem.Length) validates
+        // offset/count against data.Length and throws on overflow - preserved here instead of
+        // constructing a vector from an out-of-bounds iterator range (undefined behavior).
+        if (offset < 0 || count < 0 || offset + count > static_cast<int>(data.size()))
+        {
+            throw System::ArgumentException("offset");
+        }
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
         {
@@ -126,6 +133,11 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options, NetworkGamer* recipient)
     {
+        // Task 2.9: see the non-recipient overload above for why this check exists.
+        if (offset < 0 || count < 0 || offset + count > static_cast<int>(data.size()))
+        {
+            throw System::ArgumentException("offset");
+        }
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
         NetworkSession::NetworkEvent evt;
         evt.Type = NetworkSession::NetworkEventType::PacketSend;
