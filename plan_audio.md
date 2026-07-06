@@ -2588,6 +2588,49 @@ and P9-LIFECYCLE-013..015 / P9-CATEGORY-005..010 (deferred sub-items of already-
   approximation itself is not being "fixed" here (would need a real azimuth calculation relative
   to listener orientation, a nontrivial addition parked as a candidate for future 3D-audio work
   rather than folded into this consolidation task). This closes `P9-3D`'s full 9-item task list.
+* [x] P9-3D-010 Implement listener-orientation-aware pan (the candidate parked at `P9-3D-009`).
+  User-directed follow-up (2026-07-06); confirmed scope with the user first (contained change to
+  `SoundEffectInstance::Apply3D`'s pan projection only, not a request to implement full X3DAudio
+  multi-speaker energy diffusion or emitter-orientation cones).
+  *Note:* Read `F3DAudio.c`'s `ComputeEmitterChannelCoefficients` line-by-line first: real X3DAudio
+  projects the emitter-relative vector onto `listenerBasis.right` (itself
+  `Cross(pListener->OrientTop, pListener->OrientFront)`) and `listenerBasis.front` before computing
+  an azimuth angle for its per-speaker energy-diffusion tables -- CNA has no equivalent multi-
+  speaker pipeline (`CP-19`, SDL3_mixer's single stereo-gain-pair model), so this doesn't port that
+  whole system, just the *projection* idea: instead of raw world-space `dx`, project the emitter's
+  relative position onto the listener's own right axis before feeding it to the existing
+  `INTERNAL_calculatePan(rightDisplacement, distance)` ratio-and-clamp formula (renamed from
+  `INTERNAL_calculatePan(dx, distance)` for clarity, math otherwise unchanged and still covered by
+  its existing pure-function tests). New `SoundEffectInstance::INTERNAL_calculateListenerRight(
+  forward, up)`: `Normalize(Cross(forward, up))`, falling back to world `Vector3::Right` if
+  degenerate (parallel/zero-length inputs -- malformed orientation is undefined in real X3DAudio
+  too, per its `VECTOR_BASE_CHECK` assertion, so this is purely a defensive NaN guard, not new
+  behavior for valid input). Cross-checked the exact vector order against XNA's own `Vector3.Right`
+  constant rather than trusting F3DAudio's literal `Cross(Top, Front)` order verbatim -- X3DAudio's
+  internal azimuth/speaker-table pipeline uses vectors labeled "right"/"front" in a convention
+  self-consistent only within its own multi-speaker math, which isn't what CNA is porting; for the
+  default orientation (`Forward=(0,0,-1)`, `Up=(0,1,0)`), `Cross(Forward, Up)` reduces to exactly
+  `(1,0,0)` == `Vector3.Right`, confirming this order against a real, independently-known-correct
+  XNA constant -- and making the fix a strict generalization (an unrotated listener, the only case
+  the old code ever handled, gets bit-identical pan to before). Only the **listener's** orientation
+  is used; the **emitter's** own `Forward`/`Up` remain unread, matching real X3DAudio too (emitter
+  orientation there only affects multi-channel emitter configurations, not a mono source's pan --
+  CNA's `Apply3D` always treats the emitter as a mono point source).
+  Tests: `SoundEffectInstanceTests.cpp` gained
+  `CalculateListenerRightMatchesWorldRightForDefaultOrientation` (default orientation reduces to
+  `Vector3.Right`, proving the no-regression invariant), `CalculateListenerRightRotatesWithListenerFacingDirection`
+  (facing +X instead of the default -Z rotates right to +Z, proving actual orientation-tracking),
+  `CalculateListenerRightFallsBackToWorldRightWhenDegenerate` (parallel Forward/Up falls back
+  instead of NaN), and `Apply3DWithRotatedListenerAppliesSameDistanceAttenuation` (a rotated
+  listener doesn't throw, and distance attenuation -- a pure function of Euclidean distance --
+  stays numerically identical regardless of orientation, guarding against the rotation logic
+  accidentally leaking into unrelated math). Verified via `git stash`: the three
+  `CalculateListenerRight` tests fail to *compile* against the pre-fix code (no such method),
+  confirming genuine dependency on the fix. Full suite 3275/3275 (3273 + 4 new, 2 pre-existing
+  hardware-dependent skips); audio-scoped subset 399/399 clean under a full ASan+UBSan build.
+  `cna_demo_sound`/`cna_demo_2d` rebuilt clean. `CHECKLIST.md`'s corresponding row rewritten to
+  describe the new real behavior and the remaining approximation boundary (no multi-speaker
+  diffusion, no emitter-orientation cones).
 
 ## P9-HARDWARE — Audio hardware and exception behavior
 

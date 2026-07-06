@@ -91,5 +91,13 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return SoundEffectInstance::INTERNAL_calculatePan(dx, distance);
         }
+
+        // P9-3D-010 wrapper.
+        static Microsoft::Xna::Framework::Vector3 CalculateListenerRight(
+            const Microsoft::Xna::Framework::Vector3& forward,
+            const Microsoft::Xna::Framework::Vector3& up)
+        {
+            return SoundEffectInstance::INTERNAL_calculateListenerRight(forward, up);
+        }
     };
 }

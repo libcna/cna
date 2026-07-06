@@ -574,13 +574,34 @@ namespace Microsoft::Xna::Framework::Audio
         return std::min(3.0f / static_cast<float>(qfactorRaw), 1.0f);
     }
 
-    float SoundEffectInstance::INTERNAL_calculatePan(float dx, float distance)
+    Microsoft::Xna::Framework::Vector3 SoundEffectInstance::INTERNAL_calculateListenerRight(
+        const Microsoft::Xna::Framework::Vector3& forward,
+        const Microsoft::Xna::Framework::Vector3& up)
+    {
+        using Microsoft::Xna::Framework::Vector3;
+
+        // P9-3D-010: matches F3DAudio.c's listenerBasis.right construction (Cross of the
+        // listener's own orientation vectors), verified against XNA's own Vector3.Right constant
+        // for the default orientation (Forward=(0,0,-1), Up=(0,1,0)): Cross(Forward, Up) reduces
+        // to exactly (1,0,0) in that case. Falls back to world Vector3.Right if Forward/Up are
+        // degenerate (parallel or zero-length) rather than dividing by a near-zero length --
+        // malformed orientation input is undefined in real X3DAudio too (its VECTOR_BASE_CHECK
+        // assertion requires an orthonormal basis), so this is purely a defensive guard against
+        // NaN, not an attempt to define new real behavior for invalid input.
+        const Vector3 right = Vector3::Cross(forward, up);
+        const float len = right.Length();
+        return (len > 1e-6f) ? (right / len) : Vector3::Right;
+    }
+
+    float SoundEffectInstance::INTERNAL_calculatePan(float rightDisplacement, float distance)
     {
         // A simplified linear pan approximation (SDL3_mixer has no true angular panning/HRTF):
-        // only the listener-to-emitter X displacement matters, normalized by distance and
-        // clamped to the Pan property's own [-1,1] range. `distance == 0` (same position) has no
-        // meaningful direction, so it centers (0.0f) rather than dividing by zero.
-        return (distance > 0.0f) ? std::clamp(dx / distance, -1.0f, 1.0f) : 0.0f;
+        // only the listener-relative rightward displacement matters (Apply3D projects the
+        // emitter's position onto the listener's own Forward/Up-derived right axis before
+        // calling this, P9-3D-010), normalized by distance and clamped to the Pan property's own
+        // [-1,1] range. `distance == 0` (same position) has no meaningful direction, so it
+        // centers (0.0f) rather than dividing by zero.
+        return (distance > 0.0f) ? std::clamp(rightDisplacement / distance, -1.0f, 1.0f) : 0.0f;
     }
 
     void SoundEffectInstance::INTERNAL_applyXactTrackFilter(
@@ -670,7 +691,23 @@ namespace Microsoft::Xna::Framework::Audio
             ? std::clamp(1.0f / normalizedDistance, 0.0f, 1.0f)
             : 1.0f;
 
-        const float pan = INTERNAL_calculatePan(dx, distance);
+        // P9-3D-010: project the emitter's relative position onto the listener's own right axis
+        // (Forward x Up) instead of raw world-space X, so pan correctly reflects which way the
+        // listener is actually facing, not an assumption that they always face -Z. Matches
+        // F3DAudio.c's own ComputeEmitterChannelCoefficients, which projects the emitter-relative
+        // vector onto listenerBasis.right (itself derived from OrientFront/OrientTop) before
+        // computing azimuth -- same idea, without F3DAudio's own multi-speaker energy-diffusion
+        // math, which has no equivalent in SDL3_mixer's single stereo-gain-pair model anyway
+        // (already an accepted deviation, CHECKLIST.md CP-19). Verified against XNA's own
+        // Vector3.Right constant: for the default orientation (Forward=(0,0,-1), Up=(0,1,0)),
+        // Cross(Forward, Up) reduces to exactly (1,0,0), so this is a strict generalization of
+        // the previous world-X-only approximation -- an unrotated listener (the common case,
+        // and the only case the old code handled) gets bit-identical pan values to before.
+        const auto right = INTERNAL_calculateListenerRight(
+            listener.getForwardProperty(), listener.getUpProperty());
+        const float rightDisplacement = dx * right.X + dy * right.Y + dz * right.Z;
+
+        const float pan = INTERNAL_calculatePan(rightDisplacement, distance);
 
         // P9-3D-005: matches FNA's UpdatePitch() exactly ("doppler = dspSettings.DopplerFactor *
         // dopplerScale" when the global SoundEffect.DopplerScale is nonzero, else 1.0f/no-op).

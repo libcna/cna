@@ -3,6 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -119,12 +120,24 @@ namespace Microsoft::Xna::Framework::Audio
         NOXNA static float INTERNAL_calculateFilterCutoff(float frequencyHz, float sampleRate);
         NOXNA static float INTERNAL_calculateFilterOneOverQ(uint8_t qfactorRaw);
 
-        // P9-3D-007: `Apply3D`'s pan approximation (listener-to-emitter X displacement over
-        // distance, clamped to [-1,1]), split out so it's independently unit-testable --
-        // SDL3_mixer has no `MIX_GetTrackStereo` getter (unlike gain/frequency-ratio), so the
-        // *result* of `Apply3D`'s pan computation can't be verified by reading the track back;
-        // this pure function can be tested directly instead.
-        NOXNA static float INTERNAL_calculatePan(float dx, float distance);
+        // P9-3D-010: computes the listener's own world-space right axis from Forward/Up
+        // (Cross(Forward, Up), normalized; falls back to Vector3::Right if degenerate), split out
+        // so `Apply3D`'s orientation-aware pan projection is independently unit-testable without
+        // a real SoundEffectInstance/track. Used by `Apply3D` to project the emitter's relative
+        // position before calling `INTERNAL_calculatePan` below.
+        NOXNA static Microsoft::Xna::Framework::Vector3 INTERNAL_calculateListenerRight(
+            const Microsoft::Xna::Framework::Vector3& forward,
+            const Microsoft::Xna::Framework::Vector3& up);
+
+        // P9-3D-007/P9-3D-010: `Apply3D`'s pan approximation (listener-relative rightward
+        // displacement over distance, clamped to [-1,1]), split out so it's independently
+        // unit-testable -- SDL3_mixer has no `MIX_GetTrackStereo` getter (unlike gain/frequency-
+        // ratio), so the *result* of `Apply3D`'s pan computation can't be verified by reading the
+        // track back; this pure function can be tested directly instead. `rightDisplacement` is
+        // the emitter's position projected onto the listener's own Forward/Up-derived right axis
+        // (computed by the caller, `Apply3D`, via `INTERNAL_calculateListenerRight` above), not
+        // raw world-space X.
+        NOXNA static float INTERNAL_calculatePan(float rightDisplacement, float distance);
 
         // Test-only hook (SoundEffectInstanceTestAccess): runs this instance's filter state
         // through the exact same math the real SDL3_mixer callback uses, but synchronously and

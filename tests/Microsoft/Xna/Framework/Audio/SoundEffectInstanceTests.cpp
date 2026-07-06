@@ -33,6 +33,7 @@ using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundState;
+using Microsoft::Xna::Framework::Vector3;
 
 // All SoundEffectInstance tests need a SoundEffect, whose construction opens the
 // (dummy) audio device. The fixture skips every test if no device is available.
@@ -307,6 +308,34 @@ TEST_F(SoundEffectInstanceTest, Apply3DDoesNotModifyVolumeOrPanProperties)
 
     EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.42f);
     EXPECT_FLOAT_EQ(inst.getPanProperty(), -0.75f);
+}
+
+// P9-3D-010: Apply3D must not throw with a rotated (non-default) listener orientation, and
+// rotation must only affect the pan projection -- distance attenuation is purely a function of
+// Euclidean distance and must stay identical whether the listener faces the default -Z or is
+// rotated to face +X.
+TEST_F(SoundEffectInstanceTest, Apply3DWithRotatedListenerAppliesSameDistanceAttenuation)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard guard;
+    SoundEffect::setDistanceScaleProperty(10.0f);
+
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    listener.setForwardProperty(Vector3(1.0f, 0.0f, 0.0f)); // rotated 90 degrees to face +X
+    listener.setUpProperty(Vector3::Up);
+    AudioEmitter emitter;
+    emitter.setPositionProperty({0.0f, 0.0f, 20.0f}); // beyond DistanceScale
+    EXPECT_NO_THROW(inst.Apply3D(listener, emitter));
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    // distance == 20, DistanceScale == 10 -> normalizedDistance == 2 -> atten == 1/2, same
+    // formula/value regardless of listener orientation (P9-3D-003's inverse law only depends on
+    // Euclidean distance, never on Forward/Up).
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.5f, 1e-5f);
 }
 
 // P9-3D-003: matches FAudio's F3DAudio.c ComputeDistanceAttenuation's no-custom-curve branch --
@@ -740,6 +769,43 @@ TEST(SoundEffectInstanceFilterMathTest, CalculatePanClampsToValidRange)
 {
     EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(20.0f, 10.0f), 1.0f, 1e-6f);
     EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(-20.0f, 10.0f), -1.0f, 1e-6f);
+}
+
+// P9-3D-010: for the default listener orientation (Forward=(0,0,-1), Up=(0,1,0)), the listener's
+// own right axis must reduce to exactly world Vector3.Right -- this is what makes the rotation-
+// aware pan projection a strict generalization of the old world-X-only approximation instead of a
+// behavior change for the common (unrotated) case.
+TEST(SoundEffectInstanceFilterMathTest, CalculateListenerRightMatchesWorldRightForDefaultOrientation)
+{
+    const Vector3 right = SoundEffectInstanceTestAccess::CalculateListenerRight(
+        Vector3::Forward, Vector3::Up);
+    EXPECT_NEAR(right.X, Vector3::Right.X, 1e-6f);
+    EXPECT_NEAR(right.Y, Vector3::Right.Y, 1e-6f);
+    EXPECT_NEAR(right.Z, Vector3::Right.Z, 1e-6f);
+}
+
+// A listener rotated 90 degrees to face world +X (instead of the default -Z) must have its own
+// right axis rotate correspondingly, to world +Z -- proves the projection actually tracks the
+// listener's facing direction rather than a hardcoded axis.
+TEST(SoundEffectInstanceFilterMathTest, CalculateListenerRightRotatesWithListenerFacingDirection)
+{
+    const Vector3 facingPositiveX(1.0f, 0.0f, 0.0f);
+    const Vector3 right = SoundEffectInstanceTestAccess::CalculateListenerRight(
+        facingPositiveX, Vector3::Up);
+    EXPECT_NEAR(right.X, 0.0f, 1e-6f);
+    EXPECT_NEAR(right.Y, 0.0f, 1e-6f);
+    EXPECT_NEAR(right.Z, 1.0f, 1e-6f);
+}
+
+// A degenerate orientation (Forward and Up parallel, so their cross product is zero) must fall
+// back to world Vector3.Right rather than dividing by (near) zero and producing NaN/Inf.
+TEST(SoundEffectInstanceFilterMathTest, CalculateListenerRightFallsBackToWorldRightWhenDegenerate)
+{
+    const Vector3 right = SoundEffectInstanceTestAccess::CalculateListenerRight(
+        Vector3::Forward, Vector3::Forward);
+    EXPECT_NEAR(right.X, Vector3::Right.X, 1e-6f);
+    EXPECT_NEAR(right.Y, Vector3::Right.Y, 1e-6f);
+    EXPECT_NEAR(right.Z, Vector3::Right.Z, 1e-6f);
 }
 
 // INTERNAL_applyXactTrackFilter dispatches filterType 0/1/2 to the matching Low/Band/HighPass
