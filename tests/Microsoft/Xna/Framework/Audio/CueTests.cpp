@@ -1591,6 +1591,291 @@ namespace
         return bank;
     }
 
+    // ── P10-RPC-004: dedicated "ReleaseTime"-bound RPC fixture ────────────────────────────────
+    //
+    // Same shape as the "AttackTime" fixture above, but the single variable/RPC curve is bound
+    // to "ReleaseTime" instead: 0ms -> 0 centibels/unity gain, 150ms -> -2000 centibels/0.1x
+    // amplitude, linear. Also used to derive maxRpcReleaseTime_ (the curve's last point x, 150)
+    // at Play() time -- StopInternal() consults it when this cue's fadeOutMS is 0 (always true
+    // for a "simple" cue's format, see BuildAttackTimeXsbFixtureBytes's own comment).
+    constexpr uint32_t kReleaseXgsHeaderSize       = 69;
+    constexpr uint32_t kReleaseXgsCategoryDataSize = 10;
+    constexpr uint32_t kReleaseXgsVariableDataSize = 13;
+    constexpr uint32_t kReleaseXgsCategoryNameSize = 8;  // "Default\0"
+    constexpr uint32_t kReleaseXgsVariableNameSize = 12; // "ReleaseTime\0"
+    constexpr uint32_t kReleaseXgsRpcOffset = kReleaseXgsHeaderSize + kReleaseXgsCategoryDataSize
+        + kReleaseXgsVariableDataSize + kReleaseXgsCategoryNameSize + kReleaseXgsVariableNameSize;
+    constexpr uint32_t kReleaseVolumeRpcCode = kReleaseXgsRpcOffset;
+    // The curve saturates well before the release duration ends (rather than exactly at it) so a
+    // test can sleep into a window that is BOTH past full saturation AND safely before the cue
+    // reconciles Stopping -> Stopped (which would clear active_ and dangle any instance pointer
+    // taken beforehand) -- a single shared saturation point would leave no such safe window.
+    constexpr float    kReleaseRpcSaturateX = 30.0f;  // curve reaches its floor (-2000cB) here
+    constexpr float    kReleaseRpcMaxX      = 150.0f; // last point x == maxRpcReleaseTime_ (release duration)
+
+    std::vector<uint8_t> BuildReleaseTimeXgsFixtureBytes()
+    {
+        const uint32_t categoryOffset     = kReleaseXgsHeaderSize;
+        const uint32_t variableOffset     = categoryOffset + kReleaseXgsCategoryDataSize;
+        const uint32_t categoryNameOffset = variableOffset + kReleaseXgsVariableDataSize;
+        const std::string categoryName    = "Default";
+        const uint32_t variableNameOffset =
+            categoryNameOffset + static_cast<uint32_t>(categoryName.size()) + 1;
+        const std::string variableName    = "ReleaseTime";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'X', 'G', 'S', 'F' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // unknown
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 3);   // platform
+
+        AppendU16(data, 1); // categoryCount
+        AppendU16(data, 1); // variableCount
+        AppendU16(data, 0); // blob1Count
+        AppendU16(data, 0); // blob2Count
+        AppendU16(data, 1); // rpcCount
+        AppendU16(data, 0); // dspPresetCount
+        AppendU16(data, 0); // dspParameterCount
+
+        AppendU32(data, categoryOffset);
+        AppendU32(data, variableOffset);
+        AppendU32(data, 0); // blob1Offset
+        AppendU32(data, 0); // categoryNameIndexOffset
+        AppendU32(data, 0); // blob2Offset
+        AppendU32(data, 0); // variableNameIndexOffset
+        AppendU32(data, categoryNameOffset);
+        AppendU32(data, variableNameOffset);
+        AppendU32(data, kReleaseXgsRpcOffset);
+
+        // Category: instanceLimit, fadeInMS, fadeOutMS, maxInstanceBehavior(skip), parentIndex, volume, visibility
+        AppendU8(data, 0xFF);
+        AppendU16(data, 0);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+        AppendU16(data, 0xFFFF);
+        AppendU8(data, 0xFF);
+        AppendU8(data, 0);
+
+        // Variable: accessibility, initialValue, minValue, maxValue
+        AppendU8(data, 0x03);
+        AppendF32(data, 0.0f);
+        AppendF32(data, 0.0f);
+        AppendF32(data, 100000.0f);
+
+        AppendCStr(data, categoryName);
+        AppendCStr(data, variableName);
+
+        // RPC 0 (VOLUME): variable=0 ("ReleaseTime"), 3 points, linear, x in milliseconds. Ramps
+        // from unity gain to -2000cB by kReleaseRpcSaturateX, then holds flat at -2000cB out to
+        // kReleaseRpcMaxX (the release duration) -- see kReleaseRpcSaturateX's comment above.
+        AppendU16(data, 0); // variable
+        AppendU8(data, 3);  // pointCount
+        AppendU16(data, 0); // parameter = VOLUME
+        AppendF32(data, 0.0f);                AppendF32(data, 0.0f);     AppendU8(data, 0); // point 0: linear
+        AppendF32(data, kReleaseRpcSaturateX); AppendF32(data, -2000.0f); AppendU8(data, 0); // point 1: linear
+        AppendF32(data, kReleaseRpcMaxX);      AppendF32(data, -2000.0f); AppendU8(data, 0); // point 2: linear
+
+        return data;
+    }
+
+    // .xsb with one simple cue ("ReleaseTimeCue") referencing LongWaveBank, SOUND_FLAG_HAS_RPC
+    // set with a single sound-level RPC code (kReleaseVolumeRpcCode). A simple cue's format has
+    // no fadeOutMS field at all (always 0), so Stop(AsAuthored) on this cue can only get a real
+    // tail via the new RPC-only release path (P10-RPC-004), never the authored-fade one --
+    // isolating the new behavior from the pre-existing fadeOutMS_ tail.
+    std::vector<uint8_t> BuildReleaseTimeXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize; // 138
+        constexpr uint32_t soundSize    = 12 + 7; // simple wave ref (12) + RPC block (2+1+4=7)
+
+        const uint32_t wavebankNameOffset = baseOffset;              // 138
+        const uint32_t soundOffset        = wavebankNameOffset + 64; // 202
+        const uint32_t soundCode          = soundOffset;             // 202
+        const uint32_t cueSimpleOffset    = soundOffset + soundSize;     // 221
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;         // 226 (1 entry, 5 bytes)
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;      // 232 (1 entry, 6 bytes)
+        const std::string cueName         = "ReleaseTimeCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "ReleaseTimeSoundBank", bankNameSize);
+        AppendPadded(data, kLongWaveBankName, 64);
+
+        // Sound 0: HAS_RPC, bound to the ReleaseTime-driven VOLUME curve. Volume raw byte 0x64
+        // (~0.31x amplitude) so the curve's unity-gain (t=0ms) end doesn't saturate the final
+        // [0,1] clamp, same reasoning as BuildRpcXsbFixtureBytes's sound 0.
+        AppendU8(data, 0x02); // flags: SOUND_FLAG_HAS_RPC
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0x64); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+        AppendU16(data, 7);   // rpcDataLength (informational, unused): 2+1(count)+4(code)
+        AppendU8(data, 1);    // rpc code count
+        AppendU32(data, kReleaseVolumeRpcCode);
+
+        // Simple cue.
+        AppendU8(data, 0);
+        AppendU32(data, soundCode);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    // .xsb with one COMPLEX cue ("ReleaseTimePrecedenceCue") authoring BOTH a real fadeOutMS
+    // (like BuildLongXsbFixtureBytes) AND a sound-level RPC code bound to the same "ReleaseTime"
+    // curve (like BuildReleaseTimeXsbFixtureBytes's sound) -- reproduces FAudio's FACTCue_Stop
+    // if/else-if between fadeOutMS and maxRpcReleaseTime (FACT.c:2434-2448): whichever this cue
+    // authors, the authored fadeOutMS must always win when both are present.
+    constexpr uint16_t kReleaseTimePrecedenceFadeOutMS = 300;
+
+    std::vector<uint8_t> BuildReleaseTimePrecedenceXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize; // 138
+        constexpr uint32_t soundSize    = 12 + 7; // simple wave ref (12) + RPC block (2+1+4=7)
+
+        const uint32_t wavebankNameOffset = baseOffset;                  // 138
+        const uint32_t soundOffset        = wavebankNameOffset + 64;     // 202
+        const uint32_t soundCode          = soundOffset;                 // 202
+        const uint32_t cueComplexOffset   = soundOffset + soundSize;     // 221
+        const uint32_t cueNameIndexOffset = cueComplexOffset + 15;       // 236
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;      // 242
+        const std::string cueName         = "ReleaseTimePrecedenceCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 1); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, static_cast<int32_t>(cueComplexOffset));
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "ReleaseTimePrecedenceSoundBank", bankNameSize);
+        AppendPadded(data, kLongWaveBankName, 64);
+
+        // Sound 0: HAS_RPC (simple, not complex), bound to the same ReleaseTime-driven VOLUME
+        // curve as BuildReleaseTimeXsbFixtureBytes's sound.
+        AppendU8(data, 0x02); // flags: SOUND_FLAG_HAS_RPC
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+        AppendU16(data, 7);   // rpcDataLength (informational, unused): 2+1(count)+4(code)
+        AppendU8(data, 1);    // rpc code count
+        AppendU32(data, kReleaseVolumeRpcCode);
+
+        // Complex cue: single-sound (CUE_FLAG_SINGLE_SOUND), sbCode points directly at the one
+        // real sound above, authoring a real, nonzero fadeOutMS alongside the sound's RPC code.
+        AppendU8(data, 0x04); // flags: CUE_FLAG_SINGLE_SOUND
+        AppendU32(data, soundCode); // sbCode
+        AppendU32(data, 0);   // transitionOffset
+        AppendU8(data, 0xFF); // instanceLimit
+        AppendU16(data, 0);   // fadeInMS
+        AppendU16(data, kReleaseTimePrecedenceFadeOutMS); // fadeOutMS
+        AppendU8(data, 0);    // maxInstanceBehavior
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    AudioEngine& ReleaseTimeEngine()
+    {
+        static AudioEngine engine(WriteFixture(
+            "cna_cue_test", "releasetime.xgs", BuildReleaseTimeXgsFixtureBytes()));
+        return engine;
+    }
+
+    WaveBank& ReleaseTimeWaveBank()
+    {
+        static WaveBank wb(&ReleaseTimeEngine(), WriteFixture(
+            "cna_cue_test", "releasetime_long.xwb", BuildLongXwbFixtureBytes()));
+        return wb;
+    }
+
+    SoundBank& ReleaseTimeBank()
+    {
+        (void)ReleaseTimeWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&ReleaseTimeEngine(), WriteFixture(
+            "cna_cue_test", "releasetime.xsb", BuildReleaseTimeXsbFixtureBytes()));
+        return bank;
+    }
+
+    SoundBank& ReleaseTimePrecedenceBank()
+    {
+        (void)ReleaseTimeWaveBank(); // must be registered with the engine before GetCue()/Play()
+        static SoundBank bank(&ReleaseTimeEngine(), WriteFixture(
+            "cna_cue_test", "releasetime_precedence.xsb", BuildReleaseTimePrecedenceXsbFixtureBytes()));
+        return bank;
+    }
+
     SoundBank& SharedFilterBank()
     {
         (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
@@ -2761,17 +3046,121 @@ TEST(CueTest, GetVariableAttackTimeDoesNotReflectLiveElapsedTime)
 }
 
 // "ReleaseTime" is recognized as a valid built-in variable name (matching XACT's always-present
-// default variable set) and behaves like an ordinary variable through GetVariable/SetVariable;
-// only RPC curve evaluation substitutes a live value for it, and only while a real RPC-only
-// release phase is active -- CNA has no such phase yet (P10-RPC-004, a separate follow-up not
-// implemented here), so that live substitution always currently evaluates to 0.0f, not tested
-// further here since there is no way yet to observe a nonzero live value.
+// default variable set) and behaves like an ordinary variable through GetVariable/SetVariable --
+// GetVariable() never live-substitutes it (P10-RPC-003's documented asymmetry vs. the three 3D
+// variables), regardless of whether a real RPC-only release phase (P10-RPC-004) is active.
 TEST(CueTest, ReleaseTimeIsRecognizedAsBuiltInVariable)
 {
     auto cue = MakeCue();
     EXPECT_FLOAT_EQ(cue->GetVariable("ReleaseTime"), 0.0f);
     EXPECT_NO_THROW(cue->SetVariable("ReleaseTime", 42.0f));
     EXPECT_FLOAT_EQ(cue->GetVariable("ReleaseTime"), 42.0f);
+}
+
+// ===================== RPC-only release timing (P10-RPC-004/007) =====================
+//
+// ReleaseTimeBank()'s "ReleaseTimeCue" (its own dedicated engine/xgs/xsb, see
+// BuildReleaseTimeXgsFixtureBytes/BuildReleaseTimeXsbFixtureBytes) has a single VOLUME-parameter
+// RPC curve bound to the built-in "ReleaseTime" variable, matching FAudio's
+// FACT_internal.c:790-815's maxRpcReleaseTime scan (variable name "ReleaseTime",
+// RPC_PARAMETER_VOLUME): 0ms -> 0 centibels (unity gain), 150ms -> -2000 centibels (0.1x
+// amplitude), linear, clamped beyond 150ms. This "simple" cue's format has no fadeOutMS field at
+// all (always 0), so any real Stopping tail it gets can only come from the new RPC-only release
+// path, never the pre-existing authored-fade one -- isolating the two mechanisms.
+
+// A cue whose resolved sound had a "ReleaseTime"-bound VOLUME RPC curve must NOT stop immediately
+// on Stop(AsAuthored) -- matches FAudio's FACTCue_Stop (FACT.c:2434-2448), which enters
+// SOUND_STATE_RELEASE_RPC (a real Stopping tail) whenever maxRpcReleaseTime > 0, even with no
+// authored fadeOutMS at all.
+TEST(CueTest, StopAsAuthoredEntersRpcOnlyReleasePhaseWhenMaxRpcReleaseTimeIsPositive)
+{
+    auto cue = std::unique_ptr<Cue>(ReleaseTimeBank().GetCue("ReleaseTimeCue"));
+    cue->Play();
+    ASSERT_TRUE(cue->getIsPlayingProperty());
+
+    cue->Stop(AudioStopOptions::AsAuthored);
+    EXPECT_TRUE(cue->getIsStoppingProperty());
+    EXPECT_FALSE(cue->getIsStoppedProperty());
+
+    cue->Stop(AudioStopOptions::Immediate); // clean up the still-ringing tail
+}
+
+// Once the RPC-only release duration (maxRpcReleaseTime_, derived from the curve's last point x
+// -- 150ms here) elapses, the cue must reconcile Stopping -> Stopped on its own, the same way an
+// authored fadeOutMS_ tail does (P9-STOP-010) -- matches FACT_INTERNAL_UpdateSound's
+// SOUND_STATE_RELEASE_RPC branch (FACT_internal.c), which finishes once
+// `timestamp - fadeStart >= fadeTarget`.
+TEST(CueTest, StopAsAuthoredReconcilesToStoppedOnceRpcReleaseTimeElapses)
+{
+    auto cue = std::unique_ptr<Cue>(ReleaseTimeBank().GetCue("ReleaseTimeCue"));
+    cue->Play();
+    cue->Stop(AudioStopOptions::AsAuthored);
+    ASSERT_TRUE(cue->getIsStoppingProperty());
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(
+        static_cast<int>(kReleaseRpcMaxX) + 100)); // past the 150ms release duration
+    EXPECT_TRUE(cue->getIsStoppedProperty()); // ticks ReconcileState()
+    EXPECT_FALSE(cue->getIsPlayingProperty());
+    EXPECT_FALSE(cue->getIsStoppingProperty());
+}
+
+// While inside the RPC-only release phase, EvaluateRpc()'s "ReleaseTime" substitution feeds real
+// elapsed-since-release-started milliseconds into the bound curve (matches
+// FACT_INTERNAL_UpdateRPCs, FACT_internal.c:1042-1053) -- so the cue's live volume keeps tracking
+// the curve as the release progresses, the same continuous re-evaluation
+// ChangingBoundVariableAfterPlayContinuouslyUpdatesVolume/PlayAttackTimeRpcCurveTracksElapsedTimeSincePlay
+// already prove for other bindings. Before Stop() is called, "ReleaseTime" always evaluates to
+// 0.0f (not yet releasing), landing on the curve's unity-gain (t=0ms) end regardless of how long
+// the cue has actually been playing.
+TEST(CueTest, ReleaseTimeRpcCurveTracksLiveElapsedTimeDuringReleasePhase)
+{
+    auto cue = std::unique_ptr<Cue>(ReleaseTimeBank().GetCue("ReleaseTimeCue"));
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+    const float preReleaseVolume = inst->getVolumeProperty(); // "ReleaseTime" == 0 -> unity gain
+    ASSERT_GT(preReleaseVolume, 0.0f);
+
+    cue->Stop(AudioStopOptions::AsAuthored);
+    ASSERT_TRUE(cue->getIsStoppingProperty());
+
+    // Between kReleaseRpcSaturateX (30ms, curve already at its -2000cB floor) and kReleaseRpcMaxX
+    // (150ms, when the cue reconciles Stopping -> Stopped and active_ is cleared) -- reading
+    // `inst` after that point would dangle, so this window must stay safely inside both bounds.
+    std::this_thread::sleep_for(std::chrono::milliseconds(90));
+    ASSERT_TRUE(cue->getIsStoppingProperty()); // still releasing; ticks the continuous RPC re-eval
+
+    // -2000 vs 0 centibels is a 20dB (10x amplitude) difference, same ratio check
+    // PlayAttackTimeRpcCurveTracksElapsedTimeSincePlay uses for its own elapsed-time-driven curve.
+    EXPECT_NEAR(preReleaseVolume / inst->getVolumeProperty(), 10.0f, 1.5f);
+
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
+// FAudio's FACTCue_Stop chooses between an authored fadeOutMS tail and an RPC-only release tail
+// with an if/else-if (FACT.c:2434-2448): a real, nonzero, authored fadeOutMS always wins even
+// when the cue's sound ALSO has a positive maxRpcReleaseTime_. ReleaseTimePrecedenceBank()'s cue
+// authors both; this locks down that StopInternal() preserves FAudio's exact precedence rather
+// than, say, preferring whichever tail is longer or combining them.
+TEST(CueTest, AuthoredFadeOutTakesPrecedenceOverRpcOnlyReleaseWhenBothAreAuthored)
+{
+    auto cue = std::unique_ptr<Cue>(ReleaseTimePrecedenceBank().GetCue("ReleaseTimePrecedenceCue"));
+    cue->Play();
+    ASSERT_TRUE(cue->getIsPlayingProperty());
+
+    cue->Stop(AudioStopOptions::AsAuthored);
+    ASSERT_TRUE(cue->getIsStoppingProperty());
+
+    // The authored fadeOutMS (300ms) is strictly longer than the RPC release duration (150ms) --
+    // if the RPC-only path had won (or the two were combined), the cue would already be Stopped
+    // by 200ms. Still Stopping here proves the authored fade, not the RPC release, is driving.
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    EXPECT_TRUE(cue->getIsStoppingProperty());
+    EXPECT_FALSE(cue->getIsStoppedProperty());
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(
+        kReleaseTimePrecedenceFadeOutMS - 200 + 100)); // past the full 300ms authored fade
+    EXPECT_TRUE(cue->getIsStoppedProperty());
 }
 
 // ===================== Built-in 3D cue variables (P10-RPC-002) =====================

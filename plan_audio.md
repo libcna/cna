@@ -3346,16 +3346,32 @@ restoration can be reverted.
   the 3 fail against pre-fix `Cue.cpp`/`Cue.hpp` (the third passes in both states by construction,
   since it only documents behavior this fix didn't change). Full suite: 3327/3329 pass (was
   3324/3326; exactly the 3 new tests, no regressions), same 2 pre-existing hardware-only skips.
-* [ ] P10-RPC-004: Implement `maxRpcReleaseTime` / RPC-only release timing.
-  *Status:* Open. **Corrected dependency direction (see P10-RPC-003's note): this is NOT blocked
-  on P10-RPC-003 -- P10-RPC-003 is done, but `"ReleaseTime"` still can't produce a real nonzero
-  live value until THIS task adds the `maxRpcReleaseTime` computation (`FACT_internal.c:790-815`,
-  scan a sound's tracks' RPC codes for one bound to `"ReleaseTime"` with `RPC_PARAMETER_VOLUME`,
-  take the max curve-point x value, captured at `Play()` time) and a genuine RPC-only release
-  phase distinct from the existing authored-`fadeOutMS_` `State::Stopping` path (mirroring
-  FAudio's separate `SOUND_STATE_RELEASE_RPC`, entered from `StopInternal()` when there's no
-  authored fade but `maxRpcReleaseTime > 0`, `FACT.c:2414-2450`).** Already documented in
-  `CHECKLIST.md`/`P9-STOP-010`'s note as an accepted current gap.
+* [x] P10-RPC-004: Implement `maxRpcReleaseTime` / RPC-only release timing.
+  *Note:* Closed this pass (autonomous Phase 10 continuation, 2026-07-06/07). Added
+  `Cue::maxRpcReleaseTime_` (computed in `Play()` by scanning `rpcCodes_` -- whole-sound level,
+  same simplification already accepted for the one-shot/continuous RPC evaluation itself, not
+  per-track -- for a curve bound to a variable literally named `"ReleaseTime"` targeting
+  `RPC_PARAMETER_VOLUME`, taking the max curve-point x value across all matches; matches
+  `FACT_internal.c:790-815`) and a genuine RPC-only release phase (`Cue::releaseStart_`/
+  `releaseRpcMS_`, distinct from the existing authored-`fadeOutMS_` `State::Stopping` path)
+  mirroring FAudio's `SOUND_STATE_RELEASE_RPC`. `StopInternal()` now has a real `if
+  (fadeOutMS>0) ... else if (maxRpcReleaseTime_>0) ...` precedence chain matching
+  `FACTCue_Stop`'s exact if/else-if (`FACT.c:2434-2448`) -- an authored fadeOutMS always wins over
+  an RPC-only release when a cue's sound authors both. `ReconcileState()`'s new release-phase
+  branch applies NO extra volume ramp of its own (FAudio's `SOUND_STATE_RELEASE_RPC` holds
+  `fadeVolume` at a constant `1.0f`, `FACT_internal.c`) -- only whatever the (now live-
+  substituting, see below) `"ReleaseTime"`-bound RPC curve itself produces shapes the volume
+  during this phase; it still transitions to `State::Stopped` once `releaseRpcMS_` elapses, same
+  as the authored-fade branch already did for `fadeOutMS_`. `EvaluateRpc()`'s `"ReleaseTime"`
+  special case (previously hardcoded to `0.0f` unconditionally, per P10-RPC-003's note) now
+  substitutes real elapsed milliseconds since `releaseStart_` while `state_ == Stopping &&
+  releaseRpcMS_ > 0`, and `0.0f` in every other state (Playing, or an authored-fadeOutMS_
+  Stopping tail) -- matches `FACT_INTERNAL_UpdateRPCs` (`FACT_internal.c:1042-1053`) exactly.
+  `Cue::GetVariable("ReleaseTime")` deliberately still never reflects this live value (unchanged
+  from P10-RPC-003 -- real `FACTCue_GetVariable` has no such special case either). Already
+  documented in `CHECKLIST.md`/`P9-STOP-010`'s note as an accepted gap; that note should be
+  updated/removed the next time `CHECKLIST.md` itself is revisited (not done in this pass, to
+  keep this a small, targeted change).
 * [x] P10-RPC-005: Tests for volume RPC curves over update time.
   *Note:* Already existed (`PlayScalesVolumeByRpcCurveEvaluatedAtCurrentVariableValue`,
   `P9-XACT-008`) plus new this branch
@@ -3364,9 +3380,27 @@ restoration can be reverted.
 * [x] P10-RPC-006: Tests for pitch RPC curves over update time.
   *Note:* Same pattern (`PlayShiftsPitchByRpcCurveEvaluatedAtCurrentVariableValue`, `P9-XACT-009`;
   `ChangingBoundVariableAfterPlayContinuouslyUpdatesPitch`, `P9-XACT-016`).
-* [ ] P10-RPC-007: Tests for release-time dependent RPC behavior.
-  *Status:* Open, blocked on P10-RPC-003/004 -- there's no `"ReleaseTime"`-driven behavior to test
-  until it exists.
+* [x] P10-RPC-007: Tests for release-time dependent RPC behavior.
+  *Note:* Closed alongside P10-RPC-004 (same commit). Dedicated `ReleaseTimeBank()`/
+  `ReleaseTimePrecedenceBank()` fixtures in `CueTests.cpp` (own engine/xgs/xsb pair, not
+  `SharedEngine()`, same precedent as `AttackTimeBank()`): `ReleaseTimeCue` is a "simple" cue
+  (fadeOutMS always 0) whose sound has a VOLUME RPC curve bound to `"ReleaseTime"`;
+  `ReleaseTimePrecedenceCue` is a complex cue authoring BOTH a real fadeOutMS and the same kind of
+  RPC curve. Four new tests:
+  `StopAsAuthoredEntersRpcOnlyReleasePhaseWhenMaxRpcReleaseTimeIsPositive` (Stop(AsAuthored) on a
+  cue with no authored fade but a positive `maxRpcReleaseTime_` stays Stopping, not immediately
+  Stopped), `StopAsAuthoredReconcilesToStoppedOnceRpcReleaseTimeElapses` (eventually reconciles to
+  Stopped once the release duration elapses), `ReleaseTimeRpcCurveTracksLiveElapsedTimeDuringReleasePhase`
+  (the bound curve's live volume tracks real elapsed release time, same 10x-ratio check style as
+  `PlayAttackTimeRpcCurveTracksElapsedTimeSincePlay`), and
+  `AuthoredFadeOutTakesPrecedenceOverRpcOnlyReleaseWhenBothAreAuthored` (locks down FAudio's exact
+  if/else-if precedence when a cue's sound authors both). `git stash`-verified: 2 of the 4 new
+  tests fail against pre-fix `Cue.hpp`/`Cue.cpp` (the other 2 pass in both states by construction
+  -- the precedence test since the authored-fade path alone already produces a real tail
+  regardless of RPC-release existing, and the eventual-Stopped test since a pre-fix immediate stop
+  also ends up Stopped -- same "passes in both states" precedent P10-RPC-003 documented). Full
+  suite: 3331/3333 pass (was 3327/3329; exactly the 4 new tests, no regressions), same 2
+  pre-existing hardware-only skips.
 * [x] P10-RPC-008: Ensure RPC reevaluation doesn't reset playback position/filter state/loop state.
   *Note:* Verified by inspection: `Cue::ReconcileState()`'s continuous-RPC branches
   (`P9-XACT-016`) only ever call `pi.instance->setVolumeProperty(...)`/`setPitchProperty(...)` --

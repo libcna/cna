@@ -177,6 +177,25 @@ namespace Microsoft::Xna::Framework::Audio
         // same existing simplification.
         std::chrono::steady_clock::time_point playStart_{};
 
+        // P10-RPC-004: this cue's RPC-only release duration in milliseconds, computed once in
+        // Play() by scanning rpcCodes_ for a curve bound to a variable literally named
+        // "ReleaseTime" that targets RPC_PARAMETER_VOLUME, taking the max curve-point x value
+        // across all matches -- matches FAudio's FACT_internal.c:790-815
+        // (`cue->maxRpcReleaseTime`). StopInternal() consults this when the cue has no authored
+        // fadeOutMS, to decide whether Stop(AsAuthored) enters a real RPC-only release phase
+        // (FAudio's SOUND_STATE_RELEASE_RPC) instead of hard-stopping immediately.
+        uint32_t    maxRpcReleaseTime_ = 0;
+
+        // P10-RPC-004: only meaningful while state_ == State::Stopping AND releaseRpcMS_ > 0 --
+        // this cue's genuine RPC-only release phase, distinct from the authored fadeOutMS_/
+        // fadeStart_ tail above. Entered from StopInternal() when maxRpcReleaseTime_ > 0 but no
+        // authored fadeOutMS was authored. Unlike the authored fade, ReconcileState() applies no
+        // extra volume ramp of its own here -- FAudio's SOUND_STATE_RELEASE_RPC holds fadeVolume
+        // at a constant 1.0f (FACT_internal.c), leaving a "ReleaseTime"-bound RPC curve itself
+        // (evaluated live by EvaluateRpc() while in this phase) to shape the volume, if any.
+        std::chrono::steady_clock::time_point releaseStart_{};
+        uint32_t    releaseRpcMS_ = 0;
+
         // P9-XACT-016: retained (captured once, at Play() time, from the resolved XsbSound) so
         // ReconcileState() can continuously re-evaluate bound RPC (Runtime Parameter Control)
         // curves every tick instead of only once at Play() -- matches FACT_INTERNAL_UpdateRPCs

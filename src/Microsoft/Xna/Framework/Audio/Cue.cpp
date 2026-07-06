@@ -241,13 +241,23 @@ namespace Microsoft::Xna::Framework::Audio
                 }
                 else if (*varName == "ReleaseTime")
                 {
-                    // Real FAudio only substitutes a nonzero live value here while the wave is in
-                    // its dedicated SOUND_STATE_RELEASE_RPC phase (an RPC-only release timed by
-                    // maxRpcReleaseTime, distinct from an authored fadeOutMS_ fade) -- 0.0f
-                    // otherwise. CNA has no RPC-only release phase yet (P10-RPC-004, a separate,
-                    // not-yet-implemented follow-up), so this always evaluates to 0.0f for now,
-                    // which is the exact real value for every state CNA can currently reach.
-                    value = 0.0f;
+                    // P10-RPC-004: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c) --
+                    // only substitutes a nonzero live value while genuinely inside the RPC-only
+                    // release phase (state_ == Stopping AND releaseRpcMS_ > 0, entered from
+                    // StopInternal() when Stop() has no authored fadeOutMS but
+                    // maxRpcReleaseTime_ > 0, matching FAudio's SOUND_STATE_RELEASE_RPC) -- 0.0f
+                    // in every other state, including Playing and an authored-fadeOutMS_
+                    // Stopping tail.
+                    if (state_ == State::Stopping && releaseRpcMS_ > 0)
+                    {
+                        const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - releaseStart_).count();
+                        value = static_cast<float>(elapsedMs);
+                    }
+                    else
+                    {
+                        value = 0.0f;
+                    }
                 }
                 else
                 {
@@ -328,6 +338,42 @@ namespace Microsoft::Xna::Framework::Audio
                     // 1.0f when hasRpc is false, so this is a no-op for the common non-RPC case.
                     pi.instance->setVolumeProperty(std::clamp(
                         pi.baseVolume * catVol * rpc.volumeMultiplier * fadeMultiplier, 0.0f, 1.0f));
+                    if (hasRpc) pi.instance->setPitchProperty(rpc.pitch);
+                }
+            return;
+        }
+
+        // P10-RPC-004: this cue's RPC-only release phase (StopInternal() only ever enters this
+        // OR the authored-fadeOutMS_ branch above, never both -- mirrors FAudio's Stop()
+        // if/else-if between FACT_INTERNAL_BeginFadeOut/BeginReleaseRPC, FACT.c:2434-2448).
+        // Unlike the authored fade, no extra volume ramp is applied here: FAudio's
+        // SOUND_STATE_RELEASE_RPC holds fadeVolume at a constant 1.0f (FACT_internal.c) and
+        // lets the "ReleaseTime"-bound RPC curve itself (already reflected in `rpc` above, via
+        // EvaluateRpc()'s live substitution while this phase is active) shape the volume.
+        // hasRpc is guaranteed true whenever releaseRpcMS_ > 0, since maxRpcReleaseTime_ can
+        // only be positive if a qualifying RPC curve was found in rpcCodes_ at Play() time.
+        if (state_ == State::Stopping && releaseRpcMS_ > 0)
+        {
+            const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - releaseStart_).count();
+
+            auto* self = const_cast<Cue*>(this);
+            if (elapsedMs >= releaseRpcMS_)
+            {
+                self->active_.clear();
+                self->state_ = State::Stopped;
+                self->paused_ = false;
+                self->releaseRpcMS_ = 0;
+                return;
+            }
+
+            const AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+            const float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
+            for (const auto& pi : active_)
+                if (pi.instance)
+                {
+                    pi.instance->setVolumeProperty(std::clamp(
+                        pi.baseVolume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f));
                     if (hasRpc) pi.instance->setPitchProperty(rpc.pitch);
                 }
             return;
@@ -631,6 +677,29 @@ namespace Microsoft::Xna::Framework::Audio
         basePitchCents_ = sound->pitchCents;  // P9-XACT-016
         float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
 
+        // P10-RPC-004: matches FAudio's FACT_internal.c:790-815 -- scans this sound's RPC codes
+        // (whole-sound level, not per-track, the same simplification already accepted for the
+        // one-shot/continuous RPC evaluation itself) for one bound to a variable literally named
+        // "ReleaseTime" that targets RPC_PARAMETER_VOLUME, and captures the max curve-point x
+        // value as this cue's RPC-only release duration. StopInternal() consults this when the
+        // cue has no authored fadeOutMS.
+        maxRpcReleaseTime_ = 0;
+        if (eng)
+        {
+            for (uint32_t code : rpcCodes_)
+            {
+                const CNA::Internal::Audio::XgsRpc* candidate = eng->FindRpcByCode(code);
+                if (!candidate || candidate->parameter != 0 || candidate->points.empty()) continue;
+
+                const std::string* varName = eng->GetVariableNameByIndex(
+                    static_cast<int16_t>(candidate->variable));
+                if (!varName || *varName != "ReleaseTime") continue;
+
+                const auto lastX = static_cast<uint32_t>(candidate->points.back().x);
+                if (lastX > maxRpcReleaseTime_) maxRpcReleaseTime_ = lastX;
+            }
+        }
+
         // P9-CATEGORY-005/006/007/008/011: real FACT enforces the cue's OWN instanceLimit first,
         // then the category's, right here before the new sound is actually allowed to start
         // (FACT_internal.c's play_sound() checks cue->data->instanceLimit, then
@@ -769,17 +838,16 @@ namespace Microsoft::Xna::Framework::Audio
         // until this Cue is later disposed (matches FNA: the cue doesn't relinquish its native
         // voice until the release genuinely finishes, not the instant Stop(AsAuthored) is called).
         //
-        // P9-STOP-001/002/003/004/010: real FACT (FACTCue_Stop, FACT.c) does NOT transition to
-        // FACT_STATE_STOPPED for a non-immediate stop unless there is nothing to release --
-        // "the three ways a Cue might be stopped immediately" are: an explicit immediate request,
-        // being already paused, or (fadeOutMS == 0 AND no RPC-release time authored). A "simple"
-        // cue's format has no fadeOutMS field at all (always 0, see XactParser.cpp), so
-        // Stop(AsAuthored) on one is *always* immediate in real FACT -- there is nothing to fade.
-        // RPC-release timing remains unimplemented here (tied to the already-accepted "RPC
-        // evaluated once, not continuously" deviation, CHECKLIST.md); only a real, nonzero,
-        // authored fadeOutMS gets a real tail -- everything else (no fade authored, or RPC-only
-        // release) hard-stops right away, matching FACT's own immediate-stop condition exactly
-        // for the cases CNA can resolve.
+        // P9-STOP-001/002/003/004/010, P10-RPC-004: real FACT (FACTCue_Stop, FACT.c) does NOT
+        // transition to FACT_STATE_STOPPED for a non-immediate stop unless there is nothing to
+        // release -- "the three ways a Cue might be stopped immediately" are: an explicit
+        // immediate request, being already paused, or (fadeOutMS == 0 AND no RPC-release time
+        // authored). A "simple" cue's format has no fadeOutMS field at all (always 0, see
+        // XactParser.cpp), so Stop(AsAuthored) on one only gets a real tail via the RPC-release
+        // path below, never the authored-fade one. Only a real, nonzero, authored fadeOutMS, or
+        // (failing that) a positive maxRpcReleaseTime_, gets a real tail -- everything else (no
+        // fade authored and no RPC-release time) hard-stops right away, matching FACT's own
+        // immediate-stop condition exactly.
         uint16_t fadeOutMS = 0;
         if (!immediate && !active_.empty() && bank_)
         {
@@ -804,10 +872,27 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
+        // P10-RPC-004: matches FAudio's FACTCue_Stop's else-if (FACT.c:2434-2448) -- when there's
+        // no authored fadeOutMS but this cue's resolved sound had an RPC curve bound to
+        // "ReleaseTime" (RPC_PARAMETER_VOLUME), captured as maxRpcReleaseTime_ at Play() time,
+        // Stop() enters a distinct RPC-only release phase (FAudio's SOUND_STATE_RELEASE_RPC)
+        // instead of hard-stopping immediately. Same registry-unregistration deferral rationale
+        // as the authored-fade branch above.
+        const bool hasReleaseRpcTail = !immediate && !active_.empty() && maxRpcReleaseTime_ > 0;
+        if (hasReleaseRpcTail)
+        {
+            state_ = State::Stopping;
+            paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
+            releaseStart_ = std::chrono::steady_clock::now();
+            releaseRpcMS_ = maxRpcReleaseTime_;
+            return;
+        }
+
         active_.clear();
         state_ = State::Stopped;
         paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
         fadeOutMS_ = 0;
+        releaseRpcMS_ = 0; // P10-RPC-004: abort any in-progress RPC-only release phase too
 
         for (auto* wb : waveBanksUsed_)
             if (wb) wb->UnregisterCue(this);
