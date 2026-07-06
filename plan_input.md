@@ -1587,11 +1587,25 @@ dereference a freed window — a use-after-free), so a non-null stale handle is 
 resolution site null-guards; reset neutralizes a stale handle. **Remaining risk:** a non-null stale handle
 supplied by the app between destroy and clear is inherently the app's responsibility (documented).
 
-## P8-006 — Verify high-DPI / logical coordinate handling
-- [ ] Test mouse logical coordinates.
-- [ ] Test touch logical coordinates.
-- [ ] Test display resize.
-- [ ] Add manual validation task.
+## P8-006 — Verify high-DPI / logical coordinate handling `[x]`
+- [x] Test mouse logical coordinates.
+- [x] Test touch logical coordinates.
+- [!] Test display resize. — headless-blocked (needs a real resizable window+renderer); Phase 11 (P11-002/006).
+- [!] Add manual validation task. — Phase 11 (P11-002 mouse high-DPI, P11-006 touch scaling).
+
+**Result (2026-07-06):** The deterministically-testable parts are covered. **Mouse logical (output path,
+logical→window):** `MouseTest.SetPositionConvertsLogicalToWindowForLetterboxedRenderer` +
+`SetPositionHandlesLetterboxOffsetNotJustScale` drive a real letterboxed renderer
+(`SDL_RenderCoordinatesToWindow`, offset-aware). **Touch logical:**
+`GestureAndTouchStateShareTheLogicalCoordinateBasis` pins that the gesture (DisplayWidth/Height scaling) and
+touch-state coordinate bases agree. **Headless-blocked:** the *incoming* event transform
+(`to_logical_position` via `SDL_RenderCoordinatesFromWindow` for MOUSE_MOTION/FINGER_*) and **display
+resize** need a real window+renderer with a logical presentation — both the `dummy` driver and Xvfb run
+unscaled (1×1), so the transform can't be asserted deterministically. Marked `[!]` → **Phase 11**
+(P11-002 mouse high-DPI, P11-006 touch scaling); checklist in `docs/demo-input-checklist.md`. **Files
+changed:** none. **Behavior verified:** logical→window output + gesture/touch basis agreement; input-side
+transform + resize are HW-gated. **Remaining risk:** real high-DPI input-coordinate accuracy unverified
+until Phase 11.
 
 ## P8-007 — Verify focus, minimize, and window close behavior
 - [ ] Decide how input state is cleared on focus loss.
