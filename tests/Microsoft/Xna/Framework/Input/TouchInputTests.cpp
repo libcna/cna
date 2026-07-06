@@ -94,6 +94,26 @@ TEST(TouchInputTest, GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder)
     ResetTouchState();
 }
 
+// P5-012 / DEC-20: the event-driven fallback orders the collection by ASCENDING touch id, not by
+// insertion order. Insert three ids out of order (30, 5, 17) and assert they come back 5, 17, 30 —
+// proving the order is a deterministic id sort, not an accident of insertion sequence.
+TEST(TouchInputTest, GetStateOrdersMultipleTouchesByAscendingIdRegardlessOfInsertionOrder)
+{
+    ResetTouchState();
+
+    CNA::Internal::Input::InputManager::SetTouchState(30, TouchLocationState::Pressed, Vector2(30.0f, 0.0f));
+    CNA::Internal::Input::InputManager::SetTouchState(5, TouchLocationState::Pressed, Vector2(5.0f, 0.0f));
+    CNA::Internal::Input::InputManager::SetTouchState(17, TouchLocationState::Pressed, Vector2(17.0f, 0.0f));
+
+    const auto state = TouchPanel::GetState();
+    ASSERT_EQ(state.getCountProperty(), 3);
+    EXPECT_EQ(state[0].getIdProperty(), 5);
+    EXPECT_EQ(state[1].getIdProperty(), 17);
+    EXPECT_EQ(state[2].getIdProperty(), 30);
+
+    ResetTouchState();
+}
+
 TEST(TouchInputTest, EnqueueGestureAndReadGestureFollowFifoOrder)
 {
     while (TouchPanel::getIsGestureAvailableProperty())

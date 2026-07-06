@@ -940,11 +940,23 @@ boundary indices 0 and MAX_TOUCHES-1 do not). **Files changed:**
 `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp` (+1 test, cap test hardened, +`<stdexcept>`). **Tests:**
 both pass. **Behavior verified:** deterministic cap + no OOB write on an invalid slot. **Remaining risk:** none.
 
-## P5-012 — Verify touch id ordering
-- [ ] Test multiple touch ids.
-- [ ] Verify order is deterministic.
-- [ ] Verify order matches documented behavior.
-- [ ] Add tests.
+## P5-012 — Verify touch id ordering `[x]`
+- [x] Test multiple touch ids.
+- [x] Verify order is deterministic.
+- [x] Verify order matches documented behavior.
+- [x] Add tests.
+
+**Result (2026-07-06):** Verified against FNA: `TouchPanel.GetState()` iterates its fixed
+`touches[0..MAX_TOUCHES]` array (`TouchPanel.cs:97`) = **SDL finger-array slot order**. CNA's event-driven
+fallback (`InputManager::GetTouchState`) orders by **ascending touch id** (`std::sort` of the id set,
+InputManager.cpp:396-402) — both deterministic; because CNA ids are a compact appearance-order counter with
+lowest-free reuse, ascending-id order tracks appearance/slot order like FNA's. **Documented** this as
+**DEC-20** in `docs/input-fna-fidelity.md`. **Added**
+`GetStateOrdersMultipleTouchesByAscendingIdRegardlessOfInsertionOrder` (insert ids 30,5,17 out of order →
+come back 5,17,30, proving a real id sort, not insertion order), complementing the existing
+`GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder`. **Files changed:**
+`docs/input-fna-fidelity.md` (DEC-20), `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` (+1 test).
+**Tests:** pass. **Behavior verified:** deterministic ascending-id ordering. **Remaining risk:** none.
 
 ## P5-013 — Verify `TouchPanel::GetCapabilities`
 - [ ] Determine how touch capability is detected.

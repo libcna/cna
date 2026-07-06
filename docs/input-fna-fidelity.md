@@ -183,6 +183,14 @@ from the fake-backend unit tests above.
   fixed XNA-compat value, NOT the tracking cap. `TouchPanel::GetState()` caps the public snapshot at
   `MAX_TOUCHES (8)`, matching FNA's fixed `TouchLocation[MAX_TOUCHES]` array (the event-driven
   `InputManager` map is internally unbounded, but the public state never exceeds 8).
+- **Touch collection ordering (DEC-20, P5-012):** FNA's `TouchPanel.GetState()` iterates its fixed
+  `touches[0..MAX_TOUCHES]` array (`TouchPanel.cs:97`), so its collection order is **SDL finger-array slot
+  order**. CNA's event-driven fallback (`InputManager::GetTouchState`) instead orders by **ascending touch
+  id** (`std::sort` of the id set). Both are fully deterministic; because CNA touch ids are a compact
+  sequential appearance-order counter (see above) with lowest-free reuse, ascending-id order tracks
+  appearance/slot order the same way FNA's does. Order is opaque to games (they index by finger id, not
+  position). Pinned by `TouchInputTest.GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder` and
+  `GetStateOrdersMultipleTouchesByAscendingIdRegardlessOfInsertionOrder`.
 - `TouchPanel::Update()` copies current→previous **before** the gesture update; FNA does gesture update
   first (`TouchPanel.cs:219`). **Confirmed inert (DEC-13, 2026-07-05):** `GestureDetector::OnUpdate()`
   operates only on the gesture detector's own state and never reads or writes `touches_`/`previousTouches_`,
