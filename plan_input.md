@@ -1656,11 +1656,21 @@ enumerated and its FNA-relative omissions documented as intentional. No `src/` c
 
 # Phase 9 — Build, tests, and CI
 
-## P9-001 — Improve missing submodule diagnostics
-- [ ] If vendored SDL is required, make CMake error explicit and actionable.
-- [ ] Print exact command to initialize submodules.
-- [ ] Do not fail later with obscure include/link errors.
-- [ ] Add documentation.
+## P9-001 — Improve missing submodule diagnostics `[x]`
+- [x] If vendored SDL is required, make CMake error explicit and actionable.
+- [x] Print exact command to initialize submodules.
+- [x] Do not fail later with obscure include/link errors.
+- [x] Add documentation.
+
+**Result (2026-07-06):** Actionable configure-time diagnostics are already in place (the P0-004 follow-up).
+A missing vendored SDL submodule aborts with `message(FATAL_ERROR "Missing vendored '<dep>' in <tp>. Run:
+git submodule update --init --recursive")` (`cmake/ThirdPartySDL.cmake:36-38`); a missing `sharp-runtime`
+sibling aborts with the exact `git clone … ../sharp-runtime` command (`CMakeLists.txt:43-49`); a missing
+`easy-gl` sibling aborts with a check-it-out message (`CMakeLists.txt:104-107`). Each `FATAL_ERROR` fires at
+**configure** time (before any compile), so a missing dependency never degrades into an obscure
+include/link error. Documented in `docs/input-build-and-test.md` + the CLAUDE.md system-deps section.
+**Files changed:** none (diagnostics already present + verified). **Behavior verified:** configure aborts
+early with the exact recovery command for each missing dependency. **Remaining risk:** none.
 
 ## P9-002 — Add optional system SDL mode if desired
 - [ ] Determine whether CNA should support system SDL for local testing.
