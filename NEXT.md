@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-API-006 / -023 — value-type coverage verified + extended:** confirmed `GamePadButtons` needs no
+  `ToString` (FNA `ValueType` default; already fully covered) and closed the two `TouchLocation` gaps —
+  added `EqualityDistinguishesPreviousStateAndPosition` and `ToStringMatchesFnaFormatExactly` to
+  `TouchLocationTest` (both `TryGetPreviousLocation` paths were already tested). `TouchLocationTest` now 9.
 - **INPUT-API-028 — namespace + include-path cross-check + guard:** audited all 26 public headers — every
   top-level type is in `…::Input`, every Touch type in `…::Input::Touch`, path mirrors namespace, matching
   FNA. Added a fully-qualified namespace-placement guard to `PublicApiInputCompileTests.cpp` (negative-

@@ -437,6 +437,28 @@ TEST(TouchLocationTest, EqualityOperatorsForEqualAndDifferingInstances)
     EXPECT_FALSE(a.Equals(differentState));
 }
 
+// TouchLocation::Equals also compares the PREVIOUS state/position (not just the current fields), so two
+// locations that agree on id/state/position but differ in their previous location must be unequal.
+TEST(TouchLocationTest, EqualityDistinguishesPreviousStateAndPosition)
+{
+    const TouchLocation base(1, TouchLocationState::Moved, Vector2(1.0f, 2.0f),
+                             TouchLocationState::Pressed, Vector2(3.0f, 4.0f));
+    const TouchLocation samePrev(1, TouchLocationState::Moved, Vector2(1.0f, 2.0f),
+                                 TouchLocationState::Pressed, Vector2(3.0f, 4.0f));
+    const TouchLocation differentPrevState(1, TouchLocationState::Moved, Vector2(1.0f, 2.0f),
+                                            TouchLocationState::Moved, Vector2(3.0f, 4.0f));
+    const TouchLocation differentPrevPosition(1, TouchLocationState::Moved, Vector2(1.0f, 2.0f),
+                                              TouchLocationState::Pressed, Vector2(9.0f, 9.0f));
+
+    EXPECT_TRUE(base.Equals(samePrev));
+    EXPECT_TRUE(base == samePrev);
+
+    EXPECT_FALSE(base.Equals(differentPrevState));
+    EXPECT_TRUE(base != differentPrevState);
+    EXPECT_FALSE(base.Equals(differentPrevPosition));
+    EXPECT_TRUE(base != differentPrevPosition);
+}
+
 TEST(TouchLocationTest, GetHashCodeIsConsistentForEqualInstances)
 {
     const TouchLocation a(1, TouchLocationState::Pressed, Vector2(5.0f, 6.0f));
@@ -453,6 +475,14 @@ TEST(TouchLocationTest, ToStringContainsPositionValues)
     EXPECT_EQ(s.rfind("{Position:", 0), 0u);
     EXPECT_NE(s.find('7'), std::string::npos);
     EXPECT_NE(s.find('8'), std::string::npos);
+}
+
+// Exact format parity with FNA: "{Position:" + Position.ToString() + "}", where Vector2.ToString() is
+// "{X:.. Y:..}" — so the whole string is byte-for-byte "{Position:{X:7 Y:8}}".
+TEST(TouchLocationTest, ToStringMatchesFnaFormatExactly)
+{
+    const TouchLocation location(1, TouchLocationState::Pressed, Vector2(7.0f, 8.0f));
+    EXPECT_EQ(location.ToString(), "{Position:{X:7 Y:8}}");
 }
 
 // --- GestureSample ---

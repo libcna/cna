@@ -378,13 +378,19 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Deps:** none.
 
 #### INPUT-API-006 — Matrix: `GamePadButtons` (struct, XNA) — COVERED (add ToString check)
-- **Priority:** P2 · **Status:** TODO · **Area:** API
-- **Files:** `GamePadButtons.hpp/.cpp`
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
+- **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp` (verified, no change needed)
 - **Work:** Confirm FNA has no `ToString` override (ValueType default) and record that as the expected
   behavior; verify all 11 getters, both ctors, `FromButtonArray`, `==/!=`, `GetHashCode`.
 - **Acceptance:** Matrix filled; ToString expectation documented (no content override).
 - **Tests:** existing `GamePadButtonsTest` + ToString expectation.
 - **Deps:** none.
+- **Result (2026-07-06):** FNA `GamePadButtons.cs` overrides only `Equals`/`GetHashCode`, **no** `ToString`
+  (it inherits the `ValueType` default), so CNA correctly declares no `ToString` — confirmed independently
+  by the INPUT-API-027 parity tool (it flags a STRICT `ToString` with no FNA counterpart, and
+  `GamePadButtons` is not flagged). `GamePadButtonsTest` already covers all 11 ButtonState getters (via the
+  combined-flags ctor), the single-flag + default ctors, `FromButtonArray` (multi + empty), `==`/`!=`, and
+  `GetHashCode`. No test change needed; verification-only.
 
 #### INPUT-API-007 — Matrix: `GamePadDPad` (struct, XNA) — COVERED
 - **Priority:** P3 · **Status:** TODO · **Area:** API
@@ -525,13 +531,21 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Deps:** none.
 
 #### INPUT-API-023 — Matrix: `TouchLocation` (struct, XNA) — COVERED (add TryGetPreviousLocation test)
-- **Priority:** P2 · **Status:** TODO · **Area:** API
-- **Files:** `Touch/TouchLocation.hpp/.cpp`
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
+- **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` (`TouchLocationTest` suite)
 - **Problem:** `TryGetPreviousLocation` has no dedicated test; false-path does not write the out-param (deviation §18).
 - **Work:** Fill matrix; add dedicated true/false `TryGetPreviousLocation` tests; verify `ToString` content.
 - **Acceptance:** Matrix filled; both paths tested.
 - **Tests:** extend `TouchLocationTest`.
 - **Deps:** none.
+- **Result (2026-07-06):** Verified `TouchLocationTest` already pins both ctors + NOXNA default, all three
+  getters, `Equals`/`==`/`!=`, `GetHashCode`, and **both** `TryGetPreviousLocation` paths — the TRUE path
+  (5-arg ctor → previous id/state/position) and the FALSE-path deviation (DEC-12: out-param overwritten
+  with `(id, Invalid, prevPosition)` even when returning false). Closed the two remaining gaps: added
+  `EqualityDistinguishesPreviousStateAndPosition` (Equals also compares the previous state/position, which
+  was untested) and `ToStringMatchesFnaFormatExactly` (byte-exact `"{Position:{X:7 Y:8}}"`, tightening the
+  prior substring check). Line-checked against FNA `TouchLocation.cs`: ToString / GetHashCode /
+  TryGetPreviousLocation all match.
 
 #### INPUT-API-024 — Matrix: `TouchCollection` (struct, XNA) — COVERED
 - **Priority:** P3 · **Status:** TODO · **Area:** API
