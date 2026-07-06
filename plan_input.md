@@ -1409,13 +1409,24 @@ is decoded per-event and never de-duplicated). **Files changed:**
 `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp` (+1 test). **Tests:** pass. **Behavior
 verified:** repeat neither corrupts keyboard state nor drops text input. **Remaining risk:** none.
 
-## P7-007 — Verify text editing / IME composition
-- [ ] Test text editing callback.
-- [ ] Test empty composition.
-- [ ] Test start/length values.
-- [ ] Determine whether SDL byte offsets or UTF-16 offsets are exposed.
-- [ ] Document behavior.
-- [ ] Add tests where possible.
+## P7-007 — Verify text editing / IME composition `[x]`
+- [x] Test text editing callback.
+- [x] Test empty composition.
+- [x] Test start/length values.
+- [x] Determine whether SDL byte offsets or UTF-16 offsets are exposed.
+- [x] Document behavior.
+- [x] Add tests where possible.
+
+**Result (2026-07-06):** Callback / start-length / multibyte-passthrough / empty-composition already covered
+(`TextEditingEventForwardsTextStartLength`, `TextEditingForwardsMultiByteUtf8CompositionUnchanged`,
+`TextEditingEmptyCompositionForwardsZeroes` + the EXT-level equivalents). **Offset semantics determined and
+pinned:** CNA exposes SDL's **raw byte offsets** into the UTF-8 composition string, passed through unchanged
+(NOT converted to UTF-16 indices) — already documented in `TextInputEXT.hpp` (INPUT-TEXT-016). **Added the
+discriminating test** `TextEditingStartLengthAreRawByteOffsetsNotUtf16Indices`: for "éxy" (bytes C3 A9 'x'
+'y') a byte offset of 2 points at 'x' whose UTF-16 index would be 1 — CNA reports 2, proving byte semantics.
+**Files changed:** `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp` (+1 test). **Tests:** pass.
+**Behavior verified:** IME composition callback + byte-offset semantics. **Remaining risk:** byte offsets are
+not code-point indices — callers must index multibyte composition carefully (documented).
 
 ## P7-008 — Verify start/stop text input
 - [ ] Test start with valid window.

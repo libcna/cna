@@ -380,6 +380,29 @@ TEST_F(SdlInputBridgeTextInputTest, TextEditingEventForwardsTextStartLength)
     EXPECT_EQ(length, 2);
 }
 
+// P7-007(d): TextEditing start/length are SDL's raw BYTE offsets into the UTF-8 composition string, passed
+// through unchanged (NOT converted to UTF-16 code-unit indices — documented in TextInputEXT.hpp
+// INPUT-TEXT-016). Composition "éxy" = bytes C3 A9 'x' 'y'; byte offset 2 points at 'x', whose UTF-16 index
+// would be 1. CNA must report the byte offset (2), which discriminates byte- from UTF-16-semantics.
+TEST_F(SdlInputBridgeTextInputTest, TextEditingStartLengthAreRawByteOffsetsNotUtf16Indices)
+{
+    std::string text;
+    int start = -1;
+    int length = -1;
+    TextInputEXT::TextEditing = [&](const std::string& t, int s, int l)
+    {
+        text = t;
+        start = s;
+        length = l;
+    };
+
+    SdlInputBridge::ProcessEvent(textEditingEvent("\xC3\xA9xy", 2, 1)); // "éxy", byte offset 2 == 'x'
+
+    EXPECT_EQ(text, std::string("\xC3\xA9xy")); // UTF-8 bytes preserved unchanged
+    EXPECT_EQ(start, 2);   // byte offset (the UTF-16 index of 'x' would be 1) -> byte, not UTF-16, semantics
+    EXPECT_EQ(length, 1);
+}
+
 TEST_F(SdlInputBridgeTextInputTest, TextEditingEmptyCompositionForwardsZeroes)
 {
     bool called = false;
