@@ -621,10 +621,24 @@ referenced (`AdvanceTestClockMilliseconds` 9, `ResetForTests` 7, `EnableTestCloc
 **Members reviewed:** 4 gesture methods + 4 hooks = all. **Files changed:** none (perfect, no gap; logic
 verified in Phase 6). **Behavior verified:** full gesture state machine vs FNA. **Remaining risk:** none.
 
-## A7-003 — `SdlGamepadBackend` / `ISdlGamepadBackend` `[ ]`
-- [ ] CNA `SdlGamepadBackend.hpp`/`.cpp`; test `SdlGamepadBackendTests.cpp` + `FakeSdlGamepadBackend.hpp`.
-- [ ] Members: the `ISdlGamepadBackend` seam methods (open/close/rumble/led/sensor/…) + real impl. Verify each
+## A7-003 — `SdlGamepadBackend` / `ISdlGamepadBackend` `[x]`
+- [x] CNA `SdlGamepadBackend.hpp`/`.cpp`; test `SdlGamepadBackendTests.cpp` + `FakeSdlGamepadBackend.hpp`.
+- [x] Members: the `ISdlGamepadBackend` seam methods (open/close/rumble/led/sensor/…) + real impl. Verify each
   is exercised via the fake; seam never leaks into the XNA layer.
+
+**Result (2026-07-06):** The `ISdlGamepadBackend` seam has **19 virtual methods** (IsGamepad, OpenGamepad,
+CloseGamepad, GetGamepadJoystick, GetJoystickType/Vendor/Product, GamepadHasButton/Axis/Sensor,
+GetNumGamepadTouchpads, GetGamepadProperties, RumbleGamepad, RumbleGamepadTriggers, SetGamepadLED,
+GamepadSensorEnabled, SetGamepadSensorEnabled, GetGamepadSensorData, GetGamepadType). **`FakeSdlGamepadBackend`
+overrides ALL 19** (verified 0 interface methods un-overridden), so every seam method is injectable +
+testable; the fake adds introspection counters (open/close/rumble/led/sensor + `lastRumble/Trigger/Led`,
+`setSensorEnabledCalls`). Driven through the real bridge in **37 `SdlGamepadBackend` tests** + the
+`FakeGamepad*` suites (open/close/reconnect/slot-reuse, rumble clamp+NaN, trigger rumble, LED, sensor
+lazy-enable, GUID vendor/product, joystick-type map — the Phase-4 coverage). **No leak:** `ISdlGamepadBackend`
+appears in **no** `include/Microsoft/` header (confirmed) — the seam is hidden from the XNA layer, also
+enforced by `PublicApiInputCompileTests`. **Members reviewed:** 19/19 seam methods. **Files changed:** none
+(perfect, no gap). **Behavior verified:** full seam faked + tested; no XNA-layer leak. **Remaining risk:**
+real-hardware actuation is HW-gated (`[!]`, Phase 11) — the fake proves translation/bookkeeping only.
 
 ## A7-004 — `SdlInputBridge` `[ ]`
 - [ ] CNA `SdlInputBridge.hpp`/`.cpp`; tests: all `SdlInputBridge*` + golden + fuzz.
