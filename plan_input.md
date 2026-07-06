@@ -2003,16 +2003,36 @@ all unit-tested; the real-window text-input test already `GTEST_SKIP`s where no 
 
 # Phase 12 — Final quality gates
 
-## P12-001 — Run full Input test suite
-- [ ] Run all Input tests.
-- [ ] Run repeated/shuffled Input tests.
-- [ ] Record command and result.
-- [ ] Fix failures.
+## P12-001 — Run full Input test suite `[x]`
+- [x] Run all Input tests.
+- [x] Run repeated/shuffled Input tests.
+- [x] Record command and result.
+- [x] Fix failures.
 
-## P12-002 — Run full CNA test suite
-- [ ] Run all available CNA tests.
-- [ ] Ensure Input changes did not break other modules.
-- [ ] Record command and result.
+**Result (2026-07-06):** **Command:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir
+cmake-build-input-easygl -L input --output-on-failure`. **Result: 100% passed** — the `CnaInputTests` entry
+runs the input subset with `--gtest_shuffle --gtest_repeat=5` baked in (order-independence gate). A single
+unshuffled pass reports **378 input tests across 45 suites**, all green. Re-confirmed green on all four
+backends earlier this session (EasyGL / Vulkan / bgfx / SDL_RENDERER) and ASan+UBSan-clean (374 under the
+sanitizer filter, P9-005). **No failures to fix.** **Files changed:** none (gate run + record). **Remaining
+risk:** none.
+
+## P12-002 — Run full CNA test suite `[x]`
+- [x] Run all available CNA tests.
+- [x] Ensure Input changes did not break other modules.
+- [x] Record command and result.
+
+**Result (2026-07-06):** **Command:** `xvfb-run -a env SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy
+./cmake-build-input-easygl/CnaTests` (whole binary, EasyGL). **Result: 3369 tests / 306 suites →
+3356 PASSED, 2 SKIPPED, 11 FAILED.** The 2 skips are hardware sensors (Accelerometer/Gyroscope). **All 11
+failures are Graphics-track tests** — `DrawUserIndexedPrimitives*` (4), `DrawUserIndexedPrimitivesArgumentGuard*`
+(2), `GraphicsDeviceDefaultStateTest`, `LevelCountTest.MipMapTrueNonSquarePowerOfTwo`,
+`UnsupportedFormatConstruction*` (2), `Texture2DFromStreamFormatTest` — **zero input tests fail.** These are
+**pre-existing** and out of scope for this branch: (1) this session changed **only** input test files + docs
+(no `src/`), which cannot affect graphics tests; (2) the Graphics track lives on `develop` with its own open
+bugs (NEXT.md §4), and some graphics tests are EasyGL-backend-capability-dependent. **Input broke nothing.**
+**Files changed:** none (suite run + record). **Remaining risk:** the 11 Graphics failures belong to the
+Graphics track — do NOT fix here.
 
 ## P12-003 — Re-run public API parity
 - [ ] Regenerate parity matrix.
