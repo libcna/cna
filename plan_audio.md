@@ -427,6 +427,34 @@ These appear across the cluster and are handled in bulk:
   Verified via `git stash` (the tests don't compile without the fix --
   `INTERNAL_applyLowPassFilter` etc. don't exist) and ASan+LeakSanitizer (the whole suite). Whole
   suite 2039/2039 green.
+  *Follow-up (2026-07-06, user-directed, ThreadSanitizer stress test):* the "not empirically
+  stress-tested" limitation above is now closed. Added
+  `SoundEffectInstanceTests.cpp::ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`: plays a
+  real, looped `SoundEffectInstance` (even the SDL `dummy` driver spins up a genuine background
+  audio-device thread that periodically invokes the real SDL3_mixer mixing pipeline -- confirmed
+  by reading `third_party/SDL/src/audio/dummy/SDL_dummyaudio.c`, which doesn't set
+  `ProvidesOwnCallbackThread` on desktop, so SDL's generic per-device thread applies) while a
+  second thread hammers the real production `INTERNAL_apply{Low,High,Band}PassFilter` setters for
+  400ms straight -- the actual production entrypoint (not the test-only synchronous
+  `ProcessFilterSamplesForTest` driver the other T-4C tests use, which a NEARBY comment,
+  `P9-BUILD-007`, already documents as genuinely racy when driven manually without first calling
+  `Stop()` -- a confirmed ~15-25%-flaky pre-existing issue, but confined to that test-only driving
+  pattern, not a production code path). Also read `third_party/SDL_mixer/src/SDL_mixer.c` directly
+  (not just its public header) to check `MIX_SetTrackCookedCallback`'s actual locking:
+  it takes `LockTrack()`/`SDL_LockAudioStream(track->output_stream)` around writing
+  `cooked_callback`/`cooked_callback_userdata` -- a *different* stream/lock than
+  `MIX_LockMixer`/`UnlockMixer` (which locks `mixer->output_stream`) used to guard
+  `FilterState::kind/frequency/oneOverQ` -- worth flagging since it means two distinct locks
+  protect logically related state, but not necessarily unsafe (release-then-acquire chaining on
+  the SAME writer thread can still establish the needed happens-before relationship). Built a
+  dedicated one-off ThreadSanitizer configuration (`-fsanitize=thread`, mirroring the existing
+  ASan+UBSan one-off pattern in NEXT.md §7) and ran the new test 10x back-to-back plus the entire
+  audio-scoped test subset once, all under TSan: **zero `WARNING: ThreadSanitizer` reports** (confirmed
+  the TSan runtime was genuinely linked via `nm`/`ldd`, not silently inert). This doesn't prove the
+  complete absence of a race under every possible timing (TSan is a dynamic tool, not exhaustive),
+  but is real, repeated empirical evidence under actual concurrent load, closing the "no
+  ThreadSanitizer run" gap explicitly called out above. `CHECKLIST.md`'s corresponding "Needs
+  verification" row moved to a confirmed-clean status citing this test and run.
 
 - [x] **T-4D — AudioEngine `Update()` / per-cue category recomputation.**
   Assess what's needed from FACT `DoWork` (category fades, instance limits); at minimum finish the

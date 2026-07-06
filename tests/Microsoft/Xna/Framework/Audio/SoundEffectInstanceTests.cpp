@@ -2,10 +2,13 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <memory>
 #include <numbers>
+#include <thread>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -604,6 +607,53 @@ TEST_F(SoundEffectInstanceTest, BandPassFilterFirstSampleMatchesStateVariableFil
     SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
     EXPECT_NEAR(pcm[0], 1.0f, 1e-6f); // F * x = 0.5 * 2.0
     EXPECT_NEAR(pcm[1], 1.0f, 1e-6f);
+}
+
+// "Needs verification" (CHECKLIST.md/plan_audio.md T-4C): filter coefficient locking follows
+// SDL3_mixer's documented practice (MIX_LockMixer/UnlockMixer around FilterState's kind/
+// frequency/oneOverQ, matching "the SDL audio device thread holds this same lock while actual
+// mixing is in progress") but had never been stress-tested under real concurrency. Unlike the
+// three FirstSampleMatchesStateVariableFilterMath tests above (which deliberately Stop() the
+// track before touching filter state, precisely to AVOID racing the real mixing thread --
+// P9-BUILD-007's own comment documents a confirmed ~15-25%-flaky race when that precaution isn't
+// taken), this test does the opposite on purpose: it hammers the real production
+// INTERNAL_apply{Low,High,Band}PassFilter setters from a second thread while a real background
+// mixing thread (spun up by Play(), even under the SDL dummy driver -- see P9-BUILD-007's
+// comment) is concurrently invoking the real SDL3_mixer cooked callback against the very same
+// FilterState. Intended to be run under ThreadSanitizer (see plan_audio.md's P9-CATEGORY-011
+// follow-up note for the exact TSan build/run commands and result) -- under a normal ASan/UBSan
+// or unsanitized build this only checks for crashes/hangs, not data races.
+TEST_F(SoundEffectInstanceTest, ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.setIsLoopedProperty(true); // keeps the mixing thread pulling real data for the duration
+    inst.Play();
+    if (!SoundEffectInstanceTestAccess::GetTrack(inst))
+    {
+        GTEST_SKIP() << "no real track created";
+    }
+
+    std::atomic<bool> stop{false};
+    std::thread hammer([&]()
+    {
+        float f = 0.05f;
+        int dir = 1;
+        while (!stop.load(std::memory_order_relaxed))
+        {
+            SoundEffectInstanceTestAccess::ApplyLowPassFilter(inst, f);
+            SoundEffectInstanceTestAccess::ApplyHighPassFilter(inst, f);
+            SoundEffectInstanceTestAccess::ApplyBandPassFilter(inst, f);
+            f += 0.05f * static_cast<float>(dir);
+            if (f > 1.9f || f < 0.05f) dir = -dir;
+        }
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(400));
+    stop.store(true, std::memory_order_relaxed);
+    hammer.join();
+
+    inst.Stop(true);
 }
 
 // ===================== XACT track filter wiring (P9-XACT-011) =====================
