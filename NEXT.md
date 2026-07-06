@@ -13,8 +13,32 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–41 are complete. **Phase 42 (BasicEffect exactness,
-  `GRAPHICS_TASKS.md` Tasks 361–370) is open** — **Task 364 is done, Task 365 is next** ("Pixel
-  test: `VertexColorEnabled=true`, no texture — Vertex color multiplication" — see §8). **Task
+  `GRAPHICS_TASKS.md` Tasks 361–370) is open** — **Task 365 is done, Task 366 is next** ("Pixel
+  test: `TextureEnabled=true`, no vertex color — Texture color" — see §8). **Task 365** (the
+  inverse/complement of Task 364) verified `VertexColorEnabled=true`'s vertex-color multiplication
+  is genuinely correct on all 3 backends — **pure new-coverage verification, no bug found**.
+  Confirmed the exact expected formula from FNA source: `Common.fxh`'s `ComputeCommonVSOutput()`
+  sets `vout.Diffuse = DiffuseColor` (already `(DiffuseColor+EmissiveColor)*Alpha` via
+  `EffectHelpers.SetMaterialColor`), then `VSBasicVcNoFog` additionally executes
+  `vout.Diffuse *= vin.Color` — a component-wise product including alpha — and `PSBasicNoFog`
+  passes it through unmodified. Confirmed all 3 backends' `VertexColorEnabled` gate (added by Task
+  364) already correctly implements the `true` branch as this exact multiply (`EasyGL`:
+  `FragColor=vc*uDiffuseColor`; `Vulkan`: `fragColor=inColor*pc.diffuseColor`; `Bgfx`:
+  `v_color0=vc*u_diffuseColor`) — Task 364 only needed to add/fix the `false` (skip) branch, the
+  pre-existing `true` branch was never touched by that fix. Added one new pixel test per backend
+  (`examples/{easygl,vulkan,bgfx}_basiceffect_vertexcolor_enabled_test.cpp`) using a distinctive
+  vertex color `(200,100,50,200)` and `DiffuseColor(0.8,0.4,0.6)` chosen so the correct product
+  `(160,40,30)` is numerically distinct from either input alone (`DiffuseColor`-only would read
+  `(204,102,153)`; vertex-color-only would read `(200,100,50)`) — the test asserts the readback
+  matches the product and neither single-input fallback. **Verified genuine discriminating power on
+  all 3 backends independently**: temporarily forced each backend's shader to output `DiffuseColor`
+  alone (ignoring vertex color), rebuilt, confirmed the exact predicted `(204,102,153)` failure on
+  each, then reverted — Vulkan/Bgfx required regenerating their embedded SPIR-V/shader-bytecode
+  headers via each backend's own `compile_shaders.py` (their vertex-color multiply lives in
+  precompiled shader bytecode baked into a `.hpp`, not runtime-interpreted source like EasyGL's).
+  Full 3-backend regression: EasyGL 3415/3418 (3 pre-existing, unchanged), Vulkan 3337/3351 (13
+  pre-existing + 1 flaky `CueTest`, unchanged), Bgfx 3320/3321 (1 reconfirmed-flaky, unrelated
+  `NetworkSessionTest.FindReturnsEmptyCollection`, passed cleanly on isolated re-run). **Task
   364** was the phase's first real GPU pixel-readback task and found real bugs on **all 3
   backends**: EasyGL's and Bgfx's no-texture `BasicEffect` shader path unconditionally multiplied
   by the per-vertex color regardless of `VertexColorEnabled` (fixed with a new gating
@@ -256,22 +280,23 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
   (`cmake-build-bgfx`): all 3 configured, build cleanly. Last actually rebuilt/re-verified for
-  Task 356 (test-file-only addition to `EffectTests.cpp`; production `Effect.cpp` was temporarily
-  edited for a discriminating-power check and reverted back to its exact Task 355 state). Tasks
-  350/352/354 (docs-only) touched no `.hpp`/`.cpp`/test files, so no rebuild was needed for those —
-  matching Task 340's precedent.
+  Task 365 (new pixel test per backend, plus temporary/reverted shader edits — EasyGL's runtime
+  GLSL string in `EasyGLGraphicsBackend.cpp`, Vulkan's `colored3d.vert.glsl` regenerated into
+  `spirv_shaders.hpp` via `compile_shaders.py`, Bgfx's `vs_colored3d.sc` regenerated into
+  `bgfx_shaders.hpp` via its own `compile_shaders.py` — all reverted back to their committed Task
+  364 state, confirmed via clean `git status`).
 
 ### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 3373/3376 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`
-  — no `CueTest` flake this run.
-- **Vulkan, full `ctest -j1`:** 3295/3309 pass. 13 documented failures (see §5) + 1 reconfirmed-flaky,
+- **EasyGL, full `ctest -j1`:** 3415/3418 pass. 3 pre-existing/documented failures (see §5):
+  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
+- **Vulkan, full `ctest -j1`:** 3337/3351 pass. 13 documented failures (see §5) + 1 reconfirmed-flaky,
   unrelated `CueTest` failure: 5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*`
   (Task 870), `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
   `Vulkan_RenderTargetCube_SampleAfterUnbind` (Task 876 — genuine confirmed bug, supposed to fail
   until fixed).
-- **Bgfx, full `ctest -j1`:** 3277/3279 pass — 2 reconfirmed-flaky, unrelated `CueTest` failures this
-  run.
+- **Bgfx, full `ctest -j1`:** 3320/3321 pass — 1 reconfirmed-flaky, unrelated
+  `NetworkSessionTest.FindReturnsEmptyCollection` failure this run (passed cleanly on isolated
+  re-run immediately after).
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently**
   — concurrent runs previously produced transient GPU/driver-contention false failures. If a
   single run shows an anomaly beyond the documented list, re-run that test in isolation before
@@ -375,6 +400,7 @@ task below) is in `GRAPHICS_TASKS.md` and `git log`.
 
 | Commit / Task | Change |
 |---|---|
+| Task 365 | The inverse/complement of Task 364. Confirmed from FNA source (`Common.fxh`/`BasicEffect.fx`) that `VertexColorEnabled=true`'s expected output is `DiffuseColor × Alpha × VertexColor` (component-wise, including alpha) via `VSBasicVcNoFog`'s `vout.Diffuse *= vin.Color`. Confirmed all 3 backends' `VertexColorEnabled` gate (added by Task 364) already correctly implemented the `true` branch as this exact multiply — Task 364 only added/fixed the `false` (skip) branch, this pre-existing multiply was untouched by that fix. **Pure new-coverage verification task, no bug found.** Added one new pixel test per backend (`examples/{easygl,vulkan,bgfx}_basiceffect_vertexcolor_enabled_test.cpp`) with a distinctive vertex color `(200,100,50,200)` and `DiffuseColor(0.8,0.4,0.6)` chosen so the correct product `(160,40,30)` is numerically distinct from either input alone (`DiffuseColor`-only reads `(204,102,153)`; vertex-color-only reads `(200,100,50)`). Verified genuine discriminating power on all 3 backends independently by temporarily forcing each backend's shader to output `DiffuseColor` alone and confirming the exact predicted `(204,102,153)` failure, then reverting (Vulkan/Bgfx required regenerating their embedded shader-bytecode headers via each backend's `compile_shaders.py`, since their vertex-color multiply lives in precompiled bytecode, not runtime-interpreted source like EasyGL's). Full 3-backend regression: EasyGL 3415/3418 (3 pre-existing), Vulkan 3337/3351 (13 pre-existing + 1 flaky `CueTest`), Bgfx 3320/3321 (1 reconfirmed-flaky, unrelated `NetworkSessionTest.FindReturnsEmptyCollection`). |
 | Task 364 | Phase 42's first real GPU pixel-readback task (Tasks 361-363 were GPU-independent). Derived the expected `DiffuseColor × Alpha` output formula from FNA's `BasicEffect.cs`/`BasicEffect.fx`/`Common.fxh`/`EffectHelpers.cs`. Found and fixed 3 real bugs, one per backend, all in the same spot: `FillGpuDrawParams()`'s `vertexColorEnabled` forwarding (wired since Task 361) was never actually honored by any backend's no-texture shader path. EasyGL's/Bgfx's `colored3D` fragment/vertex shader unconditionally multiplied by the per-vertex color — added a gating uniform on each. Vulkan's separate `stride==16` pipeline was worse still — a bare vertex-color passthrough reading neither `DiffuseColor` nor the flag — fixed by extending its push-constant layout to match the existing `FillExtPushConst()` layout byte-for-byte. Fixing Vulkan exposed and required fixing 2 stale tests (`vulkan_rt2d_test.cpp`, `vulkan_render_target_usage_test.cpp`) that had been accidentally relying on the bug since Task 361 flipped `VertexColorEnabled`'s default to `false`. Also found, documented, not fixed (new **Task 884**): Bgfx's default `RasterizerState` cull state is the only one of the 3 backends actually matching FNA's real `CullCounterClockwiseFace` default, so it alone silently culled every quad in this whole pixel-test family — worked around with explicit `RasterizerState::CullNone` in the new Bgfx test. Verified genuine discriminating power on all 3 backends independently. Full 3-backend regression: EasyGL 3414/3417 (3 pre-existing), Vulkan 3336/3350 (13 pre-existing + 1 flaky `CueTest`), Bgfx 3320/3320 (100%, first-ever clean `BasicEffect` pixel-readback pass on this backend). |
 | Task 350 | **Closes Phase 40.** Wrote `docs/viewport-displaymode-adapter-support.md`, a full Phase 40 synthesis (mirroring `docs/rendertarget-support.md`'s Phase 39 closer) covering Tasks 341–349, plus this task's own non-desktop-platform section. Re-audited FNA's `GraphicsAdapter.cs`/`DisplayMode.cs`/`DisplayModeCollection.cs`/`Viewport.cs`/`SDL3_FNAPlatform.cs` for Android/mobile platform branching and found **zero** — FNA is a thin, unconditional wrapper over plain SDL3 display calls, and CNA's `GraphicsAdapter.cpp` mirrors that with no platform guards of its own. Checked actual non-desktop build/run reality instead of assuming: Android — `CNA` cross-compiles for `arm64-v8a` via NDK (`docs/devices-build.md` §4) but has **never actually executed** any display/adapter code (no APK packaging integration, blocked emulator run — `docs/devices-build.md` §4.1); Web/Emscripten — real build scaffolding exists in `CMakeLists.txt` but **no `emcc` build has ever been performed** (unstarted, tracked separately as Phase 69). Documented SDL3's own anticipated (explicitly labeled not-locally-verified) Android/Web display-enumeration caveats, and concluded CNA's existing headless-fallback path (Task 346) isn't the path Android would actually take (a real single display would go through the normal per-display loop) but no code change is anticipated to be necessary either way. No new bug found — pure documentation/synthesis, matching Task 340's precedent exactly: docs-only, no code changed, no rebuild/regression needed. |
 | Task 349 | Read FNA's `GraphicsDevice.Reset()` line-by-line: it unconditionally resets `Viewport` to `(0,0,newW,newH)` regardless of any previously-set custom `Viewport`, and `GraphicsDeviceManager.ApplyChanges()` always calls it; FNA's `Present()` never touches `Viewport` at all. **Found and fixed a real bug in CNA's equivalent mechanism**: `GraphicsDevice::UpdateViewportFromWindow()` (called every frame via `Present()`, per Task 348) decided "did the size change?" by comparing against `Viewport`'s own current width/height — so a game-set custom sub-region `Viewport` (legal FNA usage, e.g. split-screen) was silently stomped back to full-window size on the very next frame, even with no resize at all. Fixed by adding dedicated `lastKnownViewportWidth_`/`Height_` fields to `GraphicsDevice` that track the backend-derived size independently of whatever `Viewport` is currently set to. **Second finding, documented not fixed (self-healing, not a persistent bug)**: `GraphicsDeviceManager::ApplyChanges()` queries the window size immediately after `SDL_SetWindowSize()` with no event pump in between; on X11/Xvfb this can transiently observe a stale size, but it self-corrects within a frame or two since `Present()` re-derives `Viewport` every frame. New shared test `examples/viewport_reset_after_resize_test.cpp` (EasyGL + Vulkan, mirroring Task 338's cross-backend precedent): sets a custom `Viewport(10,20,100,60)`, confirms it survives a frame's `Present()` with no resize, then triggers a real resize via GDM and polls (mirroring Task 348's polling precedent) until `Viewport` settles to `(0,0,640,360)`. **Verified genuine discriminating power**: reverting the fix made exactly the 4 "survives Present()" assertions fail, while the 4 post-resize assertions still passed, before restoring. Full 3-backend rebuild + regression (shared `GraphicsDevice.hpp`/`.cpp` touched): EasyGL 3353/3356 (3 pre-existing, no `CueTest` flake this run). Vulkan 3275/3289 (13 pre-existing + 1 reconfirmed-flaky `CueTest`). Bgfx 3258/3259 (1 reconfirmed-flaky `CueTest`). |
@@ -563,30 +589,39 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 365 — pixel test: `VertexColorEnabled=true`, no texture — Vertex
-   color multiplication (EasyGL/Vulkan/Bgfx)**
-   - Goal: real GPU pixel-readback test proving `BasicEffect` renders `DiffuseColor × vertexColor`
-     (per FNA's `vout.Diffuse *= vin.Color` in the `*Vc` shader variants) when
-     `VertexColorEnabled=true` and no texture is bound. Task 364's new tests already exercise the
-     `VertexColorEnabled=false` side of this same shader-selection boundary on all 3 backends —
-     reuse the same quad/vertex-format/readback pattern
-     (`examples/{easygl,vulkan,bgfx}_basiceffect_vertexcolor_disabled_test.cpp`), just flip the
-     flag and change the expected-color formula to a product instead of `DiffuseColor` alone.
-   - **Read `docs/`/this file's Task 364 entry first**: it fixed real per-backend bugs in exactly
-     this code path (EasyGL/Bgfx no-texture shader ignored the flag entirely; Vulkan's separate
-     `stride==16` pipeline ignored both `DiffuseColor` and the flag) — the fix already wires
-     `VertexColorEnabled=true` correctly (verified as part of Task 364's own discriminating-power
-     check, which forced the old, wrong "always multiply" behavior and confirmed it broke the
-     `=false` test), so Task 365 is expected to be new-coverage, not a bug-fix task, but confirm
-     with a real pixel readback rather than assuming.
-   - **On Bgfx specifically**: remember the newly-found `RasterizerState` cull-default gap
-     (Task 884, §5) — the standard `tl,bl,br`/`tl,br,tr` NDC quad winding used throughout this test
-     family is silently culled on Bgfx unless `RasterizerState::CullNone` is set explicitly before
-     each draw (EasyGL/Vulkan don't need this, their own defaults are effectively CullNone already).
+1. **`GRAPHICS_TASKS.md` Task 366 — pixel test: `TextureEnabled=true`, no vertex color — Texture
+   color (EasyGL/Vulkan/Bgfx)**
+   - Goal: real GPU pixel-readback test proving `BasicEffect` samples the bound `Texture2D` and
+     multiplies it by `DiffuseColor` (per FNA's `PSBasicTx`: `SAMPLE_TEXTURE(Texture, pin.TexCoord)
+     * pin.Diffuse`) when `TextureEnabled=true` — confirm the exact formula from FNA source rather
+     than assuming, same discipline as Tasks 364/365.
+   - Reuse the established quad/readback pattern from
+     `examples/{easygl,vulkan,bgfx}_basiceffect_vertexcolor_enabled_test.cpp` (Task 365) —
+     `GetBackBufferData` center-pixel readback, distinctive-value discriminating-power design (pick
+     a texel color and `DiffuseColor` whose product is numerically distinct from either alone), and
+     remember the Bgfx `RasterizerState::CullNone` cull-default workaround (Task 884, §5) for the
+     standard `tl,bl,br`/`tl,br,tr` NDC quad winding.
    - Note Task 361's finding: `BasicEffect::FillGpuDrawParams()` only forwards `DirectionalLight0`
      and never `SpecularColor`/`SpecularPower`/`DirectionalLight1`/`DirectionalLight2` — likely
      irrelevant to this specific task (lighting disabled by default), but keep in mind for Tasks
      368/369.
+
+   **Task 365 status: done.** The inverse/complement of Task 364 — verified `VertexColorEnabled=
+   true`'s vertex-color multiplication is genuinely correct on all 3 backends. **Pure new-coverage
+   verification, no bug found**: confirmed from FNA source (`Common.fxh`'s `ComputeCommonVSOutput()`
+   + `VSBasicVcNoFog`'s `vout.Diffuse *= vin.Color`) that the expected formula is `DiffuseColor ×
+   Alpha × VertexColor` component-wise (including alpha), and confirmed all 3 backends' existing
+   `VertexColorEnabled` gate (added by Task 364) already implements exactly this multiply on the
+   `true` branch — Task 364 only needed to add/fix the `false` (skip) branch. Added one new pixel
+   test per backend using vertex color `(200,100,50,200)` and `DiffuseColor(0.8,0.4,0.6)`, chosen so
+   the correct product `(160,40,30)` is numerically distinct from either input alone (`DiffuseColor`
+   -only reads `(204,102,153)`; vertex-color-only reads `(200,100,50)`). Verified genuine
+   discriminating power on all 3 backends independently (temporarily forced each backend's shader to
+   output `DiffuseColor` alone, rebuilt, confirmed the exact predicted `(204,102,153)` failure,
+   reverted — Vulkan/Bgfx required regenerating embedded shader-bytecode headers via each backend's
+   own `compile_shaders.py`). Full 3-backend regression: EasyGL 3415/3418 (3 pre-existing), Vulkan
+   3337/3351 (13 pre-existing + 1 flaky `CueTest`), Bgfx 3320/3321 (1 reconfirmed-flaky, unrelated
+   `NetworkSessionTest.FindReturnsEmptyCollection`). Pushed as (see commit list below).
 
    **Task 364 status: done.** First real GPU pixel-readback task in Phase 42. Derived the expected
    `DiffuseColor × Alpha` output formula directly from FNA's `BasicEffect.cs`/`BasicEffect.fx`/
@@ -979,20 +1014,26 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-41 are FULLY COMPLETE. Phase 42 (BasicEffect exactness, GRAPHICS_TASKS.md
-Tasks 361-370) is now open, Task 364 is DONE, Task 365 next (pixel test: VertexColorEnabled=true,
-no texture - Vertex color multiplication - EasyGL/Vulkan/Bgfx).
-Last full 3-backend regression (Task 364: first real GPU pixel-readback task in Phase 42; found and
-fixed 3 real per-backend bugs where VertexColorEnabled was silently ignored by the no-texture
-BasicEffect shader path - EasyGL/Bgfx always multiplied by vertex color regardless of the flag;
-Vulkan's separate stride==16 pipeline ignored DiffuseColor AND the flag entirely. Fixing Vulkan
-required fixing 2 stale tests, vulkan_rt2d_test.cpp and vulkan_render_target_usage_test.cpp, that
-were accidentally relying on the bug. Also found and documented, not fixed, new Task 884: Bgfx's
-default RasterizerState cull state is the only one of the 3 backends matching FNA's real default,
-so it alone silently culls the standard NDC quad winding used throughout this pixel-test family):
-EasyGL 3414/3417 pass (3 documented pre-existing failures: EasyGL_MRT_TwoAttachments,
-EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests). Vulkan 3336/3350 pass (13
-documented pre-existing failures + 1 flaky CueTest). Bgfx 3320/3320 pass (100%, no flakes this run,
-first-ever clean BasicEffect pixel-readback pass on this backend).
+Tasks 361-370) is now open, Task 365 is DONE, Task 366 next (pixel test: TextureEnabled=true,
+no vertex color - Texture color - EasyGL/Vulkan/Bgfx).
+Last full 3-backend regression (Task 365: the inverse/complement of Task 364 - verified
+VertexColorEnabled=true's vertex-color multiplication is genuinely correct on all 3 backends, pure
+new-coverage verification, no bug found. Confirmed from FNA source (Common.fxh's
+ComputeCommonVSOutput() + VSBasicVcNoFog's vout.Diffuse *= vin.Color) that the expected formula is
+DiffuseColor x Alpha x VertexColor component-wise including alpha, and confirmed all 3 backends'
+existing VertexColorEnabled gate (added by Task 364) already implements exactly this multiply on
+the true branch - Task 364 only needed to add/fix the false (skip) branch. Added one new pixel test
+per backend using vertex color (200,100,50,200) and DiffuseColor(0.8,0.4,0.6), chosen so the
+correct product (160,40,30) is numerically distinct from either input alone (DiffuseColor-only
+reads (204,102,153); vertex-color-only reads (200,100,50)). Verified genuine discriminating power
+on all 3 backends independently by temporarily forcing each backend's shader to output DiffuseColor
+alone and confirming the exact predicted (204,102,153) failure, then reverting - Vulkan/Bgfx
+required regenerating their embedded shader-bytecode headers via each backend's own
+compile_shaders.py):
+EasyGL 3415/3418 pass (3 documented pre-existing failures: EasyGL_MRT_TwoAttachments,
+EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests). Vulkan 3337/3351 pass (13
+documented pre-existing failures + 1 flaky CueTest). Bgfx 3320/3321 pass (1 reconfirmed-flaky,
+unrelated NetworkSessionTest.FindReturnsEmptyCollection, passed cleanly on isolated re-run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
 if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
 it as a regression.
