@@ -2066,12 +2066,50 @@ manual validations (Phase 11) — those are *unverified*, not *undocumented devi
 none (review + record). **Behavior verified:** no undocumented/accidental strict-XNA deviation remains.
 **Remaining risk:** none (documented deviations are deliberate).
 
-## P12-005 — Final Input readiness statement
-- [ ] Write a final status section:
-  - API completeness estimate,
-  - implementation correctness estimate,
-  - automated test coverage,
-  - manual validation status,
-  - known remaining risks.
-- [ ] Do not overstate readiness.
-- [ ] Mark this plan complete only when all non-blocked tasks are done.
+## P12-005 — Final Input readiness statement `[x]`
+- [x] Write a final status section (below).
+- [x] Do not overstate readiness.
+- [x] Mark this plan complete only when all non-blocked tasks are done.
+
+### Final Input readiness statement (2026-07-06)
+
+**API completeness — high.** All 24 XNA 4.0 Input types are present with member-level parity verified by the
+regenerated parity matrix (**0 STRICT/EXT gaps, 0 FNA-only members**) and pinned by signature-freeze +
+enum-value-freeze tests. FNA extensions (`TextInputEXT`, relative mouse mode, scancode mode, gamepad
+GUID/LED/trigger-vibration/sensors/EXT-buttons) are implemented, `EXT`/`NOXNA`-tagged, and documented. No
+public API changed in this completion pass.
+
+**Implementation correctness — high (for headless-verifiable behavior).** Each Input type was verified
+line-by-line against the FNA source (its code, not its comments). This pass fixed **3 genuine bugs** with
+tests + ASan (P2-002 keyboard-hash OOB, P3-001 mouse null-window warp, P4-014 vibration NaN→int UB) and,
+across Phases 5–8, closed real coverage gaps (touch ordering/reset, every gesture threshold + negative path,
+empty-text/IME-byte-offset, ignored-event/stale-handle/lifecycle/suppress-reset). Intentional deviations are
+numbered (`DEC-06..DEC-20`) and documented; none are accidental.
+
+**Automated test coverage — exhaustive at the behavior level.** `ctest -L input` = **378 tests / 45 suites,
+100% green** under a baked `--gtest_shuffle --gtest_repeat=5` order-independence gate, on **all four backends**
+(EasyGL / Vulkan / bgfx / SDL_RENDERER), and **ASan+UBSan-clean**. Backed by a deterministic fixed-seed
+fuzzer (5000 events), golden exact-state scripts, and an injectable fake gamepad backend. The full CNA suite
+is **3356/3369** (the 11 failures are all pre-existing **Graphics-track** tests, zero input).
+
+**Manual validation status — NOT done (hardware-gated).** Phase 11 (P11-001..007) and the `[!]` sub-items
+(P5-015 high-DPI touch, P6-016 gestures on a real screen, P7-010 real IME, P8-006 display resize / high-DPI
+input transform) require physical hardware and are **unverified**. The *logic* behind them is unit-tested;
+what is pending is real-device wiring/actuation (rumble/LED/sensors, IME composition, high-DPI pixel
+scaling, per-layout OEM keys). Checklists: `docs/devices-hardware-checklist.md`, `docs/demo-input-checklist.md`.
+
+**Known remaining risks.** (1) Real-hardware actuation and high-DPI/IME behavior are unverified until Phase 11.
+(2) Documented by-design deviations remain deviations (event-driven `PacketNumber` wobble; `unordered_set`
+can store an out-of-range `Keys`; byte-offset IME `start`/`length`; `MaximumTouchCount` reports 4 but the
+event path caps at 8). (3) Wayland cursor-landing readback is X11-only. None are functional blockers.
+
+**Plan status:** all **non-blocked** tasks (Phases 0–10, 12) are `[x]`; the only outstanding items are the
+hardware-gated `[!]` Phase 11 validations and their `[!]` cross-references. Per the rule "mark this plan
+complete only when all non-blocked tasks are done", the `plan_input.md` automated/documentation scope is
+**complete**; Phase 11 remains open as manual hardware work.
+
+---
+
+**Phase 12 complete (2026-07-06) — plan_input.md automated scope COMPLETE.** Input suite 100% (378, 4
+backends, ASan); full suite input-clean; parity 0 gaps; deviations all documented. Remaining: Phase 11
+manual hardware validation (`[!]`).
