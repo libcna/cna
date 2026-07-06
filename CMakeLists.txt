@@ -1285,6 +1285,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 388: DualTextureEffect fog behavior
+        cna_easygl_test(cna_test_easygl_dualtextureeffect_fog
+                        examples/easygl_dualtextureeffect_fog_test.cpp)
+        add_test(NAME EasyGL_DualTextureEffect_Fog
+                 COMMAND cna_test_easygl_dualtextureeffect_fog)
+        set_tests_properties(EasyGL_DualTextureEffect_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_dualtexture
                         examples/easygl_dualtexture_test.cpp)
         add_test(NAME EasyGL_DualTexture

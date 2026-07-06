@@ -251,6 +251,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
         world_.ToColumnMajor(p.worldColMajor);
         // alphaTest stays at default {0,0,1,1} (Always pass — DualTextureEffect has no alpha test)
+
+        const Vector3 fogColor = getFogColorProperty();
+        p.fogEnabled  = fogEnabled_;
+        p.fogColor[0] = fogColor.X;
+        p.fogColor[1] = fogColor.Y;
+        p.fogColor[2] = fogColor.Z;
+        p.fogStart    = fogStart_;
+        p.fogEnd      = fogEnd_;
     }
 
     const std::string& DualTextureEffect::GetTypeName() const

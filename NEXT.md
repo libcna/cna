@@ -38,7 +38,12 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   slot's null-fallback behavior — zero bugs, already correct on all 3 backends (Bgfx's fix was
   already covered by Task 379's general 7-call-site fix). **Task 387 found and fixed a real bug on
   Bgfx**: the *second* texture slot (`Texture2`) had no null-fallback at all — exactly the gap Task
-  379 explicitly predicted and left unfixed; EasyGL/Vulkan were already correct. Phase 43
+  379 explicitly predicted and left unfixed; EasyGL/Vulkan were already correct. **Task 388 found
+  and fixed a real bug on EasyGL**: `DualTextureEffect::FillGpuDrawParams()` never forwarded any
+  fog fields at all, and unlike `AlphaTestEffect` (Task 378), `DualTextureEffect`'s own dedicated
+  shader had zero fog infra — added fog uniforms/blend to the shader plus the C++ forwarding.
+  Vulkan/Bgfx's already-tracked project-wide fog gap (Task 888) remains, confirmed not fixable
+  here. Phase 43
   ("AlphaTestEffect exactness", Tasks 371–380) is **CLOSED**: Task 380
   wrote `docs/alphatesteffect-support.md` synthesizing Tasks 371–379. Task 377 found
   `AlphaTestEffect.VertexColorEnabled` has zero effect on Vulkan/Bgfx by default (opened Task 887).
@@ -81,15 +86,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 387.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 388.
 
-### Test status (last verified: Task 387)
-- **EasyGL, full `ctest -j1`:** 3501/3504 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 388)
+- **EasyGL, full `ctest -j1`:** 3502/3505 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3419/3432 pass. 13 documented pre-existing failures (see §5),
+- **Vulkan, full `ctest -j1`:** 3422/3435 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3403/3403 pass — 100%, no flakes this run (re-verified against the
-  entire suite given the fix's reach across the dual-texture dispatch path).
+- **Bgfx, full `ctest -j1`:** 3406/3406 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -153,6 +157,10 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - **Bgfx's `Texture2` (second texture slot) now falls back to white when null** (Task 387 fix,
   mirroring Task 379's slot-0 fix) — previously the only remaining unconditional-skip texture-
   binding site in the codebase; EasyGL/Vulkan were already correct for this slot.
+- **`DualTextureEffect` fog now works on EasyGL** (Task 388 fix) — `FillGpuDrawParams()` never
+  forwarded fog fields, and the effect's own dedicated shader had no fog uniforms at all (unlike
+  `AlphaTestEffect`/`BasicEffect`'s shared per-stride shaders); both are now fixed. Vulkan/Bgfx
+  still have zero fog GPU implementation for any 3D effect (Task 888).
 
 ### What does NOT work yet
 - **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
@@ -212,7 +220,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 387 | **Real bug found and fixed on Bgfx**: `texColor3DSampler2_` (`Texture2`, slot 1) had no null-fallback at all — exactly the gap Task 379 explicitly predicted and left unfixed. Fixed with the same else-branch pattern as slot 0 (Task 379). EasyGL/Vulkan already correct (verified). 2/2 PASS on all 3 backends; `git stash`-confirmed pre-fix failure `(0,0,0)`. Bgfx ctest 3403/3403, 100%. |
+| — | 388 | **Real bug found and fixed on EasyGL**: `DualTextureEffect::FillGpuDrawParams()` never forwarded fog fields at all — same bug shape as pre-Task-378 `AlphaTestEffect`, but `DualTextureEffect`'s own dedicated shader also had zero fog uniforms (unlike the shared per-stride shaders). Fixed both. 3/3 PASS, `git stash`-confirmed 2/3 correctly fail pre-fix. Vulkan/Bgfx's project-wide fog gap (Task 888) remains, confirmed not fixable here. |
+| `39e5feed` | 387 | **Real bug found and fixed on Bgfx**: `texColor3DSampler2_` (`Texture2`, slot 1) had no null-fallback at all — exactly the gap Task 379 explicitly predicted and left unfixed. Fixed with the same else-branch pattern as slot 0 (Task 379). EasyGL/Vulkan already correct (verified). 2/2 PASS on all 3 backends; `git stash`-confirmed pre-fix failure `(0,0,0)`. Bgfx ctest 3403/3403, 100%. |
 | `ab98b721` | 386 | **Verify-only, zero bugs**: confirmed `DualTextureEffect`'s first texture (`Texture`, slot 0) already falls back to white when null, on all 3 backends — Bgfx's case was already covered by Task 379's general fix. New pixel test per backend (previous-draw + null-texture pattern, matching Task 379's methodology), 2/2 PASS exact match on all 3. Noted Bgfx's second slot (`Texture2`) still has the gap — deferred to Task 387. |
 | `80df324c` | 385 | **Verify-only, zero bugs**: confirmed `DualTextureEffect`'s `Alpha` correctly premultiplies the forwarded diffuse RGB (`Vector4(diffuseColor*alpha,alpha)`) via 3 new GPU-independent unit tests plus real `BlendState.AlphaBlend` pixel tests on EasyGL/Bgfx (`(128,0,128)` exact match). Vulkan's known-fake `BlendState` (Task 868/870) required a narrower alpha-channel-only pixel test there instead, to avoid misattributing that unrelated bug. |
 | `c1b80f93` | 384 | **Coverage-only (Bgfx)**: added `bgfx_dual_texture_test.cpp` (magenta×yellow=red), Bgfx's last remaining gap in basic DualTextureEffect multiply coverage (EasyGL/Vulkan already had it, Tasks 133/135). Explicitly documented as non-discriminating for Task 383's `*2` bug (saturated values). Fixed a test-authoring mistake: a copied `SetDepthTestEnabled` call crashes on Bgfx (Task 375's known stub). Bgfx ctest 3400/3400, 100%. |
@@ -413,18 +422,16 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 44 (Task 387 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 44 (Task 389 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–888).
 
-1. **Task 388 — verify fog behavior in `DualTextureEffect`**
-   - Goal: Task 381's audit already found `FillGpuDrawParams()` never forwards `FogEnabled`/
-     `FogColor`/`FogStart`/`FogEnd` at all — the same bug shape Task 378 found and fixed for
-     `AlphaTestEffect`. Fix it on EasyGL (shader infra already exists there, mirroring Task 378's
-     fix pattern exactly); Vulkan/Bgfx have zero fog GPU implementation project-wide (Task 888),
-     so no fix is possible there yet — document that clearly rather than adding a Vulkan/Bgfx test
-     that would encode a known no-op as passing.
-   - Files: `src/Microsoft/Xna/Framework/Graphics/DualTextureEffect.cpp`, new
-     `examples/easygl_dualtextureeffect_fog_test.cpp`.
+1. **Task 389 — cross-backend `DualTextureEffect` comparison suite**
+   - Goal: closes out the pixel-verification portion of Phase 44 (mirrors Task 370's `BasicEffect`
+     capstone precedent) — a combined test exercising everything Tasks 383–388 verified
+     individually (doubling factor, alpha premultiplication, both texture null-fallbacks, fog) in
+     one draw, confirming the fixes compose correctly together across all 3 backends where
+     applicable.
+   - Files: new `examples/{easygl,vulkan,bgfx}_dualtextureeffect_combined_test.cpp`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -548,7 +555,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–888).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 388).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 389).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -558,33 +565,28 @@ Current status: Phases 1-43 are FULLY COMPLETE. Phase 44 ("DualTextureEffect exa
 plan_graphics.md Tasks 381-390) is OPEN: Task 381 (opener) audited DualTextureEffect against FNA
 line-by-line — all properties/defaults/Clone()/OnApply() match exactly, ZERO bugs in its own
 scope. Found FillGpuDrawParams() never forwards any fog fields at all (identical bug shape to the
-pre-Task-378 AlphaTestEffect bug) — deliberately deferred to Task 388, which already covers this,
-mirroring Task 371's own precedent of deferring the same finding for AlphaTestEffect. Task 382
-wrote 26 new DualTextureEffectTests.cpp unit tests (defaults, round-trips including Texture/
-Texture2, Clone(), GetTypeName()) — zero prior coverage existed, zero bugs found. Task 383 found
-and FIXED A REAL BUG ON ALL 3 BACKENDS: DualTextureEffect's dual-texture shaders were all missing
-FNA's `color.rgb *= 2` doubling factor on the first texture slot — invisible to every prior test
-(Tasks 133/135/191/293/294/296/297) since they all used pure 0/1-saturated texture values where a
-missing `*2` clamps right back to the same result. Fixed on EasyGL/Vulkan/Bgfx by adding
-`base.rgb *= 2.0` to each backend's dual-texture fragment shader; also had to fix a pre-existing
-test (TextureFilter::Point vs Linear, Task 297, shared EasyGL/Vulkan source) whose blend-detection
-thresholds only worked because of the missing factor — compensated with DiffuseColor=0.5. First-
-ever Bgfx DualTextureEffect pixel test written along the way. Task 384 closed Bgfx's last
-remaining basic-multiply coverage gap (magenta×yellow=red, `bgfx_dual_texture_test.cpp`, mirroring
-Tasks 133/135) — Bgfx-only change, no EasyGL/Vulkan production code touched. Also fixed an
-unrelated test-authoring mistake found while writing it: a copied `SetDepthTestEnabled` call
-crashes on Bgfx (Task 375's known throw-stub). Task 385 verified Alpha's premultiplication
-end-to-end — zero bugs (already correct per Task 381) — via 3 new GPU-independent unit tests plus
-real BlendState.AlphaBlend pixel tests on EasyGL/Bgfx; Vulkan's known-fake BlendState (Task
-868/870) required a narrower alpha-channel-only pixel test there to avoid misattributing that
-unrelated bug. Task 386 verified the first texture (Texture, slot 0) null-fallback — zero bugs,
-already correct on all 3 backends (Bgfx's case was already covered by Task 379's general fix).
-Task 387 found and FIXED a real bug on Bgfx: the SECOND slot (Texture2) had no null-fallback at
-all — exactly the gap Task 379 explicitly predicted and left unfixed; EasyGL/Vulkan were already
-correct. This closes out DualTextureEffect's texture-null coverage entirely. Task 388 is NEXT:
-verify fog behavior in DualTextureEffect — Task 381 already found FillGpuDrawParams() never
-forwards fog fields at all (same bug shape as pre-Task-378 AlphaTestEffect); fix on EasyGL,
-document the Vulkan/Bgfx project-wide gap (Task 888) as the reason no fix is possible there yet.
+pre-Task-378 AlphaTestEffect bug) — deliberately deferred to Task 388. Task 382 wrote 26 new
+DualTextureEffectTests.cpp unit tests — zero prior coverage existed, zero bugs found. Task 383
+found and FIXED A REAL BUG ON ALL 3 BACKENDS: DualTextureEffect's dual-texture shaders were all
+missing FNA's `color.rgb *= 2` doubling factor on the first texture slot — invisible to every
+prior test since they all used pure 0/1-saturated texture values. Fixed on EasyGL/Vulkan/Bgfx;
+also had to fix a pre-existing test (TextureFilter::Point vs Linear, Task 297) whose thresholds
+only worked because of the missing factor. First-ever Bgfx DualTextureEffect pixel test written
+along the way. Task 384 closed Bgfx's last remaining basic-multiply coverage gap (magenta×yellow=
+red) — Bgfx-only, also fixed an unrelated test-authoring mistake (copied SetDepthTestEnabled call
+crashes on Bgfx, Task 375's known stub). Task 385 verified Alpha's premultiplication end-to-end —
+zero bugs — via GPU-independent unit tests plus real BlendState.AlphaBlend pixel tests on
+EasyGL/Bgfx; Vulkan's known-fake BlendState (Task 868/870) required a narrower alpha-channel-only
+test there. Task 386 verified the first texture (Texture, slot 0) null-fallback — zero bugs,
+already correct on all 3 backends. Task 387 found and FIXED a real bug on Bgfx: the SECOND slot
+(Texture2) had no null-fallback at all — exactly the gap Task 379 explicitly predicted and left
+unfixed; EasyGL/Vulkan were already correct. Task 388 found and FIXED a real bug on EasyGL:
+FillGpuDrawParams() never forwarded any fog fields at all, and DualTextureEffect's own dedicated
+shader had zero fog infra (unlike AlphaTestEffect's Task 378 fix, which reused shared shader
+infra that already existed) — added fog uniforms/blend to the shader plus the C++ forwarding.
+Vulkan/Bgfx's project-wide fog gap (Task 888) remains, confirmed not fixable here. Task 389 is
+NEXT: cross-backend DualTextureEffect comparison suite, mirroring Task 370's BasicEffect capstone
+precedent — combines everything Tasks 383-388 verified individually into one test.
 
 Phase 43 ("AlphaTestEffect exactness", Tasks 371-380) CLOSED with Task 380
 (docs/alphatesteffect-support.md, full synthesis of Tasks 371-379). Task 377 found
@@ -601,14 +603,15 @@ highlights — a new feature, zero existing infrastructure). Phase 43 closed and
 Task 887 (Vulkan/Bgfx alpha-test vertex-color unification) and Task 888 (Vulkan/Bgfx project-wide
 fog). None of these 4 block Phase 44.
 
-Last full 3-backend regression (Task 387 — fixed the Bgfx Texture2 null-fallback bug,
-re-verified against the entire Bgfx suite given the fix's reach):
-EasyGL 3501/3504 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3419/3432 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3403/3403 pass (100%, no flakes this run).
+Last full 3-backend regression (Task 388 — fixed the EasyGL DualTextureEffect fog bug; shared
+DualTextureEffect.cpp change meant all 3 backends rebuilt even though only EasyGL's shader
+changed):
+EasyGL 3502/3505 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3422/3435 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3406/3406 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44 found, read plan_graphics.md
-directly (Tasks 351-387) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-388) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
