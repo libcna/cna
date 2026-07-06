@@ -1196,6 +1196,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42
+        cna_easygl_test(cna_test_easygl_basiceffect_combined
+                        examples/easygl_basiceffect_combined_test.cpp)
+        add_test(NAME EasyGL_BasicEffect_Combined
+                 COMMAND cna_test_easygl_basiceffect_combined)
+        set_tests_properties(EasyGL_BasicEffect_Combined PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_alphatest_modes
                         examples/easygl_alphatest_modes_test.cpp)
         add_test(NAME EasyGL_AlphaTestModes
@@ -1985,6 +1994,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42
+        cna_vulkan_test(cna_test_vulkan_basiceffect_combined
+                        examples/vulkan_basiceffect_combined_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_Combined
+                 COMMAND cna_test_vulkan_basiceffect_combined)
+        set_tests_properties(Vulkan_BasicEffect_Combined PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()
@@ -2111,6 +2129,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_BasicEffect_Emissive
              COMMAND cna_test_bgfx_basiceffect_emissive)
     set_tests_properties(Bgfx_BasicEffect_Emissive PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42
+    cna_bgfx_test(cna_test_bgfx_basiceffect_combined
+                  examples/bgfx_basiceffect_combined_test.cpp)
+    add_test(NAME Bgfx_BasicEffect_Combined
+             COMMAND cna_test_bgfx_basiceffect_combined)
+    set_tests_properties(Bgfx_BasicEffect_Combined PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
