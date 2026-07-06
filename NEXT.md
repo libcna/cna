@@ -70,6 +70,16 @@ framework/runtime, not a game.
   adversarial ASan/UBSan sweep, repeat-stressed 15-20x per risk area — clean). No design
   decisions were needed for any of these (pure test-addition or read-only verification), so none
   required a confirm-with-user round first.
+  **A third, self-directed round (still 2026-07-06) closed the two remaining pure-test-addition
+  candidates**: `P10-SE-002` (three new malformed-WAV `FromStream` fixtures — unsupported format
+  tag, truncated `fmt` chunk, truncated `data` chunk — all empirically confirmed to throw
+  `System::NotSupportedException` via SDL3_mixer's own decoder rejecting them) and `P10-SEI-002`
+  (a full `Volume`/`Pitch`/`Pan`/`IsLooped` × during-play/after-pause/after-stop/after-dispose test
+  matrix, 14 new tests, built from a line-by-line read of FNA's real setters rather than guessed —
+  confirmed CNA already matches FNA's exact per-property gating, including the non-obvious
+  `IsLooped`-vs-`Pan` disposal asymmetry). Every remaining Phase 10 candidate is now either real
+  feature/behavior-decision work or large mechanical audit work — both need the user's confirmed
+  scope first (see §8).
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -86,10 +96,10 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean as of commit `88c6bddf` (last verified). EasyGL backend (Linux default),
+- **Build:** clean as of commit `4c4dc272` (last verified). EasyGL backend (Linux default),
   `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets not
   rebuilt this pass (no Audio public API surface touched, only tests/docs).
-- **Tests:** `CnaTests` whole-suite count is **3304 / 3306 pass** as of the last full run (2
+- **Tests:** `CnaTests` whole-suite count is **3321 / 3323 pass** as of the last full run (2
   skipped: `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected). The audio-scoped subset (§7's `--gtest_filter` audio suite list)
   is **430 / 430 pass** under a fresh one-off ASan+UBSan build, repeat-stressed 3x in full plus
@@ -146,6 +156,21 @@ framework/runtime, not a game.
 Newest first. One line each; full rationale, FNA/FAudio citations, and `git stash` verification
 notes for every item are in `plan_audio.md`'s "Phase 9"/"Phase 10" sections.
 
+- `4c4dc272` — **`P10-SEI-002`**: a full `Volume`/`Pitch`/`Pan`/`IsLooped` × during-play/
+  after-pause/after-stop/after-dispose test matrix (14 new tests, `SoundEffectInstanceTests.cpp`).
+  Built from a line-by-line read of FNA's real setters, not a guess: `Volume`/`Pitch` have no
+  `IsDisposed`/`hasStarted` guard at all; `Pan` is gated only by `IsDisposed`; `IsLooped` is gated
+  only by a one-way `hasStarted` latch that `Pause()`/`Stop()`/`Dispose()` never reset. CNA's
+  setters already matched exactly — no production code change. Locks down the non-obvious
+  `IsLooped`-vs-`Pan` disposal asymmetry: disposing *before ever playing* does not throw for
+  `IsLooped` (unlike `Pan`'s `ObjectDisposedException`), since `hasStarted` is still false.
+- `2c4cbd82` — **`P10-SE-002`**: added the three remaining `FromStream` malformed-WAV fixtures
+  (`SoundEffectTests.cpp`) — an unsupported `fmt` `audioFormat` tag (`0x2000`), a truncated `fmt`
+  chunk, and a `data` chunk whose declared size wildly exceeds the actual sample bytes present.
+  Empty-stream and non-WAV-garbage cases were already covered pre-existing (Fáze 9). All three new
+  cases empirically confirmed (not assumed) to throw `System::NotSupportedException` — SDL3_mixer's
+  own WAV decoder rejects each cleanly, converted by `FromStream`'s existing error path. No
+  production code change needed.
 - `88c6bddf` — **`P10-SAN-002`**: dedicated one-off ASan+UBSan sweep, repeat-stressed (15-20x)
   separately across dispose cascades, fire-and-forget sweep/timeout teardown, dynamic-instance
   callback lifetime, and stream pause/resume, plus the full audio suite 3x — all clean. Docs-only
@@ -448,35 +473,30 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 Phase 9 (§1/§4) and its four user-directed follow-ups are all closed. **Phase 10**
 (`plan_audio.md`'s "Phase 10 — Audio correctness hardening and XNA/XACT parity") is now the
 active task list — unlike Phase 9, it is NOT a fixed closed set; it has ~90 individual task IDs
-across 12 groups. Its kickoff pass plus a second, self-directed round (§3, both 2026-07-06) closed
-14 items total, including every "verification sweep"/small-test candidate previously listed here
-(`P10-3D-003`, `P10-LOOP-005`, `P10-XACT-004/005/007/010`, `P10-MIC-004`, `P10-HW-004`,
-`P10-SAN-002`). Read `plan_audio.md`'s Phase 10 section in full before picking anything — every
-task there already has a concrete, cited current-status note (done / partially done /
-open-with-a-reason), not a vague placeholder. Concretely smallest next candidates, roughly in
-increasing order of scope:
+across 12 groups. Its kickoff pass plus two further self-directed rounds (§3, all 2026-07-06)
+closed 16 items total, including **every** "verification sweep"/small-test candidate previously
+listed here (`P10-3D-003`, `P10-LOOP-005`, `P10-XACT-004/005/007/010`, `P10-MIC-004`, `P10-HW-004`,
+`P10-SAN-002`, `P10-SE-002`, `P10-SEI-002`). Read `plan_audio.md`'s Phase 10 section in full before
+picking anything — every task there already has a concrete, cited current-status note (done /
+partially done / open-with-a-reason), not a vague placeholder. **Every remaining candidate below
+is either real feature/behavior-decision work or a large mechanical audit — both need the user's
+confirmed scope first**, unlike the 16 already closed. Roughly in increasing order of scope:
 
-1. **`P10-SE-002`** — tests for `SoundEffect`/`FromStream` edge cases not yet covered: a
-   genuinely empty stream, an unsupported (non-WAV, or unsupported codec/bit-depth) stream, and a
-   WAV with a malformed/truncated `fmt`/`data` chunk. Needs new fixtures but no design decision.
-2. **`P10-SEI-002`** — a systematic before-play/during-play/after-pause/after-stop/after-dispose
-   test matrix per `SoundEffectInstance` property (`Volume`/`Pitch`/`Pan`/`IsLooped`); currently
-   only scattered, ad-hoc coverage exists.
-3. **`P10-RPC-002`** (real feature work, confirm scope first) — wire `Cue::Apply3D()`'s
+1. **`P10-RPC-002`** (real feature work, confirm scope first) — wire `Cue::Apply3D()`'s
    already-computed distance/angle/Doppler values back into `variables_` so RPC curves bound to
    `"Distance"`/`"OrientationAngle"`/`"DopplerPitchScalar"` see live values instead of whatever was
    last manually `SetVariable()`-d.
-4. **`P10-LOOP-003/004`** (real feature work, confirm scope first) — a custom playback-cursor or
+2. **`P10-LOOP-003/004`** (real feature work, confirm scope first) — a custom playback-cursor or
    raw-callback approach so a bounded loop region no longer truncates the first (pre-loop)
    playthrough. Two concrete approaches already sketched in `plan_audio.md`, neither started.
-5. **`P10-FILTER-002/003/004/006`** (real feature work, confirm scope first) — RPC-driven live
+3. **`P10-FILTER-002/003/004/006`** (real feature work, confirm scope first) — RPC-driven live
    filter frequency/Q targeting, extending the continuous-tick infra `P9-XACT-016` already built
    for volume/pitch into `SoundEffectInstance`'s filter setters.
-6. **`P10-AUDIT-002/003`** (large, mechanical, no design decision, but sizable) — the full
+4. **`P10-AUDIT-002/003`** (large, mechanical, no design decision, but sizable) — the full
    per-member XNA 4.0 Audio API cross-reference at full granularity (every property/method/
    constructor/enum-value/exception), bucketed into implemented/tested/approximate/unsupported.
    Only a class-level table exists today (`docs/xna-4-api-coverage.md`).
-7. **`P10-PAN-002`/RFC-1** and **`P10-HRTF-002`/RFC-2** — the two largest, most invasive items
+5. **`P10-PAN-002`/RFC-1** and **`P10-HRTF-002`/RFC-2** — the two largest, most invasive items
    (crossfeed stereo mixing layer; optional FAudio/FACT backend). Explicit design proposals only
    so far, not started; would need their own confirm-scope round the same way `P9-XACT-016` did.
 
@@ -496,9 +516,12 @@ prior real decision on this branch was confirmed first.
   approved work. **Exception, already established practice on this branch:** a pure test-addition
   or read-only verification-sweep item (no behavior/design decision involved) can be self-selected
   without asking first -- this is exactly how `P10-3D-003`/`P10-LOOP-005`/`P10-XACT-004/005/007/010`/
-  `P10-MIC-004`/`P10-HW-004`/`P10-SAN-002` were all closed in one self-directed round (§3). Use
-  judgment: if closing the item could ever require picking between two different real behaviors,
-  it needs the user's input first; if it's "add a test proving X" or "audit and report," it doesn't.
+  `P10-MIC-004`/`P10-HW-004`/`P10-SAN-002`/`P10-SE-002`/`P10-SEI-002` were all closed across two
+  self-directed rounds (§3). Use judgment: if closing the item could ever require picking between
+  two different real behaviors, it needs the user's input first; if it's "add a test proving X" or
+  "audit and report," it doesn't. **As of this pass, every remaining Phase 10 candidate needs the
+  user's confirmed scope first** (§8) -- there is no more self-selectable pure-test-addition work
+  left on the list.
 - **No re-litigating a resolved open decision without the user asking first.** All eight that ever
   came up on this branch are resolved: XACT filter `OneOverQ` fidelity vs. narrowing
   (`P9-XACT-011`); `Cue::IsPlaying`/`IsPaused` coexistence (`P9-LIFECYCLE-013`);
@@ -532,13 +555,13 @@ prior real decision on this branch was confirmed first.
 ```
 Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state -- Phase 9
 is fully closed (all 11 groups plus 4 user-directed follow-ups). Phase 10 (plan_audio.md) exists
-and is a large, intentionally-open task list (~90 items, 12 groups); 14 items are closed so far
-across two rounds (kickoff + a self-directed verification-sweep round, both 2026-07-06) -- read
+and is a large, intentionally-open task list (~90 items, 12 groups); 16 items are closed so far
+across three rounds (kickoff + two self-directed verification-sweep rounds, all 2026-07-06) -- read
 its Phase 10 section before picking anything; every task there already has a concrete, cited
-status, not a placeholder. See NEXT.md §8 for the smallest genuinely-open candidates. Real
-feature/behavior-decision items need the user's confirmed scope first; pure test-addition or
-read-only verification-sweep items can be self-selected (§9's exception, already established
-practice this branch).
+status, not a placeholder. See NEXT.md §8 for the remaining candidates -- as of this pass, every
+one of them is real feature/behavior-decision work or a large mechanical audit, and needs the
+user's confirmed scope first; there is no more self-selectable pure-test-addition work left on
+the list (§9).
 
 1. If the user names a specific task, inspect only the files needed for it -- do not refactor
    unrelated code. Confirm scope/approach with the user first if it's real feature work rather
