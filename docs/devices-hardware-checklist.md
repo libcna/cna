@@ -126,10 +126,23 @@ convention on the first pass — see that task's Resolution in `plan_devices_pha
 the full account. This is exactly the kind of mistake this checklist exists to catch
 before it reaches a real device, not after.
 
+**Correction (2026-07-06, Task ACCEL-004):** this section previously said the two-
+rotation restriction came from `AndroidManifest.xml`'s `android:screenOrientation=
+"sensorLandscape"` — that attribute is not actually present in the demo's manifest
+(confirmed by inspection). The real mechanism is SDL's own runtime orientation-lock
+request (`SDLActivity.setOrientationBis()`, `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` for a
+non-resizable, wider-than-tall window with no `SDL_HINT_ORIENTATIONS` hint set) — see
+`Detail::AndroidSensorLandscapeOrientation`'s own doc comment for the full citation.
+Whatever the exact mechanism, the demo's window is expected to only ever reach the two
+landscape rotations, never portrait — so this checklist (and
+`AndroidSensorOrientationTests.cpp`) deliberately does not include separate
+portrait-upright/portrait-upside-down steps; if a future session finds the app *can*
+actually reach a portrait orientation on real hardware, that would itself be a new,
+separate bug to investigate (a missing orientation lock), not a gap in this checklist.
+
 **Steps:**
 1. Run a game (or the Task P4-14 demo screen, once it exists) on a real Android device
-   or emulator with a working virtual/physical accelerometer, `AndroidManifest.xml`
-   `android:screenOrientation="sensorLandscape"`.
+   or emulator with a working virtual/physical accelerometer.
 2. Rotate the device to `ROTATION_90` (`SDL_ORIENTATION_LANDSCAPE`). Tilt the device so
    the physical right edge goes down. Confirm `AccelerometerReading.Acceleration.Y > 0`
    (matching the documented WP7 convention: `Y > 0` means "tilt right").

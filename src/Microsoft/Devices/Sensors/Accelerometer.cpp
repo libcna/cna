@@ -376,7 +376,7 @@ namespace Microsoft::Devices::Sensors
     /**
      * Converts raw SDL3 accelerometer data (portrait device frame) to the XNA Windows
      * Phone landscape coordinate convention expected by the game, for both allowed
-     * landscape rotations (sensorLandscape = ROTATION_90 or ROTATION_270).
+     * landscape rotations (ROTATION_90 or ROTATION_270).
      *
      * --- SDL3 / Android raw sensor coordinate system ---
      * SDL3 on Android always delivers accelerometer values in the device's NATURAL
@@ -386,9 +386,14 @@ namespace Microsoft::Devices::Sensors
      *   +Z  out of screen (toward the user)
      * Values are already normalised to fractions of g before this function is called.
      *
-     * --- sensorLandscape display orientation ---
-     * AndroidManifest.xml uses android:screenOrientation="sensorLandscape", which
-     * allows two rotations:
+     * --- landscape-only display orientation ---
+     * Corrected 2026-07-06 (Task ACCEL-004): this is not an
+     * `android:screenOrientation` manifest attribute (the demo's manifest sets
+     * none, confirmed by inspection) — see
+     * `Detail::AndroidSensorLandscapeOrientation`'s own doc comment for the
+     * actual mechanism (SDL's runtime `SDL_HINT_ORIENTATIONS`-driven
+     * `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` request). Whatever the exact
+     * mechanism, only two rotations are modeled here:
      *
      *   ROTATION_90  (SDL_ORIENTATION_LANDSCAPE):
      *     Device rotated 90° CCW from portrait — portrait-top points landscape-LEFT.
@@ -441,7 +446,7 @@ namespace Microsoft::Devices::Sensors
             ? "LANDSCAPE_FLIPPED(ROTATION_270)"
             : "LANDSCAPE(ROTATION_90)";
     SDL_Log (
-"[SpeedyBlupi][Accelerometer] displayRotation=%s raw=(%.3f,%.3f,%.3f) converted=(%.3f,%.3f,%.3f) orientation=sensorLandscape",
+"[CNA][Accelerometer] displayRotation=%s raw=(%.3f,%.3f,%.3f) converted=(%.3f,%.3f,%.3f)",
     orientName, rawX, rawY, rawZ, converted.X, converted.Y, converted.Z);
 #endif
 

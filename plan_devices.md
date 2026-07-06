@@ -2182,30 +2182,89 @@ not an alternate spelling to preserve.
   - `third_party/SDL/src/sensor/windows/SDL_windowssensor.c` (read-only research —
     vendored, not edited)
 
-### ACCEL-004 — Verify axis orientation on real hardware
+### ACCEL-004 — Verify axis orientation on real hardware — hardware verification still outstanding; real doc/log bugs found and fixed (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** Sensor Math / Hardware QA
 - **Problem:** Confirmed (Section 1 and this repository's own `NEXT.md`): Android
   orientation remapping (`Detail::AndroidSensorOrientation`) has never been verified
   against real hardware in any session.
+- **Progress (2026-07-06):** the physical-device verification itself remains
+  genuinely outstanding — no Android hardware is available in this session, same
+  standing limitation as every other hardware-only task in this plan. What *was*
+  done: re-read every comment touching the orientation-remap code end to end (not
+  just the math itself, which `AndroidSensorOrientationTests.cpp` already covers), and
+  found two real, previously-undetected bugs in the process:
+  - **Wrong mechanism cited for the landscape-only assumption, in three places
+    (`AndroidSensorOrientation.hpp`, `Accelerometer.cpp`, `Gyroscope.cpp`, plus
+    `docs/devices-hardware-checklist.md`):** all claimed the two-rotation restriction
+    comes from `AndroidManifest.xml`'s `android:screenOrientation="sensorLandscape"`.
+    Grepped the demo's actual manifest directly — it sets no
+    `android:screenOrientation` attribute at all. Traced the real mechanism instead:
+    SDL's own `SDLActivity.setOrientationBis()` (`org/libsdl/app/SDLActivity.java`)
+    requests `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` at runtime for a non-resizable,
+    wider-than-tall window when no `SDL_HINT_ORIENTATIONS` hint is set — confirmed
+    this codebase never calls `SDL_SetHint(SDL_HINT_ORIENTATIONS, ...)` anywhere
+    (grepped). Corrected all four locations to describe the actual mechanism rather
+    than a manifest attribute that doesn't exist, with a note that this specific
+    causal chain (window non-resizable + wider-than-tall → `SENSOR_LANDSCAPE`) was
+    reasoned from the SDL source, not independently re-traced end-to-end at runtime
+    on a real device this session — the two-rotation *assumption itself* was not
+    found wrong, only the *reason given* for it.
+  - **Stray leftover debug-log tag in `Accelerometer.cpp`:** the Android debug
+    `SDL_Log()` call tagged its message `"[SpeedyBlupi][Accelerometer] ..."` —
+    "SpeedyBlupi" is an unrelated open-source game project's name, not anything from
+    this codebase or its history (confirmed by grepping the whole tree — this was the
+    only occurrence anywhere). A genuine copy-paste leftover, unrelated to CNA
+    branding. Fixed to `"[CNA][Accelerometer] ..."`, and removed the now-redundant
+    trailing `orientation=sensorLandscape` from the same log format string (the
+    corrected doc comment above it already explains the actual mechanism).
+  - Verified both fixes compile: a plain desktop build (this code is
+    `#ifdef __ANDROID__`-gated, so the desktop compiler never actually parses it) plus
+    a real Android NDK cross-compile of the `CNA` target (`cmake --build
+    cmake-build-android --target CNA`, arm64-v8a) — confirmed clean, no errors, for
+    both `Accelerometer.cpp` and `Gyroscope.cpp`.
+  - **Portrait orientations (portrait-upright, portrait-upside-down) — explicitly
+    addressed, not silently dropped:** this task's own required-work list asks for
+    them, but the demo's window is only ever expected to reach the two landscape
+    rotations (see the corrected mechanism above) — `docs/devices-hardware-checklist.md`
+    now states this explicitly, with a note that if a future session finds the app
+    *can* actually reach a portrait orientation on real hardware, that's a separate,
+    new bug (a missing orientation lock) worth its own investigation, not evidence
+    this checklist is incomplete.
+  - No change to `Detail::ConvertAndroidPortraitToXnaLandscape()`'s actual sign math
+    or to `AndroidSensorOrientationTests.cpp`'s 9 existing tests — nothing found
+    contradicted the math itself, only the prose explaining *why* only two rotations
+    exist to remap in the first place.
 - **Required work:**
   - Define the expected XNA axis convention for portrait and landscape orientations.
+    Landscape: already defined and cited (`Acceleration.Y > 0` = tilt right, etc.,
+    `docs/devices-hardware-checklist.md` Section 2). Portrait: N/A, see above.
   - Test face-up, face-down, portrait-upright, portrait-upside-down, landscape-left, and
-    landscape-right on real Android hardware.
+    landscape-right on real Android hardware. **Still not run** — no hardware
+    available. Portrait cases specifically are N/A (see above), not merely untested.
   - Adjust the remapping code if real-device results disagree with current assumptions.
+    N/A yet — no real-device results exist to compare against.
 - **Acceptance criteria:**
   - A manual hardware checklist entry records expected vs. observed values per
-    orientation, per device tested.
+    orientation, per device tested. Checklist entry exists and is now more accurate
+    (corrected mechanism); no observed values recorded yet — hardware still
+    unavailable.
   - Automated tests cover the remapping math itself (already partially covered by
     `AndroidSensorOrientationTests.cpp` — confirm and extend, don't duplicate).
+    Confirmed already comprehensive; not extended (nothing found wrong with the math).
   - Code comments identify which specific devices/orientations have actually been
-    verified.
+    verified. Done — explicitly states zero real-device verification has occurred,
+    rather than the previous, subtly-misleading manifest-attribute claim.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`
-  - `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp`
-  - `docs/devices-hardware-checklist.md`
+  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp` (edited — doc comment + stray
+    log tag)
+  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp` (edited — doc comment)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp` (edited —
+    doc comment)
+  - `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp` (inspected, no
+    change needed — math itself unaffected)
+  - `docs/devices-hardware-checklist.md` (edited)
 
 ### ACCEL-005 — Apply `TimeBetweenUpdates` — CLOSED (2026-07-06)
 

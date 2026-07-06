@@ -304,7 +304,9 @@ namespace Microsoft::Devices::Sensors
     /**
      * Converts raw SDL3 gyroscope data (portrait device frame) to the XNA Windows
      * Phone landscape coordinate convention, for both allowed landscape rotations
-     * (sensorLandscape = ROTATION_90 or ROTATION_270). Mirrors the equivalent
+     * (ROTATION_90 or ROTATION_270 — not an `android:screenOrientation` manifest
+     * attribute; see `Detail::AndroidSensorLandscapeOrientation`'s doc comment,
+     * corrected Task ACCEL-004, for the actual mechanism). Mirrors the equivalent
      * accelerometer remap in Accelerometer.cpp; see that file for the full
      * coordinate-system rationale.
      *

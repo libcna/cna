@@ -10,10 +10,28 @@ namespace Microsoft::Devices::Sensors::Detail
      * SDL_ORIENTATION_LANDSCAPE_FLIPPED (Task P5-7), letting the axis-remap
      * math below be unit-tested on any platform without needing a real
      * Android display or an SDL_GetCurrentDisplayOrientation() call. Only
-     * the two rotations AndroidManifest.xml's
-     * android:screenOrientation="sensorLandscape" allows are represented
-     * — see Accelerometer.cpp's/Gyroscope.cpp's own `#ifdef __ANDROID__`
-     * blocks for how SDL's own orientation enum maps to this one.
+     * the two rotations this demo's window is actually expected to reach
+     * are represented — see Accelerometer.cpp's/Gyroscope.cpp's own
+     * `#ifdef __ANDROID__` blocks for how SDL's own orientation enum maps
+     * to this one.
+     *
+     * @note Corrected 2026-07-06 (Task ACCEL-004): the orientation lock is
+     * **not** an `android:screenOrientation` manifest attribute — the demo's
+     * manifest sets none, confirmed by grepping it directly. The actual
+     * mechanism is SDL's own runtime `SDLActivity.setOrientationBis()`
+     * (`org/libsdl/app/SDLActivity.java`): with no `SDL_HINT_ORIENTATIONS`
+     * hint set (confirmed — this codebase never calls
+     * `SDL_SetHint(SDL_HINT_ORIENTATIONS, ...)`) and a non-resizable window
+     * wider than tall, it requests `SCREEN_ORIENTATION_SENSOR_LANDSCAPE`,
+     * which Android itself then rotates between only the two landscape
+     * states (never portrait) based on the accelerometer — this is *why*
+     * only two rotations are ever reached, not a manifest declaration.
+     * Not independently re-verified end-to-end on a real running app this
+     * session (would require tracing the demo's actual window-creation
+     * flags at runtime, plus a real device) — corrected because the old
+     * claim named a manifest attribute that provably does not exist in the
+     * current manifest, not because the two-rotation assumption itself was
+     * found wrong.
      */
     enum class AndroidSensorLandscapeOrientation
     {
