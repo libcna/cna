@@ -33,11 +33,13 @@ framework/runtime, not a game.
   2026-07-07 at the user's explicit request: a fresh structural (every class/struct/enum/exception
   present) + per-member signature audit against FNA, done via five parallel audit forks (11.1-11.3,
   closed, found zero real behavioral bugs -- three justified C++ adaptations documented as
-  non-issues, plus two small convention nits fixed as `P11-SIG-006`), plus 6 real open follow-up
-  task groups (11.4-11.9: `CHECKLIST.md` full re-verification [done, `P11-CHECKLIST-001`],
-  test-assertion precision sweep, RFC-1 crossfeed attempt, XactParser deep re-audit,
-  `FrameworkDispatcher` pump parity, TODO/FIXME sweep) being worked through **one at a time, not
-  batched**, autonomously, per the user's explicit instruction -- the user is away again and any
+  non-issues, plus two small convention nits fixed as `P11-SIG-006`). Of the original 6 follow-up
+  task groups (11.4-11.9), `CHECKLIST.md` full re-verification (`P11-CHECKLIST-001`),
+  test-assertion precision sweep (`P11-TEST-001`), and the XactParser deep re-audit
+  (`P11-XACT-001`, which found 2 real gaps and spawned `P11-XACT-002`/`P11-XACT-003` as concrete
+  implementation follow-ups) are done; `FrameworkDispatcher` pump parity, TODO/FIXME sweep, and
+  the RFC-1 crossfeed attempt remain open, being worked through **one at a time, not batched**,
+  autonomously, per the user's explicit instruction -- the user is away again and any
   task needing to ask a question gets skipped (with a note) in favor of the next one, same as
   Phase 10's continuation. **See §4 for an important process note about how this phase started.**
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
@@ -112,6 +114,17 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11" sections.
 
+- **`P11-XACT-001`** — deep re-audit of `XactParser.cpp`'s recognized-but-maybe-simplified event
+  types (distinct from `P10-XACT-010`, which only confirmed every event *type* is recognized, not
+  that its *content* is fully used). Found 2 real, previously-undocumented gaps, both in the
+  `PlayWave{Track,}{,Effect}Variation` event family: (1) track-level wave-variation selection
+  (`Ordered`/`Random`/`RandomNoRepeats`/`Shuffle`) is entirely absent -- CNA always plays entry 0
+  regardless of the authored algorithm/weights (real FAudio: `FACT_internal.c:190-247`); (2)
+  per-play effect-variation randomization (pitch/volume/filter frequency/Q) is parsed and
+  discarded outright -- CNA always uses the track's plain authored values (real FAudio:
+  `FACT_internal.c:273-410`ish). Both documented as new `CHECKLIST.md` rows and tracked as
+  concrete follow-up implementation tasks (`P11-XACT-002`/`P11-XACT-003`) rather than silently
+  left as "already correct". Audit-only, no code changed; no build/test needed. See `plan_audio.md`.
 - **`P11-TEST-001`** — test assertion precision sweep. Checked all 33 `EXPECT_GT`/`EXPECT_LT`/
   `ASSERT_GT`/`ASSERT_LT` occurrences across 9 Audio test files individually against their real
   fixture inputs (computing the actual centibel/amplitude conversion by hand where needed, not

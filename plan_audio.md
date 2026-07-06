@@ -4429,14 +4429,73 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
 
 ## Phase 11.7 — XactParser deep re-audit for uncommon/unhandled XACT features
 
-* [ ] P11-XACT-001: Re-read FAudio's real `FACT_internal.c` sound-bank/track parsing once more,
+* [x] P11-XACT-001: Re-read FAudio's real `FACT_internal.c` sound-bank/track parsing once more,
   specifically hunting for XACT flags/features `XactParser.cpp` doesn't recognize *at all* (parsed
   as zero/ignored, not just simplified) -- as opposed to the already-documented, deliberate
   simplifications (whole-sound-level RPC instead of per-track, "first PlayWave event each" track
   simplification, etc.).
-  *Status:* Open. Different lens from every prior XACT audit in this file: those focused on
-  behavior CNA already implements being correct; this one hunts for XACT file content CNA might
-  silently misparse or skip because the parser has no case for it at all.
+  *Note:* Closed this pass (audit only -- found 2 real, previously-undocumented gaps; fixing them
+  is scoped as new follow-up tasks below, not attempted inline). `P10-XACT-010` already confirmed
+  every `FACTEVENT_*` type is *recognized* (no event type falls through unparsed); this pass instead
+  checked whether every recognized event type's *content* is actually used, not just walked
+  byte-for-byte to keep the parser in sync. Two real gaps found, both inside the same
+  `FACTEVENT_PLAYWAVETRACKVARIATION`/`PLAYWAVEEFFECTVARIATION`/`PLAYWAVETRACKEFFECTVARIATION`
+  family (`XactParser.cpp`'s `ParseFirstPlayWave`, "Complex track variation — pick first entry" /
+  "effect variation parameters (skip)" comments already hinted at both, but neither was previously
+  written up as an accepted deviation anywhere):
+  1. **Track-level wave-variation selection is entirely absent.** Real FAudio
+     (`FACT_INTERNAL_ActivateEvent`'s "Track Variation" block, `FACT_internal.c:190-247`)
+     implements a genuine per-`variation_type` selection algorithm among a track's `wave_count`
+     candidate waves: `VARIATION_TYPE_ORDERED`/`ORDERED_FROM_RANDOM` cycle sequentially
+     (`evtInst->valuei` incremented, wraps at `wave_count`); `VARIATION_TYPE_RANDOM` does a real
+     weighted-random pick using each entry's authored `weights[i]`
+     (`FACT_INTERNAL_rng() * totalWeight`, same weighted-lottery shape as the sound-level
+     variation table `P9-XACT-002`); `RANDOM_NO_REPEATS`/`SHUFFLE` do the same weighted pick but
+     exclude the previously-selected index. `XactParser.cpp` reads every entry's `wi`/`wb`/
+     min-weight/max-weight byte-for-byte (to stay in sync with the rest of the track) but
+     unconditionally keeps only `j == 0` (`if (j == 0) { waveIdx = wi; wbIdx = wb; }`) --
+     `variation_type` itself is never even read from the event header. A real XACT project
+     authoring more than one wave in a `PlayWaveTrackVariation` event (a common authored pattern
+     for e.g. footstep/impact sound variety within a single track) always plays the exact same
+     first-authored wave in CNA, never varying, regardless of what selection algorithm and
+     weights were authored.
+  2. **Per-play effect-variation randomization (pitch/volume/filter frequency/Q) is parsed and
+     entirely discarded.** Real FAudio (`FACT_internal.c:273-410`-ish, gated per-axis by
+     `VARIATION_FLAG_PITCH`/`VARIATION_FLAG_VOLUME`/`VARIATION_FLAG_FREQUENCY_Q`) draws a fresh
+     random value inside the event's authored `[minPitch,maxPitch]`/`[minVolume,maxVolume]`/
+     `[minFrequency,maxFrequency]`/`[minQFactor,maxQFactor]` ranges every time the event fires
+     (with a separate `_NEW_ON_LOOP` flag family controlling whether looped repeats redraw or
+     keep the first draw), and combines pitch/volume additively or as a fresh replacement per
+     `VARIATION_FLAG_PITCH_ADD`/`VOLUME_ADD`/`FREQUENCY_ADD`/`Q_ADD`. `XactParser.cpp` reads all
+     of `minPitch`/`maxPitch`/`minVol`/`maxVol`/`minFreq`/`maxFreq`/`minQFactor`/`maxQFactor`/
+     `variationFlags` for `PLAYWAVEEFFECTVARIATION`/`PLAYWAVETRACKEFFECTVARIATION` (to stay in
+     sync) but its own comment says exactly what happens to them: "(skip)". A real XACT project
+     authoring effect variation on a `PlayWave*Variation` event plays every instance at the
+     track's plain authored pitch/volume/filter, never the intended per-play randomized range.
+  Both gaps are now documented in `CHECKLIST.md` (new rows) and tracked as concrete follow-up
+  implementation tasks (`P11-XACT-002`/`P11-XACT-003` below) rather than silently left as
+  "already correct" — matching this file's "no silent stubs" rule. No code changed in this task
+  (audit only); no build/test needed.
+* [ ] P11-XACT-002: Implement track-level wave-variation selection (Ordered/OrderedFromRandom/
+  Random/RandomNoRepeats/Shuffle) for `PlayWaveTrackVariation`/`PlayWaveTrackEffectVariation`
+  events, replacing the current always-pick-entry-0 behavior.
+  *Status:* Open. Real feature work, well-specified (FAudio's exact algorithm is fully known and
+  cited above, not a design ambiguity) but nontrivial: needs `XactParser.cpp` to retain the full
+  `wave_indices`/`wavebanks`/`weights` arrays per track-variation event (not collapse to one
+  entry during parsing), plus new per-Cue-instance selection state (`evtInst->valuei`-equivalent,
+  needed for `Ordered`/`Shuffle`/`RandomNoRepeats` to track the *previous* pick across repeated
+  loop iterations -- CNA's whole-sound-level event model doesn't currently retain any per-event
+  instance state, so this needs a new field, likely on `Cue` alongside `rpcCodes_`/
+  `basePitchCents_`). *Files:* `XactTypes.hpp`, `XactParser.cpp`, `Cue.{hpp,cpp}`.
+* [ ] P11-XACT-003: Implement per-play effect-variation randomization (pitch/volume/filter
+  frequency/Q) for `PlayWaveEffectVariation`/`PlayWaveTrackEffectVariation` events, gated by
+  `variationFlags`' `PITCH`/`VOLUME`/`FREQUENCY_Q` and `_ADD`/`_NEW_ON_LOOP` bits.
+  *Status:* Open. Real feature work, well-specified (see `P11-XACT-001`'s citations) but touches
+  several existing invariants that need care: interacts with `Cue`'s existing base-pitch/RPC-pitch
+  combination (`basePitchCents_`) and the filter-frequency/Q RPC override machinery
+  (`P10-FILTER-002/003/004/006`) -- effect variation's randomized pitch/frequency/Q would need to
+  combine with, not silently override, whatever those already contribute. *Files:* `XactTypes.hpp`,
+  `XactParser.cpp`, `Cue.cpp`, `SoundEffectInstance.cpp`.
 
 ## Phase 11.8 — `FrameworkDispatcher` Audio-pump parity
 
