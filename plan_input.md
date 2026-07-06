@@ -244,11 +244,12 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** docs/input-build-and-test.md commands + counts (314/3303) + pinned versions (toolchain + SDL commit) current.
 
 #### INP-0211 — Refresh docs/input-manual-verification-results.md with a current dated build entry
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** Added a fresh dated entry (2026-07-06) to docs/input-manual-verification-results.md: current automated baseline (314 input green shuffle x5, 3303 full, ASan 0 errors) + the still-hardware-gated items; no hardware available in this environment.
 
 #### INP-0212 — Keep docs/platform-input-notes.md marking verified (X11) vs documented/manual cells
 - **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
@@ -273,11 +274,12 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
 
 #### INP-0215 — Add a hardware verification matrix (controller family x feature x status)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** Added a hardware verification matrix (controller family x feature: buttons/sticks/rumble/haptics/lightbar/sensors/GUID/hotplug + touch/gesture/IME/layout) to docs/input-manual-verification-results.md; all cells ⬜ pending real hardware.
 
 #### INP-0216 — Adopt a repo-wide 'verified fact' vs 'intended behavior' convention and apply it to input docs
 - **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
@@ -303,27 +305,30 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** docs/demo-input-checklist.md aligned with examples/demo_input (every checklist item is surfaced; gestures correctly noted as enabled-but-not-read).
 
 #### INP-0222 — Add instructions for recording manual results (template row + fields)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Implement the sample/doc change; keep the demo buildable.
 - **Acceptance:** Sample/doc updated + (for demo) still builds.
 - **Verify:** Read the doc.
+- **Result:** Added a 'Recording a result' template (required entry fields + per-check Method/Result) to docs/input-manual-verification-results.md; never mark a matrix cell without a dated row.
 
 #### INP-0223 — Add a supported-controllers checklist (Xbox/PS/Switch/generic/BT)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Implement the sample/doc change; keep the demo buildable.
 - **Acceptance:** Sample/doc updated + (for demo) still builds.
 - **Verify:** Read the doc.
+- **Result:** Added a supported-controllers checklist (Xbox / DualShock4 / DualSense / Switch Pro / generic / Bluetooth) with the per-family features to verify.
 
 #### INP-0224 — Add a supported-OS checklist (Linux X11/Wayland, Windows, macOS, Android, iOS)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/platform-input-notes.md`
 - **Steps:** Implement the sample/doc change; keep the demo buildable.
 - **Acceptance:** Sample/doc updated + (for demo) still builds.
 - **Verify:** Read the doc.
 
 ### Area: Cleanup (10 tasks)
+- **Result:** Added a supported-OS checklist (Linux X11/Wayland, Windows, macOS, Android, iOS) with the per-OS input specifics to verify.
 
 #### INP-0004 — Resolve any stale 'Status: PARTIAL' comments in headers/sources
 - **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
@@ -1908,18 +1913,20 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridge.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0191 — Verify CMake configures the input target across EASYGL/VULKAN/BGFX/SDL_RENDERER
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Build
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Build
 - **Files:** `CMakeLists.txt`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Result:** Verified the input target configures across all four backends: cmake-build-input-{easygl,vulkan,bgfx,sdlrenderer} (+asan) all present and building CnaTests; input is backend-agnostic (identical filter count on each).
 
 #### INP-0192 — Verify actionable FATAL_ERROR messages for each missing dependency (SDL*/sharp-runtime/easy-gl)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Build
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Build
 - **Files:** `cmake/ThirdPartySDL.cmake, CMakeLists.txt`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Result:** Re-validated the FATAL_ERROR messages (cmake/ThirdPartySDL.cmake + CMakeLists.txt): missing SDL*/sharp-runtime/easy-gl each print a correct copy-pasteable remedy (git submodule update / git clone <path> / alternative backend). See INPUT-BUILD-005.
 
 #### INP-0196 — Pin third_party/SDL to an explicit upstream SDL3 release tag; record it
 - **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Build
@@ -1931,11 +1938,12 @@ citation recorded in `docs/input-fna-fidelity.md`.
 ### Area: CI (8 tasks)
 
 #### INP-0194 — Confirm the Linux/X11 CI matrix runs ctest -L input under xvfb on all backends
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** CI
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** CI
 - **Files:** `.github/workflows/input-ci.yml`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Result:** CI (.github/workflows/input-ci.yml) runs `xvfb-run -a ctest --test-dir build -L input` on the EASYGL / SDL_RENDERER / VULKAN / bgfx / ASan matrix jobs.
 
 #### INP-0195 — Add a CI step that fails if submodules are missing or SDL is not at the pinned rev
 - **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** CI
@@ -1959,18 +1967,20 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Verify:** CI run for the branch is `success`; or config validated locally.
 
 #### INP-0199 — Define the 'Input stable' gate: 4-backend + sanitizer + determinism + dated hardware entry
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** CI
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** CI
 - **Files:** `docs/input-build-and-test.md`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Result:** Defined the 'Input stable' gate in docs/input-pre-merge-checklist.md: 4-backend green + sanitizer green + determinism (shuffle x5) green + a current dated hardware-verification entry (real controller + touchscreen + IME). Until the manual entry exists, the subsystem is 'code-complete + headless-verified', not 'Input stable'.
 
 #### INP-0200 — Author a pre-merge regression checklist (frozen API, no SDL leak, deviations, counts, filter green)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** CI
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** CI
 - **Files:** `docs/input-pre-merge-checklist.md`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Result:** Authored docs/input-pre-merge-checklist.md: machine-checkable gates (frozen API, no SDL/Internal leak, enum freeze, 0 parity gaps, 0 coverage orphans, 4-backend + sanitizer + determinism green, deviations intact, counts current) + the FNA-cited behavioral-change gate.
 
 #### INP-0203 — Add Windows CI path plan (or document why it is manual)
 - **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** CI
