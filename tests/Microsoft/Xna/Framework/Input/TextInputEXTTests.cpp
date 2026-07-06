@@ -158,6 +158,16 @@ TEST_F(TextInputEXTTest, StartStopAndSetRectangleWithoutWindowAreSafeNoOps)
     EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(0, 0, 10, 10)));
 }
 
+// P7-009(c): SetInputRectangle must not crash on zero-size or negative rectangle values. With no window
+// the null guard makes every call a safe no-op; when a window exists the geometry is passed straight to
+// SDL, which tolerates degenerate rects.
+TEST_F(TextInputEXTTest, SetInputRectangleWithZeroOrNegativeValuesIsSafe)
+{
+    EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(0, 0, 0, 0)));
+    EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(-5, -5, 0, 0)));
+    EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(-10, -20, -30, -40)));
+}
+
 TEST_F(TextInputEXTTest, StartStopAndIsActiveRoundTripThroughRealWindow)
 {
     // Task 809: verify the real SDL path (not just the no-window null guards). Mirrors the

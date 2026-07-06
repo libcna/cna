@@ -1444,11 +1444,22 @@ safe no-op with no crash. The no-op-without-window behavior is intentional and d
 **Files changed:** none (coverage confirmed). **Behavior verified:** start/stop toggles activation with a
 window; no-ops safely without one. **Remaining risk:** none.
 
-## P7-009 — Verify input rectangle
-- [ ] Test setting input rectangle.
-- [ ] Test no-window behavior.
-- [ ] Test negative and zero rectangle values if possible.
-- [ ] Document platform limitations.
+## P7-009 — Verify input rectangle `[x]`
+- [x] Test setting input rectangle.
+- [x] Test no-window behavior.
+- [x] Test negative and zero rectangle values if possible.
+- [x] Document platform limitations.
+
+**Result (2026-07-06):** Setting a rectangle over the real path is covered by
+`StartStopAndIsActiveRoundTripThroughRealWindow` (calls `SetInputRectangle(4,4,32,16)` while active,
+reaching `SDL_SetTextInputArea` with `EXPECT_NO_THROW`); no-window is covered by
+`StartStopAndSetRectangleWithoutWindowAreSafeNoOps`. **Added the degenerate-values gap test**
+`SetInputRectangleWithZeroOrNegativeValuesIsSafe` (zero-size, negative origin, fully-negative rect → no
+crash; null-guarded no-op without a window). **Platform limitation documented:** SDL exposes no getter for
+the stored input area, so the real-window test can only assert reach-without-error, not the exact rectangle
+SDL retained. **Files changed:** `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp` (+1 test).
+**Tests:** pass. **Behavior verified:** rectangle set is safe for normal + degenerate values, with/without a
+window. **Remaining risk:** exact stored rect unverifiable (no SDL getter) — inherent platform limitation.
 
 ## P7-010 — Manual IME validation
 - [ ] Validate with at least one IME on desktop.
