@@ -469,10 +469,24 @@ Position`; `GetHashCode` → `GetHashCodeMatchesFnaIdPlusPositionFormula` (FNA `
 thoroughly covered — GetHashCode-formula test added in the earlier P5-004). **Behavior verified:** ctors +
 previous-location + equality/hash/ToString FNA parity. **Remaining risk:** none.
 
-## A5-002 — `TouchCollection` (struct) `[ ]`
-- [ ] FNA `Input/Touch/TouchCollection.cs`; CNA `Touch/TouchCollection.hpp`/`.cpp`; test `TouchInputTests.cpp`.
-- [ ] Members: ctors, Count/IsConnected/IsReadOnly, `operator[]` (const+mutable), Contains, FindById, CopyTo,
+## A5-002 — `TouchCollection` (struct) `[x]`
+- [x] FNA `Input/Touch/TouchCollection.cs`; CNA `Touch/TouchCollection.hpp`/`.cpp`; test `TouchInputTests.cpp`.
+- [x] Members: ctors, Count/IsConnected/IsReadOnly, `operator[]` (const+mutable), Contains, FindById, CopyTo,
   IndexOf, Add/Clear/Remove/RemoveAt/Insert, begin/end, empty. Per-member.
+
+**Result (2026-07-06):** All **FNA `TouchCollection.cs` members present**: `Count`→`getCountProperty`,
+`IsConnected`→`getIsConnectedProperty`, `IsReadOnly`→`getIsReadOnlyProperty`, `this[]`→`operator[]`
+(const+mutable), Contains, **FindById** (verified **FNA/XNA 4.0 HAS it** at `TouchCollection.cs:112` with
+`out TouchLocation` → CNA maps to `TouchLocation&`, so it is **correctly NOT `NOXNA`** — strict XNA), CopyTo,
+IndexOf, Add/Clear/Remove/RemoveAt/Insert. CNA STL-ergonomics extras `begin`/`end`/`empty` are correctly
+`NOXNA` (replace FNA's `GetEnumerator`). **17 `TouchCollectionTest` cases** cover every member:
+Count/empty (`CountAndEmptyReflectContents`), IsConnected/IsReadOnly (+ advisory-mutation `...IsAdvisoryAnd
+MutationStillSucceedsLikeFna`), indexer (const+mutable+OOB throw), Contains, FindById, CopyTo (append/empty/
+OOB/non-zero-index), IndexOf, Add/Clear/Remove/RemoveAt/Insert, begin/end iteration order (P5-003), empty
+iteration. **Documented deviation:** `std::vector`-backed (vs FNA's null-backed default list) →
+mutable+advisory `IsReadOnly` (DEC / P5-001). **Members reviewed:** all. **Files changed:** none (perfect,
+no gap; corrected a false-alarm — FindById is genuine FNA API, not a missing NOXNA tag). **Behavior
+verified:** full member + FNA parity. **Remaining risk:** none.
 
 ## A5-003 — `TouchPanelCapabilities` (struct) `[ ]`
 - [ ] FNA `Input/Touch/TouchPanelCapabilities.cs`; CNA `Touch/TouchPanelCapabilities.hpp`/`.cpp`; test
