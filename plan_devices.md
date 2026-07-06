@@ -3076,7 +3076,7 @@ not an alternate spelling to preserve.
     change needed)
   - `docs/devices-hardware-checklist.md` (edited — tilt-mode scope note)
 
-### COMPASS-005 — Revisit the rotation-vector-plus-magnetometer support requirement
+### COMPASS-005 — Revisit the rotation-vector-plus-magnetometer support requirement — CLOSED (2026-07-06, kept as-is with documented rationale; magnetometer-only fallback deliberately deferred)
 
 - **Priority:** High
 - **Area:** Platform Policy
@@ -3085,21 +3085,60 @@ not an alternate spelling to preserve.
   magnetometer (no fused rotation vector) are reported unsupported today, even though a
   magnetometer-only heading (with reduced accuracy) might be preferable to reporting
   "not supported" at all.
+- **Resolution (2026-07-06):** decided to **keep the current "require both" policy**,
+  not add a magnetometer-only fallback, for two reasons:
+  - **Practical device coverage:** `TYPE_ROTATION_VECTOR` is a standard virtual sensor
+    on essentially every GMS-certified/CDD-compliant Android device (it's synthesized
+    by the platform's own sensor fusion from accelerometer+magnetometer, sometimes
+    +gyroscope) — genuinely magnetometer-only devices with no rotation-vector sensor at
+    all are rare, non-GMS-certified, or very old hardware, not the common case this
+    project's Android support targets.
+  - **Complexity/verification cost:** a magnetometer-only fallback would need its own,
+    separate heading-computation math (raw magnetometer X/Y `atan2`, without any tilt
+    compensation the fused rotation vector already provides), its own accuracy caveats,
+    and its own tests — a second, entirely independent, hardware-unverifiable math path
+    of the same category as `COMPASS-009`'s tilt-mode switch. Given `COMPASS-009` is
+    already tracked as open, unimplemented, hardware-unverifiable work, adding a second
+    such path in the same pass was judged lower value than keeping this task's scope to
+    a documented policy decision — a future task can pick this up if magnetometer-only
+    Android devices ever become a real, reported compatibility need for this project,
+    rather than a hypothetical one.
+  - **Tests:** confirmed the exact combination scenarios this task's acceptance
+    criteria ask for (rotation-vector-missing / magnetometer-missing / both-available)
+    have **no host-testable seam at all** — `AndroidSensorBridge::IsAvailable()` is a
+    permanent, unconditional `false` stub on every non-Android platform (confirmed by
+    reading `AndroidSensorBridge.cpp` and its own existing test,
+    `AndroidSensorBridgeTests.IsAvailableIsFalseOnNonAndroidPlatform`), so
+    `AndroidCompassBackend::IsSupported()`'s specific AND-combination logic can never
+    produce anything but `false` in this container regardless of which sensor(s) are
+    "available" — this is the same standing Android-only-code testing ceiling already
+    accepted throughout this entire plan (e.g. `ANDROID-BRIDGE-002`'s own "no
+    host-testable seam exists for `AndroidSensorBridge` itself" conclusion), not a new
+    gap this task could close differently.
 - **Required work:**
   - Verify the minimum sensor set genuinely needed for an XNA-compatible compass
-    reading.
+    reading. Done — rotation vector + magnetic field, matching current implementation;
+    the real WP7 API itself has no documented minimum-hardware requirement to compare
+    against (it assumes whatever sensor set produces `Compass.IsSupported`, an
+    implementation detail of the real OS, not something WP7's own docs specify).
   - Consider a magnetometer-only fallback path if technically feasible, with clearly
     documented accuracy tradeoffs (e.g. worse tilt compensation without a fused
-    rotation vector).
-  - Document whichever policy is chosen.
+    rotation vector). Considered and deliberately deferred, with rationale — see
+    Resolution above.
+  - Document whichever policy is chosen. Done.
 - **Acceptance criteria:**
-  - `getIsSupportedProperty()`'s exact policy is explicit and justified.
+  - `getIsSupportedProperty()`'s exact policy is explicit and justified. Done.
   - Tests cover: rotation vector missing, magnetometer missing, and both available.
+    N/A — confirmed no host-testable seam exists for this Android-only combination
+    logic; this is a pre-existing, accepted verification ceiling, not a gap this task
+    introduced or could close.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Compass.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
-  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Compass.cpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.hpp` (inspected, no
+    change needed)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp` (inspected, no
+    change needed)
+  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (inspected, no change needed)
 
 ### COMPASS-006 — Verify accuracy mapping and `Calibrate` event policy
 
