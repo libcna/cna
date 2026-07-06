@@ -748,6 +748,14 @@ namespace CNA::Internal::Backends::Bgfx
                 envMapAmountUnif_    = bgfx::createUniform("u_envMapAmount",   bgfx::UniformType::Vec4);
                 envMapSpecularUnif_  = bgfx::createUniform("u_envMapSpecular", bgfx::UniformType::Vec4);
                 envMapSampler_       = bgfx::createUniform("s_envMap",         bgfx::UniformType::Sampler);
+
+                // 1x1 opaque white fallback texture (Task 379) — sampled whenever a draw's
+                // texture0 is null, matching EasyGL/Vulkan's identical fallback.
+                const uint8_t whitePixel[4] = {255, 255, 255, 255};
+                const bgfx::Memory* whiteMem = bgfx::copy(whitePixel, sizeof(whitePixel));
+                defaultWhiteTexture3D_ = bgfx::createTexture2D(
+                    1, 1, false, 1, bgfx::TextureFormat::RGBA8,
+                    BGFX_TEXTURE_NONE | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP, whiteMem);
             }
 
             if (!bgfx::isValid(textureSampler))
@@ -807,6 +815,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyU(envMapAmountUnif_);
         destroyU(envMapSpecularUnif_);
         destroyU(envMapSampler_);
+        if (bgfx::isValid(defaultWhiteTexture3D_)) { bgfx::destroy(defaultWhiteTexture3D_); defaultWhiteTexture3D_ = BGFX_INVALID_HANDLE; }
         destroyP(colored3DProgram_);
         destroyP(textured3DProgram_);
         destroyP(coloredTextured3DProgram_);
@@ -1468,10 +1477,19 @@ namespace CNA::Internal::Backends::Bgfx
         if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
-            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            if (bgfx::isValid(texColor3DSampler_))
             {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
             }
             if (params.texture1 && bgfx::isValid(texColor3DSampler2_))
             {
@@ -1493,10 +1511,19 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(lightingEn3DUnif_, litEn);
             if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
                 bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
-            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            if (bgfx::isValid(texColor3DSampler_))
             {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
             }
             bgfx::submit(currentViewId_, skinned3DProgram_);
         }
@@ -1520,10 +1547,19 @@ namespace CNA::Internal::Backends::Bgfx
             float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],
                                    params.envMapSpecular[2], 0.0f };
             bgfx::setUniform(envMapSpecularUnif_, specular);
-            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            if (bgfx::isValid(texColor3DSampler_))
             {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
             }
             if (params.envMap && bgfx::isValid(envMapSampler_))
             {
@@ -1536,10 +1572,19 @@ namespace CNA::Internal::Backends::Bgfx
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             bgfx::setUniform(alphaTestUnif_, params.alphaTest);
-            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            if (bgfx::isValid(texColor3DSampler_))
             {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
             }
             bgfx::submit(currentViewId_, alphaTest3DProgram_);
         }
@@ -1558,10 +1603,19 @@ namespace CNA::Internal::Backends::Bgfx
             float litEn[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(lightingEn3DUnif_, litEn);
 
-            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            if (bgfx::isValid(texColor3DSampler_))
             {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
             }
             bgfx::submit(currentViewId_, litTextured3DProgram_);
         }
@@ -1571,20 +1625,38 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
-            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            if (bgfx::isValid(texColor3DSampler_))
             {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
             }
             bgfx::submit(currentViewId_, coloredTextured3DProgram_);
         }
         else if (params.textureEnabled && bgfx::isValid(textured3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
-            if (params.texture0 && bgfx::isValid(texColor3DSampler_))
+            if (bgfx::isValid(texColor3DSampler_))
             {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
             }
             bgfx::submit(currentViewId_, textured3DProgram_);
         }

@@ -280,6 +280,10 @@ namespace CNA::Internal::Backends::Bgfx
         /// BasicEffect.VertexColorEnabled gate for the no-texture colored3D path (Task 364).
         bgfx::UniformHandle vertexColorEn3DUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle texColor3DSampler_  = BGFX_INVALID_HANDLE;
+        /// 1x1 opaque white fallback, sampled whenever a draw's texture0 is null (Task 379) —
+        /// matches EasyGL/Vulkan's identical fallback instead of leaving the previous draw's
+        /// texture bound (stale, undefined behavior).
+        bgfx::TextureHandle defaultWhiteTexture3D_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle alphaTestUnif_      = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle texColor3DSampler2_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle bonesUnif_          = BGFX_INVALID_HANDLE;
