@@ -2970,7 +2970,7 @@ not an alternate spelling to preserve.
     change needed)
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (inspected, no change needed)
 
-### COMPASS-003 — Add optional declination/location support plan
+### COMPASS-003 — Add optional declination/location support plan — CLOSED (2026-07-06, decision re-confirmed, consumption plan added)
 
 - **Priority:** Medium
 - **Area:** Compass Accuracy
@@ -2980,22 +2980,43 @@ not an alternate spelling to preserve.
   location/GPS out of `Microsoft::Devices::Sensors` entirely. This task's job is to
   confirm that decision is still the right call for `Compass` specifically, not to
   silently re-open or silently re-confirm it without checking.
+- **Resolution (2026-07-06):** re-read `docs/location-future-plan.md` in full — its
+  core reasoning (GPS/location is a genuinely separate real WP7 assembly/namespace,
+  `System.Device.Location`, not part of `Microsoft.Devices.Sensors` at all; no location
+  member should ever be added to any `Microsoft::Devices::Sensors` class) still holds
+  and still applies directly to `Compass::TrueHeading` — re-confirmed against
+  `COMPASS-002`'s own fresh citation trail (`TrueHeading` needing a location source for
+  declination is exactly the scenario this document already anticipated). **Decision:
+  still no** — CNA does not implement real declination now, and this task does not
+  schedule it; `docs/location-future-plan.md` remains a placeholder for if it's ever
+  separately scoped, not a commitment.
+  - **Added the piece this document didn't previously spell out:** exactly how
+    `Compass::TrueHeading` would consume a future location layer without polluting the
+    strict XNA `Compass` surface — a new "How `Compass::TrueHeading` would consume this,
+    if ever built" section in `docs/location-future-plan.md`. Summary: an optional,
+    separately-injected dependency behind a narrow `Detail::`-only interface (e.g.
+    `IDeclinationSource`, not the full `GeoCoordinateWatcher` shape), mirroring the
+    existing `SetBackendForTesting()` injection pattern already used for `Compass`'s
+    main backend — no new public member on `Compass` itself, and a game that never
+    touches location sees identical behavior to today.
 - **Required work:**
   - Re-read `docs/location-future-plan.md` and confirm its reasoning still applies to
-    `Compass::TrueHeading` specifically.
+    `Compass::TrueHeading` specifically. Done.
   - Decide whether CNA should ever implement true-heading calculation, and if so, plan
     how a location/declination dependency could be added without polluting the strict
     XNA `Compass` surface (e.g. as an optional, separately-injected `NOXNA` dependency).
-  - If the answer remains "no," document that explicitly as this task's outcome.
+    Done — decision is "not now, but here's how, if ever."
+  - If the answer remains "no," document that explicitly as this task's outcome. Done.
 - **Acceptance criteria:**
   - The plan states clearly, with current reasoning, whether true heading is or is not
-    planned to be supported.
+    planned to be supported. Done.
   - No fake/approximated true heading is ever reported without a clearly documented
-    rationale for the approximation.
+    rationale for the approximation. Confirmed, unchanged (`COMPASS-002`).
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
-  - `docs/location-future-plan.md`
-  - `plan_devices.md`
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp` (inspected, no
+    change needed)
+  - `docs/location-future-plan.md` (edited — new consumption-plan section)
+  - `plan_devices.md` (this entry)
 
 ### COMPASS-004 — Verify Android heading math on hardware
 

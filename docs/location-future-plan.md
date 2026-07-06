@@ -75,6 +75,38 @@ a starting sketch, re-verify before actually implementing):
 - `CLLocation` → `GeoCoordinate` is a near-direct field mapping (`coordinate.latitude`/
   `.longitude`, `altitude`, `horizontalAccuracy`, `verticalAccuracy`, `speed`, `course`).
 
+## How `Compass::TrueHeading` would consume this, if ever built (Task COMPASS-003, 2026-07-06)
+
+Re-confirmed 2026-07-06 that this document's core reasoning still applies specifically
+to `Compass::TrueHeading` — no change to the decision, just re-checked rather than
+silently re-asserted. `Detail::AndroidCompassBackend::PublishReading()` currently sets
+`TrueHeading = MagneticHeading` (`COMPASS-002`, confirmed reasonable — the real API
+never documents a "declination unknown" fallback because it assumes location is always
+available). If a future task ever implements the `System::Device::Location` layer
+sketched above, `Compass`'s consumption of it should be:
+
+- An **optional, separately-injected dependency** passed into `AndroidCompassBackend`
+  (or a successor), never a hard requirement `Compass::Start()` fails without — a game
+  that never touches location should see identical behavior to today (`TrueHeading ==
+  MagneticHeading`), not a new failure mode.
+- The dependency should be expressed as a small, narrow interface (e.g. something like
+  `Detail::IDeclinationSource` returning the current magnetic declination for a given
+  coordinate/date, using WMM/IGRF-style declination models — not the full
+  `GeoCoordinateWatcher` surface directly), so `AndroidCompassBackend` depends on
+  "give me a declination value" rather than the entire location subsystem's shape —
+  mirroring this codebase's existing `Detail::ICompassBackend`/`IMotionBackend`
+  seam-injection pattern (`SetBackendForTesting()`) rather than inventing a new
+  dependency-injection style.
+- This keeps the strict XNA `Compass` public surface completely unpolluted — no new
+  public method/property/constructor parameter on `Compass` itself; the injection point
+  would live entirely in `Detail::`, exactly like `Compass::SetBackendForTesting()`
+  already does for its main backend.
+- **Still not implemented, still not scheduled** — this is a plan for *if* it's ever
+  built, not a commitment that it will be. The answer to "should CNA implement real
+  declination right now" remains **no**, per this document's existing reasoning
+  (`System::Device::Location` doesn't exist yet at all, and building it is a
+  substantially separate, unscoped effort from anything in `plan_devices.md`).
+
 ## Explicitly not doing right now
 
 - No `GeoCoordinateWatcher`/`GeoCoordinate`/any `System::Device::Location` type exists
