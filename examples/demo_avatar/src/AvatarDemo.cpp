@@ -25,7 +25,23 @@ namespace
 AvatarDemo::AvatarDemo(AvatarBodyType bodyType, std::string wardrobeHairStyle)
     : bodyType_(bodyType)
     , wardrobeHairStyle_(std::move(wardrobeHairStyle))
+    , clipNames_{"Stand0", "Stand1", "Stand2", "Stand3", "Stand4", "Stand5", "Stand6", "Stand7",
+                 "Wave", "Clap", "Celebrate"}
 {
+    // Task 11.23b: gendered presets are baked only into their own gender's content
+    // (Female* for Female, Male* for Male, once Task 11.23c adds the latter) — appending
+    // them here keeps a single clipNames_ list in sync with whichever body actually got
+    // loaded, instead of hardcoding a fixed list that would throw on the wrong gender.
+    if (bodyType_ == AvatarBodyType::Female)
+    {
+        for (const char* name : {"FemaleIdleCheckNails", "FemaleIdleLookAround", "FemaleIdleShiftWeight",
+                                  "FemaleIdleFixShoe", "FemaleAngry", "FemaleConfused", "FemaleLaugh",
+                                  "FemaleCry", "FemaleShocked", "FemaleYawn"})
+        {
+            clipNames_.emplace_back(name);
+        }
+    }
+
     static constexpr int FPS = 60;
     Game::setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(static_cast<long>(500000L * 20 / FPS)));
 }

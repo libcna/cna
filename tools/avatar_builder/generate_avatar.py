@@ -87,7 +87,7 @@ def build_avatar(gender, height_scale=None, shoulder_width_scale=None, head_scal
         armature_obj, materials, bones=bones, height_scale=height_scale, styles=garment_styles)
     hair_obj = generate_hair.build_hair(
         armature_obj, materials, bones=bones, head_scale=head_scale, style=hair_style)
-    generate_animations.build_animations(armature_obj)
+    generate_animations.build_animations(armature_obj, gender=gender)
 
     objects = [armature_obj, body_obj, hair_obj, *garments.values()]
     return armature_obj, objects

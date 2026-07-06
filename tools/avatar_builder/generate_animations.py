@@ -287,6 +287,162 @@ def build_stand7(armature_obj):
     return action
 
 
+def build_female_idle_check_nails(armature_obj):
+    """FemaleIdleCheckNails: head/neck tilt down and slightly to the side, held, as if
+    looking down at one's own hand — Neck local-X nod plus a small local-Z tilt, held
+    at the bottom rather than continuously oscillating like the Stand* idles. 70 frames,
+    plays once and returns to rest."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "FemaleIdleCheckNails")
+
+    nod, tilt = math.radians(18.0), math.radians(8.0)
+    for frame, n, t in ((1, 0.0, 0.0), (15, nod, tilt), (55, nod, tilt), (70, 0.0, 0.0)):
+        _keyframe_euler(armature_obj, "Neck", frame, (n, 0.0, t))
+
+    return action
+
+
+def build_female_idle_look_around(armature_obj):
+    """FemaleIdleLookAround: Neck turns to look left, holds, then right, holds, then
+    back to center — local-Y twist, distinct timing/holds from Stand2/Stand7's
+    continuous sway. 130 frames, plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "FemaleIdleLookAround")
+
+    turn = math.radians(35.0)
+    keys = ((1, 0.0), (20, turn), (45, turn), (65, 0.0), (85, -turn), (110, -turn), (130, 0.0))
+    for frame, angle in keys:
+        _keyframe_euler(armature_obj, "Neck", frame, (0.0, angle, 0.0))
+
+    return action
+
+
+def build_female_idle_shift_weight(armature_obj):
+    """FemaleIdleShiftWeight: Hips sway in X while Spine1 twists (local Y) the opposite
+    phase — a slower, larger-amplitude combination than Stand1/Stand6's own Hips+Spine1
+    pairings, timed differently so it doesn't read as a duplicate. Loops seamlessly over
+    120 frames."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "FemaleIdleShiftWeight")
+
+    sway, twist = 0.025, math.radians(5.0)
+    for frame, x, angle in ((1, 0.0, 0.0), (30, sway, -twist), (60, 0.0, 0.0), (90, -sway, twist), (120, 0.0, 0.0)):
+        _keyframe_location(armature_obj, "Hips", frame, (x, 0.0, 0.0))
+        _keyframe_euler(armature_obj, "Spine1", frame, (0.0, angle, 0.0))
+
+    return action
+
+
+def build_female_idle_fix_shoe(armature_obj):
+    """FemaleIdleFixShoe: torso bends forward at Spine (local X) as if reaching down
+    toward a shoe, holds, then straightens back up — approximated entirely on the torso
+    (no leg bones), since this rig has no IK to plant a foot while bending. 80 frames,
+    plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "FemaleIdleFixShoe")
+
+    bend = math.radians(35.0)
+    for frame, angle in ((1, 0.0), (20, bend), (55, bend), (80, 0.0)):
+        _keyframe_euler(armature_obj, "Spine", frame, (angle, 0.0, 0.0))
+
+    return action
+
+
+def build_female_angry(armature_obj):
+    """FemaleAngry: a quick, sharp, short-amplitude Spine twist repeated a few times —
+    an indignant "huff" shake — plus a short Hips jerk in sync, faster and snappier than
+    any Stand* idle's slow sway. 40 frames, plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "FemaleAngry")
+
+    twist = math.radians(10.0)
+    jerk = 0.01
+    keys = (
+        (1, 0.0, 0.0), (6, -twist, jerk), (12, twist, jerk), (18, -twist, jerk),
+        (24, twist, jerk), (30, 0.0, 0.0), (40, 0.0, 0.0),
+    )
+    for frame, angle, z in keys:
+        _keyframe_euler(armature_obj, "Spine", frame, (0.0, angle, 0.0))
+        _keyframe_location(armature_obj, "Hips", frame, (0.0, 0.0, z))
+
+    return action
+
+
+def build_female_confused(armature_obj):
+    """FemaleConfused: a single head tilt that holds (not oscillating back and forth
+    like Stand2's continuous curious tilt) combined with a small Neck twist — a
+    "puzzled" tilt-and-hold. 90 frames, plays once and returns to rest."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "FemaleConfused")
+
+    tilt, twist = math.radians(14.0), math.radians(10.0)
+    for frame, t, y in ((1, 0.0, 0.0), (20, tilt, twist), (65, tilt, twist), (90, 0.0, 0.0)):
+        _keyframe_euler(armature_obj, "Head", frame, (0.0, y, t))
+
+    return action
+
+
+def build_female_laugh(armature_obj):
+    """FemaleLaugh: Spine1 bounces quickly on its local-Z axis (not Stand0's slower
+    Hips Z-bob) in sync with a small Head bob — a "shaking with laughter" motion. 40
+    frames, plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "FemaleLaugh")
+
+    lean = math.radians(6.0)
+    keys = ((1, 0.0), (6, lean), (12, -lean), (18, lean), (24, -lean), (30, lean), (40, 0.0))
+    for frame, angle in keys:
+        _keyframe_euler(armature_obj, "Spine1", frame, (0.0, 0.0, angle))
+        _keyframe_euler(armature_obj, "Head", frame, (0.0, 0.0, angle * 0.5))
+
+    return action
+
+
+def build_female_cry(armature_obj):
+    """FemaleCry: Neck droops forward and stays down (not returning to neutral until
+    the very end, unlike every oscillating Stand* idle) while Spine slouches forward a
+    little — a sad slump. 100 frames, plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "FemaleCry")
+
+    droop, slouch = math.radians(22.0), math.radians(10.0)
+    for frame, n, s in ((1, 0.0, 0.0), (25, droop, slouch), (80, droop, slouch), (100, 0.0, 0.0)):
+        _keyframe_euler(armature_obj, "Neck", frame, (n, 0.0, 0.0))
+        _keyframe_euler(armature_obj, "Spine", frame, (s, 0.0, 0.0))
+
+    return action
+
+
+def build_female_shocked(armature_obj):
+    """FemaleShocked: a sharp backward Spine lean (negative local X) with the head
+    snapping back too, held briefly, then a slower return to rest — a startled recoil.
+    50 frames, plays once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "FemaleShocked")
+
+    lean = math.radians(-12.0)
+    for frame, angle in ((1, 0.0), (6, lean), (20, lean), (50, 0.0)):
+        _keyframe_euler(armature_obj, "Spine", frame, (angle, 0.0, 0.0))
+        _keyframe_euler(armature_obj, "Neck", frame, (angle, 0.0, 0.0))
+
+    return action
+
+
+def build_female_yawn(armature_obj):
+    """FemaleYawn: head/neck tilt back (positive local X, "looking up") together with a
+    small Spine1 backward stretch, slow to rise and slow to release. 110 frames, plays
+    once."""
+    _reset_pose(armature_obj)
+    action = _create_action(armature_obj, "FemaleYawn")
+
+    tilt, stretch = math.radians(20.0), math.radians(6.0)
+    for frame, n, s in ((1, 0.0, 0.0), (40, tilt, stretch), (70, tilt, stretch), (110, 0.0, 0.0)):
+        _keyframe_euler(armature_obj, "Neck", frame, (-n, 0.0, 0.0))
+        _keyframe_euler(armature_obj, "Spine1", frame, (-s, 0.0, 0.0))
+
+    return action
+
+
 def build_clap(armature_obj):
     """Both arms raise together to roughly chest height (UpperArm.L/R, via
     _raise_upper_arm) and hold, while both forearms (LowerArm.L/R, via
@@ -338,43 +494,70 @@ def build_celebrate(armature_obj):
     return action
 
 
-def build_animations(armature_obj):
-    """Builds Stand0-Stand7/Wave/Clap/Celebrate actions and returns a {name: action}
-    dict. Safe to call repeatedly in the same Blender session — replaces existing
-    actions of the same name rather than stacking duplicates. Leaves
-    `armature_obj.animation_data.action` set to whichever was built last; callers that
-    need a specific one active should set it explicitly."""
-    return {
-        "Stand0": build_stand0(armature_obj),
-        "Stand1": build_stand1(armature_obj),
-        "Stand2": build_stand2(armature_obj),
-        "Stand3": build_stand3(armature_obj),
-        "Stand4": build_stand4(armature_obj),
-        "Stand5": build_stand5(armature_obj),
-        "Stand6": build_stand6(armature_obj),
-        "Stand7": build_stand7(armature_obj),
-        "Wave": build_wave(armature_obj),
-        "Clap": build_clap(armature_obj),
-        "Celebrate": build_celebrate(armature_obj),
-    }
-
-
-_REQUIRED_ACTIONS = {
-    "Stand0", "Stand1", "Stand2", "Stand3", "Stand4", "Stand5", "Stand6", "Stand7",
-    "Wave", "Clap", "Celebrate",
+_GENERIC_BUILDERS = {
+    "Stand0": build_stand0,
+    "Stand1": build_stand1,
+    "Stand2": build_stand2,
+    "Stand3": build_stand3,
+    "Stand4": build_stand4,
+    "Stand5": build_stand5,
+    "Stand6": build_stand6,
+    "Stand7": build_stand7,
+    "Wave": build_wave,
+    "Clap": build_clap,
+    "Celebrate": build_celebrate,
 }
+
+_FEMALE_BUILDERS = {
+    "FemaleIdleCheckNails": build_female_idle_check_nails,
+    "FemaleIdleLookAround": build_female_idle_look_around,
+    "FemaleIdleShiftWeight": build_female_idle_shift_weight,
+    "FemaleIdleFixShoe": build_female_idle_fix_shoe,
+    "FemaleAngry": build_female_angry,
+    "FemaleConfused": build_female_confused,
+    "FemaleLaugh": build_female_laugh,
+    "FemaleCry": build_female_cry,
+    "FemaleShocked": build_female_shocked,
+    "FemaleYawn": build_female_yawn,
+}
+
+# Populated by Task 11.23c.
+_MALE_BUILDERS = {}
+
+
+def build_animations(armature_obj, gender=None):
+    """Builds the generic Stand0-Stand7/Wave/Clap/Celebrate actions (always), plus
+    `gender`'s own gendered `AvatarAnimationPreset` subset when `gender` is "female" or
+    "male" (Task 11.23b/11.23c) — `FemaleAngry`/`MaleAngry` etc. are gender-specific
+    presets in the real enum, so they are only baked into that gender's content, not
+    both. `gender=None` (the default) builds only the generic set, e.g. for this
+    module's own __main__ smoke test. Returns a {name: action} dict. Safe to call
+    repeatedly in the same Blender session — replaces existing actions of the same name
+    rather than stacking duplicates. Leaves `armature_obj.animation_data.action` set to
+    whichever was built last; callers that need a specific one active should set it
+    explicitly."""
+    builders = dict(_GENERIC_BUILDERS)
+    if gender == "female":
+        builders.update(_FEMALE_BUILDERS)
+    elif gender == "male":
+        builders.update(_MALE_BUILDERS)
+    return {name: fn(armature_obj) for name, fn in builders.items()}
+
 
 if __name__ == "__main__":
     armature_obj = generate_skeleton.build_skeleton()
-    actions = build_animations(armature_obj)
+    actions = {}
+    actions.update(build_animations(armature_obj, gender="female"))
+    actions.update(build_animations(armature_obj, gender="male"))
+    required = set(_GENERIC_BUILDERS) | set(_FEMALE_BUILDERS) | set(_MALE_BUILDERS)
 
     print(f"Built {len(actions)} actions: {sorted(actions)}")
     for name, action in actions.items():
         frame_start, frame_end = action.frame_range
         print(f"  {name}: frame_range = ({frame_start:.1f}, {frame_end:.1f})")
 
-    assert _REQUIRED_ACTIONS.issubset(actions), "missing required actions"
+    assert required.issubset(actions), f"missing required actions: {sorted(required - set(actions))}"
     for name, action in actions.items():
         frame_start, frame_end = action.frame_range
         assert frame_end > frame_start, f"{name} has a zero/negative frame range"
-    print(f"OK: {', '.join(sorted(_REQUIRED_ACTIONS))} actions exist with a nonzero frame range.")
+    print(f"OK: all {len(required)} generic+gendered actions exist with a nonzero frame range.")

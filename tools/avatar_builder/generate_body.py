@@ -89,7 +89,11 @@ def add_joint_sphere(name, location, radius):
 # on each side rigidly to their own segment's bone, so bending tears the seam open (the
 # confirmed elbow/sleeve tear, Task 11.6/11.15/11.18). Shoulder/UpperArm is included
 # defensively even though no current animation rotates Shoulder relative to its parent.
+# Hips/Spine and Spine/Spine1 were added after Task 11.23b's FemaleIdleFixShoe (a 35 deg
+# Spine forward bend) revealed the same class of tear at the torso, confirming this
+# isn't an arms/legs-only problem -- any animated joint needs to be in this list.
 BEND_JOINTS = [
+    ("Hips", "Spine"), ("Spine", "Spine1"),
     ("Shoulder.L", "UpperArm.L"), ("Shoulder.R", "UpperArm.R"),
     ("UpperArm.L", "LowerArm.L"), ("UpperArm.R", "LowerArm.R"),
     ("UpperLeg.L", "LowerLeg.L"), ("UpperLeg.R", "LowerLeg.R"),
