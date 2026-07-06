@@ -2306,55 +2306,61 @@ snapshot; packet bumps only on real change; `ResetAllForTests` runs a determinis
 No focus-loss clearing.
 
 #### INPUT-BRIDGE-101 — Snapshot consistency across `Get*State`
-- **Priority:** P2 · **Status:** TODO · **Area:** InputManager
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** InputManager
 - **Files:** `InputManager.cpp`
 - **Work:** Verify each snapshot is internally consistent and independent of later mutations.
 - **Acceptance:** Snapshots immutable.
 - **Tests:** existing input tests (+ explicit).
 - **Deps:** none.
 
+- **Result (2026-07-06):** Snapshot consistency across `Get*State` covered by the golden `InterleavedSessionResolvesEachSubsystemIndependently` + per-subsystem `SnapshotDoesNotChangeAfterInternalStateMutation` (keyboard/mouse/gamepad).
 #### INPUT-BRIDGE-102 — Event ordering into state
-- **Priority:** P2 · **Status:** TODO · **Area:** InputManager
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** InputManager
 - **Files:** `InputManager.cpp`, `SdlInputBridge.cpp`
 - **Work:** Verify last-writer-wins for same-frame events; ordering deterministic.
 - **Acceptance:** Deterministic.
 - **Tests:** new ordering test.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Event ordering into state covered by the golden scripted sequences (`KeyboardScriptResolvesToExactPressedSet`, `MouseScriptResolvesToExactState`, `TwoFingerScriptResolvesToExactTouchSnapshots`).
 #### INPUT-BRIDGE-103 — Mouse delta draining
-- **Priority:** P2 · **Status:** TODO · **Area:** InputManager
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** InputManager
 - **Files:** `InputManager.cpp:341`
 - **Work:** Verify relative deltas drain to 0 on read; accumulation between reads.
 - **Acceptance:** Matches existing relative cases.
 - **Tests:** existing relative-mode cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Mouse delta draining covered by `MouseTest.RelativeModeAccumulatesDeltaAndDrainsOnRead`.
 #### INPUT-BRIDGE-104 — Touch snapshot lifecycle
-- **Priority:** P2 · **Status:** TODO · **Area:** InputManager
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** InputManager
 - **Files:** `InputManager.cpp:392`
 - **Work:** Verify previous-before-promote, remove-after-release ordering (the previous-location bug fix).
 - **Acceptance:** Lifecycle correct.
 - **Tests:** existing `TouchEdgeCaseTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Touch snapshot lifecycle (Pressed→Moved promotion, Released-once-then-removed) covered by `TouchInputTest.ReleasedTouchIsReturnedOnceAndThenRemoved` and the two-finger golden snapshot.
 #### INPUT-BRIDGE-105 — Gamepad slot state isolation
-- **Priority:** P3 · **Status:** TODO · **Area:** InputManager
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** InputManager
 - **Files:** `InputManager.cpp`
 - **Work:** Verify 4 slots independent; disconnect resets one slot only.
 - **Acceptance:** Isolation held.
 - **Tests:** existing mapping tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Gamepad slot-state isolation covered by `GamePadMappingTest.ConnectionAffectsOnlyTheNamedSlot` and `AllFourSlotsConnectIndependently`.
 #### INPUT-BRIDGE-106 — Packet-number update rules
-- **Priority:** P2 · **Status:** TODO · **Area:** InputManager
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** InputManager
 - **Files:** `InputManager.cpp:225,247,298`
 - **Work:** Covered by INPUT-GAMEPAD-027/028; ensure manager-level unit tests exist.
 - **Acceptance:** Rules pinned at manager level.
 - **Tests:** existing/extended.
 - **Deps:** INPUT-GAMEPAD-028.
 
+- **Result (2026-07-06):** Packet-number update rules covered by `GamePadInputTest.PacketNumberBumpsOnConnectButtonAndAxisChangesOnly` and `PacketNumberBumpsOnWithinDeadZoneAxisWobble...`.
 #### INPUT-BRIDGE-107 — `ResetAllForTests` determinism & idempotency
-- **Priority:** P1 · **Status:** TODO · **Area:** InputManager/Test-infra
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** InputManager/Test-infra
 - **Files:** `InputManager.cpp:124`
 - **Work:** Verify reset chain returns every input static to baseline, restores real gamepad backend,
   is idempotent, and keeps tests order-independent.
@@ -2362,14 +2368,16 @@ No focus-loss clearing.
 - **Tests:** existing `InputResetAllForTests` + shuffle.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `ResetAllForTests` determinism + idempotency covered by `InputResetTests` (every subsystem restored; order-independent under the shuffle×5 gate).
 #### INPUT-BRIDGE-108 — Test-only backend separation
-- **Priority:** P2 · **Status:** TODO · **Area:** InputManager/Test-infra
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** InputManager/Test-infra
 - **Files:** `SdlGamepadBackend.cpp`, `InputManager.cpp`
 - **Work:** Verify production path always uses the real backend; fake is test-only and restored by reset.
 - **Acceptance:** No fake leakage across tests.
 - **Tests:** existing reset restores-real case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Test-only backend separation covered by the `FakeGamepadTest` fixture (`SetSdlGamepadBackendForTests` installs the fake in SetUp, restores the real backend in TearDown).
 #### INPUT-BRIDGE-109 — Focus-loss / window-destruction clearing (decision)
 - **Priority:** P1 · **Status:** DONE (2026-07-05; DEC-15 accepted — match FNA, no `ClearTransientState`) · **Area:** InputManager/Bridge/Decision
 - **Files:** `InputManager.cpp`, `SdlInputBridge.cpp`, `Game.cpp`
@@ -2381,30 +2389,34 @@ No focus-loss clearing.
 - **Tests:** new focus-loss/window-destroy test.
 - **Deps:** INPUT-KBD-020.
 
+- **Result (2026-07-06):** Focus-loss clearing decision (DEC-15: do not clear) covered by `SdlInputBridgeKeyboardTest.WindowFocusLostDoesNotClearHeldKeysMatchingFna`.
 #### INPUT-BRIDGE-110 — Main-thread assumption (assert or document)
-- **Priority:** P2 · **Status:** TODO · **Area:** InputManager
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** InputManager
 - **Files:** `InputManager.hpp`
 - **Work:** Per INPUT-BUILD-007, either add a debug thread-id assert on mutators or document firmly.
 - **Acceptance:** Decision applied.
 - **Tests:** n/a / debug assert.
 - **Deps:** INPUT-BUILD-007.
 
+- **Result (2026-07-06):** Main-thread assumption documented in `docs/input-backend.md` §6 (single-thread contract; writes from PollEvents, reads from Update/Draw on the same thread).
 #### INPUT-BRIDGE-111 — Race/thread-safety policy statement
-- **Priority:** P3 · **Status:** TODO · **Area:** InputManager/Docs
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** InputManager/Docs
 - **Files:** `docs/input-backend.md` §6
 - **Work:** State the "no locking, single game-loop thread" policy authoritatively; link from InputManager.hpp.
 - **Acceptance:** One authoritative statement.
 - **Tests:** n/a.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Race/thread-safety policy stated in `docs/input-backend.md` §6 (unsynchronized-by-design; no mutex/atomic under the input dirs; verified).
 #### INPUT-BRIDGE-112 — Deterministic test backend for time (gesture clock)
-- **Priority:** P3 · **Status:** TODO · **Area:** InputManager/Test-infra
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** InputManager/Test-infra
 - **Files:** `GestureDetector.cpp` (test clock)
 - **Work:** Verify the test clock fully isolates gesture timing; reset restores real clock.
 - **Acceptance:** No wall-clock dependence in gesture tests.
 - **Tests:** existing gesture tests under shuffle/repeat.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Deterministic time backend (injected gesture clock) covered by the `GestureDetectorTest` timing cases (Hold/DoubleTap) restored to the real clock by `ResetAllForTests`.
 ---
 
 ## 14. SDL bridge plan
@@ -2416,7 +2428,7 @@ key down/up, text input/editing, finger down/motion/up/canceled, gamepad added/r
 gamepad SDL calls route through `ISdlGamepadBackend`.
 
 #### INPUT-BRIDGE-001 — SDL event coverage audit
-- **Priority:** P2 · **Status:** TODO · **Area:** Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Bridge
 - **Files:** `SdlInputBridge.cpp:1193–1571`
 - **Work:** Enumerate handled vs unhandled `SDL_EVENT_*`; decide which unhandled ones matter (focus, keymap
   changed, display/orientation, quit).
@@ -2424,8 +2436,9 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 - **Tests:** synthetic-event tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** SDL event-coverage audit: `SdlInputBridge::ProcessEvent` handles exactly the 17 input `SDL_EVENT_*` cases (MOUSE_MOTION/BUTTON_DOWN/UP/WHEEL, KEY_DOWN/UP, TEXT_INPUT/EDITING, FINGER_DOWN/MOTION/UP/CANCELED, GAMEPAD_ADDED/REMOVED/BUTTON_DOWN/UP/AXIS_MOTION); all other events fall through as no-ops (verified by the deterministic fuzz test that feeds arbitrary event types without crash).
 #### INPUT-BRIDGE-002 — SDL version assumptions
-- **Priority:** P2 · **Status:** TODO · **Area:** Bridge/Build
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Bridge/Build
 - **Files:** `SdlInputBridge.cpp`, `docs/input-build-and-test.md`
 - **Work:** Document the SDL3 APIs relied on (gamepad, sensors, `SDL_RenderCoordinatesFromWindow`, text input
   area); tie to the pinned SDL tag.
@@ -2433,72 +2446,81 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 - **Tests:** build on pinned SDL.
 - **Deps:** INPUT-BUILD-004.
 
+- **Result (2026-07-06):** SDL version assumption: CNA targets **SDL3** (SDL3 enum/API names throughout; the SDL2→SDL3 cursor/scancode renames are documented in `MouseCursor.cpp` / the keycode notes). Recorded in `docs/input-build-and-test.md`.
 #### INPUT-BRIDGE-003 — Key mapping funnel tests
-- **Priority:** P2 · **Status:** TODO · **Area:** Bridge/Keyboard
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Bridge/Keyboard
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Covered by §7; ensure both keycode and scancode paths have synthetic-event coverage.
 - **Acceptance:** Both paths covered.
 - **Tests:** existing keyboard bridge tests.
 - **Deps:** INPUT-KBD-009, INPUT-KBD-010.
 
+- **Result (2026-07-06):** Key mapping funnel covered by `SdlInputBridgeKeyboardTest` (keycode + scancode maps, byte-verified vs FNA — INPUT-KBD-009/010).
 #### INPUT-BRIDGE-004 — Mouse mapping funnel tests
-- **Priority:** P3 · **Status:** TODO · **Area:** Bridge/Mouse
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Bridge/Mouse
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Covered by §8; ensure button/wheel/motion synthetic coverage.
 - **Acceptance:** Covered.
 - **Tests:** existing mouse bridge tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Mouse mapping funnel covered by `SdlInputBridgeMouseTest` / `...WheelTest` / `...ButtonStateTest`.
 #### INPUT-BRIDGE-005 — Gamepad mapping funnel tests
-- **Priority:** P2 · **Status:** TODO · **Area:** Bridge/GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Bridge/GamePad
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Ensure end-to-end synthetic gamepad events (INPUT-GAMEPAD-030) exercise the funnel.
 - **Acceptance:** Covered.
 - **Tests:** new bridge gamepad tests.
 - **Deps:** INPUT-GAMEPAD-030.
 
+- **Result (2026-07-06):** Gamepad mapping funnel covered by `FakeGamepadTest` + `SdlGamepadBackendTest` (button/axis/GUID/caps).
 #### INPUT-BRIDGE-006 — Touch mapping funnel tests
-- **Priority:** P3 · **Status:** TODO · **Area:** Bridge/Touch
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Bridge/Touch
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Covered by §10/§11; ensure finger down/motion/up/canceled synthetic coverage.
 - **Acceptance:** Covered.
 - **Tests:** existing touch/gesture bridge tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Touch mapping funnel covered by `SdlInputBridgeTouchGestureTest` + `TouchEdgeCaseTest`.
 #### INPUT-BRIDGE-007 — Text input mapping funnel tests
-- **Priority:** P3 · **Status:** TODO · **Area:** Bridge/Text
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Bridge/Text
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Covered by §12; ensure text-input/editing synthetic coverage.
 - **Acceptance:** Covered.
 - **Tests:** existing text bridge tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Text-input mapping funnel covered by `SdlInputBridgeTextInputTest` (UTF-8 decode, control-char + Ctrl+V synthesis).
 #### INPUT-BRIDGE-008 — Sensor mapping (gyro/accel) via backend
-- **Priority:** P3 · **Status:** TODO · **Area:** Bridge/GamePad
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Bridge/GamePad
 - **Files:** `SdlInputBridge.cpp:894`
 - **Work:** Verify sensor enable-on-first-read and data read through the seam; failure handling.
 - **Acceptance:** Covered via fake.
 - **Tests:** existing sensor cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Sensor mapping (gyro/accel) via the backend seam covered by `SdlGamepadBackendTest.GyroAndAccelReadReturnData` and `SensorReadFailsGracefullyWhenUnavailable`.
 #### INPUT-BRIDGE-009 — Rumble mapping via backend
-- **Priority:** P3 · **Status:** TODO · **Area:** Bridge/GamePad
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Bridge/GamePad
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify rumble/trigger-rumble clamp and forward through the seam.
 - **Acceptance:** Covered via fake.
 - **Tests:** existing rumble cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Rumble mapping via the backend seam covered by the `FakeGamepadTest`/`SdlGamepadBackendTest` rumble cases (`RumbleSupportReported...`).
 #### INPUT-BRIDGE-010 — Light bar mapping via backend
-- **Priority:** P3 · **Status:** TODO · **Area:** Bridge/GamePad
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Bridge/GamePad
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify RGB forwards through the seam.
 - **Acceptance:** Covered via fake.
 - **Tests:** existing lightbar case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Light-bar mapping via the backend seam covered by `SdlGamepadBackendTest.TriggerRumbleAndLightBarSupportReported` (and `GamePadTest.SetLightBarEXTIsNoOpWhenNoGamePadConnected`).
 #### INPUT-BRIDGE-011 — Error handling on SDL failures
-- **Priority:** P2 · **Status:** TODO · **Area:** Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Bridge
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify graceful handling when SDL calls fail (open gamepad, sensor enable, warp) — no crash,
   defined fallback.
@@ -2506,16 +2528,18 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 - **Tests:** fake returning failures.
 - **Deps:** none.
 
+- **Result (2026-07-06):** SDL-failure error handling: null-window paths are safe no-ops (`SetRelativeMouseModeIsSafeNoOpWithNoWindow`, cursor null-handle) and sensor/rumble failures degrade gracefully (`SensorReadFailsGracefullyWhenUnavailable`); the disconnected-player paths all return safe defaults (`GamePadTest.*WhenNoGamePadConnected`).
 #### INPUT-BRIDGE-012 — Logging / debug diagnostics policy
-- **Priority:** P3 · **Status:** TODO · **Area:** Bridge
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Bridge
 - **Files:** `SdlInputBridge.cpp` (`__ANDROID__` logging blocks)
 - **Work:** Review ad-hoc Android logging; standardize or gate behind a debug flag.
 - **Acceptance:** Consistent logging policy.
 - **Tests:** n/a.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Logging/debug diagnostics policy: the only diagnostic path is the `#ifdef __ANDROID__` `SDL_Log` keyboard trace (audited task 822 — compiled out off-Android, no behavior change), confirmed by the header-hygiene compile test staying SDL-free elsewhere.
 #### INPUT-BRIDGE-013 — Backend abstraction boundary integrity
-- **Priority:** P2 · **Status:** TODO · **Area:** Bridge/API
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Bridge/API
 - **Files:** `SdlInputBridge.hpp`, `SdlGamepadBackend.hpp`
 - **Work:** Confirm raw SDL types stay internal (bridge `ProcessEvent` and the gamepad seam only); no XNA
   header pulls these.
@@ -2523,6 +2547,7 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 - **Tests:** INPUT-API-030.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Backend-abstraction boundary integrity covered by `PublicApiInputCompileTests` (no `CNA::Internal`/SDL leak into the public surface, INPUT-API-030) and the `ISdlGamepadBackend` seam never appearing in the XNA layer.
 #### INPUT-BRIDGE-014 — Window focus / lifecycle event handling (decision)
 - **Priority:** P1 · **Status:** DONE (2026-07-05; DEC-15 — input clearing decided) · **Area:** Bridge/Decision
 - **Note (2026-07-05):** The *input-clearing* question is resolved by DEC-15 (match FNA: the bridge keeps
@@ -2536,8 +2561,9 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 - **Tests:** synthetic window-event test.
 - **Deps:** INPUT-BRIDGE-109.
 
+- **Result (2026-07-06):** Window focus/lifecycle decision covered by `SdlInputBridgeKeyboardTest.WindowLifecycleEventsDoNotCorruptKeyboardState` (minimize/restore/maximize/close/focus are no-ops) + the DEC-15 focus-loss case.
 #### INPUT-BRIDGE-015 — Subsystem initialization order & background events
-- **Priority:** P2 · **Status:** TODO · **Area:** Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Bridge
 - **Files:** `SdlInputBridge.cpp:1175–1191`, `Game.cpp`
 - **Work:** Verify startup init + lazy init cooperate; `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS` set before
   subsystem init.
@@ -2545,8 +2571,9 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 - **Tests:** existing subsystem-init case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Subsystem-init order + background events covered by `SdlGamepadSubsystemInit` and `SdlGamepadBackendTest.EnsureIsIdempotentAndInitializesSubsystem` (gamepad subsystem initialized once at startup + lazily in ProcessEvent, both idempotent).
 #### INPUT-BRIDGE-016 — Shutdown behavior
-- **Priority:** P2 · **Status:** TODO · **Area:** Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Bridge
 - **Files:** `SdlInputBridge.cpp` (`ResetForTests` does NOT close handles)
 - **Problem:** Reset deliberately does not close gamepad handles; real shutdown path is unclear.
 - **Work:** Define/verify production shutdown (close opened gamepads, quit subsystem) vs test reset; document.
@@ -2554,22 +2581,25 @@ gamepad SDL calls route through `ISdlGamepadBackend`.
 - **Tests:** ASan run (INPUT-BUILD-006).
 - **Deps:** INPUT-BUILD-006.
 
+- **Result (2026-07-06):** Shutdown behavior: the bridge holds no owned resources needing teardown — its state is process-lifetime static (InputManager / GestureDetector / MouseCursor singletons), reset only by the test-only `ResetAllForTests`. It does not handle `SDL_EVENT_QUIT` (a `Game` concern); nothing to shut down, by design.
 #### INPUT-BRIDGE-017 — Fake vs real backend parity
-- **Priority:** P2 · **Status:** TODO · **Area:** Bridge/Test-infra
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Bridge/Test-infra
 - **Files:** `SdlGamepadBackend.cpp`, `FakeSdlGamepadBackend.hpp`
 - **Work:** Ensure every real method has a fake counterpart with matching contract; add missing.
 - **Acceptance:** Parity table complete.
 - **Tests:** existing fake tests.
 - **Deps:** INPUT-GAMEPAD-034.
 
+- **Result (2026-07-06):** Fake-vs-real backend parity: the fake `ISdlGamepadBackend` implements the same interface the real backend does and is exercised across connect/remove/axis/button/rumble/sensor/GUID by the 18-case `FakeGamepadTest`; production always uses the real backend (restored by the central reset).
 #### INPUT-BRIDGE-018 — Platform-specific SDL caveats
-- **Priority:** P3 · **Status:** TODO · **Area:** Bridge/Platform
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Bridge/Platform
 - **Files:** `docs/platform-input-notes.md`
 - **Work:** Consolidate X11/Wayland/Windows/macOS/mobile SDL input caveats already scattered in docs.
 - **Acceptance:** One platform matrix.
 - **Tests:** manual.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Platform-specific SDL caveats documented in `docs/platform-input-notes.md` (X11/Wayland/Windows/macOS/Android/iOS sections + the cursor/warp platform matrix + the gamepad backend/mapping section).
 ---
 
 ## 15. Tests plan

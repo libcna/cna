@@ -51,6 +51,12 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-BRIDGE cluster verified (28 tasks):** mapped BRIDGE-001..018 + 101..112 to the SdlInputBridge*
+  funnel suites, golden/fuzz/reset tests, and the fake-backend seam — snapshot consistency, event ordering,
+  delta drain, touch lifecycle, slot isolation, packet-number, ResetAllForTests, focus/lifecycle decisions,
+  main-thread + thread-safety policy, per-modality funnels, sensor/rumble/lightbar via backend, boundary
+  integrity, init order, shutdown (no teardown by design), fake-vs-real parity. SDL event-coverage audit:
+  17 `SDL_EVENT_*` cases handled, rest no-op. Docs-only. Bridge cluster complete.
 - **INPUT-TEXT cluster verified (10 tasks) + threading note:** mapped TEXT-001..011 to the TextInputEXT +
   bridge text suites (Start/Stop, TextInput/TextEditing multicast dispatch, SetInputRectangle, WindowHandle,
   UTF-8→UTF-16 1/2/3-byte + astral surrogate pairs, control-char + Ctrl+V synthesis, DEC-08 malformed→U+FFFD)
