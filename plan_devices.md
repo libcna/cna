@@ -1160,26 +1160,74 @@ not an alternate spelling to preserve.
   - `include/Microsoft/Devices/VibrateController.hpp` (edited — doc comment citation)
   - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (edited)
 
-### VIB-007 — Define repeated `Start`/`Stop` behavior
+### VIB-007 — Define repeated `Start`/`Stop` behavior — CLOSED (2026-07-06)
 
 - **Priority:** High
 - **Area:** Vibration API
 - **Problem:** Repeated vibration calls must have fully deterministic, tested behavior
   across backend changes from `VIB-002`.
+- **Resolution (2026-07-06):** `VibrateController` itself tracks **no** "currently
+  vibrating" session state — confirmed by reading its full implementation
+  (post-`VIB-002`): every public method forwards unconditionally to `backend_`, every
+  time, with no guard against calling `Start()` again while a previous one might still
+  be "active." What re-`Start()`-ing while already vibrating actually does physically
+  is therefore entirely the active backend's own responsibility, not
+  `VibrateController`'s.
+  - **For `Detail::SdlHapticVibrateBackend` specifically, confirmed by reading
+    `third_party/SDL/src/haptic/SDL_haptic.c`'s actual `SDL_PlayHapticRumble()`
+    implementation directly (not assumed):** calling it again while a rumble is already
+    playing calls `SDL_UpdateHapticEffect()` (applies the new strength/length to the
+    existing effect slot) followed by `SDL_RunHapticEffect(haptic, rumble_id, 1)` again
+    — i.e. **it restarts the effect with the new parameters from time zero**; it does
+    not ignore the new call or queue it behind the still-running one. This is the real,
+    current, unchanged-by-`VIB-002` behavior (the logic moved verbatim into the new
+    backend class).
+  - **`Stop()` before any `Start()`:** forwards to `backend_->Stop()` unconditionally;
+    for `SdlHapticVibrateBackend`, `haptic_` is still null in that case, so it's a
+    silent no-op (unchanged pre-existing behavior, already tested by
+    `StopBeforeAnyStartDoesNotThrow`). Added
+    `StopBeforeAnyStartStillForwardsToBackend` (fake-backend) to additionally prove
+    `VibrateController` itself reaches the backend even when nothing was ever started
+    — a distinct guarantee from "the real backend happens to no-op safely."
+  - **Repeated `Stop()`:** each call forwards independently; `haptic_` is never reset to
+    null by `Stop()` itself, so later calls keep safely no-op-ing on
+    `SDL_StopHapticEffects()`/`DestroyLeftRightEffectIfAny()` (already tested by
+    `RepeatedStartStopSequencesDoNotDegrade`). Added
+    `RepeatedStopCallsEachForwardToBackend` (fake-backend, 3 calls, asserts
+    `StopCallCount == 3`) to pin the exact per-call forwarding count down, not just
+    "doesn't crash."
+  - **`Stop()` after a backend failure:** re-examined — `Detail::IVibrateBackend` has
+    no distinct "backend failed" signal at all (matching `VIB-005`/`VIB-009`'s identical
+    finding for `Start()`/`IsSupported()`); there is no separate scenario for a fake to
+    simulate beyond the already-covered "backend never had anything to stop" case
+    above. Not a gap — documented so a future reader doesn't go looking for an
+    error-injection test this interface's shape doesn't support.
+  - Added `StartWhileAlreadyStartedForwardsANewCallWithLatestParametersEveryTime`
+    (2 `Start()` calls with different parameters; asserts `StartCallCount == 2` and the
+    *latest* duration/intensity reached the backend) and
+    `StopAfterStartForwardsBothCallsIndependently` (`Start()` then `Stop()`; asserts
+    both counts are each exactly 1) — 4 new tests total this task.
+  - Verified: 52/52 `VibrateControllerTests` (up from 48), clean (0 issues) under
+    `devices-asan` with `detect_leaks=1` — no backend resource leak across the new
+    repeated Start/Stop scenarios.
 - **Required work:**
   - Verify behavior for `Start()` while already vibrating (does it restart the timer,
-    ignore the new call, or something else?).
+    ignore the new call, or something else?). Done — restarts, confirmed by reading
+    SDL3's actual `SDL_PlayHapticRumble()` source.
   - Verify `Stop()` before any `Start()`, repeated `Stop()`, and `Stop()` after a backend
-    failure.
-  - Add fake-backend tests for all of the above.
+    failure. Done for the first two; the third isn't a modeled scenario at the
+    interface level (see Resolution above).
+  - Add fake-backend tests for all of the above. Done — 4 new tests.
 - **Acceptance criteria:**
-  - Repeated calls behave consistently and are documented.
-  - Tests do not require real hardware.
+  - Repeated calls behave consistently and are documented. Done.
+  - Tests do not require real hardware. Done — all via the fake backend.
   - No backend resource leaks occur across repeated Start/Stop cycles (verify under
-    `devices-asan`).
+    `devices-asan`). Done — 0 issues.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/VibrateController.cpp`
-  - `tests/Microsoft/Devices/VibrateControllerTests.cpp`
+  - `src/Microsoft/Devices/VibrateController.cpp` (inspected, no change needed)
+  - `third_party/SDL/src/haptic/SDL_haptic.c` (read-only research — vendored, not
+    edited; confirms the real restart-on-re-Start() behavior)
+  - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (edited)
 
 ### VIB-008 — Make left/right motor support explicitly `NOXNA`
 

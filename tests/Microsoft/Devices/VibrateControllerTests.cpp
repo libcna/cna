@@ -651,3 +651,68 @@ TEST(VibrateControllerTests, RepeatedBackendSwapsDoNotLeakOrCrash)
     // destructor ran -- confirm it's still usable.
     EXPECT_NO_THROW((void)VibrateController::getDefaultProperty()->getIsSupportedProperty());
 }
+
+// ---------------------------------------------------------------------------
+// Task VIB-007: repeated Start()/Stop() behavior, verified via the fake
+// backend. VibrateController itself tracks no "currently vibrating" session
+// state at all -- every call forwards unconditionally to backend_, every
+// time. What "Start() while already vibrating" actually does physically is
+// therefore entirely the active backend's own responsibility. For
+// Detail::SdlHapticVibrateBackend specifically (confirmed by reading
+// third_party/SDL/src/haptic/SDL_haptic.c's SDL_PlayHapticRumble()
+// directly): calling it again while a rumble is already playing calls
+// SDL_UpdateHapticEffect() (applies the new strength/length) followed by
+// SDL_RunHapticEffect() again -- i.e. it restarts the effect with the new
+// parameters from time zero, it does not ignore the new call or queue it
+// behind the still-running one. This isn't independently observable through
+// this fake (the fake has no timing/effect-slot model to restart), so these
+// tests instead pin down the contract VibrateController itself guarantees:
+// every Start()/Stop() call reaches the backend, unconditionally, with the
+// exact arguments given.
+// ---------------------------------------------------------------------------
+
+TEST(VibrateControllerTests, StartWhileAlreadyStartedForwardsANewCallWithLatestParametersEveryTime)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(100), 0.2f);
+    controller->Start(TimeSpan::FromMilliseconds(200), 0.9f);
+
+    EXPECT_EQ(fake->StartCallCount, 2);
+    EXPECT_EQ(fake->LastStartDuration, TimeSpan::FromMilliseconds(200));
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.9f);
+}
+
+TEST(VibrateControllerTests, StopBeforeAnyStartStillForwardsToBackend)
+{
+    ScopedFakeVibrateBackend fake;
+
+    VibrateController::getDefaultProperty()->Stop();
+
+    EXPECT_EQ(fake->StopCallCount, 1);
+}
+
+TEST(VibrateControllerTests, RepeatedStopCallsEachForwardToBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Stop();
+    controller->Stop();
+    controller->Stop();
+
+    EXPECT_EQ(fake->StopCallCount, 3);
+}
+
+TEST(VibrateControllerTests, StopAfterStartForwardsBothCallsIndependently)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(50));
+    controller->Stop();
+
+    EXPECT_EQ(fake->StartCallCount, 1);
+    EXPECT_EQ(fake->StopCallCount, 1);
+}
