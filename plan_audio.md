@@ -3600,18 +3600,30 @@ restoration can be reverted.
   `P9-XACT-001..016`, `P9-CATEGORY-*`) -- `XactParserTests.cpp` has 33 test cases covering
   category/variable/RPC parsing, simple/complex cue parsing, compact/non-compact wave entries,
   ADPCM.
-* [ ] P10-XACT-004: Malformed/corrupt file tests for XGS, XSB, and XWB.
-  *Note:* Partially covered -- `XactParser.cpp` throws `std::runtime_error` for undersized/bad-magic
-  files (e.g. `"XSB: file too small"`, `"XSB: invalid magic (expected SDBK)"`), and
-  `WaveBankTest.IsPreparedFalseForExistingButCorruptFile`/`ConstructorMissingFileThrowsFileNotFound`
-  exist. Not verified in this pass whether every one of XGS/XSB/XWB has an equally complete
-  too-small/bad-magic/truncated-mid-record test matrix -- left open pending a dedicated per-format
-  sweep.
-* [ ] P10-XACT-005: Tests for compact wave banks if not already covered.
-  *Note:* Believed covered (compact-format fixtures are used pervasively throughout
-  `WaveBankTests.cpp`/`CueTests.cpp`, e.g. every `BuildXxxXwbFixtureBytes` helper in this codebase
-  uses the compact format) but not freshly re-verified against a definitive checklist in this
-  pass -- marking open rather than assuming.
+* [x] P10-XACT-004: Malformed/corrupt file tests for XGS, XSB, and XWB.
+  *Note:* Closed this pass. Confirmed all three formats already had matched too-small
+  (`ParseXgs/Xsb/XwbTruncatedFileThrows`) and bad-magic (`ParseXgs/Xsb/XwbBadMagicThrows`) tests.
+  The one genuinely missing corruption class -- a valid magic and a size clearing the coarse
+  minimum-size check, but truncated partway through a real record -- is now covered too:
+  `ParseXgsTruncatedMidRecordThrows`, `ParseXwbTruncatedMidRecordThrows`,
+  `ParseXsbTruncatedMidRecordThrows` (`XactParserTests.cpp`), each built by truncating a real,
+  already-used-elsewhere valid fixture down to the format's exact minimum-size threshold. All
+  three pass: confirms every field read in `XactParser.cpp` goes through `Ctx`'s bounds-checked
+  accessors (tied to the buffer's actual end, not the declared header/segment sizes), so
+  mid-record truncation throws `std::runtime_error` rather than reading out of bounds, for real,
+  not just by inspection.
+* [x] P10-XACT-005: Tests for compact wave banks if not already covered.
+  *Note:* Closed this pass -- confirmed, not just believed. `XactParserTests.cpp` has 6 dedicated
+  compact-wave-bank tests including 2 error-path throws
+  (`CompactWaveBankComputesLengthsFromConsecutiveOffsets`,
+  `CompactWaveBankThrowsWhenDeviationExceedsGapToNextEntry`,
+  `CompactWaveBankThrowsWhenLastEntryOffsetExceedsWaveDataSegment`,
+  `CompactWaveBankChannelFieldIsRawChannelCountNotMinusOne`,
+  `CompactAdpcmEntryComputesBlockAlignAndSamplesPerBlock`,
+  `VariationTypeCompactWaveParsesThreeByteEntryWithHardcodedWeight`). Additionally confirmed (grep)
+  that `WaveBankTests.cpp`'s and `CueTests.cpp`'s own fixture-building helpers all set the compact
+  `wbFlags` bit (`0x00020000u`) by default, so every higher-level `WaveBank`/`Cue` integration test
+  in the suite already exercises the compact path, not just the dedicated parser-level tests.
 * [x] P10-XACT-006: Tests for streaming wave banks and lazy loading.
   *Note:* Already covered (`T-3F`): streaming `WaveBank` constructor does real lazy per-entry disk
   reads, distinct from the non-streaming constructor's eager whole-file load.

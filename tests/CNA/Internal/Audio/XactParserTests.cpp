@@ -1608,6 +1608,36 @@ TEST(XactParserTest, ParseXsbBadMagicThrows)
     EXPECT_THROW(ParseXsb(data), std::runtime_error);
 }
 
+// P10-XACT-004: a distinct corruption class from "too small to even have a header" (10 bytes)
+// and "bad magic" above -- a real, valid magic and a size that clears the coarse minimum-size
+// check, but truncated partway through a real record. Every field read in XactParser.cpp goes
+// through Ctx::u8()/u16()/u32()/f32()/skip()/seek(), each of which bounds-checks against the
+// buffer's actual end (not the declared header/segment sizes), so this must throw
+// std::runtime_error rather than read out of bounds -- exercised here rather than just assumed.
+TEST(XactParserTest, ParseXgsTruncatedMidRecordThrows)
+{
+    std::vector<uint8_t> full = BuildXgsFixture();
+    ASSERT_GT(full.size(), 0x50u); // the real fixture must exceed the coarse minimum-size check
+    std::vector<uint8_t> truncated(full.begin(), full.begin() + 0x50);
+    EXPECT_THROW(ParseXgs(truncated), std::runtime_error);
+}
+
+TEST(XactParserTest, ParseXwbTruncatedMidRecordThrows)
+{
+    std::vector<uint8_t> full = BuildCompactXwbFixture();
+    ASSERT_GT(full.size(), 52u);
+    std::vector<uint8_t> truncated(full.begin(), full.begin() + 52);
+    EXPECT_THROW(ParseXwb(truncated), std::runtime_error);
+}
+
+TEST(XactParserTest, ParseXsbTruncatedMidRecordThrows)
+{
+    std::vector<uint8_t> full = BuildXsbWithVariationOfType(3);
+    ASSERT_GT(full.size(), 0x50u);
+    std::vector<uint8_t> truncated(full.begin(), full.begin() + 0x50);
+    EXPECT_THROW(ParseXsb(truncated), std::runtime_error);
+}
+
 TEST(XactParserTest, XgsParsesCategoryAndVariable)
 {
     const XgsData xgs = ParseXgs(BuildXgsFixture());
