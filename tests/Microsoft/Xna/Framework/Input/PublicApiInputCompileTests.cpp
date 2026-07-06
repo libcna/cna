@@ -92,6 +92,31 @@ namespace
     static_assert(not_object_v<TouchPanelCapabilities>);
 }
 
+// INPUT-API-028 — namespace + include-path placement guard.
+//
+// Every public Input type must live in `Microsoft::Xna::Framework::Input`, and every Touch type in
+// `…::Input::Touch`, with the header path mirroring the namespace (verified against FNA: 18 top-level +
+// 8 Touch .cs share exactly these two namespaces). The includes above already prove each header is
+// reachable at its mirrored path; these fully-qualified references additionally pin the *namespace* of
+// each type — naming `…::Input::Touch::GestureSample` (etc.) fails to compile if a type is ever moved to
+// the wrong namespace. `sizeof(T) > 0` resolves uniformly for both the value structs/classes and enums.
+namespace ns_placement_guard
+{
+    namespace X = Microsoft::Xna::Framework::Input;
+    namespace T = Microsoft::Xna::Framework::Input::Touch;
+
+    static_assert(sizeof(X::ButtonState) > 0 && sizeof(X::Buttons) > 0 && sizeof(X::KeyState) > 0
+                  && sizeof(X::Keys) > 0 && sizeof(X::GamePadType) > 0 && sizeof(X::GamePadDeadZone) > 0);
+    static_assert(sizeof(X::GamePad) > 0 && sizeof(X::GamePadButtons) > 0 && sizeof(X::GamePadCapabilities) > 0
+                  && sizeof(X::GamePadDPad) > 0 && sizeof(X::GamePadState) > 0 && sizeof(X::GamePadThumbSticks) > 0
+                  && sizeof(X::GamePadTriggers) > 0);
+    static_assert(sizeof(X::Keyboard) > 0 && sizeof(X::KeyboardState) > 0 && sizeof(X::Mouse) > 0
+                  && sizeof(X::MouseState) > 0 && sizeof(X::MouseCursor) > 0 && sizeof(X::TextInputEXT) > 0);
+    static_assert(sizeof(T::GestureSample) > 0 && sizeof(T::GestureType) > 0 && sizeof(T::TouchCollection) > 0
+                  && sizeof(T::TouchLocation) > 0 && sizeof(T::TouchLocationState) > 0
+                  && sizeof(T::TouchPanel) > 0 && sizeof(T::TouchPanelCapabilities) > 0);
+}
+
 #include <gtest/gtest.h>
 
 namespace

@@ -582,13 +582,22 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
   STRICT (tracked separately; a `NOXNA` marker is signature-invariant so it does not affect INPUT-API-031).
 
 #### INPUT-API-028 — Cross-check every type's namespace + include path
-- **Priority:** P3 · **Status:** TODO · **Area:** API
-- **Files:** all Input headers
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** API
+- **Files:** `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp` (guard)
 - **Work:** Verify each type is in the correct XNA namespace and include path mirrors it (Touch types under
   `Input/Touch`).
 - **Acceptance:** All paths/namespaces correct.
 - **Tests:** header-hygiene compile test.
 - **Deps:** none.
+- **Result (2026-07-06):** Audited all 26 public headers — every top-level type declares
+  `namespace Microsoft::Xna::Framework::Input` and every Touch type `…::Input::Touch`, with the header
+  path mirroring the namespace exactly; cross-checked against FNA (18 top-level + 8 Touch `.cs` share
+  precisely these two namespaces; CNA's extra top-level header is the CNA-only `MouseCursor`, and
+  `GestureDetector` stays internal). Pinned mechanically: the existing public-header compile TU already
+  includes each header by its mirrored path, and a new namespace-placement guard there references every
+  type by its fully-qualified name (`X::…` for Input, `T::…` for Touch) so moving a type to the wrong
+  namespace fails to compile (negative-verified: `X::GestureSample` — a Touch type via the Input alias —
+  does not build).
 
 #### INPUT-API-029 — Confirm `GetTypeName()` policy for Input types
 - **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API

@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-API-028 — namespace + include-path cross-check + guard:** audited all 26 public headers — every
+  top-level type is in `…::Input`, every Touch type in `…::Input::Touch`, path mirrors namespace, matching
+  FNA. Added a fully-qualified namespace-placement guard to `PublicApiInputCompileTests.cpp` (negative-
+  verified: a Touch type referenced via the Input alias fails to compile).
 - **INPUT-API-029 — `GetTypeName()` policy confirmed + guarded:** audited all 26 public headers — no Input
   type inherits `System::Object` (the sole base relationship `MouseCursor : System::IDisposable` is not an
   `Object` subclass), so `GetTypeName()` applies to none; all exempt. Pinned by a
