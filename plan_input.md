@@ -1690,16 +1690,36 @@ build; the P9-001 diagnostics tell a fresh clone exactly how to fetch the submod
 and reinforced by the CLAUDE.md system-deps note (only FFmpeg is a true system dependency; SDL is vendored).
 **Files changed:** none (decision record). **Behavior verified:** n/a (policy). **Remaining risk:** none.
 
-## P9-003 — Create focused Input test target
-- [ ] Ensure there is a simple command to run only Input tests.
-- [ ] Include Keyboard, Mouse, GamePad, Touch, Gesture, TextInput, and SDL bridge tests.
-- [ ] Document command in this plan.
+## P9-003 — Create focused Input test target `[x]`
+- [x] Ensure there is a simple command to run only Input tests.
+- [x] Include Keyboard, Mouse, GamePad, Touch, Gesture, TextInput, and SDL bridge tests.
+- [x] Document command in this plan.
 
-## P9-004 — Run Input tests repeatedly
-- [ ] Run focused Input tests once.
-- [ ] Run focused Input tests with shuffle.
-- [ ] Run focused Input tests with repeat count.
-- [ ] Fix any order-dependent failures.
+**Result (2026-07-06):** A single labelled CTest target `CnaInputTests` (CMakeLists.txt:1959-1966) runs the
+whole Input subset via `ctest -L input`. Its `--gtest_filter` (CMakeLists.txt:1952) is
+`*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*`
+— covering Keyboard, Mouse, GamePad, Touch, Gesture, TextInput/EXT, the SDL bridge, reset, fake-gamepad,
+signature-freeze/compile, and the enum suites (every suite added this session matches, confirmed by the
+green gate). **Command:** `ctest --test-dir <build> -L input --output-on-failure` (list: `ctest -N -L input`
+→ exactly one entry, `CnaInputTests`). **Files changed:** none (target already present + verified).
+**Behavior verified:** the label selects one comprehensive input test entry across all subsystems.
+**Remaining risk:** none.
+
+## P9-004 — Run Input tests repeatedly `[x]`
+- [x] Run focused Input tests once.
+- [x] Run focused Input tests with shuffle.
+- [x] Run focused Input tests with repeat count.
+- [x] Fix any order-dependent failures.
+
+**Result (2026-07-06):** Order-independence is **baked into the target**: `CnaInputTests` runs
+`CnaTests --gtest_filter=… --gtest_shuffle --gtest_repeat=5` (CMakeLists.txt:1960) — every `ctest -L input`
+invocation reshuffles the whole input subset and runs it 5× with a fresh seed each iteration, which is the
+required check for the process-wide input singletons (InputManager / GestureDetector / stock MouseCursors).
+Run this session after **every** task's additions: **100% green** across all four backends (EasyGL / Vulkan /
+bgfx / SDL_RENDERER). No order-dependent failures surfaced from the ~+50 tests added in Phases 5–8 (a couple
+were *written* to be reset-first precisely because the wheel/gesture-clock state is process-cumulative — e.g.
+the mouse-reset and gesture-reset tests). **Files changed:** none (gate already enforces this).
+**Behavior verified:** the input subset is order-independent under shuffle×5. **Remaining risk:** none.
 
 ## P9-005 — Run sanitizer builds
 - [ ] Run AddressSanitizer if supported.
