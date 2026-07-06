@@ -82,11 +82,17 @@ here — see Section 4).
 
 **Does not work / not implemented:** iOS backend for anything in this scope (`Compass`,
 `Motion`, or vibration). `Compass.TrueHeading` permanently equals `MagneticHeading` (no
-declination source). `Motion`'s coordinate-remap question is unresolved. **The new
+declination source). `Motion`'s coordinate-remap question is unresolved. ~~**The new
 `plan_devices.md` audit found that `TimeBetweenUpdates` is not honored by the SDL-backed
 sensors (`Accelerometer`, `Gyroscope`) at all** — confirmed by grep, zero references to
 the property in either `.cpp` file — and is only applied once, at `Start()` time, for
-the Android-backed sensors. No physical Android/iOS hardware has ever been used to
+the Android-backed sensors.~~ **This whole paragraph is now stale (as of 2026-07-06) —
+`SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`ANDROID-BRIDGE-002` (all closed, see Section 3)
+fixed both halves: SDL-backed sensors now throttle via `ShouldAcceptUpdateAt()`, and the
+Android backend now re-applies a live change via `AndroidSensorBridge::SetSampleInterval()`
+instead of only at `Start()` time. Left the original text struck through, not deleted,
+per this section's own "frozen historical snapshot" framing above; kept for anyone
+diffing this file's history.** No physical Android/iOS hardware has ever been used to
 verify anything in this scope, in any session.
 
 ---
@@ -201,7 +207,9 @@ interval never throttling, reset-on-restart). Verified: 290/290 tests (up from 2
 plain `cmake-build-debug` and all three sanitizer presets, 40-iteration
 `AccelerometerTests.*:GyroscopeTests.*` loop clean, no new TSan/UBSan findings beyond
 the previously-known ones. **Still open, not touched by this pass:** `Compass`/`Motion`'s
-Android backend (`ANDROID-BRIDGE-002`, only applies the interval once at `Start()`);
+Android backend (`ANDROID-BRIDGE-002`, only applies the interval once at `Start()`) —
+**fixed later the same day, see the `ANDROID-BRIDGE-002 closed` entry below; this line
+is historical, kept as-is rather than rewritten.**
 `TimeBetweenUpdates` minimum/maximum/negative-value validation (`setTimeBetweenUpdatesProperty()`
 still accepts any value unchanged); the manual demo was not run to visually confirm a
 reduced event rate (no display in this environment this session).
@@ -503,7 +511,98 @@ Android build failure (Section 4) — not yet scoped as its own plan task.
 
 ---
 
-## 10. Resume prompt
+## 10. Stabilization pass summary (2026-07-06)
+
+A small, verification-focused pass, not new feature work — requested explicitly as "a
+small stabilization and verification pass after the latest Devices/Sensors changes," not
+a continuation of `plan_devices.md`'s task list.
+
+**What was changed:**
+- **Stale docs fixed** (Section 3/5 entries below plus `docs/devices-api-coverage.md`,
+  `include/Microsoft/Devices/Sensors/SensorBase.hpp`) — several places still said
+  `Compass`/`Motion` only apply `TimeBetweenUpdates` once at `Start()` time, or that
+  `ANDROID-BRIDGE-002` was open. Both are false as of the prior session's work; text
+  updated to match current code (`AndroidSensorBridge::SetSampleInterval()` exists,
+  `Compass`/`Motion` forward `TimeBetweenUpdatesChanged` to the backend). Historical
+  dated entries in this file were annotated, not rewritten, per this file's own
+  established convention.
+- **`plan_devices.md` — `MOTION-008` closed.** Found already fully implemented (as a
+  side effect of `ANDROID-BRIDGE-002`'s work) but never marked closed — a real, if
+  small, stale-status bug in the plan file itself, not just prose.
+- **`plan_devices.md` — new `SENSORBASE-008` task added**, documenting the still-missing
+  `TimeBetweenUpdates` minimum/maximum/negative-value validation gap (confirmed still
+  present; not fixed by this pass — out of its small, verification-focused scope).
+- **Code change: `SensorBase<T>::ShouldAcceptUpdateAt()` switched from
+  `System::DateTimeOffset` wall-clock time to `std::chrono::steady_clock`** for the
+  throttle *decision* only (sensor reading timestamps, e.g.
+  `AccelerometerReading::Timestamp`, are untouched — still wall-clock `DateTimeOffset`,
+  matching the real WP7 API). Wall-clock time can step backward or jump (NTP correction,
+  manual clock change), which would wedge a throttle *decision* open or defeat it for one
+  event; `steady_clock` is standard-guaranteed never to be adjusted. Updated the two
+  production call sites (`Accelerometer`/`Gyroscope::ProcessSensorUpdateEvent()`) and all
+  `SensorBaseTests.cpp` throttle tests to use synthetic `steady_clock::time_point`
+  values instead of `DateTimeOffset` ones — still zero real-time sleeps.
+- **New test added:** `SensorBaseTests.ShouldAcceptUpdateAtWithNegativeTimeBetweenUpdatesNeverThrottles`
+  — locks in that a negative `TimeBetweenUpdates` degrades safely to "never throttle"
+  (same as `TimeSpan::Zero`), not a crash or a permanent-reject lockup. Confirmed the
+  full checklist (first-update-accepted, too-soon-rejected, exact-interval-accepted,
+  reset-on-`Start()`, independent-per-instance, zero-interval, negative-interval) is now
+  covered — "reset on `Start()`" is covered at the `SensorBase<T>` mechanism level
+  (`ResetUpdateThrottleForTestingMakesTheNextCallAlwaysAccept`) and confirmed by source
+  inspection that `Accelerometer`/`Gyroscope::Start()` call `ResetUpdateThrottle()`, but
+  has **no integration-level regression test** confirming that specific wiring — the
+  same standing limitation as everything else reachable only through
+  `ProcessSensorUpdateEvent()` (real SDL hardware event required, unavailable in this
+  container).
+- **`VibrateController` (`VIB-002`/`VIB-003`/related) — untouched**, as instructed.
+
+**Commands run:**
+- `git submodule update --init --recursive` — **did not complete** (timed out fetching
+  ~19 nested codec submodules — `third_party/SDL_image`'s/`SDL_mixer`'s own
+  `external/*` dependencies for AVIF/JXL/WebP/TIFF/libpng/GME/mod_xmp/mpg123/
+  FluidSynth-MIDI/Opus/Vorbis — none of which this project's CMake actually needs;
+  `cmake/ThirdPartySDL.cmake` explicitly passes `-DSDLIMAGE_AVIF=OFF` etc. for every one
+  of them). Confirmed instead via `git submodule update --init` (non-recursive, exit 0,
+  instant) that the actually-required top-level submodules (`SDL`, `SDL_image`,
+  `SDL_mixer`, `vendor/googletest`) were already correctly initialized.
+- `cmake --preset devices-ubsan` — succeeded.
+- `cmake --build --preset devices-ubsan --target CnaTests` — succeeded.
+- The Devices/Sensors `gtest_filter` documented in `docs/devices-build.md` — run against
+  `cmake-build-debug`, `devices-ubsan`, `devices-asan`, and `devices-tsan`.
+- 40-iteration `AccelerometerTests.*:GyroscopeTests.*` loop (concurrency-relevant, since
+  the clock-source change touches the real dispatch path).
+
+**What passed:** 293 tests (up from 292 before this pass), 291 passed + 2 expected
+hardware skips (`AccelerometerTests`/`GyroscopeTests`'
+`GetCurrentValuePropertyDoesNotThrowWhenSupported`), identically on plain
+`cmake-build-debug` and all three sanitizer presets. ASan: 0 issues. TSan: 38 reports,
+all confirmed the same pre-existing, out-of-scope `sharp-runtime`
+`System::TimeSpan::copy_count` race (no new findings from the clock-source change).
+UBSan: 3 reports, all confirmed the same pre-existing `Vector3`/`Matrix::GetHashCode()`
+signed-overflow findings, none in `Microsoft::Devices`. 40/40 clean on the concurrency
+loop.
+
+**What failed or could not be run:** the plain, unqualified
+`git submodule update --init --recursive` command (see above — not a build blocker, the
+project doesn't need those submodules). No Android device/emulator was used this
+session (all findings above are host-build-only, consistent with every prior session's
+stated hardware limitation). The Android cross-compile itself was **not re-run** this
+pass (only the desktop build/tests were, since the clock-source change compiles
+identically on Android — `std::chrono::steady_clock` is fully standard, no
+platform-specific `#ifdef` needed — but this was not independently re-confirmed via a
+fresh Android build in this pass).
+
+**Next recommended task:** `SENSORBASE-008` (validate `TimeBetweenUpdates` min/max —
+check the real WP7 API's documented behavior for negative/zero/huge values via an
+archived MSDN page, then match it) — small, well-scoped, and a direct, natural
+continuation of what this pass already found and tested defensively. Alternatives, if
+priority is unclear: the `READINGS-002`-era wrong-visibility question is fully closed,
+and the `cna_demo_input` Android build finding from `DEV-BUILD-004` remains open but
+unscoped (see Section 4) if Android example-app coverage is ever wanted.
+
+---
+
+## 11. Resume prompt
 
 ```
 Read NEXT.md first. A brand-new 70-task plan_devices.md (rewritten from scratch on

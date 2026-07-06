@@ -822,14 +822,29 @@ not an alternate spelling to preserve.
     their own `TimeBetweenUpdatesChanged` event to the active backend.
   - **Still not done, the one remaining gap:** minimum/maximum value validation
     (negative/zero `TimeBetweenUpdates`) — `setTimeBetweenUpdatesProperty()` still
-    accepts any value unchanged; this acceptance criterion needs its own
-    separately-scoped task if a concrete need is found, per this project's
-    one-task-one-commit convention.
+    accepts any value unchanged; tracked as its own task, `SENSORBASE-008`, since a
+    stabilization pass (below) confirmed the current unvalidated fallback is at least
+    safe, not just an untested assumption.
+  - **Addendum (2026-07-06, same-day stabilization pass):** `ShouldAcceptUpdateAt()`'s
+    throttle *decision* was changed from `System::DateTimeOffset` wall-clock time to
+    `std::chrono::steady_clock` — a wall-clock-based interval measurement can go
+    backward or jump on an NTP step/clock change, which would wedge the throttle open
+    (rejecting every update) or defeat it entirely for one event; `steady_clock` is
+    standard-guaranteed never to be adjusted. Production call sites
+    (`Accelerometer`/`Gyroscope::ProcessSensorUpdateEvent()`) now pass
+    `std::chrono::steady_clock::now()`; `SensorBaseTests.cpp`'s throttle tests use
+    synthetic `steady_clock::time_point` values instead of `DateTimeOffset` ones. Sensor
+    *reading* timestamps (`AccelerometerReading::Timestamp` etc.) are unchanged —
+    still wall-clock `DateTimeOffset`, matching the real WP7 API. Also added
+    `ShouldAcceptUpdateAtWithNegativeTimeBetweenUpdatesNeverThrottles` (proves the
+    negative-interval fallback is safe, feeding `SENSORBASE-008`). Verified: 293 tests
+    (up from 292) on plain `cmake-build-debug` and all three sanitizer presets, 0 new
+    findings, 40-iteration `AccelerometerTests.*:GyroscopeTests.*` loop clean.
 - **Required work:**
   - Define exact minimum, maximum, and default behavior for `TimeBetweenUpdates` (the
     current default, `TimeSpan.FromMilliseconds(2.0)`, is commented as matching ".NET
     source" — verify that comment against an authoritative reference rather than
-    trusting it at face value). **Not done — still open.**
+    trusting it at face value). **Not done — moved to `SENSORBASE-008`.**
   - Apply the value to every backend (SDL done 2026-07-06; Android done 2026-07-06,
     `ANDROID-BRIDGE-002`).
   - Support changing the value while the sensor is already running, for every backend
@@ -1028,6 +1043,43 @@ not an alternate spelling to preserve.
   - `include/Microsoft/Devices/Sensors/Accelerometer.hpp`
   - `include/Microsoft/Devices/Sensors/Gyroscope.hpp`
 
+### SENSORBASE-008 — Validate `TimeBetweenUpdates` min/max (negative/zero/huge values)
+
+- **Priority:** Medium
+- **Area:** `SensorBase<T>`
+- **Problem:** `setTimeBetweenUpdatesProperty()` accepts any `System::TimeSpan` value
+  unchanged — no rejection of negative values, no documented minimum/maximum. This gap
+  was carried forward, not fixed, by `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/
+  `ANDROID-BRIDGE-002` (2026-07-06): those tasks made `TimeBetweenUpdates` actually
+  throttle/re-apply the rate, but none of them added input validation. Confirmed
+  (2026-07-06 stabilization pass) that the current, unvalidated behavior is at least
+  *safe*, not a correctness bug: `SensorBaseTests.
+  ShouldAcceptUpdateAtWithNegativeTimeBetweenUpdatesNeverThrottles` locks in that a
+  negative interval degrades to "never throttle" (same as `TimeSpan::Zero`) rather than
+  crashing or permanently rejecting every update — but this is an accepted fallback, not
+  a validated contract a caller can rely on.
+- **Required work:**
+  - Determine the real WP7 `SensorBase<TSensorReading>.TimeBetweenUpdates` setter's
+    documented behavior for out-of-range values (archived MSDN page, not assumption) —
+    does it throw `ArgumentOutOfRangeException`, silently clamp, or accept anything?
+  - Match that behavior exactly, including for the Android bridge path (`AndroidSensorBridge::
+    SetSampleInterval()`/`ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds()`
+    already clamps to `[1, INT32_MAX]` microseconds internally — decide whether that
+    NDK-level clamp is a sufficient answer for the Android side, or whether
+    `setTimeBetweenUpdatesProperty()` itself needs to reject/clamp earlier, at the
+    public-API boundary).
+  - Add tests for the chosen behavior (negative, zero-if-disallowed, and
+    `TimeSpan::MaxValue`-scale values), for both the SDL- and Android-backed classes.
+- **Acceptance criteria:**
+  - `setTimeBetweenUpdatesProperty()`'s out-of-range behavior matches the real WP7 API,
+    with a citation, not an assumption.
+  - Tests cover the chosen behavior explicitly (not just the already-existing
+    "doesn't crash" proof from the stabilization pass above).
+- **Suggested files to inspect or edit:**
+  - `include/Microsoft/Devices/Sensors/SensorBase.hpp`
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`
+  - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp`
+
 ---
 
 ## 6. Accelerometer tasks
@@ -1158,6 +1210,13 @@ not an alternate spelling to preserve.
   clean on a `AccelerometerTests.*:GyroscopeTests.*` loop. **Not done:** the manual demo
   was not run to visually confirm a lower event rate (no display in this environment
   this session) — deferred, not claimed.
+- **Addendum (2026-07-06, same-day stabilization pass):** `ShouldAcceptUpdateAt()`'s
+  `now` parameter and internal comparison switched from `System::DateTimeOffset`
+  wall-clock time to `std::chrono::steady_clock` — see `SENSORBASE-001`'s closing note
+  for the full rationale (wall-clock time can step backward/jump on an NTP correction,
+  which a throttle *decision* must never be vulnerable to). `ProcessSensorUpdateEvent()`
+  now passes `std::chrono::steady_clock::now()`. Re-verified: 293/293 tests, all three
+  sanitizer presets, 40/40 loop, all clean.
 - **Required work:**
   - Apply the requested update interval to the SDL backend if SDL3 exposes a sensor
     polling-rate control; otherwise add software throttling in the dispatch path. Done.
@@ -1302,6 +1361,11 @@ not an alternate spelling to preserve.
   share this logic via their common `SensorBase<T>` base, exactly as `ACCEL-005`'s fix
   did. Verified together with `ACCEL-005` (290/290, all sanitizers, 40-iteration loop).
   **Not done:** demo visual confirmation — same standing gap as `ACCEL-005`.
+- **Addendum (2026-07-06, same-day stabilization pass):** see `ACCEL-005`'s identical
+  addendum — `ShouldAcceptUpdateAt()` now takes `std::chrono::steady_clock::time_point`,
+  not `System::DateTimeOffset`; `Gyroscope::ProcessSensorUpdateEvent()` passes
+  `std::chrono::steady_clock::now()`. Re-verified together with `ACCEL-005`
+  (293/293, all sanitizers, 40/40 loop).
 - **Required work:**
   - Apply the backend sample rate if SDL3 supports it; add software throttling
     otherwise. Done.
@@ -1735,7 +1799,7 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
 
-### MOTION-008 — Apply `TimeBetweenUpdates`
+### MOTION-008 — Apply `TimeBetweenUpdates` — CLOSED (2026-07-06, via `ANDROID-BRIDGE-002`)
 
 - **Priority:** Critical
 - **Area:** Motion Backend
@@ -1746,20 +1810,46 @@ not an alternate spelling to preserve.
   `Detail::AndroidSensorBridge` instances simultaneously (rotation vector,
   game-rotation-vector fallback, gravity, linear acceleration, gyroscope), so all five
   must be kept in sync.
+- **Resolution (2026-07-06, this stale cross-reference found and closed during a
+  stabilization pass — the fix already existed from `ANDROID-BRIDGE-002` but this task
+  itself was never marked closed):** `AndroidMotionBackend::SetSampleInterval()`
+  (added by `ANDROID-BRIDGE-002`) forwards to all five owned bridges
+  (`rotationVectorBridge_`, `gameRotationVectorBridge_`, `gravityBridge_`,
+  `linearAccelerationBridge_`, `gyroscopeBridge_`) unconditionally —
+  `AndroidSensorBridge::SetSampleInterval()` itself is a safe no-op on whichever ones,
+  if any, weren't actually started by `Start()` (e.g. the game-rotation-vector fallback
+  when the plain rotation vector is available), so no `usingGameRotationVector_` branch
+  is needed at this call site. `Motion::Motion()` forwards its own
+  `TimeBetweenUpdatesChanged` event to `backend_` exactly like `Compass` does.
+  **Verification level, stated honestly:** the fake-backend test
+  (`MotionTests.SetTimeBetweenUpdatesPropertyForwardsToBackend`) verifies
+  `Motion`→`IMotionBackend` forwarding only — it exercises a single mock object, not the
+  real `AndroidMotionBackend`'s 5-bridge fan-out. The 5-bridge forwarding itself is
+  confirmed to *compile* (Android cross-compile + `llvm-nm` symbol check, done for
+  `ANDROID-BRIDGE-002`) but has **no dedicated test** proving all five bridges
+  individually receive the call — Android-only code, no host-testable seam exists for
+  `AndroidSensorBridge` itself (same standing limitation as every other
+  `Detail::Android*` class in this codebase). Not re-opened for this gap alone, since it
+  matches the project's existing, accepted verification ceiling for this whole class of
+  code — but noted here rather than silently claimed as fully tested.
 - **Required work:**
   - Apply the requested interval to all five underlying Android sensor queues, or add
-    software throttling at the fused-reading publish step.
+    software throttling at the fused-reading publish step. Done.
   - Ensure interval changes while running take effect across all five sources
-    consistently.
-  - Add fake-backend tests.
+    consistently. Done, to the extent stated above.
+  - Add fake-backend tests. Done (`Motion`↔`IMotionBackend` level only).
 - **Acceptance criteria:**
-  - `Motion`'s published event rate follows the requested `TimeBetweenUpdates`.
-  - Tests cover interval changes made during active streaming.
+  - `Motion`'s published event rate follows the requested `TimeBetweenUpdates`. Done at
+    the `SetSampleInterval()`-forwarding level described above.
+  - Tests cover interval changes made during active streaming. Partially — see
+    verification-level note above.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Motion.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
-  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Motion.cpp` (edited, `ANDROID-BRIDGE-002`)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp` (edited,
+    `ANDROID-BRIDGE-002`)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (edited,
+    `ANDROID-BRIDGE-002`)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (edited, `ANDROID-BRIDGE-002`)
 
 ### MOTION-009 — Add iOS Motion backend plan or implementation
 

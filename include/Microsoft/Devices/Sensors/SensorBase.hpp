@@ -5,8 +5,11 @@
 
 #pragma once
 
+#include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
+#include <ratio>
 #include <type_traits>
 #include <utility>
 
@@ -46,8 +49,28 @@ namespace Microsoft::Devices::Sensors
          */
         bool hasAcceptedUpdate_;
 
-        /** @brief Wall-clock time of the last update ShouldAcceptUpdateAt() accepted. Guarded by mutex_. */
-        System::DateTimeOffset lastAcceptedUpdateTime_;
+        /**
+         * @brief Monotonic time of the last update ShouldAcceptUpdateAt() accepted. Guarded by mutex_.
+         *
+         * Task (2026-07-06 stabilization pass): deliberately `std::chrono::steady_clock`,
+         * not `System::DateTimeOffset`/wall-clock time. A throttle *interval*
+         * measurement must never be able to go backward or jump — wall-clock
+         * time can (NTP step corrections, manual clock changes, leap-second
+         * slew), which would either wedge the throttle open (a backward
+         * step makes `now - lastAcceptedUpdateTime_` go negative, comparing
+         * as "less than any non-negative interval," so every subsequent
+         * update is rejected until real time catches back up to where it
+         * was) or throw it wide open (a forward step makes the very next
+         * update look like it arrived after an arbitrarily long gap,
+         * defeating the throttle entirely for one event). `steady_clock` is
+         * specified by the C++ standard to never be adjusted, making this
+         * risk structurally impossible rather than just unlikely. Sensor
+         * *reading* timestamps (`AccelerometerReading::Timestamp` etc.)
+         * deliberately stay wall-clock (`DateTimeOffset`, matching the real
+         * WP7 API's `DateTimeOffset`-typed `Timestamp` property) — only this
+         * internal throttle *decision* changed.
+         */
+        std::chrono::steady_clock::time_point lastAcceptedUpdateTime_;
 
         /**
          * Guards currentValue_/isDataValid_ (Task P5-2): for real,
@@ -259,7 +282,7 @@ namespace Microsoft::Devices::Sensors
         }
 
         /**
-         * @brief Decides whether an incoming update at wall-clock time `now`
+         * @brief Decides whether an incoming update at monotonic time `now`
          * should actually be accepted (dispatched), given the current
          * TimeBetweenUpdates interval and the last accepted update's time
          * (Task SENSORBASE-001/ACCEL-005/GYRO-004/SDL-SENSOR-002).
@@ -278,17 +301,27 @@ namespace Microsoft::Devices::Sensors
          * *dispatched* update, not the last *attempted* one.
          *
          * Deliberately takes `now` as a parameter rather than calling
-         * System::DateTimeOffset::getUtcNowProperty() internally: this keeps
-         * the decision a pure function of its inputs, so it can be unit
-         * tested with synthetic timestamps (no real-time sleeps, no test
+         * `std::chrono::steady_clock::now()` internally: this keeps the
+         * decision a pure function of its inputs, so it can be unit tested
+         * with synthetic `time_point`s (no real-time sleeps, no test
          * flakiness) — the same technique this codebase already uses for
          * Android sensor math (Detail::ConvertAndroidPortraitToXnaLandscape(),
          * Detail::ExtractYawPitchRollFromQuaternion()). Production call
          * sites (Accelerometer::ProcessSensorUpdateEvent(),
-         * Gyroscope::ProcessSensorUpdateEvent()) pass the real wall-clock
-         * time. Scoped per sensor *instance* (this method reads/writes only
-         * this instance's own fields) — two instances with different
-         * TimeBetweenUpdates values throttle independently, as required.
+         * Gyroscope::ProcessSensorUpdateEvent()) pass
+         * `std::chrono::steady_clock::now()`. Scoped per sensor *instance*
+         * (this method reads/writes only this instance's own fields) — two
+         * instances with different TimeBetweenUpdates values throttle
+         * independently, as required.
+         *
+         * Deliberately `std::chrono::steady_clock`, not `System::DateTimeOffset`
+         * wall-clock time — see `lastAcceptedUpdateTime_`'s own doc comment
+         * for why a throttle *decision* must use a clock the standard
+         * guarantees never steps backward or jumps. `TimeBetweenUpdates`
+         * itself stays a `System::TimeSpan` (matching the real WP7 API);
+         * converted here via `getTicksProperty()` (100ns units, exact
+         * integer conversion, no floating-point rounding) into a
+         * `std::chrono` duration for the comparison.
          *
          * Not applied to the NOXNA synthetic-injection test hooks
          * (InjectSyntheticSensorUpdate(), DispatchToInstancesForTesting())
@@ -296,15 +329,18 @@ namespace Microsoft::Devices::Sensors
          * entirely (see its own doc comment) so tests can exercise dispatch
          * behavior without depending on real elapsed time between calls.
          *
-         * @param now Wall-clock time of the incoming update.
+         * @param now Monotonic time of the incoming update.
          * @return true if this update should be dispatched; false if it
          * should be silently dropped (too soon after the last accepted one).
          */
-        bool ShouldAcceptUpdateAt(const System::DateTimeOffset& now)
+        bool ShouldAcceptUpdateAt(const std::chrono::steady_clock::time_point& now)
         {
             std::lock_guard<std::mutex> lock(mutex_);
 
-            if (!hasAcceptedUpdate_ || (now - lastAcceptedUpdateTime_) >= timeBetweenUpdates_)
+            const std::chrono::duration<std::int64_t, std::ratio<1, 10000000>> interval(
+                timeBetweenUpdates_.getTicksProperty());
+
+            if (!hasAcceptedUpdate_ || (now - lastAcceptedUpdateTime_) >= interval)
             {
                 hasAcceptedUpdate_ = true;
                 lastAcceptedUpdateTime_ = now;
@@ -463,8 +499,10 @@ namespace Microsoft::Devices::Sensors
          * no public API to do so for `SDL_SENSOR_ACCEL`/`SDL_SENSOR_GYRO` —
          * so throttling is software-side, dropping events that arrive too
          * soon after the last accepted one. `Compass`/`Motion`'s Android
-         * backend still only applies this value once, at `Start()` time
-         * (`ANDROID-BRIDGE-002`, not fixed by this task).
+         * backend (Task `ANDROID-BRIDGE-002`, closed) forwards a live change
+         * to `Detail::AndroidSensorBridge::SetSampleInterval()`, which
+         * re-applies `ASensorEventQueue_setEventRate()` on the already-running
+         * queue — no longer applied only once at `Start()` time.
          *
          * @return Time between updates.
          */

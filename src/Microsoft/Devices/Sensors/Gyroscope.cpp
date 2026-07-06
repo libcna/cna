@@ -3,6 +3,7 @@
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -363,8 +364,10 @@ namespace Microsoft::Devices::Sensors
         }
 
         // Task GYRO-004/SDL-SENSOR-002: see Accelerometer::ProcessSensorUpdateEvent()'s
-        // identical fix for the full rationale.
-        if (!ShouldAcceptUpdateAt(System::DateTimeOffset::getUtcNowProperty()))
+        // identical fix for the full rationale. std::chrono::steady_clock,
+        // not wall-clock time (2026-07-06 stabilization pass) -- see
+        // ShouldAcceptUpdateAt()'s own doc comment.
+        if (!ShouldAcceptUpdateAt(std::chrono::steady_clock::now()))
         {
             return;
         }

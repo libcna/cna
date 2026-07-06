@@ -53,7 +53,7 @@ findings" below.
 |---|---|---|---|
 | `getCurrentValueProperty()` | Real | High | Throws `InvalidOperationException` if unsupported; does not throw if supported-but-no-reading-yet |
 | `getIsDataValidProperty()` | Real | High | Defaults `false` |
-| `getTimeBetweenUpdatesProperty()`/`set...` | Real | High | Default 2ms. **Fixed 2026-07-06 (`SENSORBASE-001`/`ACCEL-005`/`GYRO-004`):** now really throttles `Accelerometer`/`Gyroscope` dispatch (`SensorBase<T>::ShouldAcceptUpdateAt()`, called from each class's `ProcessSensorUpdateEvent()`). **Still stored/observable only for `Compass`/`Motion`'s Android backend** — applied once at `Start()` time, not while running (`ANDROID-BRIDGE-002`, open). |
+| `getTimeBetweenUpdatesProperty()`/`set...` | Real | High | Default 2ms. **Fixed 2026-07-06 (`SENSORBASE-001`/`ACCEL-005`/`GYRO-004`):** now really throttles `Accelerometer`/`Gyroscope` dispatch (`SensorBase<T>::ShouldAcceptUpdateAt()`, called from each class's `ProcessSensorUpdateEvent()`). **Also fixed 2026-07-06 (`ANDROID-BRIDGE-002`, closed):** `Compass`/`Motion` forward a live change to `Detail::AndroidSensorBridge::SetSampleInterval()`, which re-applies `ASensorEventQueue_setEventRate()` on the already-running queue — no longer applied only once at `Start()` time. All four sensor classes now honor a running `TimeBetweenUpdates` change without `Stop()`/`Start()`. |
 | `CurrentValueChanged` | Real | High | Public event |
 | `TimeBetweenUpdatesChanged` | Real | High | Protected event |
 | `Start()`/`Stop()` | Real (abstract) | High | |

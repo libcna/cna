@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include <atomic>
+#include <chrono>
 #include <string>
 #include <thread>
 #include <vector>
@@ -105,7 +106,7 @@ namespace
         // SENSORBASE-001/ACCEL-005/GYRO-004), same reasoning as
         // TimeBetweenUpdatesChanged above — exercised here via a thin public
         // wrapper rather than a new NOXNA hook on Accelerometer/Gyroscope.
-        bool ShouldAcceptUpdateForTesting(const DateTimeOffset& now)
+        bool ShouldAcceptUpdateForTesting(const std::chrono::steady_clock::time_point& now)
         {
             return ShouldAcceptUpdateAt(now);
         }
@@ -235,15 +236,20 @@ TEST(SensorBaseTests, CurrentValueChangedEventArgsCarryTheNewValue)
 // is the shared throttle decision Accelerometer/Gyroscope now call from their
 // real SDL dispatch path (ProcessSensorUpdateEvent()) to honor
 // TimeBetweenUpdates. Tested here directly, at the SensorBase<T> level, with
-// synthetic DateTimeOffset values — no real-time sleeps, so these tests are
-// fast and cannot flake under machine load, matching this codebase's existing
-// convention for platform-independent pure math (Detail::
-// ConvertAndroidPortraitToXnaLandscape(), Detail::ExtractYawPitchRollFromQuaternion()).
+// synthetic std::chrono::steady_clock::time_point values — no real-time
+// sleeps, so these tests are fast and cannot flake under machine load,
+// matching this codebase's existing convention for platform-independent pure
+// math (Detail::ConvertAndroidPortraitToXnaLandscape(),
+// Detail::ExtractYawPitchRollFromQuaternion()). Task (2026-07-06
+// stabilization pass): switched from synthetic DateTimeOffset values to
+// std::chrono::steady_clock::time_point ones, matching ShouldAcceptUpdateAt()'s
+// own signature change (see its doc comment for why the throttle decision
+// itself uses a monotonic clock, not wall-clock time).
 
 TEST(SensorBaseTests, ShouldAcceptUpdateAtAcceptsTheVeryFirstCall)
 {
     TestSensorBase sensor;
-    const DateTimeOffset now = DateTimeOffset::getUtcNowProperty();
+    const auto now = std::chrono::steady_clock::now();
 
     EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(now));
 }
@@ -253,10 +259,10 @@ TEST(SensorBaseTests, ShouldAcceptUpdateAtRejectsASecondCallTooSoonAfterTheFirst
     TestSensorBase sensor;
     sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10.0));
 
-    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    const auto first = std::chrono::steady_clock::now();
     ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
 
-    const DateTimeOffset tooSoon = first + TimeSpan::FromMilliseconds(5.0);
+    const auto tooSoon = first + std::chrono::milliseconds(5);
     EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(tooSoon));
 }
 
@@ -265,10 +271,10 @@ TEST(SensorBaseTests, ShouldAcceptUpdateAtAcceptsOnceTheIntervalHasFullyElapsed)
     TestSensorBase sensor;
     sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10.0));
 
-    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    const auto first = std::chrono::steady_clock::now();
     ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
 
-    const DateTimeOffset exactlyAtInterval = first + TimeSpan::FromMilliseconds(10.0);
+    const auto exactlyAtInterval = first + std::chrono::milliseconds(10);
     EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(exactlyAtInterval));
 }
 
@@ -279,11 +285,11 @@ TEST(SensorBaseTests, ShouldAcceptUpdateAtThrottlesIndependentlyPerInstance)
     fast.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(1.0));
     slow.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(100.0));
 
-    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    const auto first = std::chrono::steady_clock::now();
     ASSERT_TRUE(fast.ShouldAcceptUpdateForTesting(first));
     ASSERT_TRUE(slow.ShouldAcceptUpdateForTesting(first));
 
-    const DateTimeOffset tenMillisecondsLater = first + TimeSpan::FromMilliseconds(10.0);
+    const auto tenMillisecondsLater = first + std::chrono::milliseconds(10);
     EXPECT_TRUE(fast.ShouldAcceptUpdateForTesting(tenMillisecondsLater));
     EXPECT_FALSE(slow.ShouldAcceptUpdateForTesting(tenMillisecondsLater));
 }
@@ -293,16 +299,16 @@ TEST(SensorBaseTests, ShouldAcceptUpdateAtMeasuresFromTheLastAcceptedCallNotTheL
     TestSensorBase sensor;
     sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10.0));
 
-    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    const auto first = std::chrono::steady_clock::now();
     ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
 
     // Rejected attempt at +5ms must not reset the throttle's reference point.
-    ASSERT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(5.0)));
+    ASSERT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(5)));
 
     // +9ms from the original accepted call is still too soon...
-    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(9.0)));
+    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(9)));
     // ...but +10ms from the original accepted call is not.
-    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(10.0)));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(10)));
 }
 
 TEST(SensorBaseTests, ResetUpdateThrottleForTestingMakesTheNextCallAlwaysAccept)
@@ -310,13 +316,13 @@ TEST(SensorBaseTests, ResetUpdateThrottleForTestingMakesTheNextCallAlwaysAccept)
     TestSensorBase sensor;
     sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(1000.0));
 
-    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    const auto first = std::chrono::steady_clock::now();
     ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
-    ASSERT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(1.0)));
+    ASSERT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(1)));
 
     sensor.ResetUpdateThrottleForTesting();
 
-    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(1.0)));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(1)));
 }
 
 TEST(SensorBaseTests, ShouldAcceptUpdateAtWithZeroTimeBetweenUpdatesAlwaysAccepts)
@@ -324,10 +330,31 @@ TEST(SensorBaseTests, ShouldAcceptUpdateAtWithZeroTimeBetweenUpdatesAlwaysAccept
     TestSensorBase sensor;
     sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::Zero);
 
-    const DateTimeOffset first = DateTimeOffset::getUtcNowProperty();
+    const auto first = std::chrono::steady_clock::now();
     ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
     EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
-    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + TimeSpan::FromMilliseconds(1.0)));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(1)));
+}
+
+// Task (2026-07-06 stabilization pass): setTimeBetweenUpdatesProperty() does
+// not validate or reject a negative TimeSpan (no dedicated plan_devices.md
+// task exists yet for that minimum/maximum-value validation gap). This test
+// locks in that ShouldAcceptUpdateAt() itself still behaves safely, rather
+// than leaving the case as an untested assumption: a negative interval, once
+// converted to a std::chrono duration, can never be "not yet elapsed" against
+// elapsed time measured from a monotonic, non-decreasing clock (elapsed time
+// is always >= 0, which is always >= any negative interval) — so a negative
+// TimeBetweenUpdates degrades to the same "never throttle" behavior as
+// TimeSpan::Zero, not a crash or an infinite-reject lockup.
+TEST(SensorBaseTests, ShouldAcceptUpdateAtWithNegativeTimeBetweenUpdatesNeverThrottles)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(-10.0));
+
+    const auto first = std::chrono::steady_clock::now();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(1)));
 }
 
 TEST(SensorBaseTests, ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash)

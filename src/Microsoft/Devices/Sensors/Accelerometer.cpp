@@ -6,6 +6,7 @@
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -484,7 +485,11 @@ namespace Microsoft::Devices::Sensors
         // Scoped to this instance alone (ShouldAcceptUpdateAt() reads/writes
         // only this object's own fields), so two Accelerometer instances
         // with different TimeBetweenUpdates values throttle independently.
-        if (!ShouldAcceptUpdateAt(System::DateTimeOffset::getUtcNowProperty()))
+        // std::chrono::steady_clock, not wall-clock time (2026-07-06
+        // stabilization pass) -- see ShouldAcceptUpdateAt()'s own doc
+        // comment for why a throttle decision must use a clock immune to
+        // NTP steps/clock changes.
+        if (!ShouldAcceptUpdateAt(std::chrono::steady_clock::now()))
         {
             return;
         }

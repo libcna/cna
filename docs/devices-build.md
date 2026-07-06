@@ -80,6 +80,17 @@ cd cmake-build-debug && ctest --output-on-failure \
 # Same 283 tests, 281 passing, 2 expected hardware skips.
 ```
 
+**Re-verified 2026-07-06 (stabilization pass, same day as the count above but a later
+pass — `ANDROID-BRIDGE-002`/`READINGS-002`/`MOTION-008` and the `ShouldAcceptUpdateAt()`
+monotonic-clock fix all landed test changes in between):** the same 21-suite filter now
+matches **293** tests (281 → 290 passed as tests were added across those tasks, 2
+expected hardware skips throughout) — confirmed by actually running the command above
+again, not assumed. The suite list itself is unchanged (still 21 suites, no new `.cpp`
+file added under `tests/Microsoft/Devices/`); only per-suite test counts grew. If this
+number drifts again, re-run the ground-truth `grep -rE '^(TEST|TEST_F|TEST_P)\('
+tests/Microsoft/Devices` count from the paragraph above rather than trusting either
+number at face value.
+
 If a new file is added under `tests/Microsoft/Devices/` with a new suite name, add that
 suite name to both filters above — re-verify with the same diff technique (compare
 `ctest -N -R "<filter>"`'s match list against a fresh `grep -rE
