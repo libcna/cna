@@ -4296,16 +4296,34 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
 
 ## Phase 11.4 — `CHECKLIST.md` full line-by-line re-verification
 
-* [ ] P11-CHECKLIST-001: Re-verify every `CHECKLIST.md` "Audio:" deviation row against the current
+* [x] P11-CHECKLIST-001: Re-verify every `CHECKLIST.md` "Audio:" deviation row against the current
   code, one row at a time, not spot-checked.
-  *Status:* Open. `P10-AUDIT-004` (Phase 10) explicitly said its own pass was "not an exhaustive
-  re-audit of the whole document -- only this one specific, confirmed-wrong claim was found and
-  fixed; other rows were spot-checked... but not re-verified line-by-line." This task closes that
-  gap for real: read every `Audio:` row in `CHECKLIST.md`'s "Known acceptable C++ deviations"
-  table, find the cited source location, confirm the row's claim is still accurate against
-  *current* code (not what it said when written), and fix/update any row found stale (matching
-  the precedent `P10-AUDIT-004`/this phase's own `P10-LOOP-003/004` finding already set for
-  correcting a disproven claim rather than leaving it).
+  *Note:* Closed this pass. Read all 19 `Audio:` rows in `CHECKLIST.md`'s "Known acceptable C++
+  deviations" table against current code, one at a time. Found exactly the kind of staleness
+  `P10-AUDIT-004` predicted (its own pass wasn't exhaustive): three rows described gaps this same
+  autonomous session's own Phase 10 work (`P10-RPC-002/003/004`, `P10-FILTER-002/003/004/006`) had
+  already closed, but whose `CHECKLIST.md` sync was deliberately deferred at the time (see those
+  tasks' own `plan_audio.md` notes: "not done in this pass, to keep this a small, targeted
+  change"). Fixed:
+  - The `Cue::Stop(AsAuthored)`/`fadeOutMS` row's trailing clause claiming RPC-only release timing
+    "remains unimplemented" -- `P10-RPC-004` implemented exactly this; rewrote to describe the
+    real `maxRpcReleaseTime`/RPC-release-tail behavior instead.
+  - The continuous-RPC-re-evaluation row's "two narrower gaps remain" paragraph, both of which
+    (`AttackTime`/`ReleaseTime`, filter frequency/Q) are now closed (`P10-RPC-002/003/004`,
+    `P10-FILTER-002/003/004/006`) -- rewrote to state they're closed and point at the one gap that
+    remains for a different reason (DSP presets, no system exists at all).
+  - The dedicated `"Distance"`/`"OrientationAngle"`/`"DopplerPitchScalar"` row claiming these
+    "never automatically kept in sync with `Apply3D`'s... values" -- **entirely resolved** by
+    `P10-RPC-002` (`Apply3D` now live-writes all three every call); removed the row outright, same
+    as this file's own `P10-LOOP-003/004` precedent for a fully-disproven claim.
+  - The per-track filter row claiming it's "not overridable by a live filter-frequency/filter-Q
+    RPC" -- **entirely resolved** by `P10-FILTER-002/003/004/006`; rewrote to describe the base
+    (one-shot)/RPC-override (continuous) split instead, and added a new dedicated row for the one
+    genuinely still-open RPC target (DSP presets -- no DSP preset system exists at all, a
+    different kind of gap than continuity).
+  All other 15 rows checked and confirmed still accurate against current code -- no other
+  staleness found. Net row count unchanged (19 -- one row removed, one new dedicated row added).
+  Docs-only change; no code touched, no build/test needed.
 
 ## Phase 11.5 — Test assertion precision sweep
 
