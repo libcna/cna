@@ -3,6 +3,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <string>
+
 // Internal (CNA) seam over the SDL3 gamepad/joystick C API used by SdlInputBridge.
 //
 // This exists ONLY so gamepad runtime behavior (hot-plug, slot assignment, capabilities, rumble,
@@ -73,6 +75,17 @@ namespace CNA::Internal::Input
 
         /** @brief NOXNA/EXT: printed glyph label for a face button on this controller. SDL_GetGamepadButtonLabel. */
         virtual SDL_GamepadButtonLabel GetGamepadButtonLabel(SDL_Gamepad* gamepad, SDL_GamepadButton button) = 0;
+
+        /** @brief NOXNA/EXT: human-readable controller name, or "" if unknown. SDL_GetGamepadName. */
+        virtual std::string GetGamepadName(SDL_Gamepad* gamepad) = 0;
+        /** @brief NOXNA/EXT: OS device path, or "" if unknown. SDL_GetGamepadPath. */
+        virtual std::string GetGamepadPath(SDL_Gamepad* gamepad) = 0;
+        /** @brief NOXNA/EXT: hardware serial number, or "" if unavailable. SDL_GetGamepadSerial. */
+        virtual std::string GetGamepadSerial(SDL_Gamepad* gamepad) = 0;
+        /** @brief NOXNA/EXT: firmware version, or 0 if unavailable. SDL_GetGamepadFirmwareVersion. */
+        virtual Uint16 GetGamepadFirmwareVersion(SDL_Gamepad* gamepad) = 0;
+        /** @brief NOXNA/EXT: Steam Input handle, or 0 if not a Steam virtual controller. SDL_GetGamepadSteamHandle. */
+        virtual Uint64 GetGamepadSteamHandle(SDL_Gamepad* gamepad) = 0;
     };
 
     /**

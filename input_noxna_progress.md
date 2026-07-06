@@ -25,7 +25,8 @@
 - [ ] **N-008 `GamePad` touchpad fingers EXT** — `GetTouchpadFingerEXT` + counts + touchpad events.
 - [x] **N-009 `GamePad` player-index EXT** — `Get/SetPlayerIndexEXT` (SDL device player-number LED).
 - [x] **N-009b `GamePad` battery/power EXT** — `GetPowerInfoEXT` (`SDL_GetGamepadPowerInfo`) + shared `CNA::Input::PowerStateEXT`.
-- [ ] **N-010 `GamePad` metadata EXT** — name/path/serial/firmware/Steam-handle/connection-state.
+- [x] **N-010 `GamePad` metadata EXT** — `Get{Name,Path,Serial,FirmwareVersion,SteamHandle}EXT`.
+- [ ] **N-010b `GamePad` connection-state EXT** — `GetConnectionStateEXT -> {Wired,Wireless,Unknown}` (split off from N-010).
 - [x] **N-011 `GamePad` button labels EXT** — `GetButtonLabelEXT` (ABXY vs cross/circle/square/triangle).
 - [ ] **N-012 `CNA::Input::Pen`** — stylus (pressure/tilt/rotation/eraser/buttons); event-decoded.
 
@@ -47,6 +48,16 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-010 done (2026-07-06):** `GamePad::Get{Name,Path,Serial}EXT -> std::string` +
+  `GetFirmwareVersionEXT -> uint16` + `GetSteamHandleEXT -> uint64` — device metadata via the
+  gamepad seam. Seam gains `GetGamepad{Name,Path,Serial,FirmwareVersion,SteamHandle}` (real =
+  the matching SDL getters, with NULL->"" for the string ones; fake = canned config). Bridge
+  getters return ""/0 for a disconnected slot. Pinned all five in the freeze test + documented
+  in `docs/input-public-api-frozen.md`. Tests: canned-value forwarding + disconnected empties.
+  `ctest -L input` green; ASan-clean. Split the tracker's original N-010 into metadata (this
+  commit) + N-010b connection-state (new enum). Files: SdlGamepadBackend.hpp/.cpp,
+  FakeSdlGamepadBackend.hpp, SdlInputBridge.hpp/.cpp, GamePad.hpp/.cpp, freeze test, frozen-API
+  doc, SdlGamepadBackendTests.cpp.
 - **N-011 done (2026-07-06):** `GamePad::GetButtonLabelEXT(player, Buttons) -> CNA::Input::
   GamePadButtonLabelEXT {Unknown,A,B,X,Y,Cross,Circle,Square,Triangle}` — the printed glyph for a
   face button, so UI prompts show the right symbol per controller family. New enum header

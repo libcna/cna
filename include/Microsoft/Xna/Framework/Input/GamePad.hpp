@@ -12,6 +12,9 @@
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
+#include <cstdint>
+#include <string>
+
 namespace Microsoft::Xna::Framework::Input
 {
     /**
@@ -126,6 +129,41 @@ namespace Microsoft::Xna::Framework::Input
          * @return The button's label, or GamePadButtonLabelEXT::Unknown if disconnected or unlabeled.
          */
         NOXNA static CNA::Input::GamePadButtonLabelEXT GetButtonLabelEXT(PlayerIndex playerIndex, Buttons button);
+
+        /**
+         * @brief NOXNA/EXT: the controller's human-readable name.
+         * @param playerIndex The player index (slot) of the controller.
+         * @return The name, or an empty string if disconnected or unknown.
+         */
+        NOXNA static std::string GetNameEXT(PlayerIndex playerIndex);
+
+        /**
+         * @brief NOXNA/EXT: the controller's OS device path.
+         * @param playerIndex The player index (slot) of the controller.
+         * @return The device path, or an empty string if disconnected or unknown.
+         */
+        NOXNA static std::string GetPathEXT(PlayerIndex playerIndex);
+
+        /**
+         * @brief NOXNA/EXT: the controller's hardware serial number.
+         * @param playerIndex The player index (slot) of the controller.
+         * @return The serial number, or an empty string if disconnected or unavailable.
+         */
+        NOXNA static std::string GetSerialEXT(PlayerIndex playerIndex);
+
+        /**
+         * @brief NOXNA/EXT: the controller's firmware version.
+         * @param playerIndex The player index (slot) of the controller.
+         * @return The firmware version, or 0 if disconnected or unavailable.
+         */
+        NOXNA static std::uint16_t GetFirmwareVersionEXT(PlayerIndex playerIndex);
+
+        /**
+         * @brief NOXNA/EXT: the controller's Steam Input handle.
+         * @param playerIndex The player index (slot) of the controller.
+         * @return The Steam Input handle, or 0 if disconnected or not a Steam virtual controller.
+         */
+        NOXNA static std::uint64_t GetSteamHandleEXT(PlayerIndex playerIndex);
 
         /** @brief Left stick dead zone threshold (XInput-based). */
         NOXNA static constexpr float LeftDeadZone     = 7849.0f / 32768.0f;

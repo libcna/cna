@@ -107,4 +107,29 @@ namespace Microsoft::Xna::Framework::Input
     {
         return CNA::Internal::Input::SdlInputBridge::GetButtonLabel(playerIndex, button);
     }
+
+    std::string GamePad::GetNameEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetName(playerIndex);
+    }
+
+    std::string GamePad::GetPathEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetPath(playerIndex);
+    }
+
+    std::string GamePad::GetSerialEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetSerial(playerIndex);
+    }
+
+    std::uint16_t GamePad::GetFirmwareVersionEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetFirmwareVersion(playerIndex);
+    }
+
+    std::uint64_t GamePad::GetSteamHandleEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetSteamHandle(playerIndex);
+    }
 }

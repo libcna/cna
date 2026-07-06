@@ -100,6 +100,12 @@ namespace
     [[maybe_unused]] constexpr auto z_GamePad_GetPowerInfoEXT = static_cast<CNA::Input::PowerStateEXT(*)(PlayerIndex, int&)>(&GamePad::GetPowerInfoEXT);
     // NOXNA/EXT (input_noxna.md N-011): SDL gamepad face-button glyph label.
     [[maybe_unused]] constexpr auto z_GamePad_GetButtonLabelEXT = static_cast<CNA::Input::GamePadButtonLabelEXT(*)(PlayerIndex, Buttons)>(&GamePad::GetButtonLabelEXT);
+    // NOXNA/EXT (input_noxna.md N-010): SDL gamepad device metadata.
+    [[maybe_unused]] constexpr auto z_GamePad_GetNameEXT = static_cast<std::string(*)(PlayerIndex)>(&GamePad::GetNameEXT);
+    [[maybe_unused]] constexpr auto z_GamePad_GetPathEXT = static_cast<std::string(*)(PlayerIndex)>(&GamePad::GetPathEXT);
+    [[maybe_unused]] constexpr auto z_GamePad_GetSerialEXT = static_cast<std::string(*)(PlayerIndex)>(&GamePad::GetSerialEXT);
+    [[maybe_unused]] constexpr auto z_GamePad_GetFirmwareVersionEXT = static_cast<std::uint16_t(*)(PlayerIndex)>(&GamePad::GetFirmwareVersionEXT);
+    [[maybe_unused]] constexpr auto z_GamePad_GetSteamHandleEXT = static_cast<std::uint64_t(*)(PlayerIndex)>(&GamePad::GetSteamHandleEXT);
     static_assert(std::is_same_v<decltype(GamePad::LeftDeadZone), const float>, "GamePad::LeftDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::RightDeadZone), const float>, "GamePad::RightDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::TriggerThreshold), const float>, "GamePad::TriggerThreshold : static constexpr float");

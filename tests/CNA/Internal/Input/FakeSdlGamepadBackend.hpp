@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <string>
 #include <utility>
 
 #include "CNA/Internal/Input/SdlGamepadBackend.hpp"
@@ -41,6 +42,11 @@ namespace CNA::Internal::Input::test_support
         SDL_PowerState powerState = SDL_POWERSTATE_UNKNOWN; // battery/charge state reported by the fake
         int powerPercent = -1; // battery charge 0-100, or -1 if unknown
         std::map<SDL_GamepadButton, SDL_GamepadButtonLabel> buttonLabels; // printed glyph per face button
+        std::string name;                // SDL_GetGamepadName
+        std::string path;                // SDL_GetGamepadPath
+        std::string serial;              // SDL_GetGamepadSerial
+        Uint16 firmwareVersion = 0;      // SDL_GetGamepadFirmwareVersion
+        Uint64 steamHandle = 0;          // SDL_GetGamepadSteamHandle
     };
 
     class FakeSdlGamepadBackend final : public ISdlGamepadBackend
@@ -275,6 +281,32 @@ namespace CNA::Internal::Input::test_support
                 return SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN;
             const auto it = d->cfg.buttonLabels.find(button);
             return it != d->cfg.buttonLabels.end() ? it->second : SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN;
+        }
+
+        std::string GetGamepadName(SDL_Gamepad* gamepad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d ? d->cfg.name : "";
+        }
+        std::string GetGamepadPath(SDL_Gamepad* gamepad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d ? d->cfg.path : "";
+        }
+        std::string GetGamepadSerial(SDL_Gamepad* gamepad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d ? d->cfg.serial : "";
+        }
+        Uint16 GetGamepadFirmwareVersion(SDL_Gamepad* gamepad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d ? d->cfg.firmwareVersion : 0;
+        }
+        Uint64 GetGamepadSteamHandle(SDL_Gamepad* gamepad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d ? d->cfg.steamHandle : 0;
         }
 
         SDL_JoystickID lastClosedId = 0;

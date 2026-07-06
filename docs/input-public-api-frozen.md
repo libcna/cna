@@ -116,6 +116,11 @@ override must be added.
 - `static bool SetPlayerIndexEXT(PlayerIndex, int);` — NOXNA/EXT
 - `static CNA::Input::PowerStateEXT GetPowerInfoEXT(PlayerIndex, int& percent);` — NOXNA/EXT (battery/charge; percent 0-100 or -1; Error if disconnected)
 - `static CNA::Input::GamePadButtonLabelEXT GetButtonLabelEXT(PlayerIndex, Buttons);` — NOXNA/EXT (face-button glyph; Unknown if disconnected/unlabeled)
+- `static std::string GetNameEXT(PlayerIndex);` — NOXNA/EXT (controller name; "" if disconnected)
+- `static std::string GetPathEXT(PlayerIndex);` — NOXNA/EXT (OS device path; "" if disconnected)
+- `static std::string GetSerialEXT(PlayerIndex);` — NOXNA/EXT (hardware serial; "" if unavailable)
+- `static std::uint16_t GetFirmwareVersionEXT(PlayerIndex);` — NOXNA/EXT (firmware version; 0 if unavailable)
+- `static std::uint64_t GetSteamHandleEXT(PlayerIndex);` — NOXNA/EXT (Steam Input handle; 0 if not a Steam controller)
 - `static constexpr float LeftDeadZone;` — NOXNA
 - `static constexpr float RightDeadZone;` — NOXNA
 - `static constexpr float TriggerThreshold;` — NOXNA

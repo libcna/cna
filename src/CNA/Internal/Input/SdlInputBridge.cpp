@@ -1163,6 +1163,36 @@ namespace CNA::Internal::Input
         return sdl_button_label_to_ext(sdl_gamepad_backend().GetGamepadButtonLabel(gamepad, *sdlButton));
     }
 
+    std::string SdlInputBridge::GetName(Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        return gamepad ? sdl_gamepad_backend().GetGamepadName(gamepad) : std::string();
+    }
+
+    std::string SdlInputBridge::GetPath(Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        return gamepad ? sdl_gamepad_backend().GetGamepadPath(gamepad) : std::string();
+    }
+
+    std::string SdlInputBridge::GetSerial(Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        return gamepad ? sdl_gamepad_backend().GetGamepadSerial(gamepad) : std::string();
+    }
+
+    std::uint16_t SdlInputBridge::GetFirmwareVersion(Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        return gamepad ? sdl_gamepad_backend().GetGamepadFirmwareVersion(gamepad) : 0;
+    }
+
+    std::uint64_t SdlInputBridge::GetSteamHandle(Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        return gamepad ? sdl_gamepad_backend().GetGamepadSteamHandle(gamepad) : 0;
+    }
+
     static Microsoft::Xna::Framework::Input::GamePadType sdl_joystick_type_to_gamepad_type(SDL_JoystickType t)
     {
         using Microsoft::Xna::Framework::Input::GamePadType;

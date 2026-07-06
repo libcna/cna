@@ -729,6 +729,37 @@ TEST_F(FakeGamepadTest, ButtonLabelIsUnknownForNonPhysicalUnlabeledOrDisconnecte
               CNA::Input::GamePadButtonLabelEXT::Unknown) << "disconnected slot";
 }
 
+// --- gamepad metadata extension (input_noxna.md N-010) via GamePad::Get{Name,Path,Serial,...}EXT ---
+
+// N-010(a): each metadata getter forwards the device's canned value through the seam.
+TEST_F(FakeGamepadTest, MetadataForwardsDeviceValues)
+{
+    FakeGamepadConfig cfg = FullyFeaturedGamepad();
+    cfg.name = "Xbox Wireless Controller";
+    cfg.path = "/dev/input/event7";
+    cfg.serial = "ABCDEF0123";
+    cfg.firmwareVersion = 0x0105;
+    cfg.steamHandle = 0xDEADBEEFULL;
+    fake.Register(10, cfg);
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_EQ(GamePad::GetNameEXT(PlayerIndex::One), "Xbox Wireless Controller");
+    EXPECT_EQ(GamePad::GetPathEXT(PlayerIndex::One), "/dev/input/event7");
+    EXPECT_EQ(GamePad::GetSerialEXT(PlayerIndex::One), "ABCDEF0123");
+    EXPECT_EQ(GamePad::GetFirmwareVersionEXT(PlayerIndex::One), 0x0105);
+    EXPECT_EQ(GamePad::GetSteamHandleEXT(PlayerIndex::One), 0xDEADBEEFULL);
+}
+
+// N-010(b): a disconnected slot returns empty strings and zero without reaching the backend.
+TEST_F(FakeGamepadTest, MetadataIsEmptyForDisconnectedSlot)
+{
+    EXPECT_EQ(GamePad::GetNameEXT(PlayerIndex::Three), "");
+    EXPECT_EQ(GamePad::GetPathEXT(PlayerIndex::Three), "");
+    EXPECT_EQ(GamePad::GetSerialEXT(PlayerIndex::Three), "");
+    EXPECT_EQ(GamePad::GetFirmwareVersionEXT(PlayerIndex::Three), 0);
+    EXPECT_EQ(GamePad::GetSteamHandleEXT(PlayerIndex::Three), 0ULL);
+}
+
 // --- sensor enable/disable (P4-017) ---
 
 // P4-017(c): reading a sensor lazily enables it exactly once. The first GetGyroEXT enables SDL_SENSOR_GYRO;

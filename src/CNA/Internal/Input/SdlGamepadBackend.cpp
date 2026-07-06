@@ -101,6 +101,29 @@ namespace CNA::Internal::Input
             {
                 return SDL_GetGamepadButtonLabel(gamepad, button);
             }
+            std::string GetGamepadName(SDL_Gamepad* gamepad) override
+            {
+                const char* s = SDL_GetGamepadName(gamepad);
+                return s ? s : "";
+            }
+            std::string GetGamepadPath(SDL_Gamepad* gamepad) override
+            {
+                const char* s = SDL_GetGamepadPath(gamepad);
+                return s ? s : "";
+            }
+            std::string GetGamepadSerial(SDL_Gamepad* gamepad) override
+            {
+                const char* s = SDL_GetGamepadSerial(gamepad);
+                return s ? s : "";
+            }
+            Uint16 GetGamepadFirmwareVersion(SDL_Gamepad* gamepad) override
+            {
+                return SDL_GetGamepadFirmwareVersion(gamepad);
+            }
+            Uint64 GetGamepadSteamHandle(SDL_Gamepad* gamepad) override
+            {
+                return SDL_GetGamepadSteamHandle(gamepad);
+            }
         };
 
         RealSdlGamepadBackend g_realBackend;

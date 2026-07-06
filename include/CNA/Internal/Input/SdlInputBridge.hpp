@@ -135,6 +135,17 @@ namespace CNA::Internal::Input
             Microsoft::Xna::Framework::PlayerIndex playerIndex,
             Microsoft::Xna::Framework::Input::Buttons button);
 
+        /** @brief NOXNA/EXT: controller name, or "" if disconnected/unknown. */
+        static std::string GetName(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+        /** @brief NOXNA/EXT: OS device path, or "" if disconnected/unknown. */
+        static std::string GetPath(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+        /** @brief NOXNA/EXT: hardware serial, or "" if disconnected/unavailable. */
+        static std::string GetSerial(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+        /** @brief NOXNA/EXT: firmware version, or 0 if disconnected/unavailable. */
+        static std::uint16_t GetFirmwareVersion(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+        /** @brief NOXNA/EXT: Steam Input handle, or 0 if disconnected/not a Steam controller. */
+        static std::uint64_t GetSteamHandle(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+
         /**
          * @brief Queries SDL for the actual hardware capabilities of the gamepad.
          */
