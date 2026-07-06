@@ -4096,7 +4096,7 @@ not an alternate spelling to preserve.
 
 ## 10. Android sensor bridge tasks
 
-### ANDROID-BRIDGE-001 — Verify per-sensor sample value counts
+### ANDROID-BRIDGE-001 — Verify per-sensor sample value counts — CLOSED (2026-07-06, real bug found and fixed: `ValueCount` was an unconditional constant, never per-sensor-type)
 
 - **Priority:** High
 - **Area:** Android Bridge
@@ -4104,20 +4104,68 @@ not an alternate spelling to preserve.
   per-sensor-type value count (rotation vector up to 5, magnetic field/gravity/linear
   acceleration/gyroscope 3, etc.) — verify the current bridge implementation actually
   sets this correctly per sensor type, rather than a single generic constant.
+- **Resolution (2026-07-06):** confirmed the problem statement's own suspicion exactly —
+  `Impl::Run()`'s dispatch loop set `sample.ValueCount = 16;` **unconditionally, for
+  every sensor type**, contradicting `AndroidSensorSample::ValueCount`'s own doc comment
+  ("e.g. 3 for a vector sensor, up to 5 for a rotation vector with accuracy"), which had
+  described the intended design without it ever actually being implemented. Also
+  confirmed `ValueCount` was **never read anywhere in this codebase** (grepped every
+  `.ValueCount`/`->ValueCount` reference) — every consumer (`AndroidCompassBackend`/
+  `AndroidMotionBackend`) reads fixed, sensor-type-appropriate indices directly
+  (`sample.Values[0..3]` for a quaternion, `[0..2]` for a vector), never conditionally
+  on `ValueCount` first. This meant the bug was previously inert (no observable
+  incorrect behavior), but still a real correctness/clarity defect worth fixing, since
+  any future consumer that *does* check `ValueCount` before reading would get
+  systematically wrong information for every sensor type except whichever one a fresh
+  reader assumed "16" meant.
+  - **Fix:** added `Detail::GetValueCountForAndroidSensorType(int androidSensorType)`
+    (`AndroidSensorBridge.hpp`) — a pure function, host-testable like
+    `ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds()`'s own established
+    precedent, taking the sensor type as a plain `int` (not `ASensorType`) so this
+    header still needs no NDK include. Value counts confirmed directly against the
+    vendored NDK's own `android/sensor.h`: 3 for `ASENSOR_TYPE_MAGNETIC_FIELD`/
+    `_GRAVITY`/`_LINEAR_ACCELERATION`/`_GYROSCOPE` (all report through the shared
+    `ASensorVector` union, `float v[3]` plus a status byte, confirmed from its own
+    struct definition) and 5 for `ASENSOR_TYPE_ROTATION_VECTOR`/
+    `_GAME_ROTATION_VECTOR` (Android's own Java `SensorEvent.values` documentation:
+    `values[0..2]` quaternion x/y/z, `values[3]` = `cos(θ/2)`, `values[4]` = estimated
+    heading accuracy in radians, `-1` if unavailable). Any other/unrecognized type
+    falls back to 16 (the full raw union size), matching the previous behavior for
+    every type as a safe default. `Impl::Run()` now calls this function instead of the
+    hardcoded constant.
+  - **Bounds-checking:** confirmed no actual out-of-bounds risk exists either way —
+    `AndroidSensorSample::Values` is a fixed 16-`float` array (mirroring the NDK's own
+    fixed-size `ASensorEvent::data[16]` union), never a variable-length one, and every
+    real consumer reads fixed indices appropriate to the sensor type it specifically
+    constructed its own bridge for (never a generic "read up to `ValueCount`" loop) —
+    so this task's "defensive bounds-checking against a short/malformed event"
+    acceptance criterion was already satisfied by construction, not something this fix
+    needed to add.
+  - **Tests:** added `VectorSensorTypesReturnThreeValues`/
+    `RotationVectorSensorTypesReturnFiveValues`/
+    `UnrecognizedSensorTypeReturnsFullRawUnionSize` to `AndroidSensorBridgeTests.cpp` —
+    fully host-testable (pure integer function), unlike most other Android-bridge fixes
+    this session.
+  - Verified: 17 `AndroidSensorBridgeTests` (up from 14), all passing on plain
+    `cmake-build-debug`; also confirmed a clean Android NDK cross-compile of the `CNA`
+    target.
 - **Required work:**
   - Confirm `ValueCount` is set according to actual sensor type at every callsite in
-    `Detail::AndroidSensorBridge.cpp`.
+    `Detail::AndroidSensorBridge.cpp`. Done — found it wasn't, fixed the one callsite.
   - Ensure backends validate they've received enough values before reading indices
-    (defensive bounds-checking against a short/malformed event).
-  - Add tests for each consumed sensor type's expected value count.
+    (defensive bounds-checking against a short/malformed event). Confirmed already
+    safe by construction (fixed-size array, fixed-index reads) — no change needed.
+  - Add tests for each consumed sensor type's expected value count. Done — 3 new tests.
 - **Acceptance criteria:**
   - Rotation vector, magnetic field, gravity, linear acceleration, and gyroscope
-    samples all expose the correct count.
-  - Backends handle an incomplete sample safely (no out-of-bounds read).
+    samples all expose the correct count. Done.
+  - Backends handle an incomplete sample safely (no out-of-bounds read). Confirmed,
+    already true by construction.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
-  - `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp` (edited — new
+    pure function)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp` (edited — real fix)
+  - `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` (edited)
 
 ### ANDROID-BRIDGE-002 — Support update-interval changes while running — CLOSED (2026-07-06)
 

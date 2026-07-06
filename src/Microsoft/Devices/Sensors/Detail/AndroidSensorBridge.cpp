@@ -290,7 +290,18 @@ namespace Microsoft::Devices::Sensors::Detail
                        && ASensorEventQueue_getEvents(queue_, &event, 1) > 0)
                 {
                     AndroidSensorSample sample;
-                    sample.ValueCount = 16;
+                    // Task ANDROID-BRIDGE-001 (2026-07-06): ValueCount now
+                    // reflects the real per-sensor-type value count (3 for
+                    // a vector sensor, 5 for a rotation vector, see
+                    // GetValueCountForAndroidSensorType()'s own doc comment)
+                    // instead of the previous unconditional 16 -- Values
+                    // itself still always copies the full raw union (16
+                    // floats is the NDK's own fixed ASensorEvent::data size,
+                    // never a variable-length array, so there is no actual
+                    // out-of-bounds risk either way; this is a correctness/
+                    // clarity fix for ValueCount's own meaning, not a bounds
+                    // fix).
+                    sample.ValueCount = GetValueCountForAndroidSensorType(sensorType_);
                     for (int i = 0; i < 16; ++i)
                     {
                         sample.Values[i] = event.data[i];

@@ -46,6 +46,57 @@ namespace Microsoft::Devices::Sensors::Detail
     }
 
     /**
+     * @brief Returns the number of semantically valid entries in an `ASensorEvent::data`/`AndroidSensorSample::Values` array, for a given raw NDK sensor type constant.
+     *
+     * Pure function (mirrors `ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds()`'s
+     * own precedent immediately above): takes the sensor type as a plain
+     * `int` rather than `ASensorType`, so this header still needs no
+     * `<android/sensor.h>` include and stays testable on any platform
+     * (Task ANDROID-BRIDGE-001, 2026-07-06 — the numeric literals below are
+     * `ASENSOR_TYPE_*`'s own documented values, confirmed directly against
+     * the vendored NDK's `android/sensor.h`, not guessed).
+     *
+     * - `ASENSOR_TYPE_MAGNETIC_FIELD` (2) / `ASENSOR_TYPE_GRAVITY` (9) /
+     *   `ASENSOR_TYPE_LINEAR_ACCELERATION` (10) / `ASENSOR_TYPE_GYROSCOPE`
+     *   (4): 3 — these all report through the NDK's shared `ASensorVector`
+     *   union (`float v[3]` plus a status byte), confirmed directly from
+     *   its own struct definition.
+     * - `ASENSOR_TYPE_ROTATION_VECTOR` (11) / `ASENSOR_TYPE_GAME_ROTATION_VECTOR`
+     *   (15): 5 — Android's own Java `SensorEvent.values` documentation for
+     *   `TYPE_ROTATION_VECTOR` specifies `values[0..2]` = `x*sin(θ/2)`/
+     *   `y*sin(θ/2)`/`z*sin(θ/2)`, `values[3]` = `cos(θ/2)` (optional on
+     *   older API levels, always populated on the API 24+ minimum this
+     *   project targets), `values[4]` = estimated heading accuracy in
+     *   radians (`-1` if unavailable) — 5 total; the NDK's own `data[16]`
+     *   union has no dedicated named field for this sensor type (unlike
+     *   `ASensorVector`), consistent with it being a wider, less uniform
+     *   shape than the 3-value vector sensors.
+     * - Any other/unrecognized sensor type: 16 (the full raw union size —
+     *   the safe, conservative fallback for a sensor type this codebase
+     *   doesn't specifically know about, matching the previous unconditional
+     *   behavior for every type before this task).
+     *
+     * @param androidSensorType Raw `ASENSOR_TYPE_*` constant, as a plain `int`.
+     * @return Number of valid leading entries in the sample's `Values` array.
+     */
+    [[nodiscard]] inline int GetValueCountForAndroidSensorType(int androidSensorType)
+    {
+        switch (androidSensorType)
+        {
+        case 2:  // ASENSOR_TYPE_MAGNETIC_FIELD
+        case 9:  // ASENSOR_TYPE_GRAVITY
+        case 10: // ASENSOR_TYPE_LINEAR_ACCELERATION
+        case 4:  // ASENSOR_TYPE_GYROSCOPE
+            return 3;
+        case 11: // ASENSOR_TYPE_ROTATION_VECTOR
+        case 15: // ASENSOR_TYPE_GAME_ROTATION_VECTOR
+            return 5;
+        default:
+            return 16;
+        }
+    }
+
+    /**
      * One raw Android NDK sensor sample. Already stamped with real
      * wall-clock time, not the sensor's own monotonic boot-time timestamp —
      * matches the precedent Accelerometer/Gyroscope already established

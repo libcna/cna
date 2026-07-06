@@ -9,6 +9,7 @@
 
 using Microsoft::Devices::Sensors::Detail::AndroidSensorBridge;
 using Microsoft::Devices::Sensors::Detail::ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds;
+using Microsoft::Devices::Sensors::Detail::GetValueCountForAndroidSensorType;
 using System::TimeSpan;
 
 // Task DEVICES-0081/0083: ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds()
@@ -73,6 +74,36 @@ TEST(AndroidSensorBridgeTests, HugeButNotMaxTimeSpanClampsToInt32Max)
     EXPECT_EQ(
         ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(TimeSpan::FromMilliseconds(1e12)),
         std::numeric_limits<std::int32_t>::max());
+}
+
+// Task ANDROID-BRIDGE-001 (2026-07-06): GetValueCountForAndroidSensorType()
+// -- confirmed against the vendored NDK's android/sensor.h directly (see the
+// function's own doc comment for the exact citations), not guessed.
+
+TEST(AndroidSensorBridgeTests, VectorSensorTypesReturnThreeValues)
+{
+    EXPECT_EQ(GetValueCountForAndroidSensorType(2), 3);  // ASENSOR_TYPE_MAGNETIC_FIELD
+    EXPECT_EQ(GetValueCountForAndroidSensorType(9), 3);  // ASENSOR_TYPE_GRAVITY
+    EXPECT_EQ(GetValueCountForAndroidSensorType(10), 3); // ASENSOR_TYPE_LINEAR_ACCELERATION
+    EXPECT_EQ(GetValueCountForAndroidSensorType(4), 3);  // ASENSOR_TYPE_GYROSCOPE
+}
+
+TEST(AndroidSensorBridgeTests, RotationVectorSensorTypesReturnFiveValues)
+{
+    EXPECT_EQ(GetValueCountForAndroidSensorType(11), 5); // ASENSOR_TYPE_ROTATION_VECTOR
+    EXPECT_EQ(GetValueCountForAndroidSensorType(15), 5); // ASENSOR_TYPE_GAME_ROTATION_VECTOR
+}
+
+TEST(AndroidSensorBridgeTests, UnrecognizedSensorTypeReturnsFullRawUnionSize)
+{
+    // ASENSOR_TYPE_ACCELEROMETER (1) is a real, valid NDK sensor type, but
+    // this codebase's own Detail::AndroidSensorBridge users never construct
+    // one with it (Accelerometer is SDL-backed, not NDK-backed) -- included
+    // here specifically to confirm the fallback path, not to claim it as a
+    // meaningfully-supported case.
+    EXPECT_EQ(GetValueCountForAndroidSensorType(1), 16);
+    EXPECT_EQ(GetValueCountForAndroidSensorType(-1), 16);
+    EXPECT_EQ(GetValueCountForAndroidSensorType(9999), 16);
 }
 
 // Task DEVICES-0074/0084: on this desktop (non-Android) build, every
