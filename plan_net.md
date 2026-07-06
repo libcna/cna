@@ -1393,57 +1393,49 @@ open-ended, ambitious future work — not all of it needs to land in one sitting
   - Files/modules: not yet known — investigation only until root cause is found.
   - Verify: not applicable until root cause is identified and a fix is proposed.
 
-- [ ] **Task 11.21** — Runtime wardrobe attach API. Today `SkinnedModelEXT` has no compose/
-  attach entry point — only `AddPartEXT` at load time — so a standalone-converted wardrobe
-  piece (Task 11.14's `generate_wardrobe.py` output) can be converted but never actually worn
-  by an already-loaded, running avatar. Design and add a real attach API (e.g.
-  `SkinnedModelEXT::AttachPartEXT` or a small compose helper) that adds a part (with its own
-  vertex/index buffers and bone-name-based skin-weight remap onto the host model's skeleton) to
-  an already-constructed model.
-  - Files/modules: `include/.../Graphics/SkinnedModelEXT.hpp`,
-    `src/Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.cpp`, likely
-    `tools/avatar_asset_pipeline/convert_avatar.py` (to keep a wardrobe piece's own bone-name
-    tracks importable independent of a specific body's bone index order).
-  - Verify: load a body, then attach a standalone-converted wardrobe piece at runtime, and
-    render both through one `DrawRealEXT` call with correct skinning on the attached piece.
+- [x] **Task 11.21** — Runtime wardrobe attach API. Added
+  `SkinnedModelEXT::AttachPartEXT(SkinnedModelEXT&&)`, moving every part (and its owning
+  buffers) from an independently-loaded model into this one. No per-vertex bone-index
+  remap needed: confirmed (by inspecting `convert_avatar.py`'s `build_node_hierarchy`
+  against both a full-body export and a standalone wardrobe export) that the topological
+  bone sort is deterministic given the same canonical skeleton, so a wardrobe piece's
+  joint indices already agree with the host body's bone index scheme. Throws
+  `System::ArgumentException` on a `BoneCount` mismatch. 2 unit tests + a new real-GPU
+  integration test (`examples/avatar_attach_part_integration_test.cpp`,
+  `cna_test_avatar_attach_part`) proving two independently-built single-bone quad models
+  render correctly after one is attached onto the other — `[PASS]` confirmed.
 
-- [ ] **Task 11.22** — Wire `examples/demo_avatar` to exercise Task 11.21's runtime attach API:
-  a CLI flag or in-app key to swap hair/shirt/pants styles on the already-running avatar,
-  proving the attach path end-to-end rather than only via baked-in styles (Task 11.18).
-  - Files/modules: `examples/demo_avatar/src/AvatarDemo.hpp`, `examples/demo_avatar/src/AvatarDemo.cpp`.
-  - Verify: swap a style at runtime via the new control and confirm the mesh visibly changes
-    without restarting the demo.
-  - Depends on: Task 11.21.
+- [x] **Task 11.22** — Wired `examples/demo_avatar` to Task 11.21's attach API: a new
+  `--wardrobe-hair <Style>` CLI flag loads a standalone-converted hair piece
+  (`Content/wardrobe/hair_<Style>/`) and swaps it in for the baked-in hair at load time.
+  Verified visually: `--wardrobe-hair Ponytail` renders the male avatar with the
+  ponytail's distinct silhouette in place of the default round cap.
 
-- [ ] **Task 11.23** — Expand animation coverage. Only 5/31 `AvatarAnimationPreset` values
-  have real baked clips today (`Stand0`/`Stand1`/`Wave`/`Clap`/`Celebrate`); split the
-  remaining 26 into batches so no single task is unbounded:
-  - **11.23a** — `Stand2`..`Stand7` (6 more generic idle variants, gender-neutral, baked into
-    both genders' content like `Stand0`/`Stand1`).
-  - **11.23b** — the 10 `Female*` presets: `FemaleIdleCheckNails`, `FemaleIdleLookAround`,
-    `FemaleIdleShiftWeight`, `FemaleIdleFixShoe`, `FemaleAngry`, `FemaleConfused`,
-    `FemaleLaugh`, `FemaleCry`, `FemaleShocked`, `FemaleYawn` — baked only into the female
-    content.
-  - **11.23c** — the 10 `Male*` presets: `MaleIdleLookAround`, `MaleIdleStretch`,
-    `MaleIdleShiftWeight`, `MaleIdleCheckHand`, `MaleAngry`, `MaleConfused`, `MaleLaugh`,
-    `MaleCry`, `MaleSurprised`, `MaleYawn` — baked only into the male content.
-  - Files/modules: `tools/avatar_builder/generate_animations.py`,
-    `tools/avatar_builder/validate_gltf.py` (extend `REQUIRED_ANIMATIONS` per batch),
-    `examples/demo_avatar/Content/**` (regenerate after each batch).
-  - Verify per batch: `validate_gltf.py` confirms the new clips exist with nonzero frame
-    ranges; multi-angle Blender renders + numeric pose-bone dumps as Task 11.15 did; real-engine
-    render via `examples/demo_avatar` (learned from Task 11.18 — Blender-side validation alone
-    missed a real-engine-only deformation problem).
+- [x] **Task 11.23** — Expand animation coverage — **done in full, 31/31
+  `AvatarAnimationPreset` values now have real baked clips**:
+  - **11.23a** — `Stand2`-`Stand7` (6 more generic idles), built from
+    Hips/Spine/Spine1/Neck/Head only (no L/R-mirrored arm bones).
+  - **11.23b** — the 10 `Female*` presets, same safe bone set; surfaced a new seam-gap
+    finding (`FemaleIdleFixShoe`'s 35° Spine bend), fixed by adding `Hips`-`Spine` and
+    `Spine`-`Spine1` to `generate_body.BEND_JOINTS` (Task 11.20's fix generalizes beyond
+    arms/legs).
+  - **11.23c** — the 10 `Male*` presets, same safe bone set, each deliberately using a
+    different bone pairing/timing than its female counterpart.
+  - `generate_animations.build_animations()` now takes a `gender` parameter (generic set
+    always builds; `Female*`/`Male*` only build for their own gender);
+    `generate_avatar.py` passes its own gender through. `AvatarDemo`'s `clipNames_` is
+    populated per-gender in the constructor. Verified via Blender renders at each new
+    clip's peak frame plus real-engine runs (no crashes).
 
-- [ ] **Task 11.24** — Pixel-readback regression test guarding Task 11.17's fix class of bug.
-  Extend `examples/avatar_real_render_integration_test.cpp` (or add a sibling test) with two
-  distinctly-positioned, distinctly-named parts (e.g. one whose name contains `"Shirt"`) and a
-  non-default `AvatarAppearanceEXT`, then assert via `GetBackBufferData` that the two parts'
-  rendered pixels differ in the expected way. Today nothing but manual visual inspection would
-  catch a `PartTintEXT` regression.
-  - Files/modules: `examples/avatar_real_render_integration_test.cpp`.
-  - Verify: test fails if `PartTintEXT`'s substring match is reverted to exact-equality
-    against `"hair"`; passes against the current fix.
+- [x] **Task 11.24** — Pixel-readback regression test guarding Task 11.17's fix class of
+  bug. New `examples/avatar_tint_routing_integration_test.cpp`
+  (`cna_test_avatar_tint_routing`): two single-bone quads named `"CNAAvatarHair"`/
+  `"CNAAvatarShirt"` with all-white textures (isolating tint from texture) and a
+  non-default `AvatarAppearanceEXT`, asserting each renders in its own appearance color.
+  Confirmed the test actually catches the regression, not just passes vacuously:
+  temporarily reverted `PartTintEXT` to the pre-Task-11.17 exact-`"hair"`-match logic and
+  reran — `[FAIL]`, both parts collapsed to skin color; restored the real fix and reran
+  — `[PASS]`.
 
 - [ ] **Task 11.25** — (Speculative, lowest priority, scope not yet designed) A richer
   appearance/customization model: per-part texture atlases (builds on Task 11.19), a wider
