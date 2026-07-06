@@ -958,11 +958,24 @@ come back 5,17,30, proving a real id sort, not insertion order), complementing t
 `docs/input-fna-fidelity.md` (DEC-20), `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` (+1 test).
 **Tests:** pass. **Behavior verified:** deterministic ascending-id ordering. **Remaining risk:** none.
 
-## P5-013 — Verify `TouchPanel::GetCapabilities`
-- [ ] Determine how touch capability is detected.
-- [ ] Avoid capability becoming true only after first touch unless intentionally documented.
-- [ ] Add fake backend/device query if needed.
-- [ ] Add tests.
+## P5-013 — Verify `TouchPanel::GetCapabilities` `[x]`
+- [x] Determine how touch capability is detected.
+- [x] Avoid capability becoming true only after first touch unless intentionally documented.
+- [x] Add fake backend/device query if needed.
+- [x] Add tests.
+
+**Result (2026-07-06):** Detection is two-tier (`TouchPanel.cpp:94-111`): `IsConnected = true` if
+`touchDeviceExists_` (set on the first `FINGER_DOWN`, `SdlInputBridge.cpp:1428`) OR if
+`InputManager::HasAnyTouch()` sees a live touch. The **connected-only-after-first-touch** behavior is
+**intentional and FNA-faithful** — FNA/Windows only notices a touch screen once it is touched
+(`SDL3_FNAPlatform.cs:972`); now explicitly documented in `docs/input-fna-fidelity.md` (previously only a
+source comment). The query is **non-mutating** (uses `HasAnyTouch()`, not `GetTouchState()`), so it never
+consumes an input frame. `MaximumTouchCount` = 4 connected / 0 disconnected (DEC-09). The "fake device
+query" is served by the `setTouchDeviceExistsProperty` flag + the InputManager fallback (no SDL device
+needed in tests). **Coverage** already complete: `GetCapabilitiesIsDisconnectedBeforeAnyTouch`,
+`GetCapabilitiesIsConnectedOnceTouchDeviceExists`, `GetCapabilitiesIsConnectedViaInputManagerFallbackWhenFlagUnset`.
+**Files changed:** `docs/input-fna-fidelity.md` (documented the deviation). **Behavior verified:**
+detection + non-mutation + FNA parity. **Remaining risk:** none.
 
 ## P5-014 — Verify display size dependency
 - [ ] Audit behavior when display width/height is zero.

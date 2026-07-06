@@ -183,6 +183,14 @@ from the fake-backend unit tests above.
   fixed XNA-compat value, NOT the tracking cap. `TouchPanel::GetState()` caps the public snapshot at
   `MAX_TOUCHES (8)`, matching FNA's fixed `TouchLocation[MAX_TOUCHES]` array (the event-driven
   `InputManager` map is internally unbounded, but the public state never exceeds 8).
+- **`GetCapabilities` connected-after-first-touch (P5-013):** `TouchPanel::GetCapabilities` reports
+  `IsConnected = false` until a touch device is actually noticed — i.e. `touchDeviceExists_` is set on the
+  first `FINGER_DOWN` (`SdlInputBridge.cpp:1428`), or `InputManager::HasAnyTouch()` sees a live touch. This
+  is **intentional and FNA-faithful**: FNA/Windows only notices a touch screen once it is touched
+  (`SDL3_FNAPlatform.cs:972`). The capability query is non-mutating (uses `HasAnyTouch()`, never
+  `GetTouchState()`), so it does not consume a frame of input. Pinned by
+  `GetCapabilitiesIsDisconnectedBeforeAnyTouch`, `GetCapabilitiesIsConnectedOnceTouchDeviceExists`,
+  `GetCapabilitiesIsConnectedViaInputManagerFallbackWhenFlagUnset`.
 - **Touch collection ordering (DEC-20, P5-012):** FNA's `TouchPanel.GetState()` iterates its fixed
   `touches[0..MAX_TOUCHES]` array (`TouchPanel.cs:97`), so its collection order is **SDL finger-array slot
   order**. CNA's event-driven fallback (`InputManager::GetTouchState`) instead orders by **ascending touch
