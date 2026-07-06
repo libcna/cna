@@ -37,7 +37,7 @@
 - [x] **N-015 `CNA::Input::Sensors`** — device-level accelerometer/gyro + enumeration (`SDL_sensor`) via seam.
 - [x] **N-016 `Mouse` capture / global-position EXT** — `SetCaptureEXT`, `GetGlobalPositionEXT`, `WarpGlobalEXT` via seam.
 - [x] **N-017 `CNA::Input::InputDevices`** — enumeration (mice/keyboards/touch id+name) via seam. Hot-plug events -> N-017b.
-- [ ] **N-017b `InputDevices` hot-plug events** — `SDL_EVENT_{MOUSE,KEYBOARD}_ADDED/REMOVED` multicast events (split off from N-017).
+- [x] **N-017b `InputDevices` hot-plug events** — `Mouse/Keyboard Connected/DisconnectedEXT` multicast events.
 - [x] **N-018 `CNA::Input::Power`** — system battery (`SDL_GetPowerInfo`) via injectable seam; reuses `PowerStateEXT`.
 
 ## Notes
@@ -50,6 +50,13 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-017b done (2026-07-06):** `InputDevices::{Mouse,Keyboard}{Connected,Disconnected}EXT` — four
+  `System::MulticastAction<uint32_t>` hot-plug events carrying the SDL device id (use `+=`). The
+  bridge's ProcessEvent decodes `SDL_EVENT_{MOUSE,KEYBOARD}_{ADDED,REMOVED}` (`event.mdevice.which`/
+  `event.kdevice.which`) and Invokes the matching event; `InputDevices::ResetForTests` clears all
+  four. Additive NOXNA (no freeze pin). Tests `CnaInputDevicesHotplugTest` feed synthetic device
+  events through ProcessEvent and assert the right event fires with the right id + no cross-firing.
+  `ctest -L input` green; ASan-clean. Completes the InputDevices feature (enumeration + hot-plug).
 - **N-008 done (2026-07-06):** `GamePad::GetTouchpadCountEXT` / `GetTouchpadFingerCountEXT(touchpad)`
   / `GetTouchpadFingerEXT(touchpad, finger, out down,x,y,pressure)` — PS4/PS5-style touchpad finger
   data, **poll-based** (like GetGyro/AccelEXT), NOT event-driven, so no InputManager changes.

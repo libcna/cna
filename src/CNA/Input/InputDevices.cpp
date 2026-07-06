@@ -5,6 +5,19 @@
 
 namespace CNA::Input
 {
+    System::MulticastAction<std::uint32_t> InputDevices::MouseConnectedEXT;
+    System::MulticastAction<std::uint32_t> InputDevices::MouseDisconnectedEXT;
+    System::MulticastAction<std::uint32_t> InputDevices::KeyboardConnectedEXT;
+    System::MulticastAction<std::uint32_t> InputDevices::KeyboardDisconnectedEXT;
+
+    void InputDevices::ResetForTests()
+    {
+        MouseConnectedEXT = nullptr;
+        MouseDisconnectedEXT = nullptr;
+        KeyboardConnectedEXT = nullptr;
+        KeyboardDisconnectedEXT = nullptr;
+    }
+
     std::vector<InputDeviceInfoEXT> InputDevices::GetMiceEXT()
     {
         return CNA::Internal::Input::system_device_backend().GetMice();

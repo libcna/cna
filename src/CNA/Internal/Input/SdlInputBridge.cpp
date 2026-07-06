@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 
+#include "CNA/Input/InputDevices.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlGamepadBackend.hpp"
@@ -1542,6 +1543,19 @@ namespace CNA::Internal::Input
             InputManager::AddHorizontalScrollWheelDelta(
                 static_cast<int>(event.wheel.x) * 120
             );
+            break;
+        // NOXNA/EXT (input_noxna.md N-017b): device hot-plug events routed to CNA::Input::InputDevices.
+        case SDL_EVENT_MOUSE_ADDED:
+            CNA::Input::InputDevices::MouseConnectedEXT.Invoke(event.mdevice.which);
+            break;
+        case SDL_EVENT_MOUSE_REMOVED:
+            CNA::Input::InputDevices::MouseDisconnectedEXT.Invoke(event.mdevice.which);
+            break;
+        case SDL_EVENT_KEYBOARD_ADDED:
+            CNA::Input::InputDevices::KeyboardConnectedEXT.Invoke(event.kdevice.which);
+            break;
+        case SDL_EVENT_KEYBOARD_REMOVED:
+            CNA::Input::InputDevices::KeyboardDisconnectedEXT.Invoke(event.kdevice.which);
             break;
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
