@@ -862,11 +862,20 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   and sets nothing else). Full suite: **3267/3269 passing** (2 expected accelerometer/gyroscope
   skips), no regressions. Pure test-coverage addition, no revert-verify applies.
 
-- [ ] **Task 5.6** — Fix `NetEventArgsTests.cpp` exercising `GamerJoinedEventArgs`/`GamerLeftEventArgs`/
+- [x] **Task 5.6** — Fix `NetEventArgsTests.cpp` exercising `GamerJoinedEventArgs`/`GamerLeftEventArgs`/
   `HostChangedEventArgs`/`WriteLeaderboardsEventArgs` exclusively with `nullptr` gamer pointers,
   which can't catch a constructor-argument-order bug (e.g. `HostChangedEventArgs` accidentally
-  swapping `oldHost`/`newHost`). Rewrite using two distinct non-null sentinel pointers and assert
-  each property returns the correct, distinguishable one.
+  swapping `oldHost`/`newHost`).
+  **Fixed:** rewrote every gamer-carrying test to use real, distinct sentinel `NetworkGamer`
+  instances (via a `MakeSentinelGamer(gamertag)` helper — a `nullptr` `NetworkSession*` is safe
+  since the constructor never dereferences it) instead of `nullptr`, asserting each property
+  returns the correct, distinguishable instance — `HostChangedEventArgsTest.StoresOldAndNewHost`
+  now explicitly asserts `oldHost != newHost` too.
+  **Verified the rewritten test actually catches what it claims to**: temporarily swapped
+  `HostChangedEventArgs`'s constructor body (`oldHost_(newHost), newHost_(oldHost)`) and reran —
+  the test failed exactly as expected, both properties returning the wrong sentinel. Restored the
+  correct constructor and reran — passes. Full suite: **3267/3269 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 5.7** — Add a test proving `AvailableNetworkSessionCollection::Dispose()`'s actual,
   documented deviation from FNA (FNA clears its collection on `Dispose()`; this port intentionally
