@@ -35,7 +35,8 @@ class AvatarDemo : public Microsoft::Xna::Framework::Game
 {
 public:
     explicit AvatarDemo(Microsoft::Xna::Framework::GamerServices::AvatarBodyType bodyType =
-                             Microsoft::Xna::Framework::GamerServices::AvatarBodyType::Male);
+                             Microsoft::Xna::Framework::GamerServices::AvatarBodyType::Male,
+                         std::string wardrobeHairStyle = "");
     ~AvatarDemo() override;
 
     void Initialize() override;
@@ -50,6 +51,7 @@ private:
     using KbState = Microsoft::Xna::Framework::Input::KeyboardState;
 
     Microsoft::Xna::Framework::GamerServices::AvatarBodyType bodyType_;
+    std::string wardrobeHairStyle_;
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::SkinnedModelEXT> model_;
     std::unique_ptr<Microsoft::Xna::Framework::GamerServices::AvatarRenderer> renderer_;
 
