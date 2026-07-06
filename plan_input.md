@@ -1094,11 +1094,20 @@ enqueue→true, read→false). **Files changed:** `tests/Microsoft/Xna/Framework
 (+1 test). **Tests:** pass. **Behavior verified:** availability mirrors queue non-emptiness. **Remaining
 risk:** none.
 
-## P6-004 — Verify `ReadGesture`
-- [ ] Test FIFO order.
-- [ ] Test exception when no gesture is available.
-- [ ] Test gesture data fields.
-- [ ] Add tests.
+## P6-004 — Verify `ReadGesture` `[x]`
+- [x] Test FIFO order.
+- [x] Test exception when no gesture is available.
+- [x] Test gesture data fields.
+- [x] Add tests.
+
+**Result (2026-07-06):** Fully covered by existing tests. **FIFO:**
+`EnqueueGestureAndReadGestureFollowFifoOrder` (enqueue Tap then Hold, read back Tap then Hold).
+**Exception:** `ReadGestureThrowsInvalidOperationExceptionWhenQueueIsEmpty` throws
+`System::InvalidOperationException`, matching FNA's `InvalidOperationException` (TouchPanel.cpp ReadGesture).
+**Data fields:** `TapFiresOnQuickReleaseNearPressPosition` (Position.X/Y + `FingerIdEXT`),
+`PinchAndPinchCompleteFireForTwoFingerGesture` (Position, Position2, Delta, Delta2, FingerIdEXT,
+FingerId2EXT), the drag tests (Delta). **Files changed:** none (coverage confirmed). **Behavior verified:**
+FIFO dequeue + empty-throw + populated sample fields. **Remaining risk:** none.
 
 ## P6-005 — Verify tap detection
 - [ ] Test simple tap.
