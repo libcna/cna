@@ -135,10 +135,22 @@ namespace Microsoft::Devices::Sensors::Detail
     namespace
     {
         // Matches Accelerometer.cpp's identical constant/conversion (Task
-        // DEVICES-0063): Android's TYPE_GRAVITY/TYPE_LINEAR_ACCELERATION
-        // sensors report m/s^2, but MotionReading.hpp documents both
-        // Gravity and DeviceAcceleration as "in g, for each axis" (matching
-        // the real WP7 API convention).
+        // DEVICES-0063, re-verified MOTION-003 2026-07-06): Android's
+        // TYPE_GRAVITY/TYPE_LINEAR_ACCELERATION sensors report m/s^2 (same
+        // NDK convention as TYPE_ACCELEROMETER, confirmed ACCEL-003), while
+        // the real WP7 MotionReading.DeviceAcceleration is documented "in
+        // gravitational units" (archived MSDN hh220832(v=vs.105)) and the
+        // companion "How to use the combined Motion API" walkthrough
+        // (hh202984(v=vs.105)) confirms DeviceAcceleration is gravity-filtered
+        // ("Unlike the Accelerometer API, the acceleration of gravity is
+        // filtered out of the reading so that when the device is still, the
+        // acceleration is zero along all axes" -- matching
+        // TYPE_LINEAR_ACCELERATION's own NDK semantics exactly, as opposed to
+        // TYPE_ACCELEROMETER's raw, gravity-inclusive reading). Gravity's own
+        // dedicated MSDN page (hh203234) does not state its unit as explicitly,
+        // but the same g-unit convention is the only one consistent with
+        // DeviceAcceleration's documented unit and with a physically sensible
+        // "vector of magnitude ~1 at rest" reading.
         constexpr float StandardGravity = 9.80665f;
     }
 

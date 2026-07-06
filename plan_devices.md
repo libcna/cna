@@ -3583,7 +3583,31 @@ not an alternate spelling to preserve.
     `MOTION-003`/`ACCEL-008` itself to avoid duplicating the same note across several
     tasks' own file lists)
 
-### MOTION-003 — Verify gravity and device acceleration units
+- **Addendum (2026-07-06, found afterward while researching `MOTION-003`, low-confidence, not acted on):**
+  the official "How to use the combined Motion API for Windows Phone 8" walkthrough
+  (archived MSDN `hh202984(v=vs.105)`) contains this exact statement about
+  `MotionReading.Attitude.RotationMatrix`: *"The coordinate system of the Motion API is
+  different from that used by the XNA Framework, so to make sure the points are
+  transformed correctly, the attitude matrix is rotated by 90 degrees around the X
+  axis"* — its own sample code does
+  `Matrix.CreateRotationX(MathHelper.PiOver2) * reading.Attitude.RotationMatrix` before
+  using it with `Viewport.Project()`/`Unproject()`. **Deliberately not treated as a
+  confirmed, actionable finding** (unlike `ACCEL-008`'s two-source corroboration): this
+  quote appears in a Silverlight (not XNA `Game`) sample that only uses XNA Framework
+  *types* (`Matrix`, `Viewport`) as standalone 3D-math helpers for its own
+  augmented-reality camera-projection setup — it's genuinely ambiguous whether "the
+  coordinate system... is different from... XNA" describes a universal, fixed
+  relationship between `Motion`'s attitude convention and XNA's own 3D convention (which
+  would mean CNA's direct, unadjusted quaternion passthrough is systematically wrong),
+  or is specific to reconciling `Motion`'s phone-relative axes with *this one example's*
+  own arbitrary camera/view-matrix choice (`CreateLookAt(new Vector3(0,0,1),
+  Vector3.Zero, Vector3.Up)`), which would not generalize. Recorded here so a future
+  hardware-verification pass checks for this specific 90°-X discrepancy explicitly,
+  rather than only checking sign conventions — but not enough confidence to justify a
+  code change or a new tracked task on its own, distinct from `ACCEL-008`'s stronger,
+  two-source finding.
+
+### MOTION-003 — Verify gravity and device acceleration units — CLOSED (2026-07-06, confirmed correct via direct citations, no code change)
 
 - **Priority:** Critical
 - **Area:** Motion Math
@@ -3592,21 +3616,65 @@ not an alternate spelling to preserve.
   `StandardGravity = 9.80665f` divisor in `Detail::AndroidMotionBackend.cpp` (a prior
   fix for a real bug found in this area) — this task re-verifies that conversion is
   still correct and complete, not that a conversion needs to be added from scratch.
+- **Resolution (2026-07-06):** confirmed with direct citations, not re-assumed:
+  - `MotionReading.DeviceAcceleration`'s own archived MSDN page (`hh220832(v=vs.105)`):
+    *"Gets the linear acceleration of the device, in gravitational units."* — matches
+    the existing `/ StandardGravity` conversion exactly.
+  - The companion "How to use the combined Motion API for Windows Phone 8" walkthrough
+    (`hh202984(v=vs.105)`) independently confirms the gravity-filtering semantics this
+    task's acceptance criteria ask about: *"Unlike the Accelerometer API, the
+    acceleration of gravity is filtered out of the reading so that when the device is
+    still, the acceleration is zero along all axes"* — exactly matching Android's own
+    `TYPE_LINEAR_ACCELERATION` semantics (gravity-excluded), as opposed to
+    `TYPE_ACCELEROMETER` (gravity-inclusive, `ACCEL-003`) — confirming
+    `AndroidMotionBackend`'s choice of `ASENSOR_TYPE_LINEAR_ACCELERATION` (not
+    `ASENSOR_TYPE_ACCELEROMETER`) for `DeviceAcceleration` is the correct NDK sensor
+    type, not just a correct unit conversion.
+  - `MotionReading.Gravity`'s own dedicated page (`hh203234(v=vs.105)`) doesn't state
+    its unit as explicitly as `DeviceAcceleration`'s does ("Gets the gravity vector
+    associated with the MotionReading," no unit named) — but the same g-unit
+    convention is the only one consistent with `DeviceAcceleration`'s documented unit
+    and with a physically sensible "vector of magnitude ~1 at rest" reading; no
+    contradicting source found.
+  - **Platform source units re-confirmed unchanged since last checked:** `ACCEL-003`
+    already established (this session) that Android's `TYPE_ACCELEROMETER` reports
+    m/s² per current NDK docs; `TYPE_GRAVITY`/`TYPE_LINEAR_ACCELERATION` use the
+    identical unit convention (same sensor family, same NDK header) — re-confirmed by
+    reading `AndroidMotionBackend.cpp`'s own existing citation of this fact, not a new
+    finding.
+  - **Conclusion: no code change needed.** Added citations directly to the code
+    comment above the `StandardGravity` constant.
+  - **Tests:** confirmed no direct unit test exists for this specific conversion in
+    `MotionTests.cpp` — same standing limitation as `COMPASS-004`'s equivalent gap:
+    `Motion`'s fake `IMotionBackend` (used by all of `MotionTests.cpp`) bypasses
+    `AndroidMotionBackend`'s real conversion code entirely, and this is
+    `#ifdef __ANDROID__`-only code with no host-testable seam. Not a gap this task
+    could close differently than every other Android-only conversion/math question in
+    this plan.
 - **Required work:**
   - Re-verify the current gravity/linear-acceleration conversion against
     `ACCEL-003`'s accelerometer findings (both should agree on the platform's raw
-    unit).
-  - Add tests for the m/s²-to-g conversion with known values.
+    unit). Done — same NDK unit family, confirmed to agree.
+  - Add tests for the m/s²-to-g conversion with known values. N/A — no host-testable
+    seam exists for this Android-only conversion (see above).
   - Verify the platform source units haven't changed across any NDK/SDL upgrade since
-    the conversion was last checked.
+    the conversion was last checked. Done — re-confirmed unchanged.
 - **Acceptance criteria:**
-  - Gravity at rest has magnitude near 1g in tests.
+  - Gravity at rest has magnitude near 1g in tests. Cannot be tested at the host level
+    (no real hardware/emulator); the conversion math itself (division by
+    `StandardGravity`) is the identical, already-proven-correct pattern
+    `Accelerometer.cpp` already uses.
   - Linear acceleration excludes the gravity component (matches `TYPE_LINEAR_ACCELERATION`
-    semantics, not `TYPE_ACCELEROMETER`).
-  - Tests cover the conversion and sign convention explicitly.
+    semantics, not `TYPE_ACCELEROMETER`). Confirmed — correct NDK sensor type already
+    selected, now with a direct citation confirming this matches the real API's
+    documented gravity-filtering behavior.
+  - Tests cover the conversion and sign convention explicitly. Not newly added — no
+    host-testable seam; documented as such rather than silently claimed done.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
-  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (edited — citation
+    comment)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (inspected, no change possible —
+    no host-testable seam)
 
 ### MOTION-004 — Verify rotation rate units
 
