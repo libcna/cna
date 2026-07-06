@@ -1310,10 +1310,19 @@ change; `ctest -L input` green (shuffle×5).
 
 # Phase 7 — Text input and IME correctness
 
-## P7-001 — Audit `TextInputEXT` scope
-- [ ] Confirm it is an extension, not strict XNA 4.0.
-- [ ] Ensure naming and docs make this clear.
-- [ ] Verify public API does not claim strict XNA support.
+## P7-001 — Audit `TextInputEXT` scope `[x]`
+- [x] Confirm it is an extension, not strict XNA 4.0.
+- [x] Ensure naming and docs make this clear.
+- [x] Verify public API does not claim strict XNA support.
+
+**Result (2026-07-06):** `TextInputEXT` is unambiguously an extension: the class carries the `EXT` name
+suffix and the `NOXNA` marker (`NOXNA class TextInputEXT`, TextInputEXT.hpp:29), and its Doxygen explicitly
+states *"not part of the XNA 4.0 API. FNA extension … XNA 4.0 had no portable text-input event"*
+(TextInputEXT.hpp:19-21). No doc claims strict XNA support. It is classified as an FNA-compatible extension
+in **P0-005** and pinned outside the strict surface by `PublicApiInputSignatureFreezeTests` /
+`PublicApiInputCompileTests` (and every public member is `NOXNA`). The header also pre-documents the
+TextEditing byte-offset caveat (relevant to P7-007). **Files changed:** none (audit-only). **Behavior
+verified:** naming/marking/docs all designate it an extension. **Remaining risk:** none.
 
 ## P7-002 — Verify UTF-8 to UTF-16 decoding
 - [ ] Test ASCII.
