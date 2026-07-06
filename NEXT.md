@@ -16,8 +16,17 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `plan_graphics.md`; per-phase synthesis docs live in `docs/*.md`.
-- **Current development phase:** Phases 1–44 are complete. **Phase 44 ("DualTextureEffect
-  exactness", Tasks 381–390) is CLOSED** — Task 390 wrote `docs/dualtextureeffect-support.md`
+- **Current development phase:** Phases 1–44 are complete. **Phase 45 ("EnvironmentMapEffect
+  exactness", Tasks 391–400) is open** — Task 391 (opener) audited `EnvironmentMapEffect` against
+  FNA: all 14 properties/defaults/`Clone()`/`OnApply()` match exactly, **zero bugs in its own
+  scope**, including a subtle detail (`FresnelFactor`'s constructor-driven `fresnelEnabled_=true`
+  post-construction state) that was easy to get wrong but wasn't. Found `FillGpuDrawParams()` only
+  forwards `DirectionalLight0` — `DirectionalLight1`/`DirectionalLight2` are silently ignored,
+  confirmed via `EnvironmentMapEffect.fx` sharing `BasicEffect`'s identical `Lighting.fxh`
+  mechanism — opened as new **Task 890** (same shape as Task 885's `BasicEffect` finding, likely
+  shares its fix plumbing) rather than folded into Task 885, since it's a distinct effect with its
+  own dispatch. Phase 44 ("DualTextureEffect
+  exactness", Tasks 381–390) is **CLOSED** — Task 390 wrote `docs/dualtextureeffect-support.md`
   synthesizing Tasks 381–389: property/default audit (zero bugs), a real cross-backend `color.rgb
   *= 2` doubling-factor bug found and fixed (Task 383), a real Bgfx-only `Texture2` null-fallback
   bug found and fixed (Task 387), a real EasyGL-only fog-forwarding bug found and fixed (Task 388,
@@ -25,9 +34,7 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   `AlphaTestEffect`), and a capstone cross-backend consistency test (Task 389) that also
   discovered and opened **Task 889** (`VertexColorEnabled` is a total no-op on all 3 backends for
   `DualTextureEffect` — no dedicated audit task existed for this property in Phase 44, unlike
-  `AlphaTestEffect`'s Task 377). **Phase 45 ("EnvironmentMapEffect exactness", Tasks 391–400) is
-  next**: Task 391 opens it by auditing `EnvironmentMapEffect` properties/defaults against FNA
-  (mirrors Task 361/371/381's opener precedent). Phase 43
+  `AlphaTestEffect`'s Task 377). Phase 43
   ("AlphaTestEffect exactness", Tasks 371–380) is **CLOSED**: Task 380
   wrote `docs/alphatesteffect-support.md` synthesizing Tasks 371–379. Task 377 found
   `AlphaTestEffect.VertexColorEnabled` has zero effect on Vulkan/Bgfx by default (opened Task 887).
@@ -208,7 +215,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 390 | **Doc, closes Phase 44**: wrote `docs/dualtextureeffect-support.md` synthesizing Tasks 381–389 (mirrors `docs/alphatesteffect-support.md`'s style) — per-task summaries, full 3-backend support matrix, "Open, tracked follow-up work" listing Tasks 887/888/889. No code changed. |
+| — | 391 | **Verify-only, opens Phase 45**: audited `EnvironmentMapEffect` against FNA — all 14 properties/defaults/`Clone()`/`OnApply()` match exactly, zero bugs in its own scope. Found `FillGpuDrawParams()` only forwards `DirectionalLight0` (same shape as Task 885's `BasicEffect` gap, confirmed shared `Lighting.fxh` mechanism) — opened Task 890. |
+| `3eb10974` | 390 | **Doc, closes Phase 44**: wrote `docs/dualtextureeffect-support.md` synthesizing Tasks 381–389 (mirrors `docs/alphatesteffect-support.md`'s style) — per-task summaries, full 3-backend support matrix, "Open, tracked follow-up work" listing Tasks 887/888/889. No code changed. |
 | `fcaa1950` | 389 | **Capstone, zero new bugs**: combined Tasks 383–388's fixes (doubling factor, two-texture multiply, diffuse) into one scene, first `DualTextureEffect` test with a real 2×2 multi-texel texture. All 3 backends byte-identical, exact match. Found and opened Task 889 while writing it: `VertexColorEnabled` is a total no-op for `DualTextureEffect` on all 3 backends (dedicated shaders/pipelines on every backend lack a color attribute entirely) — Phase 44 never had a dedicated audit task for this property. |
 | `8d0d1cee` | 388 | **Real bug found and fixed on EasyGL**: `DualTextureEffect::FillGpuDrawParams()` never forwarded fog fields at all — same bug shape as pre-Task-378 `AlphaTestEffect`, but `DualTextureEffect`'s own dedicated shader also had zero fog uniforms (unlike the shared per-stride shaders). Fixed both. 3/3 PASS, `git stash`-confirmed 2/3 correctly fail pre-fix. Vulkan/Bgfx's project-wide fog gap (Task 888) remains, confirmed not fixable here. |
 | `39e5feed` | 387 | **Real bug found and fixed on Bgfx**: `texColor3DSampler2_` (`Texture2`, slot 1) had no null-fallback at all — exactly the gap Task 379 explicitly predicted and left unfixed. Fixed with the same else-branch pattern as slot 0 (Task 379). EasyGL/Vulkan already correct (verified). 2/2 PASS on all 3 backends; `git stash`-confirmed pre-fix failure `(0,0,0)`. Bgfx ctest 3403/3403, 100%. |
@@ -317,6 +325,7 @@ direct code reading.
 | Confirmed, real, not fixed (empirically verified) | `AlphaTestEffect.VertexColorEnabled` has **zero effect on Vulkan or Bgfx** — their alpha-test pipeline/shader never declares a color vertex attribute at all, and this pipeline is used by default (`AlphaFunction=Greater`/`ReferenceAlpha=0` already trigger it). Correct on EasyGL (reuses `BasicEffect`'s already-fixed stride-24 shader). | Task 887 |
 | Confirmed, project-wide, not fixed | **Fog is a total GPU no-op on Vulkan and Bgfx for every 3D effect** — grepped every shader file in both backends for "fog", zero matches anywhere. Affects `BasicEffect` too (its `FillGpuDrawParams()` already forwards fog correctly; only the GPU side is missing). EasyGL already has fog fully working generically (confirmed for `BasicEffect` since Task 195, and `AlphaTestEffect` since Task 378). | Task 888 |
 | Confirmed, real, not fixed | `DualTextureEffect.VertexColorEnabled` has **zero effect on all 3 backends** — every backend's dual-texture dispatch is a dedicated shader/pipeline declaring only `position`+`texcoord` inputs (Vulkan explicitly reuses the generic textured-only vertex shader; Bgfx hardcodes `v_color0` to the diffuse uniform, not a real per-vertex attribute). Found while writing Task 389's capstone test — Phase 44 never had a dedicated audit task for this property, unlike `AlphaTestEffect`'s Task 377. | Task 889 |
+| Confirmed, real, not fixed | `EnvironmentMapEffect::FillGpuDrawParams()` only forwards `DirectionalLight0` — `DirectionalLight1`/`DirectionalLight2` silently ignored on all 3 backends. Confirmed this effect shares `BasicEffect`'s identical `Lighting.fxh`/`ComputeLights` mechanism in real FNA (same `oneLight` shader-variant optimization), so the same gap and likely the same fix plumbing as Task 885 applies here too. | Task 890 |
 | Suspected, not reproduced | Vulkan/Bgfx likely have the same mip-allocation bug already fixed on EasyGL's `TextureCube` (Task 276), for `Texture3D`/`TextureCube` on both backends. | Task 864 |
 | Needs verification | Whether Bgfx's window actually has a physical stencil buffer has not been checked. | — |
 | Incomplete, by design | Stride-keyed vertex layout only supports strides 16/20/24/32/52. Vulkan has no `Tangent`/`Binormal` mapping. `SurfaceFormat` support is Color-only for real GPU formats. `SDL_Renderer` has no 3D at all. | — |
@@ -413,17 +422,17 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first opens Phase 45 (Task 391 fully scoped in `plan_graphics.md`,
-mirroring Task 361/371/381's opener precedent); the rest are the accumulated backlog from earlier
-phases (Tasks 863–889).
+In priority order — the first continues Phase 45 (Task 392 fully scoped in `plan_graphics.md`,
+mirroring Task 362/372/382's default-value-test precedent); the rest are the accumulated backlog
+from earlier phases (Tasks 863–890).
 
-1. **Task 391 — audit `EnvironmentMapEffect` properties and defaults against FNA, opens Phase 45**
-   - Goal: read FNA's `EnvironmentMapEffect.cs` line-by-line against CNA's
-     `EnvironmentMapEffect.hpp`/`.cpp` (mirrors Task 361/371/381's opener precedent): property
-     defaults, `Clone()` field list, `EffectDirtyFlags` usage. `plan_graphics.md`'s own note says
-     to include Fresnel if present in FNA's source.
-   - Files: `include/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.cpp`.
+1. **Task 392 — unit test default values for all `EnvironmentMapEffect` properties**
+   - Goal: write `tests/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffectTests.cpp` from
+     scratch (mirrors Task 372/382's precedent — Task 391 found zero existing default-value unit
+     tests, though pixel-integration tests exist from earlier phases): all 14 property defaults
+     (including the subtle constructor-driven `fresnelEnabled_=true` state), setter round-trips,
+     `Clone()`, `GetTypeName()`.
+   - Files: new `tests/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffectTests.cpp`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -547,32 +556,32 @@ phases (Tasks 863–889).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 391).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 392).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
 instruction — do not wait to be asked; one task = one commit = one push).
 
-Current status: Phases 1-44 are FULLY COMPLETE. Phase 44 ("DualTextureEffect exactness",
-plan_graphics.md Tasks 381-390) CLOSED with Task 390 (docs/dualtextureeffect-support.md, full
-synthesis of Tasks 381-389). Task 381 (opener) audited DualTextureEffect against FNA line-by-line
-— all properties/defaults/Clone()/OnApply() match exactly, ZERO bugs in its own scope. Task 382
-wrote 26 new DualTextureEffectTests.cpp unit tests — zero prior coverage existed, zero bugs found.
-Task 383 found and FIXED A REAL BUG ON ALL 3 BACKENDS: DualTextureEffect's dual-texture shaders
-were all missing FNA's `color.rgb *= 2` doubling factor on the first texture slot. Task 384 closed
-Bgfx's last remaining basic-multiply coverage gap. Task 385 verified Alpha's premultiplication
-end-to-end — zero bugs. Task 386 verified the first texture null-fallback — zero bugs. Task 387
-found and FIXED a real bug on Bgfx: the second texture slot (Texture2) had no null-fallback at
-all. Task 388 found and FIXED a real bug on EasyGL: fog was never forwarded and the dedicated
-shader had zero fog infra. Task 389 (capstone) combined Tasks 383-388's fixes into one scene using
-a real 2x2 multi-texel texture — all 3 backends byte-identical, zero new bugs — and found/opened
-Task 889 (DualTextureEffect.VertexColorEnabled is a total no-op on all 3 backends; Phase 44 never
-had a dedicated audit task for this property, unlike AlphaTestEffect's Task 377).
+Current status: Phases 1-44 are FULLY COMPLETE. Phase 45 ("EnvironmentMapEffect exactness",
+plan_graphics.md Tasks 391-400) is OPEN: Task 391 (opener) audited EnvironmentMapEffect against
+FNA line-by-line — all 14 properties/defaults/Clone()/OnApply() match exactly, ZERO bugs in its
+own scope, including a subtle detail (FresnelFactor's constructor-driven fresnelEnabled_=true
+post-construction state, easy to get wrong but wasn't) that was verified correct. Found
+FillGpuDrawParams() only forwards DirectionalLight0 (DirectionalLight1/2 silently ignored) —
+confirmed this effect shares BasicEffect's identical Lighting.fxh/ComputeLights mechanism in real
+FNA, so the same gap as Task 885 applies here too — opened as new Task 890 (distinct effect, own
+dispatch, but likely shares Task 885's fix plumbing) rather than folded into Task 885. Task 392 is
+NEXT: write EnvironmentMapEffectTests.cpp default-value unit tests (mirrors Task 372/382's
+precedent — zero existing default-value test coverage found, though pixel-integration tests
+already exist: easygl/vulkan/bgfx_env_map_test.cpp).
 
-Phase 45 ("EnvironmentMapEffect exactness", plan_graphics.md Tasks 391-400) is NEXT: Task 391
-opens it by auditing EnvironmentMapEffect properties/defaults against FNA (mirrors Task
-361/371/381's opener precedent; plan_graphics.md's own note says to include Fresnel if present in
-FNA's source).
+Phase 44 ("DualTextureEffect exactness", Tasks 381-390) CLOSED with Task 390
+(docs/dualtextureeffect-support.md, full synthesis of Tasks 381-389). Task 383 found and FIXED A
+REAL BUG ON ALL 3 BACKENDS: DualTextureEffect's dual-texture shaders were all missing FNA's
+`color.rgb *= 2` doubling factor. Task 387 found and FIXED a real bug on Bgfx: the second texture
+slot (Texture2) had no null-fallback at all. Task 388 found and FIXED a real bug on EasyGL: fog
+was never forwarded and the dedicated shader had zero fog infra. Task 389 (capstone) found/opened
+Task 889 (DualTextureEffect.VertexColorEnabled is a total no-op on all 3 backends).
 
 Phase 43 ("AlphaTestEffect exactness", Tasks 371-380) CLOSED with Task 380
 (docs/alphatesteffect-support.md, full synthesis of Tasks 371-379). Task 377 found
@@ -588,16 +597,18 @@ shared push-constant budget expansion, also used by SkinnedEffect) and Task 886 
 highlights — a new feature, zero existing infrastructure). Phase 43 closed and opened 2 more:
 Task 887 (Vulkan/Bgfx alpha-test vertex-color unification) and Task 888 (Vulkan/Bgfx project-wide
 fog). Phase 44 closed and opened Task 889 (DualTextureEffect.VertexColorEnabled is a no-op on all
-3 backends). None of these 5 block Phase 45.
+3 backends). Task 391 opened one more: Task 890 (EnvironmentMapEffect.DirectionalLight1/2 are
+completely unforwarded, same shape as Task 885, likely shares its fix). None of these 6 block
+Phase 45's remaining tasks.
 
-Last full 3-backend regression (Task 389 — pure capstone verification, no production code
-changed; Task 390 was doc-only, no rebuild needed):
+Last full 3-backend regression (Task 391 — pure source audit, no production code changed, no
+rebuild needed; last real rebuild was Task 389):
 EasyGL 3503/3506 pass (3 documented pre-existing failures, no flakes this run).
 Vulkan 3423/3436 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
 Bgfx 3407/3407 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44 found, read plan_graphics.md
-directly (Tasks 351-390) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-391) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
