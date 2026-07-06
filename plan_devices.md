@@ -4753,7 +4753,7 @@ not an alternate spelling to preserve.
     change needed)
   - `docs/devices-api-coverage.md` (edited)
 
-### READINGS-003 — Verify timestamp source consistently
+### READINGS-003 — Verify timestamp source consistently — CLOSED (2026-07-06, one policy confirmed + documented + newly test-covered for Compass/Motion)
 
 - **Priority:** High
 - **Area:** Reading Semantics
@@ -4787,6 +4787,49 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
+- **Resolution:** Traced every `setTimestampProperty()`/reading-constructor call site
+  that ultimately produces a public reading's `Timestamp` across all four sensor
+  classes (`grep`-confirmed exhaustive, not sampled): `Accelerometer.cpp`'s and
+  `Gyroscope.cpp`'s own `DispatchSensorReading()` (direct `getUtcNowProperty()` call
+  each); `Detail::AndroidCompassBackend::PublishReading()` (direct
+  `getUtcNowProperty()` call, passed into the `CompassReading` constructor); and
+  `Detail::AndroidSensorBridge.cpp`'s dispatch loop, which sets
+  `AndroidSensorSample::Timestamp = getUtcNowProperty()` once per raw NDK sample,
+  after which `Detail::AndroidMotionBackend`'s four `Handle*Sample()` methods copy
+  that same value forward and `PublishReading()` sets both `MotionReading.Timestamp`
+  and the nested `MotionReading.Attitude.Timestamp` from it (via `Task MOTION-006`'s
+  earlier fix this session). **Result: one policy, applied identically at all four
+  sites, with no exception found** — every reading's `Timestamp` is wall-clock time of
+  dispatch/publish (`System::DateTimeOffset::getUtcNowProperty()`), never a raw
+  platform/monotonic sensor timestamp. Documented this as a single, explicit,
+  consolidated policy (with the full why-not-monotonic rationale and a table of every
+  call site) in a new "Timestamp policy" section in `docs/devices-api-coverage.md`,
+  and added a one-line cross-reference comment pointing to it at each of the four call
+  sites (`Accelerometer.cpp`, `Gyroscope.cpp`, `AndroidCompassBackend.cpp`,
+  `AndroidSensorBridge.cpp`), satisfying "referenced from every sensor class's own
+  docs." **Test gap found and closed:** `AccelerometerTests`/`GyroscopeTests` already
+  had a `CurrentValueChangedReceivesWallClockTimestamp` test (before/after real-time
+  bracket, appropriate since those two classes generate their timestamp fresh inline
+  in the method under test), but neither `CompassTests.cpp` nor `MotionTests.cpp` had
+  *any* test asserting on `Timestamp` at all — a real, previously-uncaught gap, since
+  `Compass`/`Motion`'s own C++ code never re-touches the backend-supplied `Timestamp`,
+  so the propagation path (not the wall-clock generation itself, which is Android-only
+  and unreachable on this host) was completely untestable-and-untested. Closed by
+  adding `CompassTests.CurrentValueChangedPropagatesBackendTimestampExactly` and
+  `MotionTests.CurrentValueChangedPropagatesBackendTimestampExactly`: each injects one
+  fixed, deliberately-distinguishable `DateTimeOffset` (not a fresh
+  `getUtcNowProperty()` call at test time) through the class's existing
+  `SetBackendForTesting()`-plus-fake-backend seam, then asserts *exact* equality
+  (not a loose bracket) on the value that reaches `CurrentValueChanged`/`CurrentValue`
+  — proving the propagation path itself introduces no truncation, clamping, or
+  re-timestamping, satisfying this task's "tests can inject a fixed clock" and
+  "correct propagation from backend sample to public event" acceptance criteria for
+  the two classes that previously had zero coverage of either. Build: `cmake --build
+  cmake-build-debug --target CnaTests` succeeded; ran `AccelerometerTests.*:
+  GyroscopeTests.*:CompassTests.*:MotionTests.*` — 141 tests, 139 passed + 2
+  pre-existing hardware-unsupported skips. Also cross-compiled `cmake --build
+  cmake-build-android --target CNA` to confirm the two Android-only comment-only
+  edits (`AndroidCompassBackend.cpp`/`AndroidSensorBridge.cpp`) still compile — clean.
 
 ---
 

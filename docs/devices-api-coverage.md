@@ -158,6 +158,54 @@ type-name API a game would call.
 | `Dispose(bool)` (public override) | Real | High | Matches the standard C# `IDisposable` dispose pattern CNA uses project-wide, not WP7-specific |
 | `GetTypeName()` | `NOXNA` | High | Via the project-wide `GetTypeNameHPP()`/`GetTypeNameCPP()` macro pair (`sharp-runtime/include/System/Object.hpp`), which does **not** literally prefix the `NOXNA` marker at each of its ~12 use sites project-wide — confirmed this is the established, consistent, project-wide convention (identical everywhere `GetTypeNameHPP()` is used, not a Devices-specific gap), so not flagged as an Extra-unmarked finding here. |
 
+## Timestamp policy — all four sensor classes (`READINGS-003`, added 2026-07-06)
+
+**One rule, applied identically everywhere a reading struct's `Timestamp` is set:
+always `System::DateTimeOffset::getUtcNowProperty()` (wall-clock time of dispatch/
+publish), never a raw platform/monotonic sensor timestamp.** Confirmed applied
+consistently across every current call site, not just where it happened to already be
+documented (`Detail::AndroidSensorSample::Timestamp`'s own doc comment):
+
+| Sensor class | Where `Timestamp` is actually set | Wall-clock? |
+|---|---|---|
+| `Accelerometer` | `Accelerometer.cpp::DispatchSensorReading()`, direct `getUtcNowProperty()` call | Yes |
+| `Gyroscope` | `Gyroscope.cpp::DispatchSensorReading()`, direct `getUtcNowProperty()` call | Yes |
+| `Compass` | `Detail::AndroidCompassBackend::PublishReading()`, direct `getUtcNowProperty()` call passed into the `CompassReading` constructor | Yes |
+| `Motion` | `Detail::AndroidSensorBridge.cpp`'s dispatch loop sets `AndroidSensorSample::Timestamp = getUtcNowProperty()` once per raw NDK sample; `Detail::AndroidMotionBackend`'s four `Handle*Sample()` methods copy that same value into `attitude_`/`gravityTimestamp_`/`linearAccelerationTimestamp_`/`gyroscopeTimestamp_`, and `PublishReading()` sets both `MotionReading.Timestamp` and (nested) `MotionReading.Attitude.Timestamp` from `attitude_.getTimestampProperty()` specifically (Task `MOTION-006`'s fix — previously `MotionReading.Timestamp` used a *second*, independently-fresh `getUtcNowProperty()` call, which could disagree with the nested `Attitude.Timestamp`) | Yes |
+
+**Why wall-clock, not the platform's own raw sensor timestamp** (e.g. Android NDK's
+`ASensorEvent::timestamp`, a monotonic value counted from an arbitrary boot-time epoch):
+`System::DateTimeOffset` represents a specific calendar point in time (like C#'s real
+`DateTimeOffset`), which a monotonic boot-time nanosecond counter cannot be converted to
+without an unreliable, platform-specific boot-time-to-wall-clock offset calculation —
+using it directly would silently produce a nonsensical `DateTimeOffset` (e.g. an
+implausible near-1970/near-1601 date, depending on epoch), not a merely-imprecise one.
+Wall-clock-at-dispatch is a small, bounded approximation of "when the physical sample was
+taken" (dispatch happens promptly after the OS delivers a sample, not deferred), and is
+the only option that produces a genuinely valid `DateTimeOffset` on every platform.
+
+**Testability:** `Accelerometer`/`Gyroscope` construct their own reading with a fresh
+`getUtcNowProperty()` call inline in `DispatchSensorReading()`, so their tests
+(`AccelerometerTests`/`GyroscopeTests`' `CurrentValueChangedReceivesWallClockTimestamp`)
+use a before/after real-time bracket (`EXPECT_GE`/`EXPECT_LE` against two real
+`getUtcNowProperty()` calls taken immediately around the dispatch) rather than an
+injected fixed clock — appropriate since the timestamp genuinely is generated fresh
+inside the method under test, not a value the test controls. `Compass`/`Motion`, by
+contrast, only ever forward whatever `CompassReading`/`MotionReading` their
+(fake-backend-injectable, via `SetBackendForTesting()`) backend hands them —
+`Compass`/`Motion`'s own C++ code never re-touches `Timestamp` after receiving it — so
+`CompassTests`/`MotionTests`' new `CurrentValueChangedPropagatesBackendTimestampExactly`
+tests (added this task; no equivalent existed before) inject one fixed,
+deliberately-distinguishable `DateTimeOffset` via the fake backend and assert exact
+(not bracketed) equality on the value that reaches `CurrentValueChanged`/`CurrentValue`
+— proving the propagation path itself is a pure passthrough with no truncation,
+re-timestamping, or clamping of its own. This is deliberately the strongest test each
+class's own architecture allows: the real wall-clock-generating code
+(`AndroidCompassBackend`/`AndroidSensorBridge`) is Android-only and unreachable on this
+host, so the fixed-clock injection tests what *is* testable here (propagation), while
+the wall-clock-generation itself is confirmed by direct source reading, per the table
+above.
+
 ## `Microsoft::Devices::Sensors::MotionReading` / `AttitudeReading`
 
 | Member | Confidence | Notes |

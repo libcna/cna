@@ -382,6 +382,47 @@ TEST(MotionTests, CurrentValueChangedFiresFromBackendReading)
     EXPECT_TRUE(m.getIsDataValidProperty());
 }
 
+// Task READINGS-003 (2026-07-06): the real timestamp-setting logic for
+// Motion lives entirely in Detail::AndroidSensorBridge.cpp/
+// AndroidMotionBackend.cpp (Android-only, #ifdef __ANDROID__, not reachable
+// on this host), which this codebase's own wall-clock timestamp policy
+// documents as always using System::DateTimeOffset::getUtcNowProperty()
+// (AndroidSensorSample::Timestamp, propagated into MotionReading.Timestamp
+// per Task MOTION-006's fix). What *is* testable here, and was not
+// previously covered by any test in this file, is that Motion::Start()'s
+// callback lambda forwards whatever MotionReading the backend hands it
+// through to CurrentValueChanged/CurrentValue completely unmodified -- a
+// fixed, deliberately-distinguishable timestamp (not a fresh
+// getUtcNowProperty() call at test time) proves exact passthrough rather
+// than a loose "close enough" bracket check.
+TEST(MotionTests, CurrentValueChangedPropagatesBackendTimestampExactly)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    System::DateTimeOffset receivedTimestamp;
+    m.CurrentValueChanged += [&receivedTimestamp](
+        System::Object*, const SensorReadingEventArgs<MotionReading>& args)
+    {
+        receivedTimestamp = args.getSensorReadingProperty().getTimestampProperty();
+    };
+
+    const System::DateTimeOffset fixedTimestamp(System::DateTime(637000000000000000LL), System::TimeSpan::Zero);
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(), fixedTimestamp);
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const MotionReading synthetic(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        fixedTimestamp);
+    fake->CapturedOnReading(synthetic);
+
+    EXPECT_EQ(receivedTimestamp, fixedTimestamp);
+    EXPECT_EQ(m.getCurrentValueProperty().getTimestampProperty(), fixedTimestamp);
+}
+
 // Task SENSORBASE-005: mirrors AccelerometerTests.
 // CurrentValueAndIsDataValidRetainLastReadingAfterStop -- see that test for
 // the full rationale. Motion::Stop() only clears started_/state_ (confirmed

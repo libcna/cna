@@ -164,6 +164,9 @@ namespace Microsoft::Devices::Sensors::Detail
             // the same honest limitation
             // docs/devices-native-backend-design.md's Android Compass
             // section documents.
+            // Wall-clock time of this reading, this project's one consistent
+            // cross-sensor-class timestamp policy (Task READINGS-003) — see
+            // docs/devices-api-coverage.md's "Timestamp policy" section.
             reading = CompassReading(
                 headingAccuracyDegrees_,
                 magneticHeadingDegrees_,

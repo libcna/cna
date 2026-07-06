@@ -387,6 +387,43 @@ TEST(CompassTests, CurrentValueChangedFiresFromBackendReading)
     EXPECT_EQ(c.getCurrentValueProperty().getMagneticHeadingProperty(), 42.0);
 }
 
+// Task READINGS-003 (2026-07-06): the real timestamp-setting logic for
+// Compass lives entirely in Detail::AndroidCompassBackend::PublishReading()
+// (Android-only, #ifdef __ANDROID__, not reachable on this host), which
+// this codebase's own wall-clock timestamp policy documents as always using
+// System::DateTimeOffset::getUtcNowProperty() -- see that method's own doc
+// comment. What *is* testable here, and was not previously covered by any
+// test in this file, is that Compass::Start()'s callback lambda forwards
+// whatever CompassReading the backend hands it through to
+// CurrentValueChanged/CurrentValue completely unmodified -- i.e. the
+// propagation path itself introduces no truncation, clamping, or
+// re-timestamping of its own. A fixed, deliberately-distinguishable
+// timestamp (not a fresh getUtcNowProperty() call at test time) proves
+// exact passthrough rather than a loose "close enough" bracket check.
+TEST(CompassTests, CurrentValueChangedPropagatesBackendTimestampExactly)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    System::DateTimeOffset receivedTimestamp;
+    c.CurrentValueChanged += [&receivedTimestamp](
+        System::Object*, const SensorReadingEventArgs<CompassReading>& args)
+    {
+        receivedTimestamp = args.getSensorReadingProperty().getTimestampProperty();
+    };
+
+    const System::DateTimeOffset fixedTimestamp(System::DateTime(637000000000000000LL), System::TimeSpan::Zero);
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const CompassReading synthetic(5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), fixedTimestamp, 42.0);
+    fake->CapturedOnReading(synthetic);
+
+    EXPECT_EQ(receivedTimestamp, fixedTimestamp);
+    EXPECT_EQ(c.getCurrentValueProperty().getTimestampProperty(), fixedTimestamp);
+}
+
 // Task SENSORBASE-005: mirrors AccelerometerTests.
 // CurrentValueAndIsDataValidRetainLastReadingAfterStop -- see that test for
 // the full rationale. Compass::Stop() only clears started_/state_

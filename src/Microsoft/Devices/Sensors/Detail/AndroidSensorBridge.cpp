@@ -338,7 +338,10 @@ namespace Microsoft::Devices::Sensors::Detail
                     // Wall-clock time of delivery, deliberately NOT
                     // event.timestamp (a monotonic boot-time nanosecond
                     // value) — see AndroidSensorSample::Timestamp's own
-                    // doc comment.
+                    // doc comment. This project's one consistent
+                    // cross-sensor-class timestamp policy (Task
+                    // READINGS-003) — see docs/devices-api-coverage.md's
+                    // "Timestamp policy" section.
                     sample.Timestamp = System::DateTimeOffset::getUtcNowProperty();
 
                     if (callback_)

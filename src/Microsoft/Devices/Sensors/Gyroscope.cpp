@@ -428,7 +428,9 @@ namespace Microsoft::Devices::Sensors
             // from SDL_GetTicksNS() (monotonic ns since SDL init) fed into a
             // DateTime(ticks) constructor that expects ticks since the .NET
             // epoch (0001-01-01) — always produced a bogus near-year-1 value,
-            // never the actual reading time.
+            // never the actual reading time. Re-confirmed as this project's
+            // one consistent cross-sensor-class policy, Task READINGS-003 —
+            // see docs/devices-api-coverage.md's "Timestamp policy" section.
             gyroscopeReading.setTimestampProperty(System::DateTimeOffset::getUtcNowProperty());
         }
 
