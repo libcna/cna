@@ -2020,27 +2020,82 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/MotionReadingTests.cpp`
   - `tests/Microsoft/Devices/Sensors/AttitudeReadingTests.cpp`
 
-### READINGS-002 — Verify event-args types
+### READINGS-002 — Verify event-args types — CLOSED (2026-07-06)
 
 - **Priority:** High
 - **Area:** Events
 - **Problem:** Event-args classes must carry the correct reading type and be shaped
-  correctly for their consumers.
+  correctly for their consumers. `DEV-API-001` (2026-07-06) flagged two wrong-visibility
+  findings for this task to resolve: `AccelerometerReadingEventArgs`'s and
+  `SensorReadingEventArgs<T>`'s setters are fully `public`, unlike every reading
+  struct's `private`+`friend` convention (Task P3-2) — unclear, without an authoritative
+  check, whether that's a real bug or the real API's own shape.
+- **Resolution (2026-07-06):** fetched the archived MSDN "previous-versions" pages
+  directly (via the classic `msdn.microsoft.com/en-us/library/<fully.qualified.member>
+  (v=VS.105)` URL form, which 301-redirects to the current `learn.microsoft.com`
+  archive page even without knowing its numeric ID in advance) rather than assuming
+  either way:
+  - `AccelerometerReadingEventArgs.X`/`Y`/`Z`: `public double X/Y/Z { get; }` (MSDN
+    `ff707568`/`ff707712`/`ff708055`) — **no setter at all**, public or otherwise.
+  - `AccelerometerReadingEventArgs.Timestamp`: `public DateTimeOffset Timestamp { get;
+    private set; }` (MSDN `ff707430`) — `private set`, not `internal set`.
+  - `SensorReadingEventArgs<T>.SensorReading`: `public T SensorReading { get; set; }`
+    (MSDN `hh203225`) — genuinely fully public, both directions.
+
+  This confirmed one real bug and one non-bug:
+  - **`AccelerometerReadingEventArgs`'s `setXProperty()`/`setYProperty()`/
+    `setZProperty()`/`setTimestampProperty()` were a genuine, confirmed Extra-unmarked
+    finding** — CNA-only public setters with no real counterpart. Removed all four
+    entirely (not tagged `NOXNA`, since the real API has no setter of *any* visibility
+    to preserve access to). Confirmed by grep they were unused dead code —
+    `Accelerometer::DispatchSensorReading()` only ever constructs this type via its
+    4-argument constructor, never calls a setter. `Timestamp`'s real `private set`
+    needs no dedicated C++ method: the constructor already assigns the private field
+    directly, which is the literal equivalent of "settable only from within this
+    class's own code." Updated `docs/devices-api-coverage.md`'s "Cross-cutting members
+    — reading structs" table and "Flagged findings" section with the resolution and
+    citations. Removed the 4 now-dead `SetX`/`SetY`/`SetZ`/`SetTimestamp` tests from
+    `AccelerometerReadingEventArgsTests.cpp` (down to 11 tests from 15) — construction
+    is already covered by `DefaultConstructorZeroValues`/
+    `ParameterizedConstructorStoresValues`.
+  - **`SensorReadingEventArgs<T>::setSensorReadingProperty()` needed no change** — CNA's
+    existing fully-public setter (both copy and move overloads) already matches the
+    real API exactly. This class is the one outlier in the *opposite* direction from
+    `AccelerometerReadingEventArgs` — genuinely publicly mutable in the real API, not
+    `internal set` like the reading structs.
+  - `CalibrationEventArgs` was not touched — it is a genuinely empty marker class
+    (already confirmed correct, `plan_devices_phase3.md` Task P3-12, MSDN `hh220788`),
+    not part of this finding.
+
+  Verified: 292/292 tests (down from 296 — 4 dead tests removed, none added) on plain
+  `cmake-build-debug` and ASan/UBSan presets (0 ASan; UBSan's 3 findings unchanged,
+  all pre-existing `Vector3`/`Matrix::GetHashCode()`, none in this class). TSan not
+  re-run for this pass — no concurrency-relevant code touched (pure removal of unused,
+  single-threaded setter methods).
 - **Required work:**
   - Audit `SensorReadingEventArgs<T>`, `AccelerometerReadingEventArgs`, and
-    `CalibrationEventArgs`.
-  - Verify property names and inheritance against expected XNA/WP7 shape.
-  - Add or extend tests.
+    `CalibrationEventArgs`. Done.
+  - Verify property names and inheritance against expected XNA/WP7 shape. Done, via
+    direct archived-MSDN-page fetches, not assumption.
+  - Add or extend tests. Done — removed 4 dead tests exercising now-removed methods;
+    existing construction/equality/hash/`ToString()`/`GetTypeName()` tests already
+    cover the real, remaining API surface.
 - **Acceptance criteria:**
-  - Event-args classes match the intended XNA/WP7 API.
+  - Event-args classes match the intended XNA/WP7 API. Done for all three.
   - Tests cover construction, property retrieval, and actual use in event dispatch
-    (not just standalone construction).
+    (not just standalone construction). Already true before this task (`Accelerometer`'s
+    own tests exercise `ReadingChanged` dispatch); not extended further by this task.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp`
-  - `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp`
-  - `include/Microsoft/Devices/Sensors/CalibrationEventArgs.hpp`
-  - `tests/Microsoft/Devices/Sensors/AccelerometerReadingEventArgsTests.cpp`
-  - `tests/Microsoft/Devices/Sensors/CalibrationEventArgsTests.cpp`
+  - `include/Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp` (inspected, no
+    change needed)
+  - `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp` (edited)
+  - `include/Microsoft/Devices/Sensors/CalibrationEventArgs.hpp` (inspected, no change
+    needed)
+  - `src/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/AccelerometerReadingEventArgsTests.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/CalibrationEventArgsTests.cpp` (inspected, no
+    change needed)
+  - `docs/devices-api-coverage.md` (edited)
 
 ### READINGS-003 — Verify timestamp source consistently
 

@@ -46,58 +46,53 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Gets the X-axis acceleration.
          *
+         * Task READINGS-002: get-only, matching the real WP7 API exactly —
+         * confirmed via the archived MSDN page (`ff707568`, `public double X
+         * { get; }`, no setter of any visibility). Only ever set via the
+         * constructor.
+         *
          * @return X-axis acceleration.
          */
         [[nodiscard]] double getXProperty() const;
 
         /**
-         * @brief Sets the X-axis acceleration.
-         *
-         * @param value New X-axis acceleration.
-         */
-        void setXProperty(double value);
-
-        /**
          * @brief Gets the Y-axis acceleration.
+         *
+         * Task READINGS-002: get-only, matching the real WP7 API exactly —
+         * confirmed via the archived MSDN page (`ff707712`, `public double Y
+         * { get; }`, no setter of any visibility). Only ever set via the
+         * constructor.
          *
          * @return Y-axis acceleration.
          */
         [[nodiscard]] double getYProperty() const;
 
         /**
-         * @brief Sets the Y-axis acceleration.
-         *
-         * @param value New Y-axis acceleration.
-         */
-        void setYProperty(double value);
-
-        /**
          * @brief Gets the Z-axis acceleration.
+         *
+         * Task READINGS-002: get-only, matching the real WP7 API exactly —
+         * confirmed via the archived MSDN page (`ff708055`, `public double Z
+         * { get; }`, no setter of any visibility). Only ever set via the
+         * constructor.
          *
          * @return Z-axis acceleration.
          */
         [[nodiscard]] double getZProperty() const;
 
         /**
-         * @brief Sets the Z-axis acceleration.
-         *
-         * @param value New Z-axis acceleration.
-         */
-        void setZProperty(double value);
-
-        /**
          * @brief Gets the timestamp of the sensor reading.
+         *
+         * Task READINGS-002: no public setter, matching the real WP7 API —
+         * confirmed via the archived MSDN page (`ff707430`,
+         * `public DateTimeOffset Timestamp { get; private set; }`). Only
+         * ever set via the constructor; a C++ `private set` equivalent
+         * would add a method nothing in this class currently calls (the
+         * constructor already assigns the private field directly), so none
+         * is declared.
          *
          * @return Timestamp of the reading.
          */
         [[nodiscard]] const System::DateTimeOffset& getTimestampProperty() const;
-
-        /**
-         * @brief Sets the timestamp of the sensor reading.
-         *
-         * @param value New timestamp.
-         */
-        void setTimestampProperty(const System::DateTimeOffset& value);
 
         /**
          * @brief Returns true if both instances have equal X, Y, Z, and Timestamp.

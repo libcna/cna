@@ -93,6 +93,28 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `READINGS-002` closed: resolved both `DEV-API-001` wrong-visibility
+findings against real archived MSDN pages.** Fetched the archived "previous-versions"
+docs directly (classic `msdn.microsoft.com/en-us/library/<member>(v=VS.105)` URLs
+301-redirect to the current `learn.microsoft.com` archive page even without knowing the
+numeric ID) rather than assuming either way:
+- `AccelerometerReadingEventArgs.X`/`Y`/`Z`: real API is `public double X/Y/Z { get; }`
+  (MSDN `ff707568`/`ff707712`/`ff708055`) — **no setter at all**. `.Timestamp`: `public
+  DateTimeOffset Timestamp { get; private set; }` (MSDN `ff707430`).
+- `SensorReadingEventArgs<T>.SensorReading`: real API is `public T SensorReading { get;
+  set; }` (MSDN `hh203225`) — genuinely fully public both ways.
+
+Confirmed one real bug (fixed) and one non-bug (no change): removed
+`AccelerometerReadingEventArgs`'s `setXProperty()`/`setYProperty()`/`setZProperty()`/
+`setTimestampProperty()` entirely — all four were unused dead code (`Accelerometer`
+only ever constructs this type via its 4-arg constructor) and had no real counterpart
+to preserve access to. `SensorReadingEventArgs<T>::setSensorReadingProperty()` needed
+no change — CNA's existing public setter already matches the real API exactly. Removed
+4 now-dead tests from `AccelerometerReadingEventArgsTests.cpp` (292 tests, down from
+296 — no tests added, since construction is already covered elsewhere). Verified: 292/292
+on plain `cmake-build-debug` and ASan/UBSan (0 ASan; UBSan's 3 pre-existing findings
+unchanged). TSan not re-run — no concurrency-relevant code touched.
+
 **2026-07-06 — `ANDROID-BRIDGE-002` closed: Android-backed `TimeBetweenUpdates` now
 changes live.** `Detail::AndroidSensorBridge::Start()` used to convert
 `timeBetweenUpdates` to `ASensorEventQueue_setEventRate()`'s microsecond parameter only
@@ -423,24 +445,22 @@ own priority labels.
 
 `DEV-API-003` (the `getStateProperty()` `NOXNA` question), `DEV-BUILD-002` (the
 Devices-only test filter), `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`SDL-SENSOR-002`
-(SDL-backed `TimeBetweenUpdates` throttling), `DEV-API-001` (the public API matrix), and
-`ANDROID-BRIDGE-002` (Android-backed `TimeBetweenUpdates` while running) are now closed
-— see Section 3. Next smallest remaining tasks:
+(SDL-backed `TimeBetweenUpdates` throttling), `DEV-API-001` (the public API matrix),
+`ANDROID-BRIDGE-002` (Android-backed `TimeBetweenUpdates` while running), and
+`READINGS-002` (the two event-args wrong-visibility findings) are now closed — see
+Section 3. Next smallest remaining task:
 
-1. **Resolve the two `DEV-API-001` wrong-visibility findings** (plan task
-   `READINGS-002`, already existed before `DEV-API-001`). Goal: check an authoritative
-   WP7 7.0 reference for whether `AccelerometerReadingEventArgs`'s and
-   `SensorReadingEventArgs<T>`'s setters are genuinely public in the real API, or should
-   be `private`+`friend` like every reading struct (Task P3-2). Files:
-   `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp`,
-   `include/Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp`,
-   `docs/devices-api-coverage.md` (update the "Flagged findings" section once resolved).
-2. **Investigate the `cna_demo_devices` Android `SDL3/SDL_main.h` build gap**
+1. **Investigate the `cna_demo_devices` Android `SDL3/SDL_main.h` build gap**
    (Section 4 above; not yet a plan task — scope it as one first). Goal: find why this
    specific target's Android include paths lack an Android-arch SDL3 header set the
    `CNA` library target itself doesn't need. Files: whichever `CMakeLists.txt` defines
    `cna_demo_devices`'s Android include paths. Verify with:
    `cmake --build cmake-build-android --target cna_demo_devices`.
+
+Beyond this, no further "next smallest task" is queued from a quick pass over
+`plan_devices.md` — read that file's remaining open tasks (grep for section headers
+without a "— CLOSED"/"— PARTIALLY CLOSED" suffix) and pick one, or ask the user to
+prioritize, per Section 9's existing rule.
 
 ---
 

@@ -111,16 +111,18 @@ event in the real API).
 
 `AccelerometerReading`/`GyroscopeReading`/`CompassReading`/`MotionReading`/
 `AttitudeReading` and `AccelerometerReadingEventArgs` each share this identical member
-shape — listed once here rather than repeated in every per-struct table above/below.
-(`CalibrationEventArgs` does **not** — it is a genuinely empty marker class per the real
-WP7 API, with only a constructor and `GetTypeName()`; already fully covered by its own
-row in "Exceptions / Enums" below.)
+shape — listed once here rather than repeated in every per-struct table above/below —
+**except the setter row below, where `AccelerometerReadingEventArgs` now genuinely
+diverges** (Task `READINGS-002`, 2026-07-06): it has no setter at all. (`CalibrationEventArgs`
+does **not** share this shape — it is a genuinely empty marker class per the real WP7
+API, with only a constructor and `GetTypeName()`; already fully covered by its own row
+in "Exceptions / Enums" below.)
 
 | Member | Real/NOXNA | Confidence | Notes |
 |---|---|---|---|
 | Parameterless + parameterized constructors | Real | High | Two ctors each: default (zero/identity values) and one taking every data member |
 | `get<Field>Property()` (per field) | Real | High | Public getters, `const` reference or by-value depending on field type |
-| `set<Field>Property()` (per field) | Real (visibility unverified) | High (member is real) / unverified (visibility) | **`AccelerometerReading`/`GyroscopeReading`/`CompassReading`/`MotionReading`/`AttitudeReading`:** `private` + `friend class <owning sensor>` (Task P3-2), matching the real API's `internal set`. **`AccelerometerReadingEventArgs`: fully `public`** — see "Flagged findings" below, this is the one confirmed shape difference this pass found. |
+| `set<Field>Property()` (per field) | Real, `AccelerometerReadingEventArgs` has none | High | **`AccelerometerReading`/`GyroscopeReading`/`CompassReading`/`MotionReading`/`AttitudeReading`:** `private` + `friend class <owning sensor>` (Task P3-2), matching the real API's `internal set`. **`AccelerometerReadingEventArgs` (fixed `READINGS-002`, 2026-07-06): removed entirely** — the real API has no setter for `X`/`Y`/`Z` (public get-only) and only a `private set` for `Timestamp`, which needs no dedicated method since the constructor already assigns the private field directly. See "Flagged findings" below for the full citation. |
 | `operator==`/`operator!=` | Real | High | Field-by-field equality |
 | `ToString()` | Real | High | Matches XNA's conventional `"{Field:value ...}"` format |
 | `GetHashCode()` | Real | High | Hash derived from every data member; consistent for equal instances |
@@ -175,39 +177,45 @@ type-name API a game would call.
 | `SensorState` (enum) | Medium | 6 values (`NotSupported`/`Ready`/`Initializing`/`NoData`/`NoPermissions`/`Disabled`) — MonoGame cross-check only, no direct MSDN enum page found |
 | `ISensorReading` | High | Single `Timestamp` member |
 | `CalibrationEventArgs` | High | Empty marker class, confirmed against its exact member-list page |
-| `AccelerometerReadingEventArgs` | High | WP7 7.0 legacy, paired with `Accelerometer.ReadingChanged` |
-| `SensorReadingEventArgs<T>` | High | Generic wrapper. `setSensorReadingProperty()` is fully `public` (2 overloads: copy and move) — see "Flagged findings" below, same open question as `AccelerometerReadingEventArgs`. |
+| `AccelerometerReadingEventArgs` | High | WP7 7.0 legacy, paired with `Accelerometer.ReadingChanged`. **Fixed (`READINGS-002`, 2026-07-06):** `X`/`Y`/`Z`/`Timestamp` setters removed — confirmed via MSDN `ff707568`/`ff707712`/`ff708055`/`ff707430` that the real API has no public/internal setter for `X`/`Y`/`Z` and only `private set` for `Timestamp`. |
+| `SensorReadingEventArgs<T>` | High | Generic wrapper. `setSensorReadingProperty()` (2 overloads: copy and move) is fully `public` — confirmed correct (`READINGS-002`, MSDN `hh203225`: real `SensorReading` property is `public T SensorReading { get; set; }`), not a bug. |
 
 ---
 
-## Flagged findings — needs follow-up (`DEV-API-001`, 2026-07-06)
+## Flagged findings — resolved (`READINGS-002`, 2026-07-06)
 
-Two **wrong-visibility (unverified)** findings — the member itself is real, but this
-pass could not confirm its C++ access level matches the real API's C# accessibility.
-Neither is a Missing or Extra-unmarked finding (no member is absent, and nothing here is
-CNA-only API masquerading as strict XNA), so neither blocks this task's acceptance
-criteria — recorded here for `READINGS-002` (which already exists in this plan and
-already covers exactly these two types) to resolve, not fixed by this task.
+Both `DEV-API-001` wrong-visibility findings below are now resolved against the
+archived MSDN "previous-versions" pages (fetched directly, not assumed) — one was a
+real, confirmed bug (now fixed); the other was CNA's existing code already matching the
+real API exactly (no change needed).
 
 - **`AccelerometerReadingEventArgs`'s `setXProperty()`/`setYProperty()`/
-  `setZProperty()`/`setTimestampProperty()` are fully `public`.** Every reading struct
-  in this namespace (`AccelerometerReading`, `GyroscopeReading`, `CompassReading`,
-  `MotionReading`, `AttitudeReading`) instead makes its setters `private` + `friend
-  class <owning sensor>` (Task P3-2), explicitly matching the real API's `internal set`
-  convention. `AccelerometerReadingEventArgs` is the one type in this namespace that
-  does not follow that pattern — unclear whether that's because the real WP7
-  `AccelerometerReadingEventArgs.X`/`Y`/`Z`/`Timestamp` properties genuinely have a
-  public setter (plausible: WP7 7.0-era event-args classes predate the `SensorBase<T>`
-  pattern the other four structs follow, and may have been designed differently), or
-  whether this is simply an unfixed drift from before Task P3-2's convention was
-  established. Needs an authoritative WP7 7.0 reference check, not an assumption either
-  way — `READINGS-002`'s job.
-- **`SensorReadingEventArgs<T>::setSensorReadingProperty()` is fully `public`** (both the
-  copy and move overloads). Same open question: this class only ever legitimately holds
-  a reading the producing sensor already validated and dispatched, so a real `internal
-  set` (mirroring the reading structs) would be the more defensively-shaped choice, but
-  this pass found no direct evidence either way for the *generic* real WP7
-  `SensorBase<T>`-equivalent event-args type specifically.
+  `setZProperty()`/`setTimestampProperty()` — confirmed a real bug, fixed.** The real
+  `Microsoft.Devices.Sensors.AccelerometerReadingEventArgs` has:
+  - `public double X { get; }` (MSDN `ff707568`) — **no setter at all**, public or
+    otherwise.
+  - `public double Y { get; }` (MSDN `ff707712`) — same, no setter.
+  - `public double Z { get; }` (MSDN `ff708055`) — same, no setter.
+  - `public DateTimeOffset Timestamp { get; private set; }` (MSDN `ff707430`) —
+    `private set`, not the `internal set` the other four reading structs use.
+
+  CNA's public `setXProperty()`/`setYProperty()`/`setZProperty()`/
+  `setTimestampProperty()` were therefore genuine **Extra-unmarked** API — CNA-only
+  additions with no real counterpart, never tagged `NOXNA`. All four were unused dead
+  code (confirmed by grep: `Accelerometer::DispatchSensorReading()` only ever
+  constructs this type via its 4-argument constructor, never calls a setter) — removed
+  entirely rather than tagged `NOXNA`, since the real API has no public/internal
+  setter to preserve access to. `Timestamp`'s real `private set` needs no dedicated
+  method in the C++ port: the constructor already assigns the private field directly,
+  which is the literal C++ equivalent of "settable only from within this class's own
+  code."
+- **`SensorReadingEventArgs<T>::setSensorReadingProperty()` — confirmed correct as-is,
+  no change needed.** The real `Microsoft.Devices.Sensors.SensorReadingEventArgs<T>`
+  has `public T SensorReading { get; set; }` (MSDN `hh203225`) — a fully public setter,
+  exactly matching CNA's existing implementation (both the copy and move overloads).
+  This class is the outlier in the *other* direction from `AccelerometerReadingEventArgs`
+  — genuinely publicly mutable in the real API, unlike the reading structs' `internal
+  set` convention.
 
 ## SDL/internal-only internals (`Detail::` namespace, not XNA-facing)
 
@@ -259,6 +267,11 @@ file's prior content, rather than assuming the file was still current.
   public setters, vs. every reading struct's `private`+`friend` convention) —
   cross-referenced to `READINGS-002`, which already exists in `plan_devices.md` to
   resolve them; not fixed by this task.
+  **Update, same day:** `READINGS-002` resolved both — see "Flagged findings" above,
+  now retitled "resolved" — against the archived MSDN pages (`ff707568`/`ff707712`/
+  `ff708055`/`ff707430` for `AccelerometerReadingEventArgs`; `hh203225` for
+  `SensorReadingEventArgs<T>`). One was a real bug (fixed); the other was already
+  correct.
 - **Coverage gaps in this file itself (not API bugs, just matrix incompleteness) that
   this pass fixed:** added the "Cross-cutting members" tables (destructor/`Dispose()`/
   `Dispose(bool)`/`GetTypeName()` for the four sensor classes; constructors/getters/
