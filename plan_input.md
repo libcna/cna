@@ -847,8 +847,19 @@ mis-wiring); `FromButtonArray` OR-combines the list (≡ FNA); `Equals` = field 
 `Equals` = 4-field compare. **Files changed:** none (logic verified). **Behavior verified:** flag extraction
 + OR-combine + exact FNA hash weights. **Remaining risk:** none.
 
-## L-006 — `GamePadThumbSticks.cpp` logic `[ ]`
-- [ ] Dead-zone math (ExcludeAxisDeadZone, IndependentAxes, Circular, square-clamp) line-by-line vs FNA.
+## L-006 — `GamePadThumbSticks.cpp` logic `[x]`
+- [x] Dead-zone math (ExcludeAxisDeadZone, IndependentAxes, Circular, square-clamp) line-by-line vs FNA.
+
+**Result (2026-07-06):** **The entire file is byte-identical to FNA `GamePadThumbSticks.cs`** — no fix. Both
+ctors match (public: `ApplySquareClamp()`; internal: `ApplyDeadZone(dz)` then `Circular?ApplyCircularClamp:
+ApplySquareClamp` — with FNA's exact "dead zones before clamp" ordering). `ApplyDeadZone` (None no-op /
+IndependentAxes per-axis `ExcludeAxisDeadZone` with LeftDeadZone/RightDeadZone / Circular
+`ExcludeCircularDeadZone`), `ApplySquareClamp` (clamp each component to [-1,1]), `ApplyCircularClamp`
+(`if LengthSquared>1 Normalize`), and `ExcludeCircularDeadZone` (`if length<=deadZone → Zero; else scale by
+(length-deadZone)/(1-deadZone)/length`) are **line-for-line identical**. `GetHashCode` = `Left + 37*Right`
+(FNA `GamePadThumbSticks.cs:186`), with unsigned wraparound to avoid signed-overflow UB (INPUT-BUILD-006 —
+same numeric result). **Files changed:** none (logic verified). **Behavior verified:** all three dead-zone
+modes + clamp + circular scaling + hash match FNA exactly. **Remaining risk:** none.
 
 ## L-007 — `GamePadTriggers.cpp` logic `[ ]`
 - [ ] Clamp, trigger-threshold dead-zone, WithinEpsilon equality, bit-hash vs FNA.
