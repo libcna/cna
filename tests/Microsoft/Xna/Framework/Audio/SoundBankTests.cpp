@@ -489,6 +489,18 @@ TEST(SoundBankTest, PlayCueThreeArgValidDoesNotThrow)
     EXPECT_NO_THROW(bank.PlayCue("Explosion", listener, emitter));
 }
 
+// P10-XACT-007: the 3-arg overload shares PlayCueInternal with the 2-arg one (tested above via
+// PlayCueTwoArgAfterDisposeThrowsObjectDisposed), but per this project's overload-testing
+// convention each overload gets its own dedicated case rather than assuming shared internals.
+TEST(SoundBankTest, PlayCueThreeArgAfterDisposeThrowsObjectDisposed)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    AudioListener listener;
+    AudioEmitter emitter;
+    bank.Dispose();
+    EXPECT_THROW(bank.PlayCue("Explosion", listener, emitter), System::ObjectDisposedException);
+}
+
 // T-4B: the 3D PlayCue overload must actually reach Cue::Apply3D on the resulting
 // fire-and-forget cue, not just accept listener/emitter without using them. XsbFixtureBytes'
 // wavebank-less "Explosion" cue can't exercise this (Cue::active_ stays empty), so this uses a

@@ -3627,15 +3627,48 @@ restoration can be reverted.
 * [x] P10-XACT-006: Tests for streaming wave banks and lazy loading.
   *Note:* Already covered (`T-3F`): streaming `WaveBank` constructor does real lazy per-entry disk
   reads, distinct from the non-streaming constructor's eager whole-file load.
-* [ ] P10-XACT-007: Tests for invalid category names, missing cues, missing waves, duplicate
+* [x] P10-XACT-007: Tests for invalid category names, missing cues, missing waves, duplicate
   names, disposed banks.
-  *Note:* Invalid category name: `AudioEngine::GetCategory` throws `InvalidOperationException`
-  for an unknown name (existing behavior, used throughout every category test). Missing
-  cue/wave: covered (`PlayWithUnresolvableSoundCodeSpawnsNoInstance`,
-  `PlayWithUnregisteredWaveBankSpawnsNoInstance`, `PlayWithOutOfRangeWaveIndexSpawnsNoInstance`,
-  `P9-XACT-014/015`). **Duplicate category/cue/wave-bank names specifically, and a fully disposed
-  `AudioEngine`/`SoundBank`/`WaveBank`'s exact behavior for each remaining public method** are not
-  confirmed covered in this pass -- left open.
+  *Note:* Closed this pass. Invalid category name and missing cue/wave were already covered (see
+  original note below, unchanged). For duplicate names and disposed-bank per-method behavior,
+  read every remaining public method on `AudioEngine`/`SoundBank`/`WaveBank` against its disposed
+  state and added tests for every real gap found:
+  - `AudioEngine::Update()` -- the ONE public method that does NOT throw `ObjectDisposedException`
+    (unlike `GetCategory`/`GetGlobalVariable`/`SetGlobalVariable`, all three already tested). Read
+    the code: it early-returns on a null `xactImpl_` (which `Dispose()` resets), a deliberate,
+    safe no-op rather than an oversight -- FNA itself has no `IsDisposed` guard on ANY of these
+    (`AudioEngine.cs`'s `Update()`/`GetCategory()`/etc. all call straight into native FAudio with
+    no check, undefined behavior if disposed), so CNA already exceeds FNA's safety here regardless
+    of which way this particular asymmetry goes. Locked down with `UpdateAfterDisposeDoesNotThrow`.
+  - `SoundBank::PlayCue`'s 3-arg (listener/emitter) overload had no dedicated disposed-behavior
+    test of its own (only the 2-arg overload did) -- added
+    `PlayCueThreeArgAfterDisposeThrowsObjectDisposed`.
+  - `WaveBank::getIsInUseProperty()` after `Dispose()` *while a cue was actively playing* wasn't
+    covered as its own case (only after `Stop()`) -- `Dispose()` clears `activeCues_` via a
+    different code path than the natural per-cue unregister. Added
+    `IsInUseFalseAfterDisposeWhilePlaying`.
+  - Duplicate names: `categoryNameMap`/`variableNameMap`/`cueNameMap`/`AudioEngine`'s
+    name-keyed `waveBanks` map are all plain `std::unordered_map`s built by a sequential
+    `map[name] = i` loop in `XactParser.cpp` (or, for wave banks, `RegisterWaveBank` in
+    `AudioEngine.cpp`) -- a duplicate name deterministically resolves to the LAST-declared/
+    -registered entry, well-defined C++ behavior, never UB, and real XACT authoring tools never
+    emit duplicate names in the first place (validated identifiers at build time). Added a direct
+    regression test for the category case, the cheapest to construct a real fixture for:
+    `DuplicateCategoryNamesResolveDeterministicallyToLastDeclaredIndex`
+    (`XactParserTests.cpp`). Cue-name and wave-bank-name duplicates use the exact same map-overwrite
+    mechanism (verified by reading `XactParser.cpp`'s cue-name-index loop and
+    `AudioEngine::RegisterWaveBank`) but were not separately fixture-tested -- building a full
+    multi-cue XSB or a second same-named XWB is disproportionate effort for content the real tool
+    can never produce; recorded as verified-by-analogous-mechanism rather than independently
+    tested, not silently assumed.
+  All 5 new tests plus the full suite (3301/3303 pass, 2 pre-existing hardware-only skips)
+  verified green.
+
+  *Original note (invalid category name / missing cue-wave), unchanged:* Invalid category name:
+  `AudioEngine::GetCategory` throws `InvalidOperationException` for an unknown name (existing
+  behavior, used throughout every category test). Missing cue/wave: covered
+  (`PlayWithUnresolvableSoundCodeSpawnsNoInstance`, `PlayWithUnregisteredWaveBankSpawnsNoInstance`,
+  `PlayWithOutOfRangeWaveIndexSpawnsNoInstance`, `P9-XACT-014/015`).
 * [x] P10-XACT-008: Audit category/cue instance limits, queue/replace-oldest/replace-quietest
   behavior, fade behavior.
   *Note:* This branch's own major work: `P9-CATEGORY-005..011` (category- and cue-level

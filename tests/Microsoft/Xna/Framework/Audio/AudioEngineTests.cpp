@@ -654,6 +654,21 @@ TEST(AudioEngineTest, UpdateDoesNotThrow)
     EXPECT_NO_THROW(engine.Update());
 }
 
+// P10-XACT-007: unlike GetCategory/GetGlobalVariable/SetGlobalVariable above, Update() does NOT
+// check isDisposed_ and throw -- it relies on Dispose() having reset xactImpl_ to null, and
+// early-returns before touching anything. This is a deliberate asymmetry (matching neither FNA,
+// which has no IsDisposed guard on ANY of these -- see AudioEngine.cs's Update(), a raw
+// FACTAudioEngine_DoWork call with no null/disposed check at all, undefined behavior if disposed):
+// throwing here would penalize the common "call Update() every frame regardless of teardown
+// order" game-loop pattern for a call that CNA can already make perfectly safe. Locking down the
+// current, deliberate behavior with a regression test rather than leaving it unverified.
+TEST(AudioEngineTest, UpdateAfterDisposeDoesNotThrow)
+{
+    AudioEngine engine(XgsFixturePath());
+    engine.Dispose();
+    EXPECT_NO_THROW(engine.Update());
+}
+
 // P9-LIFECYCLE-008/009: mirrors FNA's AudioEngine.Update() -> FACTAudioEngine_DoWork, which is
 // what actually destroys a managed/fire-and-forget cue once it reaches FACT_STATE_STOPPED
 // (FACT_internal.c). A single Update() call after natural completion must sweep it out of its

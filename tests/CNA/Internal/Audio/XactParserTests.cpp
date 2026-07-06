@@ -1638,6 +1638,64 @@ TEST(XactParserTest, ParseXsbTruncatedMidRecordThrows)
     EXPECT_THROW(ParseXsb(truncated), std::runtime_error);
 }
 
+// P10-XACT-007: two categories sharing the same name is content a real XACT authoring tool would
+// never emit (names are validated identifiers at build time), but CNA must still not crash or
+// misbehave on it if handed a hand-crafted/adversarial file: categoryNameMap is a plain
+// `std::unordered_map<std::string, uint16_t>` built by a sequential `map[name] = i` loop
+// (XactParser.cpp), so a duplicate name deterministically resolves to the LAST-declared index --
+// well-defined, not UB -- rather than crashing or picking an arbitrary/unstable one.
+TEST(XactParserTest, DuplicateCategoryNamesResolveDeterministicallyToLastDeclaredIndex)
+{
+    constexpr uint32_t headerSize       = 65;
+    constexpr uint32_t categoryDataSize = 20; // 2 categories * 10 bytes
+    constexpr uint32_t variableDataSize = 13;
+
+    const uint32_t categoryOffset     = headerSize;
+    const uint32_t variableOffset     = categoryOffset + categoryDataSize;
+    const uint32_t categoryNameOffset = variableOffset + variableDataSize;
+    const std::string categoryName    = "Default"; // same name for both categories
+    const uint32_t variableNameOffset =
+        categoryNameOffset + 2 * (static_cast<uint32_t>(categoryName.size()) + 1);
+    const std::string variableName = "Volume";
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'X', 'G', 'S', 'F' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU16(data, 46); AppendU16(data, 0); AppendU16(data, 0);
+    for (int i = 0; i < 8; ++i) data.push_back(0);
+    AppendU8(data, 3);
+
+    AppendU16(data, 2); // categoryCount == 2
+    AppendU16(data, 1); // variableCount
+    AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0);
+
+    AppendU32(data, categoryOffset);
+    AppendU32(data, variableOffset);
+    AppendU32(data, 0); AppendU32(data, 0); AppendU32(data, 0); AppendU32(data, 0);
+    AppendU32(data, categoryNameOffset);
+    AppendU32(data, variableNameOffset);
+
+    // Category 0: instanceLimit=1, distinguishable from category 1's instanceLimit=2.
+    AppendU8(data, 1); AppendU16(data, 0); AppendU16(data, 0); AppendU8(data, 0);
+    AppendU16(data, 0xFFFF); AppendU8(data, 0xFF); AppendU8(data, 0);
+    // Category 1 (last-declared): instanceLimit=2.
+    AppendU8(data, 2); AppendU16(data, 0); AppendU16(data, 0); AppendU8(data, 0);
+    AppendU16(data, 0xFFFF); AppendU8(data, 0xFF); AppendU8(data, 0);
+
+    // Variable: accessibility, initialValue, minValue, maxValue.
+    AppendU8(data, 0x03); AppendF32(data, 0.5f); AppendF32(data, 0.0f); AppendF32(data, 1.0f);
+
+    AppendCStr(data, categoryName); // category 0's name
+    AppendCStr(data, categoryName); // category 1's name (duplicate)
+    AppendCStr(data, variableName);
+
+    const XgsData xgs = ParseXgs(data);
+    ASSERT_EQ(xgs.categories.size(), 2u);
+    ASSERT_TRUE(xgs.categoryNameMap.count("Default"));
+    EXPECT_EQ(xgs.categoryNameMap.at("Default"), 1u); // last-declared (index 1) wins
+    EXPECT_EQ(xgs.categories[1].instanceLimit, 2);
+}
+
 TEST(XactParserTest, XgsParsesCategoryAndVariable)
 {
     const XgsData xgs = ParseXgs(BuildXgsFixture());

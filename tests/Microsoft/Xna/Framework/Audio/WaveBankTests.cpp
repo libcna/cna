@@ -693,6 +693,40 @@ TEST(WaveBankTest, IsInUseTrueWhilePlayingThenFalseAfterStop)
     }
 }
 
+// P10-XACT-007: WaveBank::Dispose() clears activeCues_ directly (distinct from the natural
+// Stop()-driven unregister path exercised above) -- IsInUse must still safely and correctly
+// report false afterward rather than reading a stale/dangling cue pointer.
+TEST(WaveBankTest, IsInUseFalseAfterDisposeWhilePlaying)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, XwbFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+        SoundBank sb(&engine, XsbFixturePath());
+
+        std::unique_ptr<Cue> cue(sb.GetCue("Boom"));
+        cue->Play();
+
+        if (!wb.getIsInUseProperty())
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not exercise WaveBank playback";
+        }
+
+        ASSERT_TRUE(wb.getIsInUseProperty());
+        wb.Dispose();
+        EXPECT_FALSE(wb.getIsInUseProperty());
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise WaveBank playback";
+    }
+}
+
 // XA-7: IsInUse used to only check IsPlaying, so pausing the only cue using this bank made it
 // falsely report itself as not in use.
 TEST(WaveBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
