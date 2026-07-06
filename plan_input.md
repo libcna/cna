@@ -320,14 +320,24 @@ xna-4-api-coverage.md` (+ `NEXT.md` at root).
 - **Deps:** none.
 
 #### INPUT-AUDIT-004 — Reconcile task-number namespace collisions in docs
-- **Priority:** P2 · **Status:** TODO · **Area:** Audit/Docs
-- **Files:** `docs/input-backend.md` §4, `NEXT.md`
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Audit/Docs
+- **Files:** `docs/input-backend.md`
 - **Problem:** Tasks 868–872 denote *touch previous-location* in `input-backend.md` but *Graphics
   DepthStencil bugs* in NEXT/Graphics. Same numbers, two meanings.
 - **Work:** Re-number or namespace one set (input tasks now use the `INPUT-*` scheme in this file).
 - **Acceptance:** No number denotes two unrelated things across docs.
 - **Tests:** n/a.
 - **Deps:** none.
+- **Result (2026-07-06):** Two active cross-references in `input-backend.md` used bare legacy numbers that
+  also name Graphics tasks: **868–872** (touch previous-location here vs Graphics DepthStencil in
+  NEXT.md/GRAPHICS_TASKS.md) and **710–722** (Phase I2 gesture wiring here vs Graphics SDL_Renderer tasks
+  710–717 in GRAPHICS_TASKS.md). Re-pointed both to the `INPUT-*` scheme (INPUT-TOUCH-007 / the
+  INPUT-TOUCH-*/INPUT-GESTURE-* cluster). Graphics keeps sole ownership of those numbers. The input docs
+  carry ~40 other legacy 700–958 breadcrumbs (historical provenance, not active Graphics pointers); rather
+  than a risky 40-edit renumber, added a **task-number scheme note** at the top of `input-backend.md`
+  namespacing all bare input numbers as legacy pre-`INPUT-*` IDs distinct from the Graphics track — so no
+  bare number is ambiguous to a reader. (The `86x`/`87x` hits in the parity-matrix / fidelity docs are the
+  `7849`/`8689` dead-zone constants, not task IDs.)
 
 ---
 

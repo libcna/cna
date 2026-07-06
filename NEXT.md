@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-AUDIT-004 — task-number collisions reconciled:** `input-backend.md` reused bare legacy numbers
+  868–872 (touch) and 710–722 (gesture wiring) that also name Graphics tasks; re-pointed both to the
+  `INPUT-*` scheme and added a numbering-scheme note namespacing all bare input numbers as legacy IDs
+  distinct from the Graphics track. Docs-only.
 - **INPUT-KBD-019 — key-repeat state case added:** the text half of the repeat gate was already covered;
   added `KeyRepeatKeepsKeyDownWithoutSpuriousTransitions` (press + 5 repeats → pressed set stays `{A}`,
   one KEY_UP releases). Verification + one test, no code change.

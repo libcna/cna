@@ -2,7 +2,14 @@
 
 Describes how CNA wires SDL3 input events to the `Microsoft::Xna::Framework::Input` (and
 `Input::Touch`) public API. Reference implementation: `feature/input` branch, `plan_input.md`
-(Phases I1–I6, tasks 700–777). FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+(Phases I1–I6, legacy tasks 700–777). FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+
+> **Task-number scheme (INPUT-AUDIT-004).** Bare 3-digit numbers in this doc-set (e.g. "task 734",
+> "tasks 700–777") are the **legacy pre-`INPUT-*` input numbering** and are historical provenance only —
+> the current, authoritative input backlog uses the `INPUT-*` scheme in `plan_input.md`. These legacy
+> numbers are **not** related to the identically-numbered items in the Graphics track (`GRAPHICS_TASKS.md`,
+> e.g. tasks 710–717 or 868–872 there mean SDL_Renderer / DepthStencil work, not input). When a doc needs
+> to point at Graphics work it names `GRAPHICS_TASKS.md` explicitly; a bare number here always means input.
 
 ---
 
@@ -197,14 +204,15 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
 - `SDL_EVENT_FINGER_*` feed `TouchPanel::INTERNAL_onTouchEvent`, which drives
   `GestureDetector`'s state machine directly — this is what makes Tap, DoubleTap, Hold,
   Horizontal/Vertical/Free drag, Flick, Pinch, and PinchComplete recognition work end-to-end
-  (Phase I2, tasks 710–722; previously the pipeline was entirely dead — no caller ever reached
-  `GestureDetector`).
+  (Phase I2, the INPUT-TOUCH-* / INPUT-GESTURE-* cluster; previously the pipeline was entirely dead —
+  no caller ever reached `GestureDetector`).
 - `TouchDeviceExists` only becomes true after the *first* touch event, matching FNA's own
   comment ("Windows only notices a touch screen once it's touched").
 - `TouchPanel::GetState()` reports `TouchLocation`s with their previous location preserved for
   Moved/Released touches, so `TryGetPreviousLocation()` works on the real event-driven path —
   `InputManager` now stores each touch's previous state/position and advances it per snapshot
-  (tasks 868–872). A new Pressed touch has no previous, matching FNA.
+  (INPUT-TOUCH-007; the Phase I12 event-driven previous-location fix). A new Pressed touch has no
+  previous, matching FNA.
 - Known deviation (behaviourally equivalent, not a gap): `GetState()` reads `InputManager`'s
   event-driven snapshot rather than FNA's per-frame `SetFinger`/`SDL_GetTouchFingers` poll of
   `touches_` — see §3. The event-driven `InputManager` map is internally unbounded, but
