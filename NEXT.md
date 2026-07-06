@@ -25,10 +25,14 @@ framework/runtime, not a game.
   (`P9-LIFECYCLE`, `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, `P9-STOP`, `P9-XACT`,
   `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`, `P9-AUDIT`). **All 11 groups are now fully closed** —
   `P9-CATEGORY`'s last 6 deferred sub-items (real XACT category `instanceLimit`/
-  `maxInstanceBehavior`/fade in/out enforcement) closed in `d3b66dea`. Four genuine open design
-  decisions came up during Phase 9 and were all asked-and-resolved with the user's explicit input
-  (XACT filter `OneOverQ` fidelity, `Cue::IsPlaying`/`IsPaused` coexistence, `Cue::Stop(AsAuthored)`
-  fade timing, and this session's category `instanceLimit`/fade scope+approach) — none remain open.
+  `maxInstanceBehavior`/fade in/out enforcement) closed in `d3b66dea`. A further user-directed
+  follow-up beyond Phase 9's original fixed list, **`P9-CATEGORY-011`** (real cue-level, as
+  opposed to category-level, `instanceLimit`/`maxInstanceBehavior`/fade enforcement), was also
+  completed in `effc3626` after the user explicitly chose to continue in that specific
+  area. Five genuine open design decisions came up on this branch and were all asked-and-resolved
+  with the user's explicit input (XACT filter `OneOverQ` fidelity, `Cue::IsPlaying`/`IsPaused`
+  coexistence, `Cue::Stop(AsAuthored)` fade timing, category `instanceLimit`/fade scope+approach,
+  and choosing cue-level `instanceLimit` as the next area to continue in) — none remain open.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -45,13 +49,13 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean as of commit `d3b66dea` (last verified). EasyGL backend (Linux default),
+- **Build:** clean as of commit `effc3626` (last verified). EasyGL backend (Linux default),
   `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets also
   rebuild clean as of their last touch.
-- **Tests:** `CnaTests` whole-suite count was **3266 / 3268 pass** as of the last full run (2
+- **Tests:** `CnaTests` whole-suite count was **3268 / 3270 pass** as of the last full run (2
   skipped: `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected). The audio-scoped subset (§7's `--gtest_filter` audio suite list)
-  was **392 / 392 pass** under ASan+UBSan, with no audio-related leaks or errors. Two unrelated,
+  was **394 / 394 pass** under ASan+UBSan, with no audio-related leaks or errors. Two unrelated,
   pre-existing, full-suite-load-only flakes have been observed and confirmed non-reproducing in
   isolation (not regressions): `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`
   (un-seeded RNG) and `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`
@@ -80,8 +84,8 @@ framework/runtime, not a game.
 - **What does not work / remains incomplete:** everything open is a deliberate, documented
   `CHECKLIST.md` accepted deviation (no reverb, no true 3D HRTF/elevation, stereo hard-pan instead
   of crossfeed, RPC curves evaluated once not continuously, RPC-only cue release timing
-  unimplemented, cue-level — as opposed to category-level — XACT `instanceLimit`/
-  `maxInstanceBehavior` unenforced, etc.), not a bug. See §5 for the full table.
+  unimplemented, etc.), not a bug. See §5 for the full table. Both category-level *and* cue-level
+  XACT `instanceLimit`/`maxInstanceBehavior`/fade are now real and enforced (`P9-CATEGORY-005..011`).
 
 ---
 
@@ -90,6 +94,16 @@ framework/runtime, not a game.
 Newest first. One line each; full rationale, FNA/FAudio citations, and `git stash` verification
 notes for every item are in `plan_audio.md`'s "Phase 9" section.
 
+- `effc3626` — **`P9-CATEGORY-011`** (user-directed follow-up beyond Phase 9's original
+  list): real cue-level (XSB, per-cue) `instanceLimit`/`maxInstanceBehavior`/fade enforcement via
+  new `AudioEngine::CheckCueInstanceLimit()`, called from `Cue::Play()` *before* the category-level
+  check, matching `FACT_internal.c`'s `play_sound()` order exactly. Reuses the same FAIL/
+  REPLACE_LOWEST_PRIORITY/collapsed-QUEUE-OLDEST-QUIETEST behavior as the category-level check,
+  scoped to "same SoundBank + same cue index" for the *count*. The one new wrinkle: the *eviction
+  victim search*, when the cue-level limit triggers, has **no category filter and no
+  same-cue-definition filter at all** (matches `handle_instance_limit(cue, NULL)` exactly — a real
+  FAudio quirk/oversight, replicated rather than "fixed"), so it can evict a completely unrelated
+  cue instead of a sibling instance of the same named cue; proven with a dedicated test.
 - `d3b66dea` — **`P9-CATEGORY-005..010`** (closes Phase 9): real XACT category `instanceLimit`/
   `maxInstanceBehavior` enforcement in `AudioEngine::CheckCategoryInstanceLimit()` (called from
   `Cue::Play()`) — `FAIL` rejects the new cue, `REPLACE_LOWEST_PRIORITY` evicts the lowest-priority
@@ -154,8 +168,8 @@ fresh clone/pull of `sharp-runtime` ever lacks this commit, that one CNA test wi
 
 | Status | Issue | Ref |
 |---|---|---|
-| **Accepted deviation** | XACT category `maxInstanceBehavior`'s `QUEUE`/`REPLACE_OLDEST`/`REPLACE_QUIETEST` values all collapse to "evict the oldest active cue" (matches FAudio's own acknowledged collapse of those three, not a CNA-only shortcut) | `CHECKLIST.md`, `P9-CATEGORY-005/010` |
-| **Accepted deviation** | Cue-level (XSB, per-cue) `instanceLimit`/`maxInstanceBehavior` remain parsed-and-discarded/unenforced — only XGS category-level instanceLimit is enforced | `CHECKLIST.md`, `P9-CATEGORY-005`, `P9-STOP-010` |
+| **Accepted deviation** | XACT category/cue `maxInstanceBehavior`'s `QUEUE`/`REPLACE_OLDEST`/`REPLACE_QUIETEST` values all collapse to "evict the oldest active cue" (matches FAudio's own acknowledged collapse of those three, not a CNA-only shortcut) | `CHECKLIST.md`, `P9-CATEGORY-005/010/011` |
+| **Accepted deviation** | A cue-level `instanceLimit` eviction's victim search has no category filter and no same-cue-definition filter at all — it can evict a completely unrelated cue in the same SoundBank instead of a sibling of the same named cue | `CHECKLIST.md`, `P9-CATEGORY-011` |
 | **Accepted deviation** | RPC volume/pitch curves evaluated once at `Cue::Play()` time, not continuously re-evaluated while playing | `CHECKLIST.md`, `P9-XACT-005/006/007` |
 | **Accepted deviation** | RPC-only cue release timing (`maxRpcReleaseTime`, no authored `fadeOutMS`) unimplemented — tied to the RPC-evaluated-once deviation above | `CHECKLIST.md`, `P9-STOP-010` |
 | **Accepted deviation** | `Apply3D`'s pan ignores listener/emitter `Forward`/`Up` orientation entirely (world-space X displacement only) | `CHECKLIST.md`, `P9-3D-009` |
@@ -288,15 +302,18 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 **No confirmed next task is recorded.** Phase 9's fixed, user-specified task list (`plan_audio.md`)
 is now fully closed (§1/§4) — every group, including `P9-CATEGORY`'s previously-deferred
-`instanceLimit`/fade sub-items. There is no Phase 10 defined anywhere in `plan_audio.md`.
+`instanceLimit`/fade sub-items — and its user-directed follow-up, `P9-CATEGORY-011` (cue-level
+instanceLimit), is also closed. There is no Phase 10 defined anywhere in `plan_audio.md`.
 
 If asked "what's next" with no further user direction, the candidates are the remaining
 `CHECKLIST.md` **accepted deviations** (§5) — none are bugs, so none should be "fixed" without the
 user explicitly deciding to revisit one and accept the scope/risk (most of them trade off against
 the SDL3_mixer backend choice itself, e.g. no reverb bus, no per-source 3D graph, stereo hard-pan
-instead of crossfeed — see §1's "Key architectural decision"). Do not start any of these
-unprompted; ask first, the same way every real Phase 9 design decision in this file was asked
-before implementation.
+instead of crossfeed — see §1's "Key architectural decision"). The last time this question was
+asked, the user picked cue-level `instanceLimit` from that same candidate list (§9's ThreadSanitizer
+stress test, RPC continuous re-evaluation, and `Apply3D` pan orientation remain unpicked options).
+Do not start any of these unprompted; ask first, the same way every real design decision in this
+file was asked before implementation.
 
 ---
 
@@ -307,12 +324,14 @@ before implementation.
 - **No inventing a "Phase 10".** Phase 9 is now fully closed (§1/§4/§8) — don't start new feature
   work without the user asking for it first (§8 lists the only candidates, and even those need to
   be asked about before starting).
-- **No re-litigating a resolved open decision without the user asking first.** All four that ever
+- **No re-litigating a resolved open decision without the user asking first.** All five that ever
   came up on this branch are resolved: XACT filter `OneOverQ` fidelity vs. narrowing
   (`P9-XACT-011`); `Cue::IsPlaying`/`IsPaused` coexistence (`P9-LIFECYCLE-013`);
-  `Cue::Stop(AsAuthored)`'s authored `fadeOutMS` timing (`P9-STOP-010`); and category
+  `Cue::Stop(AsAuthored)`'s authored `fadeOutMS` timing (`P9-STOP-010`); category
   `instanceLimit`/`maxInstanceBehavior`/fade scope (`P9-CATEGORY-005..010`, `d3b66dea` — including
-  the QUEUE/REPLACE_OLDEST/REPLACE_QUIETEST collapse, matching FAudio's own shipped behavior).
+  the QUEUE/REPLACE_OLDEST/REPLACE_QUIETEST collapse, matching FAudio's own shipped behavior); and
+  cue-level `instanceLimit`/`maxInstanceBehavior`/fade scope (`P9-CATEGORY-011` — including the
+  bank-wide-unfiltered victim search quirk, also matching FAudio's own shipped behavior).
 - **No Media namespace work** — explicitly out of scope for this branch.
 - **No FAudio/FACT migration** — the backend is SDL3_mixer by design.
 - **No real 3D HRTF, Doppler-beyond-what's-implemented, or reverb implementation** — SDL3_mixer
@@ -331,8 +350,9 @@ before implementation.
 
 ```
 Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state -- Phase 9
-is now fully closed (all 11 groups, including P9-CATEGORY's last 6 sub-items, d3b66dea). There is
-no confirmed next task recorded (see §8) -- ask the user what they want done next rather than
+is now fully closed (all 11 groups, including P9-CATEGORY's last 6 sub-items, d3b66dea), and its
+user-directed follow-up P9-CATEGORY-011 (cue-level instanceLimit) is also closed. There is no
+confirmed next task recorded (see §8) -- ask the user what they want done next rather than
 inventing new feature work.
 
 1. If the user names a specific task, inspect only the files needed for it -- do not refactor
