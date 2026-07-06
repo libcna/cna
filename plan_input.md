@@ -260,18 +260,20 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** docs/platform-input-notes.md marks verified (X11, Xvfb) vs documented/manual cells via the cursor/warp platform matrix.
 
 #### INP-0213 — Add a Troubleshooting section (no display, no controller, submodule/sibling missing)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-build-and-test.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** Added a Troubleshooting table to docs/input-build-and-test.md (missing submodule/sibling, headless MouseCursor fails, Mesa GLX ASan leaks, disconnected gamepad, Wayland global-position (0,0)) — each with the fix.
 
 #### INP-0214 — Add an Extension-API section (TextInputEXT, MouseCursor, relative mode, scancode, gamepad EXT)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-fna-fidelity.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** Added an Extension APIs (FNAEXT/NOXNA) section to docs/input-fna-fidelity.md documenting TextInputEXT, MouseCursor, relative mouse mode, scancode mode, the gamepad EXT set, ClickedEXT, and FingerId(2)EXT.
 
 #### INP-0215 — Add a hardware verification matrix (controller family x feature x status)
 - **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
@@ -282,11 +284,12 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** Added a hardware verification matrix (controller family x feature: buttons/sticks/rumble/haptics/lightbar/sensors/GUID/hotplug + touch/gesture/IME/layout) to docs/input-manual-verification-results.md; all cells ⬜ pending real hardware.
 
 #### INP-0216 — Adopt a repo-wide 'verified fact' vs 'intended behavior' convention and apply it to input docs
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-*.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** Adopted the ✅ verified-fact vs 🎯 intended-behavior convention (documented in input-fna-fidelity.md) and applied it: test/tool/guard-backed claims are ✅ (default), hardware/human-gated items are 🎯/not-verified in the manual-results log — never asserted as fact.
 
 #### INP-0217 — Update docs/xna-4-api-coverage.md Input section to reference the parity artifacts
 - **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
@@ -1999,20 +2002,22 @@ citation recorded in `docs/input-fna-fidelity.md`.
 ### Area: Platform (2 tasks)
 
 #### INP-0202 — Add Wayland notes/path and confirm which cursor/warp behaviors are X11-only
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Platform
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Platform
 - **Files:** `docs/platform-input-notes.md`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Result:** Wayland notes present + expanded in docs/platform-input-notes.md (dedicated §Wayland + the cursor/warp platform matrix): global position restricted to (0,0), warp focus-gated/clamped, relative mode = pointer-lock is the supported path; X11/XWayland restores real values. Marked X11-only cells in the matrix.
 
 #### INP-0205 — Add Android/iOS manual/emulator verification plan
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Platform
+- **Priority:** P3 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Platform
 - **Files:** `docs/platform-input-notes.md`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
 
 ### Area: Manual (12 tasks)
+- **Result:** Android/iOS verification plan: docs/platform-input-notes.md §Android + §iOS describe touch-primary (device seen after first touch), on-screen keyboard, attached-HW gamepad, no cursor on iOS; the INP-0224 supported-OS checklist lists the Android/iOS items to verify manually/on emulator.
 
 #### INP-0231 — Manual: cursor warp landing (X11) + relative-mode capture on a real display
 - **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Manual

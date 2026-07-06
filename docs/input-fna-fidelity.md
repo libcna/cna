@@ -274,3 +274,35 @@ Input is "done" when **all** of these hold — not before:
 Coverage is **not** claimed as "100% FNA fidelity". Phase I15 added the fake SDL gamepad layer, so
 the gamepad SDL-bound *translation/bookkeeping* paths are now headless-tested (not just audited); what
 remains is real-hardware *actuation*, which is manual-only. See `plan_input.md` for the per-task status.
+
+---
+
+## Extension APIs (FNAEXT / NOXNA) — INP-0214
+
+Beyond the strict XNA 4.0 surface, CNA exposes the FNA/MonoGame extensions and CNA conveniences below.
+See the tier glossary in `input-public-api-frozen.md`.
+
+- **`TextInputEXT`** (FNAEXT, whole class NOXNA) — portable text input/IME that XNA 4.0 lacked:
+  `StartTextInput`/`StopTextInput`, the `TextInput` (per UTF-16 code unit) and `TextEditing` (IME
+  composition) multicast events, `SetInputRectangle`, `IsTextInputActive`, `IsScreenKeyboardShown`,
+  `WindowHandle`. Backed by SDL text-input; UTF-8→UTF-16 decode + control-char/Ctrl+V synthesis.
+- **`MouseCursor`** (NOXNA, whole class) — MonoGame-style custom cursors: stock cursors, `FromTexture2D`,
+  ownership/disposal. Cursor creation needs `SDL_INIT_VIDEO` (graceful null otherwise).
+- **Relative mouse mode** (`Mouse::…IsRelativeMouseModeEXT`) — FPS-style pointer lock + relative-delta
+  accumulation; not a stock XNA concept.
+- **Scancode mode** (`Keyboard::GetKeyFromScancodeEXT` + `FNA_KEYBOARD_USE_SCANCODES`) — layout-independent
+  physical-key mapping, matching FNA.
+- **GamePad EXT** — `GetGUIDEXT` (device GUID), `SetLightBarEXT` (PS4/5 LED), `SetTriggerVibrationEXT`
+  (adaptive-trigger haptics), `GetGyroEXT`/`GetAccelerometerEXT` (motion sensors); plus the
+  `GamePadCapabilities` `Has…EXT` flags. All FNA extensions, capability-gated.
+- **`Mouse::ClickedEXT`** — FNA's click callback (`MulticastAction<int>`, DEC-06).
+- **`GestureSample::FingerId(2)EXT`** — per-gesture finger ids (NOXNA convenience).
+
+## Convention: verified fact vs intended behavior (INP-0216)
+
+Throughout the input docs, a claim is either a **✅ verified fact** (backed by a green test or a mechanical
+tool — the default for statements citing a `…Test`, the parity/coverage generators, or a compile guard) or
+a **🎯 intended behavior** (implemented and FNA-faithful in code but **not** machine-verified here — e.g.
+real-hardware actuation, live IME, native-Wayland cursor landing). Hardware/human-gated items are recorded
+as 🎯/"not verified" in `input-manual-verification-results.md`, never asserted as ✅. Do not upgrade a 🎯 to
+✅ without a green test or a dated manual entry.

@@ -186,3 +186,15 @@ of the translation logic only, and are otherwise manual/hardware-gated:
 
 See `docs/input-fna-fidelity.md` for the per-area FNA-fidelity status and the full list of intentional
 deviations.
+
+## Troubleshooting (INP-0213)
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| CMake configure fails: `Missing vendored 'SDL' …` | submodules not initialized | `git submodule update --init --recursive` |
+| CMake configure fails: `required sibling repository 'sharp-runtime' … not found` | sibling repo not checked out next to `cna_input` | `git -C .. clone <sharp-runtime-url> sharp-runtime` |
+| CMake configure fails: `the EASYGL backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_BACKEND=VULKAN` (or BGFX / SDL_RENDERER) |
+| `ctest -L input` fails on 3 `MouseCursor` cases | headless `SDL_VIDEODRIVER=dummy` (null cursors) | run under a display: `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest -L input` |
+| ASan reports leaks in `libGLX_mesa` | third-party Mesa GLX at process exit (not CNA) | run with `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1` (what CI uses) |
+| Gamepad panels stay "disconnected" in `demo_input` | no controller / SDL can't map the device | attach a controller SDL knows (see `gamecontrollerdb`); Steam Input presents a virtual pad |
+| `SDL_GetGlobalMouseState` returns `(0,0)` | Wayland compositor security policy | force `SDL_VIDEODRIVER=x11`/XWayland, or use relative mouse mode |
