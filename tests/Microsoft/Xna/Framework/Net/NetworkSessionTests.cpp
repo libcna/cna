@@ -180,6 +180,38 @@ TEST(NetworkSessionTest, StartGameThenEndGameTransitionsState) {
     session->Dispose();
 }
 
+// Task 5.19: WriteArbitratedLeaderboard/WriteUnarbitratedLeaderboard/WriteTrueSkill had zero test
+// coverage, not even a subscribe-smoke-test - even though they're correctly never raised (matching
+// FNA, where leaderboards/TrueSkill are unimplemented upstream). Subscribing to all three and
+// exercising a full Create -> StartGame -> EndGame -> Dispose lifecycle both proves each event
+// exists under its exact FNA name/spelling (a rename/typo here would fail to compile) and locks in
+// that none of them ever actually fires.
+TEST(NetworkSessionTest, WriteLeaderboardAndTrueSkillEventsAreNeverRaised) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+
+    int arbitratedCount = 0;
+    int unarbitratedCount = 0;
+    int trueSkillCount = 0;
+    session->WriteArbitratedLeaderboard += [&](System::Object*, const WriteLeaderboardsEventArgs&) { ++arbitratedCount; };
+    session->WriteUnarbitratedLeaderboard += [&](System::Object*, const WriteLeaderboardsEventArgs&) { ++unarbitratedCount; };
+    session->WriteTrueSkill += [&](System::Object*, const WriteLeaderboardsEventArgs&) { ++trueSkillCount; };
+
+    session->Update();
+    session->StartGame();
+    session->Update();
+    session->EndGame();
+    session->Update();
+
+    EXPECT_EQ(arbitratedCount, 0);
+    EXPECT_EQ(unarbitratedCount, 0);
+    EXPECT_EQ(trueSkillCount, 0);
+
+    session->Dispose();
+}
+
 TEST(NetworkSessionTest, StartGameWhileNotInLobbyThrows) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(

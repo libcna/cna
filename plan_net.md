@@ -1081,9 +1081,20 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Pure test-coverage addition, no revert-verify applies. New tests: 2/2 passing. Full suite:
   **3298/3300 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 5.19** — Add ordinal-value/spelling-lock tests for `WriteArbitratedLeaderboard`/
+- [x] **Task 5.19** — Add ordinal-value/spelling-lock tests for `WriteArbitratedLeaderboard`/
   `WriteUnarbitratedLeaderboard`/`WriteTrueSkill` events — currently zero test coverage, not even a
-  subscribe-smoke-test, even though they're correctly never raised (matching FNA).
+  subscribe-smoke-test, even though they're correctly never raised (matching FNA). Added
+  `NetworkSessionTest.WriteLeaderboardAndTrueSkillEventsAreNeverRaised`: subscribes a counting
+  handler to all three events, then exercises a full `Create` → `Update` → `StartGame` → `Update` →
+  `EndGame` → `Update` → `Dispose` lifecycle, asserting all three counters stay at 0. Subscribing
+  under each event's exact FNA name is itself a spelling/rename guard (a typo wouldn't compile);
+  the lifecycle exercise locks in that none of them ever actually fires, matching FNA's own
+  never-raised (leaderboards/TrueSkill unimplemented upstream) contract.
+
+  Pure test-coverage addition, no revert-verify applies. New test passing. Full suite:
+  **3299/3301 passing** (2 expected accelerometer/gyroscope skips), no regressions.
+
+  **Phase 5 complete** — all 19 Net test-coverage tasks (Tasks 5.1-5.19) done.
 
 ---
 
