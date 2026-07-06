@@ -1790,11 +1790,22 @@ drift). No strict-XNA corrections were needed; no new extension members were int
 none (freeze verified unchanged). **Behavior verified:** frozen signatures + enum values still hold; no API
 drift. **Remaining risk:** none.
 
-## P9-009 — Update test coverage document
-- [ ] List every Input type.
-- [ ] List corresponding tests.
-- [ ] Mark remaining gaps.
-- [ ] Do not claim 100% behavior coverage unless true.
+## P9-009 — Update test coverage document `[x]`
+- [x] List every Input type.
+- [x] List corresponding tests.
+- [x] Mark remaining gaps.
+- [x] Do not claim 100% behavior coverage unless true.
+
+**Result (2026-07-06):** Regenerated `docs/input-test-coverage.md` via
+`tools/input_parity/check_input_test_coverage.py --out docs/input-test-coverage.md` (26 public + 8 internal
+types). It lists every Input type, whether it has a dedicated `TEST(<Type>Test, …)` suite, and how many test
+files reference it — the Phases 5–8 additions bumped the reference counts (e.g. `TouchCollection` 6→7,
+`GestureType` 8→9, `GestureSample`/`MouseState` +1, `ButtonState` 10→11, internal `MouseButton` 1→2). The
+**Gaps** section remains "None — every Input type has a dedicated suite or a documented sibling-suite cover."
+The doc deliberately measures **type→suite** coverage (an inspection aid), **not** a "100% behavior" claim —
+per-behavior correctness is what Phases 2–8 verified task-by-task against FNA (with the manual/HW-gated items
+explicitly marked `[!]`). **Files changed:** `docs/input-test-coverage.md` (regenerated). **Behavior
+verified:** doc matches the current test tree; no overstated coverage. **Remaining risk:** none.
 
 ---
 
