@@ -267,9 +267,22 @@ deterministic field-based hash (P3-003) — a reasonable, tested choice. **Membe
 **Files changed:** none (perfect, no gap). **Behavior verified:** ctor-slot order + fields + equality/hash/
 ToString. **Remaining risk:** none.
 
-## A3-002 — `Mouse` (static class) `[ ]`
-- [ ] FNA `Input/Mouse.cs`; CNA `Mouse.hpp`/`.cpp`; tests `MouseInputTests.cpp` + bridge.
-- [ ] Members: `GetState`, `SetPosition`, `WindowHandle` get/set, relative-mode EXT, `ClickedEXT`. Per-member.
+## A3-002 — `Mouse` (static class) `[x]`
+- [x] FNA `Input/Mouse.cs`; CNA `Mouse.hpp`/`.cpp`; tests `MouseInputTests.cpp` + bridge.
+- [x] Members: `GetState`, `SetPosition`, `WindowHandle` get/set, relative-mode EXT, `ClickedEXT`. Per-member.
+
+**Result (2026-07-06):** **8 members** reviewed. FNA-matching (strict/EXT): `WindowHandle` get/set (→ FNA
+`WindowHandle`), `GetState()`, `SetPosition(x,y)`, `ClickedEXT` (NOXNA multicast → FNA `Action<int>
+ClickedEXT`), `IsRelativeMouseModeEXT` get/set (→ FNA `IsRelativeMouseModeEXT`). **Confirmed NOXNA is
+correct:** `Mouse::SetCursor` (and the whole `MouseCursor` type) are genuinely **not in FNA** — FNA has no
+`MouseCursor.cs` and no `SetCursor`/`MouseCursor` reference in `Mouse.cs` (they are MonoGame additions), so
+CNA's `NOXNA` tag is right. `INTERNAL_onClicked` + `ResetForTests` are NOXNA internal/test helpers. **Test
+coverage:** `ClickedEXT` (27 refs, `ButtonDownFiresClickedEXTWithZeroBasedIndex`/`ButtonUpDoesNotFireClickedEXT`),
+WindowHandle (13/21 refs, round-trip + no-window), `SetPosition` (10 refs, no-window + letterbox),
+IsRelativeMouseModeEXT (20 refs, real-window round-trip + no-window no-op), `SetCursor`
+(`SetCursorIsSafeNoOpForDisposedCursor`), `ResetForTests` (via `ClearsMouse…` reset tests). **Members
+reviewed:** 8/8. **Files changed:** none (perfect, no gap). **Behavior verified:** FNA parity + correct NOXNA
+tagging. **Remaining risk:** none.
 
 ## A3-003 — `MouseCursor` (class, NOXNA) `[ ]`
 - [ ] FNA `Input/Mouse.cs` (MouseCursor is CNA-specific — verify against XNA MouseCursor semantics);
