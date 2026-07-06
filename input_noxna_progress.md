@@ -23,7 +23,8 @@
 ## Phase P2 — needs an injectable seam, desktop-strong
 - [ ] **N-007 `CNA::Input::Joystick`** — raw joystick (axes/buttons/hats/balls); test via virtual joystick.
 - [ ] **N-008 `GamePad` touchpad fingers EXT** — `GetTouchpadFingerEXT` + counts + touchpad events.
-- [ ] **N-009 `GamePad` battery/power + player-index EXT** — `GetPowerInfoEXT`, `Get/SetPlayerIndexEXT`.
+- [x] **N-009 `GamePad` player-index EXT** — `Get/SetPlayerIndexEXT` (SDL device player-number LED).
+- [ ] **N-009b `GamePad` battery/power EXT** — `GetPowerInfoEXT` (`SDL_GetGamepadPowerInfo`), split off from N-009.
 - [ ] **N-010 `GamePad` metadata EXT** — name/path/serial/firmware/Steam-handle/connection-state.
 - [ ] **N-011 `GamePad` button labels EXT** — ABXY vs cross/circle/square/triangle.
 - [ ] **N-012 `CNA::Input::Pen`** — stylus (pressure/tilt/rotation/eraser/buttons); event-decoded.
@@ -46,6 +47,19 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-009 done (2026-07-06):** `GamePad::Get/SetPlayerIndexEXT` — reads/sets the SDL device player
+  index (the 0-based player-number LED) through the injectable gamepad seam. Established the
+  "gamepad-seam-extension" flow: added `GetGamepadPlayerIndex`/`SetGamepadPlayerIndex` to
+  `ISdlGamepadBackend` (real = `SDL_Get/SetGamepadPlayerIndex`) + the fake
+  (`FakeGamepadConfig.playerIndex` + `setPlayerIndexCalls`/`lastSetPlayerIndex` introspection);
+  bridge `Get/SetPlayerIndex` resolve the slot and return -1/false when disconnected; public
+  `GamePad::Get/SetPlayerIndexEXT` (NOXNA) delegate. Pinned both in `PublicApiInputSignatureFreeze
+  Tests` + documented in `docs/input-public-api-frozen.md`. Tests: `FakeGamepadTest.PlayerIndex
+  RoundTripsThroughBackend` (Get reads device index, Set forwards + Get reads back) + `...IsSafe
+  ForDisconnectedSlot` (Get→-1, Set→false, backend untouched). `ctest -L input` 100% green;
+  ASan-clean. Split the tracker's old N-009 into player-index (this commit) + N-009b battery/power.
+  Files: SdlGamepadBackend.hpp/.cpp, FakeSdlGamepadBackend.hpp, SdlInputBridge.hpp/.cpp,
+  GamePad.hpp/.cpp, freeze test, frozen-API doc, SdlGamepadBackendTests.cpp.
 - **N-005 done (2026-07-06):** Mouse horizontal scroll wheel EXT (reverses DEC-18's drop of `wheel.x`).
   `MouseState::getHorizontalScrollWheelValueEXTProperty` + a NOXNA 9-arg ctor (8-arg XNA ctor unchanged,
   leaves it 0); `InputManager` gained a `HorizontalScrollWheelValue` accumulator + `AddHorizontalScroll

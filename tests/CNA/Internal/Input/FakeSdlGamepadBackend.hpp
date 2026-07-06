@@ -37,6 +37,7 @@ namespace CNA::Internal::Input::test_support
         std::array<float, 3> gyroData{{0.0f, 0.0f, 0.0f}};
         std::array<float, 3> accelData{{0.0f, 0.0f, 0.0f}};
         bool sensorReadFails = false;
+        int playerIndex = -1; // SDL device player index (LED number); -1 = unset
     };
 
     class FakeSdlGamepadBackend final : public ISdlGamepadBackend
@@ -54,6 +55,8 @@ namespace CNA::Internal::Input::test_support
         Uint16 lastRumbleLow = 0, lastRumbleHigh = 0;
         Uint16 lastTriggerLow = 0, lastTriggerHigh = 0;
         Uint8 lastLedR = 0, lastLedG = 0, lastLedB = 0;
+        int setPlayerIndexCalls = 0;     // total SetGamepadPlayerIndex calls
+        int lastSetPlayerIndex = -1;     // arg of the last SetGamepadPlayerIndex
 
         ~FakeSdlGamepadBackend() override
         {
@@ -229,6 +232,23 @@ namespace CNA::Internal::Input::test_support
         {
             FakeDevice* d = dev(gamepad);
             return d ? d->cfg.gamepadType : SDL_GAMEPAD_TYPE_UNKNOWN;
+        }
+
+        int GetGamepadPlayerIndex(SDL_Gamepad* gamepad) override
+        {
+            FakeDevice* d = dev(gamepad);
+            return d ? d->cfg.playerIndex : -1;
+        }
+
+        bool SetGamepadPlayerIndex(SDL_Gamepad* gamepad, int playerIndex) override
+        {
+            ++setPlayerIndexCalls;
+            lastSetPlayerIndex = playerIndex;
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr)
+                return false;
+            d->cfg.playerIndex = playerIndex; // per-device copy; a later Get reads it back
+            return true;
         }
 
         SDL_JoystickID lastClosedId = 0;

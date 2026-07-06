@@ -85,6 +85,14 @@ namespace CNA::Internal::Input
             {
                 return SDL_GetGamepadType(gamepad);
             }
+            int GetGamepadPlayerIndex(SDL_Gamepad* gamepad) override
+            {
+                return SDL_GetGamepadPlayerIndex(gamepad);
+            }
+            bool SetGamepadPlayerIndex(SDL_Gamepad* gamepad, int playerIndex) override
+            {
+                return SDL_SetGamepadPlayerIndex(gamepad, playerIndex);
+            }
         };
 
         RealSdlGamepadBackend g_realBackend;

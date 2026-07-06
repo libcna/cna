@@ -93,6 +93,9 @@ namespace
     [[maybe_unused]] constexpr auto z_GamePad_SetTriggerVibrationEXT_7 = static_cast<bool(*)(PlayerIndex, float, float)>(&GamePad::SetTriggerVibrationEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetGyroEXT_8 = static_cast<bool(*)(PlayerIndex, Vector3&)>(&GamePad::GetGyroEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetAccelerometerEXT_9 = static_cast<bool(*)(PlayerIndex, Vector3&)>(&GamePad::GetAccelerometerEXT);
+    // NOXNA/EXT (input_noxna.md N-009): SDL device player-index (LED) get/set.
+    [[maybe_unused]] constexpr auto z_GamePad_GetPlayerIndexEXT = static_cast<int(*)(PlayerIndex)>(&GamePad::GetPlayerIndexEXT);
+    [[maybe_unused]] constexpr auto z_GamePad_SetPlayerIndexEXT = static_cast<bool(*)(PlayerIndex, int)>(&GamePad::SetPlayerIndexEXT);
     static_assert(std::is_same_v<decltype(GamePad::LeftDeadZone), const float>, "GamePad::LeftDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::RightDeadZone), const float>, "GamePad::RightDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::TriggerThreshold), const float>, "GamePad::TriggerThreshold : static constexpr float");

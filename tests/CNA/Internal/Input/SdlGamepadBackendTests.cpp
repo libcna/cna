@@ -603,6 +603,36 @@ TEST_F(FakeGamepadTest, LightBarNoOpsForDisconnectedButForwardsForConnectedNonLe
     EXPECT_EQ(fake.ledCalls, 1) << "call forwarded; hardware simply ignores it";
 }
 
+// --- player-index extension (input_noxna.md N-009) via GamePad::Get/SetPlayerIndexEXT ---
+
+// N-009(a): GetPlayerIndexEXT reads the SDL device player index (the 0-based player-number LED)
+// off the connected device; SetPlayerIndexEXT forwards the new value to the backend seam and a
+// subsequent Get reads it back. This proves the round-trip through GamePad -> SdlInputBridge ->
+// ISdlGamepadBackend without touching real hardware.
+TEST_F(FakeGamepadTest, PlayerIndexRoundTripsThroughBackend)
+{
+    FakeGamepadConfig cfg = FullyFeaturedGamepad();
+    cfg.playerIndex = 2;
+    fake.Register(10, cfg);
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_EQ(GamePad::GetPlayerIndexEXT(PlayerIndex::One), 2) << "reads the device's current LED index";
+
+    EXPECT_TRUE(GamePad::SetPlayerIndexEXT(PlayerIndex::One, 0)) << "connected device accepts the change";
+    EXPECT_EQ(fake.setPlayerIndexCalls, 1);
+    EXPECT_EQ(fake.lastSetPlayerIndex, 0);
+    EXPECT_EQ(GamePad::GetPlayerIndexEXT(PlayerIndex::One), 0) << "Get reads back the value just set";
+}
+
+// N-009(b): the no-device path. A disconnected slot must not touch the backend: Get returns -1 and
+// Set returns false, leaving the backend's call counter untouched.
+TEST_F(FakeGamepadTest, PlayerIndexIsSafeForDisconnectedSlot)
+{
+    EXPECT_EQ(GamePad::GetPlayerIndexEXT(PlayerIndex::Four), -1);
+    EXPECT_FALSE(GamePad::SetPlayerIndexEXT(PlayerIndex::Four, 3));
+    EXPECT_EQ(fake.setPlayerIndexCalls, 0) << "disconnected slot must not reach the backend";
+}
+
 // --- sensor enable/disable (P4-017) ---
 
 // P4-017(c): reading a sensor lazily enables it exactly once. The first GetGyroEXT enables SDL_SENSOR_GYRO;

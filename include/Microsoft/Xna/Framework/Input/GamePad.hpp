@@ -93,6 +93,21 @@ namespace Microsoft::Xna::Framework::Input
         NOXNA static bool GetAccelerometerEXT(PlayerIndex playerIndex,
                                                Microsoft::Xna::Framework::Vector3& accel);
 
+        /**
+         * @brief NOXNA/EXT: gets the controller's SDL player index (the 0-based player-number LED).
+         * @param playerIndex The player index (slot) of the controller.
+         * @return The device player index, or -1 if the controller is disconnected or the index is unset.
+         */
+        NOXNA static int GetPlayerIndexEXT(PlayerIndex playerIndex);
+
+        /**
+         * @brief NOXNA/EXT: sets the controller's SDL player index (the 0-based player-number LED).
+         * @param playerIndex The player index (slot) of the controller.
+         * @param index The 0-based player-number LED to assign.
+         * @return True on success; false if the controller is disconnected or SDL rejected the change.
+         */
+        NOXNA static bool SetPlayerIndexEXT(PlayerIndex playerIndex, int index);
+
         /** @brief Left stick dead zone threshold (XInput-based). */
         NOXNA static constexpr float LeftDeadZone     = 7849.0f / 32768.0f;
         /** @brief Right stick dead zone threshold (XInput-based). */

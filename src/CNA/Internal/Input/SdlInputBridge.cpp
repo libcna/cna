@@ -1057,6 +1057,22 @@ namespace CNA::Internal::Input
         return read_gamepad_sensor(get_sdl_gamepad_for_player(playerIndex), SDL_SENSOR_ACCEL, accel);
     }
 
+    int SdlInputBridge::GetPlayerIndex(Microsoft::Xna::Framework::PlayerIndex playerIndex)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return -1;
+        return sdl_gamepad_backend().GetGamepadPlayerIndex(gamepad);
+    }
+
+    bool SdlInputBridge::SetPlayerIndex(Microsoft::Xna::Framework::PlayerIndex playerIndex, int index)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return false;
+        return sdl_gamepad_backend().SetGamepadPlayerIndex(gamepad, index);
+    }
+
     static Microsoft::Xna::Framework::Input::GamePadType sdl_joystick_type_to_gamepad_type(SDL_JoystickType t)
     {
         using Microsoft::Xna::Framework::Input::GamePadType;

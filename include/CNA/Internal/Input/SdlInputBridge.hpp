@@ -108,6 +108,16 @@ namespace CNA::Internal::Input
         );
 
         /**
+         * @brief NOXNA/EXT: the SDL device player index (LED number) of the connected pad, or -1.
+         */
+        static int GetPlayerIndex(Microsoft::Xna::Framework::PlayerIndex playerIndex);
+
+        /**
+         * @brief NOXNA/EXT: sets the SDL device player index (LED number). Returns success.
+         */
+        static bool SetPlayerIndex(Microsoft::Xna::Framework::PlayerIndex playerIndex, int index);
+
+        /**
          * @brief Queries SDL for the actual hardware capabilities of the gamepad.
          */
         static Microsoft::Xna::Framework::Input::GamePadCapabilities GetCapabilities(

@@ -87,4 +87,14 @@ namespace Microsoft::Xna::Framework::Input
     {
         return CNA::Internal::Input::SdlInputBridge::GetAccelerometer(playerIndex, accel);
     }
+
+    int GamePad::GetPlayerIndexEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetPlayerIndex(playerIndex);
+    }
+
+    bool GamePad::SetPlayerIndexEXT(PlayerIndex playerIndex, int index)
+    {
+        return CNA::Internal::Input::SdlInputBridge::SetPlayerIndex(playerIndex, index);
+    }
 }

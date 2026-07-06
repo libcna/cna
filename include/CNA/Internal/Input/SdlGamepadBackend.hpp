@@ -61,6 +61,12 @@ namespace CNA::Internal::Input
         virtual Uint16 GetJoystickProduct(SDL_Joystick* joystick) = 0;
         /** @brief High-level gamepad type (SDL_GetGamepadType). */
         virtual SDL_GamepadType GetGamepadType(SDL_Gamepad* gamepad) = 0;
+
+        /** @brief NOXNA/EXT: the device's SDL player index (LED number, 0-based), or -1 if unset. */
+        virtual int GetGamepadPlayerIndex(SDL_Gamepad* gamepad) = 0;
+
+        /** @brief NOXNA/EXT: sets the device's SDL player index (LED number). Returns success. */
+        virtual bool SetGamepadPlayerIndex(SDL_Gamepad* gamepad, int playerIndex) = 0;
     };
 
     /**

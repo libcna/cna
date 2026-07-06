@@ -112,6 +112,8 @@ override must be added.
 - `static bool SetTriggerVibrationEXT(PlayerIndex, float, float);` — EXT
 - `static bool GetGyroEXT(PlayerIndex, Vector3&);` — EXT
 - `static bool GetAccelerometerEXT(PlayerIndex, Vector3&);` — EXT
+- `static int GetPlayerIndexEXT(PlayerIndex);` — NOXNA/EXT (SDL device player-index / LED; -1 if disconnected)
+- `static bool SetPlayerIndexEXT(PlayerIndex, int);` — NOXNA/EXT
 - `static constexpr float LeftDeadZone;` — NOXNA
 - `static constexpr float RightDeadZone;` — NOXNA
 - `static constexpr float TriggerThreshold;` — NOXNA
