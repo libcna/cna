@@ -226,9 +226,24 @@ of Down/Up per key; matches FNA `IsKeyUp => !IsKeyDown`). **Members reviewed:** 
 test. **Files changed:** `tests/…/KeyboardInputTests.cpp` (+1 test). **Behavior verified:** full
 member + FNA-behavior parity. **Remaining risk:** none.
 
-## A2-002 — `Keyboard` (static class) `[ ]`
-- [ ] FNA `Input/Keyboard.cs`; CNA `Keyboard.hpp`/`.cpp`; tests `KeyboardInputTests.cpp` + bridge.
-- [ ] Members: `GetState()` (×overloads), `GetKeyFromScancodeEXT`. Per-member test + FNA behavior.
+## A2-002 — `Keyboard` (static class) `[x]`
+- [x] FNA `Input/Keyboard.cs`; CNA `Keyboard.hpp`/`.cpp`; tests `KeyboardInputTests.cpp` + bridge.
+- [x] Members: `GetState()` (×overloads), `GetKeyFromScancodeEXT`. Per-member test + FNA behavior.
+
+**Result (2026-07-06):** **3 static members**, all matching FNA `Keyboard.cs` and Doxygen'd:
+`GetState()` (→ FNA `GetState()`), `GetState(PlayerIndex)` (→ FNA overload; FNA ignores the index since the
+keyboard is single), and `GetKeyFromScancodeEXT(Keys)` (NOXNA/EXT — matches FNA's own extension).
+**Test map:** `GetState()` covered by the accumulate/reflect suite (54 references);
+**`GetState(PlayerIndex)` covered SEPARATELY** by `GetStateWithPlayerIndexMatchesGetState` (asserts it equals
+`GetState()`, FNA-faithful); `GetKeyFromScancodeEXT` covered by
+`GetKeyFromScancodeEXTIsIdentityInScancodeMode` + `...TranslatesInNormalMode` (+ 18 references). **Members
+reviewed:** 3/3, each overload with a named test. **Files changed:** none (perfect, no gap). **Behavior
+verified:** state read + player-index-ignored overload + scancode translation. **Remaining risk:** none.
+
+---
+
+**Phase 2 complete (2026-07-06):** `KeyboardState` (13 members) + `Keyboard` (3 members) fully re-audited
+vs FNA; every member has a named dedicated test (added `IsKeyUpIsTheComplementOfIsKeyDown`). No gaps.
 
 ---
 
