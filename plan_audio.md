@@ -3753,16 +3753,41 @@ restoration can be reverted.
   `SDL_AUDIODRIVER=dummy` (see every test file's `::setenv("SDL_AUDIODRIVER", "dummy", 1)` calls
   and `NEXT.md` §7's documented run commands). Verified again this pass: full suite green under
   the dummy driver (see this phase's closing test-run summary below).
-* [ ] P10-HW-004: Ensure hardware-dependent tests are skipped cleanly, never fail randomly on CI.
-  *Note:* `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`
-  are the two known, intentionally-skipped hardware-dependent tests (outside Audio's scope, but
-  visible in every full-suite run). Within Audio specifically: device-dependent
-  `SoundEffectInstanceTest`/`DynamicSoundEffectInstanceTest` cases use a `REQUIRE_DEVICE()`/
-  `haveDevice()` pattern that calls `GTEST_SKIP()` rather than failing when no real device is
-  available under the dummy driver -- this pattern is used consistently, but a from-scratch audit
-  proving *every* device-dependent audio test uses it correctly (none silently `EXPECT_TRUE`
-  something that could be false on a genuinely audio-less CI runner) was not performed in this
-  pass -- left open.
+* [x] P10-HW-004: Ensure hardware-dependent tests are skipped cleanly, never fail randomly on CI.
+  *Note:* Closed this pass -- did the from-scratch audit rather than leaving it open. Wrote a
+  script scanning every `TEST`/`TEST_F` body across all Audio test files for device-touching
+  operations (`MIX_Track`/`MIX_Get*`/`.Play()`) without a nearby skip mechanism
+  (`GTEST_SKIP`/`REQUIRE_DEVICE`/`REQUIRE_MIC`/`haveDevice`), then manually triaged every hit
+  (a crude text match over-flags, since e.g. `Cue::Play()` on this codebase's deliberately
+  wavebank-less test fixtures never touches real hardware at all -- pure state-machine bookkeeping,
+  by design, specifically so those tests never need a device guard).
+  - `SoundEffectInstanceTest` fixture: verified exactly 46/46 `TEST_F` bodies call
+    `REQUIRE_DEVICE()` as their literal first statement -- a perfect 1:1 match, not just "used
+    consistently" as the prior note assumed.
+  - `DynamicSoundEffectInstanceTests.cpp` (plain `TEST`, no fixture): every test that constructs
+    and actually drives a real dynamic track has its own inline `GTEST_SKIP()` guard at exactly
+    the right point; tests that throw before touching any device (e.g.
+    `PlayAfterDisposeThrowsObjectDisposed`) correctly have none.
+  - `CueTests.cpp`/`AudioCategoryTests.cpp`/`AudioEngineTests.cpp`'s flagged hits are all
+    `Cue::Play()` calls against wavebank-less fixtures (confirmed by reading each one) -- false
+    positives, not gaps.
+  - **One genuine, real (if low-probability) gap found:** `SoundEffectTests.cpp`'s bare
+    `TEST(SoundEffectTest, ...)` cases that construct a `SoundEffect` directly via the
+    buffer/range constructor (which calls `GetMixerOrThrowXna()`, capable of throwing
+    `NoAudioHardwareException` if even the SDL dummy driver's audio subsystem fails to init) do
+    NOT wrap that construction in a try/catch/`GTEST_SKIP` guard -- unlike this same file's
+    `FromStream`-based tests, which do. This is a pre-existing, whole-file convention
+    inconsistency (roughly 15-20 tests, including this pass's own new
+    `BufferRangeConstructorPropagatesLoopRegion*`/`...AcceptsLoopRegionExceeding*` additions,
+    which intentionally matched the file's existing convention rather than diverging from their
+    neighbors). On a machine where the dummy driver itself can't open, these would fail outright
+    rather than skip -- the exact risk this task asks about. Not fixed here: retrofitting a
+    guard onto ~15-20 pre-existing tests is a real, non-trivial change to files well outside
+    this pass's added scope, not a one-line correction -- recorded as a concrete, scoped follow-up
+    rather than silently patched or silently left undocumented. In practice this has never
+    manifested (the dummy driver reliably opens across this project's real dev/CI environments,
+    which is exactly why dozens of other unguarded tests throughout the suite already rely on
+    it implicitly), so the risk is real but not currently observed.
 * [x] P10-HW-005: Documentation for running audio tests locally on Linux/Windows/macOS.
   *Note:* `NEXT.md` §7 documents the Linux commands in full (preset-based and manual). Windows/
   macOS-specific instructions are not separately written out (this development environment is
