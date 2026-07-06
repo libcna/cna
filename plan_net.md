@@ -1132,7 +1132,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   ("Operation is not valid due to the current state of the object."). Restored the fix; full
   suite: **3300/3302 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 6.2** — Audit and fix (or explicitly accept and document) the pointer-identity gamer
+- [x] **Task 6.2** — Audit and fix (or explicitly accept and document) the pointer-identity gamer
   matching in `LocalNetworkGamer.cpp` (`gamer == packet.Gamer`, ~lines 51-52) — a faithfully-preserved
   FNA "FIXME: bad equality check." Confirmed this poses lower risk than it might initially appear
   (since `GamerCollection<T>` stores raw non-owning `T*` and container reallocation never moves the
@@ -1140,6 +1140,28 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   freed, so no address can be coincidentally reused — fixing the leak reintroduces a theoretical
   use-after-free/aliasing risk here). Re-evaluate this specifically once Task 3.1 lands, and fix or
   formally document as an accepted, tracked risk.
+
+  Re-confirmed against FNA's real source (`LocalNetworkGamer.cs`): both call sites carry FNA's own
+  verbatim comment ("FIXME: This is a bad equality check!"), so the pointer-identity comparison
+  itself is a faithfully-preserved upstream quirk, not a CNA-introduced gap — per this repo's
+  behavior-fidelity rule, "fixing" it to a value-based comparison FNA itself doesn't have would be
+  the actual deviation.
+
+  Re-evaluated the risk model now that Task 3.1 has landed: confirmed **still safe**, because
+  neither `NetworkSession::ownedGamers_` nor `ENetBackend::SessionState::OwnedRemoteGamers` ever
+  frees an individual gamer — both are pure `emplace_back` accumulators, only ever cleared/
+  destroyed in bulk at whole-session `Dispose()`/`TeardownSession` (confirmed via `grep` — no
+  individual `erase` call exists on either). Every `NetworkEvent` that could carry a stale
+  `Gamer*` lives either in a per-gamer `packetQueue_` member or `NetworkSession`'s own internal
+  event queue, both of which are destroyed together with that same session's gamers at that same
+  `Dispose()` call — so no stale pointer from a torn-down session can ever outlive the objects it
+  would need to be compared against and alias with a new session's freshly-allocated gamer.
+  Documented this finding directly at both call sites in `LocalNetworkGamer.cpp` rather than
+  changing the comparison logic itself — a pure comment update, not a synthetic test dependent on
+  allocator/UB internals that can't be deterministically forced anyway.
+
+  Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
+  **3300/3302 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 6.3** — Investigate and fix the partial-failure state possible in
   `ENetBackend::StartHosting`. Confirmed: if `ENetDiscoveryService::RegisterHost` throws (e.g. via

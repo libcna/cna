@@ -59,7 +59,17 @@ namespace Microsoft::Xna::Framework::Net
 
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
         {
-            // FIXME upstream: pointer identity is a weak equality check for "same gamer".
+            // Task 6.2: FIXME upstream ("This is a bad equality check!" in FNA's own source) -
+            // pointer identity is a weak equality check for "same gamer", preserved as-is rather
+            // than "fixed" to a value-based comparison FNA itself doesn't have. Re-evaluated after
+            // Task 3.1 gave NetworkSession/ENetBackend real ownership of every gamer they create
+            // (previously nothing was ever freed, so no address could be coincidentally reused):
+            // still safe, because neither ever frees a gamer individually - only in bulk, at
+            // whole-session Dispose()/TeardownSession - and every NetworkEvent that could carry a
+            // stale Gamer* lives inside a per-gamer packetQueue_ (or NetworkSession's own event
+            // queue), which is destroyed together with that same session's gamers at that same
+            // Dispose() call. No stale pointer from a torn-down session can outlive the objects
+            // it would need to be compared against.
             if (gamer == packet.Gamer)
             {
                 sender = gamer;
@@ -89,6 +99,8 @@ namespace Microsoft::Xna::Framework::Net
 
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
         {
+            // Task 6.2: same pointer-identity FIXME and same re-evaluated-safe reasoning as the
+            // other ReceiveData overload above.
             if (gamer == packet.Gamer)
             {
                 sender = gamer;
