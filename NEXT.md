@@ -51,6 +51,11 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-TEXT cluster verified (10 tasks) + threading note:** mapped TEXT-001..011 to the TextInputEXT +
+  bridge text suites (Start/Stop, TextInput/TextEditing multicast dispatch, SetInputRectangle, WindowHandle,
+  UTF-8→UTF-16 1/2/3-byte + astral surrogate pairs, control-char + Ctrl+V synthesis, DEC-08 malformed→U+FFFD)
+  and added a TEXT-016 threading + UTF-8 byte-indexing note to the `TextInputEXT` class doc. Text cluster
+  complete except manual IME/Czech/CJK (TEXT-012/013/014).
 - **INPUT-GESTURE cluster verified (17 tasks):** mapped GESTURE-001..020 to the ~20-case
   `GestureDetectorTest` + the bridge gesture suite — Tap/DoubleTap/Hold/H-V-Free drag/Flick/Pinch+Complete,
   multi-finger transitions, time/distance/velocity thresholds, position/delta, FIFO ordering, empty-throws,

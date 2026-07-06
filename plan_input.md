@@ -2153,61 +2153,68 @@ composition emits `("",0,0)`; control-char synthesis table for Home/End/Back/Tab
 repeat gate and a suppress flag for the literal 'v' after Ctrl+V.
 
 #### INPUT-TEXT-001 — `StartTextInput`/`StopTextInput`
-- **Priority:** P3 · **Status:** TODO · **Area:** Text/EXT
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Text/EXT
 - **Files:** `TextInputEXT.cpp`
 - **Work:** Verify start/stop no-op safely without a window; with a real window (GTEST_SKIP fallback) toggles SDL.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing `TextInputEXTTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `StartTextInput`/`StopTextInput` covered by `TextInputEXTTest.StartStopAndIsActiveRoundTripThroughRealWindow` and `StartStopAndSetRectangleWithoutWindowAreSafeNoOps`.
 #### INPUT-TEXT-002 — `TextInput` callback dispatch
-- **Priority:** P2 · **Status:** TODO · **Area:** Text/EXT
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Text/EXT
 - **Files:** `TextInputEXT.cpp`, `SdlInputBridge.cpp:1346`
 - **Work:** Verify each UTF-16 code unit dispatched; no-subscriber safe.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing text-input cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `TextInput` callback dispatch covered by `TextInputEXTTest.TextInputDispatchesEachCodeUnitToSubscriber`, `TextInputIsMulticastAndDeliversToEverySubscriber`, and `TextInputWithoutSubscriberIsSafe`.
 #### INPUT-TEXT-003 — `TextEditing` callback dispatch
-- **Priority:** P2 · **Status:** TODO · **Area:** Text/EXT
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Text/EXT
 - **Files:** `TextInputEXT.cpp`, `SdlInputBridge.cpp:1368`
 - **Work:** Verify IME draft (string,start,length) dispatched; empty composition `("",0,0)`; no-subscriber safe.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing text-editing cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `TextEditing` callback dispatch covered by `TextInputEXTTest.TextEditingIsMulticast...`, `TextEditingDispatchesTextStartAndLength`, `TextEditingEmptyCompositionFiresWithEmptyString`, and `TextEditingWithoutSubscriberIsSafe`.
 #### INPUT-TEXT-004 — `SetInputRectangle`
-- **Priority:** P3 · **Status:** TODO · **Area:** Text/EXT
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Text/EXT
 - **Files:** `TextInputEXT.cpp`
 - **Work:** Verify no-op without window; forwards to `SDL_SetTextInputArea` with window.
 - **Acceptance:** Safe + forwards.
 - **Tests:** existing set-rectangle no-op case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `SetInputRectangle` covered by `TextInputEXTTest.StartStopAndSetRectangleWithoutWindowAreSafeNoOps` (safe no-op without a window).
 #### INPUT-TEXT-005 — Window handle round-trip + null behavior
-- **Priority:** P3 · **Status:** TODO · **Area:** Text/EXT
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Text/EXT
 - **Files:** `TextInputEXT.cpp`
 - **Work:** Verify uintptr_t get/set; `IsTextInputActive`/`IsScreenKeyboardShown` false without window.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** WindowHandle round-trip + null covered by `TextInputEXTTest.WindowHandlePropertyRoundTrips`, `IsTextInputActiveIsFalseWithoutWindow`, and `IsScreenKeyboardShownIsFalseWithoutWindow`.
 #### INPUT-TEXT-006 — UTF-8 → UTF-16 conversion (1/2/3-byte)
-- **Priority:** P2 · **Status:** TODO · **Area:** Text/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Text/Bridge
 - **Files:** `SdlInputBridge.cpp` (`decode_utf8_to_utf16`)
 - **Work:** Verify ASCII, 2-byte, 3-byte decode to correct code units; ordering preserved.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing UTF-8 cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** UTF-8 → UTF-16 (1/2/3-byte) covered by `SdlInputBridgeTextInputTest.TextInputEventForwardsAsciiAsCodeUnits`, `TextInputEventDecodesTwoByteUtf8ToSingleCodeUnit`, and `TextInputEventDecodesThreeByteUtf8ToSingleCodeUnit`.
 #### INPUT-TEXT-007 — Surrogate pairs (astral emoji)
-- **Priority:** P2 · **Status:** TODO · **Area:** Text/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Text/Bridge
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify astral code point emits a high+low surrogate pair (two callbacks).
 - **Acceptance:** Matches existing emoji case.
 - **Tests:** existing astral case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Surrogate pairs (astral emoji) covered by `SdlInputBridgeTextInputTest.TextInputEventDecodesAstralEmojiToSurrogatePair` and `TextInputEventDecodesCombiningCharactersAsSeparateCodeUnits`.
 #### INPUT-TEXT-008 — Malformed UTF-8 handling (skipped vs U+FFFD)
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-08 — match FNA, U+FFFD) · **Area:** Text/Bridge/Decision
 - **Files:** `SdlInputBridge.cpp`, `docs/input-fna-fidelity.md`
@@ -2218,13 +2225,14 @@ repeat gate and a suppress flag for the literal 'v' after Ctrl+V.
 - **Deps:** none.
 
 #### INPUT-TEXT-009 — Control character synthesis
-- **Priority:** P2 · **Status:** TODO · **Area:** Text/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Text/Bridge
 - **Files:** `SdlInputBridge.cpp:90–207`
 - **Work:** Verify Home(2)/End(3)/Back(8)/Tab(9)/Enter(13)/Delete(127) synthesized from key events.
 - **Acceptance:** Matches existing case.
 - **Tests:** existing control-keys case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Control-character synthesis covered by `SdlInputBridgeTextInputTest.ControlKeysSynthesizeTextInputCharacters` and `KeyRepeatReemitsControlCharacter`.
 #### INPUT-TEXT-010 — Repeat gate for synthesized text
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-19 — matches FNA) · **Area:** Text/Bridge
 - **Files:** `SdlInputBridge.cpp`
@@ -2235,13 +2243,14 @@ repeat gate and a suppress flag for the literal 'v' after Ctrl+V.
 - **Deps:** none.
 
 #### INPUT-TEXT-011 — Ctrl+V synthesis + literal-'v' suppression
-- **Priority:** P2 · **Status:** TODO · **Area:** Text/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Text/Bridge
 - **Files:** `SdlInputBridge.cpp` (index 6 Ctrl+V, `g_textInputSuppress`)
 - **Work:** Verify Ctrl+V emits char 22 and suppresses the following literal 'v' TEXT_INPUT; plain 'v' not suppressed.
 - **Acceptance:** Matches existing cases + edge cases.
 - **Tests:** existing Ctrl+V cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Ctrl+V synthesis + literal-`v` suppression covered by `SdlInputBridgeTextInputTest.CtrlVEmitsPasteCharAndSuppressesLiteralText`, `CtrlVSuppressionDoesNotStickWhenCtrlReleasedWithoutVKeyUp`, and `PlainVWithoutCtrlIsNotSuppressed`. (Malformed UTF-8 → U+FFFD is separately pinned — DEC-08 — by the InvalidLeadByte/Truncated/BadContinuation/Overlong/Surrogate replacement-char tests.)
 #### INPUT-TEXT-012 — IME composition (manual)
 - **Priority:** P2 · **Status:** TODO · **Area:** Text/Manual
 - **Files:** `docs/input-manual-verification-results.md`
@@ -2276,7 +2285,7 @@ repeat gate and a suppress flag for the literal 'v' after Ctrl+V.
 - **Deps:** INPUT-MOUSE-014 (shared decision on EXT callback style).
 
 #### INPUT-TEXT-016 — Threading assumptions + UTF-8 byte-indexing note
-- **Priority:** P3 · **Status:** TODO · **Area:** Text/Docs
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Text/Docs
 - **Files:** `docs/input-fna-fidelity.md`
 - **Problem:** `TextEditing` string is UTF-8 (byte-indexed) vs FNA UTF-16 (§18); single-thread pump.
 - **Work:** Document the byte-vs-UTF-16 index difference and threading model.
@@ -2284,6 +2293,7 @@ repeat gate and a suppress flag for the literal 'v' after Ctrl+V.
 - **Tests:** n/a.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Threading + UTF-8 byte-indexing note added to the `TextInputEXT` class doc: callbacks dispatch on the event-pump (game-loop) thread (single-thread, like all input), and the `TextEditing` composition is a multi-byte UTF-8 `std::string` whose `start`/`length` come straight from SDL — index carefully (a byte offset is not a code-point count).
 ---
 
 ## 13. Internal InputManager plan

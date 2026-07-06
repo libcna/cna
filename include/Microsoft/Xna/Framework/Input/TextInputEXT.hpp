@@ -19,6 +19,12 @@ namespace Microsoft::Xna::Framework::Input
      * @note NOXNA — not part of the XNA 4.0 API. FNA extension (the `EXT` suffix
      *       marks an FNA addition beyond XNA 4.0). XNA 4.0 had no portable text-input
      *       event; FNA exposes this static class backed by SDL.
+     *
+     * @note Threading (INPUT-TEXT-016): like all CNA input, `TextInput`/`TextEditing` are dispatched on
+     *       the event-pump (game-loop) thread during `Game::PollEvents()`; do not subscribe/raise from a
+     *       background thread. The `TextEditing` composition is a **UTF-8** `std::string` (multi-byte), and
+     *       its `start`/`length` are passed straight through from SDL's IME model — index the string
+     *       carefully, since a byte offset is not a character/code-point count for multi-byte text.
      */
     NOXNA class TextInputEXT
     {
