@@ -35,5 +35,6 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkGamer::setMachineProperty(NetworkMachine value)    { machine_ = std::move(value); }
 
     System::TimeSpan NetworkGamer::getRoundtripTimeProperty() const { return roundtripTime_; }
+    void NetworkGamer::SetRoundtripTime(System::TimeSpan value) { roundtripTime_ = value; }
     NetworkSession* NetworkGamer::getSessionProperty() const        { return session_; }
 }

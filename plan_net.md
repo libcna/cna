@@ -699,12 +699,29 @@ verified via revert-verify-restore. Continuing to Phase 4 (Net API gaps).
 
 ## Phase 4 — Net: API Gaps
 
-- [ ] **Task 4.1** — Wire up `NetworkGamer::RoundtripTime` to real ENet per-peer RTT data. Confirmed
+- [x] **Task 4.1** — Wire up `NetworkGamer::RoundtripTime` to real ENet per-peer RTT data. Confirmed
   permanently dead: backed by `roundtripTime_`, default-constructed and never assigned anywhere
-  (`grep -rn "RoundtripTime"` finds zero writes) — ENet natively tracks real per-peer round-trip
-  time that's simply never surfaced. Wire it up from the underlying `ENetPeer`'s own RTT tracking.
-  Add a test (over a real two-peer ENet connection) asserting `RoundtripTime` becomes non-zero
-  after some real traffic.
+  (`grep -rn "RoundtripTime"` found zero writes) — ENet natively tracks real per-peer round-trip
+  time (`ENetPeer::roundTripTime`) that was simply never surfaced.
+  **Scope decision:** only the host's view of its directly-connected remote gamers has a genuine,
+  unambiguous `ENetPeer` to read from (`SessionState::WireIdToPeer`, already populated one-to-one
+  with `WireIdToGamer`). A client's view of the host, or of any other client relayed through the
+  host in this star topology, has no equivalent direct peer without further plumbing (the client
+  never tracks "which wire id is the peer at the other end of `HostPeer`") — left as a documented,
+  known gap rather than guessing at an unverified mapping.
+  **Fixed:** added `NOXNA void NetworkGamer::SetRoundtripTime(System::TimeSpan)` (mirroring
+  `SetId`/`SetIsHost`'s existing internal-wiring pattern); `ENetBackend::PumpSession` now updates
+  every host-tracked remote gamer's RTT from its direct `ENetPeer::roundTripTime` at the end of
+  every pump.
+  **Added `ENetBackendTest.HostMeasuresRealRoundtripTimeForRemoteGamer`**: a real host + fake-client
+  ENet connection completing a genuine `ClientHello`/`ServerWelcome` handshake, asserting the
+  resulting remote gamer's `RoundtripTime` is greater than `TimeSpan::Zero` (its untouched default —
+  nothing else in this codebase ever assigns it, so any non-zero value only appears via this fix).
+  **Verified the bug is real, not theoretical:** reverted the 3 source-fix files (keeping the test,
+  which only calls the pre-existing `getRoundtripTimeProperty()` getter, so it still compiled) and
+  reran — a genuine **runtime** failure: `RoundtripTime` stayed at `TimeSpan::Zero`. Restored the
+  fix and reran — passes. Full suite: **3262/3264 passing** (2 expected accelerometer/gyroscope
+  skips), no regressions.
 
 - [ ] **Task 4.2** — Make `QualityOfService` reflect real measurements for real `SystemLink`
   sessions instead of always being a hardcoded stub. Confirmed:

@@ -547,6 +547,22 @@ namespace CNA::Internal::Net
                 HandleDisconnect(session, state, evt.peer);
             }
         }
+
+        // Task 4.1: NetworkGamer::RoundtripTime was permanently dead (never assigned anywhere) -
+        // ENet already natively tracks real per-peer RTT; surface it every pump instead. Scoped to
+        // the host's view of each of its directly-connected remote gamers (WireIdToPeer only holds
+        // entries the host itself populated in HandleClientHello) - a client's own view of the
+        // host, or of any other client relayed through the host in this star topology, has no
+        // equivalent direct ENetPeer to read from without further plumbing, and stays at its
+        // default (unmeasured) TimeSpan::Zero.
+        for (const auto& [wireId, peer] : state.WireIdToPeer)
+        {
+            auto gamerIt = state.WireIdToGamer.find(wireId);
+            if (gamerIt != state.WireIdToGamer.end())
+            {
+                gamerIt->second->SetRoundtripTime(System::TimeSpan::FromMilliseconds(peer->roundTripTime));
+            }
+        }
     }
 
     uint16_t ENetBackend::GetBoundPort(NetworkSession* session)

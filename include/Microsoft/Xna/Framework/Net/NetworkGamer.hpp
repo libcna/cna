@@ -162,6 +162,16 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] System::TimeSpan getRoundtripTimeProperty() const;
 
         /**
+         * @brief Task 4.1: sets the measured round-trip time, wired up from the underlying
+         * `ENetPeer`'s own native RTT tracking for gamers with a direct connection. Not part of
+         * real XNA's public API (`RoundtripTime` has no setter there); mirrors `SetId`/`SetIsHost`'s
+         * existing internal-wiring pattern.
+         *
+         * @param value The newly-measured round-trip time.
+         */
+        NOXNA void SetRoundtripTime(System::TimeSpan value);
+
+        /**
          * @brief Gets the network session this gamer belongs to.
          *
          * @return Pointer to the NetworkSession.
