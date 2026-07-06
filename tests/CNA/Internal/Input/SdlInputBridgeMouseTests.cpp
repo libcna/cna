@@ -97,6 +97,33 @@ TEST(SdlInputBridgeMouseButtonStateTest, AllFiveButtonsTransitionThroughBridge)
     InputManager::ResetForTests();
 }
 
+// P8-007: window lifecycle events (focus-lost / minimized / restored / close-requested) are no-ops for
+// MOUSE state too, not just keyboard — they fall through the bridge's default: branch. A held button
+// survives them (matching FNA/DEC-15: input state is not cleared on focus loss; games gate on Game.IsActive).
+TEST(SdlInputBridgeMouseButtonStateTest, WindowLifecycleEventsDoNotCorruptMouseState)
+{
+    InputManager::ResetForTests();
+
+    SdlInputBridge::ProcessEvent(mouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_DOWN, SDL_BUTTON_LEFT));
+    ASSERT_EQ(Mouse::GetState().getLeftButtonProperty(), ButtonState::Pressed);
+
+    for (const Uint32 type : {SDL_EVENT_WINDOW_FOCUS_LOST, SDL_EVENT_WINDOW_MINIMIZED,
+                              SDL_EVENT_WINDOW_RESTORED, SDL_EVENT_WINDOW_CLOSE_REQUESTED})
+    {
+        SDL_Event e{};
+        e.type = type;
+        e.window.windowID = 0;
+        SdlInputBridge::ProcessEvent(e);
+    }
+
+    EXPECT_EQ(Mouse::GetState().getLeftButtonProperty(), ButtonState::Pressed)
+        << "window lifecycle events must not release a held mouse button";
+
+    SdlInputBridge::ProcessEvent(mouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_UP, SDL_BUTTON_LEFT));
+    EXPECT_EQ(Mouse::GetState().getLeftButtonProperty(), ButtonState::Released);
+    InputManager::ResetForTests();
+}
+
 // P3-004: an unknown/out-of-range SDL mouse button (SDL only defines 1..5) must be ignored safely —
 // the bridge's button switch has a `default: break;`, so it changes no button state and does not
 // crash. Only the position (carried by every button event) is applied.

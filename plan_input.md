@@ -1607,11 +1607,22 @@ changed:** none. **Behavior verified:** logical→window output + gesture/touch 
 transform + resize are HW-gated. **Remaining risk:** real high-DPI input-coordinate accuracy unverified
 until Phase 11.
 
-## P8-007 — Verify focus, minimize, and window close behavior
-- [ ] Decide how input state is cleared on focus loss.
-- [ ] Decide how input behaves when minimized.
-- [ ] Add SDL bridge tests if fake events can represent this.
-- [ ] Document runtime behavior.
+## P8-007 — Verify focus, minimize, and window close behavior `[x]`
+- [x] Decide how input state is cleared on focus loss.
+- [x] Decide how input behaves when minimized.
+- [x] Add SDL bridge tests if fake events can represent this.
+- [x] Document runtime behavior.
+
+**Result (2026-07-06):** **Decision (FNA-faithful, DEC-15):** input state is **not** cleared on focus loss,
+minimize, or close — FNA only sets `Game.IsActive = false` (`SDL3_FNAPlatform.cs:1026-1035`); games gate
+input on `IsActive`. CNA's bridge does not consume window events, so they fall through `default:` as no-ops.
+**Keyboard** was already pinned (`WindowFocusLostDoesNotClearHeldKeysMatchingFna`,
+`WindowLifecycleEventsDoNotCorruptKeyboardState`). **Closed the mouse gap:** added
+`WindowLifecycleEventsDoNotCorruptMouseState` (a held Left button survives FOCUS_LOST / MINIMIZED / RESTORED
+/ CLOSE_REQUESTED, then releases normally). Touch/gamepad fall through the same `default:` no-op branch.
+Runtime behavior documented in `docs/input-fna-fidelity.md` (DEC-15) and the source. **Files changed:**
+`tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp` (+1 test). **Behavior verified:** mouse + keyboard
+state survive window lifecycle events. **Remaining risk:** none.
 
 ## P8-008 — Verify backend reset
 - [ ] Ensure all internal input state can be reset for tests.
