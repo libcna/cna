@@ -1109,12 +1109,21 @@ risk:** none.
 FingerId2EXT), the drag tests (Delta). **Files changed:** none (coverage confirmed). **Behavior verified:**
 FIFO dequeue + empty-throw + populated sample fields. **Remaining risk:** none.
 
-## P6-005 — Verify tap detection
-- [ ] Test simple tap.
-- [ ] Test movement threshold.
-- [ ] Test duration threshold.
-- [ ] Test disabled tap gesture.
-- [ ] Add deterministic clock tests.
+## P6-005 — Verify tap detection `[x]`
+- [x] Test simple tap.
+- [x] Test movement threshold.
+- [x] Test duration threshold.
+- [x] Test disabled tap gesture.
+- [x] Add deterministic clock tests.
+
+**Result (2026-07-06):** Simple tap already covered by `TapFiresOnQuickReleaseNearPressPosition`. **Added
+three gap tests** (all deterministic via the injectable test clock): `TapDoesNotFireWhenFingerMovesBeyondMoveThreshold`
+(a 100px move > MOVE_THRESHOLD=35 with only Tap enabled drops HOLDING→NONE, so no Tap),
+`TapDoesNotFireWhenHeldForOneSecondOrMore` (the tap gate is `held < 1s`, so releasing at exactly the 1000ms
+cutoff emits no Tap), and `TapDoesNotFireWhenTapGestureIsDisabled` (Tap/DoubleTap off → quick press+release
+emits nothing). Thresholds verified equal to FNA (`MOVE_THRESHOLD=35`, `held < seconds(1)`). **Files
+changed:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+3 tests). **Tests:** pass. **Behavior
+verified:** tap fires only on a quick, near-stationary press+release. **Remaining risk:** none.
 
 ## P6-006 — Verify double-tap detection
 - [ ] Test two taps within threshold.

@@ -85,6 +85,43 @@ TEST_F(GestureDetectorTest, TapFiresOnQuickReleaseNearPressPosition)
     EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 }
 
+// P6-005(b): moving beyond MOVE_THRESHOLD with only Tap enabled cancels the tap. No drag is enabled, so
+// the detector leaves HOLDING for NONE once the finger crosses 35px, and the release emits no Tap.
+TEST_F(GestureDetectorTest, TapDoesNotFireWhenFingerMovesBeyondMoveThreshold)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap);
+
+    Press(50, 0.5f, 0.5f);
+    Move(50, 0.6f, 0.5f, 0.1f, 0.0f); // 100px move, above MOVE_THRESHOLD (35)
+    Release(50, 0.6f, 0.5f);
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+// P6-005(c): a finger held >= 1s is a Hold candidate, not a Tap — the tap gate is `held < 1s`, so a
+// release at/after the threshold emits no Tap even with only Tap enabled.
+TEST_F(GestureDetectorTest, TapDoesNotFireWhenHeldForOneSecondOrMore)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap);
+
+    Press(51, 0.5f, 0.5f);
+    GestureDetector::AdvanceTestClockMilliseconds(1000); // reaches the 1s tap cutoff (held < 1s is false)
+    Release(51, 0.5f, 0.5f);
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+// P6-005(d): with Tap (and DoubleTap) disabled, a quick press+release emits nothing.
+TEST_F(GestureDetectorTest, TapDoesNotFireWhenTapGestureIsDisabled)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Hold); // anything but Tap/DoubleTap
+
+    Press(52, 0.5f, 0.5f);
+    Release(52, 0.5f, 0.5f);
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
 TEST_F(GestureDetectorTest, DoubleTapFiresWhenSecondTapIsWithinTimingAndDistanceWindow)
 {
     TouchPanel::setEnabledGesturesProperty(GestureType::Tap | GestureType::DoubleTap);
