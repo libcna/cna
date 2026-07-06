@@ -165,6 +165,43 @@ TEST_F(GestureDetectorTest, DoubleTapDoesNotFireWhenSecondTapArrivesAfterTimingW
     EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 }
 
+// P6-006(c): a second tap within the 300ms window but beyond MOVE_THRESHOLD is NOT a double tap — the
+// double-tap distance gate is `dist <= MOVE_THRESHOLD` (35px) measured from the first tap's press. The
+// second press falls through to a plain Tap.
+TEST_F(GestureDetectorTest, DoubleTapDoesNotFireWhenSecondTapIsTooFarAway)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap | GestureType::DoubleTap);
+
+    Press(53, 0.5f, 0.5f);
+    Release(53, 0.5f, 0.5f);
+    Press(53, 0.6f, 0.5f);   // 100px away at DisplaySize 1000: within timing, beyond distance
+    Release(53, 0.6f, 0.5f);
+
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::Tap);
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::Tap)
+        << "a second tap too far from the first must be a plain Tap, not a DoubleTap";
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+// P6-006(d): with DoubleTap disabled, two quick co-located taps are just two Taps.
+TEST_F(GestureDetectorTest, DoubleTapDoesNotFireWhenDoubleTapGestureIsDisabled)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap); // DoubleTap NOT enabled
+
+    Press(54, 0.5f, 0.5f);
+    Release(54, 0.5f, 0.5f);
+    Press(54, 0.5f, 0.5f);
+    Release(54, 0.5f, 0.5f);
+
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::Tap);
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::Tap);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
 TEST_F(GestureDetectorTest, HoldFiresAfterFingerIsHeldForAtLeastOneSecond)
 {
     TouchPanel::setEnabledGesturesProperty(GestureType::Hold);

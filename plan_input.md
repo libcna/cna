@@ -1125,12 +1125,22 @@ emits nothing). Thresholds verified equal to FNA (`MOVE_THRESHOLD=35`, `held < s
 changed:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+3 tests). **Tests:** pass. **Behavior
 verified:** tap fires only on a quick, near-stationary press+release. **Remaining risk:** none.
 
-## P6-006 — Verify double-tap detection
-- [ ] Test two taps within threshold.
-- [ ] Test two taps outside threshold.
-- [ ] Test moved second tap.
-- [ ] Test disabled double-tap.
-- [ ] Add deterministic tests.
+## P6-006 — Verify double-tap detection `[x]`
+- [x] Test two taps within threshold.
+- [x] Test two taps outside threshold.
+- [x] Test moved second tap.
+- [x] Test disabled double-tap.
+- [x] Add deterministic tests.
+
+**Result (2026-07-06):** Within-window and outside-timing already covered
+(`DoubleTapFiresWhenSecondTapIsWithinTimingAndDistanceWindow`,
+`DoubleTapDoesNotFireWhenSecondTapArrivesAfterTimingWindow`). **Added two gap tests:**
+`DoubleTapDoesNotFireWhenSecondTapIsTooFarAway` (second tap within 300ms but 100px away > MOVE_THRESHOLD=35
+→ two plain Taps, matching FNA's `dist <= MOVE_THRESHOLD` gate) and
+`DoubleTapDoesNotFireWhenDoubleTapGestureIsDisabled` (DoubleTap off → two Taps). **Files changed:**
+`tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+2 tests). **Tests:** pass. **Behavior verified:**
+double-tap fires only within both the timing (300ms) and distance (35px) windows and only when enabled.
+**Remaining risk:** none.
 
 ## P6-007 — Verify hold detection
 - [ ] Test hold threshold.
