@@ -51,6 +51,12 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-API-027 — mechanical member-parity matrix:** `tools/input_parity/gen_input_parity_matrix.py`
+  parses the 26 public Input headers (member + STRICT/EXT/NOXNA tag) and the FNA `.cs`, emitting
+  `docs/input-member-parity-matrix.md` — one table per type with an FNA cross-check column. It reproduces
+  the hand-audited `docs/input-public-api-frozen.md` classification mechanically (drift catcher) and
+  surfaced exactly one finding: `KeyboardState::ToString()` is STRICT but FNA has no such member → should
+  be `NOXNA` (queued as §8 task 2). Script lives outside `src/`; no build/test impact.
 - **INPUT-TEST-008 — golden behavior tests:** `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp` —
   4 fixed recorded event scripts driven through `SdlInputBridge::ProcessEvent` with the COMPLETE resulting
   snapshot asserted (keyboard pressed-set, mouse pos/buttons/wheel, two-finger touch snapshots, and one
@@ -180,11 +186,15 @@ input item is a CI-change to confirm, not a failure. Graphics bugs (§4) reprodu
    - Done locally: `ctest -N -L input` selects exactly 1 entry (`CnaInputTests`); it runs **100% green**
      under `xvfb-run` on EasyGL (incl. MouseCursor). Remaining: confirm the Actions run for `f0a185ca`
      is `success`; if not, read the failing job's "Run input tests" step and fix the run cmd / `add_test`.
-2. **INPUT-API-027 — mechanically generate the member-level parity matrix** from the headers.
-   - Goal: close the last "Medium" behavioral-parity gap in `plan_input.md` §2.3 / §5.
-   - Files: a generator script + `docs/xna-4-api-coverage.md` (or the §5 matrix).
-   - Verify: the generated matrix covers every public member enumerated by
-     `PublicApiInputSignatureFreezeTests.cpp`.
+2. **Retag `KeyboardState::ToString()` as `NOXNA`** (surfaced by INPUT-API-027).
+   - Why: FNA `KeyboardState.cs` has no `ToString` (unlike `MouseState`/`GamePadState`/`TouchLocation`),
+     so per CLAUDE.md this CNA convenience must carry `NOXNA`. A `NOXNA` marker is signature-invariant, so
+     `PublicApiInputSignatureFreezeTests.cpp` still passes; update `docs/input-public-api-frozen.md`
+     (KeyboardState entry STRICT→NOXNA) in the same commit, then re-run
+     `python3 tools/input_parity/gen_input_parity_matrix.py --out docs/input-member-parity-matrix.md`
+     (review summary should then read 0 STRICT/EXT gaps).
+   - Files: `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp` (+ `CNA/CNAHelper.hpp` include if
+     not already present), `docs/input-public-api-frozen.md`, regenerated `docs/input-member-parity-matrix.md`.
 
 ## 9. Do not do yet
 

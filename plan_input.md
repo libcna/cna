@@ -46,7 +46,7 @@ implemented and event-driven.
 
 | Layer | Examples | State |
 |---|---|---|
-| **Strict XNA 4.0 API** | `ButtonState`, `Buttons` (core bits), `GamePad(.GetState/GetCapabilities/SetVibration)`, `GamePadState/Buttons/DPad/ThumbSticks/Triggers/Capabilities`, `GamePadType`, `GamePadDeadZone`, `KeyState`, `Keys`, `Keyboard`, `KeyboardState`, `Mouse`, `MouseState`, `TouchPanel`, `TouchPanelCapabilities`, `TouchCollection`, `TouchLocation`, `TouchLocationState`, `GestureSample`, `GestureType` | Implemented; member-level parity **needs a formal matrix** (§5). |
+| **Strict XNA 4.0 API** | `ButtonState`, `Buttons` (core bits), `GamePad(.GetState/GetCapabilities/SetVibration)`, `GamePadState/Buttons/DPad/ThumbSticks/Triggers/Capabilities`, `GamePadType`, `GamePadDeadZone`, `KeyState`, `Keys`, `Keyboard`, `KeyboardState`, `Mouse`, `MouseState`, `TouchPanel`, `TouchPanelCapabilities`, `TouchCollection`, `TouchLocation`, `TouchLocationState`, `GestureSample`, `GestureType` | Implemented; member-level parity matrix now mechanically generated (INPUT-API-027 → `docs/input-member-parity-matrix.md`). |
 | **FNA-compatible extensions** (`EXT`/`NOXNA`) | `GamePad::GetGUIDEXT/SetLightBarEXT/SetTriggerVibrationEXT/GetGyroEXT/GetAccelerometerEXT`, `Buttons::{Misc1,Paddle1..4,TouchPad}EXT`, `GamePadCapabilities::Has*EXT`, `Keyboard::GetKeyFromScancodeEXT`, `Mouse::ClickedEXT/IsRelativeMouseModeEXT`, `TextInputEXT`, `GestureSample::FingerId(2)EXT` | Implemented; marked. |
 | **CNA/MonoGame extensions** (`NOXNA`) | `MouseCursor` (entire class) | Implemented; leaks SDL types into its public header (§6). |
 | **Implementation fidelity** | Ported from FNA with cited source lines | Documented deviations exist (§18); a few remain `not asserted`/`incomplete`. |
@@ -59,8 +59,11 @@ implemented and event-driven.
 - Member-level XNA numeric/behavior parity: **High for enum ABI** — as of 2026-07-05 all 8 public Input
   enums are exhaustively value-pinned against FNA (`Keys` 160/160, `Buttons` 31/31, `GamePadType` 10/10,
   `GamePadDeadZone` 3/3, `ButtonState` 2/2, `KeyState` 2/2, `TouchLocationState` 4/4, `GestureType` 11/11;
-  INPUT-KBD-001 + INPUT-TEST-001, guarded by INPUT-API-034). **Medium** remains only for struct/method
-  behavioral parity not yet captured by the formal member matrix (INPUT-API-027).
+  INPUT-KBD-001 + INPUT-TEST-001, guarded by INPUT-API-034). The member-level **structural** parity
+  matrix is now mechanically generated and FNA-cross-checked (INPUT-API-027 →
+  `docs/input-member-parity-matrix.md`; all STRICT members map to an FNA counterpart bar the one flagged
+  `KeyboardState::ToString`). **Medium** remains only for per-member numeric/**behavioral** parity (value
+  ranges, clamping, ordering) that a structural name-level matrix cannot assert.
 - Internal bridge behavior: **High** for what is unit-tested via the fake backend and synthetic events;
   **Low** for real-hardware actuation (rumble, sensors, LED, hotplug, real GUID) — none is headless-verifiable.
 - Docs accuracy: **Low** — multiple mutually-contradictory test counts, a stale verification log, a
@@ -558,14 +561,25 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Deps:** none.
 
 #### INPUT-API-027 — Generate the matrix mechanically from headers
-- **Priority:** P2 · **Status:** TODO · **Area:** API/Tooling
-- **Files:** a small inspection script (mentioned, not committed to Input code)
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API/Tooling
+- **Files:** `tools/input_parity/gen_input_parity_matrix.py` (generator, outside `src/`),
+  `docs/input-member-parity-matrix.md` (generated artifact)
 - **Problem:** Hand-maintaining 26 type matrices drifts.
 - **Work:** Write a helper that lists public members per Input header and emits a matrix skeleton to
   cross-check against FNA `.cs`. Keep the script outside `src/` (tools/scratch).
 - **Acceptance:** Script regenerates the member list; diff against FNA is reviewable.
 - **Tests:** n/a.
 - **Deps:** none.
+- **Result (2026-07-06):** `gen_input_parity_matrix.py` parses all 26 public Input headers (member +
+  STRICT/EXT/NOXNA tag, from the `NOXNA` marker / `EXT` suffix) and the matching FNA `.cs` (public
+  members, incl. ctors + `this[]` indexers), emits one markdown table per type with an `In FNA`
+  cross-check column, and a review summary. It mechanically reproduces the hand-audited classification
+  in `docs/input-public-api-frozen.md` (validating both), and heuristic false-positives are filtered
+  (`= delete`/`= default` C++ idioms, EXT members, and `IList`/`IEnumerator`/`IDisposable` plumbing that
+  CNA's value-type collections omit by design). **Finding:** exactly one STRICT/EXT member has no FNA
+  counterpart — `KeyboardState::ToString()` (FNA `KeyboardState.cs` has no `ToString`, unlike its
+  `MouseState`/`GamePadState`/`TouchLocation` siblings), so per CLAUDE.md it should be `NOXNA`, not
+  STRICT (tracked separately; a `NOXNA` marker is signature-invariant so it does not affect INPUT-API-031).
 
 #### INPUT-API-028 — Cross-check every type's namespace + include path
 - **Priority:** P3 · **Status:** TODO · **Area:** API
