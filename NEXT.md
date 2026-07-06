@@ -214,13 +214,22 @@ treat as "last known good, from an earlier session," not freshly confirmed:
     this API in C++, not a stopgap. Full write-up in `plan_net.md`'s Task 12.3 entry.
   - Full suite after 12.1+12.2: **3231/3233 passing**, 2 expected skips (unchanged
     accelerometer/gyroscope). All commits pushed to `feature/net`.
-  - **Next step (Task 12.4, not started):** in `../cna-samples`, remove the two
-    workarounds Tasks 12.1/12.2 actually fix (omitted `GamerServicesComponent`; local
-    `isHost_` tracking) from `ClientServerSample`, re-verify it still works, then
-    re-attempt porting NetworkPrediction (#100)/PeerToPeer (#103). Keep the third
-    workaround (extra `Update()` call after `HookSessionEvents()`) — per Task 12.3, it's
-    correct and permanent, not a gap. Requires coordinating with whichever session drives
-    `cna-samples`.
+  - **Task 12.4 (DONE, same session):** in `../cna-samples`, removed the two workarounds
+    Tasks 12.1/12.2 actually fix (omitted `GamerServicesComponent`; local `isHost_`
+    tracking) from `ClientServerSample`. Kept the third workaround (extra `Update()` call
+    after `HookSessionEvents()`) — per Task 12.3, it's correct and permanent, not a gap.
+    `../cna-samples` builds against a *separate* checkout of this repo (`../cna` relative
+    to it, not this `cna_net` working copy) — that checkout was on stale `develop`, so
+    temporarily checked out `feature/net` there (local only, not merged/pushed to
+    `develop` — a separate decision for whoever manages that branch) to build/test
+    against these fixes. Live-verified with real `xdotool` keypresses (no hang, real
+    `"Stub Gamer (server)"` label, tank moves). A genuine two-instance host+client test
+    hit a separate, pre-existing `ENetDiscoveryService` two-process discovery limitation
+    on this container (not a regression). Updated `ClientServerSample/missing.md` and
+    `DEFERRED.md` (items #19/#20 ✅ resolved, #21 investigated/blocked) in `cna-samples`,
+    committed and pushed to its `develop` (`3197b06`, `8a8300d`). **Not done:**
+    re-attempting to port NetworkPrediction (#100)/PeerToPeer (#103) — a separate, larger
+    task than "cleanup," left for the user to request explicitly.
 
 - **Tasks 11.17-11.18 done (this session) — Phase 11e opened.** A hands-on interactive
   test of `examples/demo_avatar` (actually running it under X11 and screenshotting, not
@@ -882,17 +891,28 @@ Full suite after 12.1+12.2: 3231/3233 passing (2 expected accelerometer/gyroscop
 skips), including the real two-process ENet loopback test. All work committed and
 pushed to feature/net.
 
-**Next step (Task 12.4, not started):** in ../cna-samples, remove the two workarounds
-Tasks 12.1/12.2 actually fix from ClientServerSample (omitted GamerServicesComponent;
-local isHost_ tracking), re-verify it still works, then re-attempt porting
-NetworkPrediction (#100)/PeerToPeer (#103). Keep the third workaround (extra Update()
-call after HookSessionEvents()) - it's correct and permanent per Task 12.3, not a gap.
-Requires coordinating with whichever session drives cna-samples - do not edit files
-there without doing so first.
+**Task 12.4 is DONE (same session as 12.1-12.3):** removed the two workarounds Tasks
+12.1/12.2 actually fixed from ClientServerSample in ../cna-samples (omitted
+GamerServicesComponent; local isHost_ tracking) - kept the third (extra Update() call
+after HookSessionEvents()), since Task 12.3 found it's correct/permanent, not a gap.
+Note: ../cna-samples builds against a SEPARATE checkout of this repo at ../cna
+(relative to cna-samples, not this cna_net working copy) - that checkout was stale
+(develop, missing feature/net's commits), so it was temporarily switched to
+feature/net locally (not merged/pushed to develop - that's a separate decision for
+whoever manages cna's develop branch). If you're resuming and ../cna-samples builds
+fail to find these fixes, check that ../cna (relative to cna-samples) is still on
+feature/net or has since been merged into develop. Live-verified with real xdotool
+keypresses; a genuine two-instance test hit a separate, pre-existing
+ENetDiscoveryService discovery limitation (not a regression). Committed/pushed to
+cna-samples' develop (3197b06, 8a8300d).
 
-If the user doesn't want Task 12.4 next, ask what they want instead - it may come from
-a different phase/track entirely (Task 11.16/11.25, or a different track like Graphics/
-Vulkan parity surveyed in a prior session). Do not assume; confirm first.
+Only remaining Phase 12 items: the sharp-runtime decision for Task 12.3 (needs the
+user), and optionally porting NetworkPrediction (#100)/PeerToPeer (#103) in
+cna-samples (a separate, larger task, not done this session - left for the user to
+request explicitly). If the user doesn't want either next, ask what they want instead
+- it may come from a different phase/track entirely (Task 11.16/11.25, or a different
+track like Graphics/Vulkan parity surveyed in a prior session). Do not assume; confirm
+first.
 
 Build: cmake --build cmake-build-debug --target CnaTests
 Test:  cmake-build-debug/CnaTests

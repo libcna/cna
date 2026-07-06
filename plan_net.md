@@ -1677,18 +1677,47 @@ blocked by item #11 (custom shaders), unrelated to this phase.
   one-off special case — needs design discussion with whoever is driving `sharp-runtime`, not a
   unilateral change from this session.
 
-- [ ] **Task 12.4** — Once Task 12.1/12.2 land (Task 12.3 has no code change to land — see above),
-  remove the two now-real sample-level workarounds in `../cna-samples/samples/ClientServerSample/`
-  that Tasks 12.1/12.2 actually fix (omitted `GamerServicesComponent`; local `isHost_` tracking
-  instead of `NetworkSession.IsHost`) and re-verify it still renders/functions correctly with the
-  real fixes in place — confirms the fixes are actually drop-in replacements for real XNA
-  semantics, not just theoretically correct. **Keep** the third workaround (extra
-  `networkSession_->Update()` call right after `HookSessionEvents()`) — per Task 12.3's findings,
-  that one is not a stopgap, it is the correct, still-necessary pattern given `EventHandler<T>`'s
-  current design. Then re-attempt porting NetworkPrediction (#100) and PeerToPeer (#103) (both
-  previously blocked by the same gaps) using the same (now smaller) set of workarounds. This task
-  lives here (not solely in `cna-samples`) because it's the acceptance test for Tasks 12.1/12.2.
-  Coordinate with whichever session is driving `cna-samples` before editing files there.
+- [x] **Task 12.4** — Removed the two now-real sample-level workarounds in
+  `../cna-samples/samples/ClientServerSample/` that Tasks 12.1/12.2 actually fix (omitted
+  `GamerServicesComponent`; local `isHost_` tracking instead of `NetworkSession.IsHost`).
+  **Kept** the third workaround (extra `networkSession_->Update()` call right after
+  `HookSessionEvents()`) — per Task 12.3's findings, that one is not a stopgap, it is the correct,
+  still-necessary pattern given `EventHandler<T>`'s current design.
+  **Build dependency note:** `cna-samples`' `CMakeLists.txt` references `../cna` (a separate git
+  checkout of this same repo, not this `cna_net` working copy) as its build dependency, and that
+  checkout was on `develop` — several commits behind `feature/net`'s tip. Temporarily checked out
+  `feature/net` there (`git checkout -b feature/net origin/feature/net`, purely local, not
+  merged/pushed to `develop`) to build/test against Tasks 12.1/12.2's real fixes. Left it on
+  `feature/net` rather than reverting to `develop`, since reverting would silently make
+  `cna-samples` build against the un-fixed code again; merging `feature/net` → `develop` and
+  pushing that is a separate decision for whoever manages `cna`'s `develop` branch, not done here.
+  **Verified live**, with real `xdotool` keypresses this time (the previous porting session's own
+  `missing.md` documented `xdotool` as unreliable and needing a debug auto-trigger workaround —
+  worked fine this time): built cleanly, launched from its own output directory (`Content/`
+  resolves relative to the executable — a real gotcha, fixed by `cd`-ing there first), sent a real
+  `a` keypress — `CreateSession()` completed with no hang (Task 12.1), tank spawned labeled
+  `"Stub Gamer (server)"` (the real `GamerServicesDispatcher`-populated identity replacing the old
+  manually-synthesized `"Player"`, and the `"(server)"` label now driven by real
+  `gamer->getIsHostProperty()`, Task 12.2) — screenshotted. Sent a real `Right` arrow keypress —
+  screenshotted the tank having moved, confirming input/rendering still work with the
+  `isHost_`-member removal.
+  **Attempted, not achieved:** a genuine two-instance host+client test (second window, `b` to
+  join) — the client's `Find()` returned "No network sessions found," a separate, pre-existing,
+  already-documented platform limitation (two independent processes both relying on
+  `ENetDiscoveryService`'s shared well-known port is fragile in this container — the same reason
+  `cna`'s own `TwoProcessLoopbackTest.cpp` hands the host's port to the client out-of-band instead
+  of through discovery). Not a regression from this session's changes. Genuine multi-gamer
+  `Id`-routing (Task 12.2's core fix) is therefore proven at the `cna_net` test-suite level instead
+  (already covered by Task 12.2's own tests), not re-verified live within `ClientServerSample`
+  itself this session.
+  Updated `../cna-samples/samples/ClientServerSample/missing.md` (per-item resolution write-ups,
+  new Verification section) and `../cna-samples/DEFERRED.md` (items #19/#20 marked ✅ RESOLVED,
+  item #21 marked "investigated, genuinely blocked," summary table updated). Committed
+  (`889ae1c`→amended to `3197b06`, `8a8300d`) and pushed to `cna-samples`' `develop`.
+  **Not done this session** (separate, larger scope than "cleanup"): re-attempting to port
+  NetworkPrediction (#100)/PeerToPeer (#103) — both are now easier (2 of 3 workarounds no longer
+  needed) but porting two new samples from scratch is a distinct task, left for the user to
+  request explicitly; noted as the natural next step in `cna-samples`' own `NEXT.md`.
 
 ---
 
@@ -1704,7 +1733,8 @@ Phase 0 (build — complete)
                                 ├─> Phase 6 (platform — complete)
                                 ├─> Phase 7 (integration tests — complete)
                                 ├─> Phase 9 (docs/audit — complete)
-                                └─> Phase 12 (cna-samples-driven networking fixes — not started)
+                                └─> Phase 12 (cna-samples-driven networking fixes — 12.1/12.2/12.4
+                                    done; 12.3 investigated, blocked on a sharp-runtime decision)
               └─> Phase 8 (Avatar — complete)
                     └─> Phase 9 (docs/audit — complete)
                           └─> Phase 10 (Avatar real-rendering engine — complete)
