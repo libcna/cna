@@ -334,12 +334,23 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   unchanged behavior, so there is no fix to revert-verify. Full suite: **3243/3245 passing** (2
   expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.7** — Enforce `AllowJoinInProgress` in `ENetBackend::HandleClientHello`. Confirmed
-  (`ENetBackend.cpp`, ~lines 132-177): incoming `ClientHello` is unconditionally accepted regardless
-  of `sessionState_`/`AllowJoinInProgress` — a host with `AllowJoinInProgress = false` still
-  silently accepts new players mid-`Playing` state. Fix: reject (or queue, per whatever the correct
-  XNA-faithful behavior is) a join attempt when the session is `Playing` and `AllowJoinInProgress`
-  is false. Add a test.
+- [x] **Task 2.7** — Enforce `AllowJoinInProgress` in `ENetBackend::HandleClientHello`. Confirmed
+  (`ENetBackend.cpp`, ~lines 132-177): incoming `ClientHello` was unconditionally accepted
+  regardless of `sessionState_`/`AllowJoinInProgress` — a host with `AllowJoinInProgress = false`
+  (the default once hosting) still silently accepted new players mid-`Playing` state.
+  **Fixed:** added a guard at the top of `HandleClientHello` — if
+  `getSessionStateProperty() == NetworkSessionState::Playing && !getAllowJoinInProgressProperty()`,
+  disconnect the peer outright (`state.Host.Disconnect(peer, 0)`) and return, instead of processing
+  the hello. Disconnecting rather than silently dropping the datagram avoids leaving the connecting
+  client hanging forever waiting for a `ServerWelcome` that will never arrive.
+  **Added `ENetBackendTest.HostRejectsClientHelloWhenPlayingAndJoinInProgressDisallowed`**: hosts a
+  session, calls `StartGame()` to reach `Playing` (confirming `AllowJoinInProgress` defaults to
+  `false`), connects a fake client and sends a `ClientHello`, and asserts the peer receives a
+  `DISCONNECT` event and `AllGamers` never grows past the host's own local gamer.
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran (3x, all
+  consistent) — failed with `disconnected == false` and `AllGamers` count `2` (the late joiner was
+  silently accepted). Restored the fix and reran (3x) — passes every time. Full suite:
+  **3244/3246 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.8** — Fix `LocalNetworkGamer::ReceiveData(vector&, int offset, sender)` writing past
   the end of the caller's buffer. Confirmed (`LocalNetworkGamer.cpp`, ~lines 44-47):

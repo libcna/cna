@@ -529,6 +529,54 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
     EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Ended);
 }
 
+// Task 2.7: incoming ClientHello was previously accepted unconditionally regardless of
+// sessionState_/AllowJoinInProgress - a host already Playing with AllowJoinInProgress == false
+// (the default) still silently accepted a new player's join mid-game.
+TEST(ENetBackendTest, HostRejectsClientHelloWhenPlayingAndJoinInProgressDisallowed) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+    ASSERT_FALSE(host.session->getAllowJoinInProgressProperty());
+
+    host.session->StartGame();
+    for (int i = 0; i < 5; ++i, PollYield()) {
+        host.session->Update();
+    }
+    ASSERT_EQ(host.session->getSessionStateProperty(), NetworkSessionState::Playing);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"LateJoiner"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+
+    bool disconnected = false;
+    for (int i = 0; i < 200 && !disconnected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_DISCONNECT) {
+            disconnected = true;
+        }
+    }
+    EXPECT_TRUE(disconnected) << "host should have disconnected the peer instead of accepting its join";
+    // The host's own local gamer only - no new gamer was ever added.
+    EXPECT_EQ(host.session->getAllGamersProperty().getCountProperty(), 1);
+}
+
 TEST(ENetBackendTest, ClientProcessesGamerLeaveBroadcast) {
     ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
     uint16_t fakeHostPort = fakeHost.getBoundPortProperty();

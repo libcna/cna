@@ -132,6 +132,18 @@ namespace CNA::Internal::Net
 
         void HandleClientHello(NetworkSession* session, SessionState& state, ENetPeer* peer, const ClientHelloMessage& hello)
         {
+            // Task 2.7: incoming ClientHello was previously accepted unconditionally regardless of
+            // sessionState_/AllowJoinInProgress - a host with AllowJoinInProgress == false still
+            // silently accepted new players mid-Playing state. Reject by disconnecting the peer
+            // outright (rather than a silent drop) so the connecting client isn't left hanging
+            // forever waiting for a ServerWelcome that will never arrive.
+            if (session->getSessionStateProperty() == NetworkSessionState::Playing
+                && !session->getAllowJoinInProgressProperty())
+            {
+                state.Host.Disconnect(peer, 0);
+                return;
+            }
+
             EnsureLocalWireIds(session, state);
 
             ServerWelcomeMessage welcome;
