@@ -249,9 +249,23 @@ vs FNA; every member has a named dedicated test (added `IsKeyUpIsTheComplementOf
 
 # Phase 3 — Mouse types
 
-## A3-001 — `MouseState` (struct) `[ ]`
-- [ ] FNA `Input/MouseState.cs`; CNA `MouseState.hpp`/`.cpp`; test `MouseInputTests.cpp`.
-- [ ] Members: ctor, X/Y, ScrollWheelValue, 5 button props, `Equals`/`==`/`!=`, `GetHashCode`. Per-member.
+## A3-001 — `MouseState` (struct) `[x]`
+- [x] FNA `Input/MouseState.cs`; CNA `MouseState.hpp`/`.cpp`; test `MouseInputTests.cpp`.
+- [x] Members: ctor, X/Y, ScrollWheelValue, 5 button props, `Equals`/`==`/`!=`, `GetHashCode`. Per-member.
+
+**Result (2026-07-06):** **15 public members**, matching FNA `MouseState.cs` exactly (FNA has **no**
+horizontal-scroll member — CNA correctly omits it). The 8-arg ctor's parameter order
+`(x, y, scrollWheel, leftButton, middleButton, rightButton, xButton1, xButton2)` is **byte-identical to
+FNA** and pinned by `EightArgConstructorSetsEveryFieldInTheRightSlot` (alternating Pressed/Released catches
+any parameter swap). **Test map** (all Doxygen'd): 8 properties + default ctor →
+`DefaultConstructorAllValuesAtRest`; full ctor → the 8-arg test; `Equals`/`==`/`!=` →
+`EqualsAndOperatorsReturnTrueForIdenticalStates` + `...FalseWhenPositionDiffers`/`...ScrollWheelDiffers`/
+`...AButtonDiffers`; `GetHashCode` → `GetHashCodeMatchesFormula` + `...IsConsistentForEqualStates`;
+`ToString` → `ToStringFormatsNoneWhenNoButtonsPressed` + `...MultiplePressedButtonsIn…Order`. **Documented
+deviation:** FNA's `GetHashCode` returns `base.GetHashCode()` (default `ValueType` hash); CNA uses an explicit
+deterministic field-based hash (P3-003) — a reasonable, tested choice. **Members reviewed:** 15/15.
+**Files changed:** none (perfect, no gap). **Behavior verified:** ctor-slot order + fields + equality/hash/
+ToString. **Remaining risk:** none.
 
 ## A3-002 — `Mouse` (static class) `[ ]`
 - [ ] FNA `Input/Mouse.cs`; CNA `Mouse.hpp`/`.cpp`; tests `MouseInputTests.cpp` + bridge.
