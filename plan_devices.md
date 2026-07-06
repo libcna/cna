@@ -4610,7 +4610,7 @@ not an alternate spelling to preserve.
 
 ## 12. Reading structs and event-args tasks
 
-### READINGS-001 — Verify all reading struct fields
+### READINGS-001 — Verify all reading struct fields — CLOSED (2026-07-06, confirmed complete + closed one citation gap)
 
 - **Priority:** Critical
 - **Area:** Reading Structs
@@ -4642,6 +4642,39 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/CompassReadingTests.cpp`
   - `tests/Microsoft/Devices/Sensors/MotionReadingTests.cpp`
   - `tests/Microsoft/Devices/Sensors/AttitudeReadingTests.cpp`
+- **Resolution:** Most of this task's ground was already covered by `DEV-API-001`'s
+  from-scratch audit and `DEV-API-004`'s cross-cutting-members pass (both 2026-07-06,
+  earlier this session) — re-verified rather than assumed complete, field-by-field,
+  against each struct's own archived MSDN page: `AccelerometerReading` (`ff403534`):
+  `Acceleration`/`Timestamp` — match. `CompassReading` (`hh203072`):
+  `HeadingAccuracy`/`MagneticHeading`/`MagnetometerReading`/`Timestamp`/`TrueHeading`
+  — match. `MotionReading` (`hh220685`): `Attitude`/`DeviceAcceleration`/
+  `DeviceRotationRate`/`Gravity`/`Timestamp` — match. `AttitudeReading` (`hh220667`):
+  `Pitch`/`Roll`/`Yaw`/`Quaternion`/`RotationMatrix`/`Timestamp` — match. One real gap
+  found and closed: `docs/devices-api-coverage.md` had only ever cited
+  `GyroscopeReading`'s member list "by the identical established pattern" to the other
+  four structs, never from its own MSDN page directly. Fetched it —
+  `hh220755(v=vs.105)` — and confirmed it lists exactly `RotationRate`/`Timestamp` (no
+  more, no fewer) and, separately, `Equals`/`GetHashCode`/`ToString` all explicitly
+  "(Inherited from ValueType)" with no custom override — both facts now cited directly
+  in `docs/devices-api-coverage.md` instead of by inference. Units/mutability were
+  already independently established by `ACCEL-003`/`GYRO-002`/`MOTION-003`/`MOTION-004`
+  (units, all cited from SDL3/MSDN source) and the project-wide `private`+
+  `friend <owning class>` setter convention (Task P3-2, matching every real property's
+  `internal set`) — no changes needed to any of the five headers/`.cpp` files, since no
+  field mismatch was found. Test coverage: every getter on every struct is already
+  exercised by that struct's own `ParameterizedConstructorStoresValues` test (all five
+  `*ReadingTests.cpp` files, 10 tests each, 50 total, confirmed passing); every private
+  setter is exercised indirectly through its owning sensor class's own dispatch tests
+  (`AccelerometerTests`/`GyroscopeTests`'s `InjectSyntheticSensorUpdate`-based tests;
+  `CompassTests`/`MotionTests`'s `SetBackendForTesting()`-plus-fake-backend-based
+  tests) — a reading struct's setters are only ever called from within its owning
+  sensor's own `DispatchSensorReading()`/`PublishReading()`, so this is the correct
+  (and only meaningful) place to exercise them, not a gap. No new tests were added, no
+  behavior changed — this task's only code change is the citation fix in
+  `docs/devices-api-coverage.md`. Build: `cmake --build cmake-build-debug --target
+  CnaTests` succeeded; ran `AccelerometerReadingTests.*:GyroscopeReadingTests.*:
+  CompassReadingTests.*:MotionReadingTests.*:AttitudeReadingTests.*` — 50/50 passed.
 
 ### READINGS-002 — Verify event-args types — CLOSED (2026-07-06)
 

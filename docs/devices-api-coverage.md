@@ -281,10 +281,32 @@ file's prior content, rather than assuming the file was still current.
   actively claiming (incorrectly) that it "Matches XNA's conventional format." Fetched
   each reading structure's own archived MSDN page directly (`AccelerometerReading`
   `ff403534`, `CompassReading` `hh203072`, `MotionReading` `hh220685`, `AttitudeReading`
-  `hh220667`, plus `GyroscopeReading` by the identical established pattern): all show
-  `Equals`/`GetHashCode`/`ToString` inherited unmodified from `System.ValueType`, and no
-  equality operator at all. Fixed: tagged `NOXNA` on all four members across all five
-  headers, corrected this file's table above.
+  `hh220667`, plus `GyroscopeReading` by the identical established pattern — **since
+  confirmed directly, not just by pattern, via its own archived page `hh220755(v=vs.105)`,
+  Task READINGS-001, 2026-07-06**): all show `Equals`/`GetHashCode`/`ToString` inherited
+  unmodified from `System.ValueType`, and no equality operator at all. Fixed: tagged
+  `NOXNA` on all four members across all five headers, corrected this file's table
+  above.
+  **Update 2026-07-06 (`READINGS-001`):** re-verified all five reading structs'
+  *fields* (not just their cross-cutting members, already covered above) field-by-field
+  against each struct's own archived MSDN page — `AccelerometerReading` (`ff403534`):
+  `Acceleration`/`Timestamp`; `GyroscopeReading` (`hh220755`, fetched directly this
+  pass, closing the "by pattern" gap noted above): `RotationRate`/`Timestamp`;
+  `CompassReading` (`hh203072`): `HeadingAccuracy`/`MagneticHeading`/
+  `MagnetometerReading`/`Timestamp`/`TrueHeading`; `MotionReading` (`hh220685`):
+  `Attitude`/`DeviceAcceleration`/`DeviceRotationRate`/`Gravity`/`Timestamp`;
+  `AttitudeReading` (`hh220667`): `Pitch`/`Roll`/`Yaw`/`Quaternion`/`RotationMatrix`/
+  `Timestamp`. Every field on every struct in `include/Microsoft/Devices/Sensors/`
+  matches exactly — no Missing, no Extra-unmarked fields found. Units/mutability were
+  already independently confirmed by `ACCEL-003`/`GYRO-002`/`MOTION-003`/`MOTION-004`
+  (units) and `P3-2` (the `private`+`friend`-restricted setter convention, matching
+  every real property's `internal set`). Test coverage: every getter on every struct
+  is exercised by that struct's own `ParameterizedConstructorStoresValues` test
+  (`tests/Microsoft/Devices/Sensors/*ReadingTests.cpp`); every private setter is
+  exercised indirectly through its owning sensor class's own dispatch tests
+  (`Accelerometer`/`Gyroscope`/`Compass`/`Motion`'s synthetic-update-injection tests),
+  since a reading struct's setters are only ever called from within its owning
+  sensor's `DispatchSensorReading()` — no gap found, no new tests were needed.
 - **Wrong signature/visibility (unverified): 2 found**, both newly recorded in "Flagged
   findings" above (`AccelerometerReadingEventArgs`'s and `SensorReadingEventArgs<T>`'s
   public setters, vs. every reading struct's `private`+`friend` convention) —
