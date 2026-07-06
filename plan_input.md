@@ -834,8 +834,18 @@ MonoGame→SDL3 names (task 833; WaitArrow→PROGRESS since SDL3 dropped WAITARR
 transfer + dispose safety + FromTexture2D pipeline. **Remaining risk:** none (origin bounds are enforced by
 SDL's own hotspot check — behavior is correct).
 
-## L-005 — `GamePadButtons.cpp` / `GamePadDPad.cpp` logic `[ ]`
-- [ ] Flag→property extraction; FromButtonArray OR-combine; DPad bit-weighted hash vs FNA.
+## L-005 — `GamePadButtons.cpp` / `GamePadDPad.cpp` logic `[x]`
+- [x] Flag→property extraction; FromButtonArray OR-combine; DPad bit-weighted hash vs FNA.
+
+**Result (2026-07-06):** Both files **byte-identical to FNA in logic; no fix.** **GamePadButtons:**
+`ButtonStateFromFlag` = `(buttons_ & flag) == flag ? Pressed : Released` (all-bits-set check ≡ FNA's
+per-property test); all **11 getters map to their own flag** (A→A … BigButton→BigButton, verified 1:1, no
+mis-wiring); `FromButtonArray` OR-combines the list (≡ FNA); `Equals` = field compare; `GetHashCode` =
+`(int)buttons_` ≡ FNA `(int)this.buttons`. **GamePadDPad:** `FromButtonArray` OR-combines then extracts
+`flagToState(mask, DPadUp/Down/Left/Right)` into the (up,down,left,right) ctor (correct 1:1); `GetHashCode`
+= `(Down?1)+(Left?2)+(Right?4)+(Up?8)` — **byte-identical to FNA `GamePadDPad.cs:138-146`** (same weights);
+`Equals` = 4-field compare. **Files changed:** none (logic verified). **Behavior verified:** flag extraction
++ OR-combine + exact FNA hash weights. **Remaining risk:** none.
 
 ## L-006 — `GamePadThumbSticks.cpp` logic `[ ]`
 - [ ] Dead-zone math (ExcludeAxisDeadZone, IndependentAxes, Circular, square-clamp) line-by-line vs FNA.
