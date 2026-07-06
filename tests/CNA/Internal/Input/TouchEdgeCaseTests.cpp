@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <optional>
+#include <stdexcept>
 
 #include "CNA/Internal/Input/GestureDetector.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
@@ -196,7 +197,30 @@ TEST_F(TouchEdgeCaseTest, MoreThanMaxTouchesAreCappedAtMaxTouchesByTouchPanelGet
     for (int i = 0; i < 10; ++i)
         InputManager::SetTouchState(i, TouchLocationState::Pressed, Vector2(static_cast<float>(i), 0));
 
-    EXPECT_EQ(TouchPanel::GetState().getCountProperty(), TouchPanel::MAX_TOUCHES);
+    const TouchCollection capped = TouchPanel::GetState();
+    ASSERT_EQ(capped.getCountProperty(), TouchPanel::MAX_TOUCHES);
+
+    // P5-011: the truncation is DETERMINISTIC, not arbitrary. GetTouchState() sorts touch ids ascending
+    // and GetState() keeps the first MAX_TOUCHES, so ids 0..MAX_TOUCHES-1 survive and the highest ids
+    // (8, 9) are dropped. (Position.x == id in this test, so it doubles as an id check.)
+    for (int i = 0; i < TouchPanel::MAX_TOUCHES; ++i)
+    {
+        EXPECT_EQ(capped[static_cast<std::size_t>(i)].getIdProperty(), i);
+        EXPECT_EQ(capped[static_cast<std::size_t>(i)].getPositionProperty().X, static_cast<float>(i));
+    }
+}
+
+// P5-011: the slot-path SetFinger writes touches_[index]; an out-of-range index must throw
+// std::out_of_range rather than write past the fixed MAX_TOUCHES array (no OOB). The boundary indices
+// 0 and MAX_TOUCHES-1 are the valid extremes and must NOT throw.
+TEST_F(TouchEdgeCaseTest, SetFingerRejectsOutOfRangeSlotIndexWithoutOutOfBoundsWrite)
+{
+    EXPECT_THROW(TouchPanel::SetFinger(-1, 1, Vector2::Zero), std::out_of_range);
+    EXPECT_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES, 1, Vector2::Zero), std::out_of_range);
+    EXPECT_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES + 5, 1, Vector2::Zero), std::out_of_range);
+
+    EXPECT_NO_THROW(TouchPanel::SetFinger(0, 1, Vector2::Zero));
+    EXPECT_NO_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES - 1, 2, Vector2::Zero));
 }
 
 // --- Tasks 868-871: event-driven path preserves TouchLocation previous-location ---

@@ -921,11 +921,24 @@ is a fresh Pressed, proving cleanup completed); and `FingerCanceledMidDragRecove
 Release at the detector). **Files changed:** none (coverage confirmed). **Behavior verified:** cancel ==
 release, one-shot cleanup, id + gesture recovery. **Remaining risk:** none.
 
-## P5-011 — Verify max touch count
-- [ ] Test more touches than maximum supported by current storage.
-- [ ] Ensure deterministic truncation or rejection.
-- [ ] Ensure no out-of-bounds writes.
-- [ ] Add tests.
+## P5-011 — Verify max touch count `[x]`
+- [x] Test more touches than maximum supported by current storage.
+- [x] Ensure deterministic truncation or rejection.
+- [x] Ensure no out-of-bounds writes.
+- [x] Add tests.
+
+**Result (2026-07-06):** Two paths verified. (1) **Event-driven cap:** `TouchPanel::GetState` caps the
+public snapshot at `MAX_TOUCHES` (=8) to match FNA's fixed `TouchLocation[MAX_TOUCHES]` array
+(TouchPanel.cpp:140-152); the source is `GetTouchState`'s **ascending-id-sorted** list
+(InputManager.cpp:396-402), so truncation is deterministic (lowest ids survive). **Strengthened**
+`MoreThanMaxTouchesAreCappedAtMaxTouchesByTouchPanelGetState` to assert not just `count==MAX_TOUCHES` but
+that the surviving ids are exactly 0..MAX_TOUCHES-1 (ids 8,9 dropped). (2) **Slot-path OOB:**
+`TouchPanel::SetFinger` writes `touches_[index]` guarded by `if (index < 0 || index >= MAX_TOUCHES) throw
+std::out_of_range` (TouchPanel.cpp:221-223). **Added**
+`SetFingerRejectsOutOfRangeSlotIndexWithoutOutOfBoundsWrite` (-1 / MAX_TOUCHES / MAX_TOUCHES+5 throw; the
+boundary indices 0 and MAX_TOUCHES-1 do not). **Files changed:**
+`tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp` (+1 test, cap test hardened, +`<stdexcept>`). **Tests:**
+both pass. **Behavior verified:** deterministic cap + no OOB write on an invalid slot. **Remaining risk:** none.
 
 ## P5-012 — Verify touch id ordering
 - [ ] Test multiple touch ids.
