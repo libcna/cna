@@ -1285,10 +1285,26 @@ finger/state survived). **Files changed:** `tests/CNA/Internal/Input/GestureDete
 **Tests:** GestureDetector suite 35/35 pass shuffled×5; `ctest -L input` green. **Behavior verified:** both
 the queue reset and the detector-state reset. **Remaining risk:** none.
 
-## P6-016 — Manual gesture validation
-- [ ] Create manual test checklist for real touchscreen.
-- [ ] Validate tap, double-tap, hold, drag, flick, and pinch on at least one real device.
-- [ ] Record device, OS, display scale, and result.
+## P6-016 — Manual gesture validation `[!]`
+- [x] Create manual test checklist for real touchscreen.
+- [!] Validate tap, double-tap, hold, drag, flick, and pinch on at least one real device. — Phase 11 (P11-006).
+- [!] Record device, OS, display scale, and result. — Phase 11 (P11-006).
+
+**Result (2026-07-06):** Genuinely hardware-gated — requires a real touchscreen, so on-device validation is
+deferred to **Phase 11 (P11-006)**. The checklist already exists (`docs/demo-input-checklist.md` /
+`docs/platform-input-notes.md`). All gesture *logic* is exhaustively pinned by the deterministic
+`GestureDetectorTest` suite (35 tests, incl. every P6-005..015 threshold + negative path) and the real-SDL
+bridge integration (`SdlInputBridgeTouchGestureTests` Tap/Flick/cancel), so manual validation is confirming
+real-device wiring, not untested logic. **Files changed:** none. **Remaining risk:** on-device gesture feel
+unverified until Phase 11.
+
+---
+
+**Phase 6 complete (2026-07-06):** all automated tasks (P6-001..015) `[x]`; P6-016 `[!]` (manual HW →
+Phase 11). **+17 gesture tests** added this phase closing the negative-path / axis-rejection / disabled /
+velocity-gate / direction / reset gaps found by an audit vs FNA `GestureDetector.cs`; thresholds confirmed
+byte-identical to FNA (MOVE_THRESHOLD=35, flick velocity 100, hold 1s, double-tap 300ms/35px). No public API
+change; `ctest -L input` green (shuffle×5).
 
 ---
 
