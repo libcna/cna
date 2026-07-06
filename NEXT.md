@@ -51,6 +51,12 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-GAMEPAD cluster verified (30 tasks):** mapped GAMEPAD-001..034 to the ~100-case gamepad suites
+  (FakeGamepadTest / SdlGamepadBackendTest / GamePadTest / GamePadMappingTest / GamePadStateTest / DPad /
+  ThumbSticks / Triggers / DeadZone) — hotplug add/remove/duplicate/over-limit, GUID formats, vibration,
+  gyro/accel, all-21-buttons, dead-zone math, PacketNumber, IsButtonDown threshold, fake-backend
+  conformance — all backed. Docs-only. Remaining: GAMEPAD-031 (type-mapping test), 033/036/037 (docs),
+  035 (manual hardware).
 - **INPUT-TOUCH-024 — coordinate-basis consistency verified:** confirmed gesture and touch-state positions
   share one logical (virtual back-buffer) basis (`GraphicsDevice` sets DisplayWidth/Height=virtualSize;
   gesture scales linearly like FNA, GetState maps window→logical); they coincide for uniform presentations

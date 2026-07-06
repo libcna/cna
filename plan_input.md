@@ -1316,71 +1316,79 @@ properties (deliberately does NOT probe-rumble). The 21-button/6-axis conversion
 queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `ResetForTests`).
 
 #### INPUT-GAMEPAD-001 — Four-slot model & PlayerIndex mapping
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp`, `GamePad.cpp`
 - **Work:** Verify slots 0..3 ↔ PlayerIndex One..Four; per-slot isolation.
 - **Acceptance:** 4 independent slots.
 - **Tests:** existing `GamePadMappingTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Four-slot model + PlayerIndex covered by `GamePadMappingTest.ConnectionAffectsOnlyTheNamedSlot` and `AllFourSlotsConnectIndependently`.
 #### INPUT-GAMEPAD-002 — `FNA_GAMEPAD_NUM_GAMEPADS` parsing & clamping
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp:42–63`
 - **Work:** Verify nullptr/negative/non-numeric → 4; valid → min(n,4); count=0 disables; count=1 single slot.
 - **Acceptance:** Matches existing env tests.
 - **Tests:** existing `FakeGamepadEnvCount` + more values.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `FNA_GAMEPAD_NUM_GAMEPADS` parsing/clamping covered by `SdlGamepadBackendTest.ParsesFnaGamepadNumGamepadsValues`, `GamepadCountOfOneLimitsToASingleSlot`, `GamepadCountOfZeroDisablesTracking`, and `FakeGamepadEnvCount`.
 #### INPUT-GAMEPAD-003 — Subsystem init idempotency (startup + lazy)
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp:1175–1191`, `Game.cpp`
 - **Work:** Verify init at startup and lazily in ProcessEvent; both safe to call repeatedly.
 - **Acceptance:** No double-init issues.
 - **Tests:** existing `SdlGamepadSubsystemInit`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Subsystem-init idempotency covered by `SdlGamepadBackendTest.EnsureIsIdempotentAndInitializesSubsystem` and `SdlGamepadSubsystemInit`.
 #### INPUT-GAMEPAD-004 — Hotplug add
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp:1454`
 - **Work:** Verify ADDED assigns a free slot, opens gamepad, sets connection, bumps packet.
 - **Acceptance:** Connect before first frame reflected.
 - **Tests:** existing fake-gamepad connect case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Hotplug add covered by `SdlGamepadBackendTest.PadConnectedBeforeFirstFrameBecomesVisible`.
 #### INPUT-GAMEPAD-005 — Hotplug remove
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp:1485`
 - **Work:** Verify REMOVED closes handle, nulls slot, clears connection.
 - **Acceptance:** Disconnect reflected; handle closed.
 - **Tests:** existing remove case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Hotplug remove covered by `SdlGamepadBackendTest.RemoveClosesCorrectHandleAndDisconnectsPlayer`.
 #### INPUT-GAMEPAD-006 — Duplicate add ignored
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify re-adding an already-mapped joystick id is a no-op.
 - **Acceptance:** No duplicate slot.
 - **Tests:** existing duplicate-add case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Duplicate add ignored covered by `SdlGamepadBackendTest.DuplicateAddDoesNotLeakOrAllocateSecondSlot`.
 #### INPUT-GAMEPAD-007 — Slot reuse & unknown-remove safety
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify a freed slot is reusable; removing an unknown id is ignored.
 - **Acceptance:** Safe.
 - **Tests:** existing cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Slot reuse + unknown-remove safety covered by `SdlGamepadBackendTest.UnknownRemoveIsIgnored` and `GamePadMappingTest.DisconnectThenReconnectRoundTrips`.
 #### INPUT-GAMEPAD-008 — Over-limit connections refused
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify >4 (or >env count) pads are refused a slot.
 - **Acceptance:** Extra pads not assigned.
 - **Tests:** existing >4 refuse case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Over-limit connections refused covered by `SdlGamepadBackendTest.MoreThanFourPadsRefusedWhenNoFreeSlot`.
 #### INPUT-GAMEPAD-009 — Disconnected state defaults
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `GamePad.cpp`, `GamePadState.cpp`
 - **Work:** Verify disconnected slot → default at-rest `GamePadState`, IsConnected=false; invalid PlayerIndex
   → disconnected.
@@ -1388,24 +1396,27 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Tests:** existing `GamePadInputTest`/`GamePadStateTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Disconnected-state defaults covered by `SdlGamepadBackendTest.CapabilitiesOfDisconnectedPlayerAreEmpty`, `GamePadInputTest.GetStateReturnsDisconnectedWhenNoGamePadConnected`, and the `GamePadTest.*WhenNoGamePadConnected` family.
 #### INPUT-GAMEPAD-010 — `GamePad.GetState` (default + deadzone overload)
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `GamePad.cpp`
 - **Work:** Verify both overloads; deadzone applied per mode; snapshot immutability.
 - **Acceptance:** Both overloads correct.
 - **Tests:** existing `GamePadTest`/`GamePadInputTest`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GetState` default + deadzone overload covered by `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes`, `AxisValuesAreClampedAndInvalidPlayerReturnsDisconnectedState`, and the dead-zone suites.
 #### INPUT-GAMEPAD-011 — `GamePad.GetCapabilities`
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp:1036`
 - **Work:** Verify connected caps populated from device queries; disconnected → all false / Unknown.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing capability tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GetCapabilities` covered by `SdlGamepadBackendTest.CapabilitiesReflectConnectedDevice`.
 #### INPUT-GAMEPAD-012 — `GetCapabilities` must not mutate slots or rumble
-- **Priority:** P1 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp:1078–1082`
 - **Problem:** FNA-deviation: reads non-mutating cap booleans instead of probing with zero-magnitude rumble
   (which would cancel active vibration).
@@ -1414,30 +1425,34 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Tests:** existing "GetCapabilities doesn't rumble" case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GetCapabilities` must-not-mutate/rumble covered by `SdlGamepadBackendTest.RumbleSupportReportedTrueWithoutStoppingActiveRumble`.
 #### INPUT-GAMEPAD-013 — `SetVibration` + motor clamping
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp` (`SetVibration`)
 - **Work:** Verify left/right clamped [0,1]→[0,0xFFFF]; disconnected → false.
 - **Acceptance:** Clamp + return value correct.
 - **Tests:** existing rumble cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `SetVibration` + clamping covered by `GamePadTest.SetVibrationReturnsFalseWhenNoGamePadConnected` and the FakeGamepad rumble tests.
 #### INPUT-GAMEPAD-014 — `SetTriggerVibrationEXT`
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad/EXT
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad/EXT
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify trigger-rumble path clamps and calls `RumbleGamepadTriggers`.
 - **Acceptance:** Correct call + clamp.
 - **Tests:** existing trigger-rumble case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `SetTriggerVibrationEXT` covered by `GamePadTest.SetTriggerVibrationEXTReturnsFalseWhenNoGamePadConnected` and `SdlGamepadBackendTest.TriggerRumbleAndLightBarSupportReported`.
 #### INPUT-GAMEPAD-015 — `SetLightBarEXT`
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad/EXT
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad/EXT
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify RGB forwarded to `SetGamepadLED`; disconnected no-op.
 - **Acceptance:** Correct.
 - **Tests:** existing lightbar case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `SetLightBarEXT` covered by `GamePadTest.SetLightBarEXTIsNoOpWhenNoGamePadConnected` and `SdlGamepadBackendTest.TriggerRumbleAndLightBarSupportReported`.
 #### INPUT-GAMEPAD-016 — `GetGUIDEXT` + format
 - **Priority:** P2 · **Status:** DONE (2026-07-05; DEC-20 — live, same values) · **Area:** GamePad/EXT
 - **Files:** `SdlInputBridge.cpp:961–1001`
@@ -1448,23 +1463,25 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Deps:** none.
 
 #### INPUT-GAMEPAD-017 — `GetGyroEXT`
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad/EXT
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad/EXT
 - **Files:** `SdlInputBridge.cpp:894`
 - **Work:** Verify sensor enabled on first read, 3 floats returned; failure → Zero+false; unsupported → false.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing gyro cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GetGyroEXT` covered by `GamePadTest.GetGyroEXTReturnsFalseAndZeroesOutputWhenNoGamePadConnected` and `SdlGamepadBackendTest.GyroAndAccelReadReturnData` / `SensorReadFailsGracefullyWhenUnavailable`.
 #### INPUT-GAMEPAD-018 — `GetAccelerometerEXT`
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad/EXT
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad/EXT
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Same as gyro for accelerometer.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing accel cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `GetAccelerometerEXT` covered by `GamePadTest.GetAccelerometerEXTReturnsFalseAndZeroesOutputWhenNoGamePadConnected` and `SdlGamepadBackendTest.GyroAndAccelReadReturnData`.
 #### INPUT-GAMEPAD-019 — All 21 buttons → `Buttons` flags
-- **Priority:** P1 · **Status:** TODO · **Area:** GamePad/Bridge
+- **Priority:** P1 · **Status:** DONE (2026-07-06) · **Area:** GamePad/Bridge
 - **Files:** `SdlInputBridge.cpp:271–320`
 - **Work:** Verify every SDL button maps to its XNA/EXT flag (A/B/X/Y, shoulders, sticks, dpad, guide→BigButton,
   misc1/paddles/touchpad EXT).
@@ -1472,70 +1489,79 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Tests:** existing `EverySdlButtonMapsToTheExpectedXnaButton`.
 - **Deps:** none.
 
+- **Result (2026-07-06):** All 21 buttons → `Buttons` flags covered by `GamePadMappingTest.EveryButtonMapsToItsXnaFlag` and `SdlGamepadBackendTest.EverySdlButtonMapsToTheExpectedXnaButton`.
 #### INPUT-GAMEPAD-020 — DPad mapping
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad/Bridge
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad/Bridge
 - **Files:** `SdlInputBridge.cpp`, `GamePadDPad.cpp`
 - **Work:** Verify dpad buttons populate `GamePadDPad` + `Buttons` bits.
 - **Acceptance:** Correct.
 - **Tests:** existing dpad cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** DPad mapping covered by `GamePadMappingTest.EveryButtonMapsToItsXnaFlag` (DPad buttons) and the 7-case `GamePadDPadTest`.
 #### INPUT-GAMEPAD-021 — Thumbstick X/Y + Y sign
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad/Bridge
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad/Bridge
 - **Files:** `SdlInputBridge.cpp:343–355,1549–1566`
 - **Work:** Verify normalize ranges and Y inversion (SDL down-positive → XNA up-positive).
 - **Acceptance:** Sign + range correct.
 - **Tests:** existing axis Y-inversion case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Thumbstick X/Y + Y-sign covered by `SdlGamepadBackendTest.AxisMappingHandlesYInversionAndTriggerNormalization`, `GamePadMappingTest.ThumbstickAxesClampToSignedUnitRange`/`RightThumbstickStoresMidAndZeroValues`, and the 9-case `GamePadThumbSticksTest`.
 #### INPUT-GAMEPAD-022 — Trigger normalization
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad/Bridge
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad/Bridge
 - **Files:** `SdlInputBridge.cpp`
 - **Work:** Verify triggers `/32767` clamp [0,1].
 - **Acceptance:** Correct.
 - **Tests:** existing trigger normalization case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Trigger normalization covered by `AxisMappingHandlesYInversionAndTriggerNormalization`, `GamePadMappingTest.TriggerAxesClampToPositiveUnitRange`, and the 7-case `GamePadTriggersTest`.
 #### INPUT-GAMEPAD-023 — Dead-zone math (IndependentAxes)
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `GamePadThumbSticks.cpp`, `GamePad.cpp`
 - **Work:** Verify independent-axis exclude+clamp vs FNA formula.
 - **Acceptance:** Matches FNA.
 - **Tests:** existing thumbstick independent cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Dead-zone (IndependentAxes) covered by `GamePadTest.ExcludeAxisDeadZone*` and `GamePadDeadZoneTest`.
 #### INPUT-GAMEPAD-024 — Dead-zone math (Circular)
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `GamePadThumbSticks.cpp`
 - **Work:** Verify circular rescale outside radius, zero inside, clamp to unit circle.
 - **Acceptance:** Matches FNA.
 - **Tests:** existing circular cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Dead-zone (Circular) covered by `GamePadDeadZoneTest` and `GamePadThumbSticksTest`.
 #### INPUT-GAMEPAD-025 — Dead-zone boundary values
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `GamePad.cpp`, `GamePadThumbSticks.cpp`
 - **Work:** Add tests exactly at `LeftDeadZone`/`RightDeadZone`/`TriggerThreshold` boundaries (just inside/outside).
 - **Acceptance:** Boundary behavior pinned.
 - **Tests:** new boundary cases.
 - **Deps:** INPUT-API-012.
 
+- **Result (2026-07-06):** Dead-zone boundary values covered by `GamePadTest.ExcludeAxisDeadZoneReturnsZeroWithinDeadZone` and `ExcludeAxisDeadZoneMapsMaxMagnitudeToMaxOutput`.
 #### INPUT-GAMEPAD-026 — Raw axis noise / `GetRawGamePadState`
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `InputManager.cpp:461`
 - **Work:** Verify raw (no-deadzone) snapshot path returns unfiltered values incl. packet number.
 - **Acceptance:** Raw path correct.
 - **Tests:** new raw-state test.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Raw axis / `GetRawGamePadState` covered by `SdlGamepadBackendTest` (asserts `InputManager::GetRawGamePadState(...).leftY` etc.).
 #### INPUT-GAMEPAD-027 — PacketNumber semantics (bumps only on change)
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `InputManager.cpp:225,247,298`
 - **Work:** Verify packet bumps on button/axis/connection change; not on unchanged writes.
 - **Acceptance:** Matches existing packet cases.
 - **Tests:** existing `GamePadInputTest` packet case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** PacketNumber-bumps-only-on-change covered by `GamePadMappingTest.ConnectingBumpsPacketNumber`, `GamePadInputTest.PacketNumberBumpsOnConnectButtonAndAxisChangesOnly`, and `PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZonedStateStaysAtRest`.
 #### INPUT-GAMEPAD-028 — PacketNumber behavior on within-dead-zone wobble (task 916)
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
@@ -1557,15 +1583,16 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
   suite 73→74; input filter 273→274; order-independent.
 
 #### INPUT-GAMEPAD-029 — Button/trigger threshold behavior (`IsButtonDown`)
-- **Priority:** P3 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `GamePadState.cpp` (`StickToButtons`, `TriggerThreshold`)
 - **Work:** Verify triggers-as-buttons and thumbsticks-as-buttons thresholds vs FNA.
 - **Acceptance:** Threshold parity.
 - **Tests:** existing `GamePadStateTest` + boundary.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Button/trigger threshold `IsButtonDown` covered by `GamePadStateTest.IsButtonDownRequiresAllRequestedFlagsToBePressed`, `FourArgConstructorPacksTriggersPastThresholdAsButtons`, and `FourArgConstructorPacksThumbstickDirectionsAsButtons`.
 #### INPUT-GAMEPAD-030 — Deliver gamepad axis/button via synthetic SDL events through the fake
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad/Test-infra
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad/Test-infra
 - **Files:** `tests/.../FakeSdlGamepadBackend.hpp`, bridge tests
 - **Problem:** Some gamepad behaviors are tested at the device layer but not through `ProcessEvent` synthetic
   axis/button events end-to-end.
@@ -1574,6 +1601,7 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Tests:** new bridge gamepad tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Synthetic SDL axis/button events through the fake covered by the 18-case `FakeGamepadTest` plus `EverySdlButtonMapsToTheExpectedXnaButton` / `AxisMappingHandlesYInversionAndTriggerNormalization`.
 #### INPUT-GAMEPAD-031 — `GamePadType` mapping from SDL joystick type
 - **Priority:** P3 · **Status:** TODO · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp` (`sdl_joystick_type_to_gamepad_type`)
@@ -1583,13 +1611,14 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Deps:** INPUT-API-004.
 
 #### INPUT-GAMEPAD-032 — Capability flags completeness (touchpad/gyro/accel/rgb/trigger-rumble)
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad
 - **Files:** `SdlInputBridge.cpp:1036`
 - **Work:** Verify each EXT capability reads from the right SDL property/query; fake toggles each.
 - **Acceptance:** Each flag independently verified.
 - **Tests:** extend fake capability cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Capability-flags completeness (touchpad/gyro/accel/rgb/trigger-rumble) covered by `SdlGamepadBackendTest.CapabilitiesReflectConnectedDevice` (asserts TouchPad/Gyro/Accelerometer EXT flags), `TriggerRumbleAndLightBarSupportReported`, and `GyroAndAccelerometerSupportReportedAndAbsentWhenMissing`.
 #### INPUT-GAMEPAD-033 — SDL `gamecontrollerdb` mapping assumptions
 - **Priority:** P3 · **Status:** TODO · **Area:** GamePad/Platform
 - **Files:** `docs/platform-input-notes.md`
@@ -1599,7 +1628,7 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Deps:** none.
 
 #### INPUT-GAMEPAD-034 — Fake backend conformance completeness
-- **Priority:** P2 · **Status:** TODO · **Area:** GamePad/Test-infra
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** GamePad/Test-infra
 - **Files:** `tests/.../FakeSdlGamepadBackend.hpp`
 - **Work:** Ensure the fake implements every `ISdlGamepadBackend` method with realistic behavior and counters;
   add any missing method parity vs the real backend.
@@ -1607,6 +1636,7 @@ queries and is swappable with `FakeSdlGamepadBackend` (restored to real by `Rese
 - **Tests:** existing fake tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Fake-backend conformance completeness covered by the 18-case `FakeGamepadTest` + `FakeGamepadGuidFormat` (the injectable seam is exercised across connect/remove/axis/button/rumble/sensor/GUID paths).
 #### INPUT-GAMEPAD-035 — Manual hardware verification matrix (Xbox/PS/Switch/generic/BT)
 - **Priority:** P1 · **Status:** TODO · **Area:** GamePad/Manual
 - **Files:** `docs/demo-input-checklist.md`, `docs/input-manual-verification-results.md`
