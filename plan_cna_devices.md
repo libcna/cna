@@ -145,7 +145,7 @@ independent task instead of guessing.
   both new `CNA::Devices` suites together: 350 tests, 348 passed, 2 pre-existing
   expected skips, zero regressions.
 
-### DEVICES-CNA-003 — `Clipboard`
+### DEVICES-CNA-003 — `Clipboard` — CLOSED (2026-07-07)
 
 - **Priority:** Medium
 - **SDL3 API:** `SDL_clipboard.h` — `SDL_SetClipboardText`/`SDL_GetClipboardText`/
@@ -164,6 +164,23 @@ independent task instead of guessing.
 - **Acceptance criteria:** builds/tests pass in this exact headless container (proving
   the no-crash path for real, not just in theory).
 - **Suggested files:** new files only.
+- **Resolution:** Created `Clipboard.hpp`/`.cpp` (static class, three properties). Used
+  plain `std::string` (same rationale/precedent as `DEVICES-CNA-002`'s `Locale`
+  deviation note — matches `VibrateController.hpp`'s existing style). `getTextProperty()`
+  frees SDL's returned buffer via `SDL_free()` after copying into a CNA-owned
+  `std::string`, mirroring `Locale`'s ownership pattern. Documented in the class's own
+  Doxygen that every member is main-thread-only per SDL3's own doc comments, and that
+  Web/Emscripten additionally gates clipboard access behind a user-gesture/permission
+  context. Added `tests/CNA/Devices/ClipboardTests.cpp` (5 tests) — since this test
+  binary (`CnaTests`) never initializes SDL's video subsystem (no window is ever
+  created), running these tests here **is** the "no video subsystem available"
+  verification this task's acceptance criteria specifically asked for, not just a
+  theoretical claim: `SetThenGetIsConsistentWhetherOrNotAClipboardIsAvailable` branches
+  on `setTextProperty()`'s actual return value and asserts the correct behavior for
+  either outcome, rather than assuming one. Build: `cmake --build cmake-build-debug
+  --target CNA`/`--target CnaTests` (both clean). Ran `ClipboardTests.*` (5/5 pass) and
+  the full existing filter plus all three new `CNA::Devices` suites together: 355
+  tests, 353 passed, 2 pre-existing expected skips, zero regressions.
 
 ### DEVICES-CNA-004 — `UrlLauncher`
 
@@ -305,6 +322,10 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — DEVICES-CNA-003 CLOSED.** `CNA::Devices::Clipboard` implemented, 5
+  tests — this headless container's own lack of an SDL video subsystem serves as the
+  real "no clipboard available" verification, not just a theoretical claim. Full suite
+  355/355 (353 pass + 2 expected skips). Next: `DEVICES-CNA-004` (`UrlLauncher`).
 - **2026-07-07 — DEVICES-CNA-002 CLOSED.** `CNA::Devices::Locale` implemented
   (`LocaleInfo`/`Locale`), 3 tests, verified leak-free under `devices-asan` explicitly
   (manual `SDL_free()` boundary). Full suite 350/350 (348 pass + 2 expected skips).
