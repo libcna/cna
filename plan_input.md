@@ -183,9 +183,24 @@ extension values**. Doxygen: 0 members missing. **Test:** `GestureTypeTest.Value
 changed:** none (perfect, no gap; re-confirms A1-audit of the earlier P6-001). **Behavior verified:** flag
 values + operators. **Remaining risk:** none.
 
-## A1-008 — `TouchLocationState` `[ ]`
-- [ ] FNA `Input/Touch/TouchLocationState.cs`; CNA `Touch/TouchLocationState.hpp`; test `Touch/TouchLocationStateTests.cpp`.
-- [ ] Verify `Invalid=0, Released=1, Pressed=2, Moved=3`; freeze test; transitions covered elsewhere.
+## A1-008 — `TouchLocationState` `[x]`
+- [x] FNA `Input/Touch/TouchLocationState.cs`; CNA `Touch/TouchLocationState.hpp`; test `Touch/TouchLocationStateTests.cpp`.
+- [x] Verify `Invalid=0, Released=1, Pressed=2, Moved=3`; freeze test; transitions covered elsewhere.
+
+**Result (2026-07-06):** **Byte-identical to FNA**: `Invalid=0, Released=1, Pressed=2, Moved=3` (FNA
+`TouchLocationState.cs:15-18`). Enum + all 4 members carry Doxygen `@brief`. **Test:**
+`TouchLocationStateTest.ValuesMatchXnaSequentialConstants` pins all 4. The four state transitions are
+exercised by the touch state-machine suites (P5-005: `GetStateReflectsCurrentTouchSnapshot`,
+`ReleasedTouchIsReturnedOnceAndThenRemoved`, the SetFinger release-branch tests). **Members reviewed:** 4/4.
+**Files changed:** none (perfect, no gap). **Behavior verified:** value + transition parity. **Remaining
+risk:** none.
+
+---
+
+**Phase 1 complete (2026-07-06):** all 8 input enums re-audited member-by-member vs FNA — **every enum is
+byte-identical (0 name/value gaps), every member has Doxygen, and every value is pinned by a dedicated
+freeze test** (Keys additionally with a `static_assert` count anchor + distinctness). No source change
+needed; no gaps found.
 
 ---
 
