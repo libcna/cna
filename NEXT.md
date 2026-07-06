@@ -29,7 +29,11 @@ build+test+sanitizer verification and its own commit.
   for `Accelerometer`/`Compass`/`Gyroscope`/`Motion` — see Section 6.
 - `VibrateController` (correct XNA name — not "VibrationController") is a singleton
   (`getDefaultProperty()`), lives directly in `Microsoft::Devices` (not `::Sensors`),
-  does not derive `SensorBase<T>`/`IDisposable`. Its only backend is SDL3 `SDL_Haptic`.
+  does not derive `SensorBase<T>`/`IDisposable`. Since Task VIB-002 (2026-07-06), it
+  calls through a `Detail::IVibrateBackend` abstraction instead of hardcoding SDL3
+  `SDL_Haptic` calls directly; the only production implementation is
+  `Detail::SdlHapticVibrateBackend` (same SDL3 `SDL_Haptic` logic as before, just moved
+  behind the interface), swappable via `SetBackendForTesting()` for fake-backend tests.
 - `Compass`/`Motion` each hold a `std::unique_ptr<Detail::ICompassBackend>`/
   `IMotionBackend`, constructed only inside `#if defined(__ANDROID__)`. Every other
   platform keeps the original permanent-stub behavior.

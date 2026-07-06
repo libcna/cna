@@ -2,9 +2,12 @@
 
 #pragma once
 
+#include <memory>
+#include <mutex>
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Devices/Detail/IVibrateBackend.hpp"
 #include "System/TimeSpan.hpp"
 
 namespace Microsoft::Devices
@@ -141,32 +144,50 @@ namespace Microsoft::Devices
 
     public:
         /**
-         * @brief Destroys the vibrate controller, releasing its haptic device and subsystem hold.
+         * @brief Destroys the vibrate controller, releasing its backend's resources.
          *
          * Only ever runs once (Task P5-11), when the process-lifetime
          * singleton returned by getDefaultProperty() is itself destroyed
-         * as part of normal program termination — confirmed safe since
-         * this codebase never calls SDL_Quit() anywhere, so SDL's
-         * subsystems remain valid for the entire process lifetime, well
-         * after this runs. NOXNA in spirit (the real WP7 VibrateController
-         * has no Dispose/destructor concept at all — it's a fire-and-
-         * forget static design), but not tagged since it's not a new
-         * *public API surface* addition a game would ever call directly.
-         *
-         * @note Task P6-6: this per-class SDL_InitSubSystem()/
-         * SDL_QuitSubSystem() pairing (never the umbrella SDL_Init()/
-         * SDL_Quit()) is an established, project-wide convention —
-         * Microsoft::Xna::Framework::Graphics::GraphicsDevice does the
-         * identical thing for SDL_INIT_VIDEO. A host application calling
-         * the umbrella SDL_Quit() directly, in its own code, would affect
-         * GraphicsDevice identically and is a characteristic of this
-         * whole codebase's SDL usage model, not something unique to or
-         * fixable by VibrateController alone.
+         * as part of normal program termination. NOXNA in spirit (the real
+         * WP7 VibrateController has no Dispose/destructor concept at all —
+         * it's a fire-and-forget static design), but not tagged since it's
+         * not a new *public API surface* addition a game would ever call
+         * directly.
          */
         ~VibrateController();
 
+        /**
+         * @brief Test-only hook (Task VIB-002): replaces the real,
+         * platform-default backend with a caller-supplied one (typically a
+         * test fake), so Start()/Stop()/StartLeftRight() delegation can be
+         * exercised on any host without depending on whatever haptic
+         * hardware (or lack of it) happens to be present.
+         *
+         * Mirrors Compass/Motion's existing `SetBackendForTesting()`
+         * pattern. Unlike those sensor classes, `VibrateController` has no
+         * persistent "started" state to protect against swapping a live
+         * backend out from under an active session — every call is
+         * independently fire-and-forget — so no equivalent guard is needed
+         * here.
+         *
+         * @param backend Replacement backend; pass nullptr to restore the
+         * platform-default (`Detail::SdlHapticVibrateBackend`) behavior.
+         */
+        NOXNA void SetBackendForTesting(std::unique_ptr<Detail::IVibrateBackend> backend);
+
     private:
         /** @brief Private constructor; use getDefaultProperty() to obtain the singleton instance. */
-        VibrateController() = default;
+        VibrateController();
+
+        /** @brief Guards backend_ against concurrent replacement via SetBackendForTesting() while another thread is mid-call. */
+        std::mutex backendMutex_;
+
+        /**
+         * @brief Active backend, selected at construction time.
+         *
+         * Defaults to `Detail::SdlHapticVibrateBackend`; replaceable via
+         * `SetBackendForTesting()`.
+         */
+        std::unique_ptr<Detail::IVibrateBackend> backend_;
     };
 } // namespace Microsoft::Devices

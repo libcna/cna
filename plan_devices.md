@@ -776,7 +776,7 @@ not an alternate spelling to preserve.
   - `docs/devices-*.md` (inspected, no change needed)
   - `plan_devices.md` (this entry only)
 
-### VIB-002 — Split XNA phone vibration from SDL haptics
+### VIB-002 — Split XNA phone vibration from SDL haptics — CLOSED (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** Vibration Backend
@@ -785,27 +785,72 @@ not an alternate spelling to preserve.
   extension. A generic SDL haptic device (e.g. an arbitrary desktop force-feedback
   wheel) is not the same concept as "the Windows Phone's vibration motor," and treating
   them identically is a compatibility risk, not just a naming one.
+- **Resolution (2026-07-06):** added `Detail::IVibrateBackend`
+  (`include/Microsoft/Devices/Detail/IVibrateBackend.hpp`, new `Microsoft::Devices::Detail`
+  namespace/directory, mirroring the existing `Microsoft::Devices::Sensors::Detail`
+  pattern used by `ICompassBackend`/`IMotionBackend`) — a 5-method interface
+  (`Start(duration, intensity)`, `Stop()`, `IsSupported()`, `GetDeviceName()`,
+  `StartLeftRight(large, small, duration)`). Moved every line of the existing SDL3
+  `SDL_Haptic` logic (all file-local state and helper functions previously in
+  `VibrateController.cpp`) into a new concrete implementation,
+  `Detail::SdlHapticVibrateBackend`
+  (`include/Microsoft/Devices/Detail/SdlHapticVibrateBackend.hpp` +
+  `src/.../SdlHapticVibrateBackend.cpp`) — behavior-for-behavior identical to before,
+  just moved from free functions/file-local globals into a class's members/methods.
+  `VibrateController` now holds a `std::unique_ptr<Detail::IVibrateBackend> backend_`
+  (constructed to a `SdlHapticVibrateBackend` by default) and delegates every public
+  method to it, after performing its own duration validation
+  (`ArgumentOutOfRangeException`) and intensity/magnitude clamping to `[0,1]` itself —
+  those stay in `VibrateController`, not the backend, since they're part of the public
+  XNA/`NOXNA` contract regardless of which backend is active, not backend-specific
+  behavior. Added `NOXNA void SetBackendForTesting(std::unique_ptr<Detail::IVibrateBackend>)`,
+  mirroring `Compass`/`Motion`'s existing pattern exactly (pass `nullptr` to restore the
+  default backend) — no "throws if currently started" guard was needed here (unlike
+  `Compass`/`Motion`), since `VibrateController` has no persistent "started" session
+  state to protect against swapping a live backend out from under.
+  **On the "desktop haptic device presented as phone vibration" naming/compatibility
+  concern this task was originally raised to address:** re-examined and left
+  unchanged, with the reasoning now written down in `SdlHapticVibrateBackend`'s own doc
+  comment rather than left implicit — on Android, SDL3's own bundled haptic backend
+  already enumerates `Context.VIBRATOR_SERVICE` (the real phone vibrator) as the haptic
+  device this backend opens (re-confirmed, `VIB-003`), so strict XNA `Start(TimeSpan)`
+  genuinely reaches the real phone motor there; on desktop, there is no phone to
+  vibrate in the first place, so a generic force-feedback device responding to
+  `Start(TimeSpan)` cannot conflict with or misrepresent any real WP7 content's
+  expectations (no such content ever runs on a desktop with this class). This remains
+  accepted `NOXNA`-flavored desktop behavior, not a compatibility gap — a genuinely
+  separate desktop-only backend implementation was considered and rejected as
+  unnecessary abstraction for a difference with no observable behavioral consequence.
+  Verified: all 313 pre-existing tests still pass unchanged after the refactor, plus 13
+  new fake-backend tests added in the same pass (see `VIB-009`) — 326/326 total (324
+  passed + 2 expected hardware skips) on plain `cmake-build-debug`; re-verified clean
+  (0 issues) under `devices-asan` with `detect_leaks=1`, including a
+  20-iteration repeated-backend-swap test, confirming no resource leak across
+  `SetBackendForTesting()` swaps.
 - **Required work:**
   - Introduce a backend abstraction (e.g. `Detail::IVibrateBackend`) that
     `VibrateController` calls through, instead of calling `SDL_Haptic` functions
-    directly.
+    directly. Done.
   - Separate "the phone/system vibration motor" backend concept from "any SDL haptic
     device" — the desktop SDL-haptic path should be an explicit, documented fallback or
     `NOXNA`-flavored behavior, not silently presented as equivalent to strict XNA phone
-    vibration.
-  - Make the backend choice injectable for tests (see `VIB-009`).
+    vibration. Done — re-examined and documented as accepted behavior, not changed (see
+    Resolution above for why a separate implementation isn't warranted).
+  - Make the backend choice injectable for tests (see `VIB-009`). Done.
 - **Acceptance criteria:**
   - Strict XNA `Start(TimeSpan)` behavior does not rumble an arbitrary desktop haptic
     device (e.g. a random USB force-feedback gadget) as if it were "the phone vibrating,"
     unless that mapping is explicitly documented as the deliberate desktop behavior.
-  - Backend choice is documented and independently testable.
-  - Unit tests can inject a fake `IVibrateBackend`.
+    Done — documented, not changed.
+  - Backend choice is documented and independently testable. Done.
+  - Unit tests can inject a fake `IVibrateBackend`. Done — see `VIB-009`.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/VibrateController.hpp`
-  - `src/Microsoft/Devices/VibrateController.cpp`
-  - `src/Microsoft/Devices/Detail/` (new — no `Detail/` directory exists yet under
-    `Microsoft::Devices`, unlike `Microsoft::Devices::Sensors::Detail`)
-  - `tests/Microsoft/Devices/VibrateControllerTests.cpp`
+  - `include/Microsoft/Devices/VibrateController.hpp` (edited)
+  - `src/Microsoft/Devices/VibrateController.cpp` (edited)
+  - `include/Microsoft/Devices/Detail/IVibrateBackend.hpp` (new)
+  - `include/Microsoft/Devices/Detail/SdlHapticVibrateBackend.hpp` (new)
+  - `src/Microsoft/Devices/Detail/SdlHapticVibrateBackend.cpp` (new)
+  - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (edited)
 
 ### VIB-003 — Implement Android phone vibrator backend
 
@@ -965,7 +1010,7 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/VibrateController.cpp`
   - `tests/Microsoft/Devices/VibrateControllerTests.cpp`
 
-### VIB-009 — Add fake vibration backend tests
+### VIB-009 — Add fake vibration backend tests — CLOSED (2026-07-06, via `VIB-002`)
 
 - **Priority:** Critical
 - **Area:** Tests
@@ -973,17 +1018,57 @@ not an alternate spelling to preserve.
   directly; after `VIB-002` introduces a backend abstraction, tests should be able to
   inject a fake backend instead of depending on whatever haptic hardware (or lack of it)
   happens to be present in the test environment.
+- **Resolution (2026-07-06, done together with `VIB-002`):** added `FakeVibrateBackend`
+  (implements `Detail::IVibrateBackend`, records call counts and last-seen arguments for
+  every method) and `ScopedFakeVibrateBackend` (RAII helper that installs the fake on
+  `VibrateController`'s shared singleton and always restores the real
+  `Detail::SdlHapticVibrateBackend` in its destructor — necessary because
+  `VibrateController` is a genuine process-wide singleton, so a test that installed a
+  fake and forgot to restore it would silently break every later test in the same
+  process) to `tests/Microsoft/Devices/VibrateControllerTests.cpp`. 13 new tests cover:
+  - **Duration/intensity forwarding:** both `Start()` overloads forward the exact
+    duration and (clamped) intensity to the backend.
+  - **Clamping happens before the backend sees it:** out-of-range intensity/magnitudes
+    are clamped to `[0,1]` by `VibrateController` itself, confirmed by asserting what
+    the fake actually received.
+  - **Duration validation happens before the backend is ever called:** an out-of-range
+    duration throws `ArgumentOutOfRangeException` with the fake's call count staying at
+    0 — proves validation isn't bypassable by installing a permissive fake.
+  - **Stop forwarding, `IsSupported()` forwarding (both true and false), `GetDeviceName()`
+    forwarding, `StartLeftRight()` forwarding** (duration + both magnitudes, plus its own
+    clamping-before-backend and duration-validation-before-backend cases).
+  - **`SetBackendForTesting(nullptr)` genuinely restores a live, working default
+    backend** (not a null/no-op stand-in) — asserted by exercising the same no-crash
+    contract every non-fake test in the file already relies on, immediately after a
+    scoped fake's destructor runs.
+  - **Repeated backend swaps (20 iterations) don't leak or crash** — verified clean (0
+    issues) under `devices-asan` with `detect_leaks=1`.
+  **"Backend errors" (this task's original required-work wording) is not a scenario
+  `Detail::IVibrateBackend` actually models** — every method is `void` (except the two
+  probe getters), fire-and-forget, matching the original SDL3-direct code's own
+  "silent no-op on any failure" contract exactly (this was true before `VIB-002`'s
+  refactor too — `SDL_PlayHapticRumble()`'s own return value was already ignored). There
+  is no failure path for a fake to simulate beyond what `SupportedResult = false`
+  already covers (`IsSupported()` returning false is the only "backend can't do this"
+  signal the real interface exposes). Not a gap — documented here so a future reader
+  doesn't go looking for an error-injection test that was never applicable.
 - **Required work:**
   - Add fake-backend injection (mirroring the `SetBackendForTesting()`-style pattern
-    already used by `Compass`/`Motion` for their Android backends).
+    already used by `Compass`/`Motion` for their Android backends). Done.
   - Test duration forwarding, stop forwarding, supported/unsupported probing, backend
-    errors, and resource cleanup — all via the fake.
-  - Ensure these tests run in CI (`DEV-BUILD-003`) without any hardware.
+    errors, and resource cleanup — all via the fake. Done, except "backend errors" —
+    see Resolution above for why that scenario doesn't apply to this interface's shape.
+  - Ensure these tests run in CI (`DEV-BUILD-003`) without any hardware. Done — none of
+    the 13 new tests touch real SDL haptic hardware at all.
 - **Acceptance criteria:**
-  - All core `VibrateController` tests pass without real hardware present.
-  - Hardware-dependent tests (if any remain) are separate and explicitly opt-in.
+  - All core `VibrateController` tests pass without real hardware present. Done —
+    44/44 `VibrateControllerTests` pass in this container (no haptic hardware present).
+  - Hardware-dependent tests (if any remain) are separate and explicitly opt-in. N/A —
+    no `VibrateControllerTests` test requires real hardware; the pre-existing
+    `UnsupportedEnvironmentFullContract` test already self-skips via early `GTEST_SKIP()`
+    if real hardware happens to be present, unchanged by this task.
 - **Suggested files to inspect or edit:**
-  - `tests/Microsoft/Devices/VibrateControllerTests.cpp`
+  - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (edited)
   - `src/Microsoft/Devices/Detail/` (new, from `VIB-002`)
 
 ### VIB-010 — Add manual hardware vibration checklist
