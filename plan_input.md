@@ -671,8 +671,14 @@ every event case + helper covered. **Remaining risk:** none.
 
 # Phase 8 — Cross-cutting final gates
 
-## A8-001 — Regenerate member parity matrix `[ ]`
-- [ ] Re-run `tools/input_parity/gen_input_parity_matrix.py`; confirm 0 STRICT/EXT gaps, 0 FNA-only; commit.
+## A8-001 — Regenerate member parity matrix `[x]`
+- [x] Re-run `tools/input_parity/gen_input_parity_matrix.py`; confirm 0 STRICT/EXT gaps, 0 FNA-only; commit.
+
+**Result (2026-07-06):** Regenerated `docs/input-member-parity-matrix.md`: **26 types, 0 STRICT/EXT gaps,
+0 FNA-only members**. The file is **byte-identical** to the committed version (`git diff` empty) — the
+per-type audit added only tests + removed one *internal* method (`InputManager::GetGamePadState`), so the
+**public XNA member parity is unchanged**. **Files changed:** none (matrix regenerated identically).
+**Remaining risk:** none.
 
 ## A8-002 — Regenerate test-coverage document `[ ]`
 - [ ] Re-run `tools/input_parity/check_input_test_coverage.py`; confirm every type has a dedicated suite;
