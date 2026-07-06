@@ -178,6 +178,39 @@ TEST(TouchInputTest, GetCapabilitiesFallsBackToInputManagerTouchStateWhenFlagIsU
     ResetTouchState();
 }
 
+// P6-002: default EnabledGestures is None — matches FNA's plain static `GestureType EnabledGestures`
+// auto-property (no initializer / static ctor → default(GestureType) == 0). Gestures are opt-in.
+TEST(TouchInputTest, DefaultEnabledGesturesIsNone)
+{
+    TouchPanel::ResetForTests();
+    EXPECT_EQ(TouchPanel::getEnabledGesturesProperty(), GestureType::None);
+}
+
+// P6-002: changing EnabledGestures must NOT clear already-queued gestures. FNA's setter only mutates the
+// flag; the queue is drained solely by ReadGesture / reset. So disabling everything (or switching sets)
+// leaves pending gestures readable.
+TEST(TouchInputTest, ChangingEnabledGesturesDoesNotClearTheQueue)
+{
+    const GestureType previous = TouchPanel::getEnabledGesturesProperty();
+    while (TouchPanel::getIsGestureAvailableProperty())
+    {
+        (void)TouchPanel::ReadGesture();
+    }
+
+    TouchPanel::EnqueueGesture(GestureSample(GestureType::Tap, System::TimeSpan::Zero,
+                                             Vector2::Zero, Vector2::Zero, Vector2::Zero, Vector2::Zero));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+
+    TouchPanel::setEnabledGesturesProperty(GestureType::None);   // "disable" everything
+    EXPECT_TRUE(TouchPanel::getIsGestureAvailableProperty())
+        << "changing EnabledGestures must not drop already-queued gestures";
+    TouchPanel::setEnabledGesturesProperty(GestureType::Pinch);  // switch to a different set
+    EXPECT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+
+    (void)TouchPanel::ReadGesture();
+    TouchPanel::setEnabledGesturesProperty(previous);
+}
+
 TEST(TouchInputTest, EnabledGesturesGetterAndSetterRoundTrip)
 {
     const GestureType previous = TouchPanel::getEnabledGesturesProperty();

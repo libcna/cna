@@ -1061,12 +1061,24 @@ fails the test) and `GestureTypeTest.BitwiseOperatorsCombineAndMaskFlags` (`|`, 
 combine/mask). **Files changed:** none (freeze + bitwise coverage already complete). **Behavior verified:**
 enum value + flag-operator parity with FNA. **Remaining risk:** none.
 
-## P6-002 — Verify enabled gestures behavior
-- [ ] Test default enabled gestures.
-- [ ] Test enabling one gesture.
-- [ ] Test enabling multiple gestures.
-- [ ] Test disabling gestures clears or preserves queue according to XNA/FNA behavior.
-- [ ] Add regression tests.
+## P6-002 — Verify enabled gestures behavior `[x]`
+- [x] Test default enabled gestures.
+- [x] Test enabling one gesture.
+- [x] Test enabling multiple gestures.
+- [x] Test disabling gestures clears or preserves queue according to XNA/FNA behavior.
+- [x] Add regression tests.
+
+**Result (2026-07-06):** Enabling one / multiple / None round-trip already covered by
+`EnabledGesturesGetterAndSetterRoundTrip` (`Tap | Hold` combined, then None). Verified against FNA: default
+`EnabledGestures` is **None** — FNA's plain static `GestureType EnabledGestures` auto-property has no
+initializer/static ctor, so `default(GestureType) == 0`; CNA initializes `enabledGestures_ = None`
+(TouchPanel.cpp:20). And **disabling PRESERVES the queue** — FNA's setter only mutates the flag; the queue
+drains solely via `ReadGesture`/reset (CNA's `setEnabledGesturesProperty` likewise just assigns the field).
+**Added two tests:** `DefaultEnabledGesturesIsNone` (after reset → None) and
+`ChangingEnabledGesturesDoesNotClearTheQueue` (enqueue → set None → still available → switch set → still
+available). **Files changed:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` (+2 tests).
+**Tests:** pass. **Behavior verified:** default None + enable/disable flag semantics + queue preservation.
+**Remaining risk:** none.
 
 ## P6-003 — Verify `IsGestureAvailable`
 - [ ] Test false when queue is empty.
