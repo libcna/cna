@@ -225,6 +225,14 @@ namespace Microsoft::Xna::Framework::Audio
         // with each instance's stored baseVolume (see AudioEngine::SetCategoryVolumeInternal).
         void ApplyCategoryVolume(float catVol);
 
+        // P10-VAR-004: reseeds the file-local RNG (Cue.cpp's anonymous-namespace `Rng()`, shared
+        // by every Cue -- matching FAudio's own single process-wide RNG state, FACT_INTERNAL_rng)
+        // used for non-interactive weighted variation selection. Test-only: lets a test compute
+        // an expected pick independently (seeding an identical std::mt19937 + distribution in the
+        // test itself) and cross-check it against Cue::Play()'s real, deterministic-for-a-known-
+        // seed outcome, instead of relying on an unseeded std::random_device draw every run.
+        NOXNA static void INTERNAL_seedRngForTest(unsigned int seed);
+
         // Tests need to observe which sound a variation table selected (via the category
         // index it carries) without a real WaveBank/audio device backing playback.
         NOXNA friend struct CueTestAccess;

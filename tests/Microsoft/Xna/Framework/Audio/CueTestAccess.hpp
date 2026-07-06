@@ -32,5 +32,10 @@ namespace Microsoft::Xna::Framework::Audio
             if (index >= cue.active_.size()) return nullptr;
             return cue.active_[index].instance.get();
         }
+
+        // P10-VAR-004: reseeds the RNG non-interactive weighted variation selection draws from,
+        // so a test can deterministically predict (by independently replicating the same
+        // std::mt19937 + std::uniform_int_distribution draw) which entry Cue::Play() will pick.
+        static void SeedRng(unsigned int seed) { Cue::INTERNAL_seedRngForTest(seed); }
     };
 }

@@ -719,6 +719,11 @@ namespace Microsoft::Xna::Framework::Audio
             if (pi.instance) pi.instance->setVolumeProperty(std::clamp(pi.baseVolume * catVol, 0.0f, 1.0f));
     }
 
+    void Cue::INTERNAL_seedRngForTest(unsigned int seed)
+    {
+        Rng().seed(seed);
+    }
+
     // ── Dispose ───────────────────────────────────────────────────────────────
 
     void Cue::Dispose()

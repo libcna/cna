@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <random>
 #include <string>
 #include <thread>
 #include <vector>
@@ -343,6 +344,113 @@ namespace
         return data;
     }
 
+    // P10-VAR-005: one entry of an N-entry non-interactive (SOUND-type) weighted variation
+    // table, generalizing BuildXsbFixtureBytesWithWeightedVariation above (which is hardcoded to
+    // exactly 2 entries) to any number of entries with independently configurable weights --
+    // needed to test 3+ entries, zero-weight entries, and deterministic-by-construction/by-seed
+    // edge cases (P9-XACT-001, `plan_audio.md`'s Phase 10 audit).
+    struct WeightedVariationEntrySpec
+    {
+        uint16_t categoryIndex;
+        uint8_t  weightMin;
+        uint8_t  weightMax;
+    };
+
+    std::vector<uint8_t> BuildXsbFixtureBytesWithWeightedVariationN(
+        const std::string& cueName, const std::vector<WeightedVariationEntrySpec>& entries)
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+        constexpr uint32_t soundSize    = 12;
+        constexpr uint32_t tableHeaderSize = 8;
+        constexpr uint32_t tableEntrySize  = 6; // sbCode(4) + weightMin(1) + weightMax(1)
+
+        const auto soundCount = static_cast<uint32_t>(entries.size());
+        const uint32_t soundOffset        = baseOffset;
+        const uint32_t variationOffset    = soundOffset + soundCount * soundSize;
+        const uint32_t tableSize          = tableHeaderSize + soundCount * tableEntrySize;
+        const uint32_t cueComplexOffset   = variationOffset + tableSize;
+        const uint32_t cueNameIndexOffset = cueComplexOffset + 15;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+
+        std::vector<uint32_t> soundCodes(soundCount);
+        for (uint32_t i = 0; i < soundCount; ++i)
+            soundCodes[i] = soundOffset + i * soundSize;
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0);          // cueSimpleCount
+        AppendU16(data, 1);          // cueComplexCount
+        AppendU16(data, 0);          // unknown
+        AppendU16(data, 0);          // cueTotalAlign
+        AppendU8(data, 0);           // wavebankCount
+        AppendU16(data, static_cast<uint16_t>(soundCount)); // soundCount
+        AppendU16(data, 0);          // cueNameLength
+        AppendU16(data, 0);          // unknown
+
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, static_cast<int32_t>(cueComplexOffset));
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, static_cast<int32_t>(variationOffset));
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, -1); // wavebankNameOffset
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "WeightedNTestBank", bankNameSize);
+
+        for (const auto& e : entries)
+        {
+            AppendU8(data, 0);              // flags: simple, no RPC/DSP
+            AppendU16(data, e.categoryIndex);
+            AppendU8(data, 0xFF);           // volume raw byte (unused by this test)
+            AppendU16(data, 0);             // pitchCents
+            AppendU8(data, 0);              // priority
+            AppendU16(data, 0);             // soundLength (skipped)
+            AppendU16(data, 0);             // waveIdx
+            AppendU8(data, 0);              // wbIdx
+        }
+
+        // Variation table: type=SOUND(1), N entries.
+        const uint32_t entryCountAndFlags = soundCount | (1u << 19);
+        AppendU32(data, entryCountAndFlags);
+        AppendU16(data, 0);                          // unknown
+        AppendU16(data, static_cast<uint16_t>(-1));   // variable (unused, not interactive)
+
+        for (uint32_t i = 0; i < soundCount; ++i)
+        {
+            AppendU32(data, soundCodes[i]);
+            AppendU8(data, entries[i].weightMin);
+            AppendU8(data, entries[i].weightMax);
+        }
+
+        // Complex cue: not single-sound, sbCode points at the variation table.
+        AppendU8(data, 0);                 // flags (CUE_FLAG_SINGLE_SOUND clear)
+        AppendU32(data, variationOffset);  // sbCode
+        AppendU32(data, 0);                // transitionOffset
+        AppendU8(data, 0xFF);              // instanceLimit
+        AppendU16(data, 0);                // fadeInMS
+        AppendU16(data, 0);                // fadeOutMS
+        AppendU8(data, 0);                 // maxInstanceBehavior
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0); // unknown
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
     // .xsb with 2 simple sounds (distinguished only by categoryIndex: 0 and 1) and one complex
     // cue ("Interactive") referencing an INTERACTIVE-type (type==3) variation table with 2
     // entries whose [varMin, varMax] ranges are disjoint and don't cover the full [0, 1] range
@@ -514,6 +622,81 @@ namespace
     {
         static SoundBank bank(&SharedEngine(), XsbWeightedVariationFixturePath());
         return bank;
+    }
+
+    // P10-VAR-005: 4 entries, all weight concentrated on entry 0 (categoryIndex 0), the other
+    // three carrying zero weight. Mathematically guaranteed to always select entry 0 regardless
+    // of the RNG's drawn value -- entries 1..3 (the only ones the reverse-index loop explicitly
+    // checks; see Cue.cpp's comment on FAudio's get_active_variation_index) all contribute zero
+    // weight, so `remaining` never shrinks and the `value > (remaining - weight)` check can never
+    // pass for them (value is always < remaining, which stays equal to the untouched total
+    // weight); the loop always falls through to the implicit default of entry 0. Zero flake risk,
+    // no RNG seeding needed.
+    const std::string& XsbAllWeightOnFirstEntryFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_cue_test", "fixture_weighted_first.xsb",
+            BuildXsbFixtureBytesWithWeightedVariationN("WeightedFirst", {
+                {0, 0, 255}, {1, 0, 0}, {2, 0, 0}, {3, 0, 0},
+            }));
+        return path;
+    }
+
+    SoundBank& SharedAllWeightOnFirstEntryBank()
+    {
+        static SoundBank bank(&SharedEngine(), XsbAllWeightOnFirstEntryFixturePath());
+        return bank;
+    }
+
+    // P10-VAR-005: 4 entries -- two zero-weight (categoryIndex 0/1), then weight 30
+    // (categoryIndex 2) and weight 70 (categoryIndex 3), total 100. Used with
+    // CueTestAccess::SeedRng() for deterministic-by-replica tests: a test seeds the RNG to a
+    // fixed value, independently computes the expected pick using the identical
+    // std::mt19937 + std::uniform_int_distribution(0, 99) draw and the same reverse-index
+    // selection loop as Cue::Play() (Cue.cpp), then asserts Play() actually picked that entry.
+    const std::string& XsbFourWeightedEntriesFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_cue_test", "fixture_weighted_four.xsb",
+            BuildXsbFixtureBytesWithWeightedVariationN("WeightedFour", {
+                {0, 0, 0}, {1, 0, 0}, {2, 0, 30}, {3, 30, 100},
+            }));
+        return path;
+    }
+
+    SoundBank& SharedFourWeightedEntriesBank()
+    {
+        static SoundBank bank(&SharedEngine(), XsbFourWeightedEntriesFixturePath());
+        return bank;
+    }
+
+    // Independently replicates Cue::Play()'s non-interactive weighted-variation selection
+    // (Cue.cpp), for cross-checking against a seeded Cue::Play() outcome in a test. Deliberately
+    // separate code, not a call into production -- mirrors FAudio's own get_active_variation_index
+    // algorithm (see Cue.cpp's citation), transcribed independently here as a controlled oracle.
+    uint16_t PredictWeightedPick(unsigned int seed, const std::vector<uint32_t>& weights)
+    {
+        uint32_t total = 0;
+        for (uint32_t w : weights) total += w;
+        if (total == 0) return 0;
+
+        std::mt19937 rng(seed);
+        std::uniform_int_distribution<uint32_t> dist(0, total - 1);
+        const uint32_t value = dist(rng);
+
+        uint16_t pick = 0;
+        uint32_t remaining = total;
+        for (int32_t i = static_cast<int32_t>(weights.size()) - 1; i > 0; --i)
+        {
+            const uint32_t weight = weights[static_cast<std::size_t>(i)];
+            if (value > (remaining - weight))
+            {
+                pick = static_cast<uint16_t>(i);
+                break;
+            }
+            remaining -= weight;
+        }
+        return pick;
     }
 
     SoundBank& SharedInteractiveVariationBank()
@@ -2111,14 +2294,29 @@ TEST(CueTest, GetTypeNameIsDottedXnaName)
 
 // ===================== Variation selection (XA-3) =====================
 
+// P10-VAR-001/002 (2026-07-06 audit): this test previously reused a single `Cue` object across
+// all 200 loop iterations, calling `Play()` on it repeatedly. That's not a real bug in the
+// selection algorithm itself (see the line-by-line comparison against FAudio's
+// get_active_variation_index below, and CHECKLIST.md/plan_audio.md's Phase 10 audit note) -- it's
+// a bug in *this test*: neither sound in `fixture_weighted.xsb` references a real WaveBank, so
+// `Cue::active_` stays empty after the first `Play()`, `ReconcileState()`'s
+// `... || active_.empty()) return;` guard means `state_` can never reconcile back from
+// `Playing`, and `Play()`'s own `state_ == State::Playing` guard (P9-LIFECYCLE-010/011, "a Cue
+// models exactly one playthrough, not a restartable voice") then silently no-ops every
+// subsequent call in the loop. Confirmed by direct instrumentation: all 200 "iterations" read
+// back the *identical* categoryIndex from iteration 1 -- this was really a single weighted draw,
+// not 200 independent trials, which is what actually made the test's pass/fail outcome depend on
+// one random draw's ~1% chance of landing on the low-weight entry (matching NEXT.md's "un-seeded
+// RNG" flake description) rather than a smooth statistical average across genuinely independent
+// samples. Fixed by creating a fresh `Cue` (a fresh "playthrough", matching how a real game would
+// call `SoundBank::PlayCue()` repeatedly, never replaying one `Cue` object) each iteration.
 TEST(CueTest, PlayWeightedVariationFavorsHigherWeightEntryStatistically)
 {
-    auto cue = std::unique_ptr<Cue>(SharedWeightedVariationBank().GetCue("Weighted"));
-
     constexpr int kIterations = 200;
     int highWeightPicks = 0;
     for (int i = 0; i < kIterations; ++i)
     {
+        auto cue = std::unique_ptr<Cue>(SharedWeightedVariationBank().GetCue("Weighted"));
         cue->Play();
         if (CueTestAccess::CategoryIndex(*cue) == 1)
             ++highWeightPicks;
@@ -2128,6 +2326,54 @@ TEST(CueTest, PlayWeightedVariationFavorsHigherWeightEntryStatistically)
     // Uniform (unweighted) selection between the two entries would land close to 50%, so an
     // 80% threshold cleanly distinguishes weighted selection from the old uniform pick.
     EXPECT_GT(highWeightPicks, kIterations * 0.8);
+}
+
+// P10-VAR-002/005 (2026-07-06 audit): line-by-line comparison of Cue::Play()'s non-interactive
+// weighted-lottery loop against FAudio's get_active_variation_index (FACT_internal.c, the
+// `else` / "Random" branch) confirms it is a byte-for-byte port: same reverse-index loop bound
+// (`i = entryCount-1` down to `i > 0`, entry 0 is an implicit fallback never explicitly checked),
+// same single `remaining -= weight` per non-matching iteration (not applied twice in any branch
+// -- no such bug exists), same strict `>` (not `>=`) boundary comparison. No fix was needed; the
+// tests below exist to lock this proof down and to give this branch real, deterministic-by-
+// construction and deterministic-by-seed coverage (multiple entries, zero-weight entries) instead
+// of only the single pre-existing statistical test above.
+
+// 4 entries, all weight on entry 0 -- see SharedAllWeightOnFirstEntryBank()'s comment for why
+// this is mathematically guaranteed, not just statistically likely: entries 1..3 (the only ones
+// explicitly checked by the reverse loop) all carry zero weight, so the loop can never break out
+// of its default fallback to entry 0. Every one of many fresh-cue trials must pick entry 0.
+TEST(CueTest, PlayWeightedVariationWithAllWeightOnFirstEntryAlwaysSelectsItAcrossManyTrials)
+{
+    constexpr int kIterations = 50;
+    for (int i = 0; i < kIterations; ++i)
+    {
+        auto cue = std::unique_ptr<Cue>(SharedAllWeightOnFirstEntryBank().GetCue("WeightedFirst"));
+        cue->Play();
+        EXPECT_EQ(CueTestAccess::CategoryIndex(*cue), 0) << "iteration " << i;
+    }
+}
+
+// 4-entry table (two zero-weight, then weight 30 and weight 70, total 100) cross-checked against
+// an independent replica (PredictWeightedPick) of the same selection algorithm, for several fixed
+// RNG seeds. Deterministic and reproducible on every run (std::mt19937 is a fully deterministic
+// PRNG given a fixed seed -- unlike the un-seeded std::random_device the production code falls
+// back to by default), and exercises whatever specific boundary values each seed happens to draw
+// against the real `>` comparison in Cue.cpp, not just the two extremes a hand-picked value would
+// hit. Covers 3+ entries, zero-weight entries, and non-extreme (30/70, not 1/99) weight ratios in
+// one fixture.
+TEST(CueTest, PlayWeightedVariationWithFourEntriesMatchesIndependentReplicaForSeededRng)
+{
+    const std::vector<uint32_t> weights = {0, 0, 30, 70};
+    for (unsigned int seed : {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u})
+    {
+        CueTestAccess::SeedRng(seed);
+        const uint16_t expected = PredictWeightedPick(seed, weights);
+
+        auto cue = std::unique_ptr<Cue>(SharedFourWeightedEntriesBank().GetCue("WeightedFour"));
+        cue->Play();
+
+        EXPECT_EQ(CueTestAccess::CategoryIndex(*cue), expected) << "seed " << seed;
+    }
 }
 
 // P9-XACT-002/003/004: interactive (type==3) variation tables select by a bound variable's

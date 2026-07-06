@@ -12,6 +12,7 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/EventArgs.hpp"
+#include "System/TimeSpan.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstance;
@@ -51,6 +52,57 @@ TEST(DynamicSoundEffectInstanceTest, ConstructionDefaultState)
     EXPECT_FALSE(d.getIsDisposedProperty());
     EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
     EXPECT_FALSE(d.getIsLoopedProperty());
+}
+
+// P10-DYN-001/002/003 (2026-07-06 audit, Phase 10): real FNA's constructor (DynamicSoundEffectInstance.cs)
+// stores `sampleRate`/`channels` directly into a FAudioWaveFormatEx with zero validation -- no
+// range check, no throw, for ANY value (confirmed by reading the FNA source line-by-line: the
+// ctor body is a straight field-assignment + FAudioWaveFormatEx construction, no guard at all).
+// This diverges from MSDN's *documented* contract for this constructor (8,000-48,000 Hz,
+// ArgumentOutOfRangeException otherwise) -- an XNA-docs-vs-FNA-behavior split, resolved here in
+// favor of matching real FNA behavior (this project's established practical-compatibility
+// policy, consistent with e.g. P9-VALIDATION-001's identical resolution for SoundEffect's own
+// constructors). CNA's constructor already has zero validation, matching FNA -- these tests lock
+// that decision down instead of it being an untested, accidental gap.
+TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsSampleRateBelowXnaDocumentedMinimum)
+{
+    // MSDN documents 8000 as the minimum; FNA itself never enforces it.
+    EXPECT_NO_THROW(DynamicSoundEffectInstance d(4000, AudioChannels::Mono));
+}
+
+TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsSampleRateAboveXnaDocumentedMaximum)
+{
+    // MSDN documents 48000 as the maximum; FNA itself never enforces it.
+    EXPECT_NO_THROW(DynamicSoundEffectInstance d(96000, AudioChannels::Stereo));
+}
+
+TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsZeroSampleRate)
+{
+    EXPECT_NO_THROW(DynamicSoundEffectInstance d(0, AudioChannels::Mono));
+}
+
+TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsNegativeSampleRate)
+{
+    EXPECT_NO_THROW(DynamicSoundEffectInstance d(-1, AudioChannels::Mono));
+}
+
+// P10-DYN-004/005: real FNA's GetSampleDuration/GetSampleSizeInBytes (DynamicSoundEffectInstance.cs)
+// delegate straight to the static SoundEffect helpers using the stored sampleRate/channels
+// fields, with no `IsDisposed` guard at all -- confirmed by reading the FNA source. Matching that
+// (not adding a new ObjectDisposedException guard CNA-side) is the resolved decision; these tests
+// lock it down.
+TEST(DynamicSoundEffectInstanceTest, GetSampleDurationAfterDisposeDoesNotThrow)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    d.Dispose();
+    EXPECT_NO_THROW({ auto result = d.GetSampleDuration(4000); (void)result; });
+}
+
+TEST(DynamicSoundEffectInstanceTest, GetSampleSizeInBytesAfterDisposeDoesNotThrow)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    d.Dispose();
+    EXPECT_NO_THROW({ auto result = d.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0)); (void)result; });
 }
 
 TEST(DynamicSoundEffectInstanceTest, IsLoopedSetterIsNoOpDirect)
