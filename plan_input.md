@@ -133,9 +133,19 @@ build or the test. **Doxygen:** verified **0** of the 160 enum members lack an i
 tested in their suites. **Members reviewed:** 160/160. **Files changed:** none (perfect, no gap). **Behavior
 verified:** full value + Doxygen parity. **Remaining risk:** none.
 
-## A1-004 — `Buttons` `[ ]`
-- [ ] FNA `Input/Buttons.cs`; CNA `Buttons.hpp`; test `ButtonsTests.cpp`.
-- [ ] Verify every XNA bit + EXT bits (Misc1/Paddle1-4/TouchPad) with no collision; bitwise operators.
+## A1-004 — `Buttons` `[x]`
+- [x] FNA `Input/Buttons.cs`; CNA `Buttons.hpp`; test `ButtonsTests.cpp`.
+- [x] Verify every XNA bit + EXT bits (Misc1/Paddle1-4/TouchPad) with no collision; bitwise operators.
+
+**Result (2026-07-06):** CNA and FNA each have **31 members**. A value diff (normalizing CNA's `EXT` name
+suffix) reports **0 FNA-only, 0 value mismatches, 0 colliding bit values** — the values are byte-identical;
+CNA only appends the `EXT` suffix to the 6 FNA extension bits (`Misc1EXT`, `Paddle1-4EXT`, `TouchPadEXT`) per
+its documented naming convention (these are FNA additions beyond stock XNA). **Test:** all 31 pinned —
+`CoreXnaValuesMatchXnaBitConstants` (25 XNA bits, `DPadUp=0x1`…`LeftThumbstickRight=0x40000000`),
+`FnaExtensionValuesMatchTheExtensionBits` (6 EXT bits), and `BitwiseOperatorsCombineMaskAndComplementFlags`
+(`|`, `&`, `|=`, `&=`, `~`). **Doxygen:** 0 members missing `@brief`. **Members reviewed:** 31/31. **Files
+changed:** none (perfect, no gap). **Behavior verified:** bit values + no-collision + flag operators.
+**Remaining risk:** none.
 
 ## A1-005 — `GamePadDeadZone` `[ ]`
 - [ ] FNA `Input/GamePadDeadZone.cs`; CNA `GamePadDeadZone.hpp`; test `GamePadDeadZoneTests.cpp`.
