@@ -530,6 +530,19 @@ namespace
         return e;
     }
 
+    // Builds a single track event with an unrecognized type (2 -- a genuine gap in FAudio's own
+    // FACTEVENT_* enum: FACT_internal.h defines exactly {0,1,3,4,6,7,8,9,16,17,18}, so 2 can never
+    // appear in real XACT-tool-built content, but the parser must still handle it safely rather
+    // than misreading undefined bytes as a known event's fields).
+    std::vector<uint8_t> BuildUnknownTypeEventBytes()
+    {
+        std::vector<uint8_t> e;
+        AppendU32(e, 2u);  // evtInfo: type=2 (unrecognized), timestamp=0
+        AppendU16(e, 0);   // randomOffset
+        AppendU8(e, 0xFF); // separator
+        return e;
+    }
+
     // Minimal .xsb with zero cues/wavebanks and one complex sound whose single track's event
     // list is exactly `events` (each pre-encoded via the Build*EventBytes helpers above).
     // Regression fixture for T-2E. `filterData`/`frequency` default to 0 (no filter, matching
@@ -1270,6 +1283,23 @@ TEST(XactParserTest, ComplexTrackWithOnlyPlayWaveEventStillResolves)
     EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 2);
     EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 99u);
     EXPECT_EQ(xsb.sounds[0].waves[0].loopCount, 1);
+}
+
+// P10-XACT-010: CNA's FACTEVENT_* constants match FAudio's real enum (FACT_internal.h) exactly --
+// there is no XACT event type CNA fails to recognize among the ones that actually exist. The one
+// remaining "unsupported" path is a genuinely unrecognized/malformed type (never emitted by real
+// content); its already-documented behavior (stop scanning rather than misinterpret the remaining
+// bytes as event headers) had no direct test proving it until now.
+TEST(XactParserTest, ComplexTrackStopsScanningAtUnrecognizedEventType)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithComplexTrack(
+        { BuildUnknownTypeEventBytes(), BuildPlayWaveEventBytes(42, 7, 3) }));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    // The scan gave up at the unrecognized event and never reached the PlayWave event after it.
+    EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 0xFF);
+    EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 0xFFFFu);
 }
 
 // P9-XACT-010/011: a complex track's filterData/frequency used to be read-and-discarded. This

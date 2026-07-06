@@ -3679,12 +3679,24 @@ restoration can be reverted.
   *Note:* Already added this branch: `AudioCategoryTest.InstanceLimit*` (3 tests) and
   `CueTest.CueInstanceLimit*` (2 tests), all verified via `git stash` to fail against the pre-fix
   code.
-* [ ] P10-XACT-010: Ensure all unsupported XACT event types are implemented or fail with clear,
+* [x] P10-XACT-010: Ensure all unsupported XACT event types are implemented or fail with clear,
   documented behavior.
-  *Note:* Track "PlayWave" events are implemented (`ParseFirstPlayWave`, "first PlayWave event
-  each" simplification already documented in `CHECKLIST.md`). A full audit of every *other* XACT
-  event type (stop, marker/tempo, volume/pitch repeat events, etc.) against what CNA's parser
-  actually recognizes-vs-silently-skips was not carried out in this pass -- left open.
+  *Note:* Closed this pass. Compared `XactParser.cpp`'s `FACTEVENT_*` constants directly against
+  FAudio's real enum (`FACT_internal.h`): `{STOP=0, PLAYWAVE=1, PLAYWAVETRACKVARIATION=3,
+  PLAYWAVEEFFECTVARIATION=4, PLAYWAVETRACKEFFECTVARIATION=6, PITCH=7, VOLUME=8, MARKER=9,
+  PITCHREPEATING=16, VOLUMEREPEATING=17, MARKERREPEATING=18}` -- byte-for-byte identical, and
+  `ParseFirstPlayWave` (the only place that dispatches on event type) has an explicit `else if`
+  branch handling every single one of them (STOP/PLAYWAVE/track-variation-family all resolve or
+  skip correctly; PITCH/VOLUME/PITCHREPEATING/VOLUMEREPEATING/MARKER/MARKERREPEATING are read past
+  and skipped, "not a play event -- keep scanning"). There is no real XACT event type CNA fails to
+  recognize -- values 2/5/10-15 are genuine gaps in FAudio's own numbering, not omissions here.
+  The one remaining path -- a genuinely unrecognized/malformed type, which can never appear in
+  real XACT-tool-built content -- already had documented, correct behavior (stop scanning rather
+  than misread the remaining bytes as event headers) but no test proving it; added
+  `ComplexTrackStopsScanningAtUnrecognizedEventType` (`XactParserTests.cpp`), which confirms a
+  PlayWave event placed *after* an unrecognized-type event is never reached (result stays the
+  "no play event found" sentinel, not silently misparsed data). Full suite: 3302/3304 pass (2
+  pre-existing hardware-only skips).
 
 ## Phase 10.10 — Microphone behavior
 
