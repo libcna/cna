@@ -38,6 +38,19 @@ TEST(AndroidSensorBridgeTests, SubMicrosecondIntervalFloorsToOneMicrosecond)
     EXPECT_EQ(ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(TimeSpan::FromMilliseconds(0.0001)), 1);
 }
 
+// Task SENSORBASE-008: setTimeBetweenUpdatesProperty() does not reject a
+// negative TimeSpan (matches the real WP7 API's own undocumented/unvalidated
+// setter contract, confirmed via MSDN hh220884/hh239315 — see
+// SensorBaseTests.cpp's identical citation). A negative value can therefore
+// reach this conversion function in practice; it must floor to the same safe
+// 1-microsecond minimum as zero/sub-microsecond values, not produce a zero or
+// negative argument to ASensorEventQueue_setEventRate() (undocumented
+// behavior for either).
+TEST(AndroidSensorBridgeTests, NegativeTimeBetweenUpdatesFloorsToOneMicrosecond)
+{
+    EXPECT_EQ(ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(TimeSpan::FromMilliseconds(-10.0)), 1);
+}
+
 // Micro-cleanup pass, Task 4: a requested interval converted to
 // microseconds as a double can exceed what std::int32_t can represent
 // (e.g. TimeSpan::MaxValue is on the order of 10^17 milliseconds) --

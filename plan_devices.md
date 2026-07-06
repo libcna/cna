@@ -789,7 +789,7 @@ not an alternate spelling to preserve.
 
 ## 5. `SensorBase<T>` tasks
 
-### SENSORBASE-001 — Implement real `TimeBetweenUpdates` semantics — PARTIALLY CLOSED (2026-07-06, min/max validation only remaining)
+### SENSORBASE-001 — Implement real `TimeBetweenUpdates` semantics — CLOSED (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** `SensorBase<T>`
@@ -820,11 +820,11 @@ not an alternate spelling to preserve.
     `Detail::AndroidSensorBridge::SetSampleInterval()` re-applies
     `ASensorEventQueue_setEventRate()` on the live queue; `Compass`/`Motion` forward
     their own `TimeBetweenUpdatesChanged` event to the active backend.
-  - **Still not done, the one remaining gap:** minimum/maximum value validation
-    (negative/zero `TimeBetweenUpdates`) — `setTimeBetweenUpdatesProperty()` still
-    accepts any value unchanged; tracked as its own task, `SENSORBASE-008`, since a
-    stabilization pass (below) confirmed the current unvalidated fallback is at least
-    safe, not just an untested assumption.
+  - **Minimum/maximum value validation (`SENSORBASE-008`, closed 2026-07-06):**
+    confirmed via archived MSDN pages (`hh220884`/`hh239315`) that the real WP7
+    `TimeBetweenUpdates` setter has no documented validation contract at all — CNA's
+    unvalidated `setTimeBetweenUpdatesProperty()` already matches it exactly. Not a gap;
+    verified correct as-is, no code change needed.
   - **Addendum (2026-07-06, same-day stabilization pass):** `ShouldAcceptUpdateAt()`'s
     throttle *decision* was changed from `System::DateTimeOffset` wall-clock time to
     `std::chrono::steady_clock` — a wall-clock-based interval measurement can go
@@ -844,7 +844,9 @@ not an alternate spelling to preserve.
   - Define exact minimum, maximum, and default behavior for `TimeBetweenUpdates` (the
     current default, `TimeSpan.FromMilliseconds(2.0)`, is commented as matching ".NET
     source" — verify that comment against an authoritative reference rather than
-    trusting it at face value). **Not done — moved to `SENSORBASE-008`.**
+    trusting it at face value). Done, via `SENSORBASE-008` — no validation contract
+    exists in the real API to define; the "no validation" behavior itself is now
+    citation-backed rather than assumed.
   - Apply the value to every backend (SDL done 2026-07-06; Android done 2026-07-06,
     `ANDROID-BRIDGE-002`).
   - Support changing the value while the sensor is already running, for every backend
@@ -864,14 +866,17 @@ not an alternate spelling to preserve.
   - Setting `TimeBetweenUpdates` while a sensor is started changes behavior without
     requiring `Stop()`/`Start()` or object recreation. Done for all four.
   - Tests cover invalid values (negative, zero if disallowed) and valid updates, for
-    every sensor class. **Zero covered (see `ShouldAcceptUpdateAtWithZeroTimeBetweenUpdatesAlwaysAccepts`);
-    negative-value validation not addressed — still open.**
+    every sensor class. Done — zero (`ShouldAcceptUpdateAtWithZeroTimeBetweenUpdatesAlwaysAccepts`)
+    and negative (`ShouldAcceptUpdateAtWithNegativeTimeBetweenUpdatesNeverThrottles`,
+    `SetTimeBetweenUpdatesPropertyAcceptsNegativeValueWithoutThrowing`) are both covered
+    as of `SENSORBASE-008`, which also confirmed "disallowed" doesn't apply — the real
+    API disallows nothing.
 - **Suggested files to inspect or edit:**
   - `include/Microsoft/Devices/Sensors/SensorBase.hpp` (edited)
   - `src/Microsoft/Devices/Sensors/Accelerometer.cpp` (edited)
   - `src/Microsoft/Devices/Sensors/Gyroscope.cpp` (edited)
-  - `src/Microsoft/Devices/Sensors/Compass.cpp` (not edited — still open)
-  - `src/Microsoft/Devices/Sensors/Motion.cpp` (not edited — still open)
+  - `src/Microsoft/Devices/Sensors/Compass.cpp` (edited, `ANDROID-BRIDGE-002`)
+  - `src/Microsoft/Devices/Sensors/Motion.cpp` (edited, `ANDROID-BRIDGE-002`)
   - `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`
   - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp`
@@ -1043,7 +1048,7 @@ not an alternate spelling to preserve.
   - `include/Microsoft/Devices/Sensors/Accelerometer.hpp`
   - `include/Microsoft/Devices/Sensors/Gyroscope.hpp`
 
-### SENSORBASE-008 — Validate `TimeBetweenUpdates` min/max (negative/zero/huge values)
+### SENSORBASE-008 — Validate `TimeBetweenUpdates` min/max (negative/zero/huge values) — CLOSED (2026-07-06, verified correct as-is, no code change)
 
 - **Priority:** Medium
 - **Area:** `SensorBase<T>`
@@ -1058,27 +1063,72 @@ not an alternate spelling to preserve.
   negative interval degrades to "never throttle" (same as `TimeSpan::Zero`) rather than
   crashing or permanently rejecting every update — but this is an accepted fallback, not
   a validated contract a caller can rely on.
+- **Resolution (2026-07-06):** fetched the archived MSDN "previous-versions" pages
+  directly (same technique as `READINGS-002` — the classic
+  `msdn.microsoft.com/en-us/library/<member>(v=VS.11x)` URL form 301-redirects to the
+  current `learn.microsoft.com` archive page even without knowing the numeric ID):
+  - `SensorBase(TSensorReading).TimeBetweenUpdates` property page (MSDN `hh220884`,
+    v=vs.110): syntax is a plain `public TimeSpan TimeBetweenUpdates { get; set; }` —
+    **no Exceptions section, no Remarks describing a valid range**, unlike e.g.
+    `VibrateController.Start(TimeSpan)`, which does document an
+    `ArgumentOutOfRangeException` contract for `[Zero, FromSeconds(5)]` (already
+    correctly implemented in this codebase).
+  - `SensorBase(TSensorReading)` class overview page (MSDN `hh239315`, v=vs.105):
+    confirms the same — `TimeBetweenUpdates` listed as "Gets or sets the preferred time
+    between `CurrentValueChanged` events," no further constraint documented anywhere on
+    the class page either.
+  - **Conclusion: CNA's current unvalidated setter already matches the real, documented
+    (lack of) API contract exactly.** This is not an unvalidated gap to fix — it is a
+    faithful port of a real WP7 API that itself has no input validation. No code change
+    made to `setTimeBetweenUpdatesProperty()`.
+  - The Android-side `ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds()` clamp to
+    `[1, INT32_MAX]` microseconds is unrelated to this question — it is a defensive,
+    internal safety net against undefined behavior in the *native NDK call*
+    (`ASensorEventQueue_setEventRate()` takes an `int32_t`; casting an extreme/negative
+    `double` to it without clamping is UB), not a public-API-level validation decision.
+    Confirmed it already floors a negative input safely (new test below), so no change
+    needed there either.
+  - Added 3 tests locking in the verified-correct behavior, distinct from the
+    stabilization pass's existing throttle-decision test:
+    `SensorBaseTests.SetTimeBetweenUpdatesPropertyAcceptsNegativeValueWithoutThrowing`,
+    `SensorBaseTests.SetTimeBetweenUpdatesPropertyAcceptsMaxValueWithoutThrowing` (both
+    confirm the plain property getter/setter round-trips an extreme value without
+    throwing), and
+    `AndroidSensorBridgeTests.NegativeTimeBetweenUpdatesFloorsToOneMicrosecond` (confirms
+    the Android-side conversion function's existing zero/sub-microsecond-flooring logic
+    already covers negative input safely, not just by coincidence).
+  - Verified: 296/296 tests (up from 293) on plain `cmake-build-debug` and all three
+    sanitizer presets — 0 ASan; TSan 41 reports, all the same pre-existing
+    `sharp-runtime` `TimeSpan::copy_count` race; UBSan 3 reports, all the same
+    pre-existing `Vector3`/`Matrix::GetHashCode()` signed-overflow findings, none in
+    `Microsoft::Devices`.
 - **Required work:**
   - Determine the real WP7 `SensorBase<TSensorReading>.TimeBetweenUpdates` setter's
     documented behavior for out-of-range values (archived MSDN page, not assumption) —
     does it throw `ArgumentOutOfRangeException`, silently clamp, or accept anything?
+    Done — accepts anything, no documented contract (MSDN `hh220884`/`hh239315`).
   - Match that behavior exactly, including for the Android bridge path (`AndroidSensorBridge::
     SetSampleInterval()`/`ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds()`
     already clamps to `[1, INT32_MAX]` microseconds internally — decide whether that
     NDK-level clamp is a sufficient answer for the Android side, or whether
     `setTimeBetweenUpdatesProperty()` itself needs to reject/clamp earlier, at the
-    public-API boundary).
+    public-API boundary). Done — the NDK-level clamp is the correct, sufficient answer;
+    no earlier rejection/clamp belongs at the public-API boundary, since the real API
+    has none.
   - Add tests for the chosen behavior (negative, zero-if-disallowed, and
     `TimeSpan::MaxValue`-scale values), for both the SDL- and Android-backed classes.
+    Done — see the 3 new tests listed above.
 - **Acceptance criteria:**
   - `setTimeBetweenUpdatesProperty()`'s out-of-range behavior matches the real WP7 API,
-    with a citation, not an assumption.
+    with a citation, not an assumption. Done — MSDN `hh220884`/`hh239315`.
   - Tests cover the chosen behavior explicitly (not just the already-existing
-    "doesn't crash" proof from the stabilization pass above).
+    "doesn't crash" proof from the stabilization pass above). Done.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/SensorBase.hpp`
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`
-  - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp`
+  - `include/Microsoft/Devices/Sensors/SensorBase.hpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp` (inspected, no
+    change needed)
+  - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` (edited)
 
 ---
 

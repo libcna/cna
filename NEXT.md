@@ -171,7 +171,8 @@ cross-compiled `CNA` for Android (arm64-v8a, NDK r30, API 24) and confirmed via
 code — **not runtime-verified**, no Android device/emulator run this session. This
 closes `SENSORBASE-001`'s remaining gap for all four sensor classes except
 minimum/maximum `TimeBetweenUpdates` value validation, which is still open (no
-dedicated task exists for it yet).
+dedicated task exists for it yet). **Update:** that validation question was scoped as
+`SENSORBASE-008` and closed the same day — see Section 10.
 
 **2026-07-06 — `DEV-API-001` closed: public API matrix re-verified.** Read every public
 header under `include/Microsoft/Devices/` end-to-end and cross-checked every public
@@ -211,7 +212,9 @@ Android backend (`ANDROID-BRIDGE-002`, only applies the interval once at `Start(
 **fixed later the same day, see the `ANDROID-BRIDGE-002 closed` entry below; this line
 is historical, kept as-is rather than rewritten.**
 `TimeBetweenUpdates` minimum/maximum/negative-value validation (`setTimeBetweenUpdatesProperty()`
-still accepts any value unchanged); the manual demo was not run to visually confirm a
+still accepts any value unchanged) — **update: confirmed via `SENSORBASE-008` (Section
+10) that this is correct as-is, matching the real WP7 API's own undocumented/unvalidated
+setter; closed, not a gap.** The manual demo was not run to visually confirm a
 reduced event rate (no display in this environment this session).
 
 **2026-07-06 — `DEV-BUILD-002` closed: Devices-only test filter corrected.** Extracted
@@ -311,10 +314,12 @@ ever needed. No plan task exists for it yet.
   `Compass`/`Motion` via `Detail::AndroidSensorBridge::SetSampleInterval()` re-applying
   `ASensorEventQueue_setEventRate()` on the live queue. The Android side was only
   confirmed to compile (cross-compile + `llvm-nm`), not runtime-verified — no Android
-  device/emulator run this session. **Still open (not this fix's scope, no dedicated
-  task yet):** `TimeBetweenUpdates` minimum/maximum value validation —
-  `setTimeBetweenUpdatesProperty()` still accepts any value, including negative,
-  unchanged.
+  device/emulator run this session.
+- **Not a bug, closed 2026-07-06 (`SENSORBASE-008`):** `TimeBetweenUpdates` minimum/
+  maximum/negative-value validation — `setTimeBetweenUpdatesProperty()` accepts any
+  value, including negative, unchanged, and this is *correct*: the real WP7
+  `SensorBase(TSensorReading).TimeBetweenUpdates` setter (MSDN `hh220884`/`hh239315`) has
+  no documented validation contract at all — CNA's setter already matches it exactly.
 - **By design, not a bug:** `Compass.TrueHeading` always equals `MagneticHeading` — real
   declination needs a location source, out of scope for `Microsoft::Devices::Sensors`
   (see `docs/location-future-plan.md`). `Motion.Calibrate` is never raised by any
@@ -592,13 +597,60 @@ identically on Android — `std::chrono::steady_clock` is fully standard, no
 platform-specific `#ifdef` needed — but this was not independently re-confirmed via a
 fresh Android build in this pass).
 
-**Next recommended task:** `SENSORBASE-008` (validate `TimeBetweenUpdates` min/max —
-check the real WP7 API's documented behavior for negative/zero/huge values via an
-archived MSDN page, then match it) — small, well-scoped, and a direct, natural
-continuation of what this pass already found and tested defensively. Alternatives, if
-priority is unclear: the `READINGS-002`-era wrong-visibility question is fully closed,
-and the `cna_demo_input` Android build finding from `DEV-BUILD-004` remains open but
-unscoped (see Section 4) if Android example-app coverage is ever wanted.
+**Next recommended task (at the time this summary was first written):** `SENSORBASE-008`
+— see the addendum immediately below; it was picked up and closed the same session.
+
+---
+
+### Addendum: `SENSORBASE-008` closed (2026-07-06, same session)
+
+Continuing directly from the recommendation above. Fetched the archived MSDN
+"previous-versions" pages for `SensorBase(TSensorReading).TimeBetweenUpdates` (MSDN
+`hh220884`, v=vs.110 — plain `public TimeSpan TimeBetweenUpdates { get; set; }`, no
+Exceptions section, no Remarks describing a valid range) and the `SensorBase(TSensorReading)`
+class overview (MSDN `hh239315`, v=vs.105 — same, no further constraint documented).
+**Conclusion: CNA's current unvalidated `setTimeBetweenUpdatesProperty()` already
+matches the real, documented (lack of) API contract exactly — not a gap, verified
+correct as-is.** No code change made to `SensorBase.hpp` or `AndroidSensorBridge.hpp`;
+the Android-side `ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds()` clamp is a
+separate, already-correct internal safety net against native-call UB, unrelated to this
+question.
+
+Added 3 tests locking in the verified behavior (distinct from the stabilization pass's
+throttle-decision test above): `SensorBaseTests.SetTimeBetweenUpdatesPropertyAccepts
+NegativeValueWithoutThrowing`, `...AcceptsMaxValueWithoutThrowing` (plain property
+getter/setter round-trip, no throw), and `AndroidSensorBridgeTests.
+NegativeTimeBetweenUpdatesFloorsToOneMicrosecond` (confirms the existing Android-side
+flooring logic already handles negative input safely).
+
+**Commands run:** same build/test matrix as the stabilization pass above (plain
+`cmake-build-debug`, `devices-ubsan`, `devices-asan`, `devices-tsan`, same documented
+`gtest_filter`) — no Android cross-compile or submodule commands re-run this time
+(nothing in this change touches Android-specific `#ifdef` code or dependencies).
+
+**What passed:** 296 tests (up from 293), 294 passed + 2 expected hardware skips,
+identically on plain `cmake-build-debug` and all three sanitizer presets. ASan: 0
+issues. TSan: 41 reports, all the same pre-existing `sharp-runtime`
+`TimeSpan::copy_count` race. UBSan: 3 reports, all the same pre-existing `Vector3`/
+`Matrix::GetHashCode()` findings, none in `Microsoft::Devices`.
+
+**What failed or could not be run:** nothing new — same standing limitations as the
+stabilization pass above (no Android device/emulator, no fresh Android cross-compile
+this specific pass).
+
+**`plan_devices.md` updates:** `SENSORBASE-008` marked closed with the citations above;
+`SENSORBASE-001`'s header changed from "PARTIALLY CLOSED (min/max validation only
+remaining)" to a plain "CLOSED" now that the one remaining gap is resolved; its
+`Compass.cpp`/`Motion.cpp` "not edited — still open" file notes corrected (they *were*
+edited, by `ANDROID-BRIDGE-002`, in a prior pass — another small stale-status fix found
+along the way, same category as `MOTION-008` earlier in this pass).
+
+**Next recommended task:** no further "next smallest task" is queued from a quick pass
+over `plan_devices.md` — the `cna_demo_input` Android build finding from `DEV-BUILD-004`
+remains open but unscoped (see Section 4) if Android example-app coverage beyond
+`cna_demo_devices` is ever wanted; otherwise, read `plan_devices.md` for its next open
+task (grep for section headers without a "— CLOSED" suffix) or ask the user to
+prioritize.
 
 ---
 

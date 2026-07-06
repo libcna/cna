@@ -183,6 +183,35 @@ TEST(SensorBaseTests, RepeatedSetTimeBetweenUpdatesPropertyToSameValueRaisesOnly
     EXPECT_EQ(sensor.timeBetweenUpdatesChangedCount, 1);
 }
 
+// Task SENSORBASE-008: confirmed via the archived MSDN pages for
+// SensorBase(TSensorReading).TimeBetweenUpdates (MSDN `hh220884`, vs.110) and
+// the SensorBase(TSensorReading) class overview (MSDN `hh239315`, vs.105)
+// that the real WP7 API's setter is a plain `public TimeSpan
+// TimeBetweenUpdates { get; set; }` with no documented Exceptions section and
+// no Remarks describing a valid range — unlike, e.g.,
+// VibrateController.Start(TimeSpan), which does document an
+// ArgumentOutOfRangeException contract. CNA's setTimeBetweenUpdatesProperty()
+// accepting any value unchanged is therefore not an unvalidated gap but a
+// faithful match to the real, documented (lack of) contract. These two tests
+// lock that in explicitly, distinct from
+// ShouldAcceptUpdateAtWithNegativeTimeBetweenUpdatesNeverThrottles above
+// (which covers the throttle *decision*, not the property setter itself).
+TEST(SensorBaseTests, SetTimeBetweenUpdatesPropertyAcceptsNegativeValueWithoutThrowing)
+{
+    TestSensorBase sensor;
+
+    EXPECT_NO_THROW(sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(-10.0)));
+    EXPECT_EQ(sensor.getTimeBetweenUpdatesProperty(), TimeSpan::FromMilliseconds(-10.0));
+}
+
+TEST(SensorBaseTests, SetTimeBetweenUpdatesPropertyAcceptsMaxValueWithoutThrowing)
+{
+    TestSensorBase sensor;
+
+    EXPECT_NO_THROW(sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::MaxValue));
+    EXPECT_EQ(sensor.getTimeBetweenUpdatesProperty(), TimeSpan::MaxValue);
+}
+
 // Confirms setCurrentValueProperty()'s update-then-notify order at the
 // SensorBase<T> level directly: by the time CurrentValueChanged's handler
 // runs, getCurrentValueProperty() must already reflect the new value, not
