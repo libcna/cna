@@ -3140,7 +3140,7 @@ not an alternate spelling to preserve.
     change needed)
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (inspected, no change needed)
 
-### COMPASS-006 — Verify accuracy mapping and `Calibrate` event policy
+### COMPASS-006 — Verify accuracy mapping and `Calibrate` event policy — CLOSED (2026-07-06, real inconsistency found and fixed)
 
 - **Priority:** High
 - **Area:** Compass Events
@@ -3150,23 +3150,70 @@ not an alternate spelling to preserve.
   in this codebase as a deliberate choice, e.g. "`Low` deliberately excluded" from
   triggering `Calibrate`) — this task re-verifies that specific chosen mapping is still
   the right one, not that a mapping exists at all.
+- **Resolution (2026-07-06):** fetched `Compass.Calibrate`'s own archived MSDN page
+  directly (`hh203107(v=vs.105)`) for the first time (previously only referenced
+  informally) — its Remarks state, precisely: *"If the HeadingAccuracy exceeds +/- 20
+  degrees, this event is raised."* Cross-checked this exact, numeric rule against both
+  of CNA's own already-made policies at once (the degree mapping and the firing
+  decision), rather than checking either in isolation, and found a real, previously
+  undetected inconsistency: `Low` mapped to **45°** (`ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees()`)
+  — a value that *exceeds* 20° — while `ShouldRaiseCalibrateForAccuracyStatus()`
+  deliberately does **not** fire `Calibrate` for `Low`. A game checking
+  `HeadingAccuracy > 20` itself (replicating the real, documented rule directly, instead
+  of relying on CNA's `Calibrate` event) would see a contradiction: `Low`'s own reported
+  number claims calibration is needed while CNA's own event says it isn't.
+  - **Fix:** changed `Low`'s mapped value from 45° to exactly **20°** — `20.0` does not
+    itself "exceed" 20 (a strict `>` comparison, matching the documented wording), so it
+    stays consistent with the existing, deliberate "don't fire `Calibrate` for `Low`"
+    decision (kept unchanged — avoiding event spam from a common, momentary reading
+    during normal use remains a legitimate product concern) while no longer
+    contradicting the real API's own documented threshold rule. `Medium` (15°) and
+    `High` (5°) were already consistent (both below 20°, both correctly non-firing);
+    `Unreliable`/`NoContact` (180°) were already consistent (both above 20°, both
+    correctly firing) — `Low` was the only actual mismatch.
+  - Updated `LowAccuracyStatusMapsToFortyFiveDegrees` → `LowAccuracyStatusMapsToTwentyDegrees`
+    (same test, corrected expected value) and added
+    `CalibrateDecisionIsConsistentWithHeadingAccuracyThreshold` — a single test that
+    loops every `AndroidSensorAccuracyStatus` value and asserts
+    `ShouldRaiseCalibrateForAccuracyStatus(status) == (ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees(status) > 20.0)`
+    directly, so a future change to either function that reintroduces this exact class
+    of mismatch fails immediately, rather than requiring another manual cross-check to
+    catch it.
+  - Documented the citation and rationale directly in
+    `ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees()`'s own doc comment.
+  - **`CalibrationEventArgs` content:** re-confirmed a genuinely empty marker class
+    (already established, `READINGS-002`/MSDN `hh220788`) — nothing to verify beyond
+    what's already confirmed.
+  - Verified: 12 `AndroidCompassMathTests` (up from 11 — one renamed, one added), 43
+    total with `CompassTests.*` included, all passing on plain `cmake-build-debug`;
+    also re-confirmed a clean Android NDK cross-compile of the `CNA` target after the
+    header change.
 - **Required work:**
   - Verify the accuracy-status-to-degrees mapping against any available reference (WP7
-    docs, or a reasoned default if none exists).
+    docs, or a reasoned default if none exists). Done — found and fixed a real
+    inconsistency against the one directly relevant reference (`Calibrate`'s own
+    documented threshold).
   - Confirm the current `Calibrate`-firing policy (unreliable/no-contact fire it,
-    low/medium/high do not) doesn't cause event spam in practice.
-  - Add or extend tests for the mapping and for `Calibrate` firing conditions.
+    low/medium/high do not) doesn't cause event spam in practice. Kept unchanged — the
+    firing *policy* itself (which statuses fire) was already reasonable; only the
+    *degree value* assigned to `Low` needed to change to stay consistent with it.
+  - Add or extend tests for the mapping and for `Calibrate` firing conditions. Done —
+    1 test corrected, 1 new cross-check test added.
 - **Acceptance criteria:**
   - Accuracy mapping is documented and tested for every
-    `AndroidSensorAccuracyStatus` value.
-  - `Calibrate` fires only under the intended, tested conditions.
-  - `CalibrationEventArgs` content is verified correct.
+    `AndroidSensorAccuracyStatus` value. Done.
+  - `Calibrate` fires only under the intended, tested conditions. Done, and now
+    provably consistent with the mapped `HeadingAccuracy` values via the new
+    cross-check test.
+  - `CalibrationEventArgs` content is verified correct. Confirmed, already established.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
-  - `include/Microsoft/Devices/Sensors/CalibrationEventArgs.hpp`
-  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
-  - `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp` (inspected, no
+    change needed)
+  - `include/Microsoft/Devices/Sensors/CalibrationEventArgs.hpp` (inspected, no change
+    needed)
+  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp` (edited)
 
 ### COMPASS-007 — Add iOS compass backend plan or implementation
 

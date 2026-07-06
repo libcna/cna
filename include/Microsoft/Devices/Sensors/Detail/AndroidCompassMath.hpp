@@ -77,7 +77,23 @@ namespace Microsoft::Devices::Sensors::Detail
      * degrees but does not define what value corresponds to a given
      * hardware accuracy tier — there is no XNA-documented value to match):
      * `Unreliable`/`NoContact`/any unrecognized value → 180° (worst case,
-     * "could be anything"), `Low` → 45°, `Medium` → 15°, `High` → 5°.
+     * "could be anything"), `Low` → 20°, `Medium` → 15°, `High` → 5°.
+     *
+     * @note `Low`'s value is deliberately exactly 20°, not some larger
+     * "clearly bad" value like the previous 45° (Task COMPASS-006,
+     * 2026-07-06) — the real `Compass.Calibrate` event's own documented
+     * contract (archived MSDN `hh203107(v=vs.105)`) is "If the
+     * HeadingAccuracy exceeds +/- 20 degrees, this event is raised."
+     * `ShouldRaiseCalibrateForAccuracyStatus()` below deliberately does
+     * *not* fire `Calibrate` for `Low` (avoids event spam from a common,
+     * momentary reading during normal use) — so `Low`'s own reported
+     * `HeadingAccuracy` value must not itself exceed 20°, or a game
+     * independently checking `HeadingAccuracy > 20` (matching the
+     * documented real-API rule exactly, instead of relying on `Calibrate`)
+     * would see a contradiction: a "no calibration needed" status reporting
+     * an accuracy number that claims calibration *is* needed. The previous
+     * 45° value did not have this property. `20.0` itself does not "exceed"
+     * 20 (a strict `>` comparison), so it stays consistent with not firing.
      *
      * @param status Accuracy status from the magnetic-field sensor's
      * `ASensorVector::status` field.
@@ -93,7 +109,7 @@ namespace Microsoft::Devices::Sensors::Detail
         case AndroidSensorAccuracyStatus::Medium:
             return 15.0;
         case AndroidSensorAccuracyStatus::Low:
-            return 45.0;
+            return 20.0;
         case AndroidSensorAccuracyStatus::Unreliable:
         case AndroidSensorAccuracyStatus::NoContact:
         default:

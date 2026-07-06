@@ -74,9 +74,16 @@ TEST(AndroidCompassMathTests, MediumAccuracyStatusMapsToFifteenDegrees)
     EXPECT_EQ(ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees(AndroidSensorAccuracyStatus::Medium), 15.0);
 }
 
-TEST(AndroidCompassMathTests, LowAccuracyStatusMapsToFortyFiveDegrees)
+// Task COMPASS-006 (2026-07-06): Low's value was previously 45 degrees,
+// which -- cross-checked against the real Compass.Calibrate event's own
+// documented threshold ("If the HeadingAccuracy exceeds +/- 20 degrees,
+// this event is raised", archived MSDN hh203107) -- silently contradicted
+// ShouldRaiseCalibrateForAccuracyStatus() choosing not to fire Calibrate
+// for Low. Changed to exactly 20 degrees, which does not itself "exceed"
+// 20, keeping the reported value consistent with the no-fire decision.
+TEST(AndroidCompassMathTests, LowAccuracyStatusMapsToTwentyDegrees)
 {
-    EXPECT_EQ(ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees(AndroidSensorAccuracyStatus::Low), 45.0);
+    EXPECT_EQ(ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees(AndroidSensorAccuracyStatus::Low), 20.0);
 }
 
 TEST(AndroidCompassMathTests, UnreliableAccuracyStatusMapsToOneEightyDegrees)
@@ -100,4 +107,32 @@ TEST(AndroidCompassMathTests, LowMediumHighDoNotRaiseCalibrate)
     EXPECT_FALSE(ShouldRaiseCalibrateForAccuracyStatus(AndroidSensorAccuracyStatus::Low));
     EXPECT_FALSE(ShouldRaiseCalibrateForAccuracyStatus(AndroidSensorAccuracyStatus::Medium));
     EXPECT_FALSE(ShouldRaiseCalibrateForAccuracyStatus(AndroidSensorAccuracyStatus::High));
+}
+
+// Task COMPASS-006: for every accuracy status, ShouldRaiseCalibrateForAccuracyStatus()
+// must agree with the real Compass.Calibrate contract ("fires iff HeadingAccuracy
+// exceeds +/- 20 degrees", MSDN hh203107) applied to that same status's own
+// ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees() value -- these are two
+// independently-implemented functions and nothing at the type level keeps them in
+// sync; this test is the cross-check that previously would have caught the
+// Low-status 45-degree/no-fire contradiction fixed by this same task.
+TEST(AndroidCompassMathTests, CalibrateDecisionIsConsistentWithHeadingAccuracyThreshold)
+{
+    constexpr AndroidSensorAccuracyStatus AllStatuses[] = {
+        AndroidSensorAccuracyStatus::NoContact,
+        AndroidSensorAccuracyStatus::Unreliable,
+        AndroidSensorAccuracyStatus::Low,
+        AndroidSensorAccuracyStatus::Medium,
+        AndroidSensorAccuracyStatus::High,
+    };
+
+    for (const AndroidSensorAccuracyStatus status : AllStatuses)
+    {
+        const double headingAccuracy = ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees(status);
+        const bool exceedsDocumentedThreshold = headingAccuracy > 20.0;
+        EXPECT_EQ(ShouldRaiseCalibrateForAccuracyStatus(status), exceedsDocumentedThreshold)
+            << "status " << static_cast<int>(status) << " reports HeadingAccuracy="
+            << headingAccuracy << " but its Calibrate-firing decision doesn't match "
+            << "the documented \"exceeds 20 degrees\" rule";
+    }
 }
