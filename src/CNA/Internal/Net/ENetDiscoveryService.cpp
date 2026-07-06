@@ -166,6 +166,29 @@ namespace CNA::Internal::Net
             }
         }
 
+        // Task 1.3: currentResults_ points at a stack-local std::vector owned by FindSessions()'s
+        // own call frame (see below). Resetting it to nullptr via a plain assignment at the end
+        // of FindSessions() is only reached on the normal, no-exception path - if
+        // HandleReceived/DecodeAnnounce throws mid-poll (e.g. a still-malformed packet reaching
+        // some future decode path, or any other exception), the throw unwinds straight past that
+        // reset, leaving currentResults_ dangling at the about-to-be-destroyed `results` local.
+        // The *next* Poll() call (driven from every NetworkSession::Update()) then writes through
+        // it. This guard's destructor runs during unwinding too, so the reset always happens.
+        class CurrentResultsGuard
+        {
+        public:
+            explicit CurrentResultsGuard(std::vector<AvailableNetworkSession>* results)
+            {
+                currentResults_ = results;
+            }
+            ~CurrentResultsGuard()
+            {
+                currentResults_ = nullptr;
+            }
+            CurrentResultsGuard(const CurrentResultsGuard&) = delete;
+            CurrentResultsGuard& operator=(const CurrentResultsGuard&) = delete;
+        };
+
         // Waits up to timeoutMs for one datagram and processes it. Returns true if a message was
         // handled (so Poll()'s drain loop can keep going without waiting), false on timeout.
         bool PollOnce(ENetSocket sock, uint32_t timeoutMs)
@@ -243,7 +266,7 @@ namespace CNA::Internal::Net
         SendTo(sock, loopbackAddress, bytes);
 
         std::vector<AvailableNetworkSession> results;
-        currentResults_ = &results;
+        CurrentResultsGuard resultsGuard(&results);
 
         auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kSearchWindowMs);
         while (true)
@@ -257,7 +280,6 @@ namespace CNA::Internal::Net
             PollOnce(sock, static_cast<uint32_t>(remaining));
         }
 
-        currentResults_ = nullptr;
         return results;
     }
 

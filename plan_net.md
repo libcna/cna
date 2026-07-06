@@ -75,7 +75,7 @@ resource consumption, or a crashed process — not just XNA-fidelity gaps.
   the timeout, not a benign no-op); restored the fix and reran — completes instantly, full suite
   3234/3236 (2 expected skips), no regressions.
 
-- [ ] **Task 1.3** — Fix the dangling-pointer bug in `ENetDiscoveryService::FindSessions` that
+- [x] **Task 1.3** — Fix the dangling-pointer bug in `ENetDiscoveryService::FindSessions` that
   corrupts memory on the *next* poll after any exception mid-search. Confirmed
   (`src/CNA/Internal/Net/ENetDiscoveryService.cpp`, around lines 246/260): `currentResults_ = &results`
   (a stack-local `std::vector` inside `FindSessions`) is set before the poll loop and only reset to
@@ -83,11 +83,25 @@ resource consumption, or a crashed process — not just XNA-fidelity gaps.
   throws mid-loop (e.g. from the very bugs in Tasks 1.1/1.2, or any other malformed packet), the
   exception unwinds past the `nullptr` reset, leaving `currentResults_` pointing at destroyed stack
   storage. The *next* `Poll()` call (invoked from every `NetworkSession::Update()`) then writes
-  through the dangling pointer via `currentResults_->push_back(...)`. Fix with RAII (e.g. a scope
-  guard that resets `currentResults_` to `nullptr` in a destructor, so it's reset even on exception
-  unwind) rather than a plain post-loop assignment. Add a test that induces an exception mid-poll
-  (a malformed packet) and then confirms a subsequent, well-formed `Poll()`/`FindSessions()` call
-  behaves correctly and doesn't corrupt/crash (run under ASan if available).
+  through the dangling pointer via `currentResults_->push_back(...)`.
+  **Fixed** with a private `CurrentResultsGuard` RAII class whose destructor resets
+  `currentResults_` to `nullptr` unconditionally — runs during exception unwinding too, unlike the
+  old plain post-loop assignment.
+  **Added `ENetDiscoveryServiceTest.MalformedAnnounceDuringSearchDoesNotLeaveADanglingResultsPointer`**
+  (POSIX-only, guarded out on `_WIN32`/`__EMSCRIPTEN__` since it needs a raw UDP socket to simulate
+  an external, untrusted sender): sends a hand-crafted malformed Announce datagram (negative
+  property index, bypassing `Encode()` entirely) directly to the discovery port before
+  `FindSessions()` even starts; confirms `FindSessions()` throws while processing it (Task 1.1's
+  guard); then sends a second, well-formed announce and pumps real `NetworkSession::Update()`
+  calls (exercising the exact production path that drives `Poll()` independent of any
+  `FindSessions()` call in flight) — if `currentResults_` were still dangling, this would write
+  through it right now; finally confirms a completely fresh `FindSessions()` call still finds the
+  real host correctly.
+  **Verified the bug is real and reliably reproducible, not theoretical**: reverted just this
+  fix (back to the old plain assignment) and ran the new test 5 times in a row — **5/5 produced an
+  immediate, consistent segmentation fault (exit code 139)**; restored the fix and reran 3 times —
+  3/3 clean passes, no flakiness either direction. Full suite: 3235/3237 passing (2 expected
+  accelerometer/gyroscope skips).
 
 - [ ] **Task 1.4** — Add exception handling around all `Decode*` calls in
   `ENetBackend::HandleReceive` and `ENetDiscoveryService::HandleReceived` so a single malformed

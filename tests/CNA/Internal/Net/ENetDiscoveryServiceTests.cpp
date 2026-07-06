@@ -9,6 +9,18 @@
 #include <string>
 #include <vector>
 
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+#include "CNA/Internal/Net/NetDiscoveryProtocol.hpp"
+#include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
+#include <arpa/inet.h>
+#include <chrono>
+#include <cstring>
+#include <sys/socket.h>
+#include <thread>
+#include <unistd.h>
+#endif
+
 using namespace CNA::Internal::Net;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 using Microsoft::Xna::Framework::Net::NetworkSession;
@@ -110,3 +122,88 @@ TEST(ENetDiscoveryServiceTest, UnregisterHostIsSafeForAnUnregisteredOrMismatched
     EXPECT_EQ(found.size(), 1u);
 #endif
 }
+
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+namespace {
+    // Mirrors ENetDiscoveryService.cpp's private kDiscoveryPort (61190) - not exposed publicly,
+    // duplicated here deliberately since this test simulates an external, untrusted sender that
+    // wouldn't have access to CNA's own internals either.
+    constexpr uint16_t kTestDiscoveryPort = 61190;
+
+    // Hand-crafts a raw Announce datagram byte-for-byte matching NetDiscoveryProtocol::Encode's
+    // wire format for DiscoveryAnnounceMessage, with a single raw (index, value) property pair -
+    // adversarial when index is negative/huge, well-formed when index is small and non-negative.
+    // This bypasses the normal Encode() path entirely, simulating a crafted/external packet.
+    std::vector<SharpRuntime::bytecs> BuildRawAnnounceWithPropertyIndex(int32_t index, int32_t value) {
+        Microsoft::Xna::Framework::Net::PacketWriter writer;
+        writer.Write(static_cast<SharpRuntime::bytecs>(DiscoveryMessageTag::Announce));
+        writer.Write(kDiscoveryProtocolVersion);
+        writer.Write(static_cast<uint16_t>(4242)); // ConnectPort
+        writer.Write(static_cast<int32_t>(0));     // CurrentGamerCount
+        writer.Write(static_cast<int32_t>(8));     // MaxGamers
+        writer.Write(static_cast<int32_t>(0));     // OpenPrivateSlots
+        writer.Write(static_cast<int32_t>(8));     // OpenPublicSlots
+        writer.Write(std::string("SpoofedHost"));  // HostGamertag
+        writer.Write(static_cast<int32_t>(1));     // presentCount
+        writer.Write(index);
+        writer.Write(value);
+        return NetPacketCodec::ExtractBytes(writer);
+    }
+
+    // Sends bytes to 127.0.0.1:kTestDiscoveryPort over a plain POSIX UDP socket - deliberately not
+    // using ENet at all, since a real attacker on the LAN needs no ENet dependency either; this is
+    // the same unauthenticated raw-socket surface ENetDiscoveryService itself listens on.
+    void SendRawUdpDatagram(uint16_t port, const std::vector<SharpRuntime::bytecs>& bytes) {
+        int sock = socket(AF_INET, SOCK_DGRAM, 0);
+        ASSERT_GE(sock, 0) << "failed to create a raw UDP socket for this test: " << strerror(errno);
+
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        ASSERT_EQ(inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr), 1);
+
+        ssize_t sent = sendto(sock, bytes.data(), bytes.size(), 0,
+                               reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
+        EXPECT_EQ(sent, static_cast<ssize_t>(bytes.size()));
+        close(sock);
+    }
+}
+
+// Task 1.3: HandleReceived/DecodeAnnounce throwing mid-poll (here, via Task 1.1's negative-index
+// guard) used to leave FindSessions()'s currentResults_ pointing at its own about-to-be-destroyed
+// stack-local `results` vector, since the plain `currentResults_ = nullptr;` reset at the end of
+// FindSessions() was skipped by the exception unwinding straight past it. The *next* real announce
+// processed via Poll() (driven from NetworkSession::Update(), exactly as in production) would then
+// write through that dangling pointer. Confirmed fixed via CurrentResultsGuard's RAII reset.
+TEST(ENetDiscoveryServiceTest, MalformedAnnounceDuringSearchDoesNotLeaveADanglingResultsPointer) {
+    SystemLinkSessionFixture host("HostPlayer");
+
+    // Already sitting in the OS socket receive buffer before FindSessions() below even sends its
+    // own query, so it's the first datagram FindSessions()'s poll loop picks up.
+    SendRawUdpDatagram(kTestDiscoveryPort, BuildRawAnnounceWithPropertyIndex(-1, 999));
+
+    EXPECT_THROW(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink), std::runtime_error)
+        << "expected the malformed packet to be processed and throw during this call - if it "
+           "didn't, this test isn't actually exercising the exception-mid-poll scenario";
+
+    // Without Task 1.3's fix, currentResults_ would still be dangling here. Send a second,
+    // well-formed-enough announce and pump real Update() calls (-> ENetDiscoveryService::Poll(),
+    // the passive per-frame responder) so, if the pointer were still dangling, this would write
+    // through it right now — exactly the production code path (Poll() runs on every
+    // NetworkSession::Update(), independent of any FindSessions() call being in flight).
+    SendRawUdpDatagram(kTestDiscoveryPort, BuildRawAnnounceWithPropertyIndex(0, 111));
+    auto pumpDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    while (std::chrono::steady_clock::now() < pumpDeadline)
+    {
+        host.session->Update();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    // The real proof: a completely fresh, well-formed search must still work correctly - no
+    // crash, no corrupted results, exactly as if the malformed packet had never arrived.
+    std::vector<AvailableNetworkSession> found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
+    ASSERT_EQ(found.size(), 1u);
+    EXPECT_EQ(found[0].getHostGamertagProperty(), "HostPlayer");
+    EXPECT_EQ(found[0].GetConnectPort(), ENetBackend::GetBoundPort(host.session));
+}
+#endif // !defined(__EMSCRIPTEN__) && !defined(_WIN32)
