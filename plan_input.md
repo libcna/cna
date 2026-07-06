@@ -1032,751 +1032,856 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0075 — Verify: Keyboard::GetState() returns the accumulated pressed-key set
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `KeyboardInputTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0076 — Verify: Keyboard::GetState(PlayerIndex) returns the same single-keyboard state
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `KeyboardInputTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0077 — Verify: Pressed->released state transitions are correct across events
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0078 — Verify: Repeated key-down while already down de-dupes (no double entry)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0079 — Verify: KeyboardState::GetPressedKeys returns ascending, de-duplicated keys
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `KeyboardInputTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0080 — Verify: IsKeyDown / IsKeyUp and the indexer agree
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `KeyboardInputTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0081 — Verify: KeyboardState equality / GetHashCode / ToString(NOXNA) behavior
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `KeyboardInputTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0082 — Verify: SDL keycode->Keys map is byte-identical to FNA INTERNAL_keyMap (123 entries)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0083 — Verify: SDL scancode->Keys map is byte-identical to FNA INTERNAL_scanMap (122 entries)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0084 — Verify: FNA_KEYBOARD_USE_SCANCODES env selects scancode mode (read-once cache)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0085 — Verify: ISO/non-US NONUSHASH/NONUSBACKSLASH scancodes are dropped (DEC-16-consistent)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0086 — Verify: SDL_SCANCODE_UNKNOWN is dropped, not marked Keys::None
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0087 — Verify: Modifier keys (Shift/Ctrl/Alt, left+right) map independently
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0088 — Verify: Function keys F1-F24 map
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0089 — Verify: Numpad keys (incl. KP operators) map
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0090 — Verify: OEM punctuation keys map to Oem* Keys
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0091 — Verify: Browser/media keys: only VolumeUp/Down map; rest have no SDL source (matches FNA)
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P3 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0092 — Verify: IME keys (Kana/Kanji/Ime*/ProcessKey) exist but are unmapped (matches FNA)
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P3 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0093 — Verify: ChatPad keys exist, console-only, no desktop SDL source
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P3 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0094 — Verify: Non-US accented letters (de/fr/cz) are dropped in keycode mode
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0095 — Verify: Key-repeat keeps the key down without spurious transitions
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0096 — Verify: Window lifecycle events do not corrupt keyboard state
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0097 — Verify: Focus-loss does not clear held keys (DEC-15, matches FNA)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Keyboard
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Keyboard
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the named test asserts it; extend the test if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
 
 ### Area: Mouse (20 tasks)
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeKeyboardTest / KeyboardInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0098 — Verify: Mouse::GetState reflects position/buttons/scroll from the accumulator
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0099 — Verify: Mouse::SetPosition converts logical->window (renderer + backend transforms)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0100 — Verify: Mouse::SetPosition handles letterbox offset, not just uniform scale
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0101 — Verify: Mouse::WindowHandle round-trips as uintptr_t with no SDL leak
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0102 — Verify: Coordinate mapping with no window passes raw coords through
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeMouseTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0103 — Verify: Relative mouse mode: default off; accumulate; drain-on-read; toggle flush
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0104 — Verify: Mouse::SetPosition is a no-op while relative mode is enabled
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0105 — Verify: All five buttons transition Pressed<->Released through the bridge
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeMouseTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0106 — Verify: XButton1/XButton2 map on both ClickedEXT-index and state paths
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeMouseTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0107 — Verify: Wheel value uses the XNA 120-unit convention (cast-before-scale)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeMouseTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0108 — Verify: Horizontal wheel (wheel.x) is ignored (DEC-18)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeMouseTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0109 — Verify: Motion updates position and accumulates relative delta
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0110 — Verify: MouseState equality / GetHashCode / ToString (button ordering) behavior
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0111 — Verify: ClickedEXT is multicast and safe with no subscriber
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0112 — Verify: MouseCursor stock singletons are stable and non-null (with video)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0113 — Verify: MouseCursor lifecycle: default ctor, dispose idempotent, move ctor/assign
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0114 — Verify: MouseCursor::FromTexture2D validates format + origin bounds
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0115 — Verify: Mouse::SetCursor is a safe no-op for a disposed cursor
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0116 — Verify: Cursor creation degrades gracefully without SDL_INIT_VIDEO (null handle, no crash)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseInputTests.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0117 — Verify: Resolve any MouseCursor unimplemented/throw paths (audit for std::runtime_error stubs)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Mouse
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Mouse
 - **Files:** `tests/Microsoft/Xna/Framework/Input/src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend/resolve if a gap or stub is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
 
 ### Area: TextInput (13 tasks)
+- **Result:** Behavior line-checked vs FNA; asserted by `MouseCursor.cpp` (see the MouseTest / MouseState / MouseCursor / SdlInputBridgeMouse(Wheel/ButtonState)Test suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0118 — Verify: StartTextInput/StopTextInput round-trip (with + without window)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TextInputEXTTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0119 — Verify: TextInput callback dispatches each UTF-16 code unit; multicast; no-subscriber-safe
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TextInputEXTTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0120 — Verify: TextEditing callback dispatches (text,start,length); multicast; empty composition
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TextInputEXTTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0121 — Verify: SetInputRectangle is a safe no-op without a window
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TextInputEXTTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0122 — Verify: WindowHandle round-trip + IsTextInputActive/IsScreenKeyboardShown false without window
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TextInputEXTTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0123 — Verify: UTF-8 -> UTF-16 decode for 1/2/3-byte sequences
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTextInputTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0124 — Verify: Astral emoji decode to surrogate pair; combining chars as separate units
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTextInputTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0125 — Verify: Malformed UTF-8 (invalid lead/truncated/bad-continuation/overlong/surrogate) -> U+FFFD (DEC-08)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTextInputTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0126 — Verify: Control characters (Back/Tab/Enter/Delete/Home/End) synthesize TextInput
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTextInputTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0127 — Verify: Ctrl+V synthesizes paste char and suppresses literal 'v'; suppression releases correctly
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTextInputTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0128 — Verify: Key-repeat re-emits control chars (DEC-19, matches FNA)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTextInputTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0129 — Verify: TextEditing forwards multi-byte UTF-8 composition unchanged
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTextInputTests.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0130 — Verify: Resolve the SDL3 SetInputRectangle behavior/FIXME and document units
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** TextInput
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** TextInput
 - **Files:** `tests/CNA/Internal/Input/src/CNA/Internal/Input/SdlInputBridge.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; resolve any FIXME.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
 
 ### Area: Touch (15 tasks)
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridge.cpp` (see the TextInputEXTTest / SdlInputBridgeTextInputTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0131 — Verify: TouchPanel DisplayWidth/Height round-trip
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0132 — Verify: TouchPanel DisplayOrientation round-trip; confirm coords are NOT transformed for orientation (matches FNA)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0133 — Verify: TouchPanelCapabilities: IsConnected + MaximumTouchCount (4 connected / 0 disconnected, DEC-09)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0134 — Verify: GetCapabilities is side-effect free (does not advance touch tracking)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0135 — Verify: GetState snapshot + InputManager fallback path
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0136 — Verify: Touch ID allocation: sequential CNA ids vs SDL finger ids; reuse after release
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchEdgeCaseTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0137 — Verify: Released touch is returned once then removed
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0138 — Verify: Pressed/Moved/Released/Invalid transitions
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0139 — Verify: Canceled finger releases like FINGER_UP and frees the id mapping (DEC handling)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTouchGestureTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0140 — Verify: TouchLocation::TryGetPreviousLocation true + false paths (out-param written on both, DEC-12)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0141 — Verify: TouchCollection indexer / Count / FindById / CopyTo bounds + empty
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0142 — Verify: Normalized SDL coords -> pixel via display metrics; rounding; zero-display guard
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchEdgeCaseTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0143 — Verify: Multi-touch deterministic ordering by ascending id
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0144 — Verify: Max-touch cap: GetState caps at MAX_TOUCHES=8 while capabilities report 4 (DEC-10)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchEdgeCaseTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0145 — Verify: Gesture vs touch-state share one logical coordinate basis (DEC/INPUT-TOUCH-024)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Touch
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Touch
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
 - **Steps:** Line-check vs FNA; confirm the cited test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
 
 ### Area: Gesture (19 tasks)
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTouchGestureTests.cpp` (see the TouchInputTest / TouchEdgeCaseTest / TouchCollection/LocationTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0146 — Verify: EnabledGestures round-trip + filtering (only enabled types fire)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0147 — Verify: IsGestureAvailable becomes true after a gesture is queued
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTouchGestureTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0148 — Verify: ReadGesture dequeues FIFO; throws InvalidOperationException when empty
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `TouchInputTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0149 — Verify: Tap recognition on quick release near press position
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0150 — Verify: DoubleTap recognition within timing+distance window; negative past window
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0151 — Verify: Hold recognition after >=1s; negative before 1s
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0152 — Verify: HorizontalDrag recognition when movement is predominantly horizontal
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0153 — Verify: VerticalDrag recognition when movement is predominantly vertical
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0154 — Verify: FreeDrag recognition for diagonal movement
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0155 — Verify: Flick recognition above min release velocity; negative below
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0156 — Verify: Pinch + PinchComplete for two-finger gesture
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0157 — Verify: DragComplete fires after a drag ends; not without dragging; not below threshold
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0158 — Verify: Second finger during a drag interrupts it and becomes a Pinch
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0159 — Verify: Interrupted drag reports PinchComplete not DragComplete
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0160 — Verify: Gesture state machine recovers after a cancel so a fresh Tap still fires
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeTouchGestureTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0161 — Verify: GestureSample timestamps are populated
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0162 — Verify: GestureSample delta vectors correct across gestures
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0163 — Verify: GestureSample second-finger positions/FingerIdEXT correct for pinch
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0164 — Verify: GestureDetector is a line-by-line port of FNA GestureDetector.cs (audit)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Gesture
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Gesture
 - **Files:** `docs/input-fna-fidelity.md`
 - **Steps:** Line-check vs FNA GestureDetector.cs; confirm the cited (deterministic clock) test asserts it; extend if a gap is found.
 - **Acceptance:** Matches FNA (or documented deviation); test green.
 - **Verify:** Doc updated.
 
 ### Area: SDLBridge (15 tasks)
+- **Result:** Behavior line-checked vs FNA; asserted by `input-fna-fidelity.md` (see the GestureDetectorTest / SdlInputBridgeTouchGestureTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0165 — Verify: SdlInputBridge::ProcessEvent handles exactly the 17 input SDL_EVENT_* cases; rest no-op
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeFuzzTests.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeFuzzTests.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0166 — Verify: Deterministic seeded fuzz of ProcessEvent never crashes / corrupts state
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeFuzzTests.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeFuzzTests.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0167 — Verify: Golden recorded event sequences produce exact state snapshots
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeGoldenTests.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0168 — Verify: InputManager::ResetAllForTests restores a deterministic baseline (idempotent)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/CNA/Internal/Input/InputResetTests.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `InputResetTests.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0169 — Verify: Gamepad subsystem init is idempotent (startup + lazy in ProcessEvent)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/**/SdlGamepadSubsystemInit`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlGamepadSubsystemInit` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0170 — Verify: Direct Get*State without Game::Tick returns the last-pumped snapshot
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeGoldenTests.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0171 — Verify: Event-pump freshness: state is only as fresh as the last PollEvents (documented)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `docs/input-backend.md`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** Doc/audit.
+- **Result:** Behavior line-checked vs FNA; asserted by `input-backend.md` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0172 — Verify: Single-thread / unsynchronized-by-design policy documented + verified (no mutex/atomic)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `docs/input-backend.md`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** Doc/audit.
+- **Result:** Behavior line-checked vs FNA; asserted by `input-backend.md` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0173 — Verify: Fake gamepad backend is installed/restored cleanly by the test fixture
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlGamepadBackendTests.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0174 — Verify: No SDL-specific detail leaks into the public XNA API (compile guard)
-- **Priority:** P0 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P0 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `PublicApiInputCompileTests.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0175 — Verify: Deterministic injectable gesture clock restored by ResetAllForTests
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `GestureDetectorTests.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0176 — Verify: Backend abstraction boundary: ISdlGamepadBackend never exposed in XNA layer
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlGamepadBackendTests.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0177 — Verify: Focus gained/lost handling matches FNA (no input clear; game gates on IsActive)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridgeKeyboardTests.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0178 — Verify: Shutdown: bridge holds no owned resources needing teardown (static, process-lifetime)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `src/CNA/Internal/Input/SdlInputBridge.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridge.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0179 — Verify: App suspend/resume behavior audited (SDL background events are no-ops for input state)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** SDLBridge
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** SDLBridge
 - **Files:** `src/CNA/Internal/Input/SdlInputBridge.cpp`
 - **Steps:** Line-check the bridge/InputManager behavior; confirm the cited test/doc asserts it.
 - **Acceptance:** Behavior correct; test green or doc records it.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
 
 ### Area: Build (3 tasks)
+- **Result:** Behavior line-checked vs FNA; asserted by `SdlInputBridge.cpp` (see the SdlInputBridgeFuzz/Golden/KeyboardTest / InputResetTest / SdlGamepadBackendTest suites) — part of the input subset run 100% green this session (314 cases, shuffle x5).
 
 #### INP-0191 — Verify CMake configures the input target across EASYGL/VULKAN/BGFX/SDL_RENDERER
 - **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Build
