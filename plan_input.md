@@ -57,11 +57,27 @@ Each `A*-*` type task runs this uniform checklist:
 
 # Phase 0 — Baseline, method, inventory
 
-## A0-001 — Record baseline and audit method `[ ]`
-- [ ] Record branch, HEAD commit, compiler/CMake/OS, backends buildable, input gate green.
-- [ ] Record that the previous phase-based plan was replaced (git `8e878d97`) and not copied.
-- [ ] Record the complete type inventory this plan audits (below).
-- [ ] Record the tooling used to re-verify (parity matrix generator, coverage checker, signature freeze).
+## A0-001 — Record baseline and audit method `[x]`
+- [x] Record branch, HEAD commit, compiler/CMake/OS, backends buildable, input gate green.
+- [x] Record that the previous phase-based plan was replaced (git `8e878d97`) and not copied.
+- [x] Record the complete type inventory this plan audits (below).
+- [x] Record the tooling used to re-verify (parity matrix generator, coverage checker, signature freeze).
+
+**Baseline (2026-07-06):**
+- Branch `feature/input` · HEAD `ce828b09` · g++ (Debian 14.2.0-19) 14.2.0 · CMake 3.31.6 · Ninja 1.12.1 ·
+  Linux 6.12.90+deb13-amd64.
+- **Backends:** four build dirs present + current (`cmake-build-input-{easygl,vulkan,bgfx,sdlrenderer}`) plus
+  `cmake-build-input-asan`; `ctest -L input` = **100% green** on EasyGL at baseline.
+- **Previous plan:** the completed phase-based `plan_input.md` was replaced (removed; preserved in git at
+  `8e878d97`); no content copied into this v2 — this is a fresh member-level re-audit.
+- **Inventory:** 26 public types + 4 internal (listed above).
+- **Re-verification tooling:** `tools/input_parity/gen_input_parity_matrix.py` (member parity vs FNA),
+  `tools/input_parity/check_input_test_coverage.py` (type→suite coverage), `PublicApiInputSignatureFreezeTests`
+  + `PublicApiInputCompileTests` (frozen signatures / no SDL leak), the exhaustive enum-value suites, and the
+  input gate `ctest -L input` (shuffle×5) + the ASan/UBSan config.
+
+**Files changed:** `plan_input.md`. **Tests:** none (baseline). **Result:** environment buildable + gate
+green. **Remaining risk:** none.
 
 **Type inventory (26 public + 4 internal):**
 - *Enums (8):* `ButtonState`, `KeyState`, `Keys`, `Buttons`, `GamePadDeadZone`, `GamePadType`,
