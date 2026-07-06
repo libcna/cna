@@ -2053,7 +2053,7 @@ not an alternate spelling to preserve.
   - `docs/devices-api-coverage.md` (edited — citation fixes)
   - `AUDIT.md` (edited — citation fix)
 
-### ACCEL-002 — Audit `ReadingChanged`-related comments for accuracy
+### ACCEL-002 — Audit `ReadingChanged`-related comments for accuracy — CLOSED (2026-07-06)
 
 - **Priority:** High
 - **Area:** Documentation / Code Quality
@@ -2062,21 +2062,57 @@ not an alternate spelling to preserve.
   boundary must exactly match actual dispatch order and behavior — verify this rather
   than assume the existing comment (already present, describing a specific reentrancy
   concern) is still accurate after any later change.
+- **Resolution (2026-07-06):** re-read `DispatchSensorReading()` (`Accelerometer.cpp`)
+  line by line against every relevant comment:
+  - **Firing order, confirmed by reading the actual code, not assumed:**
+    `setCurrentValueProperty(accelerometerReading)` is called first (which raises
+    `CurrentValueChanged` synchronously, inside `SensorBase<T>`), then
+    `ReadingChanged.Raise(...)` is called afterward, directly in
+    `DispatchSensorReading()` — so `CurrentValueChanged` always fires strictly before
+    `ReadingChanged` for the same reading. No existing comment previously stated this
+    order explicitly (there was nothing actively wrong to fix, just an unstated fact) —
+    added an explicit `@note` to `ReadingChanged`'s own doc comment
+    (`Accelerometer.hpp`) recording it, cross-referenced to this task.
+  - **The "destroying from within your own callback" boundary comment (Task P8-1,
+    `dispatchToken_`'s doc comment) is still accurate, re-confirmed against current
+    code:** it states destroying `Accelerometer` from within its own
+    `CurrentValueChanged` handler is unsupported because `DispatchSensorReading()`
+    "unconditionally touches `this` again afterward" — confirmed true today:
+    immediately after `setCurrentValueProperty()` returns, the very next line calls
+    `getIsDataValidProperty()` (a member function on `this`) before deciding whether to
+    raise `ReadingChanged`. No fix needed; the comment matches the current
+    implementation exactly.
+  - Added the same `ff707930` citation to `ReadingChanged`'s own doc comment that
+    `ACCEL-001` established, so its "real, obsolete-since-7.1, still-raised" status is
+    directly citable from the declaration itself, not only from
+    `docs/devices-api-coverage.md`.
+  - Added `AccelerometerTests.CurrentValueChangedFiresBeforeReadingChanged` — a
+    dedicated ordering test (both handlers append a name to a shared `std::vector`,
+    asserts `{"CurrentValueChanged", "ReadingChanged"}` in that exact order) — the
+    existing `ReadingChangedReceivesMatchingXYZ` test already proved args content
+    matches, but nothing previously asserted firing order explicitly.
+  - Verified: 41 `AccelerometerTests` (up from 40, 1 expected hardware skip unchanged),
+    all passing, on plain `cmake-build-debug`.
 - **Required work:**
   - Re-read the current comments in `Accelerometer.hpp`/`.cpp` and
-    `AccelerometerReadingEventArgs.hpp` against the actual dispatch code.
-  - Fix any comment that no longer matches implementation.
+    `AccelerometerReadingEventArgs.hpp` against the actual dispatch code. Done.
+  - Fix any comment that no longer matches implementation. Done — none were wrong;
+    one gap (unstated firing order) filled in.
   - Add tests verifying event raising order (`CurrentValueChanged` then
     `ReadingChanged`, or whatever order is actually implemented) and args content.
+    Done — order test added; content-matching test already existed.
 - **Acceptance criteria:**
-  - No comment contradicts implementation.
+  - No comment contradicts implementation. Confirmed.
   - Tests verify `CurrentValueChanged` and `ReadingChanged` firing order and content
-    together.
+    together. Done — order (new test) and content (pre-existing test) are both now
+    covered, in separate focused tests rather than one combined test, matching this
+    file's existing one-concern-per-test style.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Accelerometer.hpp`
-  - `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp`
-  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
-  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (edited)
+  - `include/Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp` (inspected,
+    no change needed)
+  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (edited)
 
 ### ACCEL-003 — Verify acceleration units
 

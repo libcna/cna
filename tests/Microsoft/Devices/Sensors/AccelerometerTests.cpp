@@ -800,6 +800,36 @@ TEST(AccelerometerTests, ReadingChangedReceivesMatchingXYZ)
     EXPECT_DOUBLE_EQ(receivedArgs.getZProperty(), static_cast<double>(rawZ / StandardGravity));
 }
 
+// Task ACCEL-002: pins down the exact firing order between the two events,
+// not just that both eventually fire with matching content
+// (ReadingChangedReceivesMatchingXYZ above). Confirmed by reading
+// DispatchSensorReading() (Accelerometer.cpp): it calls
+// setCurrentValueProperty() (which raises CurrentValueChanged, via
+// SensorBase<T>) first, then raises ReadingChanged directly afterward —
+// so CurrentValueChanged always fires strictly before ReadingChanged for
+// the same reading, never the reverse and never interleaved.
+TEST(AccelerometerTests, CurrentValueChangedFiresBeforeReadingChanged)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    std::vector<std::string> firedOrder;
+    a.CurrentValueChanged += [&firedOrder](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        firedOrder.emplace_back("CurrentValueChanged");
+    };
+    a.ReadingChanged += [&firedOrder](System::Object*, const AccelerometerReadingEventArgs&)
+    {
+        firedOrder.emplace_back("ReadingChanged");
+    };
+
+    a.InjectSyntheticSensorUpdate(1.0f, 2.0f, 3.0f);
+
+    ASSERT_EQ(firedOrder.size(), 2u);
+    EXPECT_EQ(firedOrder[0], "CurrentValueChanged");
+    EXPECT_EQ(firedOrder[1], "ReadingChanged");
+}
+
 // Task P4-6: confirms Stop() actually disables further synthetic-event
 // dispatch (not just that Start() throws headless — StopDoesNotCrash
 // above already covers that). started_ is cleared by the real Stop()

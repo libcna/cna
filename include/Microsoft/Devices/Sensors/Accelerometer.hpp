@@ -369,9 +369,19 @@ namespace Microsoft::Devices::Sensors
          * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.
          *
          * Deprecated in favor of CurrentValueChanged, which is the WP7 7.1
-         * SensorBase pattern used by every other sensor in this namespace.
-         * Kept and raised here only for API completeness with the real WP7
-         * Accelerometer, which still exposes both.
+         * SensorBase pattern used by every other sensor in this namespace
+         * (archived MSDN page for this event, `ff707930(v=vs.105)`,
+         * re-verified Task ACCEL-001: `[ObsoleteAttribute("use
+         * CurrentValueChanged")]`, "Supported in: 7.0. Obsolete (compiler
+         * warning) in 8.1, 8.0, 7.1" — real, present, still-raised API, not
+         * removed, on every WP7 version). Kept and raised here only for API
+         * completeness with the real WP7 Accelerometer, which still exposes
+         * both.
+         *
+         * @note Firing order (Task ACCEL-002, verified against
+         * DispatchSensorReading()'s actual implementation): CurrentValueChanged
+         * always fires first, ReadingChanged second, for the same reading —
+         * never the reverse, never interleaved.
          */
         System::EventHandler<AccelerometerReadingEventArgs> ReadingChanged;
     };
