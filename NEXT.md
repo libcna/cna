@@ -14,13 +14,13 @@ and `VibrateController` to verified XNA 4.0 / Windows Phone 7 compatibility — 
 strict-XNA-vs-`NOXNA` boundary.
 
 **Current development phase:** working through `plan_devices.md`, a 72-task audit/
-implementation plan rewritten from scratch on 2026-07-05. **32 of 72 tasks are closed
-as of 2026-07-06** (all of Section 2 `DEV-BUILD-*`/Section 4 `VIB-*` now done, plus
-most of Section 3 `DEV-API-*`), the rest open. Tasks are picked up one at a time, each
-with its own build+test+sanitizer verification and its own commit. Working
-autonomously through the remaining tasks in plan order (Sections 6-14:
-Accelerometer/Gyroscope/Compass/Motion/Android bridge/SDL sensor/reading
-structs/demo/final verification).
+implementation plan rewritten from scratch on 2026-07-05. **37 of 72 tasks are closed
+as of 2026-07-06** (all of Section 2 `DEV-BUILD-*`, Section 4 `VIB-*`, and Section 6
+`ACCEL-*` now done, plus most of Section 3 `DEV-API-*`), the rest open. Tasks are
+picked up one at a time, each with its own build+test+sanitizer verification and its
+own commit. Working autonomously through the remaining tasks in plan order (Sections
+7-14: Gyroscope/Compass/Motion/Android bridge/SDL sensor/reading structs/demo/final
+verification).
 
 **Important architectural decisions:**
 - Public API names/signatures match XNA 4.0 (or, for `Microsoft::Devices`, the archived
