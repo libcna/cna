@@ -2316,7 +2316,7 @@ not an alternate spelling to preserve.
     shared with `Gyroscope`, not in `SdlSensorSubsystem.hpp`)
   - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` (edited)
 
-### ACCEL-006 — Add fake accelerometer backend for tests
+### ACCEL-006 — Add fake accelerometer backend for tests — CLOSED (2026-07-06, confirmed already comprehensive, no gap found)
 
 - **Priority:** High
 - **Area:** Tests / Architecture
@@ -2325,19 +2325,56 @@ not an alternate spelling to preserve.
   (`InjectSyntheticSensorUpdate`, `SetStartedForTesting`, `SetSupportedForTesting`,
   confirmed present) — this task is to verify those hooks are sufficient for full
   coverage, or extend them, not to assume no test seam exists yet.
+- **Resolution (2026-07-06):** read `AccelerometerTests.cpp` end to end (41 tests) and
+  cross-checked against each named area:
+  - **Start/Stop:** `StopDoesNotCrash`, `StartOnUnsupportedPlatformThrows`,
+    `FailedStartReleasesSubsystemHoldItAcquired`, `StartThenDisposeDoesNotCrash`,
+    `DisposeWhileStartedForTestingDoesNotCrash`, `ConcurrentStartStopFromMultipleThreadsDoesNotCrash`.
+  - **Event dispatch:** extensive — `CurrentValueChangedReceivesExpectedReading`,
+    `ReadingChangedReceivesMatchingXYZ`, `CurrentValueChangedFiresBeforeReadingChanged`
+    (`ACCEL-002`), `NoDispatchAfterStop`/`NoDispatchAfterDispose`, reentrancy/self-destroy
+    tests, batch-dispatch tests.
+  - **Unit conversion:** covered (`ACCEL-003`'s already-cited tests).
+  - **State:** `GetStatePropertyReflectsSupportStatus`.
+  - **Exceptions:** `StartOnUnsupportedPlatformThrows`, `StopAfterDisposeThrows`,
+    `StartAfterDisposeThrows`, `DisposeSucceedsAndSecondDisposeThrows`,
+    `GetCurrentValuePropertyThrowsWhenUnsupported`, `EleventhSimultaneousInstanceThrows`.
+  - **Throttling (`ACCEL-005`):** confirmed **not** testable through
+    `Accelerometer`'s own hooks, by design, not a gap — `SENSORBASE-001`'s closing note
+    already documents that `InjectSyntheticSensorUpdate()` deliberately bypasses
+    `ShouldAcceptUpdateAt()` (so synthetic-injection tests dispatch immediately,
+    independent of real elapsed time); the throttle decision itself is tested at the
+    `SensorBase<T>` level (`SensorBaseTests.cpp`'s 7 `ShouldAcceptUpdateAt`/
+    `ResetUpdateThrottle` tests), which is the correct, already-established seam for
+    it, not something `AccelerometerTests.cpp` needs to duplicate.
+  - **No test-only surface leaking into strict XNA mode:** confirmed — all 8 testing
+    hooks are `NOXNA`-tagged (re-confirmed by grep), matching `DEV-API-002`'s ongoing
+    audit; no new hook added by this task that would need tagging.
+  - **Conclusion: no gap found, no new fake-backend abstraction needed.** Unlike
+    `Compass`/`Motion` (which needed a fake `ICompassBackend`/`IMotionBackend` because
+    their real backend is Android-only and cannot run in this container at all),
+    `Accelerometer`'s SDL-backed real path already runs on every desktop platform this
+    container builds for — its existing `NOXNA` synthetic-injection hooks
+    (`InjectSyntheticSensorUpdate`/`SetStartedForTesting`/`SetSupportedForTesting`) serve
+    the equivalent purpose without needing a separate backend-interface abstraction, and
+    were already sufficient before this task.
 - **Required work:**
   - Confirm existing testing hooks cover Start/Stop, event dispatch, unit conversion,
     state, exceptions, and throttling (from `ACCEL-005`); extend if any gap is found.
+    Done — all covered; throttling correctly tested one level down, not a gap.
   - Keep the production public API clean of any test-only surface leaking into strict
-    XNA mode (cross-check against `DEV-API-002`).
+    XNA mode (cross-check against `DEV-API-002`). Confirmed, unchanged.
 - **Acceptance criteria:**
   - Unit tests can simulate accelerometer samples end-to-end without SDL hardware.
+    Confirmed, already true.
   - CI (`DEV-BUILD-003`) does not require physical sensor hardware for
-    `AccelerometerTests`.
+    `AccelerometerTests`. Confirmed — `DEV-BUILD-003`'s workflow runs this exact
+    hardware-free suite.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Accelerometer.hpp`
-  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
-  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (inspected, no change
+    needed — already comprehensive)
 
 ### ACCEL-007 — Decide desktop support policy
 
