@@ -212,6 +212,18 @@ TEST(MicrophoneTest, GetDataSingleArgOverloadDelegatesAndReturnsZero)
     EXPECT_EQ(mic.GetData(buffer), 0);
 }
 
+// P10-MIC-004: the single-arg overload delegates to GetData(buffer, 0, buffer.size()) -- an empty
+// buffer makes count == 0, which the 3-arg overload's own validation rejects (matches FNA
+// exactly: Microphone.cs's GetData(byte[]) computes `GetData(buffer, 0, buffer.Length)`, and
+// `count <= 0` throws there too). A genuinely distinct call path from the 3-arg
+// GetDataZeroOrNegativeCountThrows test above, which never goes through the single-arg overload.
+TEST(MicrophoneTest, GetDataSingleArgOverloadWithEmptyBufferThrows)
+{
+    Microphone mic = MakeMic();
+    std::vector<SharpRuntime::bytecs> buffer; // empty -- delegates to count == 0
+    EXPECT_THROW(mic.GetData(buffer), System::ArgumentException);
+}
+
 TEST(MicrophoneTest, GetDataValidRangeReturnsZero)
 {
     Microphone mic = MakeMic();
@@ -394,6 +406,25 @@ TEST_F(MicrophoneCaptureTest, GetDataReturnsNonZeroBytesAfterCapture)
     }
 
     EXPECT_GT(read, 0);
+}
+
+// P10-MIC-004: GetData() after a real Start()-then-Stop() cycle must behave exactly like "never
+// started" (return 0, leave the caller's buffer untouched, MC-3) -- Stop() closes
+// captureStream_, a genuinely different history than
+// GetDataLeavesBufferUntouchedWhenNoDataAvailable (which never opens a stream at all), even
+// though both currently land on the same null-stream code path afterward.
+TEST_F(MicrophoneCaptureTest, GetDataAfterStopReturnsZeroAndLeavesBufferUntouched)
+{
+    REQUIRE_MIC();
+    mic_->Start();
+    mic_->Stop();
+
+    std::vector<SharpRuntime::bytecs> buffer(10, static_cast<SharpRuntime::bytecs>(0xAB));
+    EXPECT_EQ(mic_->GetData(buffer, 0, 10), 0);
+    for (auto b : buffer)
+    {
+        EXPECT_EQ(b, static_cast<SharpRuntime::bytecs>(0xAB));
+    }
 }
 
 // MC-4: GetQueuedBytes/CheckBuffer were only just wired up to real SDL data (T-4A); before

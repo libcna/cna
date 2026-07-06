@@ -3712,14 +3712,29 @@ restoration can be reverted.
   case that can't be tested any other way within one process.
 * [x] P10-MIC-003: Tests for Start/Stop state transitions.
   *Note:* Covered pre-existing.
-* [ ] P10-MIC-004: Tests for `GetData` before start/after stop/after dispose/bad offsets-counts/
+* [x] P10-MIC-004: Tests for `GetData` before start/after stop/after dispose/bad offsets-counts/
   small buffers.
-  *Note:* Offset/count overflow specifically: fixed and tested (`Microphone::GetData`'s int32
-  `offset+count` overflow, the SAME overflow-class bug found and fixed twice before in
-  `SoundEffect`/`DynamicSoundEffectInstance`, `P9-AUDIT-001..005`). Before-start/after-stop/after-
-  dispose/small-buffer cases specifically were not individually re-confirmed against a checklist
-  in this pass -- believed covered given `MicrophoneTests.cpp`'s 31 cases, but not verified
-  exhaustively; left open rather than assumed.
+  *Note:* Closed this pass. Offset/count overflow: already fixed and tested (unchanged, see
+  original note below). "After dispose" doesn't apply -- confirmed `Microphone` has no
+  `Dispose()`/`IDisposable` at all, matching FNA's own `Microphone.cs` (neither has one), so this
+  sub-case was never applicable, not an oversight. Before-start: already effectively covered
+  (`GetDataSingleArgOverloadDelegatesAndReturnsZero`'s own comment already documents "never
+  Start()-ed"), but "small buffer" specifically had no dedicated test through the single-arg
+  overload's own delegation path -- added `GetDataSingleArgOverloadWithEmptyBufferThrows` (empty
+  buffer -> `GetData(buffer, 0, 0)` -> `count<=0` throws, matches FNA's identical
+  `GetData(byte[])` -> `GetData(buffer, 0, buffer.Length)` chain exactly). After-stop: genuinely
+  untested as its own case (only "never started" was covered) -- added
+  `GetDataAfterStopReturnsZeroAndLeavesBufferUntouched` in the real-device `MicrophoneCaptureTest`
+  fixture (the "Default Device" entry opens for real even under the dummy driver, per that
+  fixture's own comment, so this runs for real rather than `GTEST_SKIP`-ing in headless CI):
+  `Start()` then `Stop()` then `GetData()` must return 0 and leave the buffer untouched, the same
+  observable behavior as never-started but reached via a genuinely different code path
+  (`captureStream_` opened then explicitly closed, not simply never opened). Full suite:
+  3304/3306 pass (2 pre-existing hardware-only skips).
+
+  *Original note (offset/count overflow), unchanged:* Fixed and tested (`Microphone::GetData`'s
+  int32 `offset+count` overflow, the SAME overflow-class bug found and fixed twice before in
+  `SoundEffect`/`DynamicSoundEffectInstance`, `P9-AUDIT-001..005`).
 * [x] P10-MIC-005: Verify `BufferDuration` validation quirks against XNA/FNA; document decision.
   *Note:* Already audited and documented in earlier Fáze work (not re-verified line-by-line in
   this pass, but no contradicting evidence found).
