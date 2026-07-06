@@ -236,7 +236,7 @@ independent task instead of guessing.
   pre-existing expected skips, zero regressions. `DEVICES-CNA-006` (the dedicated
   Phase 1 sanitizer verification pass) is next.
 
-### DEVICES-CNA-006 — Phase 1 verification pass
+### DEVICES-CNA-006 — Phase 1 verification pass — CLOSED (2026-07-07)
 
 - **Priority:** High
 - **Required work:** build `CnaTests` with `-DCNA_DEVICES=ON`, run the full new
@@ -245,6 +245,31 @@ independent task instead of guessing.
   `CNA_DEVICES=OFF` (default) still builds with zero new warnings/symbols.
 - **Acceptance criteria:** documented exact pass/fail/skip counts for both the plain and
   sanitizer runs, mirroring `plan_devices.md`'s `VERIFY-001`/`VERIFY-002` precedent.
+- **Resolution:** Ran all 18 tests across the 5 Phase 1 `CNA::Devices` suites
+  (`PowerInfoTests` 4, `LocaleTests` 3, `ClipboardTests` 5, `UrlLauncherTests` 3,
+  `SystemInfoTests` 3) together under both sanitizer presets, reconfigured with
+  `-DCNA_DEVICES=ON`:
+  - **`devices-asan`** (`ASAN_OPTIONS=detect_leaks=1`): **18/18 passed, zero ASan
+    reports.** Confirms `Locale`/`Clipboard`'s manual `SDL_free()` boundaries are
+    leak-free under the full combined suite, not just their own individual test files
+    in isolation.
+  - **`devices-ubsan`**: **18/18 passed, zero UBSan reports** (`grep -c "runtime
+    error"` on the full output — `0`, verified directly rather than eyeballed).
+  - **`CNA_DEVICES=OFF` (default) unaffected:** configured a fresh, separate build
+    directory with no `CNA_DEVICES` flag at all (true default), confirmed via `grep`
+    that `-DCNA_DEVICES` is absent from `CNA.dir/flags.make`, then built the `CNA`
+    target from scratch — clean, and confirmed via `build.make` that all 5 new
+    `src/CNA/Devices/*.cpp` files are still compiled (as empty, `#ifdef`-gated
+    translation units, exactly like `CNA::Graphics`'s existing `CNA_NOXNA` behavior) —
+    zero new warnings, zero new symbols, no observable difference from before this
+    plan's work began.
+  - Plain `cmake-build-debug` build (no sanitizer) was already exercised continuously
+    across `DEVICES-CNA-001` through `-005`, each time confirming the full existing
+    Devices/Sensors filter plus every `CNA::Devices` suite added so far — last full
+    count (after `DEVICES-CNA-005`): 361 tests, 359 passed, 2 pre-existing expected
+    hardware-gated skips.
+  - **Phase 1 is now fully verified and complete.** `DEVICES-CNA-007` (`DisplayInfo`,
+    Phase 2) is next.
 
 ---
 
@@ -346,6 +371,11 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — DEVICES-CNA-006 CLOSED. Phase 1 fully verified and complete.** All 18
+  tests across 5 `CNA::Devices` suites pass under `devices-asan` (0 reports) and
+  `devices-ubsan` (0 reports); `CNA_DEVICES=OFF` default confirmed unaffected in a
+  fresh build directory. Next: `DEVICES-CNA-007` (`DisplayInfo`, Phase 2 — needs a
+  short design pass on window ownership first).
 - **2026-07-07 — DEVICES-CNA-005 CLOSED.** `CNA::Devices::SystemInfo` implemented, 3
   tests. **All five Phase 1 capabilities now implemented.** Full suite 361/361 (359
   pass + 2 expected skips). Next: `DEVICES-CNA-006` (Phase 1 sanitizer verification
