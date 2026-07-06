@@ -205,5 +205,11 @@ namespace CNA::Internal::Input
 
         /** @brief NOXNA/EXT: the currently active keyboard modifier/lock keys (SDL_GetModState). */
         static CNA::Input::KeyModifiersEXT GetModState();
+
+        /** @brief NOXNA/EXT: the physical (layout-independent) name of a key, or "" if it has none. */
+        static std::string GetScancodeName(Microsoft::Xna::Framework::Input::Keys key);
+
+        /** @brief NOXNA/EXT: the Keys value for a physical key name, or Keys::None if unrecognized. */
+        static Microsoft::Xna::Framework::Input::Keys GetScancodeFromName(const std::string& name);
     };
 }

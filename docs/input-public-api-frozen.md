@@ -205,6 +205,8 @@ override must be added.
 - `static KeyboardState GetState(PlayerIndex);` — STRICT
 - `static Keys GetKeyFromScancodeEXT(Keys);` — EXT
 - `static CNA::Input::KeyModifiersEXT GetModStateEXT();` — NOXNA/EXT (active Shift/Ctrl/Alt/Gui + Caps/Num/Scroll/Mode lock flags)
+- `static std::string GetScancodeNameEXT(Keys);` — NOXNA/EXT (physical key name; "" if none)
+- `static Keys GetScancodeFromNameEXT(const std::string&);` — NOXNA/EXT (inverse; Keys::None if unrecognized)
 
 ### `KeyboardState` — struct (XNA)
 - `KeyboardState();` — NOXNA
