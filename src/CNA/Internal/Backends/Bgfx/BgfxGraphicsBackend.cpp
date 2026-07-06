@@ -1265,8 +1265,29 @@ namespace CNA::Internal::Backends::Bgfx
             layout.add(bgfx::Attrib::Weight,    4, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::Indices,   4, bgfx::AttribType::Uint8);
         }
+        else if (stride == 20)
+        {
+            // VertexPositionTexture: pos(3f=12) + uv(2f=8)
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+        }
+        else if (stride == 24)
+        {
+            // VertexPositionColorTexture: pos(3f=12) + color(4xu8=4) + uv(2f=8)
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Color0,    4, bgfx::AttribType::Uint8, true);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+        }
+        else if (stride == 32)
+        {
+            // VertexPositionNormalTexture: pos(3f=12) + normal(3f=12) + uv(2f=8)
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+        }
         else
         {
+            // VertexPositionColor (stride 16), and any other/unknown stride as a fallback.
             layout.add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float);       // 12 bytes at offset 0
             layout.add(bgfx::Attrib::Color0,   4, bgfx::AttribType::Uint8, true); // 4 bytes at offset 12
             if (stride > 16)

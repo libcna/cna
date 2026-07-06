@@ -38,7 +38,12 @@ namespace Microsoft::Xna::Framework::Graphics
         p.ambientColor[1] = ambientLightColor_.Y;
         p.ambientColor[2] = ambientLightColor_.Z;
 
-        const Vector3 ld  = DirectionalLight0.getDiffuseColorProperty();
+        // FNA's DirectionalLight.Enabled setter zeroes the GPU-facing diffuse/specular parameters
+        // when disabled (DirectionalLight.cs), regardless of what DiffuseColor is still set to at
+        // the C# property level. CNA's DirectionalLight has no such side effect, so the gating
+        // must happen here.
+        const bool    light0On = DirectionalLight0.getEnabledProperty();
+        const Vector3 ld  = light0On ? DirectionalLight0.getDiffuseColorProperty() : Vector3::Zero;
         const Vector3 dir = DirectionalLight0.getDirectionProperty();
         p.light0Dir[0]     = dir.X; p.light0Dir[1]     = dir.Y; p.light0Dir[2]     = dir.Z;
         p.light0Diffuse[0] = ld.X;  p.light0Diffuse[1] = ld.Y;  p.light0Diffuse[2] = ld.Z;
