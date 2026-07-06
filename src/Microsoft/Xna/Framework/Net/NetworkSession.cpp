@@ -338,6 +338,16 @@ namespace Microsoft::Xna::Framework::Net
         adding->SetId(static_cast<SharpRuntime::bytecs>(allGamers_.getCountProperty()));
         localGamers_.Add(adding);
         allGamers_.Add(adding);
+
+        // Task 2.3: AddRemoteGamer (below) already enqueues a GamerJoin event so a handler
+        // already subscribed before it runs still learns about the new gamer; AddLocalGamer never
+        // did, so a handler subscribed before this call had no way to learn about the newly-added
+        // local gamer at all (no replay hook covers this path - SetReplayHook only fires on
+        // subscription, not on a later Add()).
+        NetworkEvent evt;
+        evt.Type = NetworkEventType::GamerJoin;
+        evt.Gamer = adding;
+        SendNetworkEvent(std::move(evt));
     }
 
     NetworkGamer* NetworkSession::FindGamerById(SharpRuntime::bytecs gameId) const

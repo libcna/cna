@@ -242,14 +242,34 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   really did keep appearing forever. Restored the fix and reran — passes. Full suite:
   **3240/3242 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.3** — Fix `NetworkSession::AddLocalGamer` never raising `GamerJoined`. Confirmed:
-  `AddLocalGamer` only does `localGamers_.Add(adding); allGamers_.Add(adding);` with no event
+- [x] **Task 2.3** — Fix `NetworkSession::AddLocalGamer` never raising `GamerJoined`. Confirmed:
+  `AddLocalGamer` only did `localGamers_.Add(adding); allGamers_.Add(adding);` with no event
   enqueue, unlike `AddRemoteGamer` (~lines 396-405), which explicitly enqueues a
-  `NetworkEventType::GamerJoin` event. This is the same class of bug as the just-fixed Task 12.3
+  `NetworkEventType::GamerJoin` event. Same class of bug as the earlier-fixed Task 12.3
   (`GamerJoined` replay-on-subscribe), but for a still-broken code path: a handler already
-  subscribed before `AddLocalGamer` runs never learns about the newly-added local gamer at all (no
-  replay, no queue). Fix: enqueue a `GamerJoin` event the same way `AddRemoteGamer` does. Add a test
-  subscribing to `GamerJoined` before calling `AddLocalGamer` and asserting it fires.
+  subscribed before `AddLocalGamer` ran never learned about the newly-added local gamer at all (no
+  replay, no queue).
+  **Fixed:** `AddLocalGamer` now enqueues a `NetworkEventType::GamerJoin` event for the newly-added
+  gamer, the same way `AddRemoteGamer` does.
+  **Added `NetworkSessionTest.AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler`.**
+  `AddLocalGamer`'s successful (non-throwing) path had never been exercised at all before this task
+  — every existing fixture using the explicit-local-gamers `Create()`/`JoinInvited()` overloads has
+  zero spare local-gamer capacity by construction (`maxLocalGamers_` == the passed list's exact
+  size), and the `maxLocalGamers`-only overload falls back to the global `Gamer::SignedInGamers`,
+  which defaults to empty in this test binary — an empty list makes the constructor's
+  `host_ = localGamers_[0]` throw, permanently corrupting the process-wide `activeAction_` (a
+  documented "cannot safely be unit-tested" trap, per this file's own NOTE above the
+  Create/BeginCreate/EndCreate family). This test gets spare capacity safely instead: it
+  temporarily installs its own one-gamer global `SignedInGamerCollection` (restored via an RAII
+  guard), then calls `Create(Local, /*maxLocalGamers=*/2, 8)` — only 1 of the 2 slots fills at
+  construction, leaving room for one real `AddLocalGamer` call, whose `GamerJoined` firing (for an
+  already-subscribed handler, after resetting past the construction-time replay) is then asserted.
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with
+  `joinCount` `0` (expected `1`) and `joinedGamer` `nullptr` (expected non-null) — the handler
+  genuinely never learned about the new local gamer. Restored the fix and reran — passes. Full
+  suite: **3241/3243 passing** (2 expected accelerometer/gyroscope skips), no regressions, and no
+  cross-test pollution from the temporary global swap (full `NetworkSessionTest.*` suite — 39 tests
+  — reruns clean).
 
 - [ ] **Task 2.4** — Fix the local-gamer `Id`-collision bug after remove-then-add churn. Confirmed:
   `NetworkSession`'s constructor assigns sequential local-placeholder ids (`nextLocalId` starting at

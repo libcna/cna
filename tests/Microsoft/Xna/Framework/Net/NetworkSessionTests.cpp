@@ -2,7 +2,9 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Net/ENetBackend.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "System/ArgumentException.hpp"
@@ -12,7 +14,9 @@
 #include "System/ObjectDisposedException.hpp"
 
 using namespace Microsoft::Xna::Framework::Net;
+using Microsoft::Xna::Framework::GamerServices::Gamer;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
+using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
 
 namespace {
     SignedInGamer MakeSignedInGamer(const std::string& tag = "tag1") {
@@ -232,13 +236,58 @@ TEST(NetworkSessionTest, JoinInvitedMakesLocalGamersReportIsHostFalse) {
     session->Dispose();
 }
 
-// NOTE: AddLocalGamer()'s successful (non-throwing) path is not exercised here, for the same
-// reason AddLocalGamerThrowsAtMaxLimit's own comment explains: the explicit-local-gamers Create()/
-// JoinInvited() overloads always set maxLocalGamers_ to the passed list's size, so any session
-// constructed through them already has zero spare capacity — AddLocalGamer always throws
-// immediately. There is no currently-safe way to construct a session with spare local-gamer
-// capacity (the maxLocalGamers-only overloads fall back to the empty global Gamer::SignedInGamers
-// in this test binary — see this file's own top-of-file note on why that's unsafe to exercise).
+// NOTE: the explicit-local-gamers Create()/JoinInvited() overloads always set maxLocalGamers_ to
+// the passed list's size (zero spare capacity — see AddLocalGamerThrowsAtMaxLimit's own comment
+// above), and the maxLocalGamers-only overload falls back to the global Gamer::SignedInGamers,
+// which defaults to empty in this test binary (unsafe to exercise directly — see the NOTE above
+// the Create/BeginCreate/EndCreate family below: an empty list makes the constructor's
+// `host_ = localGamers_[0]` throw, corrupting activeAction_ for the rest of the process). The next
+// test gets spare local-gamer capacity safely by temporarily installing its own one-gamer global
+// list (restored via RAII) before using the maxLocalGamers-only overload, so the constructor's
+// empty-list throw path is never reached.
+
+// Task 2.3: AddLocalGamer only did localGamers_.Add(adding); allGamers_.Add(adding); with no event
+// enqueue at all — unlike AddRemoteGamer just below, which explicitly enqueues a GamerJoin event.
+// A handler already subscribed before AddLocalGamer ran never learned about the newly-added local
+// gamer (no replay, no queued event).
+TEST(NetworkSessionTest, AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler) {
+    SignedInGamerCollection* previousGlobal = Gamer::getSignedInGamersProperty();
+    SignedInGamer extraGamer = MakeSignedInGamer("ExtraTag");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&extraGamer})
+    ));
+    struct RestoreGlobalGuard {
+        SignedInGamerCollection* previous;
+        ~RestoreGlobalGuard() { Gamer::setSignedInGamersProperty(previous); }
+    } restoreGuard{previousGlobal};
+
+    // maxLocalGamers=2, but only 1 gamer (extraGamer) is actually signed in globally, so the
+    // constructor only fills 1 of the 2 local-gamer slots - leaving room for AddLocalGamer below.
+    NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 2, 8);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+
+    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
+    int joinCount = 0;
+    NetworkGamer* joinedGamer = nullptr;
+    session->GamerJoined += [&joinCount, &joinedGamer](System::Object*, const GamerJoinedEventArgs& e) {
+        ++joinCount;
+        joinedGamer = e.getGamerProperty();
+    };
+    // The += above already replayed once for extraGamer (Task 12.3's SetReplayHook) - reset so
+    // this test isolates AddLocalGamer's own new join below.
+    joinCount = 0;
+    joinedGamer = nullptr;
+
+    session->AddLocalGamer(&newGamer);
+    EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 2);
+
+    session->Update();
+    EXPECT_EQ(joinCount, 1);
+    ASSERT_NE(joinedGamer, nullptr);
+    EXPECT_EQ(joinedGamer, session->getLocalGamersProperty()[1]);
+
+    session->Dispose();
+}
 
 TEST(NetworkSessionTest, UpdateAfterDisposeThrows) {
     auto gamer = MakeSignedInGamer();
