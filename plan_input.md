@@ -1223,12 +1223,19 @@ computed). **Files changed:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp
 **Tests:** pass. **Behavior verified:** flick needs distance AND velocity AND enablement; Delta encodes
 direction. **Remaining risk:** none.
 
-## P6-012 — Verify pinch detection
-- [ ] Test two-finger pinch start.
-- [ ] Test pinch delta.
-- [ ] Test pinch complete.
-- [ ] Test one finger released.
-- [ ] Add tests.
+## P6-012 — Verify pinch detection `[x]`
+- [x] Test two-finger pinch start.
+- [x] Test pinch delta.
+- [x] Test pinch complete.
+- [x] Test one finger released.
+- [x] Add tests.
+
+**Result (2026-07-06):** Fully covered by `PinchAndPinchCompleteFireForTwoFingerGesture`: two-finger start
+(Press 20 then 21 → PINCHING), delta (`Delta.X==-100, Delta2.X==0`, plus Position 300 / Position2 600,
+FingerIds 20/21), complete (reads PinchComplete after `Release(20)`), and **one finger released mid-pinch**
+(finger 20 lifted while 21 still down → PinchComplete). Also `DragInterruptedByASecondFingerReportsPinchComplete
+NotDragComplete` exercises the pinch-from-drag path. **Files changed:** none (coverage confirmed).
+**Behavior verified:** two-finger pinch start/delta/complete/single-release. **Remaining risk:** none.
 
 ## P6-013 — Verify pinch-complete gesture
 - [ ] Test pinch-complete queue entry.
