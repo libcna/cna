@@ -21,6 +21,7 @@
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
 #include "Microsoft/Devices/VibrateController.hpp"
 #include "CNA/CNAHelper.hpp"
+#include "System/TimeSpan.hpp"
 
 // Demo/manual-verification screen for Microsoft::Devices (plan_devices_phase4.md
 // Task P4-14). Mirrors examples/demo_input's Game-subclass, rectangle-only visual
@@ -72,6 +73,7 @@ private:
 
     void HandleVibrationInput(const KbState& kb);
     void HandleSensorToggleInput(const KbState& kb);
+    void HandleTimeBetweenUpdatesInput(const KbState& kb);
     void UpdateWindowTitle();
 
     Microsoft::Xna::Framework::Graphics::SpriteBatch* spriteBatch_ = nullptr;
@@ -116,4 +118,15 @@ private:
     // "what did the demo itself last ask for."
     bool accelStarted_ = false;
     bool gyroStarted_ = false;
+
+    // Task DEMO-001: shared TimeBetweenUpdates applied identically to all
+    // four sensor instances (Numpad +/- adjust it, doubling/halving per
+    // press so a wide, useful test range is reachable in only a handful of
+    // keypresses) — lets a human tester manually verify SENSORBASE-001/
+    // ACCEL-005/GYRO-004/MOTION-008's throttling behavior on real hardware
+    // without recompiling. Not itself read back from any sensor (all four
+    // start at, and are kept in sync with, the same value), since
+    // SensorBase<T>'s own default (2ms) is already identical across all
+    // four classes (confirmed SENSORBASE-002).
+    System::TimeSpan timeBetweenUpdates_ = System::TimeSpan::FromMilliseconds(2.0);
 };

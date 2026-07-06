@@ -4835,7 +4835,7 @@ not an alternate spelling to preserve.
 
 ## 13. Demo and manual QA tasks
 
-### DEMO-001 — Make `demo_devices` show all sensor states
+### DEMO-001 — Make `demo_devices` show all sensor states — CLOSED (2026-07-06, TimeBetweenUpdates controls added + title-bar data-completeness gaps closed)
 
 - **Priority:** Medium
 - **Area:** Demo
@@ -4859,6 +4859,50 @@ not an alternate spelling to preserve.
   - `examples/demo_devices/src/DevicesDemo.hpp`
   - `examples/demo_devices/src/Main.cpp`
   - `examples/demo_devices/android/`
+- **Resolution:** Read `DevicesDemo.cpp`/`.hpp` in full before assuming anything was
+  missing, per this task's own instruction. Found the demo was already substantially
+  built out from earlier tasks (P4-14/P9-6/DEVICES-0137): all four sensors' support
+  status/`SensorState`/event-flash are drawn on-screen, vibration already covers
+  `Start(TimeSpan)` (key `1`), the `NOXNA` intensity variant (`2`/`3`), `StartLeftRight`
+  (`4`/`5`/`6`), and `getIsSupportedProperty()`/`getDeviceNameProperty()` were already in
+  the title bar — that part of "Required work" needed no changes. Two real, concrete
+  gaps remained: **(1)** `TimeBetweenUpdates` had no interactive control at all, despite
+  being explicitly named in "Required work" and tying directly into on-hardware
+  verification of `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`/`MOTION-008`'s throttling
+  behavior. **(2)** the demo's own established rationale (`UpdateWindowTitle()`'s doc
+  comment) states the title bar is deliberately "its one text-output channel" for
+  complete data (no `SpriteFont`/`Content` dependency) — but the title bar only ever
+  showed `IsDataValid` for Accelerometer/Gyroscope, never Compass/Motion, and never
+  displayed `CompassReading.HeadingAccuracy`/`MagnetometerReading` or any of
+  `MotionReading.DeviceRotationRate`/`Attitude`/full `DeviceAcceleration`/`Gravity` —
+  contradicting the class's own "enough data to write a bug report" design intent for
+  two of the four sensors. Fixed both: added `HandleTimeBetweenUpdatesInput()` (Numpad
+  `+`/`-` double/halve a shared `timeBetweenUpdates_` member, clamped to `[1ms,
+  1000ms]`, applied identically to all four sensors via their own
+  `SensorBase<T>::setTimeBetweenUpdatesProperty()` — safe whether or not each sensor is
+  currently started, confirmed by that setter's own contract); extended
+  `UpdateWindowTitle()` to add Compass/Motion `IsDataValid`, every remaining
+  `CompassReading`/`MotionReading` field, and the live `TimeBetweenUpdates` value. The
+  on-screen bars were deliberately left as a partial "at a glance" view (unchanged) —
+  the title bar is this demo's one channel required to carry everything, per its own
+  prior design decision, not the bars. Build: `cmake --build cmake-build-debug --target
+  cna_demo_devices` succeeded. Runtime check: ran the built binary under `xvfb-run`
+  (this sandboxed container's only available display) for 6-8 continuous seconds
+  (well past the 10-frame title-refresh interval and hundreds of
+  `HandleTimeBetweenUpdatesInput()`/`UpdateWindowTitle()` calls) with no crash,
+  exception, or error output — confirms the new code paths execute repeatedly without
+  fault. **Honest limitation, stated directly rather than glossed over:** could not
+  visually confirm the on-screen window title *text* itself in this environment —
+  `xdotool`/`xprop`/`xwininfo` could not locate/read the mapped SDL window's title
+  property under this container's software-GL Xvfb setup (a sandbox tooling gap, not
+  evidence of a code problem; the amdgpu DRI backend errors in `Xvfb`'s own log are
+  pre-existing and unrelated). No physical/interactive display was available to verify
+  the title text renders as intended, matching this codebase's own established honesty
+  norm for hardware/display limitations it cannot fully close (e.g. "no physical
+  Android device has ever been used"). This task changed only
+  `examples/demo_devices/` files, not any `CNA` library code, so no Android
+  cross-compile was needed to verify it (the demo's own Android packaging is a
+  separate Gradle build, `examples/demo_devices/android/`, not exercised this task).
 
 ### DEMO-002 — Add a hardware QA report template
 

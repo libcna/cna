@@ -129,6 +129,7 @@ void DevicesDemo::Update(GameTime& gameTime)
 
     HandleVibrationInput(kb);
     HandleSensorToggleInput(kb);
+    HandleTimeBetweenUpdatesInput(kb);
     previousKeyboardState_ = kb;
 
     ++accelFramesSinceEvent_;
@@ -228,10 +229,56 @@ void DevicesDemo::HandleSensorToggleInput(const KbState& kb)
     }
 }
 
+// Task DEMO-001: Numpad +/- double/halve timeBetweenUpdates_ (clamped to
+// [1ms, 1000ms], a range comfortably spanning "as fast as this codebase
+// will ever allow" to "clearly visibly throttled"), applied to all four
+// sensors identically via their own SensorBase<T>::setTimeBetweenUpdatesProperty()
+// -- a safe call whether or not each sensor is currently started
+// (ACCEL-005/GYRO-004/ANDROID-BRIDGE-002's own contract: forwarded live to
+// a running backend, or simply stored for the next Start() otherwise).
+void DevicesDemo::HandleTimeBetweenUpdatesInput(const KbState& kb)
+{
+    auto justPressed = [&](Keys key)
+    {
+        return kb.IsKeyDown(key) && !previousKeyboardState_.IsKeyDown(key);
+    };
+
+    constexpr double MinMs = 1.0;
+    constexpr double MaxMs = 1000.0;
+
+    bool changed = false;
+    double ms = timeBetweenUpdates_.getTotalMillisecondsProperty();
+
+    if (justPressed(Keys::Add))
+    {
+        ms = std::min(ms * 2.0, MaxMs);
+        changed = true;
+    }
+    else if (justPressed(Keys::Subtract))
+    {
+        ms = std::max(ms / 2.0, MinMs);
+        changed = true;
+    }
+
+    if (changed)
+    {
+        timeBetweenUpdates_ = System::TimeSpan::FromMilliseconds(ms);
+        accelerometer_.setTimeBetweenUpdatesProperty(timeBetweenUpdates_);
+        gyroscope_.setTimeBetweenUpdatesProperty(timeBetweenUpdates_);
+        compass_.setTimeBetweenUpdatesProperty(timeBetweenUpdates_);
+        motion_.setTimeBetweenUpdatesProperty(timeBetweenUpdates_);
+    }
+}
+
 void DevicesDemo::UpdateWindowTitle()
 {
-    const Vector3& accel = latestAccelReading_.getAccelerationProperty();
-    const Vector3& rot    = latestGyroReading_.getRotationRateProperty();
+    const Vector3& accel        = latestAccelReading_.getAccelerationProperty();
+    const Vector3& rot          = latestGyroReading_.getRotationRateProperty();
+    const Vector3& magnetometer = latestCompassReading_.getMagnetometerReadingProperty();
+    const Vector3& deviceAccel  = latestMotionReading_.getDeviceAccelerationProperty();
+    const Vector3& deviceRot    = latestMotionReading_.getDeviceRotationRateProperty();
+    const Vector3& gravity      = latestMotionReading_.getGravityProperty();
+    const auto& attitude        = latestMotionReading_.getAttitudeProperty();
 
     // Task P9-6: added IsDataValid for Accelerometer/Gyroscope (previously
     // shown nowhere — only the underlying SensorState indicator square,
@@ -248,17 +295,46 @@ void DevicesDemo::UpdateWindowTitle()
     // (this demo's constructor already calls compass_.Start()/motion_.Start(),
     // see the try/catch there), still an honest SDL3-has-no-magnetometer
     // stub everywhere else.
+    //
+    // Task DEMO-001 (2026-07-06): added Compass/Motion IsDataValid (only
+    // Accelerometer/Gyroscope had this before — a real, previously-unnoticed
+    // gap in "show every sensor's ... data validity"), every field of
+    // CompassReading/MotionReading (previously only MagneticHeading/
+    // TrueHeading were visible anywhere, via the on-screen bars — the raw
+    // MagnetometerReading vector and HeadingAccuracy were not shown at all;
+    // Motion's DeviceRotationRate and Attitude were not shown at all, and
+    // DeviceAcceleration/Gravity only showed their X component via the
+    // on-screen bars), and the current TimeBetweenUpdates value (so a
+    // tester can see what HandleTimeBetweenUpdatesInput()'s Numpad +/-
+    // controls actually changed it to). The on-screen bars remain a partial
+    // "at a glance" view (unchanged by this task); this title bar is the
+    // one channel that must carry literally everything, per this class's
+    // own established rationale above and per Task DEMO-001's "enough data
+    // to write a useful bug report from its output alone" requirement.
     std::ostringstream title;
     title.setf(std::ios::fixed);
-    title.precision(2);
+    title.precision(3);
     title << "CNA Devices Demo | "
-          << "[A/G toggle sensors, 1-6 vibrate, Space stop] | "
-          << "Accel(" << accel.X << "," << accel.Y << "," << accel.Z << ") #" << accelEventCount_
+          << "[A/G toggle sensors, Numpad +/- rate, 1-6 vibrate, Space stop] | "
+          << "TBU=" << timeBetweenUpdates_.getTotalMillisecondsProperty() << "ms"
+          << " | Accel(" << accel.X << "," << accel.Y << "," << accel.Z << ") #" << accelEventCount_
           << " valid=" << (accelerometer_.getIsDataValidProperty() ? "Y" : "N")
           << " | Gyro(" << rot.X << "," << rot.Y << "," << rot.Z << ") #" << gyroEventCount_
           << " valid=" << (gyroscope_.getIsDataValidProperty() ? "Y" : "N")
           << " | Compass " << (Compass::getIsSupportedProperty() ? "supported" : "unsupported")
+          << " valid=" << (compass_.getIsDataValidProperty() ? "Y" : "N")
+          << " magHeading=" << latestCompassReading_.getMagneticHeadingProperty()
+          << " trueHeading=" << latestCompassReading_.getTrueHeadingProperty()
+          << " accuracy=" << latestCompassReading_.getHeadingAccuracyProperty()
+          << " mag(" << magnetometer.X << "," << magnetometer.Y << "," << magnetometer.Z << ")"
           << " | Motion " << (Motion::getIsSupportedProperty() ? "supported" : "unsupported")
+          << " valid=" << (motion_.getIsDataValidProperty() ? "Y" : "N")
+          << " devAccel(" << deviceAccel.X << "," << deviceAccel.Y << "," << deviceAccel.Z << ")"
+          << " gravity(" << gravity.X << "," << gravity.Y << "," << gravity.Z << ")"
+          << " devRotRate(" << deviceRot.X << "," << deviceRot.Y << "," << deviceRot.Z << ")"
+          << " attitude(pitch=" << attitude.getPitchProperty()
+          << ",roll=" << attitude.getRollProperty()
+          << ",yaw=" << attitude.getYawProperty() << ")"
           << " | Vibrate " << (vibrateController_->getIsSupportedProperty() ? "supported" : "unsupported")
           << " (" << vibrateController_->getDeviceNameProperty() << ")";
 
