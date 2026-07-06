@@ -13,11 +13,13 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
-  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–355 are
-  done, **Task 356 is next** ("Verify `EffectTechnique` selection changes applied pass collection"
+  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–356 are
+  done, **Task 357 is next** ("Verify effect parameter lookup by name and semantic — FNA semantics"
   — see §8). Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks 351–354); Task 355
-  closed the `EffectPass::Apply()`-consistency sub-thread; Phase 41 itself is **not** yet closed —
-  Tasks 356–360 (`EffectTechnique`/parameter-lookup verification) remain open.
+  closed the `EffectPass::Apply()`-consistency sub-thread; Task 356 confirmed `EffectTechnique`
+  selection is already correct by construction (verify-only, no code fix); Phase 41 itself is
+  **not** yet closed — Tasks 357–360 (parameter-lookup/enumeration/lifecycle verification) remain
+  open.
   **Task 351**
   audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
   returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
@@ -136,6 +138,22 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   tests fail, reverted). Full 3-backend regression, zero new failures: EasyGL 3370/3375 (3
   pre-existing + 2 reconfirmed-flaky `CueTest`). Vulkan 3294/3308 (13 pre-existing + 1 reconfirmed
   order-dependent `Vulkan_FillMode_WireFrame` flake). Bgfx 3278/3278 (100%).
+  **Task 356** re-read FNA's `CurrentTechnique` setter (`Effect.cs`) and `EffectPass.Apply()`
+  (`EffectPass.cs`) with a narrower lens: does switching `CurrentTechnique` do anything beyond a
+  plain pointer swap? Confirmed FNA's setter only does two things — a native
+  `FNA3D_SetEffectTechnique` call (implementation detail, no C#-observable effect of its own) and
+  `INTERNAL_currentTechnique = value` — and all real enforcement already lives in
+  `EffectPass.Apply()`'s live comparison, which Task 355 already ported faithfully. **Conclusion: no
+  code fix needed**, CNA's plain-pointer-swap setter already provides the full contract; verify-only,
+  matching Task 344's precedent. Added `CurrentTechniquePropertyPassCollectionTracksSelectedTechnique`
+  to `EffectTests.cpp`, using a different access pattern than Task 355's test (re-fetching
+  `getCurrentTechniqueProperty()->getPassesProperty()[0]` after each switch instead of holding a
+  fixed `EffectPass&`), proving the *live selection* itself resolves to each technique's own pass
+  collection bidirectionally. Discriminating power verified: temporarily made
+  `setCurrentTechniqueProperty()` a no-op, confirmed the new test fails alongside Task 355's
+  technique-switch tests, reverted. Full 3-backend regression, zero new failures: EasyGL 3373/3376
+  (3 pre-existing, no `CueTest` flake this run). Vulkan 3295/3309 (13 pre-existing + 1
+  reconfirmed-flaky `CueTest`). Bgfx 3277/3279 (2 reconfirmed-flaky `CueTest` failures this run).
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -158,22 +176,22 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
   (`cmake-build-bgfx`): all 3 configured, build cleanly. Last actually rebuilt/re-verified for
-  Task 355 (touches shared `Effect.hpp`/`EffectPass.hpp`/`.cpp`, `EffectTechnique.hpp`/`.cpp`,
-  `EffectTechniqueCollection.hpp`/`.cpp` — 2 real fixes, not just a test addition). Tasks 350/352/354
-  (docs-only) touched no `.hpp`/`.cpp`/test files, so no rebuild was needed for those — matching
-  Task 340's precedent.
+  Task 356 (test-file-only addition to `EffectTests.cpp`; production `Effect.cpp` was temporarily
+  edited for a discriminating-power check and reverted back to its exact Task 355 state). Tasks
+  350/352/354 (docs-only) touched no `.hpp`/`.cpp`/test files, so no rebuild was needed for those —
+  matching Task 340's precedent.
 
 ### Test status (last verified this session)
-- **EasyGL, full `ctest -j1`:** 3353/3356 pass. 3 pre-existing/documented failures (see §5):
+- **EasyGL, full `ctest -j1`:** 3373/3376 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`
   — no `CueTest` flake this run.
-- **Vulkan, full `ctest -j1`:** 3275/3289 pass. 13 documented failures (see §5) + 1 reconfirmed-flaky,
-  unrelated `CueTest` failure (no order-dependent `Vulkan_RenderTargetUsage`/`Vulkan_FillMode_WireFrame`
-  flake this run): 5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*` (Task 870),
-  `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
+- **Vulkan, full `ctest -j1`:** 3295/3309 pass. 13 documented failures (see §5) + 1 reconfirmed-flaky,
+  unrelated `CueTest` failure: 5× `Vulkan_BlendState_*` (Task 868), 5× `Vulkan_DepthStencilState_*`
+  (Task 870), `Vulkan_GraphicsDevice_ReferenceStencil` (Task 872), `Vulkan_DepthBias` (one sub-case),
   `Vulkan_RenderTargetCube_SampleAfterUnbind` (Task 876 — genuine confirmed bug, supposed to fail
   until fixed).
-- **Bgfx, full `ctest -j1`:** 3258/3259 pass — 1 reconfirmed-flaky, unrelated `CueTest` failure.
+- **Bgfx, full `ctest -j1`:** 3277/3279 pass — 2 reconfirmed-flaky, unrelated `CueTest` failures this
+  run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently**
   — concurrent runs previously produced transient GPU/driver-contention false failures. If a
   single run shows an anomaly beyond the documented list, re-run that test in isolation before
@@ -463,17 +481,25 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 356 — verify `EffectTechnique` selection changes applied pass collection**
-   - Goal: unit test confirming that switching `Effect.CurrentTechnique` (via
-     `setCurrentTechniqueProperty()`) correctly changes which technique's `Passes` are the ones
-     that successfully `Apply()` — i.e. exercise the "selection" half of the story Task 355 already
-     built the "consistency" machinery for (Task 355's `ApplyIsConsistentAcrossInterleavedTechniqueSwitches`
-     test already covers a good chunk of this from the `EffectPass::Apply()` side; Task 356 should
-     confirm there isn't a separate, `EffectTechnique`-side gap — e.g. does selecting a technique
-     need to reset/re-upload anything else, matching FNA's `EffectTechnique`/`EffectPass` source).
-   - Files: likely `EffectTechnique.hpp`/`.cpp`, `Effect.hpp`/`.cpp`, `tests/.../EffectTests.cpp` or
-     `EffectTechniqueTests.cpp`.
+1. **`GRAPHICS_TASKS.md` Task 357 — verify effect parameter lookup by name and semantic**
+   - Goal: confirm CNA's `EffectParameterCollection` parameter lookup (by name, and by HLSL
+     semantic if CNA tracks semantics at all) matches FNA's semantics — read FNA's
+     `EffectParameterCollection.cs` (`this[string name]`/`this[string semantic]` indexers) and
+     compare against CNA's `EffectParameterCollection.hpp`/`.cpp`.
+   - Files: likely `EffectParameterCollection.hpp`/`.cpp`, `EffectParameter.hpp`/`.cpp`,
+     `tests/.../EffectParameterTests.cpp` or a new `EffectParameterCollectionTests.cpp`.
    - Verification: new unit test(s) with genuine discriminating power.
+
+   **Task 356 status: done — verify-only, no code fix needed.** Re-read FNA's `CurrentTechnique`
+   setter and `EffectPass.Apply()`; confirmed the setter is a plain pointer swap (its native
+   `FNA3D_SetEffectTechnique` call has no C#-observable effect) and all real enforcement already
+   lives in `EffectPass.Apply()`'s live comparison, which Task 355 already ported correctly.
+   Added `CurrentTechniquePropertyPassCollectionTracksSelectedTechnique` to `EffectTests.cpp`
+   (re-fetches `getCurrentTechniqueProperty()->getPassesProperty()[0]` after each switch, proving
+   the live selection resolves bidirectionally), discriminating power verified (temporarily made
+   the setter a no-op, confirmed failure, reverted). Full 3-backend regression, zero new failures:
+   EasyGL 3373/3376, Vulkan 3295/3309, Bgfx 3277/3279. Does not close Phase 41 (Tasks 357–360
+   remain).
 
    **Task 355 status: done.** Confirmed and fixed Task 351's deferred `EffectPass::Apply()`
    technique-validation finding (gave `EffectTechnique` a stable identity token, `EffectPass` a
@@ -484,8 +510,7 @@ In priority order:
    `vector<unique_ptr<EffectTechnique>>` (same idiom as `GraphicsAdapter::adapters_`). Opened new
    Task 884 (identical latent hazard in `EffectPassCollection`, not yet exercised, not fixed).
    4 new tests, discriminating power verified. Full 3-backend regression, zero new failures:
-   EasyGL 3370/3375, Vulkan 3294/3308, Bgfx 3278/3278 (100%). Does not close Phase 41
-   (Tasks 356–360 remain).
+   EasyGL 3370/3375, Vulkan 3294/3308, Bgfx 3278/3278 (100%).
 
 2. **`GRAPHICS_TASKS.md` Task 883 — implement `Effect::Clone()` (new, opened by Task 351)**
    - Goal: FNA's `Effect` has a public virtual `Clone()` (used by every stock effect, each
@@ -737,11 +762,12 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
 Current status: Phases 1-40 are FULLY COMPLETE. Phase 41 (Effect base class and compiled effect
-compatibility, GRAPHICS_TASKS.md Tasks 351-360) is open, Tasks 351-355 are ALL DONE, Task 356 next.
-Last full 3-backend regression (Task 355, shared Effect/EffectPass/EffectTechnique/
-EffectTechniqueCollection code touched): EasyGL 3370/3375 pass (3 documented pre-existing failures
-+ 2 reconfirmed-flaky CueTest). Vulkan 3294/3308 pass (13 documented failures + 1 reconfirmed
-order-dependent Vulkan_FillMode_WireFrame flake). Bgfx 3278/3278 pass (100%, no flakes that run).
+compatibility, GRAPHICS_TASKS.md Tasks 351-360) is open, Tasks 351-356 are ALL DONE, Task 357 next.
+Last full 3-backend regression (Task 356, test-file-only addition to EffectTests.cpp; Effect.cpp was
+temporarily edited for a discriminating-power check and reverted to its exact Task 355 state):
+EasyGL 3373/3376 pass (3 documented pre-existing failures, no CueTest flake that run). Vulkan
+3295/3309 pass (13 documented failures + 1 reconfirmed-flaky CueTest). Bgfx 3277/3279 pass (2
+reconfirmed-flaky CueTest failures that run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2);
 if a single run shows an anomaly beyond the documented list, re-run in isolation before treating
 it as a regression.
@@ -777,17 +803,25 @@ reference. Fixed via vector<unique_ptr<EffectTechnique>> (matching GraphicsAdapt
 established idiom) with a small custom iterator pair. Opened new Task 884 (identical latent hazard
 in EffectPassCollection, not yet exercised by any test, not fixed).
 
-Next task: GRAPHICS_TASKS.md Task 356 - verify EffectTechnique selection changes applied pass
-collection (unit test). Goal: confirm that switching Effect.CurrentTechnique via
-setCurrentTechniqueProperty() correctly changes which technique's Passes actually succeed on
-Apply() - Task 355's ApplyIsConsistentAcrossInterleavedTechniqueSwitches test in EffectTests.cpp
-already covers a good chunk of this from the EffectPass::Apply() side, so Task 356 should focus on
-confirming there isn't a separate EffectTechnique-side gap (check FNA's EffectTechnique.cs /
-EffectPass.cs again for anything selection-triggered that CNA might be missing beyond what Task 355
-already validated). Files: likely EffectTechnique.hpp/.cpp, Effect.hpp/.cpp,
-tests/Microsoft/Xna/Framework/Graphics/EffectTests.cpp or EffectTechniqueTests.cpp. As always:
-verify genuine discriminating power for any new test (temporarily break/omit any fix, confirm the
-test fails, then revert), full 3-backend rebuild + regression if production code changes, update
-GRAPHICS_TASKS.md and NEXT.md, commit AND push after finishing (standing instruction - do not wait
-to be asked).
+Task 356 (verify EffectTechnique selection changes applied pass collection) is now DONE - verify-only,
+no code fix needed. Re-read FNA's CurrentTechnique setter (Effect.cs) and EffectPass.Apply()
+(EffectPass.cs): the setter only does a native FNA3D_SetEffectTechnique call (no C#-observable
+effect) plus a plain pointer assignment; all real enforcement already lives in EffectPass.Apply()'s
+live comparison, which Task 355 already ported correctly. Added
+CurrentTechniquePropertyPassCollectionTracksSelectedTechnique to EffectTests.cpp (re-fetches
+getCurrentTechniqueProperty()->getPassesProperty()[0] after each switch, proving the live selection
+itself resolves to each technique's own pass collection, bidirectionally), discriminating power
+verified (temporarily made setCurrentTechniqueProperty() a no-op, confirmed the new test + Task
+355's technique-switch tests all fail, reverted).
+
+Next task: GRAPHICS_TASKS.md Task 357 - verify effect parameter lookup by name and semantic (FNA
+semantics). Goal: read FNA's EffectParameterCollection.cs (this[string name] / this[string
+semantic] indexers, if CNA tracks semantics at all) and compare against CNA's
+EffectParameterCollection.hpp/.cpp; confirm lookup behavior (case sensitivity, not-found behavior -
+null vs throw, matching FNA) matches exactly. Files: likely EffectParameterCollection.hpp/.cpp,
+EffectParameter.hpp/.cpp, tests/.../EffectParameterTests.cpp or a new
+EffectParameterCollectionTests.cpp. As always: verify genuine discriminating power for any new test
+(temporarily break/omit any fix, confirm the test fails, then revert), full 3-backend rebuild +
+regression if production code changes, update GRAPHICS_TASKS.md and NEXT.md, commit AND push after
+finishing (standing instruction - do not wait to be asked).
 ```

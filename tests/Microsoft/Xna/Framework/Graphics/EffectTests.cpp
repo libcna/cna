@@ -298,6 +298,46 @@ TEST_F(EffectApplyTest, ApplyIsConsistentAcrossInterleavedTechniqueSwitches)
 }
 
 // -----------------------------------------------------------------------
+// Task 356: verify that switching CurrentTechnique genuinely changes which
+// EffectPassCollection is "the applied one" — accessed *through*
+// CurrentTechnique itself (getCurrentTechniqueProperty()->getPassesProperty()),
+// not via a directly-held technique index as Task 355's test above does.
+// Confirms FNA's CurrentTechnique.set (Effect.cs) has no additional hidden
+// state beyond the plain pointer swap CNA already performs: FNA's setter also
+// calls FNA3D_SetEffectTechnique, a native call into the compiled-effect
+// backend with no C#-observable side effect beyond what INTERNAL_applyEffect
+// later reads — CNA has no compiled-technique GPU representation yet
+// (Phase 74), so the plain pointer swap already provides the complete
+// C#-visible contract.
+// -----------------------------------------------------------------------
+
+TEST_F(EffectApplyTest, CurrentTechniquePropertyPassCollectionTracksSelectedTechnique)
+{
+    fx.getTechniquesProperty().Add(EffectTechnique(&fx, "Second"));
+
+    // Immediately after construction, CurrentTechnique's own Passes collection
+    // must be technique [0]'s, not technique [1]'s.
+    EXPECT_EQ(&fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
+              &fx.getTechniquesProperty()[0].getPassesProperty()[0]);
+    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+
+    fx.setCurrentTechniqueProperty(&fx.getTechniquesProperty()[1]);
+
+    // After switching, CurrentTechnique's own Passes collection must now be
+    // technique [1]'s — a real toggle, not a one-directional/stale snapshot.
+    EXPECT_EQ(&fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
+              &fx.getTechniquesProperty()[1].getPassesProperty()[0]);
+    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+
+    fx.setCurrentTechniqueProperty(&fx.getTechniquesProperty()[0]);
+
+    // Switching back restores [0]'s pass collection as current — bidirectional.
+    EXPECT_EQ(&fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
+              &fx.getTechniquesProperty()[0].getPassesProperty()[0]);
+    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+}
+
+// -----------------------------------------------------------------------
 // GetTypeName() — must be the fully-qualified .NET name per CLAUDE.md,
 // matching every other GraphicsResource subclass's convention
 // (RenderTarget2D, Texture3D, BasicEffect, ...).
