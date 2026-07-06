@@ -1253,11 +1253,22 @@ marker like DragComplete). The finger ids (20/21) were already asserted. **Files
 verified:** PinchComplete is a zeroed terminal marker carrying only the two finger ids, ordered after the
 last Pinch. **Remaining risk:** none.
 
-## P6-014 — Verify multi-touch interactions
-- [ ] Test tap while second finger appears.
-- [ ] Test drag interrupted by second finger.
-- [ ] Test pinch after one-finger drag.
-- [ ] Document expected policy.
+## P6-014 — Verify multi-touch interactions `[x]`
+- [x] Test tap while second finger appears.
+- [x] Test drag interrupted by second finger.
+- [x] Test pinch after one-finger drag.
+- [x] Document expected policy.
+
+**Result (2026-07-06):** Drag-interrupted-by-second-finger and pinch-after-one-finger-drag already covered
+(`SecondFingerDuringADragInterruptsItAndBecomesAPinch`,
+`DragInterruptedByASecondFingerReportsPinchCompleteNotDragComplete`). **Added the tap-with-second-finger gap
+test** `TapDoesNotFireWhileASecondFingerIsStillDown`: with two fingers down, releasing the first emits no
+Tap because `OnReleased` early-returns while `fingerIds` is non-empty. **Expected policy (documented here):**
+a single-finger tap is suppressed while any other finger remains down; a second finger during a drag
+promotes the interaction to a pinch (when Pinch is enabled) and the terminal event is PinchComplete, never
+DragComplete. **Files changed:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+1 test). **Tests:**
+pass. **Behavior verified:** multi-finger arbitration (tap suppression + drag→pinch promotion).
+**Remaining risk:** none.
 
 ## P6-015 — Verify gesture queue reset
 - [ ] Ensure reset clears queued gestures.

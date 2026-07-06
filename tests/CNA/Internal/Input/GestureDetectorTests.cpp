@@ -604,6 +604,24 @@ TEST_F(GestureDetectorTest, SecondFingerDuringADragInterruptsItAndBecomesAPinch)
     DrainGestures();
 }
 
+// P6-014(a): a tap must NOT be reported while a second finger is still down. With two fingers pressed,
+// releasing the first leaves the other finger tracked, so OnReleased early-returns (`!fingerIds.empty()`)
+// and no Tap is emitted until the whole touch ends.
+TEST_F(GestureDetectorTest, TapDoesNotFireWhileASecondFingerIsStillDown)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap);
+
+    Press(80, 0.4f, 0.5f);
+    Press(81, 0.6f, 0.5f);   // second finger appears
+    Release(80, 0.4f, 0.5f); // first finger lifts, but 81 is still down
+
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty())
+        << "no Tap may fire while another finger is still down";
+
+    Release(81, 0.6f, 0.5f);
+    DrainGestures();
+}
+
 TEST_F(GestureDetectorTest, DragInterruptedByASecondFingerReportsPinchCompleteNotDragComplete)
 {
     TouchPanel::setEnabledGesturesProperty(
