@@ -889,8 +889,28 @@ FNA, A4-006). **`Equals` includes `PacketNumber`** — verified FNA's `operator=
 name (≡ FNA `base.ToString()`). **Files changed:** none (logic verified). **Behavior verified:** the full
 button-packing pipeline + equality-with-packet match FNA exactly. **Remaining risk:** none.
 
-## L-009 — `GamePad.cpp` logic `[ ]`
-- [ ] GetState dead-zone application, GetCapabilities assembly, SetVibration/EXT forwarding vs FNA policy.
+## L-009 — `GamePad.cpp` logic `[x]`
+- [x] GetState dead-zone application, GetCapabilities assembly, SetVibration/EXT forwarding vs FNA policy.
+
+**Result (2026-07-06):** Logic verified vs FNA `GamePad.cs` — **faithful, no fix.** `ExcludeAxisDeadZone` is
+**byte-identical** to FNA (`if v<-dz: v+=dz; elif v>dz: v-=dz; else return 0; return v/(1-dz)`), and the
+dead-zone constants are **byte-identical**: `LeftDeadZone = 7849/32768`, `RightDeadZone = 8689/32768`,
+`TriggerThreshold = 30/255`. `GetState(playerIndex)` defaults to `IndependentAxes` (≡ FNA). The 2-arg
+`GetState` reads the accumulated raw state (event-driven vs FNA's poll — documented architectural deviation),
+returns a disconnected default when not connected, and assembles `GamePadThumbSticks`/`GamePadTriggers`
+(with the dead-zone) + `GamePadButtons` + `GamePadDPad::FromButtonArray` then sets the packet number — the
+dead-zone/packing math lives in the sub-struct ctors already verified byte-identical (L-006/L-007/L-008).
+`GetCapabilities` and all EXT ops (`SetVibration`/`SetLightBarEXT`/`SetTriggerVibrationEXT`/`GetGUIDEXT`/
+`GetGyroEXT`/`GetAccelerometerEXT`) thin-forward to `SdlInputBridge` (≡ FNA forwarding to `FNAPlatform`).
+**Files changed:** none (logic verified). **Behavior verified:** axis dead-zone rescale + constants + default
+mode + assembly + forwarding. **Remaining risk:** none.
+
+---
+
+**GamePad logic subtotal (L-005..L-009):** every GamePad `.cpp` (Buttons, DPad, ThumbSticks, Triggers, State,
+GamePad) is **byte-identical to FNA** in its core math (flag extraction, dead-zone rescale + constants,
+StickToButtons packing, hashes) — the only deviations are the documented deterministic `GetHashCode` choices
+(vs FNA's `base.GetHashCode()`) and the event-driven-vs-poll architecture.
 
 ## L-010 — `TouchCollection.cpp` logic `[ ]`
 - [ ] Indexer/CopyTo/IndexOf/Contains/mutators over the vector; advisory IsReadOnly; FindById out-semantics.
