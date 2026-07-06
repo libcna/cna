@@ -2438,7 +2438,7 @@ not an alternate spelling to preserve.
 
 ## 7. Gyroscope tasks
 
-### GYRO-001 — Verify gyroscope public surface
+### GYRO-001 — Verify gyroscope public surface — CLOSED (2026-07-06, confirmed clean, citation already correct)
 
 - **Priority:** Critical
 - **Area:** Gyroscope API
@@ -2446,19 +2446,52 @@ not an alternate spelling to preserve.
   `getStateProperty()` is already marked `NOXNA` (unlike `Accelerometer`'s, per Section
   1's confirmed finding) — this task is where that specific fact gets folded into the
   full matrix, cross-referenced with `DEV-API-003`.
+- **Resolution (2026-07-06):** read `Gyroscope.hpp` end to end and independently
+  re-fetched its own archived MSDN class page (`hh239201(v=vs.110)`) directly, applying
+  the same "don't trust an existing citation without re-checking it" discipline that
+  found a real citation bug for `Accelerometer` (`ACCEL-001`) — this time the citation
+  held up: `hh239201`'s own `ms:assetid` frontmatter confirms it genuinely is
+  `T:Microsoft.Devices.Sensors.Gyroscope`, and its Properties table lists exactly
+  `CurrentValue`, `IsDataValid`, `IsSupported`, `TimeBetweenUpdates` (the first three
+  inherited from `SensorBase<TSensorReading>`, `IsSupported` static and real) — no
+  `State` property, confirming `Gyroscope::getStateProperty()`'s `NOXNA` marking is
+  correct, exactly as `DEV-API-003` already concluded. Its Methods table lists
+  `Dispose`/`Start`/`Stop`, all "(Inherited from `SensorBase<TSensorReading>`)" — no
+  override, matching CNA's shape (`Gyroscope` overrides all three in C++ only because
+  C++ has no equivalent to C#'s implicit base-class method inheritance for a `sealed`
+  class needing its own SDL-backed implementation, not because the real API redeclares
+  them). Events table lists only `CurrentValueChanged` — confirms, independently, that
+  `Gyroscope` correctly has no `ReadingChanged`-equivalent legacy event (matching
+  `docs/devices-api-coverage.md`'s existing "Identical shape to `Accelerometer` minus
+  `ReadingChanged` (correctly absent...)" note). Added the `hh239201` citation directly
+  to the coverage table's own `getStateProperty()` row (previously cited only in
+  `plan_devices.md`, not in the table itself).
+  - **`getIsSupportedProperty()`/`CurrentValue`/`CurrentValueChanged`/
+    `TimeBetweenUpdates`/`Start()`/`Stop()`/`Dispose()`:** all already correctly
+    shaped, confirmed by the same MSDN page and by `SensorBase<T>`'s own already-cited
+    pages — no changes needed.
+  - **Tests:** `GyroscopeTests.cpp` already compiles against and exercises every
+    public member (confirmed by reading it, mirroring `ACCEL-001`'s identical
+    conclusion for `Accelerometer`) — no new mechanism added here (a dedicated
+    "strict XNA surface" compile check remains `DEV-API-002`/`VERIFY-003`'s separate,
+    still-open concern).
 - **Required work:**
-  - Compare `Gyroscope.hpp` to the official XNA/WP7 API.
+  - Compare `Gyroscope.hpp` to the official XNA/WP7 API. Done, with a fresh,
+    independent MSDN re-fetch rather than trusting the existing citation blindly.
   - Verify `getIsSupportedProperty()`, inherited `CurrentValue`, `CurrentValueChanged`,
-    `TimeBetweenUpdates`, `Start()`/`Stop()`/`Dispose()`.
+    `TimeBetweenUpdates`, `Start()`/`Stop()`/`Dispose()`. Done, all confirmed correct.
   - Cross-check `getStateProperty()`'s `NOXNA` status against `DEV-API-003`'s decision.
+    Done — independently re-confirmed, not just cross-referenced.
 - **Acceptance criteria:**
-  - `DEV-API-001`'s matrix covers `Gyroscope` completely.
+  - `DEV-API-001`'s matrix covers `Gyroscope` completely. Confirmed, citation added.
   - Non-XNA API is marked `NOXNA` consistently with the rest of the sensor classes.
-  - Tests compile against the expected, decided signatures.
+    Confirmed.
+  - Tests compile against the expected, decided signatures. Confirmed, already true.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Gyroscope.hpp`
-  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp`
-  - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Gyroscope.hpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp` (inspected, no change needed)
+  - `docs/devices-api-coverage.md` (edited — citation added)
 
 ### GYRO-002 — Verify gyroscope units
 
