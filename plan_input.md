@@ -342,25 +342,28 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** Removed the 5 stale '@note Status: PARTIAL/IMPLEMENTED' comments from the internal input headers (SdlInputBridge.hpp, InputManager.hpp x4) — those internal classes/enums are complete and covered by tests; the misleading scaffolding status notes are gone. Build clean; ctest -L input 100% green.
 
 #### INP-0219 — Extend demo_input to exercise relative mouse mode + cursor warp
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Cleanup
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
 - **Files:** `examples/demo_input/src`
 - **Steps:** Implement the sample/doc change; keep the demo buildable.
 - **Acceptance:** Sample/doc updated + (for demo) still builds.
 - **Verify:** `cmake --build cmake-build-input-easygl --target CnaTests`
+- **Result:** Extended examples/demo_input: F2 toggles relative mouse mode (setIsRelativeMouseModeEXTProperty) and F3 warps the cursor (Mouse::SetPosition), with on-screen relative/warp indicators in the mouse panel. Builds (cna_demo_input) + smoke-launches crash-free under Xvfb. Runtime/visual verification remains manual (INP-0231).
 
 #### INP-0220 — Extend demo_input to drain + display recognized gestures (ReadGesture)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Cleanup
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
 - **Files:** `examples/demo_input/src`
 - **Steps:** Implement the sample/doc change; keep the demo buildable.
 - **Acceptance:** Sample/doc updated + (for demo) still builds.
 - **Verify:** `cmake --build cmake-build-input-easygl --target CnaTests`
+- **Result:** Extended demo_input: Update() now drains the recognized-gesture queue (TouchPanel::ReadGesture) and displays the last GestureType as lit cells in the mouse panel. Builds + smoke-runs. Real-gesture verification needs a touchscreen (INP-0238).
 
 #### INP-0221 — Extend demo_input to drive light bar + read sensors (gated by capability)
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Cleanup
+- **Priority:** P3 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
 - **Files:** `examples/demo_input/src`
 - **Steps:** Implement the sample/doc change; keep the demo buildable.
 - **Acceptance:** Sample/doc updated + (for demo) still builds.
 - **Verify:** `cmake --build cmake-build-input-easygl --target CnaTests`
+- **Result:** Extended demo_input: cycles Player One's light bar (SetLightBarEXT, color swatch shown) and reads gyro/accelerometer (GetGyroEXT/GetAccelerometerEXT) into on-screen magnitude bars (grey when absent). Capability-gated no-ops when disconnected. Builds + smoke-runs. Physical light-bar/sensor verification needs a controller (INP-0233).
 
 #### INP-0225 — Grep-audit and remove stale/misleading comments in input headers/sources
 - **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup

@@ -17,7 +17,8 @@ cmake --build cmake-build-debug --target cna_demo_input -j"$(nproc)"
 ./cmake-build-debug/cna_demo_input                 # needs a display
 ```
 
-Global controls: **F1** toggles text input on/off; **Esc** exits.
+Global controls: **F1** toggles text input on/off; **F2** toggles relative mouse mode; **F3** warps
+the cursor to the window centre; **Esc** exits.
 
 ## What the demo shows
 
@@ -53,11 +54,16 @@ Global controls: **F1** toggles text input on/off; **Esc** exits.
 - [ ] Left/Middle/Right and X1/X2 buttons light up when pressed.
 - [ ] Scrolling the wheel moves the scroll indicator (cumulative value).
 - [ ] On a letterboxed/scaled window, the reported position matches the logical render position.
+- [ ] **F2** toggles relative mouse mode — the mouse-panel relative indicator turns green; motion is
+      captured (pointer-lock), and `SetPosition` becomes a no-op while active (INP-0219).
+- [ ] **F3** warps the cursor toward the window centre — the warp indicator flashes yellow (INP-0219).
 
 ### Touch (touch-capable display)
 - [ ] Each finger down shows a marker at the correct position.
 - [ ] Multiple simultaneous touches each show a marker.
 - [ ] Markers track finger movement and disappear on release.
+- [ ] A **Tap / FreeDrag / Flick** lights the gesture-readout cells in the mouse panel (via
+      `ReadGesture`) — one cell per set `GestureType` bit, flashing when recognized (INP-0220).
 
 ### GamePad (up to 4 controllers)
 - [ ] Connecting a controller flips its panel to "connected"; disconnecting flips it back.
@@ -67,23 +73,24 @@ Global controls: **F1** toggles text input on/off; **Esc** exits.
 - [ ] **Rumble:** pulling a trigger vibrates that controller (the demo calls `SetVibration` every
       frame from the trigger values); the magenta rumble bar mirrors the trigger.
 - [ ] Plugging in a **second/third/fourth** controller populates the compact panels in order.
+- [ ] **Light bar** (PS4/PS5): the Player One light bar cycles color each frame (`SetLightBarEXT`); the
+      on-screen swatch mirrors the color being sent (INP-0221).
+- [ ] **Motion sensors** (gyro/accelerometer): the two sensor bars in the Player One panel move with the
+      controller's motion (`GetGyroEXT`/`GetAccelerometerEXT`); grey when the pad lacks sensors (INP-0221).
 
-## Not exercised by the current demo (verify separately)
+## Now exercised by the demo (INP-0219/0220/0221)
 
-These input features are implemented and unit-tested where possible, but the demo does not
-surface them. Verifying them needs a small demo enhancement or a separate harness:
+The demo was extended to **exercise** these EXT paths end-to-end (they are in the checklist above):
+relative mouse mode + cursor warp (F2/F3, INP-0219), recognized-gesture readout via `ReadGesture`
+(INP-0220), and gamepad light-bar cycling + gyro/accelerometer readout (INP-0221). The demo builds and
+smoke-launches crash-free (2026-07-06, EasyGL/Xvfb). **Their visual/behavioral correctness on real
+hardware is still human/hardware-gated** — see `input-manual-verification-results.md`.
 
-- **Relative mouse mode** (`Mouse::IsRelativeMouseModeEXT`) — not toggled by the demo. Covered by
-  `MouseInputTests` (real-window round-trip) and the manual check INPUT-MOUSE-023 in `plan_input.md`.
-- **Mouse cursor warp** (`Mouse::SetPosition`) — not called by the demo. Manually verified in
-  INPUT-MOUSE-023 (pixel-exact under X11); the scaled/letterboxed logical→window conversion is now
-  implemented (INPUT-MOUSE-002 (decision a-0001)) and unit-tested (`SetPositionConvertsLogicalToWindowFor
-  LetterboxedRenderer`).
-- **Gamepad sensors** (`GetGyroEXT` / `GetAccelerometerEXT`) — not read by the demo. Only the
-  disconnected/zeroed fallback is unit-tested (INPUT-GAMEPAD-017/018); live values need real sensor hardware.
-- **Gamepad light bar** (`SetLightBarEXT`) — not driven by the demo.
-- **Touch *gestures*** (Tap/DoubleTap/Hold/Flick/Drag/Pinch via `TouchPanel::ReadGesture`) — the demo
-  **enables** `Tap | FreeDrag | Flick` (`setEnabledGesturesProperty`) and pumps `TouchPanel::Update()`
-  each frame, but shows raw touch points only and never calls `ReadGesture`, so recognized gestures are
-  not surfaced. A future enhancement only needs to drain + display the gesture queue. Gesture recognition
-  itself is covered by `GestureDetectorTests` (deterministic) and `SdlInputBridgeTouchGestureTests`.
+## Still requires separate verification
+
+- **Real hardware actuation** — a real controller's light bar physically changing color, live gyro/accel
+  values responding to motion, real rumble/trigger-haptics, and a real touchscreen's gestures. The demo
+  now surfaces them, but confirming the *physical* result needs the hardware (INP-0231..0242).
+- **Gestures beyond Tap/FreeDrag/Flick** — the demo enables that subset; DoubleTap/Hold/H-V drag/Pinch are
+  covered by `GestureDetectorTests` (deterministic) and `SdlInputBridgeTouchGestureTests`, not the demo UI.
+- **Cursor-warp landing pixel on native Wayland** — X11/XWayland only (compositor policy); see platform notes.

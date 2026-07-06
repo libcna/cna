@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -74,4 +75,21 @@ private:
     bool textInputActive_ = false;
     bool prevToggleKey_ = false;
     int  frame_ = 0;
+
+    // INP-0219: relative mouse mode (F2) + cursor warp (F3) demo state.
+    bool relativeMouse_ = false;
+    bool prevRelKey_    = false;
+    bool prevWarpKey_   = false;
+    int  warpFlash_     = 0;   // countdown frames after a warp, for the on-screen flash
+
+    // INP-0220: recognized-gesture readout (TouchPanel::ReadGesture).
+    int  lastGesture_   = 0;   // GestureType flags of the last read gesture
+    int  gestureFlash_  = 0;   // countdown frames after a gesture, for the on-screen flash
+
+    // INP-0221: gamepad light bar (SetLightBarEXT) + motion sensors (GetGyroEXT/GetAccelerometerEXT).
+    Microsoft::Xna::Framework::Vector3 gyro_{};
+    Microsoft::Xna::Framework::Vector3 accel_{};
+    bool haveGyro_  = false;
+    bool haveAccel_ = false;
+    Microsoft::Xna::Framework::Color lightBar_{0, 0, 0, 255}; // color currently driven to the LED
 };

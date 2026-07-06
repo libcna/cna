@@ -85,7 +85,8 @@ session to close the hardware/platform gaps.
 ### Automated baseline (this build)
 - Input filter `ctest -L input`: **314 tests, 100% green** under `--gtest_shuffle --gtest_repeat=5`.
 - Full `CnaTests`: **3303 passed / 2 skipped**.
-- ASan+UBSan (`cmake-build-input-asan`, `detect_leaks=0:halt_on_error=1`): input subset **314 green, 0 sanitizer errors** (the only leaks are third-party `libGLX_mesa`, not CNA input code).
+- ASan+UBSan (`cmake-build-input-asan`, `detect_leaks=0:halt_on_error=1`): input subset **314 green, 0 sanitizer errors**
+- `cna_demo_input` (extended with the INP-0219/0220/0221 EXT paths) builds + smoke-launches crash-free under Xvfb (`timeout 4`, window created, EasyGL/OpenGL ES 3.2 initialized). Visual/hardware correctness of the new indicators is **not** verified (no display observed, no hardware). (the only leaks are third-party `libGLX_mesa`, not CNA input code).
 
 ### Still hardware/human-gated (unchanged from 2026-07-04, not verified here)
 Real controller actuation (rumble / trigger-haptics / light bar / sensors / hotplug / GUID), real
