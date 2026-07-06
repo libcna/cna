@@ -1359,39 +1359,44 @@ open-ended, ambitious future work — not all of it needs to land in one sitting
   the elbow/sleeve seam that previously separated now stays visually continuous — this
   reduces the visible gap at the bend angles this rig's animations actually use, not a
   claim of welding the still-topologically-separate cylinder segments into one surface.
-  - **Did NOT fix, and is a separate issue from what this task targeted:** verifying via
+  - **Did NOT fix, and was a separate issue from what this task targeted:** verifying via
     `examples/demo_avatar`'s real GPU-skinned engine (not just Blender) surfaced a much
     more severe, pre-existing bug — during actual Wave clip *playback* (not a static
-    pose), the forearm renders as a dramatically elongated, partially-detached shape.
+    pose), the forearm rendered as a dramatically elongated, partially-detached shape.
     Confirmed present in both this fix's content and the prior (Task 11.19) committed
-    content, so this fix neither caused nor cured it. See Task 11.20b.
+    content, so this fix neither caused nor cured it — resolved separately as Task 11.20b
+    (a real matrix-multiplication-order bug in `ComputeBoneTransformsEXT`, unrelated to
+    vertex weights).
 
-- [ ] **Task 11.20b** — Investigate the severe real-engine-only arm deformation found
-  while verifying Task 11.20. Reproduction: build male/female content via
-  `generate_avatar.py` → `convert_avatar.py --embedded-clips` (any recent commit — the
-  bug predates Task 11.19/11.20) → `examples/demo_avatar --gender male`, cycle to `Wave`
-  (Space, twice from launch), watch the right forearm during the swing. Ruled out so far
-  by direct inspection (this session): clip keyframe data (verified correct — the
-  glTF's `UpperArm.R`/`LowerArm.R` rotation channels have 60 samples each, and the
-  converted `.clip.bin` preserves all 60 with correct oscillating angles once bones are
-  looked up by their *actual* topological order, not declaration order — a mistake this
-  session's own throwaway debug script made first); `skeleton.bin`'s topological bone
-  order (every parent index < child index, confirmed correct); bind-pose matrices for
-  `UpperArm.R`/`LowerArm.R` (spot-checked, plausible identity-rotation-plus-translation
-  form); `ComputeBoneTransformsEXT`/`SampleTrack`'s math (code-reviewed, matches
-  `SkinnedEffect`'s already-passing single-bone-translation integration test). Reimporting
-  the exported `.glb` into a fresh Blender session and playing the *identical* `Wave`
-  action through Blender's own armature renders cleanly at every tested frame (1, 10, 18,
-  26, 34) — this isolates the bug to somewhere in CNA's own content-to-GPU path: either
-  `convert_avatar.py`'s vertex/weight binary writing, `ContentManager`'s reading of it, or
-  the EasyGL skinned shader (`EasyGLGraphicsBackend.cpp`'s `EnsureSkinnedProgram`,
-  `uBones[72]` skinning matrix palette) — not yet narrowed further. A good next step:
-  extend `examples/avatar_real_render_integration_test.cpp`'s synthetic single-bone
-  approach to a synthetic *2-3 bone chain* with known expected transformed pixel
-  positions at a large rotation angle, to pixel-check the hierarchy composition and
-  shader in isolation from real (more complex) avatar content.
-  - Files/modules: not yet known — investigation only until root cause is found.
-  - Verify: not applicable until root cause is identified and a fix is proposed.
+- [x] **Task 11.20b** — **RESOLVED.** Root cause: `SkinnedModelEXT::ComputeBoneTransformsEXT`
+  computed the final skinning matrix as `worldTransforms[i] * InverseBindPoseGlobal[i]` —
+  backwards for CNA's row-vector convention (`v' = v * M`, first-applied transform
+  leftmost). Correct order removes the bind pose first, *then* applies the current pose:
+  `InverseBindPoseGlobal[i] * worldTransforms[i]`. Both orders reduce to the identity at
+  rest pose (`A * Inverse(A) == Inverse(A) * A` for any invertible `A`), which is exactly
+  why every prior check — Task 11.11's rest-pose sanity tests, the single-bone
+  translation-only integration test, and every existing unit test (all pure translations,
+  which commute with anything) — never caught it. Only a bone with both a nontrivial
+  bind-pose offset from its parent *and* a real rotation exposes the difference — exactly
+  `UpperArm.R`/`LowerArm.R`'s situation in `Wave`.
+  - Ruled out first (before finding the real cause), by direct inspection: clip keyframe
+    data, `skeleton.bin`'s topological bone order, bind-pose matrix values, vertex
+    attribute/GL-integer-pointer setup for bone indices, and the bone-matrix-to-GPU
+    upload/column-major-conversion path — all confirmed correct. Reimporting the exported
+    `.glb` into a fresh Blender session and replaying the identical `Wave` action through
+    Blender's own armature rendered cleanly at every tested frame — this correctly
+    isolated the bug to CNA's own matrix math, not the content or Blender-side data.
+  - New unit test `SkinnedModelEXTTest.RotatingBoneKeepsItsOwnBindPivotFixed`: a bone with
+    bind offset `(1,0,0)` that rotates 90° in place must keep its own bind-world pivot
+    fixed at `(1,0,0)`. Confirmed fails under the old order (pivot moves to the bare
+    rotation's result, `~(0,1,0)`, with no bind correction at all) and passes under the fix.
+  - Real-engine visual confirmation: `Wave` and `Celebrate`, which previously rendered the
+    forearm as a dramatically elongated, partially-detached shape, now show a normal,
+    coherent raised arm — screenshotted before/after, front and rotated side views.
+  - Files: `src/Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.cpp`,
+    `tests/Microsoft/Xna/Framework/Graphics/SkinnedModelEXTTests.cpp`.
+  - Verify: `cmake-build-debug/CnaTests --gtest_filter="*SkinnedModelEXT*"` (11/11); full
+    suite 3225/3227 (2 expected skips); all 3 GPU integration tests still `[PASS]`.
 
 - [x] **Task 11.21** — Runtime wardrobe attach API. Added
   `SkinnedModelEXT::AttachPartEXT(SkinnedModelEXT&&)`, moving every part (and its owning

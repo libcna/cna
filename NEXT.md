@@ -42,23 +42,36 @@ over-4-influence vertices, remain confirmed-but-not-fixed (documented in
 `tools/avatar_builder/README.md`) — out of scope for 11a/11b/11c.
 
 **Phase 11d is optional/not scheduled (Task 11.16 only). Phase 11e ("Rendering Fidelity
-& Coverage Hardening") is now open, and Tasks 11.17-11.18 are done.** Opened after a
-hands-on interactive test session (running `examples/demo_avatar` for real, not just
-headless pixel-readback) found the avatar rendered as a uniform skin-tone mannequin with
-no visible hair/clothing color, plus visibly worse forearm deformation on `Stand1`/
-`Celebrate` than on `Stand0`/`Wave`. Task 11.17 fixed the root cause: `AvatarRenderer::
-DrawRealEXT`'s `isHair` check compared `part.Name == "hair"`, which never matched real
-part names (`CNAAvatarHair` etc.), so every part — including actual hair — rendered in
-skin color; fixed via a new `PartTintEXT()` substring-match helper, and
-`AvatarAppearanceEXT` grew `ShirtColor`/`PantsColor`/`ShoesColor` so clothing has its own
-tint instead of silently falling back to skin color. Task 11.18 regenerated the demo's
-committed `Content/` with all 5 baked clips (previously only `Stand0`/`Wave` were wired
-into the demo, even though `Stand1`/`Clap`/`Celebrate` existed since Task 11.15) and
-extended `examples/demo_avatar` to cycle through all 5 via Space. Tasks 11.19-11.25 (real
-textures, the elbow/sleeve tear fix, runtime wardrobe attach, the remaining 26/31
-animation presets, a tint-routing regression test) are scoped but not started — see
-`plan_net.md`'s Phase 11e section for full detail on each, and section 8 below for
-next-step ordering. Full detail on 11a-11d in section 3; next tasks in section 8.
+& Coverage Hardening") is now DONE IN FULL: Tasks 11.17-11.24 are all complete,
+including Task 11.20b, a critical fix.** Opened after a hands-on interactive test
+session (running `examples/demo_avatar` for real, not just headless pixel-readback)
+found the avatar rendered as a uniform skin-tone mannequin with no visible hair/clothing
+color. Task 11.17 fixed `AvatarRenderer::DrawRealEXT`'s `isHair` check (compared
+`part.Name == "hair"`, which never matched real part names) and added
+`ShirtColor`/`PantsColor`/`ShoesColor` to `AvatarAppearanceEXT`. Task 11.18 wired up all 5
+then-existing clips. Task 11.19 added real (if neutral-placeholder) per-part textures.
+Task 11.20 weight-painted the confirmed elbow/sleeve tear. Task 11.21/11.22 added and
+wired up a real runtime wardrobe-attach API. **Task 11.23 brought animation coverage
+to 31/31 `AvatarAnimationPreset` values** (was 5/31) across three batches. Task 11.24
+added a pixel-readback regression test for the Task 11.17 tint-routing bug class.
+
+**Task 11.20b — found and fixed while verifying Task 11.20 — was the session's most
+significant discovery: `SkinnedModelEXT::ComputeBoneTransformsEXT`'s final skinning
+matrix multiplication was in the wrong order** (`worldTransforms[i] *
+InverseBindPoseGlobal[i]` instead of `InverseBindPoseGlobal[i] * worldTransforms[i]`),
+causing any bone with both a nontrivial bind-pose offset *and* a real rotation (i.e. any
+bent limb) to render as a dramatically elongated, partially-detached shape through the
+real GPU-skinned engine — while looking completely correct in Blender, since both
+multiplication orders coincidentally reduce to the identity at rest pose, and every prior
+check (Task 11.11's sanity tests, the existing single-bone integration test, every unit
+test) used only pure translations, which commute regardless of order. Fixed with a
+one-line swap plus a new regression-guarding unit test; confirmed live via
+`examples/demo_avatar`'s `Wave`/`Celebrate` poses, which now show a normal, coherent
+raised arm instead of the "elongated blade" artifact. See `plan_net.md`'s Phase 11e
+section for full task-by-task detail, and section 3 for the session's own narrative.
+
+Only Phase 11d (Task 11.16, optional) and Task 11.25 (speculative, not yet scoped)
+remain open for Phase 11 overall — see section 8.
 
 **Architectural decisions that matter for future work:**
 - `CNA_GamerServices` and `CNA_Net` are separate CMake static libraries (gated by
@@ -83,20 +96,17 @@ next-step ordering. Full detail on 11a-11d in section 3; next tasks in section 8
 ## 2. Current status
 
 ### Build / test
-Freshly re-verified this session (native Linux, `cmake-build-debug`, clean build +
-full run) after Tasks 11.17-11.18: `CnaTests` — **3222/3224** passing, 2 skipped (same
-two documented hardware-dependent skips, `AccelerometerTests`/`GyroscopeTests`
-`GetCurrentValuePropertyDoesNotThrowWhenSupported` — no accelerometer/gyroscope in this
-container). No regressions; the +6 over the prior 3216/3218 in this same session is
-exactly the 6 new `AvatarAppearanceEXTTest` cases added for Task 11.17. Before that, the
-total had already grown by 4 versus the last-recorded 3212/3214 with no test file
-changed in this repo since Task 11.12 (a661b0a) — most likely new tests landed via the
-separately-maintained sibling `sharp-runtime` repo pulled in by the build; not
-investigated further since all tests pass and this isn't a regression.
-`cna_test_avatar_real_render` (Phase 10's synthetic integration test) re-run clean after
-Task 11.17: `[PASS] AvatarRealRenderIntegration: left=(0,255,0) centre=(255,0,0)
-right=(0,255,0)` — unaffected, since its single "body"-named part still falls through
-`PartTintEXT` to skin color exactly as the old `isHair` logic did.
+Freshly re-verified this session (native Linux, `cmake-build-debug`, clean build + full
+run) after Phase 11e's full Tasks 11.17-11.24 + 11.20b: `CnaTests` — **3225/3227**
+passing, 2 skipped (same two documented hardware-dependent skips,
+`AccelerometerTests`/`GyroscopeTests` `GetCurrentValuePropertyDoesNotThrowWhenSupported`
+— no accelerometer/gyroscope in this container). No regressions. All 3 GPU integration
+tests re-run clean: `cna_test_avatar_real_render` `[PASS]`, and two new ones added this
+session — `cna_test_avatar_attach_part` (Task 11.21) and `cna_test_avatar_tint_routing`
+(Task 11.24), both `[PASS]`. One transient unrelated failure seen mid-session,
+`CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`, confirmed to be a
+pre-existing flaky statistical test (passes 4/5 repeats in isolation), not caused by any
+Avatar work.
 Windows/Web/Android cross-build numbers below are from an even earlier session, not
 re-verified since (no code in those paths changed, but treat as "last known good," not
 freshly confirmed):
@@ -717,56 +727,12 @@ presets. Full step-by-step detail is preserved in `plan_net.md`'s Phase 11 secti
 (Tasks 11.13-11.15) — not re-narrated here; see section 5 for the short version of what
 was found, and section 3 for this session's own account.
 
-**Phase 11d is optional/not scheduled (Task 11.16 only). Phase 11e is open, Tasks
-11.17-11.18 are done, Tasks 11.19-11.25 are scoped in `plan_net.md` but not started.**
-Full detail on each is in `plan_net.md`'s Phase 11e section — not re-narrated here.
-Ordered candidates for a next session (none of these is "the plan" — confirm with the
-user before starting any of them; the user explicitly asked for this list to be
-ambitious/exhaustive, so it's longer than usual on purpose):
+**Phase 11e is DONE IN FULL — Tasks 11.17-11.24 (including the critical Task 11.20b
+matrix-order fix) are all complete.** Full detail on each is in `plan_net.md`'s Phase
+11e section — not re-narrated here. Only two items remain for Phase 11 overall, both
+explicitly optional/deferred, not a default next step:
 
-1. **Task 11.20 — weight-painting pass on the elbow/sleeve tear and zero-weight
-   vertices.** Now confirmed (Task 11.18) to be visibly worse on `Stand1`/`Celebrate`
-   than `Stand0`/`Wave` — the highest-visibility remaining defect.
-   - Files/modules: `tools/avatar_builder/generate_body.py`/`generate_clothes.py`
-     (vertex group weight adjustments) — exact approach not yet designed.
-   - Verify: pose the clothed avatar through `Wave`/`Clap`/`Celebrate`'s peak fold
-     frames and render a close-up; forearm/hand should no longer visibly separate from
-     the sleeve; re-run `validate_gltf.py`.
-
-2. **Task 11.19 — real per-part textures.** Currently the only color signal is flat
-   per-part tint (Task 11.17); `ContentManager` already supports loading a per-part
-   texture, but nothing ever emits one.
-   - Files/modules: `tools/avatar_builder/export_gltf.py`,
-     `tools/avatar_builder/generate_materials.py`,
-     `tools/avatar_asset_pipeline/convert_avatar.py`.
-   - Verify: converted content includes a real texture per part; demo shows textured
-     surfaces.
-
-3. **Task 11.21 (+ 11.22) — runtime wardrobe attach API.** `SkinnedModelEXT` has no
-   compose/attach entry point today — a standalone wardrobe piece (Task 11.14) can be
-   converted but never actually worn by a running avatar.
-   - Files/modules: `include/.../Graphics/SkinnedModelEXT.hpp`,
-     `src/Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.cpp`, then
-     `examples/demo_avatar` to exercise it (11.22).
-   - Verify: attach a standalone-converted piece to an already-loaded body at runtime
-     and render both correctly skinned in one `DrawRealEXT` call.
-
-4. **Task 11.23a/b/c — expand animation coverage** (only 5/31 `AvatarAnimationPreset`
-   values have real clips). Split into `Stand2`-`Stand7` (6), the 10 `Female*` presets,
-   and the 10 `Male*` presets — see `plan_net.md` for the exact enumerator lists.
-   - Files/modules: `tools/avatar_builder/generate_animations.py`,
-     `tools/avatar_builder/validate_gltf.py`.
-   - Verify per batch: `validate_gltf.py`, multi-angle Blender renders + pose-bone
-     dumps, **and** a real-engine render via `examples/demo_avatar` — Task 11.18 showed
-     Blender-side validation alone can miss a real-engine-only deformation problem.
-
-5. **Task 11.24 — pixel-readback regression test for per-part tint routing**, so a
-   `PartTintEXT`-class regression (Task 11.17) can't silently reappear.
-   - Files/modules: `examples/avatar_real_render_integration_test.cpp`.
-   - Verify: test fails if the substring match reverts to exact-equality against
-     `"hair"`; passes against the current fix.
-
-6. **Task 11.16 (optional, not scheduled, requires fresh explicit user sign-off) —
+1. **Task 11.16 (optional, not scheduled, requires fresh explicit user sign-off) —
    revisit MakeHuman or CharMorph/Blender** as a higher-quality body *source*, only if
    the user explicitly wants to invest in resolving the automation/permission questions
    from the original attempt (see section 3's history).
@@ -775,8 +741,16 @@ ambitious/exhaustive, so it's longer than usual on purpose):
      specific, fresh go-ahead for the exact action.
    - Verify: not applicable until scoped.
 
-If none of these is what the user wants, the next task likely comes from a different
-phase entirely — ask rather than assume.
+2. **Task 11.25 (speculative, lowest priority, scope not yet designed) — a richer
+   appearance/customization model**: per-part texture atlases (builds on Task 11.19's
+   neutral-placeholder textures), a wider skin-tone/hair-color preset palette, and
+   revisiting whether `AvatarAppearanceEXT` should grow beyond simple named-slot tints.
+   Do not start without a fresh scoping pass with the user first.
+
+If neither of these is what the user wants, the next task likely comes from a different
+phase/track entirely (e.g. Graphics/Vulkan parity, Audio Fáze 9 hardening — see a prior
+cross-project survey in this conversation, not repeated in this file) — ask rather than
+assume.
 
 ---
 
@@ -806,45 +780,37 @@ phase entirely — ask rather than assume.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, in full, before doing anything else. Phase 11a and Phase 11b (Tasks
-11.10-11.12) are both fully done — a real, procedurally-generated, animated avatar
-renders correctly through the real C++ engine for BOTH male and female bodies
-(examples/demo_avatar --gender male|female), each confirmed with a real screenshot.
-AvatarBodyTypeToContentNameEXT (Task 11.12) is the mapping; getting Task 11.11 working
-found and fixed three real bugs (see section 3/5) — none of that needs redoing.
+Read NEXT.md first, in full, before doing anything else. Phases 11a/11b/11c are fully
+done (see plan_net.md's Phase 11 section for that history — none of it needs redoing).
 
-Phase 11c is now fully done: Task 11.13 (parametric body variation), Task 11.14
-(hair/clothing variants + standalone attachable pieces), and Task 11.15 (additional
-animation presets — Stand1/Clap/Celebrate, 5/31 AvatarAnimationPreset values covered)
-are all complete. height_scale/shoulder_width_scale/head_scale are real, independent
-script parameters (Task 11.13); a second hair style (Ponytail) and a second style each
-for Shirt/Pants (LongSleeve/Shorts) exist, and generate_wardrobe.py exports any one piece
-as its own standalone .glb, proven to convert cleanly through the unmodified
-convert_avatar.py (Task 11.14) — runtime attachment of a separate piece onto a running
-avatar needs new C++ engine support that doesn't exist yet, explicitly out of scope for
-that task. Task 11.15 found a real, two-layered gotcha about mirroring bone rotations
-between .L/.R (see section 3/5) — none of that needs redoing.
+Phase 11e ("Rendering Fidelity & Coverage Hardening") is now DONE IN FULL — Tasks
+11.17-11.24 all complete:
+- 11.17: fixed AvatarRenderer::DrawRealEXT's isHair-name-match bug (every part was
+  rendering in skin color); added Shirt/Pants/Shoes colors to AvatarAppearanceEXT.
+- 11.18: wired examples/demo_avatar to cycle through all baked clips.
+- 11.19: real (neutral-placeholder) per-part textures via convert_avatar.py.
+- 11.20: weight-painted the confirmed elbow/sleeve tear + zero-weight vertices.
+- 11.20b (the session's biggest find): SkinnedModelEXT::ComputeBoneTransformsEXT's
+  skinning-matrix multiplication order was BACKWARDS (worldTransforms[i] *
+  InverseBindPoseGlobal[i] instead of InverseBindPoseGlobal[i] * worldTransforms[i]) --
+  any bent limb rendered as a dramatically elongated, detached shape through the real
+  engine while looking perfectly fine in Blender, since both orders coincidentally
+  reduce to identity at rest pose. Fixed with a one-line swap + a new regression unit
+  test (RotatingBoneKeepsItsOwnBindPivotFixed). This was NOT what Task 11.20 was
+  originally scoped to fix -- found while verifying it, then root-caused and fixed
+  separately.
+- 11.21/11.22: real runtime wardrobe-attach API (SkinnedModelEXT::AttachPartEXT) + a
+  --wardrobe-hair demo CLI flag proving it end-to-end.
+- 11.23a/b/c: animation coverage 5/31 -> 31/31 AvatarAnimationPreset values (ALL of
+  them now have a real baked clip for their applicable gender).
+- 11.24: pixel-readback regression test guarding the 11.17 tint-routing bug class.
 
-Tasks 11.17-11.18 (Phase 11e) are also done: fixed AvatarRenderer::DrawRealEXT's
-isHair-name-match bug (every part was rendering in skin color; now hair/shirt/pants/
-shoes each get their own AvatarAppearanceEXT tint via a new PartTintEXT() helper) and
-regenerated examples/demo_avatar's committed Content/ with all 5 baked animation clips
-plus wired Space to cycle through all of them. Phase 11e also scoped Tasks 11.19-11.25
-in plan_net.md (real textures, the elbow/sleeve tear fix, runtime wardrobe attach +
-demo wiring, the remaining 26/31 animation presets in three batches, a tint-routing
-regression test, speculative future appearance-model work) — none of them started yet.
-
-Phase 11d (Task 11.16 — optional, not scheduled, revisit MakeHuman/CharMorph only with
-fresh explicit user sign-off) also remains, and is NOT a default next step. Ask the user
-what they want to work on next — section 8 lists the full ordered menu (11.20's
-weight-painting pass is the highest-visibility remaining defect, but that is not a
-decision to make unilaterally). Do not assume any of these — confirm first.
-
-Do not "fix" the confirmed elbow/sleeve tear or the zero-weight/over-4-influence vertices
-(section 5 / Task 11.20) without the user explicitly asking for it first. Do not refactor
-unrelated code. Do not re-attempt MakeHuman or CharMorph automation without explicit
-fresh sign-off (Task 11.16). Make one small, verified improvement, run the verification
-command for that task, and update NEXT.md and plan_net.md after finishing.
+Only two Phase 11 items remain, BOTH optional/deferred, NOT a default next step:
+Task 11.16 (MakeHuman/CharMorph revisit, needs fresh explicit sign-off) and Task 11.25
+(speculative appearance-model work, not yet scoped). Ask the user what they want next --
+it may come from a different phase/track entirely (a prior session surveyed Graphics/
+Vulkan parity and Audio Fáze 9 hardening as the largest other open tracks, not repeated
+here). Do not assume; confirm first.
 
 Build: cmake --build cmake-build-debug --target CnaTests
 Test:  cmake-build-debug/CnaTests
