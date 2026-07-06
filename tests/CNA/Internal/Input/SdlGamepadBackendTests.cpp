@@ -12,6 +12,7 @@
 #include <cmath>
 #include <limits>
 
+#include "CNA/Input/GamePadButtonLabel.hpp"
 #include "CNA/Input/PowerState.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlGamepadBackend.hpp"
@@ -671,6 +672,61 @@ TEST_F(FakeGamepadTest, PowerInfoIsErrorForDisconnectedSlot)
     int percent = 999;
     EXPECT_EQ(GamePad::GetPowerInfoEXT(PlayerIndex::Four, percent), CNA::Input::PowerStateEXT::Error);
     EXPECT_EQ(percent, -1);
+}
+
+// --- gamepad button labels extension (input_noxna.md N-011) via GamePad::GetButtonLabelEXT ---
+
+// N-011(a): an Xbox-style pad labels the face buttons A/B/X/Y. The XNA Buttons value is mapped to the
+// SDL face button, the fake returns that button's configured label, and the SDL label maps to the EXT.
+TEST_F(FakeGamepadTest, ButtonLabelReportsXboxGlyphs)
+{
+    FakeGamepadConfig cfg = FullyFeaturedGamepad();
+    cfg.buttonLabels[SDL_GAMEPAD_BUTTON_SOUTH] = SDL_GAMEPAD_BUTTON_LABEL_A;
+    cfg.buttonLabels[SDL_GAMEPAD_BUTTON_EAST]  = SDL_GAMEPAD_BUTTON_LABEL_B;
+    cfg.buttonLabels[SDL_GAMEPAD_BUTTON_WEST]  = SDL_GAMEPAD_BUTTON_LABEL_X;
+    cfg.buttonLabels[SDL_GAMEPAD_BUTTON_NORTH] = SDL_GAMEPAD_BUTTON_LABEL_Y;
+    fake.Register(10, cfg);
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::A), CNA::Input::GamePadButtonLabelEXT::A);
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::B), CNA::Input::GamePadButtonLabelEXT::B);
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::X), CNA::Input::GamePadButtonLabelEXT::X);
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::Y), CNA::Input::GamePadButtonLabelEXT::Y);
+}
+
+// N-011(b): a PlayStation-style pad labels the same physical positions cross/circle/square/triangle,
+// proving the full SDL_GamepadButtonLabel -> EXT mapping.
+TEST_F(FakeGamepadTest, ButtonLabelReportsPlayStationGlyphs)
+{
+    FakeGamepadConfig cfg = FullyFeaturedGamepad();
+    cfg.buttonLabels[SDL_GAMEPAD_BUTTON_SOUTH] = SDL_GAMEPAD_BUTTON_LABEL_CROSS;
+    cfg.buttonLabels[SDL_GAMEPAD_BUTTON_EAST]  = SDL_GAMEPAD_BUTTON_LABEL_CIRCLE;
+    cfg.buttonLabels[SDL_GAMEPAD_BUTTON_WEST]  = SDL_GAMEPAD_BUTTON_LABEL_SQUARE;
+    cfg.buttonLabels[SDL_GAMEPAD_BUTTON_NORTH] = SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE;
+    fake.Register(10, cfg);
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::A), CNA::Input::GamePadButtonLabelEXT::Cross);
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::B), CNA::Input::GamePadButtonLabelEXT::Circle);
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::X), CNA::Input::GamePadButtonLabelEXT::Square);
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::Y), CNA::Input::GamePadButtonLabelEXT::Triangle);
+}
+
+// N-011(c): a non-physical Buttons value (a thumbstick direction) has no SDL button, so the bridge
+// short-circuits to Unknown without consulting the device; a connected physical button with no
+// configured label also reports Unknown; and a disconnected slot reports Unknown.
+TEST_F(FakeGamepadTest, ButtonLabelIsUnknownForNonPhysicalUnlabeledOrDisconnected)
+{
+    FakeGamepadConfig cfg = FullyFeaturedGamepad(); // no buttonLabels configured
+    fake.Register(10, cfg);
+    SdlInputBridge::ProcessEvent(addedEvent(10));
+
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::LeftThumbstickUp),
+              CNA::Input::GamePadButtonLabelEXT::Unknown) << "no SDL face button for a stick direction";
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::A),
+              CNA::Input::GamePadButtonLabelEXT::Unknown) << "physical button with no configured label";
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::Four, Buttons::A),
+              CNA::Input::GamePadButtonLabelEXT::Unknown) << "disconnected slot";
 }
 
 // --- sensor enable/disable (P4-017) ---

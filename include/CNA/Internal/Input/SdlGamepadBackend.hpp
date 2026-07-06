@@ -70,6 +70,9 @@ namespace CNA::Internal::Input
 
         /** @brief NOXNA/EXT: battery/charge state; fills `*percent` (0-100, or -1 unknown). SDL_GetGamepadPowerInfo. */
         virtual SDL_PowerState GetGamepadPowerInfo(SDL_Gamepad* gamepad, int* percent) = 0;
+
+        /** @brief NOXNA/EXT: printed glyph label for a face button on this controller. SDL_GetGamepadButtonLabel. */
+        virtual SDL_GamepadButtonLabel GetGamepadButtonLabel(SDL_Gamepad* gamepad, SDL_GamepadButton button) = 0;
     };
 
     /**

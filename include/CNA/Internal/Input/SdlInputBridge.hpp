@@ -6,8 +6,10 @@
 #include <cstdint>
 #include <string>
 
+#include "CNA/Input/GamePadButtonLabel.hpp"
 #include "CNA/Input/PowerState.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
@@ -124,6 +126,14 @@ namespace CNA::Internal::Input
          */
         static CNA::Input::PowerStateEXT GetPowerInfo(
             Microsoft::Xna::Framework::PlayerIndex playerIndex, int& percent);
+
+        /**
+         * @brief NOXNA/EXT: the printed glyph label for a face button on the connected pad, or
+         * Unknown if no gamepad is connected or the button has no label on this controller.
+         */
+        static CNA::Input::GamePadButtonLabelEXT GetButtonLabel(
+            Microsoft::Xna::Framework::PlayerIndex playerIndex,
+            Microsoft::Xna::Framework::Input::Buttons button);
 
         /**
          * @brief Queries SDL for the actual hardware capabilities of the gamepad.

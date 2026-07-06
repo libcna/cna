@@ -115,6 +115,7 @@ override must be added.
 - `static int GetPlayerIndexEXT(PlayerIndex);` — NOXNA/EXT (SDL device player-index / LED; -1 if disconnected)
 - `static bool SetPlayerIndexEXT(PlayerIndex, int);` — NOXNA/EXT
 - `static CNA::Input::PowerStateEXT GetPowerInfoEXT(PlayerIndex, int& percent);` — NOXNA/EXT (battery/charge; percent 0-100 or -1; Error if disconnected)
+- `static CNA::Input::GamePadButtonLabelEXT GetButtonLabelEXT(PlayerIndex, Buttons);` — NOXNA/EXT (face-button glyph; Unknown if disconnected/unlabeled)
 - `static constexpr float LeftDeadZone;` — NOXNA
 - `static constexpr float RightDeadZone;` — NOXNA
 - `static constexpr float TriggerThreshold;` — NOXNA

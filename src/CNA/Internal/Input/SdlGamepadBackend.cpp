@@ -97,6 +97,10 @@ namespace CNA::Internal::Input
             {
                 return SDL_GetGamepadPowerInfo(gamepad, percent);
             }
+            SDL_GamepadButtonLabel GetGamepadButtonLabel(SDL_Gamepad* gamepad, SDL_GamepadButton button) override
+            {
+                return SDL_GetGamepadButtonLabel(gamepad, button);
+            }
         };
 
         RealSdlGamepadBackend g_realBackend;

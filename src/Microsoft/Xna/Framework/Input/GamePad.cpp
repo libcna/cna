@@ -102,4 +102,9 @@ namespace Microsoft::Xna::Framework::Input
     {
         return CNA::Internal::Input::SdlInputBridge::GetPowerInfo(playerIndex, percent);
     }
+
+    CNA::Input::GamePadButtonLabelEXT GamePad::GetButtonLabelEXT(PlayerIndex playerIndex, Buttons button)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetButtonLabel(playerIndex, button);
+    }
 }

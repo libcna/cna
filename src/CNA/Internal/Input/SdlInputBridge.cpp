@@ -342,6 +342,55 @@ namespace
         }
     }
 
+    std::optional<SDL_GamepadButton> try_convert_xna_button_to_sdl(
+        const Microsoft::Xna::Framework::Input::Buttons button)
+    {
+        using Microsoft::Xna::Framework::Input::Buttons;
+        switch (button)
+        {
+        case Buttons::A:              return SDL_GAMEPAD_BUTTON_SOUTH;
+        case Buttons::B:              return SDL_GAMEPAD_BUTTON_EAST;
+        case Buttons::X:              return SDL_GAMEPAD_BUTTON_WEST;
+        case Buttons::Y:              return SDL_GAMEPAD_BUTTON_NORTH;
+        case Buttons::Back:           return SDL_GAMEPAD_BUTTON_BACK;
+        case Buttons::Start:          return SDL_GAMEPAD_BUTTON_START;
+        case Buttons::LeftShoulder:   return SDL_GAMEPAD_BUTTON_LEFT_SHOULDER;
+        case Buttons::RightShoulder:  return SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER;
+        case Buttons::LeftStick:      return SDL_GAMEPAD_BUTTON_LEFT_STICK;
+        case Buttons::RightStick:     return SDL_GAMEPAD_BUTTON_RIGHT_STICK;
+        case Buttons::DPadUp:         return SDL_GAMEPAD_BUTTON_DPAD_UP;
+        case Buttons::DPadDown:       return SDL_GAMEPAD_BUTTON_DPAD_DOWN;
+        case Buttons::DPadLeft:       return SDL_GAMEPAD_BUTTON_DPAD_LEFT;
+        case Buttons::DPadRight:      return SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
+        case Buttons::BigButton:      return SDL_GAMEPAD_BUTTON_GUIDE;
+        case Buttons::Misc1EXT:       return SDL_GAMEPAD_BUTTON_MISC1;
+        case Buttons::Paddle1EXT:     return SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1;
+        case Buttons::Paddle2EXT:     return SDL_GAMEPAD_BUTTON_LEFT_PADDLE1;
+        case Buttons::Paddle3EXT:     return SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2;
+        case Buttons::Paddle4EXT:     return SDL_GAMEPAD_BUTTON_LEFT_PADDLE2;
+        case Buttons::TouchPadEXT:    return SDL_GAMEPAD_BUTTON_TOUCHPAD;
+        default:                      return std::nullopt;
+        }
+    }
+
+    CNA::Input::GamePadButtonLabelEXT sdl_button_label_to_ext(SDL_GamepadButtonLabel label)
+    {
+        using CNA::Input::GamePadButtonLabelEXT;
+        switch (label)
+        {
+        case SDL_GAMEPAD_BUTTON_LABEL_A:        return GamePadButtonLabelEXT::A;
+        case SDL_GAMEPAD_BUTTON_LABEL_B:        return GamePadButtonLabelEXT::B;
+        case SDL_GAMEPAD_BUTTON_LABEL_X:        return GamePadButtonLabelEXT::X;
+        case SDL_GAMEPAD_BUTTON_LABEL_Y:        return GamePadButtonLabelEXT::Y;
+        case SDL_GAMEPAD_BUTTON_LABEL_CROSS:    return GamePadButtonLabelEXT::Cross;
+        case SDL_GAMEPAD_BUTTON_LABEL_CIRCLE:   return GamePadButtonLabelEXT::Circle;
+        case SDL_GAMEPAD_BUTTON_LABEL_SQUARE:   return GamePadButtonLabelEXT::Square;
+        case SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE: return GamePadButtonLabelEXT::Triangle;
+        case SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN:
+        default:                                return GamePadButtonLabelEXT::Unknown;
+        }
+    }
+
     std::optional<GamePadAxis> try_convert_sdl_gamepad_axis(const SDL_GamepadAxis axis)
     {
         switch (axis)
@@ -1099,6 +1148,19 @@ namespace CNA::Internal::Input
         }
         percent = -1;
         return sdl_power_state_to_ext(sdl_gamepad_backend().GetGamepadPowerInfo(gamepad, &percent));
+    }
+
+    CNA::Input::GamePadButtonLabelEXT SdlInputBridge::GetButtonLabel(
+        Microsoft::Xna::Framework::PlayerIndex playerIndex,
+        Microsoft::Xna::Framework::Input::Buttons button)
+    {
+        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
+        if (gamepad == nullptr)
+            return CNA::Input::GamePadButtonLabelEXT::Unknown;
+        const std::optional<SDL_GamepadButton> sdlButton = try_convert_xna_button_to_sdl(button);
+        if (!sdlButton.has_value())
+            return CNA::Input::GamePadButtonLabelEXT::Unknown;
+        return sdl_button_label_to_ext(sdl_gamepad_backend().GetGamepadButtonLabel(gamepad, *sdlButton));
     }
 
     static Microsoft::Xna::Framework::Input::GamePadType sdl_joystick_type_to_gamepad_type(SDL_JoystickType t)

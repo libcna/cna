@@ -40,6 +40,7 @@ namespace CNA::Internal::Input::test_support
         int playerIndex = -1; // SDL device player index (LED number); -1 = unset
         SDL_PowerState powerState = SDL_POWERSTATE_UNKNOWN; // battery/charge state reported by the fake
         int powerPercent = -1; // battery charge 0-100, or -1 if unknown
+        std::map<SDL_GamepadButton, SDL_GamepadButtonLabel> buttonLabels; // printed glyph per face button
     };
 
     class FakeSdlGamepadBackend final : public ISdlGamepadBackend
@@ -265,6 +266,15 @@ namespace CNA::Internal::Input::test_support
             if (percent != nullptr)
                 *percent = d->cfg.powerPercent;
             return d->cfg.powerState;
+        }
+
+        SDL_GamepadButtonLabel GetGamepadButtonLabel(SDL_Gamepad* gamepad, SDL_GamepadButton button) override
+        {
+            FakeDevice* d = dev(gamepad);
+            if (d == nullptr)
+                return SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN;
+            const auto it = d->cfg.buttonLabels.find(button);
+            return it != d->cfg.buttonLabels.end() ? it->second : SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN;
         }
 
         SDL_JoystickID lastClosedId = 0;

@@ -26,7 +26,7 @@
 - [x] **N-009 `GamePad` player-index EXT** — `Get/SetPlayerIndexEXT` (SDL device player-number LED).
 - [x] **N-009b `GamePad` battery/power EXT** — `GetPowerInfoEXT` (`SDL_GetGamepadPowerInfo`) + shared `CNA::Input::PowerStateEXT`.
 - [ ] **N-010 `GamePad` metadata EXT** — name/path/serial/firmware/Steam-handle/connection-state.
-- [ ] **N-011 `GamePad` button labels EXT** — ABXY vs cross/circle/square/triangle.
+- [x] **N-011 `GamePad` button labels EXT** — `GetButtonLabelEXT` (ABXY vs cross/circle/square/triangle).
 - [ ] **N-012 `CNA::Input::Pen`** — stylus (pressure/tilt/rotation/eraser/buttons); event-decoded.
 
 ## Phase P3 — powerful but platform-narrow / manual actuation
@@ -47,6 +47,19 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-011 done (2026-07-06):** `GamePad::GetButtonLabelEXT(player, Buttons) -> CNA::Input::
+  GamePadButtonLabelEXT {Unknown,A,B,X,Y,Cross,Circle,Square,Triangle}` — the printed glyph for a
+  face button, so UI prompts show the right symbol per controller family. New enum header
+  `include/CNA/Input/GamePadButtonLabel.hpp`. Seam: `ISdlGamepadBackend::GetGamepadButtonLabel`
+  (real = `SDL_GetGamepadButtonLabel`; fake = per-button `buttonLabels` config map). Bridge adds
+  `try_convert_xna_button_to_sdl` (public `Buttons` -> `SDL_GamepadButton`, inverse of the existing
+  SDL->internal map) + `sdl_button_label_to_ext`, and `GetButtonLabel` returns Unknown for a
+  disconnected pad or a non-physical `Buttons` value (stick dirs/triggers) without touching the
+  device. Pinned in the freeze test + documented in `docs/input-public-api-frozen.md`. Tests: Xbox
+  glyphs, PlayStation glyphs (full label mapping), and the Unknown paths (non-physical / unlabeled /
+  disconnected). `ctest -L input` green; ASan-clean. Files: GamePadButtonLabel.hpp (new),
+  SdlGamepadBackend.hpp/.cpp, FakeSdlGamepadBackend.hpp, SdlInputBridge.hpp/.cpp, GamePad.hpp/.cpp,
+  freeze test, frozen-API doc, SdlGamepadBackendTests.cpp.
 - **N-009b done (2026-07-06):** `GamePad::GetPowerInfoEXT(player, out percent)` — reads the pad's
   battery/charge state via the gamepad seam. Introduced the shared public enum
   `CNA::Input::PowerStateEXT {Error,Unknown,OnBattery,NoBattery,Charging,Charged}`

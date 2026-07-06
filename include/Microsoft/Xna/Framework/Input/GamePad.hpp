@@ -2,7 +2,9 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Input/GamePadButtonLabel.hpp"
 #include "CNA/Input/PowerState.hpp"
+#include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
@@ -116,6 +118,14 @@ namespace Microsoft::Xna::Framework::Input
          * @return The power state, or PowerStateEXT::Error if the controller is disconnected.
          */
         NOXNA static CNA::Input::PowerStateEXT GetPowerInfoEXT(PlayerIndex playerIndex, int& percent);
+
+        /**
+         * @brief NOXNA/EXT: returns the printed glyph label for a face button on this controller.
+         * @param playerIndex The player index (slot) of the controller.
+         * @param button The XNA button to query (only physical buttons have a label).
+         * @return The button's label, or GamePadButtonLabelEXT::Unknown if disconnected or unlabeled.
+         */
+        NOXNA static CNA::Input::GamePadButtonLabelEXT GetButtonLabelEXT(PlayerIndex playerIndex, Buttons button);
 
         /** @brief Left stick dead zone threshold (XInput-based). */
         NOXNA static constexpr float LeftDeadZone     = 7849.0f / 32768.0f;
