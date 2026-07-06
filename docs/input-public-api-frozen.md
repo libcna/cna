@@ -67,6 +67,18 @@ member-by-member table (STRICT / EXT / NOXNA per member) is the recorded audit; 
 INPUT-API-030 (header hygiene) and INPUT-API-031 (signature freeze) keep it honest, and the enum-value
 guard INPUT-API-034 covers the enum layer.
 
+## `GetTypeName()` exemption (INPUT-API-029)
+
+CLAUDE.md requires every **concrete `System::Object` subclass** to override `NOXNA GetTypeName()`.
+Audit result (2026-07-06): **no** public Input type inherits `System::Object`, directly or transitively.
+The value structs, static classes, and enums are all non-`Object`; the single base-class relationship,
+`MouseCursor : System::IDisposable`, inherits `IDisposable`, which is **not** an `Object` subclass. So
+`GetTypeName()` applies to none of the Input types — **all are exempt**. This exemption is pinned
+mechanically by a `static_assert(!std::is_base_of_v<System::Object, T>)` block over the 18 public
+class/struct Input types in `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`; if a
+type ever gains an `Object` base, that TU stops compiling — the point at which the `NOXNA GetTypeName()`
+override must be added.
+
 ---
 
 ## GamePad cluster (`Microsoft::Xna::Framework::Input`)

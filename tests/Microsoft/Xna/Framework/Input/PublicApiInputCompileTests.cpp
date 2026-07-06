@@ -13,6 +13,9 @@
 
 #include <cstdint>
 #include <functional>
+#include <type_traits>
+
+#include "System/Object.hpp"
 
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
@@ -50,6 +53,44 @@
 #if defined(SDL_MAJOR_VERSION) || defined(SDL_h_)
 #error "A public Input header leaked SDL (<SDL3/SDL.h>) into the public API surface."
 #endif
+
+// INPUT-API-029 — GetTypeName() policy guard.
+//
+// CLAUDE.md requires every *concrete* System::Object subclass to override `NOXNA GetTypeName()`
+// (Object declares it pure-virtual, so a concrete Object subclass that omitted it would not even
+// compile). Audit result: NO public Input type inherits System::Object — the value structs, the
+// static classes, and the enums are all non-Object, and the one type with a base (`MouseCursor :
+// System::IDisposable`) inherits IDisposable, which is itself NOT an Object subclass. So GetTypeName()
+// does not apply to any Input type; every type is exempt. These static_asserts pin that exemption: if a
+// future change makes any public Input type derive from System::Object, this stops compiling — the
+// signal to add the required `NOXNA GetTypeName()` override at that point.
+namespace
+{
+    template <class T>
+    inline constexpr bool not_object_v = !std::is_base_of_v<System::Object, T>;
+
+    using namespace Microsoft::Xna::Framework::Input;
+    using namespace Microsoft::Xna::Framework::Input::Touch;
+
+    static_assert(not_object_v<GamePad>);
+    static_assert(not_object_v<GamePadButtons>);
+    static_assert(not_object_v<GamePadCapabilities>);
+    static_assert(not_object_v<GamePadDPad>);
+    static_assert(not_object_v<GamePadState>);
+    static_assert(not_object_v<GamePadThumbSticks>);
+    static_assert(not_object_v<GamePadTriggers>);
+    static_assert(not_object_v<Keyboard>);
+    static_assert(not_object_v<KeyboardState>);
+    static_assert(not_object_v<Mouse>);
+    static_assert(not_object_v<MouseCursor>);
+    static_assert(not_object_v<MouseState>);
+    static_assert(not_object_v<TextInputEXT>);
+    static_assert(not_object_v<GestureSample>);
+    static_assert(not_object_v<TouchCollection>);
+    static_assert(not_object_v<TouchLocation>);
+    static_assert(not_object_v<TouchPanel>);
+    static_assert(not_object_v<TouchPanelCapabilities>);
+}
 
 #include <gtest/gtest.h>
 

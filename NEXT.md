@@ -51,6 +51,11 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-API-029 — `GetTypeName()` policy confirmed + guarded:** audited all 26 public headers — no Input
+  type inherits `System::Object` (the sole base relationship `MouseCursor : System::IDisposable` is not an
+  `Object` subclass), so `GetTypeName()` applies to none; all exempt. Pinned by a
+  `static_assert(!std::is_base_of_v<System::Object, T>)` block over the 18 class/struct types in
+  `PublicApiInputCompileTests.cpp` (negative-verified). Recorded in `docs/input-public-api-frozen.md`.
 - **INPUT-API-027 finding fixed — `KeyboardState::ToString()` retagged `NOXNA`:** FNA `KeyboardState.cs`
   has no `ToString` (unlike `MouseState`/`GamePadState`/`TouchLocation`), so per CLAUDE.md the CNA
   convenience is now `NOXNA` in `KeyboardState.hpp` + `docs/input-public-api-frozen.md`. Signature-invariant

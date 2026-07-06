@@ -591,8 +591,9 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Deps:** none.
 
 #### INPUT-API-029 — Confirm `GetTypeName()` policy for Input types
-- **Priority:** P2 · **Status:** TODO · **Area:** API
-- **Files:** all Input types
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** API
+- **Files:** `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp` (guard),
+  `docs/input-public-api-frozen.md` (exemption record)
 - **Problem:** CLAUDE.md requires concrete `System::Object` subclasses to override `NOXNA GetTypeName()`.
   No Input type overrides it. Most Input types are value structs / static classes / non-Object — likely
   exempt — but this must be confirmed, not assumed.
@@ -601,6 +602,15 @@ Legend for current per-type test status (from the test audit): COVERED / PARTIAL
 - **Acceptance:** Rule satisfied or explicit exemption recorded per type.
 - **Tests:** n/a / compile.
 - **Deps:** none.
+- **Result (2026-07-06):** Audited inheritance across all 26 public headers: **no** Input type inherits
+  `System::Object` (directly or transitively). The only base-class relationship is
+  `MouseCursor : System::IDisposable`, and `IDisposable` is itself not an `Object` subclass — so
+  `GetTypeName()` applies to **none** of the Input types; all are exempt (value structs, static classes,
+  enums, and the IDisposable-only `MouseCursor`). Pinned the exemption mechanically: added a
+  `static_assert(!std::is_base_of_v<System::Object, T>)` block over all 18 public class/struct Input
+  types in `PublicApiInputCompileTests.cpp` — if a future change makes any of them an `Object` subclass,
+  the TU stops compiling (negative-verified: flipping one assert to require the base fails to build),
+  which is the signal to add the required `NOXNA GetTypeName()` override then.
 
 #### INPUT-API-030 — Public-API-only compile test (header hygiene)
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** API/Test
