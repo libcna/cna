@@ -147,9 +147,16 @@ its documented naming convention (these are FNA additions beyond stock XNA). **T
 changed:** none (perfect, no gap). **Behavior verified:** bit values + no-collision + flag operators.
 **Remaining risk:** none.
 
-## A1-005 — `GamePadDeadZone` `[ ]`
-- [ ] FNA `Input/GamePadDeadZone.cs`; CNA `GamePadDeadZone.hpp`; test `GamePadDeadZoneTests.cpp`.
-- [ ] Verify `None=0, IndependentAxes=1, Circular=2`; freeze test; used by thumbstick dead-zone math.
+## A1-005 — `GamePadDeadZone` `[x]`
+- [x] FNA `Input/GamePadDeadZone.cs`; CNA `GamePadDeadZone.hpp`; test `GamePadDeadZoneTests.cpp`.
+- [x] Verify `None=0, IndependentAxes=1, Circular=2`; freeze test; used by thumbstick dead-zone math.
+
+**Result (2026-07-06):** **Byte-identical to FNA**: `None=0, IndependentAxes=1, Circular=2` (FNA
+`GamePadDeadZone.cs:31-33`). Enum + all 3 members carry Doxygen `@brief`. **Test:**
+`GamePadDeadZoneTest.ValuesMatchXnaSequentialConstants` pins all 3 values. Consumed by
+`GamePadThumbSticks` dead-zone application (`ExcludeAxisDeadZone`, covered in `GamePadThumbSticksTests`) and
+`GamePad::GetState` dead-zone overloads. **Members reviewed:** 3/3. **Files changed:** none (perfect, no
+gap). **Behavior verified:** value parity + dead-zone usage. **Remaining risk:** none.
 
 ## A1-006 — `GamePadType` `[ ]`
 - [ ] FNA `Input/GamePadType.cs`; CNA `GamePadType.hpp`; test `GamePadTypeTests.cpp`.
