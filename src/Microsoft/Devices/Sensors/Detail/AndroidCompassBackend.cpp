@@ -112,12 +112,30 @@ namespace Microsoft::Devices::Sensors::Detail
             }
         }
 
+        // Task COMPASS-008 (2026-07-06): PublishReading() must run *before*
+        // calibrationCallback(), not after -- calibrationCallback() invokes
+        // user code (Compass::Calibrate's subscribers), which may destroy
+        // the owning Compass (and therefore this AndroidCompassBackend)
+        // reentrantly, exactly like a CurrentValueChanged handler can
+        // (SENSORBASE-003). PublishReading() itself never touches `this`
+        // after invoking its own callback (its last statement), matching
+        // this codebase's established "last touch of `this` is a user
+        // callback invocation" safety pattern (see HandleRotationVectorSample()
+        // and Gyroscope::DispatchSensorReading()) -- so calibrationCallback()
+        // must be the true last statement in this function, or a
+        // Calibrate handler destroying the instance would leave this call
+        // site invoking PublishReading() on an already-destroyed `this`.
+        // The previous order (calibrationCallback() then PublishReading())
+        // had exactly that bug. Not independently testable here beyond
+        // compiling (Android-only code, no host test seam reaches this
+        // exact multi-callback call chain -- see COMPASS-008's closing
+        // note in plan_devices.md).
+        PublishReading();
+
         if (calibrationCallback)
         {
             calibrationCallback();
         }
-
-        PublishReading();
     }
 
     void AndroidCompassBackend::PublishReading()

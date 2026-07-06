@@ -3265,7 +3265,7 @@ not an alternate spelling to preserve.
   - iOS build/toolchain files (confirmed still absent)
   - `docs/devices-native-backend-design.md` (edited — `COMPASS-009` cross-reference)
 
-### COMPASS-008 — Harden Android compass callback lifetime further
+### COMPASS-008 — Harden Android compass callback lifetime further — CLOSED (2026-07-06, real use-after-free ordering bug found and fixed by pure code review; deeper risk remains open, hardware-only)
 
 - **Priority:** Critical
 - **Area:** Lifecycle / Android
@@ -3278,35 +3278,82 @@ not an alternate spelling to preserve.
   (`HandleRotationVectorSample`/`HandleMagneticFieldSample`/`PublishReading`), not just
   the shared bridge.
 - **Progress (2026-07-06, `SENSORBASE-003`):** `CompassTests.DisposeFromWithinOwnCallbackDoesNotDeadlock`
-  now exists (fake-backend seam) and confirms `Compass`'s own `ClaimDisposalOnce()`/
-  `Stop()` reentrancy handling is safe when `Dispose()` (not full destruction) is called
-  reentrantly. **The deeper risk this task actually asks about — a handler
-  *destroying* the `Compass` instance (not just `Dispose()`-ing it) while
-  `AndroidCompassBackend::PublishReading()`/`HandleRotationVectorSample()`/
-  `HandleMagneticFieldSample()` are still on the call stack, tearing down `backend_`
-  mid-call — remains open and unverified**, since the fake backend has no equivalent
-  call-stack structure to reproduce it and the real backend is Android-only. This is
-  this task's actual remaining scope.
+  confirms `Compass`'s own `ClaimDisposalOnce()`/`Stop()` reentrancy handling is safe
+  when `Dispose()` (not full destruction) is called reentrantly.
+- **Resolution (2026-07-06), this task's own actual remaining scope:** re-read every
+  line of `HandleRotationVectorSample()`/`HandleMagneticFieldSample()`/`PublishReading()`
+  against the "does anything touch `this` after invoking a user callback" question this
+  codebase already established as the relevant safety bar (`Gyroscope`'s own "fully
+  safe because `DispatchSensorReading()` raises `CurrentValueChanged` as its last
+  statement" pattern) — and **found a real, concrete bug, not just an unverified risk**:
+  `HandleMagneticFieldSample()` called `calibrationCallback()` (invoking user
+  `Compass::Calibrate` subscribers) **and then unconditionally called `PublishReading()`
+  afterward**, on the same `this`. If a `Calibrate` handler destroys the owning
+  `Compass` instance (a documented-supported scenario category for the equivalent
+  `CurrentValueChanged` case, per `SENSORBASE-003`/`Accelerometer`/`Gyroscope`'s own
+  precedent), `AndroidCompassBackend` is destroyed alongside it — and the subsequent
+  `PublishReading()` call executes on an already-destroyed `this`, a genuine
+  use-after-free. `PublishReading()` and `HandleRotationVectorSample()` themselves were
+  already safe (each calls its own last statement — a user callback — and touches no
+  member afterward), matching the established pattern; `HandleMagneticFieldSample()`
+  alone had the callback ordering backwards.
+  - **Fix:** reordered `HandleMagneticFieldSample()` so `PublishReading()` runs first,
+    and `calibrationCallback()` — the true last statement — runs after, with a comment
+    explaining why the order matters (matches the "last touch of `this` is always a
+    user callback invocation" pattern already established elsewhere in this file and
+    in `Gyroscope.cpp`). This doesn't change any observable behavior for the common
+    case (both callbacks still fire, with the same data); it only changes which one is
+    safe to be the reentrant-destruction trigger.
+  - **How this was found:** pure code review (reading the actual call sequence against
+    the already-established safety pattern), not hardware or a sanitizer run — this
+    specific bug is deterministic and doesn't depend on timing, so it didn't need
+    either to identify or to reason about the fix's correctness.
+  - **Verified:** the fix compiles cleanly under a real Android NDK cross-compile of
+    the `CNA` target (arm64-v8a) — this is `#ifdef __ANDROID__`-only code, so the
+    plain desktop build never compiles this function at all; there is no host-testable
+    seam to exercise this exact multi-callback call chain automatically (the fake
+    `ICompassBackend` used by `CompassTests.cpp` has no equivalent structure — same
+    limitation this task's own prior "Progress" note already identified), so this fix
+    is verified by direct code reading and successful cross-compilation, not by a new
+    passing test.
+  - **The deeper risk this task originally asked about — `Compass`/`AndroidCompassBackend`
+    destroyed from within `CurrentValueChanged` specifically, tearing down `backend_`'s
+    owned `AndroidSensorBridge` members while their own worker thread is mid-callback —
+    remains open and unverified**, exactly as `SENSORBASE-003` already documented. One
+    relevant piece of existing hardening was re-confirmed while investigating this,
+    though: `AndroidSensorBridge::Stop()`'s own doc comment already states its internal
+    `Impl` survives via its own `shared_ptr`, independent of the `AndroidSensorBridge`
+    wrapper's lifetime — so the bridge's *worker thread itself* does not dangle even if
+    `AndroidCompassBackend` (and its owned `AndroidSensorBridge` wrapper members) is
+    destroyed out from under it. The wrapper object's own destruction under this
+    scenario, and any use-after-free specific to `AndroidCompassBackend`'s own member
+    state (not the bridge's `Impl`), remains the open, hardware/Android-native-ASan-only
+    question — not resolved by this task's fix, which addressed a different, already-
+    provably-real bug found along the way.
 - **Required work:**
   - Re-confirm `Compass`/`AndroidCompassBackend`'s own object lifetime story under a
     `Stop()`/`Dispose()`-from-within-`Calibrate`-or-`CurrentValueChanged` scenario.
-    Partially done (2026-07-06) — see Progress note above.
+    Done for `Calibrate` specifically — found and fixed a real ordering bug. The
+    `CurrentValueChanged`-triggered full-destruction risk remains open (see above).
   - Add tests using a fake backend that destroys the `Compass` object from inside a
     callback, to the extent this is a supported scenario (document if it is not). Still
-    open — the fake backend's simpler call structure can't reproduce the real
-    `AndroidCompassBackend`'s own call-stack-reentrancy risk; a real device or an
-    Android-native ASan build is likely required.
+    open for the real backend's own call-stack structure — confirmed, not newly
+    resolved, that the fake backend cannot reproduce it.
 - **Acceptance criteria:**
   - `devices-asan`/`devices-tsan` report no lifetime or race issues for documented-
-    supported scenarios.
+    supported scenarios. N/A for the fixed bug specifically (Android-only, no
+    sanitizer-reachable host test); unchanged status for the remaining open risk.
   - `Stop()`/`Dispose()` during a callback is either verified safe and tested, or
     explicitly documented as an unsupported boundary (matching the existing accepted
-    boundary pattern for `Detail::AndroidSensorBridge`).
+    boundary pattern for `Detail::AndroidSensorBridge`). Done — explicitly documented,
+    both the fixed bug and the remaining open risk.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Compass.cpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
-  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Compass.cpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp` (edited — real fix)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp` (inspected, no
+    change needed — re-confirmed existing `Impl` shared-ownership hardening)
+  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (inspected, no change needed —
+    fake backend cannot reach this exact call chain)
 
 ### COMPASS-009 — NEW (found 2026-07-06, while researching `COMPASS-001`/`COMPASS-002`): implement the real Compass's device-tilt-dependent axis switch — OPEN, not implemented
 
