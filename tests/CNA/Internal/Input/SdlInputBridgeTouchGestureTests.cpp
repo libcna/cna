@@ -88,6 +88,35 @@ TEST_F(SdlInputBridgeTouchGestureTest, GestureAndTouchStateShareTheLogicalCoordi
     EXPECT_FLOAT_EQ(gesturePos.Y, ny * static_cast<float>(DisplaySize));
 }
 
+// P5-014: at startup, before GraphicsDevice publishes the display size, TouchPanel.DisplayWidth/Height
+// are 0. Touch PRESENCE must still be tracked (the bridge records it via window/normalized coords,
+// independent of the display metric), but GESTURES must be suppressed until a valid display size exists —
+// otherwise a touch would scale to a bogus (0,0)-corner gesture. This is an intentional, documented
+// startup divergence (touch tracked, gesture suppressed), NOT an unexpected one; gestures resume the
+// moment the display size is published.
+TEST_F(SdlInputBridgeTouchGestureTest, TouchBeforeDisplaySizeIsKnownTracksTouchButSuppressesGestures)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap);
+    TouchPanel::setDisplayWidthProperty(0);   // simulate pre-GraphicsDevice startup
+    TouchPanel::setDisplayHeightProperty(0);
+
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 9001, 0.5f, 0.5f));
+    EXPECT_EQ(TouchPanel::GetState().getCountProperty(), 1)           // presence tracked despite 0 display
+        << "touch presence must be tracked even before the display size is published";
+
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_UP, 9001, 0.5f, 0.5f));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty())          // no bogus (0,0) corner gesture
+        << "gestures must be suppressed until a valid display size exists";
+
+    // Recovery: once the display size is published, gestures resume for a fresh finger.
+    TouchPanel::setDisplayWidthProperty(DisplaySize);
+    TouchPanel::setDisplayHeightProperty(DisplaySize);
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 9002, 0.4f, 0.6f));
+    SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_UP, 9002, 0.4f, 0.6f));
+    EXPECT_TRUE(TouchPanel::getIsGestureAvailableProperty())
+        << "gestures must resume once the display size is known";
+}
+
 TEST_F(SdlInputBridgeTouchGestureTest, FingerDownUpThroughProcessEventProducesTap)
 {
     TouchPanel::setEnabledGesturesProperty(GestureType::Tap);

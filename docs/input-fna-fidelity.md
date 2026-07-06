@@ -183,6 +183,15 @@ from the fake-backend unit tests above.
   fixed XNA-compat value, NOT the tracking cap. `TouchPanel::GetState()` caps the public snapshot at
   `MAX_TOUCHES (8)`, matching FNA's fixed `TouchLocation[MAX_TOUCHES]` array (the event-driven
   `InputManager` map is internally unbounded, but the public state never exceeds 8).
+- **Zero display size at startup (P5-014):** before `GraphicsDevice` publishes the virtual back-buffer
+  size, `TouchPanel.DisplayWidth/Height` are `0`. The gesture path (`INTERNAL_onTouchEvent`, TouchPanel.cpp:188)
+  **early-returns** when either is `<= 0`, so no touch collapses to a bogus `(0,0)`-corner gesture. Touch
+  **presence** is still tracked, because the bridge records it via `SetTouchState(to_touch_pixel_position(...))`,
+  which scales by the SDL **window** size (min 1×1), independent of the display metric. So at startup there is
+  an **intentional** divergence — touch tracked, gestures suppressed — that resolves the instant a valid
+  display size is published (gestures resume). Pinned by
+  `SdlInputBridgeTouchGestureTest.TouchBeforeDisplaySizeIsKnownTracksTouchButSuppressesGestures` and
+  `TouchEdgeCaseTest.ScalingProducesNoGestureWhenDisplaySizeIsZero`.
 - **`GetCapabilities` connected-after-first-touch (P5-013):** `TouchPanel::GetCapabilities` reports
   `IsConnected = false` until a touch device is actually noticed — i.e. `touchDeviceExists_` is set on the
   first `FINGER_DOWN` (`SdlInputBridge.cpp:1428`), or `InputManager::HasAnyTouch()` sees a live touch. This

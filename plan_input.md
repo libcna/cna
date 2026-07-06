@@ -977,11 +977,27 @@ needed in tests). **Coverage** already complete: `GetCapabilitiesIsDisconnectedB
 **Files changed:** `docs/input-fna-fidelity.md` (documented the deviation). **Behavior verified:**
 detection + non-mutation + FNA parity. **Remaining risk:** none.
 
-## P5-014 — Verify display size dependency
-- [ ] Audit behavior when display width/height is zero.
-- [ ] Ensure touch state and gesture state do not diverge unexpectedly.
-- [ ] Add tests for touch before display size is known.
-- [ ] Document startup behavior.
+## P5-014 — Verify display size dependency `[x]`
+- [x] Audit behavior when display width/height is zero.
+- [x] Ensure touch state and gesture state do not diverge unexpectedly.
+- [x] Add tests for touch before display size is known.
+- [x] Document startup behavior.
+
+**Result (2026-07-06):** Audited both coordinate paths. The **gesture** path
+(`TouchPanel::INTERNAL_onTouchEvent`, TouchPanel.cpp:188-190) early-returns when `displayWidth_ <= 0 ||
+displayHeight_ <= 0`, so a touch before the display size is published does **not** collapse to a bogus
+`(0,0)` corner gesture. The **touch-state** path (`SdlInputBridge::to_touch_pixel_position`) scales by the
+SDL **window** size (min 1×1), independent of `TouchPanel.DisplayWidth`, so touch **presence** is still
+tracked at startup. This divergence (touch tracked, gestures suppressed) is **intentional** and resolves
+the moment a valid display size is published. **Documented** as a startup deviation in
+`docs/input-fna-fidelity.md`. **Added**
+`SdlInputBridgeTouchGestureTest.TouchBeforeDisplaySizeIsKnownTracksTouchButSuppressesGestures` (0-display →
+touch tracked, gesture suppressed, then gestures resume once size is published), complementing the existing
+`ScalingProducesNoGestureWhenDisplaySizeIsZero` / `ScalingUsesDisplaySizeForPixelPosition` /
+`ScalingReflectsResizedDisplay`. **Files changed:**
+`tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp` (+1 test), `docs/input-fna-fidelity.md`.
+**Tests:** pass. **Behavior verified:** zero-display safety + intentional startup divergence + recovery.
+**Remaining risk:** none.
 
 ## P5-015 — Verify touch coordinate scaling
 - [ ] Test normalized SDL touch coordinates to pixel coordinates.
