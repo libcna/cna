@@ -311,21 +311,28 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   nothing" and both counts incrementing past capacity. Restored the fix and reran — passes. Full
   suite: **3243/3245 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.6** — Investigate and either implement or explicitly document-as-unsupported real
+- [x] **Task 2.6** — Investigate and either implement or explicitly document-as-unsupported real
   host migration. Confirmed dead/unwired end-to-end: `AllowHostMigration`'s setter
   (`NetworkSession.cpp`, ~lines 185-186) is plain storage never read anywhere in `ENetBackend.cpp`;
   `NetworkEventType::HostChange` is never enqueued anywhere in the repo; `ENetBackend::HandleDisconnect`
   (~lines 288-303) unconditionally ends the session the instant the host peer disconnects, with no
   election logic at all; the wire tag `0x05` reserved for `HostChangeBroadcast` in
   `NetPacketCodec.hpp` (~line 31) is explicitly commented "not implemented"; `NetworkGamer::IsHost`
-  is never recomputed on any migration event. This means `AllowHostMigration = true` currently does
-  nothing — a session always ends when its host disconnects, regardless of the flag. Either (a)
-  implement real host election (elect a remaining gamer, fire `HostChanged`, update wire routing
-  state) gated on the flag, or (b) if implementing this is out of scope for now, make the code
-  honest: e.g. have the setter throw `NotSupportedException` if set to `true`, or add a clear
-  doc-comment + a regression test asserting the current (unsupported) behavior, so a caller can't
-  be misled into thinking migration works. Whichever direction is chosen, add a test proving the
-  actual (documented) behavior.
+  is never recomputed on any migration event.
+  **Decision: (b), document as unsupported** — checked the FNA reference: `AllowHostMigration` is
+  itself just a plain C# auto-property in FNA with zero real migration logic anywhere in FNA's
+  entirely-stubbed networking layer, so there is no real FNA behavior to implement parity with
+  here; a `NotSupportedException`-on-`true` guard would actually be a *divergence* from FNA (which
+  accepts the value freely), not a fidelity fix. Instead documented the true current behavior
+  honestly in both the getter's and setter's Doxygen comments: the flag is stored but has no effect
+  — `ENetBackend::HandleDisconnect` unconditionally ends the session regardless of its value.
+  **Extended** `ENetBackendTest.ClientRaisesSessionEndedOnHostDisconnect` with
+  `client.session->setAllowHostMigrationProperty(true)` before the host disconnects, proving the
+  session still ends immediately (not masked/skipped) even with migration nominally "allowed" —
+  so a future reader can't be misled into thinking this silently works.
+  **No behavior change** — this task is documentation + a regression test proving already-existing,
+  unchanged behavior, so there is no fix to revert-verify. Full suite: **3243/3245 passing** (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.7** — Enforce `AllowJoinInProgress` in `ENetBackend::HandleClientHello`. Confirmed
   (`ENetBackend.cpp`, ~lines 132-177): incoming `ClientHello` is unconditionally accepted regardless

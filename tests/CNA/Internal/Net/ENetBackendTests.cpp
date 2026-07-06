@@ -503,6 +503,13 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
     }
     ASSERT_NE(clientPeerFromHostSide, nullptr);
 
+    // Task 2.6: AllowHostMigration is stored but has no effect on actual behavior (matching FNA's
+    // own reference implementation, itself a plain auto-property with no real migration logic
+    // anywhere in FNA's stubbed-out networking layer) - HandleDisconnect below unconditionally
+    // ends the session regardless of this flag; this test proves that documented behavior rather
+    // than letting a future reader assume setting it to true silently, secretly works.
+    client.session->setAllowHostMigrationProperty(true);
+
     int endedCount = 0;
     NetworkSessionEndReason observedReason = NetworkSessionEndReason::ClientSignedOut;
     client.session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs& e) {

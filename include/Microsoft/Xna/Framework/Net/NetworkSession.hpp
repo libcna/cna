@@ -139,12 +139,22 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets whether host migration is allowed.
          *
+         * Implementation note: this flag is stored but has no effect on actual behavior, matching
+         * FNA's own reference implementation (a plain auto-property with no real migration logic
+         * anywhere in FNA's stubbed-out networking layer). Setting this to true does not enable
+         * host election: `ENetBackend::HandleDisconnect` unconditionally ends the session the
+         * instant its host peer disconnects, with no election logic, regardless of this flag.
+         *
          * @return true if host migration is allowed.
          */
         [[nodiscard]] bool getAllowHostMigrationProperty() const;
 
         /**
          * @brief Sets whether host migration is allowed.
+         *
+         * Implementation note: see getAllowHostMigrationProperty()'s doc comment - this value is
+         * stored, but real host migration is not implemented (matching FNA's own reference
+         * behavior).
          *
          * @param value The new value.
          */
