@@ -1038,9 +1038,26 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   1.1/1.2/1.4), no revert-verify applies. New tests: 8/8 passing. Full suite: **3293/3295 passing**
   (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 5.15** — Add error-path tests for `ENetHostHandle`: `Connect()` with an unresolvable
+- [x] **Task 5.15** — Add error-path tests for `ENetHostHandle`: `Connect()` with an unresolvable
   hostname (should throw a clear, catchable exception), `Send()`/`Broadcast()` targeting zero
   connected peers, and the (currently untested) path where `enet_packet_create` returns null.
+  Added `ConnectWithUnresolvableHostnameThrows` (uses the RFC 2606-reserved `.invalid` TLD, so
+  resolution fails fast and deterministically — 38ms observed — with no real network dependency),
+  `SendToNotYetConnectedPeerDoesNotThrowOrLeak` (sends immediately after `Connect()`, before any
+  `Service()` call — the peer is still `ENET_PEER_STATE_CONNECTING`, so `enet_peer_send` rejects it
+  and `Send()`'s `if (... < 0) enet_packet_destroy(packet);` cleanup branch runs, previously
+  untested), and `BroadcastWithZeroConnectedPeersDoesNotThrow` (a freshly created host with no
+  peers at all).
+
+  The `enet_packet_create` returns null path (real ENet only returns null there on a `malloc()`
+  failure — confirmed by reading `third_party/enet/packet.c`) is intentionally left untested: it
+  cannot be triggered deterministically without replacing the global allocator, which is out of
+  scope. Documented in a comment at the point in the test file where that guard lives, rather than
+  silently skipped.
+
+  Pure test-coverage addition (all three exercised code paths are pre-existing and already
+  correct), no revert-verify applies. New tests: 3/3 passing. Full suite: **3296/3298 passing** (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [x] **Task 5.16** — Add a regression test for the wire-id wraparound/collision scenario fixed in
   Task 2.11 — e.g. 256+ join/leave cycles on one `SessionState` asserting no misrouting. **Already

@@ -111,3 +111,44 @@ TEST(ENetHostHandleTest, LoopbackConnectAndExchangeOnePacket) {
     EXPECT_STREQ(reinterpret_cast<const char*>(received->data), payload);
     enet_packet_destroy(received);
 }
+
+// Task 5.15: error-path coverage. Connect()'s address-resolution failure branch
+// (enet_address_set_host_ip and enet_address_set_host both failing) was previously untested -
+// ".invalid" is an RFC 2606-reserved TLD guaranteed to never resolve, so this is deterministic
+// and fast (no real network round-trip needed to observe the failure).
+TEST(ENetHostHandleTest, ConnectWithUnresolvableHostnameThrows) {
+    ENetHostHandle client = ENetHostHandle::CreateClient(2);
+    EXPECT_THROW(
+        (void) client.Connect("this-hostname-should-not-resolve.invalid", 12345, 2),
+        std::runtime_error
+    );
+}
+
+// Task 5.15: Send()'s `if (enet_peer_send(peer, channel, packet) < 0) enet_packet_destroy(packet);`
+// cleanup branch was previously untested. enet_peer_send() itself rejects (returns < 0) unless the
+// peer is in ENET_PEER_STATE_CONNECTED - true immediately after Connect() returns (the peer starts
+// in ENET_PEER_STATE_CONNECTING and only transitions once a real handshake completes via
+// Service()), so sending before ever calling Service() deterministically exercises this path
+// without needing a real connection or a timeout.
+TEST(ENetHostHandleTest, SendToNotYetConnectedPeerDoesNotThrowOrLeak) {
+    ENetHostHandle client = ENetHostHandle::CreateClient(2);
+    ENetPeer* peer = client.Connect("127.0.0.1", 61199, 2);
+    ASSERT_NE(peer, nullptr);
+
+    const char payload[] = "hello";
+    EXPECT_NO_THROW(client.Send(peer, 0, payload, sizeof(payload), ENET_PACKET_FLAG_RELIABLE));
+}
+
+// Task 5.15: Broadcast() on a host with zero connected peers - enet_host_broadcast() has nothing
+// to iterate over and must be a safe no-op, not a crash.
+TEST(ENetHostHandleTest, BroadcastWithZeroConnectedPeersDoesNotThrow) {
+    ENetHostHandle server = ENetHostHandle::CreateHost(0, 4, 2);
+    const char payload[] = "hello";
+    EXPECT_NO_THROW(server.Broadcast(0, payload, sizeof(payload), ENET_PACKET_FLAG_RELIABLE));
+}
+
+// Task 5.15: the `if (!packet) return;` guard in both Send() and Broadcast(), for when
+// enet_packet_create() itself returns null, is intentionally left untested - real ENet only
+// returns null there on a malloc() failure (see third_party/enet/packet.c), which cannot be
+// triggered deterministically without replacing the global allocator. Documented here rather
+// than skipped silently; see plan_net.md Task 5.15 for the same note.
