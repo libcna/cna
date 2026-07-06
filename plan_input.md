@@ -1020,8 +1020,22 @@ finger-id mapping + gamepad slot lifecycle (P4-009); the 17 ProcessEvent cases (
 (+1 test), `docs/input-fna-fidelity.md`. **Behavior verified:** stick normalization now byte-identical to
 FNA; all other translations already faithful. **Remaining risk:** none.
 
-## L-016 — `TextInputEXT.cpp` / `SdlGamepadBackend.cpp` logic `[ ]`
-- [ ] TextInputEXT window-guarded SDL calls + INTERNAL dispatch; SdlGamepadBackend real SDL wrappers.
+## L-016 — `TextInputEXT.cpp` / `SdlGamepadBackend.cpp` logic `[x]`
+- [x] TextInputEXT window-guarded SDL calls + INTERNAL dispatch; SdlGamepadBackend real SDL wrappers.
+
+**Result (2026-07-06):** Both verified — **faithful, no fix.** **`TextInputEXT.cpp`:** every SDL call maps
+to FNA's — `IsTextInputActive`→`SDL_TextInputActive`, `IsScreenKeyboardShown[(window)]`→`SDL_ScreenKeyboard
+Shown`, `StartTextInput`→`SDL_StartTextInput`, `StopTextInput`→`SDL_StopTextInput`, and `SetInputRectangle`
+builds an `SDL_Rect` and calls **`SDL_SetTextInputArea(window, &rect, 0)`** — the cursor-offset **0 matches
+FNA exactly** (`SDL3_FNAPlatform.cs:779`, which itself passes 0 with a FIXME). All are wrapped in a
+null-window guard (safe — the handle isn't populated until the window exists, Task 703); FNA passes the
+handle straight through. `INTERNAL_OnTextInput`/`OnTextEditing` dispatch the multicast events if subscribed
+(≡ FNA `?.Invoke`). **`SdlGamepadBackend.cpp`:** `RealSdlGamepadBackend` is **19 pure 1:1 SDL3 forwards**
+(IsGamepad→`SDL_IsGamepad`, Open/Close, HasButton/Axis/Sensor, Rumble/RumbleTriggers, SetLED,
+Sensor enable/read, Vendor/Product, GamepadType, …) — no logic to diverge; the `sdl_gamepad_backend()`
+accessor + `SetSdlGamepadBackendForTests` swap seam are trivially correct. **Files changed:** none (logic
+verified). **Behavior verified:** SDL-call fidelity + event dispatch + 1:1 backend forwards. **Remaining
+risk:** none.
 
 ## L-017 — Final logic-audit statement `[ ]`
 - [ ] Summarize logic divergences found (fixed vs documented `DEC-*`), re-run all gates + ASan, record.
