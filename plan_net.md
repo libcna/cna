@@ -473,14 +473,33 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   oversized collections). Restored the fix and reran — all 5 pass. Full suite:
   **3254/3256 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.13** — Fix `SendAppData` silently dropping packets sent before the ENet handshake
-  completes. Confirmed (`ENetBackend.cpp`, ~lines 489-536): a `GamerToWireId` lookup miss does a
+- [x] **Task 2.13** — Fix `SendAppData` silently dropping packets sent before the ENet handshake
+  completes. Confirmed (`ENetBackend.cpp`, ~lines 489-536): a `GamerToWireId` lookup miss did a
   bare `return;` — a `SendData` call issued immediately after `Join()`/`ConnectToHost()` (before at
-  least one `Update()` call pumps the `ClientHello`/`ServerWelcome` round-trip) is silently
-  discarded with no error, retry, or queuing. Decide whether to queue-and-flush-once-ready, or at
-  least surface this discard somehow (a NOXNA diagnostic hook, a debug log) rather than a totally
-  silent drop. Add a test proving the current (fixed) behavior explicitly, whichever direction is
-  chosen.
+  least one `Update()` call pumps the `ClientHello`/`ServerWelcome` round-trip) was silently
+  discarded with no error, retry, or queuing.
+  **Decision: surface the discard rather than queue-and-flush-once-ready** — a full retry/flush
+  redesign would need to track pending sends across multiple, differently-triggered resolution
+  points (`HandleServerWelcome` for the local sender, `HandleClientHello`/`AddRemoteGamer` for a
+  remote target) with correct ordering; nothing else in this codebase retries a dropped send
+  either, so a much simpler observability fix was chosen for this pass.
+  **Fixed:** added `ENetBackend::GetDroppedAppDataCount()` / `ResetDroppedAppDataCount()` (a
+  process-wide diagnostic counter, `NOXNA`-equivalent — not part of real XNA), incremented at the
+  exact `GamerToWireId` lookup-miss branch. The drop itself is unchanged (still a no-op); it's just
+  no longer totally invisible.
+  **Added `ENetBackendTest.SendAppDataBeforeHandshakeDropsButIsNowObservable`**: connects a client
+  out via `ConnectToHost` and immediately (before any `Update()`) calls `SendData` targeting a
+  `NetworkGamer` the session doesn't officially know about yet — targeting "all gamers" instead
+  (which, this early, resolves to just the sender itself) turned out to take
+  `NetworkSession::Update()`'s purely-local, `ENetBackend`-bypassing delivery path instead of
+  reaching `SendAppData` at all, so an explicit not-yet-known recipient was needed to force the
+  real code path under test. Asserts the counter increments by exactly 1 (delta-based, robust
+  against whatever other tests may have already incremented the process-wide counter).
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran — the test file
+  failed to even **compile** (`'GetDroppedAppDataCount' is not a member of 'CNA::Internal::Net::ENetBackend'`),
+  since the whole point of this fix is a previously-nonexistent API. Restored the fix and reran
+  (3x) — passes every time. Full suite: **3255/3257 passing** (2 expected accelerometer/gyroscope
+  skips), no regressions.
 
 - [ ] **Task 2.14** — Add graceful peer disconnect on session teardown. Confirmed:
   `ENetBackend::TeardownSession` destroys the ENet host with no prior `enet_peer_disconnect` call

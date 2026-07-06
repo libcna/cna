@@ -124,6 +124,24 @@ namespace CNA::Internal::Net
         );
 
         /**
+         * @brief Task 2.13: how many `SendAppData` calls have been silently dropped because
+         * sender and/or target weren't yet known to ENetBackend's wire-id map.
+         *
+         * Reachable in practice when `SendData` is called immediately after `Join()`/
+         * `ConnectToHost()`, before any `Update()` call has pumped the `ClientHello`/
+         * `ServerWelcome` round-trip that populates the map. Not part of real XNA; exists purely
+         * so this previously-totally-silent drop is at least observable (e.g. by tests, or a
+         * game's own diagnostics) instead of vanishing with no trace at all.
+         *
+         * @return The number of drops observed so far, process-wide, since startup or the last
+         * `ResetDroppedAppDataCount()` call.
+         */
+        static std::size_t GetDroppedAppDataCount();
+
+        /** @brief Task 2.13: resets the counter `GetDroppedAppDataCount()` reports back to zero. */
+        static void ResetDroppedAppDataCount();
+
+        /**
          * @brief Broadcasts a session state change (StartGame/EndGame) to every connected peer.
          *
          * No-op if RealNetworkingEnabled(session's type) is false, session has no registered

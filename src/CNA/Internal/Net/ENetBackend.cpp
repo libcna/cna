@@ -64,6 +64,10 @@ namespace CNA::Internal::Net
             std::vector<uint8_t> FreeWireIds;
         };
 
+        // Task 2.13: process-wide, since SendAppData's silent-drop path (sender/target not yet in
+        // any per-session SessionState::GamerToWireId map) isn't tied to one particular session.
+        std::size_t droppedAppDataCount_ = 0;
+
         std::unordered_map<NetworkSession*, std::unique_ptr<SessionState>>& Sessions()
         {
             static std::unordered_map<NetworkSession*, std::unique_ptr<SessionState>> sessions;
@@ -525,6 +529,16 @@ namespace CNA::Internal::Net
         return it->second->Host.getBoundPortProperty();
     }
 
+    std::size_t ENetBackend::GetDroppedAppDataCount()
+    {
+        return droppedAppDataCount_;
+    }
+
+    void ENetBackend::ResetDroppedAppDataCount()
+    {
+        droppedAppDataCount_ = 0;
+    }
+
     void ENetBackend::ConnectToHost(NetworkSession* session, const std::string& address, uint16_t port)
     {
         if (!RealNetworkingEnabled(session->getSessionTypeProperty()))
@@ -571,6 +585,12 @@ namespace CNA::Internal::Net
         auto targetIt = state.GamerToWireId.find(target);
         if (senderIt == state.GamerToWireId.end() || targetIt == state.GamerToWireId.end())
         {
+            // Task 2.13: reachable when SendData is called immediately after Join()/
+            // ConnectToHost(), before any Update() call has pumped the ClientHello/ServerWelcome
+            // round-trip that populates GamerToWireId. Previously a totally silent, unobservable
+            // drop; surfaced via a simple counter rather than a bigger queue-and-flush-once-ready
+            // redesign, since nothing else in this codebase retries a dropped send either.
+            ++droppedAppDataCount_;
             return;
         }
 

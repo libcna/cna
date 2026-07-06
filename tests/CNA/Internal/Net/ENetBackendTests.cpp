@@ -291,6 +291,38 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
     // flag; see NetworkGamer::SetIsHost's doc comment), not something this test can prove correct.
 }
 
+// Task 2.13: SendAppData silently dropped (bare `return;`, no error/log/queue) whenever sender
+// and/or target weren't yet known to ENetBackend's wire-id map - reachable whenever SendData is
+// called immediately after ConnectToHost(), before any Update() call has pumped the connect/
+// ClientHello/ServerWelcome round-trip. Rather than a bigger queue-and-flush-once-ready redesign,
+// this drop is now at least observable via GetDroppedAppDataCount() instead of vanishing with no
+// trace; the actual drop behavior itself is unchanged (still a no-op, just now a counted one).
+TEST(ENetBackendTest, SendAppDataBeforeHandshakeDropsButIsNowObservable) {
+    std::size_t before = ENetBackend::GetDroppedAppDataCount();
+
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    // Immediately, before any Update() has pumped the connect/ClientHello/ServerWelcome round
+    // trip - client.session's own ENetBackend-side wire-id map is still completely empty, even
+    // though the local gamer already has a NetworkSession-level placeholder Id. Targeting a
+    // NetworkGamer the session doesn't officially know about yet (rather than "all gamers",
+    // which at this early point resolves to just the sender itself and takes NetworkSession::
+    // Update()'s purely-local, ENetBackend-bypassing delivery path instead) forces the dispatch
+    // through the real, remote-target SendAppData path this task is about.
+    LocalNetworkGamer* localGamer = client.session->getLocalGamersProperty()[0];
+    NetworkGamer notYetKnownRemote = NetworkGamer::CreateInternal(client.session, "SomeRemotePlayer");
+    localGamer->SendData(std::vector<SharpRuntime::bytecs>{1, 2, 3}, SendDataOptions::None, &notYetKnownRemote);
+
+    client.session->Update(); // drains the just-queued PacketSend event -> SendAppData -> drop
+
+    EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + 1);
+}
+
 // --- Task 5.5: AppData relay (real SendData/ReceiveData) ---
 
 TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
