@@ -429,14 +429,27 @@ tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net corre
   structurally-unavoidable behavior, so there is no fix to revert-verify. Full suite:
   **3248/3250 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 2.11** — Fix the wire-id wraparound/collision bug in `ENetBackend`'s
+- [x] **Task 2.11** — Fix the wire-id wraparound/collision bug in `ENetBackend`'s
   `SessionState::NextWireId`. Confirmed: `NextWireId` is a `uint8_t` (`ENetBackend.cpp`, ~line 50),
   incremented via `state.NextWireId++` in `AssignWireId` and never reclaimed/decremented on a
   gamer leaving. A long-running lobby with churn (not 256 *simultaneous* gamers, just 256
-  cumulative joins over the session's life) silently reassigns an in-use wire id, corrupting
-  `HandleAppData`'s wire-id-based routing for whichever gamer previously owned that id. Fix: either
-  reclaim ids on leave (a free-list) or widen the id type with a documented wraparound-avoidance
-  scheme; add a regression test simulating 256+ join/leave cycles asserting no misrouting occurs.
+  cumulative joins over the session's life) would silently reassign an in-use wire id, corrupting
+  `HandleAppData`'s wire-id-based routing for whichever gamer previously owned that id.
+  **Fixed:** added `std::vector<uint8_t> FreeWireIds;` to `SessionState`; `AssignWireId` now pops
+  from it before ever incrementing `NextWireId`; `HandleDisconnect`'s existing per-departing-gamer
+  cleanup loop now also pushes the freed id back onto `FreeWireIds` right alongside its existing
+  `GamerToWireId`/`WireIdToGamer`/`WireIdToPeer` erasures.
+  **Added `ENetBackendTest.DisconnectedPeerWireIdIsReclaimedAndReusedByTheNextJoiner`**: rather
+  than literally spinning 256+ real ENet connect/disconnect cycles (slow, and it would only
+  demonstrate the wraparound at the very end), this directly proves the fix mechanism — 3
+  sequential connect/`ClientHello`/disconnect cycles, asserting each cycle's assigned wire id
+  equals the previous cycle's (proving reclaim-and-reuse, the actual property that prevents
+  wraparound regardless of how many cumulative join/leave cycles occur — a stronger, more direct
+  test than a slow brute-force 256-iteration loop).
+  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with
+  ids `1, 2, 3` (ever-incrementing, no reuse) instead of the same id three times. Restored the fix
+  and reran (3x) — passes every time, each cycle completing near-instantly. Full suite:
+  **3249/3251 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 2.12** — Fix list-length wire fields silently truncating past 255 entries. Confirmed
   pattern in `NetPacketCodec::Encode` (~lines 60, 91, 97, 137, 167): `.size()` is cast down to a

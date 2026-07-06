@@ -56,6 +56,12 @@ namespace CNA::Internal::Net
             // Host-only: which peer owns a given remote wire-id, for AppData relay (Task 5.5).
             // Never populated for the host's own local gamers (they need no peer to reach).
             std::unordered_map<uint8_t, ENetPeer*> WireIdToPeer;
+            // Task 2.11: ids reclaimed from disconnected peers (see HandleDisconnect), reused by
+            // AssignWireId before ever incrementing NextWireId. Without this, NextWireId (a
+            // uint8_t) wraps after 256 *cumulative* joins over the session's life (churn, not 256
+            // simultaneous gamers), silently reassigning an id already owned by a still-connected
+            // gamer and corrupting HandleAppData's wire-id-based routing.
+            std::vector<uint8_t> FreeWireIds;
         };
 
         std::unordered_map<NetworkSession*, std::unique_ptr<SessionState>>& Sessions()
@@ -66,7 +72,16 @@ namespace CNA::Internal::Net
 
         uint8_t AssignWireId(SessionState& state, NetworkGamer* gamer)
         {
-            uint8_t id = state.NextWireId++;
+            uint8_t id;
+            if (!state.FreeWireIds.empty())
+            {
+                id = state.FreeWireIds.back();
+                state.FreeWireIds.pop_back();
+            }
+            else
+            {
+                id = state.NextWireId++;
+            }
             state.GamerToWireId[gamer] = id;
             state.WireIdToGamer[id] = gamer;
             // Surface the real, cross-machine-consistent wire-id through the public
@@ -337,6 +352,10 @@ namespace CNA::Internal::Net
                 state.GamerToWireId.erase(gamer);
                 state.WireIdToGamer.erase(gamerIt);
                 state.WireIdToPeer.erase(wireId);
+                // Task 2.11: reclaim the id for reuse by a future AssignWireId call, instead of
+                // leaving NextWireId to eventually wrap around after enough cumulative join/leave
+                // churn.
+                state.FreeWireIds.push_back(wireId);
             }
             state.PeerWireIds.erase(peerWireIdsIt);
 

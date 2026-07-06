@@ -828,3 +828,68 @@ TEST(ENetBackendTest, HostSurvivesTruncatedClientHelloAndContinuesFunctioningAft
     }
     EXPECT_NE(remoteGamer, nullptr);
 }
+
+// Task 2.11: NextWireId (a uint8_t) was only ever incremented, never reclaimed on a gamer leaving
+// - not 256 *simultaneous* gamers, just 256 *cumulative* joins over the session's life, would
+// silently wrap around and reassign an id still owned by another gamer, corrupting HandleAppData's
+// wire-id-based routing. Rather than spinning literally 256+ real ENet connect/disconnect cycles
+// (slow, and it only demonstrates the wraparound at the very end), this directly proves the actual
+// fix mechanism: a disconnected peer's wire id is reclaimed and handed back out to the *next*
+// connecting peer, rather than the counter marching forever upward - the property that prevents
+// wraparound regardless of how many cumulative join/leave cycles occur.
+TEST(ENetBackendTest, DisconnectedPeerWireIdIsReclaimedAndReusedByTheNextJoiner) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    std::vector<uint8_t> assignedIds;
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+        ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+        ASSERT_NE(peerFromClientSide, nullptr);
+
+        bool connected = false;
+        for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+            host.session->Update();
+            ENetEvent evt{};
+            if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+                connected = true;
+            }
+        }
+        ASSERT_TRUE(connected);
+
+        ClientHelloMessage hello;
+        hello.LocalGamertags = {"Churner"};
+        auto helloBytes = NetPacketCodec::Encode(hello);
+        fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+        fakeClient.Flush();
+
+        ENetPacket* received = nullptr;
+        for (int i = 0; i < 200 && !received; ++i, PollYield()) {
+            host.session->Update();
+            ENetEvent evt{};
+            if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                received = evt.packet;
+            }
+        }
+        ASSERT_NE(received, nullptr);
+        std::vector<SharpRuntime::bytecs> data(received->data, received->data + received->dataLength);
+        ServerWelcomeMessage welcome = NetPacketCodec::DecodeServerWelcome(data);
+        enet_packet_destroy(received);
+        ASSERT_EQ(welcome.AssignedWireIds.size(), 1u);
+        assignedIds.push_back(welcome.AssignedWireIds[0]);
+
+        fakeClient.Disconnect(peerFromClientSide, 0);
+        fakeClient.Flush();
+        for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() > 1; ++i, PollYield()) {
+            host.session->Update();
+        }
+        ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 1)
+            << "cycle " << cycle << " did not clean up on disconnect";
+    }
+
+    // Every cycle reused the same reclaimed id instead of a fresh, ever-incrementing one.
+    ASSERT_EQ(assignedIds.size(), 3u);
+    EXPECT_EQ(assignedIds[0], assignedIds[1]);
+    EXPECT_EQ(assignedIds[1], assignedIds[2]);
+}
