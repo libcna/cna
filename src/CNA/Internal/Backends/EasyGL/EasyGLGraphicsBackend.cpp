@@ -2476,7 +2476,9 @@ void main()
 "uniform vec4 uAlphaTest;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
-"    FragColor=texture(uTexture,vUV)*texture(uTexture2,vUV)*uDiffuseColor;\n"
+"    vec4 base=texture(uTexture,vUV);\n"
+"    base.rgb*=2.0;\n"
+"    FragColor=base*texture(uTexture2,vUV)*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "}\n";

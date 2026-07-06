@@ -113,6 +113,13 @@ protected:
         DualTextureEffect fx(device);
         fx.setTextureProperty(&tex);
         fx.setTexture2Property(&whiteTex_);
+        // Task 383 fix: DualTextureEffect's shader now correctly applies FNA's
+        // `color.rgb *= 2` doubling factor to the first texture slot. With a white
+        // (identity) overlay texture that doubling would otherwise propagate straight
+        // into the final pixel and push this test's mid-range blend samples up near
+        // saturation. Compensate with DiffuseColor=0.5 (2 * 0.5 = 1) so the raw texel
+        // colours this test actually cares about are preserved unscaled.
+        fx.setDiffuseColorProperty(Vector3(0.5f, 0.5f, 0.5f));
         fx.setWorldProperty(Matrix::getIdentityProperty());
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());

@@ -22,5 +22,6 @@ layout(push_constant) uniform PC {
 void main() {
     vec4 tex1 = texture(uTexture,  fragUV);
     vec4 tex2 = texture(uTexture2, fragUV);
+    tex1.rgb *= 2.0;
     outColor  = tex1 * tex2 * fragTint;
 }

@@ -1249,6 +1249,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 383: DualTextureEffect two-texture blend formula, including FNA's color.rgb*=2
+        cna_easygl_test(cna_test_easygl_dualtextureeffect_doubling
+                        examples/easygl_dualtextureeffect_doubling_test.cpp)
+        add_test(NAME EasyGL_DualTextureEffect_Doubling
+                 COMMAND cna_test_easygl_dualtextureeffect_doubling)
+        set_tests_properties(EasyGL_DualTextureEffect_Doubling PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_dualtexture
                         examples/easygl_dualtexture_test.cpp)
         add_test(NAME EasyGL_DualTexture
@@ -2057,6 +2066,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 383: DualTextureEffect two-texture blend formula, including FNA's color.rgb*=2
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_doubling
+                        examples/vulkan_dualtextureeffect_doubling_test.cpp)
+        add_test(NAME Vulkan_DualTextureEffect_Doubling
+                 COMMAND cna_test_vulkan_dualtextureeffect_doubling)
+        set_tests_properties(Vulkan_DualTextureEffect_Doubling PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()
@@ -2210,6 +2228,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_AlphaTest_NullTexture
              COMMAND cna_test_bgfx_alphatest_null_texture)
     set_tests_properties(Bgfx_AlphaTest_NullTexture PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 383: DualTextureEffect two-texture blend formula, including FNA's color.rgb*=2.
+    # Also the first-ever Bgfx pixel-integration test for DualTextureEffect.
+    cna_bgfx_test(cna_test_bgfx_dualtextureeffect_doubling
+                  examples/bgfx_dualtextureeffect_doubling_test.cpp)
+    add_test(NAME Bgfx_DualTextureEffect_Doubling
+             COMMAND cna_test_bgfx_dualtextureeffect_doubling)
+    set_tests_properties(Bgfx_DualTextureEffect_Doubling PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
