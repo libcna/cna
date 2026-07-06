@@ -1545,10 +1545,23 @@ rather than real env; `parse_gamepad_count` is unit-tested directly. **Files cha
 confirmed). **Behavior verified:** owns only the gamepad subsystem, idempotent init, order-independent tests.
 **Remaining risk:** none.
 
-## P8-004 — Verify fake backend coverage
-- [ ] Ensure fake keyboard/mouse/touch/gamepad paths exist or are testable.
-- [ ] Add fake backend helpers where useful.
-- [ ] Keep fake backend internal to tests.
+## P8-004 — Verify fake backend coverage `[x]`
+- [x] Ensure fake keyboard/mouse/touch/gamepad paths exist or are testable.
+- [x] Add fake backend helpers where useful.
+- [x] Keep fake backend internal to tests.
+
+**Result (2026-07-06):** **Gamepad** has a dedicated injectable seam: `ISdlGamepadBackend` +
+`FakeSdlGamepadBackend` installed via `SetSdlGamepadBackendForTests(&fake)` and driven through the real
+`ProcessEvent` in every `FakeGamepadTest` (introspection counters for open/close/rumble/led/sensor +
+`lastRumbleLow/High`, `lastTriggerLow/High`, `lastLedR/G/B`, `setSensorEnabledCalls`). **Keyboard / mouse /
+touch / text** need no separate fake — they are exercised by synthesizing `SDL_Event` structs fed to
+`ProcessEvent` (golden/fuzz/keyboard/mouse/touch/text suites build events by hand), which is the intended
+design. **Fake kept internal:** `FakeSdlGamepadBackend` lives under `tests/` in
+`CNA::Internal::Input::test_support`, marked "NOT compiled into production", installed only via the
+`...ForTests` seam, and `ResetForTests` restores the real backend (pinned by
+`ResetClearsAllGamepadSlotsAndPacketNumbers`). **Files changed:** none (coverage confirmed). **Behavior
+verified:** all four input classes are testable; the fake never leaks into the shipped library.
+**Remaining risk:** none.
 
 ## P8-005 — Verify window handle resolution
 - [ ] Audit all places resolving SDL window handle.
