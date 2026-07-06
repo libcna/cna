@@ -357,7 +357,7 @@ independent task instead of guessing.
 
 ## Phase 3 — desktop-only capabilities
 
-### DEVICES-CNA-008 — `FileDialog`
+### DEVICES-CNA-008 — `FileDialog` — CLOSED (2026-07-07)
 
 - **Priority:** Medium
 - **SDL3 API:** `SDL_dialog.h` — async callback-based
@@ -375,6 +375,64 @@ independent task instead of guessing.
 - **Acceptance criteria:** builds/tests pass; `getIsSupportedProperty()` is correct on
   this Linux container (desktop → real SDL3 probe, not a hardcoded true).
 - **Suggested files:** new files only.
+- **Resolution:** **Correction found before writing any implementation:** reading
+  `third_party/SDL/src/dialog/` directly (per this project's own established "verify
+  against source, don't trust the analysis document" discipline) found a real
+  `third_party/SDL/src/dialog/android/SDL_androiddialog.c` backend, and
+  `third_party/SDL/CMakeLists.txt`'s own per-platform dialog-source selection compiles
+  it in for `ANDROID` — this task's (and `noxna_devices.md`'s) original "desktop-only"
+  claim was wrong. Only iOS and Web/Emscripten genuinely lack a backend. Corrected
+  `getIsSupportedProperty()`'s design (`false` only for `iOS`/`Web` via
+  `CNA::getCurrentPlatform()`) and updated `noxna_devices.md` Sections 1/4.7/5 to match,
+  before implementing anything against the wrong assumption.
+  - **A real incident during this task's own test-writing, caught and fixed
+    immediately:** an early draft of `FileDialogTests.cpp` called the real
+    `Show*Dialog()` functions directly with normal parameters. Running it on this
+    development machine (which, unlike assumed, has a real, working desktop session
+    with `zenity`/XDG portals available) launched four real, interactive `zenity`
+    windows that hung indefinitely waiting for a human — confirmed via `ps aux`, then
+    killed manually. This was an active, unwanted side effect on the real machine, not
+    a hypothetical risk. **Fixed by giving `FileDialog` a swappable backend**
+    (`Detail::IFileDialogBackend`, default `Detail::SdlFileDialogBackend`,
+    `FileDialog::SetBackendForTesting()`) — the exact `Detail::I<X>Backend` pattern
+    `plan_cna_devices.md`'s own Section 3.2 already called for "wherever its real
+    backend cannot be meaningfully exercised" — this class specifically needed it,
+    unlike the simpler static Phase 1 classes, because its real backend has a
+    genuinely uncontainable side effect, not merely an untestable one.
+  - Also found and fixed a real memory-safety bug in the same draft, before it was
+    ever run: SDL3's own doc comment for `SDL_Show*Dialog()`'s `filters` parameter
+    states it "must remain valid at least until the callback is invoked" — since these
+    calls are asynchronous, a naive implementation building `SDL_DialogFileFilter`
+    pointers into a function-local vector (destroyed when the synchronous call
+    returns) would leave SDL reading freed memory once the async callback actually
+    fires. Fixed by heap-allocating a `DialogContext` (owning the callback,
+    `defaultLocation`, and every filter name/pattern string, with `SdlFilters` built
+    only after `FilterNames`/`FilterPatterns` are reserved to their final size so no
+    reallocation can invalidate the `c_str()` pointers taken into it) and freeing it
+    exactly once, inside the trampoline, matching SDL3's own "callback fires exactly
+    once" contract.
+  - Final architecture: `include/CNA/Devices/Detail/IFileDialogBackend.hpp` (interface
+    + `FileDialogResultCallback` type, defined outside `FileDialog` specifically so the
+    interface doesn't depend on it), `Detail/SdlFileDialogBackend.hpp`/`.cpp` (real
+    backend, the `DialogContext`/trampoline logic above), `FileDialog.hpp`/`.cpp`
+    (thin static dispatcher holding a process-wide swappable backend pointer behind a
+    mutex, mirroring `VibrateController`'s own backend-storage discipline).
+  - Added `tests/CNA/Devices/FileDialogTests.cpp` (6 tests) using a
+    `FakeFileDialogBackend`/`ScopedFakeFileDialogBackend` pair — the exact
+    `FakeVibrateBackend`/`ScopedFakeVibrateBackend` pattern from
+    `VibrateControllerTests.cpp`, restoring the real backend in the destructor so a
+    fake never leaks into an unrelated test run later in the same process. **The real
+    backend is never invoked by any test in this file** — confirmed directly by
+    re-running under a `timeout` wrapper (0ms total for all 6, versus the ~130ms and
+    four real `zenity` spawns the first, incorrect draft produced) and by `ps aux`
+    showing zero `zenity`/`kdialog` processes after the run.
+  - Build: `cmake --build cmake-build-debug --target CNA`/`--target CnaTests` (both
+    clean). Ran `FileDialogTests.*` (6/6 pass, 0ms, no stray processes) and the full
+    existing filter plus every `CNA::Devices` suite through this task: 383 tests, 381
+    passed, 2 pre-existing expected skips, zero regressions. Also explicitly re-ran
+    under `devices-asan` with `ASAN_OPTIONS=detect_leaks=1`: 6/6 pass, exit code `0`,
+    zero reports — confirms the `DialogContext`/fake-backend heap allocations are
+    leak-free.
 
 ### DEVICES-CNA-009 — `SystemTray`
 
@@ -429,6 +487,18 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — DEVICES-CNA-008 CLOSED.** `CNA::Devices::FileDialog` implemented, with
+  a real platform-support correction found by reading `third_party/SDL/src/dialog/`
+  directly (Android has a real backend — "desktop-only" was wrong; corrected in
+  `noxna_devices.md` too). **Real incident during development:** an early test draft
+  called the real backend directly and spawned four orphaned `zenity` processes on
+  the actual desktop session — fixed by giving `FileDialog` a swappable
+  `Detail::IFileDialogBackend`, mirroring `VibrateController`'s pattern, so tests never
+  touch the real dialog subsystem. Also caught and fixed a real filter-lifetime
+  memory-safety bug before ever running it (SDL3 requires filter data to outlive the
+  async callback, not just the synchronous call). 6 tests, 0ms, zero stray processes,
+  ASan clean. Full suite 383/383 (381 pass + 2 expected skips). Next:
+  `DEVICES-CNA-009` (`SystemTray`).
 - **2026-07-07 — DEVICES-CNA-007 CLOSED.** `CNA::Devices::DisplayInfo` implemented,
   scope narrowed after design research found `GameWindow` already exposes real-XNA
   orientation/bounds — only content-scale and safe-area were genuinely new. Added one

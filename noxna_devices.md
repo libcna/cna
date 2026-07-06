@@ -40,11 +40,13 @@ plumbing), and have real backend support on all five target platforms.
 
 **Recommended later phases:** `DisplayInfo` (orientation/safe-area/content-scale —
 needs careful scoping against the existing `Microsoft::Xna::Framework::GraphicsDevice`/
-`GameWindow` surface to avoid duplication), `FileDialog` and `SystemTray` (both
-desktop-only — no mobile/Web equivalent exists in SDL3, so these need an honest
-`IsSupported`-style story from day one, mirroring `Microsoft::Devices::Sensors`'
-`SensorState`), and finally `Camera` (the most complex — asynchronous frame delivery,
-per-platform permission prompts, and a texture-upload path into
+`GameWindow` surface to avoid duplication); `FileDialog` (real backends on Desktop
+**and Android** — corrected during implementation, see Section 4.7 below; not
+desktop-only) and `SystemTray` (genuinely desktop-only — no Android/iOS/Web tray
+concept exists in SDL3), both needing an honest `IsSupported`-style story from day one,
+mirroring `Microsoft::Devices::Sensors`' `SensorState`; and finally `Camera` (the most
+complex — asynchronous frame delivery, per-platform permission prompts, and a
+texture-upload path into
 `Microsoft::Xna::Framework::Graphics::Texture2D`).
 
 ---
@@ -387,22 +389,22 @@ per-platform source in this repo), a rough platform-support matrix, a proposed
   `SDL_ShowOpenFolderDialog`, all **asynchronous**: they take a callback invoked later
   (possibly on a different thread, possibly after pumping the event loop, per SDL3's own
   docs) rather than blocking and returning a result directly.
-- **Platform support: desktop-only in any meaningful sense.** Windows/Linux(via
-  portal/GTK/Qt backend)/macOS have real native dialog backends. Android and iOS have no
-  SDL3 dialog backend at all — a mobile game has no "native OS file picker" concept in
-  the same sense a desktop app does. Web has no SDL3 backend for this either (browsers
-  have their own `<input type=file>`-driven flow that doesn't map onto this API shape).
-  **This must be designed as an explicitly desktop-only capability from day one** —
-  `getIsSupportedProperty()` returning `false` on Android/iOS/Web is not a bug or a gap
-  to "eventually fix," it is the correct, permanent answer, and should be documented as
-  such (mirroring how `Compass`/`Motion` are documented as "real on Android only,
-  permanent stub elsewhere").
+- **Platform support — corrected during implementation (Task `DEVICES-CNA-008`,
+  2026-07-07): NOT desktop-only.** This section's original claim was wrong, caught by
+  reading `third_party/SDL/src/dialog/` and `third_party/SDL/CMakeLists.txt` directly
+  rather than assuming. Real native backends exist for Windows, Linux (via XDG
+  portal/zenity), macOS, **and Android** (`third_party/SDL/src/dialog/android/SDL_androiddialog.c`
+  is a real, complete backend — `CMakeLists.txt`'s own per-platform dialog-source
+  selection confirms it's compiled in for `ANDROID`). Only iOS and Web/Emscripten
+  genuinely have no backend (confirmed by their absence from both the source tree and
+  the CMake selection logic) — `getIsSupportedProperty()` should report `false` only
+  for those two, not for Android too.
 - **Proposed sketch (async, so shaped differently from 4.1–4.5):**
   ```cpp
   namespace CNA::Devices {
       class FileDialog {
       public:
-          static bool getIsSupportedProperty(); // false on Android/iOS/Web
+          static bool getIsSupportedProperty(); // false on iOS/Web only, per the correction above
           static void ShowOpenFile(std::function<void(const std::vector<System::String>&)> onResult,
                                     /* filters, default location, allow-multiple */);
           static void ShowSaveFile(std::function<void(const System::String&)> onResult, /* ... */);
@@ -410,8 +412,9 @@ per-platform source in this repo), a rough platform-support matrix, a proposed
       };
   }
   ```
-- **Complexity/priority: Medium complexity (async callback plumbing, desktop-only
-  scoping). Recommended Phase 3.**
+- **Complexity/priority: Medium complexity (async callback plumbing; testability
+  required a swappable backend, since the real one launches a genuine interactive OS
+  dialog no automated test can safely trigger). Recommended Phase 3.**
 
 ### 4.8 `SystemTray` — desktop tray icon + menu
 
@@ -510,7 +513,7 @@ per-platform source in this repo), a rough platform-support matrix, a proposed
 |---|---|---|
 | **1** | `PowerInfo`, `Locale`, `Clipboard`, `UrlLauncher`, `SystemInfo` | Smallest SDL3 surface each (1-6 functions), synchronous, real backends on all 5 target platforms, no cross-cutting design questions to resolve first. |
 | **2** | `DisplayInfo` | Needs one design decision first (how it reaches the existing window/`GraphicsDevice` rather than owning a second one) — otherwise simple. |
-| **3** | `FileDialog`, `SystemTray` | Desktop-only by nature; needs the async-callback shape and an honest `IsSupported` story designed once, then reused for both. `FileDialog` first (more broadly useful than a tray icon). |
+| **3** | `FileDialog`, `SystemTray` | `FileDialog`: real backends on Desktop and Android (corrected during implementation — not desktop-only). `SystemTray`: genuinely desktop-only. Both needed the async-callback shape and an honest `IsSupported` story designed once, then reused for both. `FileDialog` first (more broadly useful, and its swappable-backend testability pattern is reusable for `SystemTray` too). |
 | **4** | `Camera` | Materially harder than everything else combined — async permission + frame delivery + graphics-backend texture upload. Deserves its own dedicated design document when it's actually prioritized, not a rushed addition to this one. |
 | **Not recommended** | Geolocation, Storage/filesystem paths, Microphone, Bluetooth/NFC/biometric/etc. | See Section 4.10 for why each is out of scope. |
 
