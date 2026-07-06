@@ -420,6 +420,29 @@ TEST(MouseTest, SetRelativeMouseModeIsSafeNoOpWithNoWindow)
     ResetMouseState();
 }
 
+TEST(MouseTest, SetPositionIsSafeAndUpdatesInternalStateWithNoWindow)
+{
+    // P3-001: with no published handle and no focused window, resolve_mouse_window() returns null.
+    // SetPosition must NOT hand a null window to SDL_WarpMouseInWindow (undefined), yet must still
+    // update the internal position so GetState() reflects the requested logical coordinate.
+    ResetMouseState();
+    ASSERT_EQ(Mouse::getWindowHandleProperty(), 0u);
+
+    EXPECT_NO_THROW(Mouse::SetPosition(123, 456));
+
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state.getXProperty(), 123);
+    EXPECT_EQ(state.getYProperty(), 456);
+
+    // Negative and large coordinates must be equally safe with no window (no crash, state tracks).
+    EXPECT_NO_THROW(Mouse::SetPosition(-100, -100));
+    EXPECT_NO_THROW(Mouse::SetPosition(1 << 20, 1 << 20));
+    EXPECT_EQ(Mouse::GetState().getXProperty(), 1 << 20);
+    EXPECT_EQ(Mouse::GetState().getYProperty(), 1 << 20);
+
+    ResetMouseState();
+}
+
 TEST(MouseTest, SetCursorIsSafeNoOpForDisposedCursor)
 {
     // Task 803: a disposed cursor has a null SDL handle. SetCursor must no-op rather than call

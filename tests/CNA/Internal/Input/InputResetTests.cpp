@@ -9,7 +9,9 @@
 
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
+#include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
@@ -63,6 +65,44 @@ TEST(InputResetAllForTests, ClearsMouseAndTextInputCallbacks)
     EXPECT_FALSE(static_cast<bool>(Mouse::ClickedEXT));
     EXPECT_FALSE(static_cast<bool>(TextInputEXT::TextInput));
     EXPECT_FALSE(static_cast<bool>(TextInputEXT::TextEditing));
+}
+
+// P3-012: ResetAllForTests must return the accumulated mouse state to rest — buttons Released,
+// position (0,0), and the cumulative scroll-wheel value back to 0 (it lives in InternalInputState,
+// which ResetForTests reassigns wholesale). The ClickedEXT/relative-mode extension state is pinned
+// by ClearsMouseAndTextInputCallbacks above.
+TEST(InputResetAllForTests, ClearsAccumulatedMouseButtonsPositionAndWheel)
+{
+    using CNA::Internal::Input::MouseButton;
+    using Microsoft::Xna::Framework::Input::ButtonState;
+
+    // Start from a clean slate: the scroll-wheel value is process-cumulative, so a prior test's
+    // delta would otherwise leak into the `before` assertion under --gtest_shuffle.
+    InputManager::ResetAllForTests();
+
+    InputManager::SetMouseButtonState(MouseButton::Left, ButtonState::Pressed);
+    InputManager::SetMouseButtonState(MouseButton::XButton2, ButtonState::Pressed);
+    InputManager::SetMousePosition(50, 60);
+    InputManager::AddScrollWheelDelta(240);
+    {
+        const auto before = Mouse::GetState();
+        ASSERT_EQ(before.getLeftButtonProperty(), ButtonState::Pressed);
+        ASSERT_EQ(before.getXProperty(), 50);
+        ASSERT_EQ(before.getYProperty(), 60);
+        ASSERT_EQ(before.getScrollWheelValueProperty(), 240);
+    }
+
+    InputManager::ResetAllForTests();
+
+    const auto after = Mouse::GetState();
+    EXPECT_EQ(after.getLeftButtonProperty(),    ButtonState::Released);
+    EXPECT_EQ(after.getXButton2Property(),      ButtonState::Released);
+    EXPECT_EQ(after.getRightButtonProperty(),   ButtonState::Released);
+    EXPECT_EQ(after.getMiddleButtonProperty(),  ButtonState::Released);
+    EXPECT_EQ(after.getXButton1Property(),      ButtonState::Released);
+    EXPECT_EQ(after.getXProperty(), 0);
+    EXPECT_EQ(after.getYProperty(), 0);
+    EXPECT_EQ(after.getScrollWheelValueProperty(), 0);
 }
 
 TEST(InputResetAllForTests, ResetsSequentialTouchIdCounterViaBridge)

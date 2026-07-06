@@ -441,75 +441,168 @@ ResetAllForTests → IsKeyDown(A) false). No stale leaks: every SDL bridge test 
 
 # Phase 3 — Mouse correctness
 
-## P3-001 — Harden `Mouse::SetPosition`
-- [ ] Audit `Mouse::SetPosition`.
-- [ ] Ensure it does not call SDL with a null window.
-- [ ] Ensure it updates CNA internal state consistently.
-- [ ] Add tests for no-window behavior.
+## P3-001 — Harden `Mouse::SetPosition` `[x]`
+- [x] Audit `Mouse::SetPosition`.
+- [x] Ensure it does not call SDL with a null window.
+- [x] Ensure it updates CNA internal state consistently.
+- [x] Add tests for no-window behavior.
 
-## P3-002 — Verify default `MouseState`
-- [ ] Test default X/Y/scroll values.
-- [ ] Test default buttons are released.
-- [ ] Test equality and hash behavior.
+**Result (2026-07-06):** Confirmed the audit-flagged bug (external priority #2): `SetPosition`
+called `SDL_WarpMouseInWindow(window, …)` **unconditionally**, even when `resolve_mouse_window()`
+returned null (no published handle + no focused window) — unlike the relative-mode getter/setter,
+which both guard. Added a `if (window == nullptr) return;` guard before the warp, matching that
+pattern. The internal `InputManager::SetMousePosition(x,y)` runs *before* the guard, so GetState()
+still reflects the requested logical position with no window. **Files changed:**
+`src/Microsoft/Xna/Framework/Input/Mouse.cpp` (guard + WHY comment). **Tests:** added
+`MouseTest.SetPositionIsSafeAndUpdatesInternalStateWithNoWindow` — no-op-safe warp with no window,
+internal X/Y still updated, plus negative and large (1<<20) coordinates. `MouseTest.*`/`MouseStateTest.*`
+27/27 pass shuffled ×3. **Behavior verified:** no null window handed to SDL; state consistent.
+**Remaining risk:** none.
 
-## P3-003 — Verify `MouseState` hash behavior
-- [ ] Compare hash behavior against FNA where practical.
-- [ ] Decide whether button states should affect hash.
-- [ ] Fix or document current behavior.
-- [ ] Add regression tests.
+## P3-002 — Verify default `MouseState` `[x]`
+- [x] Test default X/Y/scroll values.
+- [x] Test default buttons are released.
+- [x] Test equality and hash behavior.
 
-## P3-004 — Verify mouse button mapping
-- [ ] Test left, middle, right, XButton1, and XButton2.
-- [ ] Verify unknown SDL buttons are ignored safely.
-- [ ] Add SDL bridge tests.
+**Result (2026-07-06):** Covered by `MouseStateTest.DefaultConstructorAllValuesAtRest` (X=0, Y=0,
+scroll=0, all five buttons Released) and the `EqualsAndOperators*` / `GetHashCode*` tests.
+**Files changed:** none (coverage confirmed). **Remaining risk:** none.
 
-## P3-005 — Verify mouse position updates
-- [ ] Test SDL mouse motion updates X/Y.
-- [ ] Test button events carrying position update X/Y.
-- [ ] Test no negative coordinate crashes.
-- [ ] Test large coordinate values.
+## P3-003 — Verify `MouseState` hash behavior `[x]`
+- [x] Compare hash behavior against FNA where practical.
+- [x] Decide whether button states should affect hash.
+- [x] Fix or document current behavior.
+- [x] Add regression tests.
 
-## P3-006 — Verify scroll wheel behavior
-- [ ] Test vertical wheel increments.
-- [ ] Verify XNA-compatible 120-unit behavior.
-- [ ] Decide/document behavior for horizontal wheel.
-- [ ] Add tests for fractional SDL wheel values if possible.
+**Result (2026-07-06):** `GetHashCodeMatchesFormula` pins the exact hash formula (position + wheel +
+packed button bits — buttons DO affect the hash, consistent with equality) and
+`GetHashCodeIsConsistentForEqualStates` pins equal-objects-equal-hash. Buttons-affect-equality is
+pinned by `EqualsAndOperatorsReturnFalseWhenAButtonDiffers`. FNA's MouseState is a value type whose
+default GetHashCode is not contractually specified; CNA's field-based hash is a documented,
+deterministic choice. **Files changed:** none (coverage confirmed). **Remaining risk:** none.
 
-## P3-007 — Verify relative mouse mode
-- [ ] Test enabling relative mode.
-- [ ] Test disabling relative mode.
-- [ ] Test delta accumulation.
-- [ ] Test delta drain-on-read behavior.
-- [ ] Ensure behavior is documented as extension if not XNA.
+## P3-004 — Verify mouse button mapping `[x]`
+- [x] Test left, middle, right, XButton1, and XButton2.
+- [x] Verify unknown SDL buttons are ignored safely.
+- [x] Add SDL bridge tests.
 
-## P3-008 — Verify relative mode with no window
-- [ ] Ensure getter returns safe value.
-- [ ] Ensure setter does not crash.
-- [ ] Decide whether internal desired mode should be remembered.
-- [ ] Add regression tests.
+**Result (2026-07-06):** All five buttons are pinned end-to-end through the bridge by
+`AllFiveButtonsTransitionThroughBridge` (Pressed↔Released, only the pressed one reads Pressed) and
+`ButtonDownFiresClickedEXTWithZeroBasedIndex` (0-based index mapping). Closed a gap: the bridge's
+button `switch` has `default: break;` (SdlInputBridge.cpp:1262) but no test proved an unknown button
+is safely ignored. **Added `UnknownSdlButtonIsIgnoredSafely`** — button indices 0/6/99/255 leave all
+five XNA buttons Released and don't crash, while the position carried by the event is still applied.
+**Files changed:** `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp` (+1 test).
+**Behavior verified:** unknown buttons ignored; position still updates. **Remaining risk:** none.
 
-## P3-009 — Verify `Mouse::WindowHandle`
-- [ ] Test setting and getting the mouse window handle.
-- [ ] Ensure invalid/null handles are safe.
-- [ ] Ensure public API does not expose SDL types beyond opaque pointer policy.
-- [ ] Document behavior.
+## P3-005 — Verify mouse position updates `[x]`
+- [x] Test SDL mouse motion updates X/Y.
+- [x] Test button events carrying position update X/Y.
+- [x] Test no negative coordinate crashes.
+- [x] Test large coordinate values.
 
-## P3-010 — Verify `MouseCursor`
-- [ ] Test system cursor creation.
-- [ ] Test null cursor handling.
-- [ ] Test disposed cursor behavior.
-- [ ] Test repeated `Dispose`.
-- [ ] Test setting cursor before a window exists.
+**Result (2026-07-06):** Motion→X/Y and button-carried-position are pinned by
+`SdlInputBridgeGoldenTest.MouseScriptResolvesToExactState` (a scripted timeline moves to (640,360),
+presses/releases buttons, then moves to (100,200); asserts final X=100/Y=200) and the golden touch/
+mouse script asserting X=320/Y=240. The new `UnknownSdlButtonIsIgnoredSafely` also asserts a button
+event applies its carried (12,34) position. Negative + large (1<<20) coordinate safety is pinned by
+`SetPositionIsSafeAndUpdatesInternalStateWithNoWindow` (P3-001). **Files changed:** none beyond P3-004
+(coverage confirmed). **Remaining risk:** none.
 
-## P3-011 — Verify custom cursor behavior
-- [ ] Audit custom cursor image format expectations.
-- [ ] Validate hotspot/origin behavior.
-- [ ] Add tests for invalid dimensions if possible.
-- [ ] Document platform limitations.
+## P3-006 — Verify scroll wheel behavior `[x]`
+- [x] Test vertical wheel increments.
+- [x] Verify XNA-compatible 120-unit behavior.
+- [x] Decide/document behavior for horizontal wheel.
+- [x] Add tests for fractional SDL wheel values if possible.
 
-## P3-012 — Verify mouse reset
-- [ ] Ensure reset clears buttons, wheel, position, clicked extension state, and relative delta.
-- [ ] Add regression tests.
+**Result (2026-07-06):** Fully covered: `WholeNotchesScaleBy120` (XNA 120-unit notch),
+`RepeatedEventsAccumulate` (cumulative), `ZeroDeltaLeavesValueUnchanged`,
+`FractionalSubNotchIsTruncatedBeforeScaling` (fractional SDL wheel truncated before ×120), and
+`HorizontalWheelIsIgnored` (DEC-18: XNA MouseState has no horizontal wheel, so SDL wheel.x is
+dropped). **Files changed:** none (coverage confirmed). **Remaining risk:** none.
+
+## P3-007 — Verify relative mouse mode `[x]`
+- [x] Test enabling relative mode.
+- [x] Test disabling relative mode.
+- [x] Test delta accumulation.
+- [x] Test delta drain-on-read behavior.
+- [x] Ensure behavior is documented as extension if not XNA.
+
+**Result (2026-07-06):** Covered by `IsRelativeMouseModeEXTRoundTripsThroughRealWindow` (enable/
+disable via a real SDL window), `RelativeModeAccumulatesDeltaAndDrainsOnRead` (accumulation +
+drain-on-read), and `SetIsRelativeMouseModeEXTSyncsInputManagerDeltaHandling`. This is a CNA
+extension (EXT suffix, DEC-14) — not XNA — documented in `docs/input-fna-fidelity.md`. **Files
+changed:** none (coverage confirmed). **Remaining risk:** none.
+
+## P3-008 — Verify relative mode with no window `[x]`
+- [x] Ensure getter returns safe value.
+- [x] Ensure setter does not crash.
+- [x] Decide whether internal desired mode should be remembered.
+- [x] Add regression tests.
+
+**Result (2026-07-06):** `GetIsRelativeMouseModeEXTDefaultsToFalseWithNoWindow` (getter returns false
+with no window) and `SetRelativeMouseModeIsSafeNoOpWithNoWindow` (setter no-ops, no crash). Decision:
+with no window there are no motion events to accumulate, so the InputManager mode flag is left
+untouched rather than remembering a desired mode (Mouse.cpp:136-147) — documented in the source WHY
+comment. **Files changed:** none (coverage confirmed). **Remaining risk:** none.
+
+## P3-009 — Verify `Mouse::WindowHandle` `[x]`
+- [x] Test setting and getting the mouse window handle.
+- [x] Ensure invalid/null handles are safe.
+- [x] Ensure public API does not expose SDL types beyond opaque pointer policy.
+- [x] Document behavior.
+
+**Result (2026-07-06):** Round-trip set/get is exercised by every test that publishes a window
+(`IsRelativeMouseModeEXTRoundTripsThroughRealWindow`, the letterbox warp tests) plus the new no-window
+test asserting `getWindowHandleProperty()==0` after reset. Null/invalid handle is safe: `handle==0`
+falls back to `SDL_GetKeyboardFocus()` and all consumers null-guard. The public API type is
+`std::uintptr_t` (opaque), **not** an `SDL_Window*` — this is enforced by
+`PublicApiInputCompileTests`/`PublicApiInputSignatureFreezeTests` (no SDL types on the surface).
+Documented in `docs/input-public-api-frozen.md`. **Files changed:** none (coverage confirmed).
+**Remaining risk:** none.
+
+## P3-010 — Verify `MouseCursor` `[x]`
+- [x] Test system cursor creation.
+- [x] Test null cursor handling.
+- [x] Test disposed cursor behavior.
+- [x] Test repeated `Dispose`.
+- [x] Test setting cursor before a window exists.
+
+**Result (2026-07-06):** Covered by the `MouseCursorTest` suite: `StockCursorsAreNonNull…` (13 system
+cursors), `DisposeReleasesHandleAndIsIdempotent` (repeated Dispose is a no-op),
+`DisposingAStockSingletonIsANoOpAndKeepsItUsable`, `NonOwningConstructorDoesNotDestroy…`, move
+semantics, and `SetCursorIsSafeNoOpForDisposedCursor` (disposed/null handle → no-op, works with no
+window). **Files changed:** none (coverage confirmed). **Remaining risk:** the stock-cursor tests
+need a real cursor backend — under `SDL_VIDEODRIVER=dummy` they skip; run under x11/xvfb (documented
+in `docs/input-build-and-test.md`).
+
+## P3-011 — Verify custom cursor behavior `[x]`
+- [x] Audit custom cursor image format expectations.
+- [x] Validate hotspot/origin behavior.
+- [x] Add tests for invalid dimensions if possible.
+- [x] Document platform limitations.
+
+**Result (2026-07-06):** Covered by `FromTexture2DCreatesCursorFromColorTexture`,
+`FromTexture2DAcceptsColorSrgbTexture`, `FromTexture2DRejectsNonColorSurfaceFormat` (format
+expectation: Color / ColorSrgb only), `FromTexture2DThrowsWhenOriginIsOutsideTheTexture` (hotspot/
+origin validation), and `ColorCursorSurvivesSourcePixelBufferDestruction` (surface owns its pixels).
+Platform limitations documented in `docs/platform-input-notes.md`. **Files changed:** none (coverage
+confirmed). **Remaining risk:** none.
+
+## P3-012 — Verify mouse reset `[x]`
+- [x] Ensure reset clears buttons, wheel, position, clicked extension state, and relative delta.
+- [x] Add regression tests.
+
+**Result (2026-07-06):** ClickedEXT + text callbacks were already pinned by
+`InputResetAllForTests.ClearsMouseAndTextInputCallbacks`, but nothing asserted the accumulated
+button/position/wheel state resets. **Added
+`InputResetAllForTests.ClearsAccumulatedMouseButtonsPositionAndWheel`**: presses Left+XButton2, sets
+position (50,60) and wheel +240, then `ResetAllForTests()` and asserts all five buttons Released,
+X/Y=0, wheel=0. (Leads with a reset because the wheel is process-cumulative — otherwise a prior
+shuffled test leaks in; caught this under `--gtest_shuffle`.) Relative delta resets with the whole
+`InternalInputState{}` reassignment. **Files changed:**
+`tests/CNA/Internal/Input/InputResetTests.cpp` (+1 test, +2 includes). **Behavior verified:** full
+mouse-state reset. **Remaining risk:** none.
 
 ---
 

@@ -99,7 +99,15 @@ namespace Microsoft::Xna::Framework::Input
 
         // ...but warp the OS cursor in window space: convert logical -> window so the cursor lands
         // at the correct physical pixel on a scaled/letterboxed window (a-0001).
+        // Guard the same way getIsRelativeMouseModeEXTProperty/setIsRelativeMouseModeEXTProperty do:
+        // if there is no window (no published handle and no focused window), never hand SDL a null
+        // window — SDL_WarpMouseInWindow(NULL, ...) is undefined/implementation-dependent. Internal
+        // state was already updated above, so GetState() still reflects the requested position.
         SDL_Window* window = resolve_mouse_window(windowHandle_);
+        if (window == nullptr)
+        {
+            return;
+        }
         float windowX, windowY;
         logical_to_window(window, static_cast<float>(x), static_cast<float>(y), windowX, windowY);
         SDL_WarpMouseInWindow(window, windowX, windowY);

@@ -97,6 +97,36 @@ TEST(SdlInputBridgeMouseButtonStateTest, AllFiveButtonsTransitionThroughBridge)
     InputManager::ResetForTests();
 }
 
+// P3-004: an unknown/out-of-range SDL mouse button (SDL only defines 1..5) must be ignored safely —
+// the bridge's button switch has a `default: break;`, so it changes no button state and does not
+// crash. Only the position (carried by every button event) is applied.
+TEST(SdlInputBridgeMouseButtonStateTest, UnknownSdlButtonIsIgnoredSafely)
+{
+    using MS = Microsoft::Xna::Framework::Input::MouseState;
+    InputManager::ResetForTests();
+
+    // Button index 99 (and 0, which SDL never emits) must not touch any of the five XNA buttons.
+    for (const Uint8 bogus : {Uint8{0}, Uint8{6}, Uint8{99}, Uint8{255}})
+    {
+        SDL_Event e = mouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_DOWN, bogus);
+        e.button.x = 12.0f;
+        e.button.y = 34.0f;
+        EXPECT_NO_THROW(SdlInputBridge::ProcessEvent(e)) << "bogus button " << static_cast<int>(bogus);
+
+        const auto s = Mouse::GetState();
+        EXPECT_EQ(s.getLeftButtonProperty(),    ButtonState::Released);
+        EXPECT_EQ(s.getRightButtonProperty(),   ButtonState::Released);
+        EXPECT_EQ(s.getMiddleButtonProperty(),  ButtonState::Released);
+        EXPECT_EQ(s.getXButton1Property(),      ButtonState::Released);
+        EXPECT_EQ(s.getXButton2Property(),      ButtonState::Released);
+        // Position carried by the event is still applied (P3-005: button events update X/Y).
+        EXPECT_EQ(s.getXProperty(), 12);
+        EXPECT_EQ(s.getYProperty(), 34);
+    }
+
+    InputManager::ResetForTests();
+}
+
 TEST(SdlInputBridgeMouseTest, ButtonUpDoesNotFireClickedEXT)
 {
     // FNA fires INTERNAL_onClicked only on button-down, never on button-up.
