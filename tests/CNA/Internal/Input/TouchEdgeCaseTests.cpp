@@ -138,6 +138,25 @@ TEST_F(TouchEdgeCaseTest, ReleasingAnUnknownFingerIsSafe)
     EXPECT_NO_THROW(TouchPanel::INTERNAL_onTouchEvent(42, TouchLocationState::Released, 0.5f, 0.5f, 0, 0));
 }
 
+// P5-008: an unknown finger that is Released without a prior Pressed must not fabricate a bogus
+// previous location. It surfaces at most as a single Released whose PreviousState stayed Invalid
+// (TryGetPreviousLocation == false), then is flushed after one snapshot — never a Moved and never a
+// Released carrying a garbage previous.
+TEST_F(TouchEdgeCaseTest, UnknownReleasedFingerHasNoBogusPreviousAndClears)
+{
+    InputManager::SetTouchState(42, TouchLocationState::Released, Vector2(5, 5));
+
+    TouchLocation prev;
+    const TouchCollection first = InputManager::GetTouchState();
+    ASSERT_EQ(first.getCountProperty(), 1);
+    EXPECT_EQ(first[0].getStateProperty(), TouchLocationState::Released);
+    EXPECT_EQ(first[0].getPositionProperty(), Vector2(5, 5));
+    EXPECT_FALSE(first[0].TryGetPreviousLocation(prev)); // no bogus previous — previous is Invalid
+
+    // Released is flushed after that one snapshot; nothing lingers.
+    EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 0);
+}
+
 TEST_F(TouchEdgeCaseTest, RepeatedFingerDownWithSameIdOverwritesRatherThanDuplicates)
 {
     InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(10, 10));

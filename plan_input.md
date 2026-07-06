@@ -869,11 +869,24 @@ FNA. **Remaining risk:** none.
 
 **Result (2026-07-06):** External-audit priority #4. **Verified line-by-line against FNA `TouchPanel.cs:165-217`:** the current CNA `SetFinger` has exactly ONE release condition (`prev.State != Invalid && prev.State != Released` → Released, else Invalid) and one press/move condition — **no duplicate remains** (any historical duplication was already removed before this audit; `git log` shows the release condition present in its correct single form). No source change needed. Structure matches FNA exactly; the two documented CNA additions are the `index` bounds guard (`std::out_of_range`) and `touchDeviceExists_ = true` + the `updateInputManagerTouch` cross-write (slot-path→InputManager mirroring). **Tests:** first-touch (Pressed) and moved already covered by `UpdatePropagatesTouchesToPreviousForSlotPathContinuity`; **added** `SetFingerReleaseOfHeldFingerProducesReleasedWithPreviousLocation` (NO_FINGER release of a held finger → Released + previous) and `SetFingerReleaseWithNoPriorFingerInsertsInvalidAndReportsNothing` (else branch → Invalid, slot dropped) — covering both branches of the release condition as a regression guard. **Remaining risk:** none.
 
-## P5-008 — Verify touch previous-location tracking
-- [ ] Test Pressed has invalid previous location.
-- [ ] Test Moved has previous Pressed/Moved location.
-- [ ] Test Released has previous location.
-- [ ] Test unknown Released does not create bogus state.
+## P5-008 — Verify touch previous-location tracking `[x]`
+- [x] Test Pressed has invalid previous location.
+- [x] Test Moved has previous Pressed/Moved location.
+- [x] Test Released has previous location.
+- [x] Test unknown Released does not create bogus state.
+
+**Result (2026-07-06):** The first three transitions are covered end-to-end by
+`EventDrivenPathPreservesPreviousLocation` (Pressed→no previous; Pressed→Moved previous=Pressed;
+Moved→Moved previous=prior Moved; Moved→Released previous=prior Moved, then flushed) plus
+`HeldTouchAutoPromotesToMovedWithPressedPrevious`. The last item lacked a state assertion —
+`ReleasingAnUnknownFingerIsSafe` only proved no-throw. **Added
+`UnknownReleasedFingerHasNoBogusPreviousAndClears`:** an unknown finger released without a prior press
+surfaces at most as a single Released whose `PreviousState` stayed Invalid (`TryGetPreviousLocation`
+== false — no fabricated previous), then is flushed after one snapshot (`RemoveAfterSnapshot`). Verified
+against `InputManager::SetTouchState`/`GetTouchState` (a Released defaults `PreviousState`=Invalid, so no
+bogus previous is possible). **Files changed:** `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp` (+1 test).
+**Tests:** `TouchEdgeCaseTest.*` 21/21 pass. **Behavior verified:** previous-location honesty across all four
+transition classes. **Remaining risk:** none.
 
 ## P5-009 — Verify repeated touch down
 - [ ] Test repeated Pressed with same id.
