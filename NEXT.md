@@ -51,6 +51,11 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-GESTURE cluster verified (17 tasks):** mapped GESTURE-001..020 to the ~20-case
+  `GestureDetectorTest` + the bridge gesture suite — Tap/DoubleTap/Hold/H-V-Free drag/Flick/Pinch+Complete,
+  multi-finger transitions, time/distance/velocity thresholds, position/delta, FIFO ordering, empty-throws,
+  EnabledGestures filtering, and the FNA-port comparison (fidelity-doc §Gestures). Docs-only. Gesture
+  cluster complete.
 - **INPUT-GAMEPAD-031/033/036/037 — type mapping test + backend docs:** added
   `FakeGamepadTest.SdlJoystickTypeMapsToXnaGamePadType` (SDL_JoystickType → GamePadType end-to-end via the
   fake) and a consolidated §Gamepad backend & mapping in `docs/platform-input-notes.md` (SDL gamecontrollerdb

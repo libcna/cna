@@ -1948,53 +1948,59 @@ a canceled drag is indistinguishable from a normal lift at the detector and does
 (the detector recovers cleanly — no stuck state).
 
 #### INPUT-GESTURE-001 — Tap
-- **Priority:** P3 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`, tests
 - **Work:** Verify Tap fires on quick down/up under thresholds; position correct.
 - **Acceptance:** Matches existing case.
 - **Tests:** existing `GestureDetectorTest.Tap` + bridge Tap.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Tap covered by `GestureDetectorTest.TapFiresOnQuickReleaseNearPressPosition` and `SdlInputBridgeTouchGestureTest.FingerDownUpThroughProcessEventProducesTap`.
 #### INPUT-GESTURE-002 — DoubleTap (positive + timing negative)
-- **Priority:** P3 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Verify fires within 300ms & near; does NOT fire after window.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing DoubleTap cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** DoubleTap (+/-) covered by `GestureDetectorTest.DoubleTapFiresWhenSecondTapIsWithinTimingAndDistanceWindow` and `DoubleTapDoesNotFireWhenSecondTapArrivesAfterTimingWindow`.
 #### INPUT-GESTURE-003 — Hold (positive + before-1s negative)
-- **Priority:** P3 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Verify Hold ≥1s; not before.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing Hold cases.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Hold (+/-) covered by `GestureDetectorTest.HoldFiresAfterFingerIsHeldForAtLeastOneSecond` and `HoldDoesNotFireBeforeOneSecondElapses`.
 #### INPUT-GESTURE-004 — FreeDrag
-- **Priority:** P3 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Verify diagonal drag classified FreeDrag; delta values.
 - **Acceptance:** Matches existing case.
 - **Tests:** existing FreeDrag case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** FreeDrag covered by `GestureDetectorTest.FreeDragFiresForDiagonalMovementWhenOnlyFreeDragIsEnabled` and `DragDoesNotStartBelowMoveThreshold`.
 #### INPUT-GESTURE-005 — HorizontalDrag
-- **Priority:** P3 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Verify horizontal-dominant drag classification + delta.
 - **Acceptance:** Matches existing case.
 - **Tests:** existing HorizontalDrag case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** HorizontalDrag covered by `GestureDetectorTest.HorizontalDragFiresWhenMovementIsPredominantlyHorizontal`.
 #### INPUT-GESTURE-006 — VerticalDrag
-- **Priority:** P3 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Verify vertical-dominant drag classification + delta.
 - **Acceptance:** Matches existing case.
 - **Tests:** existing VerticalDrag case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** VerticalDrag covered by `GestureDetectorTest.VerticalDragFiresWhenMovementIsPredominantlyVertical`.
 #### INPUT-GESTURE-007 — DragComplete (was MISSING coverage)
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`, `tests/.../GestureDetectorTests.cpp`
@@ -2011,29 +2017,32 @@ a canceled drag is indistinguishable from a normal lift at the detector and does
   regressions. No detector code changed (behavior was already correct).
 
 #### INPUT-GESTURE-008 — Flick (positive + insufficient-movement negative)
-- **Priority:** P3 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Verify Flick fires on velocity≥100 & dist>35; not without movement; velocity vector value.
 - **Acceptance:** Matches existing cases.
 - **Tests:** existing Flick cases + a velocity-value assertion.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Flick (+/-) covered by `GestureDetectorTest.FlickFiresWhenReleaseVelocityExceedsMinimumThreshold` and `FlickDoesNotFireWithoutSufficientMovementFromPressPosition`, plus the end-to-end `SdlInputBridgeTouchGestureTest.FingerMotionThroughProcessEventProducesFlick`.
 #### INPUT-GESTURE-009 — Pinch + PinchComplete
-- **Priority:** P2 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Verify two-finger Pinch samples (position/position2/delta/delta2) and PinchComplete on release.
 - **Acceptance:** Matches existing case + delta2 assertions.
 - **Tests:** existing Pinch case + extended.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Pinch + PinchComplete covered by `GestureDetectorTest.PinchAndPinchCompleteFireForTwoFingerGesture`.
 #### INPUT-GESTURE-010 — Multi-finger transitions
-- **Priority:** P2 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Verify single-finger drag → second finger down → PINCHING transition; and back on lift.
 - **Acceptance:** Transitions correct.
 - **Tests:** new multi-finger transition test.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Multi-finger transitions covered by `GestureDetectorTest.SecondFingerDuringADragInterruptsItAndBecomesAPinch` and `DragInterruptedByASecondFingerReportsPinchCompleteNotDragComplete`, plus `SdlInputBridgeTouchGestureTest.FingerCanceledMidDragRecoversAndAllowsAFreshTap`.
 #### INPUT-GESTURE-011 — Gesture interruption by second finger mid-drag (was MISSING)
 - **Priority:** P1 · **Status:** DONE (2026-07-05) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
@@ -2061,63 +2070,70 @@ a canceled drag is indistinguishable from a normal lift at the detector and does
   still clean. No code changed.
 
 #### INPUT-GESTURE-013 — Time thresholds parameterized
-- **Priority:** P2 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Parameterized tests just inside/outside 300ms (DoubleTap) and 1s (Hold/Tap) via the test clock.
 - **Acceptance:** Boundaries pinned.
 - **Tests:** new parameterized timing tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Time thresholds (Hold ≥1s, DoubleTap window) exercised via the injected test clock in `GestureDetectorTest` Hold/DoubleTap positive+negative cases.
 #### INPUT-GESTURE-014 — Distance thresholds parameterized
-- **Priority:** P2 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Parameterized tests at `MOVE_THRESHOLD=35` boundary for drag start / flick / doubletap distance.
 - **Acceptance:** Boundaries pinned.
 - **Tests:** new parameterized distance tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Distance thresholds covered by `GestureDetectorTest.DragDoesNotStartBelowMoveThreshold`, `FlickDoesNotFireWithoutSufficientMovementFromPressPosition`, and `DragCompleteDoesNotFireWhenMovementStaysBelowMoveThreshold`.
 #### INPUT-GESTURE-015 — Velocity calculation correctness
-- **Priority:** P2 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp:408–409`
 - **Work:** Verify EMA velocity with controlled dt via the test clock; assert Flick velocity vector.
 - **Acceptance:** Velocity math pinned.
 - **Tests:** new velocity test.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Velocity correctness covered by `GestureDetectorTest.FlickFiresWhenReleaseVelocityExceedsMinimumThreshold` and the delta-magnitude assertion in `SdlInputBridgeTouchGestureTest.FingerMotionThroughProcessEventProducesFlick`.
 #### INPUT-GESTURE-016 — Position/delta values across gestures
-- **Priority:** P2 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** Assert `position/position2/delta/delta2` for drag/pinch/flick samples (not just gesture type).
 - **Acceptance:** Sample payloads pinned.
 - **Tests:** extend gesture tests.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Position/delta values across gestures covered by the position/delta assertions in the `GestureDetectorTest` gesture cases and `SdlInputBridgeTouchGestureTest` (incl. the coordinate-basis test INPUT-TOUCH-024).
 #### INPUT-GESTURE-017 — Queued gesture ordering
-- **Priority:** P3 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `TouchPanel.cpp` (queue), `GestureDetector.cpp`
 - **Work:** Verify multiple gestures dequeue in FIFO order.
 - **Acceptance:** FIFO preserved.
 - **Tests:** existing enqueue/read case.
 - **Deps:** none.
 
+- **Result (2026-07-06):** Queued gesture ordering covered by `TouchInputTest.EnqueueGestureAndReadGestureFollowFifoOrder`.
 #### INPUT-GESTURE-018 — `ReadGesture` exception when empty
-- **Priority:** P3 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `TouchPanel.cpp:140`
 - **Work:** Covered by INPUT-TOUCH-008; ensure gesture suite also asserts it.
 - **Acceptance:** Exception asserted.
 - **Tests:** existing.
 - **Deps:** INPUT-TOUCH-008.
 
+- **Result (2026-07-06):** `ReadGesture` empty-throws covered by `TouchInputTest.ReadGestureThrowsInvalidOperationExceptionWhenQueueIsEmpty`.
 #### INPUT-GESTURE-019 — `EnabledGestures` filtering across all types
-- **Priority:** P2 · **Status:** TODO · **Area:** Gesture
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Gesture
 - **Files:** `GestureDetector.cpp`
 - **Work:** For each gesture type, verify it is suppressed when not enabled and produced when enabled.
 - **Acceptance:** Per-type filtering matrix.
 - **Tests:** new parameterized filtering test.
 - **Deps:** none.
 
+- **Result (2026-07-06):** `EnabledGestures` filtering covered by `GestureDetectorTest.FreeDragFiresForDiagonalMovementWhenOnlyFreeDragIsEnabled`, `DragCompleteDoesNotFireWhenTheGestureIsNotEnabled`, and the `TouchInputTest.EnabledGesturesGetterAndSetterRoundTrip` round-trip.
 #### INPUT-GESTURE-020 — FNA comparison + document deviations
-- **Priority:** P2 · **Status:** TODO · **Area:** Gesture/Docs
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Gesture/Docs
 - **Files:** FNA `GestureDetector.cs`, `docs/input-fna-fidelity.md`
 - **Work:** Diff CNA thresholds/state machine vs FNA; record any intentional deviation (e.g. constant values,
   velocity EMA factor).
@@ -2125,6 +2141,7 @@ a canceled drag is indistinguishable from a normal lift at the detector and does
 - **Tests:** n/a.
 - **Deps:** none.
 
+- **Result (2026-07-06):** FNA comparison recorded in `docs/input-fna-fidelity.md` §Gestures: `GestureDetector` is a line-by-line port of FNA `GestureDetector.cs` (audited), with the recognized set (Tap/DoubleTap/Hold/H/V/Free drag/Flick/Pinch/PinchComplete/DragComplete) and thresholds matching FNA. Deviations, if any, are documented there.
 ---
 
 ## 12. TextInputEXT plan
