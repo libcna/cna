@@ -1491,10 +1491,19 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            if (params.texture1 && bgfx::isValid(texColor3DSampler2_))
+            if (bgfx::isValid(texColor3DSampler2_))
             {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
-                bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
+                if (params.texture1)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
+                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
+                }
+                else
+                {
+                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
+                    // instead of leaving the previous draw's texture bound.
+                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
+                }
             }
             bgfx::submit(currentViewId_, dualTexture3DProgram_);
         }

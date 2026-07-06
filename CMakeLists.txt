@@ -1276,6 +1276,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 387: DualTextureEffect second texture (Texture2, slot 1) null behavior
+        cna_easygl_test(cna_test_easygl_dualtextureeffect_null_texture2
+                        examples/easygl_dualtextureeffect_null_texture2_test.cpp)
+        add_test(NAME EasyGL_DualTextureEffect_NullTexture2
+                 COMMAND cna_test_easygl_dualtextureeffect_null_texture2)
+        set_tests_properties(EasyGL_DualTextureEffect_NullTexture2 PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_dualtexture
                         examples/easygl_dualtexture_test.cpp)
         add_test(NAME EasyGL_DualTexture
@@ -2112,6 +2121,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 387: DualTextureEffect second texture (Texture2, slot 1) null behavior
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_null_texture2
+                        examples/vulkan_dualtextureeffect_null_texture2_test.cpp)
+        add_test(NAME Vulkan_DualTextureEffect_NullTexture2
+                 COMMAND cna_test_vulkan_dualtextureeffect_null_texture2)
+        set_tests_properties(Vulkan_DualTextureEffect_NullTexture2 PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()
@@ -2302,6 +2320,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_DualTextureEffect_NullTexture0
              COMMAND cna_test_bgfx_dualtextureeffect_null_texture0)
     set_tests_properties(Bgfx_DualTextureEffect_NullTexture0 PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 387: DualTextureEffect second texture (Texture2, slot 1) null behavior
+    cna_bgfx_test(cna_test_bgfx_dualtextureeffect_null_texture2
+                  examples/bgfx_dualtextureeffect_null_texture2_test.cpp)
+    add_test(NAME Bgfx_DualTextureEffect_NullTexture2
+             COMMAND cna_test_bgfx_dualtextureeffect_null_texture2)
+    set_tests_properties(Bgfx_DualTextureEffect_NullTexture2 PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
