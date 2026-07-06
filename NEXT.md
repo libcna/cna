@@ -25,18 +25,19 @@ framework/runtime, not a game.
   (`P9-LIFECYCLE`, `P9-CATEGORY`, `P9-VALIDATION`, `P9-DOCS`, `P9-BUILD`, `P9-STOP`, `P9-XACT`,
   `P9-3D`, `P9-HARDWARE`, `P9-DYNAMIC`, `P9-AUDIT`). **All 11 groups are now fully closed** —
   `P9-CATEGORY`'s last 6 deferred sub-items (real XACT category `instanceLimit`/
-  `maxInstanceBehavior`/fade in/out enforcement) closed in `d3b66dea`. Two further user-directed
-  follow-ups beyond Phase 9's original fixed list were also completed after the user was asked
-  which of several remaining candidate areas to continue in: **`P9-CATEGORY-011`** (real
+  `maxInstanceBehavior`/fade in/out enforcement) closed in `d3b66dea`. Three further user-directed
+  follow-ups beyond Phase 9's original fixed list were also completed, each after the user was
+  asked which of several remaining candidate areas to continue in: **`P9-CATEGORY-011`** (real
   cue-level, as opposed to category-level, `instanceLimit`/`maxInstanceBehavior`/fade
-  enforcement), `effc3626`; and a **ThreadSanitizer stress test** for `SoundEffectInstance`'s
-  filter-coefficient locking (`T-4C`'s previously-open "not empirically stress-tested" gap), 
-  `3ebec7db` — ran clean, zero races found. Six genuine open design decisions came up on
-  this branch and were all asked-and-resolved with the user's explicit input (XACT filter
-  `OneOverQ` fidelity, `Cue::IsPlaying`/`IsPaused` coexistence, `Cue::Stop(AsAuthored)` fade
-  timing, category `instanceLimit`/fade scope+approach, choosing cue-level `instanceLimit` as a
-  follow-up area, and choosing the ThreadSanitizer stress test as the next follow-up area) — none
-  remain open.
+  enforcement), `effc3626`; a **ThreadSanitizer stress test** for `SoundEffectInstance`'s
+  filter-coefficient locking (`T-4C`'s previously-open "not empirically stress-tested" gap),
+  `3ebec7db` — ran clean, zero races found; and **`P9-3D-010`** (listener-orientation-aware
+  `Apply3D` pan, the candidate explicitly parked at `P9-3D-009`), `8c622307`. Seven genuine open
+  design decisions came up on this branch and were all asked-and-resolved with the user's explicit
+  input (XACT filter `OneOverQ` fidelity, `Cue::IsPlaying`/`IsPaused` coexistence,
+  `Cue::Stop(AsAuthored)` fade timing, category `instanceLimit`/fade scope+approach, and three
+  successive rounds of "which follow-up area next" — cue-level `instanceLimit`, the ThreadSanitizer
+  stress test, then `Apply3D` pan orientation) — none remain open.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
   by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
@@ -53,13 +54,13 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean as of commit `3ebec7db` (last verified). EasyGL backend (Linux default),
+- **Build:** clean as of commit `8c622307` (last verified). EasyGL backend (Linux default),
   `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets also
   rebuild clean as of their last touch.
-- **Tests:** `CnaTests` whole-suite count was **3269 / 3271 pass** as of the last full run (2
+- **Tests:** `CnaTests` whole-suite count was **3273 / 3275 pass** as of the last full run (2
   skipped: `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected). The audio-scoped subset (§7's `--gtest_filter` audio suite list)
-  was **395 / 395 pass** under ASan+UBSan, with no audio-related leaks or errors, and also clean
+  was **399 / 399 pass** under ASan+UBSan, with no audio-related leaks or errors, and also clean
   (zero races) under a dedicated one-off ThreadSanitizer build (see §5's `T-4C` row). Two unrelated,
   pre-existing, full-suite-load-only flakes have been observed and confirmed non-reproducing in
   isolation (not regressions): `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`
@@ -91,6 +92,8 @@ framework/runtime, not a game.
   of crossfeed, RPC curves evaluated once not continuously, RPC-only cue release timing
   unimplemented, etc.), not a bug. See §5 for the full table. Both category-level *and* cue-level
   XACT `instanceLimit`/`maxInstanceBehavior`/fade are now real and enforced (`P9-CATEGORY-005..011`).
+  `Apply3D`'s pan is now listener-orientation-aware too (`P9-3D-010`) — it's still a linear
+  approximation (no multi-speaker azimuth diffusion), not "ignoring orientation entirely" anymore.
 
 ---
 
@@ -99,6 +102,14 @@ framework/runtime, not a game.
 Newest first. One line each; full rationale, FNA/FAudio citations, and `git stash` verification
 notes for every item are in `plan_audio.md`'s "Phase 9" section.
 
+- `8c622307` — **`P9-3D-010`** (user-directed follow-up, the candidate parked at `P9-3D-009`):
+  `Apply3D`'s pan now projects the emitter's relative position onto the listener's own right axis
+  (`Cross(Forward, Up)`, normalized) instead of raw world-space X, via new
+  `SoundEffectInstance::INTERNAL_calculateListenerRight()`. Verified the axis order against XNA's
+  own `Vector3.Right` constant (default orientation reduces to exactly `(1,0,0)`), so an unrotated
+  listener — the only case the old code ever handled — gets bit-identical pan to before. Only the
+  listener's orientation is used; the emitter's own `Forward`/`Up` remain unread, matching real
+  X3DAudio (emitter orientation there only affects multi-channel emitter configs).
 - `3ebec7db` — **`T-4C` ThreadSanitizer stress test** (user-directed follow-up, no
   behavior change): new `SoundEffectInstanceTests.cpp::ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`
   hammers the real production `INTERNAL_apply{Low,High,Band}PassFilter` setters from a second
@@ -186,7 +197,7 @@ fresh clone/pull of `sharp-runtime` ever lacks this commit, that one CNA test wi
 | **Accepted deviation** | A cue-level `instanceLimit` eviction's victim search has no category filter and no same-cue-definition filter at all — it can evict a completely unrelated cue in the same SoundBank instead of a sibling of the same named cue | `CHECKLIST.md`, `P9-CATEGORY-011` |
 | **Accepted deviation** | RPC volume/pitch curves evaluated once at `Cue::Play()` time, not continuously re-evaluated while playing | `CHECKLIST.md`, `P9-XACT-005/006/007` |
 | **Accepted deviation** | RPC-only cue release timing (`maxRpcReleaseTime`, no authored `fadeOutMS`) unimplemented — tied to the RPC-evaluated-once deviation above | `CHECKLIST.md`, `P9-STOP-010` |
-| **Accepted deviation** | `Apply3D`'s pan ignores listener/emitter `Forward`/`Up` orientation entirely (world-space X displacement only) | `CHECKLIST.md`, `P9-3D-009` |
+| **Accepted deviation** | `Apply3D`'s pan is a single-axis linear approximation (listener-orientation-aware since `P9-3D-010`, projected onto `Cross(Forward, Up)`), not real X3DAudio's full multi-speaker energy-diffusion azimuth pipeline; the emitter's own `Forward`/`Up` remain unread (matches real X3DAudio — emitter orientation only affects multi-channel emitter configs there) | `CHECKLIST.md`, `P9-3D-010` |
 | **Accepted deviation** | Stereo hard-pan eliminates the opposite channel instead of crossfeed-blending it (`Pan` property and `Apply3D` both) | `CHECKLIST.md`, `CP-19`, `P9-3D-001` |
 | **Accepted deviation** | A parsed per-track filter's type can only ever decode to low-pass or high-pass, never band-pass (replicates a real FAudio bit-decode quirk) | `CHECKLIST.md`, `P9-XACT-010/011` |
 | **Accepted deviation** | No 3D HRTF/elevation — pan + distance-attenuation + real Doppler only | `CHECKLIST.md` |
@@ -329,20 +340,20 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 **No confirmed next task is recorded.** Phase 9's fixed, user-specified task list (`plan_audio.md`)
 is now fully closed (§1/§4) — every group, including `P9-CATEGORY`'s previously-deferred
-`instanceLimit`/fade sub-items — and its two user-directed follow-ups, `P9-CATEGORY-011`
-(cue-level instanceLimit) and the `T-4C` ThreadSanitizer stress test (§5), are also closed. There
-is no Phase 10 defined anywhere in `plan_audio.md`.
+`instanceLimit`/fade sub-items — and its three user-directed follow-ups, `P9-CATEGORY-011`
+(cue-level instanceLimit), the `T-4C` ThreadSanitizer stress test, and `P9-3D-010`
+(listener-orientation-aware pan) (§5), are also closed. There is no Phase 10 defined anywhere in
+`plan_audio.md`.
 
 If asked "what's next" with no further user direction, the candidates are the remaining
 `CHECKLIST.md` **accepted deviations** (§5) — none are bugs, so none should be "fixed" without the
 user explicitly deciding to revisit one and accept the scope/risk (most of them trade off against
 the SDL3_mixer backend choice itself, e.g. no reverb bus, no per-source 3D graph, stereo hard-pan
-instead of crossfeed — see §1's "Key architectural decision"). Two candidates from a prior round of
-this same question remain unpicked: **RPC continuous re-evaluation** (the largest/most invasive —
-touches `Cue`/`AudioEngine::Update()` broadly) and **`Apply3D` pan orientation** (`Forward`/`Up`,
-a smaller, more contained math change in `SoundEffectInstance::Apply3D`). Do not start either
-unprompted; ask first, the same way every real design decision in this file was asked before
-implementation.
+instead of crossfeed — see §1's "Key architectural decision"). One candidate from a prior round of
+this same question remains unpicked: **RPC continuous re-evaluation** (the largest/most invasive of
+the ones raised so far — touches `Cue`/`AudioEngine::Update()` broadly, would need a genuine
+per-frame RPC re-evaluation tick that doesn't exist today). Do not start it unprompted; ask first,
+the same way every real design decision in this file was asked before implementation.
 
 ---
 
@@ -353,16 +364,18 @@ implementation.
 - **No inventing a "Phase 10".** Phase 9 is now fully closed (§1/§4/§8) — don't start new feature
   work without the user asking for it first (§8 lists the only candidates, and even those need to
   be asked about before starting).
-- **No re-litigating a resolved open decision without the user asking first.** All six that ever
+- **No re-litigating a resolved open decision without the user asking first.** All seven that ever
   came up on this branch are resolved: XACT filter `OneOverQ` fidelity vs. narrowing
   (`P9-XACT-011`); `Cue::IsPlaying`/`IsPaused` coexistence (`P9-LIFECYCLE-013`);
   `Cue::Stop(AsAuthored)`'s authored `fadeOutMS` timing (`P9-STOP-010`); category
   `instanceLimit`/`maxInstanceBehavior`/fade scope (`P9-CATEGORY-005..010`, `d3b66dea` — including
   the QUEUE/REPLACE_OLDEST/REPLACE_QUIETEST collapse, matching FAudio's own shipped behavior);
   cue-level `instanceLimit`/`maxInstanceBehavior`/fade scope (`P9-CATEGORY-011` — including the
-  bank-wide-unfiltered victim search quirk, also matching FAudio's own shipped behavior); and
-  which follow-up area to continue in next after that, twice (cue-level `instanceLimit`, then the
-  `T-4C` ThreadSanitizer stress test).
+  bank-wide-unfiltered victim search quirk, also matching FAudio's own shipped behavior);
+  `Apply3D`'s pan-orientation fix scope (`P9-3D-010` — contained to the pan projection only, not
+  full X3DAudio multi-speaker diffusion); and which follow-up area to continue in next, three
+  times in a row (cue-level `instanceLimit`, then the `T-4C` ThreadSanitizer stress test, then
+  `Apply3D` pan orientation).
 - **No Media namespace work** — explicitly out of scope for this branch.
 - **No FAudio/FACT migration** — the backend is SDL3_mixer by design.
 - **No real 3D HRTF, Doppler-beyond-what's-implemented, or reverb implementation** — SDL3_mixer
@@ -382,9 +395,10 @@ implementation.
 ```
 Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state -- Phase 9
 is now fully closed (all 11 groups, including P9-CATEGORY's last 6 sub-items, d3b66dea), and its
-two user-directed follow-ups (P9-CATEGORY-011 cue-level instanceLimit; T-4C's ThreadSanitizer
-stress test) are also closed. There is no confirmed next task recorded (see §8) -- ask the user
-what they want done next rather than inventing new feature work.
+three user-directed follow-ups (P9-CATEGORY-011 cue-level instanceLimit; T-4C's ThreadSanitizer
+stress test; P9-3D-010 listener-orientation-aware Apply3D pan) are also closed. There is no
+confirmed next task recorded (see §8) -- ask the user what they want done next rather than
+inventing new feature work.
 
 1. If the user names a specific task, inspect only the files needed for it -- do not refactor
    unrelated code. Confirm scope/approach with the user first if it's real feature work rather
