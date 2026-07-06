@@ -122,6 +122,36 @@ TEST_F(SdlInputBridgeKeyboardTest, WindowLifecycleEventsDoNotCorruptKeyboardStat
     EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::B));
 }
 
+// P8-001(c): the bridge deliberately does NOT consume window-resize / display-orientation / quit events
+// (unlike FNA, which uses them for coordinate scaling, adapter reset, and Game exit — those belong to the
+// graphics/app layers, not input). They must fall through the default: no-op branch without mutating input
+// state or crashing.
+TEST_F(SdlInputBridgeKeyboardTest, UnconsumedResizeDisplayAndQuitEventsDoNotAffectInputState)
+{
+    SdlInputBridge::ProcessEvent(keyDownWithKeycode(SDLK_A));
+    ASSERT_TRUE(Keyboard::GetState().IsKeyDown(Keys::A));
+
+    SDL_Event resize{};
+    resize.type = SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED;
+    resize.window.windowID = 0;
+    resize.window.data1 = 1920;
+    resize.window.data2 = 1080;
+    SdlInputBridge::ProcessEvent(resize);
+
+    SDL_Event orientation{};
+    orientation.type = SDL_EVENT_DISPLAY_ORIENTATION;
+    SdlInputBridge::ProcessEvent(orientation);
+
+    SDL_Event quit{};
+    quit.type = SDL_EVENT_QUIT;
+    SdlInputBridge::ProcessEvent(quit);
+
+    // None are consumed -> keyboard state is unchanged and nothing crashes.
+    EXPECT_TRUE(Keyboard::GetState().IsKeyDown(Keys::A));
+    EXPECT_EQ(Keyboard::GetState().GetPressedKeys().size(), 1u)
+        << "resize/display/quit events must not touch input state";
+}
+
 // --- Task 820: keycode map (default mode) via synthetic KEY_DOWN events ---
 
 TEST_F(SdlInputBridgeKeyboardTest, KeycodeMapCoversLettersDigitsNumpadOemModifiersFunctionAndMediaKeys)

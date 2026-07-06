@@ -1485,11 +1485,26 @@ set + Ctrl+V confirmed byte-identical to FNA. No public API change; `ctest -L in
 
 # Phase 8 — SDL bridge and backend integration
 
-## P8-001 — Audit SDL bridge event coverage
-- [ ] List every SDL event consumed by `SdlInputBridge`.
-- [ ] List every relevant SDL input event not consumed.
-- [ ] Decide whether missing events are intentional.
-- [ ] Document gaps.
+## P8-001 — Audit SDL bridge event coverage `[x]`
+- [x] List every SDL event consumed by `SdlInputBridge`.
+- [x] List every relevant SDL input event not consumed.
+- [x] Decide whether missing events are intentional.
+- [x] Document gaps.
+
+**Result (2026-07-06):** **Consumed (17 cases, `ProcessEvent` switch):** MOUSE_MOTION,
+MOUSE_BUTTON_DOWN/UP, MOUSE_WHEEL, KEY_DOWN/UP, TEXT_INPUT, TEXT_EDITING, FINGER_DOWN/MOTION/UP/CANCELED,
+GAMEPAD_ADDED/REMOVED/BUTTON_DOWN/UP/AXIS_MOTION — each exercised through the real `ProcessEvent` by the
+bridge test suite (+ the fuzz test drives mouse/keyboard/text/touch randomly). **Not consumed (intentional):**
+`WINDOW_*` (focus/size/move/enter/leave), `DISPLAY_*` incl. DISPLAY_ORIENTATION, and `QUIT` — FNA uses these
+for `Game.IsActive`, coordinate scaling, adapter reset and app-exit, which in CNA belong to the graphics/app
+layers, not the input bridge (Mouse coordinate scaling is done live via the backend transform, not on a
+resize event). Also neither CNA nor FNA polls raw JOYSTICK_*/MOUSE_ADDED/KEYBOARD_ADDED/DROP_*/CLIPBOARD.
+The focus/minimize/close no-op was already pinned (`WindowFocusLostDoesNotClearHeldKeysMatchingFna`,
+`WindowLifecycleEventsDoNotCorruptKeyboardState`); **closed the last gap** with
+`UnconsumedResizeDisplayAndQuitEventsDoNotAffectInputState` (PIXEL_SIZE_CHANGED / DISPLAY_ORIENTATION / QUIT
+fall through `default:` → no input mutation, no crash). **Files changed:**
+`tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp` (+1 test). **Behavior verified:** consumed set is
+complete + tested; omissions are intentional and now pinned. **Remaining risk:** none.
 
 ## P8-002 — Verify event ordering
 - [ ] Test keyboard event ordering.
