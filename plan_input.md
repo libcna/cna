@@ -873,9 +873,21 @@ clamp"). `Equals` = `WithinEpsilon(left)` && `WithinEpsilon(right)` — FNA-fait
 result). **Files changed:** none (logic verified). **Behavior verified:** clamp + trigger-threshold dead-zone
 + epsilon equality + float-hash sum all match FNA. **Remaining risk:** none.
 
-## L-008 — `GamePadState.cpp` logic `[ ]`
-- [ ] Ctor button/trigger/thumbstick→Buttons packing (StickToButtons/TriggerToButton thresholds),
+## L-008 — `GamePadState.cpp` logic `[x]`
+- [x] Ctor button/trigger/thumbstick→Buttons packing (StickToButtons/TriggerToButton thresholds),
   IsButtonDown/Up bit ops, equality incl. packet number, hash vs FNA.
+
+**Result (2026-07-06):** **Ctor packing + equality byte-identical to FNA `GamePadState.cs`** — no fix.
+The 4-arg ctor ORs `LeftTrigger`/`RightTrigger` into `buttons` when `triggers.Left/Right > TriggerThreshold`
+(strict `>`, FNA order), then ORs `StickToButtons` for left+right sticks — **line-for-line FNA**.
+`StickToButtons` maps `X > dz → right`, `X < -dz → left`, `Y > dz → up`, `Y < -dz → down` — **byte-identical
+to FNA** (no axis swap; strict inequalities). `IsButtonDown` = `(buttons & b)==b`, `IsButtonUp` = `!= b` (≡
+FNA, A4-006). **`Equals` includes `PacketNumber`** — verified FNA's `operator==` also compares
+`IsConnected & PacketNumber & Buttons & DPad & ThumbSticks & Triggers`, so CNA is **FNA-faithful**
+(EqualityConsidersPacketNumber is *not* a deviation). `GetHashCode` = `buttons.GetHashCode() ^ (packetNumber
+*31)` — a **deterministic field-based choice** (documented) vs FNA's `base.GetHashCode()`. `ToString` = type
+name (≡ FNA `base.ToString()`). **Files changed:** none (logic verified). **Behavior verified:** the full
+button-packing pipeline + equality-with-packet match FNA exactly. **Remaining risk:** none.
 
 ## L-009 — `GamePad.cpp` logic `[ ]`
 - [ ] GetState dead-zone application, GetCapabilities assembly, SetVibration/EXT forwarding vs FNA policy.
