@@ -1037,8 +1037,45 @@ accessor + `SetSdlGamepadBackendForTests` swap seam are trivially correct. **Fil
 verified). **Behavior verified:** SDL-call fidelity + event dispatch + 1:1 backend forwards. **Remaining
 risk:** none.
 
-## L-017 — Final logic-audit statement `[ ]`
-- [ ] Summarize logic divergences found (fixed vs documented `DEC-*`), re-run all gates + ASan, record.
+## L-017 — Final logic-audit statement `[x]`
+- [x] Summarize logic divergences found (fixed vs documented `DEC-*`), re-run all gates + ASan, record.
+
+### Final source-logic audit statement (2026-07-06)
+
+**Scope.** Every CNA input `src/` file (16 tasks, L-001..L-016) was read **line-by-line against its FNA
+implementation** and its actual computation validated (branches, math, thresholds, ordering, edge cases) —
+not just member presence.
+
+**Divergences found.** **One** genuine FNA divergence (L-015): `SdlInputBridge::normalize_stick_axis`
+divided the negative SDL stick half by `32768` instead of FNA's `32767` (endpoints agreed, non-endpoint
+negatives diverged by ~3e-5). **Fixed** to `clamp(value/32767, -1, 1)` over the full range — now
+byte-identical to FNA — with a regression test (`StickAxisNormalizationMatchesFnaDivisor`) and a documented
+fidelity note. Also, the earlier per-type pass removed one piece of dead code
+(`InputManager::GetGamePadState`, zero callers).
+
+**Everything else is FNA-faithful.** The value/math-heavy files are **byte-identical to FNA**: GamePad
+`ExcludeAxisDeadZone` + dead-zone constants (`7849/8689/30`), GamePadThumbSticks dead-zone math + circular
+scaling + `Left+37*Right` hash, GamePadTriggers clamp + `WithinEpsilon` + float-hash sum, GamePadState
+button-packing (trigger threshold + `StickToButtons`) + equality-with-packet, GamePadDPad
+`Down1+Left2+Right4+Up8` hash, GamePadButtons flag extraction + `(int)buttons` hash, TouchLocation
+5-field-Equals + `Id+Position` hash + ToString, MouseState field-Equals + exact ToString, KeyboardState
+8×32-XOR hash + ascending GetPressedKeys, TouchPanel coordinate scaling + FIFO ReadGesture, TextInputEXT
+SDL calls (incl. `SDL_SetTextInputArea(…, 0)`), GestureDetector's constants + `0.45` flick low-pass, and
+SdlGamepadBackend's 19 pure SDL forwards. **Documented (not-fixed) deviations** are all intentional:
+deterministic `GetHashCode`s (MouseState/GamePadState) vs FNA's `base.GetHashCode()`; event-driven
+accumulation vs FNA's poll; `TouchCollection` `std::vector` (advisory IsReadOnly, insert-CopyTo);
+a-0001 coordinate model; DEC-14 relative-mouse; clock-source injection in GestureDetector; the
+`unordered_set` out-of-range-Keys note (P2-002); startup/DEC entries in `docs/input-fna-fidelity.md`.
+
+**Verification.** `ctest -L input` = **100% on all four backends** (EasyGL/Vulkan/bgfx/SDL_RENDERER), **383
+input tests / 45 suites**; **ASan+UBSan-clean** (382). No public API drift.
+
+---
+
+**Phase 9 complete (2026-07-06) — source-logic audit DONE.** 16 files audited line-by-line vs FNA; **1 real
+divergence found and fixed** (stick-axis `/32768`→`/32767`, L-015); all other logic is byte-identical to FNA
+or an intentional documented deviation. The CNA input implementation now behaves like XNA 4.0/FNA to the
+byte in every value/math path, with only the deliberate architectural/representation deviations remaining.
 
 ---
 
