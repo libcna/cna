@@ -552,11 +552,31 @@ functional round-trip). No behavior gaps.
 
 # Phase 6 — Text input
 
-## A6-001 — `TextInputEXT` (static class, NOXNA) `[ ]`
-- [ ] FNA `Input/TextInputEXT.cs`; CNA `TextInputEXT.hpp`/`.cpp`; tests `TextInputEXTTests.cpp` + bridge.
-- [ ] Members: `TextInput`/`TextEditing` multicast events, WindowHandle, IsTextInputActive,
+## A6-001 — `TextInputEXT` (static class, NOXNA) `[x]`
+- [x] FNA `Input/TextInputEXT.cs`; CNA `TextInputEXT.hpp`/`.cpp`; tests `TextInputEXTTests.cpp` + bridge.
+- [x] Members: `TextInput`/`TextEditing` multicast events, WindowHandle, IsTextInputActive,
   IsScreenKeyboardShown (×overloads), StartTextInput/StopTextInput, SetInputRectangle,
   INTERNAL_OnTextInput/OnTextEditing, reset. Per-member.
+
+**Result (2026-07-06):** **All FNA `TextInputEXT.cs` public members present:** `TextInput` (MulticastAction
+<charcs> ↔ FNA `event Action<char>`), `TextEditing` (MulticastAction<const string&,int,int> ↔ FNA `event
+Action<string,int,int>`), `WindowHandle` get/set, `IsTextInputActive()`, `IsScreenKeyboardShown()` +
+`IsScreenKeyboardShown(window)` (2 overloads), `StartTextInput()`, `StopTextInput()`, `SetInputRectangle
+(Rectangle)`. Plus `INTERNAL_OnTextInput`/`INTERNAL_OnTextEditing` (FNA internals → NOXNA) and `ResetForTests`.
+The whole class is correctly `NOXNA` (FNA extension, not XNA 4.0). **Test map** (14 `TextInputEXTTest` +
+bridge): TextInput dispatch/multicast/no-subscriber; TextEditing dispatch/empty/multicast; WindowHandle
+round-trip + `ResetForTestsClearsWindowHandle…`; IsTextInputActive (no-window + real-window); IsScreenKeyboard
+Shown **both overloads** (`IsScreenKeyboardShownIsFalseWithoutWindow` asserts `()` and `(0)`); Start/Stop
+(no-window no-op + real-window round-trip); SetInputRectangle (no-window + zero/negative + real-window);
+INTERNAL_* via the dispatch + bridge tests; ResetForTests (window handle + suppress-flag). **Members
+reviewed:** all. **Files changed:** none (perfect, no gap; thoroughly audited in the earlier Phase 7).
+**Behavior verified:** full member + FNA parity. **Remaining risk:** real IME composition is HW-gated (`[!]`,
+Phase 11).
+
+---
+
+**Phase 6 complete (2026-07-06):** `TextInputEXT` fully re-audited — every FNA member present, whole class
+correctly NOXNA, both `IsScreenKeyboardShown` overloads tested, all members named-tested. No gaps.
 
 ---
 
