@@ -106,3 +106,13 @@ TEST(NetDiscoveryProtocolTest, DecodeAnnounceRejectsNegativePropertyIndex) {
     auto bytes = BuildAnnounceWithRawPropertyIndex(-1, 123);
     EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), std::runtime_error);
 }
+
+// Task 1.2: an unbounded positive property index (e.g. near INT32_MAX) would otherwise make
+// ReadProperties' pre-extend loop call Add() up to ~2 billion times - a real hang/OOM from one
+// crafted packet, entirely decoupled from how many bytes are actually left in the buffer. This
+// test itself has an implicit timeout (the whole suite run) that would catch a hang if the fix
+// regressed; asserting a prompt, clean exception is the direct proof.
+TEST(NetDiscoveryProtocolTest, DecodeAnnounceRejectsHugePropertyIndex) {
+    auto bytes = BuildAnnounceWithRawPropertyIndex(INT32_MAX - 1, 123);
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), std::runtime_error);
+}

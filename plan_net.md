@@ -62,13 +62,18 @@ resource consumption, or a crashed process — not just XNA-fidelity gaps.
   confirmed a real, immediate **segmentation fault (exit code 139)**, not just a benign no-op UB;
   restored the fix and reran — passes, full suite 3233/3235 (2 expected skips), no regressions.
 
-- [ ] **Task 1.2** — Fix unbounded-allocation DoS via a huge positive property index in the same
+- [x] **Task 1.2** — Fix unbounded-allocation DoS via a huge positive property index in the same
   `ReadProperties` path (`NetDiscoveryProtocol.cpp`). A crafted `index` near `INT32_MAX` makes the
   pre-extend `while (count <= index)` loop call `Add()`/`push_back` up to ~2 billion times — a
-  multi-second hang or OOM. Fix: clamp the accepted index range to something sane (e.g.
-  `NetworkSessionProperties`' realistic maximum size, or a fixed small cap like 256) and reject
-  anything outside it. Add a test feeding an index like `INT32_MAX` and asserting the parse is
-  rejected quickly (with a wall-clock timeout in the test itself) rather than hanging.
+  multi-second hang or OOM.
+  **Fixed:** added `constexpr int32_t kMaxPropertyIndex = 256;` (a generous-but-safe ceiling — no
+  real game session plausibly has anywhere near this many custom properties) and a second guard
+  rejecting `index >= kMaxPropertyIndex`, right alongside Task 1.1's negative-index guard. Added
+  `NetDiscoveryProtocolTest.DecodeAnnounceRejectsHugePropertyIndex` feeding `INT32_MAX - 1`.
+  **Verified the bug is real, not theoretical:** reverted just the upper-bound guard and ran the
+  new test under an 8-second `timeout` — confirmed it genuinely hangs (exit code 124, killed by
+  the timeout, not a benign no-op); restored the fix and reran — completes instantly, full suite
+  3234/3236 (2 expected skips), no regressions.
 
 - [ ] **Task 1.3** — Fix the dangling-pointer bug in `ENetDiscoveryService::FindSessions` that
   corrupts memory on the *next* poll after any exception mid-search. Confirmed

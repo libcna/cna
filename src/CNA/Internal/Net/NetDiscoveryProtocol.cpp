@@ -10,6 +10,14 @@ namespace CNA::Internal::Net
 
     namespace
     {
+        // Task 1.2: no real game session plausibly has anywhere near this many custom int?
+        // properties (FNA's own NetworkSessionProperties is an unbounded List<int?> with no
+        // documented cap, but this wire format is CNA's own invention for the ENet transport, not
+        // part of FNA's design). A generous-but-safe ceiling that still rejects a maliciously huge
+        // wire-supplied index (see ReadProperties) before it can drive an unbounded number of
+        // Add() calls.
+        constexpr int32_t kMaxPropertyIndex = 256;
+
         // NetworkSessionProperties is a sparse list of std::optional<int>; only present
         // (non-nullopt) entries are written, as (index, value) pairs, to keep the packet small.
         void WriteProperties(Microsoft::Xna::Framework::Net::PacketWriter& writer, const NetworkSessionProperties& properties)
@@ -54,6 +62,15 @@ namespace CNA::Internal::Net
                 if (index < 0)
                 {
                     throw std::runtime_error("NetDiscoveryProtocol: negative property index");
+                }
+                // Task 1.2: an unbounded positive index (e.g. near INT32_MAX) would otherwise
+                // make the pre-extend loop below call Add() up to ~2 billion times - a
+                // multi-second hang/OOM from a single crafted packet, decoupled from how many
+                // bytes are actually left in the buffer (unlike presentCount above, which is
+                // naturally bounded by PacketReader eventually throwing on underflow).
+                if (index >= kMaxPropertyIndex)
+                {
+                    throw std::runtime_error("NetDiscoveryProtocol: property index out of range");
                 }
                 // operator[](index) only targets an arbitrary index once the list is already at
                 // least that long — past the end, it appends instead (a documented
