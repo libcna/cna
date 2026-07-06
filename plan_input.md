@@ -798,12 +798,23 @@ mouse-state reset. **Remaining risk:** none.
 
 **Result (2026-07-06):** FNA's `CopyTo` delegates to `List<T>.CopyTo` (overwrites pre-allocated slots of a fixed array; null/empty is a no-op). CNA's destination is a growable `std::vector`, so it **inserts** at `arrayIndex` (documented deviation in `TouchCollection.cpp`) and guards the index (bad index → `std::out_of_range`, mapping FNA's `ArgumentOutOfRangeException`). "Insufficient capacity" is N/A — a vector grows. **Tests:** offset/invalid-offset/non-zero-index already covered (`CopyToAppendsAllElementsInOrder`, `CopyToThrowsOnOutOfRangeIndexInsteadOfUndefinedBehavior`, `CopyToInsertsAtValidNonZeroIndex`); **added** `CopyToFromEmptyCollectionIsANoOp`. **Remaining risk:** none.
 
-## P5-003 — Verify `TouchCollection` enumeration
-- [ ] Test begin/end iteration.
-- [ ] Test count.
-- [ ] Test contains.
-- [ ] Test index lookup.
-- [ ] Test deterministic order.
+## P5-003 — Verify `TouchCollection` enumeration `[x]`
+- [x] Test begin/end iteration.
+- [x] Test count.
+- [x] Test contains.
+- [x] Test index lookup.
+- [x] Test deterministic order.
+
+**Result (2026-07-06):** Count / Contains / IndexOf were already covered
+(`CountAndEmptyReflectContents`, `ContainsFindsMatchingLocation`, `IndexOfReturnsPositionOrNegativeOne`).
+The genuine gap was begin/end iteration and its determinism. Verified against FNA `TouchCollection.cs:190-206`:
+the `Enumerator` yields `collection[position]` for `position` 0..Count-1, i.e. **index/insertion order**.
+**Added three tests:** `RangeIterationYieldsElementsInInsertionOrder` (const range-for yields ids 1,2,3 in
+order and matches indexed access element-for-element), `MutableIterationVisitsEveryElementOnceInOrder`
+(mutable `begin()/end()`, `end()-begin()==Count`), `EmptyCollectionIterationIsANoOp` (empty → zero visits,
+`begin()==end()`). **Files changed:** `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` (+3 tests).
+**Tests:** `TouchCollectionTest.*` 17/17 pass; `ctest -L input` 100% green (shuffle×5). **Behavior verified:**
+range iteration is deterministic insertion order, matching FNA's indexed enumerator. **Remaining risk:** none.
 
 ## P5-004 — Verify `TouchLocation`
 - [ ] Test constructors.

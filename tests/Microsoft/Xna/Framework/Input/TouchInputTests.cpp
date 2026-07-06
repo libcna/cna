@@ -378,6 +378,61 @@ TEST(TouchCollectionTest, IndexOfReturnsPositionOrNegativeOne)
     EXPECT_EQ(collection.IndexOf(missing), -1);
 }
 
+// P5-003: FNA's TouchCollection.Enumerator yields collection[position] for position 0..Count-1
+// (TouchCollection.cs:190-206), i.e. index/insertion order. A range-based for over begin()/end()
+// must reproduce that deterministic order for both the const and mutable overloads.
+TEST(TouchCollectionTest, RangeIterationYieldsElementsInInsertionOrder)
+{
+    const TouchLocation first(1, TouchLocationState::Pressed, Vector2(10.0f, 11.0f));
+    const TouchLocation second(2, TouchLocationState::Moved, Vector2(20.0f, 21.0f));
+    const TouchLocation third(3, TouchLocationState::Released, Vector2(30.0f, 31.0f));
+    const TouchCollection collection(std::vector<TouchLocation>{first, second, third});
+
+    std::vector<int> idsInIterationOrder;
+    for (const TouchLocation& location : collection)
+    {
+        idsInIterationOrder.push_back(location.getIdProperty());
+    }
+
+    EXPECT_EQ(idsInIterationOrder, (std::vector<int>{1, 2, 3}));
+    // Iteration order matches indexed access exactly (no reordering).
+    ASSERT_EQ(collection.getCountProperty(), 3);
+    for (int i = 0; i < collection.getCountProperty(); ++i)
+    {
+        EXPECT_EQ(collection[static_cast<std::size_t>(i)].getIdProperty(), idsInIterationOrder[static_cast<std::size_t>(i)]);
+    }
+}
+
+TEST(TouchCollectionTest, MutableIterationVisitsEveryElementOnceInOrder)
+{
+    TouchCollection collection(std::vector<TouchLocation>{
+        TouchLocation(5, TouchLocationState::Pressed, Vector2::Zero),
+        TouchLocation(6, TouchLocationState::Pressed, Vector2::Zero),
+    });
+
+    std::vector<int> ids;
+    for (TouchLocation& location : collection)
+    {
+        ids.push_back(location.getIdProperty());
+    }
+
+    EXPECT_EQ(ids, (std::vector<int>{5, 6}));
+    EXPECT_EQ(collection.end() - collection.begin(), collection.getCountProperty());
+}
+
+TEST(TouchCollectionTest, EmptyCollectionIterationIsANoOp)
+{
+    const TouchCollection empty;
+    int visited = 0;
+    for (const TouchLocation& location : empty)
+    {
+        (void)location;
+        ++visited;
+    }
+    EXPECT_EQ(visited, 0);
+    EXPECT_TRUE(empty.begin() == empty.end());
+}
+
 TEST(TouchCollectionTest, AddClearRemoveRemoveAtAndInsertMutateCollection)
 {
     TouchCollection collection;
