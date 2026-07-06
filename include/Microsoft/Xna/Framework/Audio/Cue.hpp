@@ -213,6 +213,16 @@ namespace Microsoft::Xna::Framework::Audio
         {
             std::unique_ptr<SoundEffectInstance> instance;
             float baseVolume = 1.0f; // waveRef.volume, before category volume is combined in
+
+            // P11-XACT-003: PlayWaveEffectVariation-family per-play randomization, drawn once at
+            // Play() time (CNA's "first activation only" scope, matching P11-XACT-002's own
+            // precedent) and re-folded into every subsequent volume/pitch reapplication site
+            // (ReconcileState()'s fade/release/steady-state branches, ApplyCategoryVolume) so a
+            // later tick doesn't silently drop the randomized offset back to the plain authored
+            // value. Defaults are exact no-ops (1.0f multiplier, 0.0f cents), so an instance with
+            // no effect variation behaves identically to before this task.
+            float effectVolumeMultiplier = 1.0f; // amplitude ratio
+            float effectPitchCentsDelta  = 0.0f;  // cents
         };
         std::vector<PlaybackInstance> active_;
 
@@ -256,6 +266,14 @@ namespace Microsoft::Xna::Framework::Audio
         {
             float volumeMultiplier;
             float pitch;
+            // P11-XACT-003: the raw combined cents sum `pitch` was itself converted from
+            // (basePitchCents_ + the summed RPC pitch curve result), exposed so a per-instance
+            // PlayWaveEffectVariation pitch delta (PlaybackInstance::effectPitchCentsDelta) can
+            // be added in before one shared CentsToPitch() conversion, instead of re-deriving the
+            // sum from scratch at every reapplication site. For an instance with no
+            // effect-variation pitch offset, CentsToPitch(pitchCentsBeforeConversion + 0.0f) ==
+            // pitch exactly.
+            float pitchCentsBeforeConversion = 0.0f;
             float filterFrequencyHz = -1.0f;
             float filterQFactor     = -1.0f;
         };
@@ -282,6 +300,18 @@ namespace Microsoft::Xna::Framework::Audio
         NOXNA static std::size_t INTERNAL_selectTrackVariationIndexForTest(
             const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
             CNA::Internal::Audio::XsbTrackVariationType type);
+
+        // P11-XACT-003: test-only entry point for the PlayWaveEffectVariation-family randomization
+        // algorithm (Cue.cpp's anonymous-namespace ApplyEffectVariation), so its exact pitch/
+        // volume/filter draws can be unit-tested directly against a synthetic XsbWaveRef, without
+        // needing a full XACT fixture wired through Cue::Play() for every axis/flag combination.
+        // Out-params (not a return-by-value struct) since ApplyEffectVariation's own result type
+        // is anonymous-namespace-private to Cue.cpp. Reuses the same shared Rng()
+        // INTERNAL_seedRngForTest above reseeds, for deterministic-for-a-known-seed test outcomes.
+        NOXNA static void INTERNAL_applyEffectVariationForTest(
+            const CNA::Internal::Audio::XsbWaveRef& waveRef,
+            float& pitchCentsDelta, float& volumeAmplitudeMultiplier,
+            bool& hasFilterOverride, float& filterFrequencyHz, float& filterQFactor);
 
         // Tests need to observe which sound a variation table selected (via the category
         // index it carries) without a real WaveBank/audio device backing playback.

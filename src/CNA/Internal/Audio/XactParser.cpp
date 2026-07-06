@@ -179,13 +179,30 @@ namespace CNA::Internal::Audio
                 uint8_t  wbIdx   = ctx.u8();
                 uint8_t  loopCnt = ctx.u8();
                 ctx.u16(); ctx.u16(); // position, angle
-                // effect variation parameters (skip)
-                ctx.s16(); ctx.s16(); // minPitch, maxPitch
-                ReadVolByte(ctx); ReadVolByte(ctx); // minVol, maxVol
-                ctx.f32(); ctx.f32(); // minFreq, maxFreq
-                ctx.f32(); ctx.f32(); // minQFactor, maxQFactor
-                ctx.u16(); // variationFlags
+
+                // P11-XACT-003: retained (previously "(skip)") so Cue::Play() can run FAudio's
+                // real per-play pitch/volume/filter randomization (FACT_internal.c:309-425)
+                // instead of always using the track's plain authored values.
+                const int16_t minPitch = ctx.s16();
+                const int16_t maxPitch = ctx.s16();
+                const float   minVol   = ReadVolByte(ctx);
+                const float   maxVol   = ReadVolByte(ctx);
+                const float   minFreq  = ctx.f32();
+                const float   maxFreq  = ctx.f32();
+                const float   minQ     = ctx.f32();
+                const float   maxQ     = ctx.f32();
+                const uint16_t variationFlags = ctx.u16();
+
                 result = {wbIdx, waveIdx, loopCnt, trackVol};
+                result.effectVariationFlags = variationFlags;
+                result.effectMinPitch     = minPitch;
+                result.effectMaxPitch     = maxPitch;
+                result.effectMinVolume    = minVol;
+                result.effectMaxVolume    = maxVol;
+                result.effectMinFrequency = minFreq;
+                result.effectMaxFrequency = maxFreq;
+                result.effectMinQFactor   = minQ;
+                result.effectMaxQFactor   = maxQ;
                 break;
             }
             else if (type == FACTEVENT_PLAYWAVETRACKVARIATION ||
@@ -199,12 +216,26 @@ namespace CNA::Internal::Audio
                 uint8_t loopCnt = ctx.u8();
                 ctx.u16(); ctx.u16(); // position, angle
 
+                // P11-XACT-003: retained (previously "(skip)"), same fields/units as the plain
+                // PLAYWAVEEFFECTVARIATION branch above.
+                bool     hasEffect        = false;
+                int16_t  effMinPitch = 0, effMaxPitch = 0;
+                float    effMinVol = 0.0f, effMaxVol = 0.0f;
+                float    effMinFreq = 0.0f, effMaxFreq = 0.0f;
+                float    effMinQ = 0.0f, effMaxQ = 0.0f;
+                uint16_t effFlags = 0;
                 if (type == FACTEVENT_PLAYWAVETRACKEFFECTVARIATION)
                 {
-                    ctx.s16(); ctx.s16(); // minPitch, maxPitch
-                    ReadVolByte(ctx); ReadVolByte(ctx);
-                    ctx.f32(); ctx.f32(); ctx.f32(); ctx.f32();
-                    ctx.u16(); // variationFlags
+                    hasEffect  = true;
+                    effMinPitch = ctx.s16();
+                    effMaxPitch = ctx.s16();
+                    effMinVol   = ReadVolByte(ctx);
+                    effMaxVol   = ReadVolByte(ctx);
+                    effMinFreq  = ctx.f32();
+                    effMaxFreq  = ctx.f32();
+                    effMinQ     = ctx.f32();
+                    effMaxQ     = ctx.f32();
+                    effFlags    = ctx.u16();
                 }
 
                 // Matches FAudio's real parse (FACT_internal.c:2303-2322): evtInfo's low 16 bits
@@ -231,6 +262,18 @@ namespace CNA::Internal::Audio
                 result = {wbIdx, waveIdx, loopCnt, trackVol};
                 result.trackVariationEntries = std::move(entries);
                 result.trackVariationType    = variationType;
+                if (hasEffect)
+                {
+                    result.effectVariationFlags = effFlags;
+                    result.effectMinPitch     = effMinPitch;
+                    result.effectMaxPitch     = effMaxPitch;
+                    result.effectMinVolume    = effMinVol;
+                    result.effectMaxVolume    = effMaxVol;
+                    result.effectMinFrequency = effMinFreq;
+                    result.effectMaxFrequency = effMaxFreq;
+                    result.effectMinQFactor   = effMinQ;
+                    result.effectMaxQFactor   = effMaxQ;
+                }
                 break;
             }
             else if (type == FACTEVENT_PITCH || type == FACTEVENT_VOLUME ||

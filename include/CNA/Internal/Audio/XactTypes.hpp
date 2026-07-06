@@ -220,6 +220,36 @@ namespace CNA::Internal::Audio
         std::vector<XsbTrackVariationEntry> trackVariationEntries;
         /** @brief Selection algorithm for @ref trackVariationEntries; meaningless when that list is empty. */
         XsbTrackVariationType trackVariationType = XsbTrackVariationType::Ordered;
+
+        /**
+         * @brief `variationFlags` bitmask for a `PlayWaveEffectVariation`-family event
+         * (`P11-XACT-003`), matching FAudio's own `VARIATION_FLAG_PITCH`/`VARIATION_FLAG_VOLUME`/
+         * `VARIATION_FLAG_FREQUENCY_Q` bits (`FACT_internal.h`). Zero (the default) means "no
+         * per-play randomization on any axis" -- true for every plain `PlayWave`/
+         * `PlayWaveTrackVariation` event, not just ones that happen to author an empty range.
+         */
+        uint16_t effectVariationFlags = 0;
+        /** @brief Authored pitch-randomization range, in cents (matches FAudio's raw int16 units). Meaningful only when @ref effectVariationFlags has the pitch bit set. */
+        int16_t effectMinPitch = 0;
+        /** @brief See @ref effectMinPitch. */
+        int16_t effectMaxPitch = 0;
+        /** @brief Authored volume-randomization range, in centibels (matches FAudio's `read_volbyte` units). Meaningful only when @ref effectVariationFlags has the volume bit set. */
+        float effectMinVolume = 0.0f;
+        /** @brief See @ref effectMinVolume. */
+        float effectMaxVolume = 0.0f;
+        /** @brief Authored filter cutoff frequency-randomization range, in Hz. Meaningful only when @ref effectVariationFlags has the frequency/Q bit set. */
+        float effectMinFrequency = 0.0f;
+        /** @brief See @ref effectMinFrequency. */
+        float effectMaxFrequency = 0.0f;
+        /**
+         * @brief Authored filter Q-factor-randomization range, already in reciprocal-ready Q
+         * units, unlike the per-track @ref filterQFactorRaw byte (which needs the
+         * raw-byte-decode formula `min(3.0f/qfactor, 1.0f)` instead of a plain reciprocal).
+         * Meaningful only when @ref effectVariationFlags has the frequency/Q bit set.
+         */
+        float effectMinQFactor = 0.0f;
+        /** @brief See @ref effectMinQFactor. */
+        float effectMaxQFactor = 0.0f;
     };
 
     /** @brief One sound entry parsed from a .XSB sound bank file. */

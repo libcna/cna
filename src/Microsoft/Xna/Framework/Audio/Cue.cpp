@@ -131,6 +131,96 @@ namespace Microsoft::Xna::Framework::Audio
             return valuei;
         }
 
+        // P11-XACT-003: gating bits for a PlayWaveEffectVariation-family event's variationFlags,
+        // matching FAudio's own constants exactly (FACT_internal.h). CNA only ever resolves a
+        // track's wave once per fresh Cue::Play() (the same "first activation" simplification
+        // P11-XACT-002 documents), so only the top-level per-axis gate is needed here -- the
+        // separate _ADD/_NEW_ON_LOOP bits (FACT_internal.h) only affect FAudio's behavior on a
+        // *later* loop iteration re-triggering the same track event, which CNA has no equivalent
+        // per-frame XACT event-scheduling system to ever reach.
+        constexpr uint16_t kVariationFlagPitch       = 0x1000;
+        constexpr uint16_t kVariationFlagVolume      = 0x2000;
+        constexpr uint16_t kVariationFlagFrequencyQ  = 0xC000;
+
+        // Converts XACT centibels to an amplitude ratio (matches FAudio's
+        // FACT_INTERNAL_CalculateAmplitudeRatio, FACT_internal.c: pow(10, centibels/2000)) -- the
+        // same formula EvaluateRpc() applies to RPC volume curves, needed again here for
+        // PlayWaveEffectVariation's per-play randomized volume offset (P11-XACT-003), which
+        // arrives in the same centibel units (XactParser.cpp's ReadVolByte).
+        float CentibelsToAmplitude(float centibels)
+        {
+            return static_cast<float>(std::pow(10.0, centibels / 2000.0));
+        }
+
+        // P11-XACT-003: one-time "Initial Variation" draw for a PlayWaveEffectVariation-family
+        // wave reference, matching FAudio's FACT_INTERNAL_GetNextWave (FACT_internal.c:309-425)
+        // exactly for the activeWave.wave == NULL branch -- CNA's per-track single-resolution
+        // model (see kVariationFlagPitch's comment above) only ever reaches that branch, so the
+        // NEW_ON_LOOP/_ADD combination logic for a later loop iteration is out of scope, not
+        // simplified away.
+        struct EffectVariationResult
+        {
+            float pitchCentsDelta        = 0.0f; // added to the sound's own base pitch, in cents
+            float volumeAmplitudeMultiplier = 1.0f; // multiplied into the wave's combined amplitude
+            bool  hasFilterOverride      = false;
+            float filterFrequencyHz      = 0.0f; // desired Hz, only valid if hasFilterOverride
+            // Already the final OneOverQ coefficient (this axis's own reciprocal already taken
+            // below, matching FAudio's `rngQFactor = 1.0f / (...)` -- NOT a plain Q value the
+            // caller still needs to invert). Only valid if hasFilterOverride.
+            float filterQFactor          = 0.0f;
+        };
+
+        EffectVariationResult ApplyEffectVariation(const CNA::Internal::Audio::XsbWaveRef& waveRef)
+        {
+            EffectVariationResult out;
+            std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+
+            if (waveRef.effectVariationFlags & kVariationFlagPitch)
+            {
+                // FACT_internal.c:311-314: rngPitch = int16(rng() * (max-min)) + min; the sound's
+                // own base pitch is summed in by the caller (Cue::Play() already has
+                // basePitchCents_/rpc.pitchCentsBeforeConversion for that), not here.
+                const auto rngPitch = static_cast<int16_t>(
+                    unit(Rng()) * static_cast<float>(waveRef.effectMaxPitch - waveRef.effectMinPitch));
+                out.pitchCentsDelta = static_cast<float>(rngPitch + waveRef.effectMinPitch);
+            }
+
+            if (waveRef.effectVariationFlags & kVariationFlagVolume)
+            {
+                // FACT_internal.c:343-346: rngVolume = rng() * (max-min) + min, in centibels,
+                // additively combined with the sound/track's own base volume (also both already
+                // in centibel-additive form before FAudio's single final amplitude conversion).
+                // waveRef.volume is CNA's own pre-multiplied amplitude equivalent of that same
+                // sound+track centibel sum (XactParser.cpp's `wr.volume *= sound.volume`), so
+                // multiplying by CentibelsToAmplitude(rngVolume) here reproduces the identical
+                // final amplitude as FAudio's additive-then-single-convert approach exactly:
+                // 10^((a+b)/2000) == 10^(a/2000) * 10^(b/2000).
+                const float rngVolumeCentibels = unit(Rng()) *
+                    (waveRef.effectMaxVolume - waveRef.effectMinVolume) + waveRef.effectMinVolume;
+                out.volumeAmplitudeMultiplier = CentibelsToAmplitude(rngVolumeCentibels);
+            }
+
+            if (waveRef.effectVariationFlags & kVariationFlagFrequencyQ)
+            {
+                // FACT_internal.c:383-393: two independent draws, Q first then frequency; both a
+                // straight replacement of the track's plain authored base filter, not additive
+                // (matches the "Initial Filter Variation" branch exactly, no clamp on either
+                // axis). rngQFactor's own reciprocal is taken right here, matching FAudio's
+                // `1.0f / (...)` exactly -- the result is already the final OneOverQ coefficient,
+                // unlike the raw-XACT-byte per-track qfactor's own /3-clamp formula
+                // (INTERNAL_calculateFilterOneOverQ), which starts from a byte, not a plain float.
+                const float rngQFactor = 1.0f / (unit(Rng()) *
+                    (waveRef.effectMaxQFactor - waveRef.effectMinQFactor) + waveRef.effectMinQFactor);
+                const float rngFrequencyHz = unit(Rng()) *
+                    (waveRef.effectMaxFrequency - waveRef.effectMinFrequency) + waveRef.effectMinFrequency;
+                out.hasFilterOverride = true;
+                out.filterQFactor     = rngQFactor;
+                out.filterFrequencyHz = rngFrequencyHz;
+            }
+
+            return out;
+        }
+
         // Evaluates one RPC (Runtime Parameter Control) curve at a given variable value, matching
         // FAudio's FACT_INTERNAL_CalculateRPC (FACT_internal.c): clamps to the first/last point's
         // Y outside the curve's domain, otherwise piecewise-interpolates between the bracketing
@@ -379,8 +469,9 @@ namespace Microsoft::Xna::Framework::Audio
 
         const float volumeMultiplier =
             static_cast<float>(std::pow(10.0, rpcVolumeCentibels / 2000.0));
-        const float pitch = CentsToPitch(static_cast<float>(basePitchCents_) + rpcPitchCents);
-        return {volumeMultiplier, pitch, rpcFilterFreqHz, rpcFilterQFactor};
+        const float pitchCentsSum = static_cast<float>(basePitchCents_) + rpcPitchCents;
+        const float pitch = CentsToPitch(pitchCentsSum);
+        return {volumeMultiplier, pitch, pitchCentsSum, rpcFilterFreqHz, rpcFilterQFactor};
     }
 
     void Cue::ReconcileState() const
@@ -441,10 +532,12 @@ namespace Microsoft::Xna::Framework::Audio
                     // that this same touch-point now fixes). rpc.volumeMultiplier is exactly
                     // 1.0f when hasRpc is false, so this is a no-op for the common non-RPC case.
                     pi.instance->setVolumeProperty(std::clamp(
-                        pi.baseVolume * catVol * rpc.volumeMultiplier * fadeMultiplier, 0.0f, 1.0f));
+                        pi.baseVolume * pi.effectVolumeMultiplier * catVol * rpc.volumeMultiplier
+                            * fadeMultiplier, 0.0f, 1.0f));
                     if (hasRpc)
                     {
-                        pi.instance->setPitchProperty(rpc.pitch);
+                        pi.instance->setPitchProperty(CentsToPitch(
+                            rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta));
                         // P10-FILTER-002/003
                         pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                     }
@@ -482,10 +575,12 @@ namespace Microsoft::Xna::Framework::Audio
                 if (pi.instance)
                 {
                     pi.instance->setVolumeProperty(std::clamp(
-                        pi.baseVolume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f));
+                        pi.baseVolume * pi.effectVolumeMultiplier * catVol * rpc.volumeMultiplier,
+                        0.0f, 1.0f));
                     if (hasRpc)
                     {
-                        pi.instance->setPitchProperty(rpc.pitch);
+                        pi.instance->setPitchProperty(CentsToPitch(
+                            rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta));
                         // P10-FILTER-002/003
                         pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                     }
@@ -516,11 +611,13 @@ namespace Microsoft::Xna::Framework::Audio
                 for (const auto& pi : active_)
                     if (pi.instance)
                     {
-                        pi.instance->setVolumeProperty(
-                            std::clamp(pi.baseVolume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f));
+                        pi.instance->setVolumeProperty(std::clamp(
+                            pi.baseVolume * pi.effectVolumeMultiplier * catVol * rpc.volumeMultiplier,
+                            0.0f, 1.0f));
                         if (hasRpc)
                         {
-                            pi.instance->setPitchProperty(rpc.pitch);
+                            pi.instance->setPitchProperty(CentsToPitch(
+                                rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta));
                             // P10-FILTER-002/003
                             pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                         }
@@ -534,10 +631,12 @@ namespace Microsoft::Xna::Framework::Audio
                     if (pi.instance)
                     {
                         pi.instance->setVolumeProperty(std::clamp(
-                            pi.baseVolume * catVol * rpc.volumeMultiplier * fadeMultiplier, 0.0f, 1.0f));
+                            pi.baseVolume * pi.effectVolumeMultiplier * catVol * rpc.volumeMultiplier
+                                * fadeMultiplier, 0.0f, 1.0f));
                         if (hasRpc)
                         {
-                            pi.instance->setPitchProperty(rpc.pitch);
+                            pi.instance->setPitchProperty(CentsToPitch(
+                                rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta));
                             // P10-FILTER-002/003
                             pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                         }
@@ -557,9 +656,11 @@ namespace Microsoft::Xna::Framework::Audio
             for (const auto& pi : active_)
                 if (pi.instance)
                 {
-                    pi.instance->setVolumeProperty(
-                        std::clamp(pi.baseVolume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f));
-                    pi.instance->setPitchProperty(rpc.pitch);
+                    pi.instance->setVolumeProperty(std::clamp(
+                        pi.baseVolume * pi.effectVolumeMultiplier * catVol * rpc.volumeMultiplier,
+                        0.0f, 1.0f));
+                    pi.instance->setPitchProperty(CentsToPitch(
+                        rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta));
                     // P10-FILTER-002/003
                     pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                 }
@@ -909,21 +1010,43 @@ namespace Microsoft::Xna::Framework::Audio
             const SoundEffect* sf = wb->GetSoundEffect(effectiveWaveIndex);
             if (!sf) continue;
 
+            // P11-XACT-003: PlayWaveEffectVariation-family per-play pitch/volume/filter
+            // randomization, drawn once per fresh Play() (see ApplyEffectVariation's own comment
+            // for why that's the only branch of FAudio's real algorithm CNA's per-track
+            // single-resolution model can reach). A no-op (all-default EffectVariationResult) for
+            // every plain PlayWave/PlayWaveTrackVariation wave reference.
+            const EffectVariationResult effect = ApplyEffectVariation(waveRef);
+
             auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
-            float combinedVol = std::clamp(waveRef.volume * catVol * rpc.volumeMultiplier, 0.0f, 1.0f);
+            float combinedVol = std::clamp(
+                waveRef.volume * effect.volumeAmplitudeMultiplier * catVol * rpc.volumeMultiplier,
+                0.0f, 1.0f);
             inst->setVolumeProperty(combinedVol);
-            inst->setPitchProperty(rpc.pitch);
+            inst->setPitchProperty(
+                CentsToPitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta));
             inst->setIsLoopedProperty(waveRef.loopCount > 0);
             inst->Play();
 
-            // P9-XACT-011: wire the track's real parsed XACT filter (if any) into the real
-            // SDL3_mixer filter callback.
+            // P9-XACT-011/P11-XACT-003: wire the track's real filter into the real SDL3_mixer
+            // filter callback -- effect variation's randomized frequency/Q, when authored,
+            // *replaces* the plain per-track authored base value (matches FAudio's own "Initial
+            // Filter Variation" branch, a straight overwrite, not additive); RPC continues to
+            // override either base live every tick exactly as before, unaffected by which one
+            // established it.
             if (waveRef.filterType != 0xFF)
             {
-                inst->INTERNAL_applyXactTrackFilter(
-                    waveRef.filterType,
-                    static_cast<float>(waveRef.filterFrequencyHz),
-                    waveRef.filterQFactorRaw);
+                if (effect.hasFilterOverride)
+                {
+                    inst->INTERNAL_applyEffectVariationFilter(
+                        waveRef.filterType, effect.filterFrequencyHz, effect.filterQFactor);
+                }
+                else
+                {
+                    inst->INTERNAL_applyXactTrackFilter(
+                        waveRef.filterType,
+                        static_cast<float>(waveRef.filterFrequencyHz),
+                        waveRef.filterQFactorRaw);
+                }
             }
 
             // P10-FILTER-002/003: apply this cue's initial RPC filter frequency/Q evaluation
@@ -935,7 +1058,8 @@ namespace Microsoft::Xna::Framework::Audio
             // are both -1.0f in that case).
             inst->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
 
-            active_.push_back({std::move(inst), waveRef.volume});
+            active_.push_back({std::move(inst), waveRef.volume,
+                effect.volumeAmplitudeMultiplier, effect.pitchCentsDelta});
 
             if (std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), wb) == waveBanksUsed_.end())
             {
@@ -1089,7 +1213,9 @@ namespace Microsoft::Xna::Framework::Audio
     void Cue::ApplyCategoryVolume(float catVol)
     {
         for (auto& pi : active_)
-            if (pi.instance) pi.instance->setVolumeProperty(std::clamp(pi.baseVolume * catVol, 0.0f, 1.0f));
+            if (pi.instance)
+                pi.instance->setVolumeProperty(std::clamp(
+                    pi.baseVolume * pi.effectVolumeMultiplier * catVol, 0.0f, 1.0f));
     }
 
     void Cue::INTERNAL_seedRngForTest(unsigned int seed)
@@ -1102,6 +1228,19 @@ namespace Microsoft::Xna::Framework::Audio
         CNA::Internal::Audio::XsbTrackVariationType type)
     {
         return SelectTrackVariationIndex(entries, type);
+    }
+
+    void Cue::INTERNAL_applyEffectVariationForTest(
+        const CNA::Internal::Audio::XsbWaveRef& waveRef,
+        float& pitchCentsDelta, float& volumeAmplitudeMultiplier,
+        bool& hasFilterOverride, float& filterFrequencyHz, float& filterQFactor)
+    {
+        const EffectVariationResult result = ApplyEffectVariation(waveRef);
+        pitchCentsDelta          = result.pitchCentsDelta;
+        volumeAmplitudeMultiplier = result.volumeAmplitudeMultiplier;
+        hasFilterOverride        = result.hasFilterOverride;
+        filterFrequencyHz        = result.filterFrequencyHz;
+        filterQFactor            = result.filterQFactor;
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────

@@ -113,6 +113,16 @@ namespace Microsoft::Xna::Framework::Audio
         // (P10-FILTER-002/003, see INTERNAL_applyRpcFilterOverride below).
         NOXNA void INTERNAL_applyXactTrackFilter(uint8_t filterType, float frequencyHz, uint8_t qfactorRaw);
 
+        // P11-XACT-003: same role as INTERNAL_applyXactTrackFilter above (establishes this
+        // filter's base frequency/Q; itself only ever called once, at Play() time), but for a
+        // PlayWaveEffectVariation-family event's randomized override. Unlike
+        // INTERNAL_applyXactTrackFilter's raw XACT Q-factor byte, `oneOverQ` here is already the
+        // final coefficient -- the caller (Cue.cpp's ApplyEffectVariation) already took the
+        // reciprocal of the authored min/maxQFactor draw itself (matching FAudio's own
+        // `rngQFactor = 1.0f / (...)`, assigned directly to `activeWave.baseQFactor` with no
+        // further transformation downstream) -- so this method must NOT take another reciprocal.
+        NOXNA void INTERNAL_applyEffectVariationFilter(uint8_t filterType, float frequencyHz, float oneOverQ);
+
         // P10-FILTER-002/003: continuous per-tick RPC targeting for filter frequency/Q, called
         // every tick from Cue::ReconcileState() (the same continuous-tick infra P9-XACT-016
         // already built for volume/pitch) whenever this cue has RPC bindings, plus once more at

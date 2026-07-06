@@ -4541,15 +4541,67 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
   and equal weights, observed via `MIX_GetTrackRemaining()` against a midpoint threshold to prove
   both candidates get selected across 40 fresh `Play()`s). Full suite: 3347 passed (2 hardware-
   gated skips unaffected), up from 3341/3343 before this task.
-* [ ] P11-XACT-003: Implement per-play effect-variation randomization (pitch/volume/filter
+* [x] P11-XACT-003: Implement per-play effect-variation randomization (pitch/volume/filter
   frequency/Q) for `PlayWaveEffectVariation`/`PlayWaveTrackEffectVariation` events, gated by
   `variationFlags`' `PITCH`/`VOLUME`/`FREQUENCY_Q` and `_ADD`/`_NEW_ON_LOOP` bits.
-  *Status:* Open. Real feature work, well-specified (see `P11-XACT-001`'s citations) but touches
-  several existing invariants that need care: interacts with `Cue`'s existing base-pitch/RPC-pitch
-  combination (`basePitchCents_`) and the filter-frequency/Q RPC override machinery
-  (`P10-FILTER-002/003/004/006`) -- effect variation's randomized pitch/frequency/Q would need to
-  combine with, not silently override, whatever those already contribute. *Files:* `XactTypes.hpp`,
-  `XactParser.cpp`, `Cue.cpp`, `SoundEffectInstance.cpp`.
+  *Note:* Closed. `XactTypes.hpp`'s `XsbWaveRef` gained `effectVariationFlags` (FAudio's own
+  `VARIATION_FLAG_*` bits, `FACT_internal.h`) plus the authored min/max pitch (cents)/volume
+  (centibels)/frequency (Hz)/Q-factor (plain, reciprocal-ready) ranges. `XactParser.cpp`'s
+  `ParseFirstPlayWave` now retains these fields for both `PLAYWAVEEFFECTVARIATION` and the
+  `PLAYWAVETRACKEFFECTVARIATION` half of the track-variation branch, instead of reading-and-
+  discarding them ("(skip)"). `Cue.cpp` gained `ApplyEffectVariation`, matching FAudio's real
+  "Initial Variation" branch (`FACT_internal.c:309-425`, the `activeWave.wave == NULL` case)
+  exactly for each of the three independently-gated axes -- CNA's per-track single-resolution
+  model (documented scope boundary, same precedent as `P11-XACT-002`) only ever reaches that
+  branch, so the `_ADD`/`_NEW_ON_LOOP` combination logic for a *later* loop iteration re-
+  triggering the same event is out of scope, not simplified away (no per-frame XACT event-
+  scheduling system exists to ever reach it). Pitch: `rngPitch = int16(rng()*(max-min))+min`,
+  summed into the existing `basePitchCents_`/RPC-pitch cents sum before one shared
+  `CentsToPitch()` conversion (`Cue::RpcResult` gained `pitchCentsBeforeConversion`, the pre-
+  conversion sum `pitch` was itself computed from, so a per-instance delta can be added in
+  without re-deriving it at each of `Play()`'s and `ReconcileState()`'s five volume/pitch
+  reapplication sites). Volume: `rngVolume` (centibels) converted to an amplitude ratio via the
+  same `CentibelsToAmplitude` formula `EvaluateRpc()` already uses, then *multiplied* into
+  `waveRef.volume` -- mathematically exactly equivalent to FAudio's additive-centibel-then-single-
+  convert combination (`10^((a+b)/2000) == 10^(a/2000)*10^(b/2000)`), not an approximation.
+  Filter frequency/Q: a straight *replacement* of the track's plain authored base filter (matches
+  FAudio's own "Initial Filter Variation" branch, no clamp on either axis, unlike the raw-XACT-
+  byte per-track qfactor's own `/3`-clamp formula) -- new `SoundEffectInstance::
+  INTERNAL_applyEffectVariationFilter(filterType, frequencyHz, oneOverQ)`, called instead of
+  `INTERNAL_applyXactTrackFilter` when the frequency/Q flag is set; RPC continues to override
+  either base live every tick exactly as before (`INTERNAL_applyRpcFilterOverride`, unmodified),
+  unaffected by which one established the base -- matches FAudio's own per-tick fallback between
+  `rpcData.rpcFilterFreq/Q` and `activeWave.baseFrequency/baseQFactor` exactly. `Cue::
+  PlaybackInstance` gained `effectVolumeMultiplier`/`effectPitchCentsDelta` (drawn once at
+  `Play()`, re-folded into every later volume/pitch reapplication site --
+  `ReconcileState()`'s fade-out/release-RPC/fade-in/steady-state branches and
+  `ApplyCategoryVolume()` -- so a category-volume change or a fade tick doesn't silently drop the
+  randomized offset back to the plain authored value).
+  **Real bug found and fixed by the end-to-end test**: `INTERNAL_applyEffectVariationFilter`'s
+  first draft took an extra, unwanted reciprocal of the Q value it was given -- `ApplyEffectVariation`
+  already computes the final `OneOverQ` coefficient itself (matching FAudio's own `rngQFactor =
+  1.0f / (...)`, assigned directly to `activeWave.baseQFactor` with no further transformation
+  downstream), so a second reciprocal inside the `SoundEffectInstance` method inverted it back
+  (e.g. an authored Q of 4 -- expected `oneOverQ = 0.25` -- came out as `4` instead). Caught
+  immediately by `PlayWiresEffectVariationFilterFrequencyAndQIntoSpawnedInstance`'s exact
+  end-to-end assertion; fixed by removing the extra reciprocal and renaming the parameter to
+  `oneOverQ` to make the contract unambiguous.
+  Tests: 8 new (`CueTests.cpp`, "PlayWaveEffectVariation-family randomization (P11-XACT-003)"
+  section) -- 5 algorithm-level (`ApplyEffectVariationWithNoFlagsIsANoOp`,
+  `...PitchStaysWithinAuthoredRangeAndVaries`, `...PitchWithDegenerateRangeIsExact`,
+  `...VolumeStaysWithinAuthoredAmplitudeRangeAndVaries`,
+  `...FrequencyQStaysWithinAuthoredRangeAndVaries`, via a new
+  `Cue::INTERNAL_applyEffectVariationForTest`/`CueTestAccess::ApplyEffectVariation` hook) plus 3
+  end-to-end wiring tests against a new `SharedEffectVariationBank()`/"EffectVarCue" fixture
+  (degenerate min==max ranges on every axis, for full determinism without seeding/replicating the
+  RNG) -- one per axis (`PlayWiresEffectVariationPitchIntoSpawnedInstance`, exact `getPitchProperty()`
+  value; `...VolumeIntoSpawnedInstance`, exact `getVolumeProperty()` via an independent-oracle
+  centibel/amplitude replica, same convention as `PredictWeightedPick`; `...FilterFrequencyAndQ
+  IntoSpawnedInstance`, exact frequency/Q readback via `SoundEffectInstanceTestAccess::GetFilterState`,
+  proving the event's own values *replaced* the track's differently-authored plain base of
+  8000Hz/qfactor=6). `git stash`-verified (stashing every production file causes a compile
+  failure in the new tests, confirming real dependency, not a tautological pass). Full suite
+  3356/3358 pass (was 3348/3350), no regressions. See `plan_audio.md`.
 * [x] P11-XACT-004: Fix the pre-existing sound-level variation-table weighted lottery's (`Cue::Play()`'s
   `SOUND_VARIATION_TYPE` non-interactive branch, `P9-XACT-002`/`P10-VAR-004`) discrete-vs-continuous
   boundary bug -- discovered as a side effect of implementing `P11-XACT-002` above, in the *new*

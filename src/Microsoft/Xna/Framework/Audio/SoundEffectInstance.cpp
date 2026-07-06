@@ -648,6 +648,30 @@ namespace Microsoft::Xna::Framework::Audio
 #endif
     }
 
+    void SoundEffectInstance::INTERNAL_applyEffectVariationFilter(
+        uint8_t filterType, float frequencyHz, float oneOverQ)
+    {
+#ifdef SOUND_ENABLED
+        if (!track_) return;
+
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        SDL_AudioSpec spec{};
+        if (!MIX_GetMixerFormat(mixer, &spec) || spec.freq <= 0) return;
+
+        const float cutoff = INTERNAL_calculateFilterCutoff(frequencyHz, static_cast<float>(spec.freq));
+
+        switch (filterType)
+        {
+            case 0: INTERNAL_applyLowPassFilter(cutoff, oneOverQ); break;
+            case 1: INTERNAL_applyBandPassFilter(cutoff, oneOverQ); break;
+            case 2: INTERNAL_applyHighPassFilter(cutoff, oneOverQ); break;
+            default: break; // Not reachable via XactParser.cpp's bit-decode; defensive only.
+        }
+#else
+        (void)filterType; (void)frequencyHz; (void)oneOverQ;
+#endif
+    }
+
     void SoundEffectInstance::INTERNAL_applyRpcFilterOverride(float rpcFrequencyHz, float rpcQFactor)
     {
 #ifdef SOUND_ENABLED

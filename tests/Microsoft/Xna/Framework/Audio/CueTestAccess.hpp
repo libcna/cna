@@ -47,5 +47,27 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return Cue::INTERNAL_selectTrackVariationIndexForTest(entries, type);
         }
+
+        // P11-XACT-003: direct access to the PlayWaveEffectVariation-family randomization
+        // algorithm, for unit-testing pitch/volume/filter draws against a synthetic XsbWaveRef
+        // without a full XACT fixture.
+        struct EffectVariationOutcome
+        {
+            float pitchCentsDelta = 0.0f;
+            float volumeAmplitudeMultiplier = 1.0f;
+            bool  hasFilterOverride = false;
+            float filterFrequencyHz = 0.0f;
+            float filterQFactor = 0.0f;
+        };
+
+        static EffectVariationOutcome ApplyEffectVariation(
+            const CNA::Internal::Audio::XsbWaveRef& waveRef)
+        {
+            EffectVariationOutcome out;
+            Cue::INTERNAL_applyEffectVariationForTest(
+                waveRef, out.pitchCentsDelta, out.volumeAmplitudeMultiplier,
+                out.hasFilterOverride, out.filterFrequencyHz, out.filterQFactor);
+            return out;
+        }
     };
 }

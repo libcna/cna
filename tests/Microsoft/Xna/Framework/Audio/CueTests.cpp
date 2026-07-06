@@ -3488,6 +3488,317 @@ TEST(CueTest, PlayResolvesTrackVariationEventToOneOfTheAuthoredCandidates)
     EXPECT_TRUE(sawLong);
 }
 
+// ===================== PlayWaveEffectVariation-family randomization (P11-XACT-003) =====================
+//
+// Mirrors FAudio's real per-play pitch/volume/filter randomization (FACT_internal.c:309-425)
+// exactly for the "Initial Variation" branch (activeWave.wave == NULL) -- CNA's per-track single-
+// resolution model (see plan_audio.md's P11-XACT-003 note) only ever reaches that branch, so the
+// NEW_ON_LOOP/_ADD combination logic for a later loop iteration re-triggering the same event is
+// out of scope, not simplified away. These tests exercise
+// CueTestAccess::ApplyEffectVariation's exact reproduction of that one-time draw directly, without
+// needing a full XACT fixture for every flag combination.
+
+// FAudio's own VARIATION_FLAG_* bit values (FACT_internal.h) -- not exposed by CNA's public/test
+// headers (Cue.cpp keeps its own private copy), so tests build synthetic flags the same way
+// fixture builders elsewhere in this file hardcode other protocol-level constants directly.
+constexpr uint16_t kEffectVarFlagPitch      = 0x1000;
+constexpr uint16_t kEffectVarFlagVolume     = 0x2000;
+constexpr uint16_t kEffectVarFlagFrequencyQ = 0xC000;
+
+CNA::Internal::Audio::XsbWaveRef MakeEffectVariationWaveRef()
+{
+    CNA::Internal::Audio::XsbWaveRef wr{};
+    wr.wavebankIndex = 0;
+    wr.waveIndex     = 0;
+    wr.loopCount     = 0;
+    wr.volume        = 1.0f;
+    return wr;
+}
+
+TEST(CueTest, ApplyEffectVariationWithNoFlagsIsANoOp)
+{
+    auto wr = MakeEffectVariationWaveRef();
+    const auto result = CueTestAccess::ApplyEffectVariation(wr);
+    EXPECT_FLOAT_EQ(result.pitchCentsDelta, 0.0f);
+    EXPECT_FLOAT_EQ(result.volumeAmplitudeMultiplier, 1.0f);
+    EXPECT_FALSE(result.hasFilterOverride);
+}
+
+TEST(CueTest, ApplyEffectVariationPitchStaysWithinAuthoredRangeAndVaries)
+{
+    auto wr = MakeEffectVariationWaveRef();
+    wr.effectVariationFlags = kEffectVarFlagPitch;
+    wr.effectMinPitch = -300;
+    wr.effectMaxPitch = 300;
+
+    CueTestAccess::SeedRng(55);
+    bool sawNegative = false, sawPositive = false;
+    for (int i = 0; i < 60; ++i)
+    {
+        const auto result = CueTestAccess::ApplyEffectVariation(wr);
+        ASSERT_GE(result.pitchCentsDelta, -300.0f);
+        ASSERT_LE(result.pitchCentsDelta, 300.0f);
+        EXPECT_FLOAT_EQ(result.volumeAmplitudeMultiplier, 1.0f); // untouched -- volume flag unset
+        EXPECT_FALSE(result.hasFilterOverride);
+        if (result.pitchCentsDelta < 0.0f) sawNegative = true;
+        if (result.pitchCentsDelta > 0.0f) sawPositive = true;
+    }
+    EXPECT_TRUE(sawNegative);
+    EXPECT_TRUE(sawPositive);
+}
+
+TEST(CueTest, ApplyEffectVariationPitchWithDegenerateRangeIsExact)
+{
+    // min == max collapses the draw to one deterministic value regardless of the RNG --
+    // int16(rng() * (600-600)) + 600 == 600 for every possible rng() output.
+    auto wr = MakeEffectVariationWaveRef();
+    wr.effectVariationFlags = kEffectVarFlagPitch;
+    wr.effectMinPitch = 600;
+    wr.effectMaxPitch = 600;
+
+    const auto result = CueTestAccess::ApplyEffectVariation(wr);
+    EXPECT_FLOAT_EQ(result.pitchCentsDelta, 600.0f);
+}
+
+TEST(CueTest, ApplyEffectVariationVolumeStaysWithinAuthoredAmplitudeRangeAndVaries)
+{
+    // Amplitude is monotonically increasing in centibels (pow(10, x/2000)), so the min/max
+    // centibel range maps directly to a min/max amplitude range with no inversion.
+    auto wr = MakeEffectVariationWaveRef();
+    wr.effectVariationFlags = kEffectVarFlagVolume;
+    wr.effectMinVolume = -2000.0f; // centibels
+    wr.effectMaxVolume = 0.0f;
+    const float minAmp = std::pow(10.0f, -2000.0f / 2000.0f); // 0.1
+    const float maxAmp = std::pow(10.0f, 0.0f / 2000.0f);     // 1.0
+
+    CueTestAccess::SeedRng(66);
+    bool sawLow = false, sawHigh = false;
+    for (int i = 0; i < 60; ++i)
+    {
+        const auto result = CueTestAccess::ApplyEffectVariation(wr);
+        ASSERT_GE(result.volumeAmplitudeMultiplier, minAmp - 1e-5f);
+        ASSERT_LE(result.volumeAmplitudeMultiplier, maxAmp + 1e-5f);
+        EXPECT_FLOAT_EQ(result.pitchCentsDelta, 0.0f); // untouched -- pitch flag unset
+        EXPECT_FALSE(result.hasFilterOverride);
+        if (result.volumeAmplitudeMultiplier < (minAmp + maxAmp) / 2.0f) sawLow = true;
+        else sawHigh = true;
+    }
+    EXPECT_TRUE(sawLow);
+    EXPECT_TRUE(sawHigh);
+}
+
+TEST(CueTest, ApplyEffectVariationFrequencyQStaysWithinAuthoredRangeAndVaries)
+{
+    // The Q axis takes a reciprocal (matching FAudio's own `1.0f / rngQFactor`), which inverts
+    // the ordering: authored [minQ,maxQ] maps to a final oneOverQ range of [1/maxQ, 1/minQ].
+    auto wr = MakeEffectVariationWaveRef();
+    wr.effectVariationFlags = kEffectVarFlagFrequencyQ;
+    wr.effectMinFrequency = 1000.0f;
+    wr.effectMaxFrequency = 9000.0f;
+    wr.effectMinQFactor = 2.0f;
+    wr.effectMaxQFactor = 4.0f;
+    const float minOneOverQ = 1.0f / wr.effectMaxQFactor; // 0.25
+    const float maxOneOverQ = 1.0f / wr.effectMinQFactor; // 0.5
+
+    CueTestAccess::SeedRng(77);
+    bool sawLowFreq = false, sawHighFreq = false;
+    for (int i = 0; i < 60; ++i)
+    {
+        const auto result = CueTestAccess::ApplyEffectVariation(wr);
+        ASSERT_TRUE(result.hasFilterOverride);
+        ASSERT_GE(result.filterFrequencyHz, 1000.0f);
+        ASSERT_LE(result.filterFrequencyHz, 9000.0f);
+        ASSERT_GE(result.filterQFactor, minOneOverQ - 1e-5f);
+        ASSERT_LE(result.filterQFactor, maxOneOverQ + 1e-5f);
+        EXPECT_FLOAT_EQ(result.pitchCentsDelta, 0.0f); // untouched -- pitch flag unset
+        EXPECT_FLOAT_EQ(result.volumeAmplitudeMultiplier, 1.0f); // untouched -- volume flag unset
+        if (result.filterFrequencyHz < 5000.0f) sawLowFreq = true; else sawHighFreq = true;
+    }
+    EXPECT_TRUE(sawLowFreq);
+    EXPECT_TRUE(sawHighFreq);
+}
+
+// End-to-end: proves Cue::Play() actually wires ApplyEffectVariation's draw into the spawned
+// SoundEffectInstance for all three axes, not just that the algorithm itself (tested directly
+// above) is correct in isolation. "EffectVarCue" authors a PlayWaveEffectVariation event with
+// degenerate (min == max) ranges on every axis, so the expected outcome is fully deterministic
+// without needing to seed/replicate the RNG at all.
+constexpr uint8_t kEffectVarVolByte = 50;
+
+std::vector<uint8_t> BuildEffectVarXsbFixtureBytes()
+{
+    constexpr uint32_t headerSize   = 74;
+    constexpr uint32_t bankNameSize = 64;
+    constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+    const uint32_t wavebankNameOffset = baseOffset;
+    const uint32_t soundOffset        = wavebankNameOffset + 64;
+    // flags+cat+vol+pitch+prio+len(9) + trackCount(1) + track-meta vol+code+filterData+freq(9)
+    constexpr uint32_t soundPrefixSize = 9 + 1 + 9;
+    // header(evtInfo+randomOffset+separator=7) + flags+waveIdx+wbIdx+loopCnt+position+angle(9) +
+    // minPitch+maxPitch(4) + minVol+maxVol(2) + minFreq+maxFreq+minQ+maxQ(16) + variationFlags(2)
+    constexpr uint32_t eventSize       = 7 + 9 + 4 + 2 + 16 + 2;
+    constexpr uint32_t soundSize       = soundPrefixSize + 1 /*eventCount*/ + eventSize;
+    const uint32_t trackEventsOffset  = soundOffset + soundPrefixSize;
+    const uint32_t cueSimpleOffset    = soundOffset + soundSize;
+    const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+    const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+    const std::string cueName = "EffectVarCue";
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'S', 'D', 'B', 'K' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU16(data, 46); // contentVersion
+    AppendU16(data, 0);  // toolVersion
+    AppendU16(data, 0);  // CRC
+    for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+    AppendU8(data, 0);   // platform
+
+    AppendU16(data, 1); // cueSimpleCount
+    AppendU16(data, 0); // cueComplexCount
+    AppendU16(data, 0); // unknown
+    AppendU16(data, 0); // cueTotalAlign
+    AppendU8(data, 1);  // wavebankCount
+    AppendU16(data, 1); // soundCount
+    AppendU16(data, 0); // cueNameLength
+    AppendU16(data, 0); // unknown
+
+    AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+    AppendS32(data, -1); // cueComplexOffset
+    AppendS32(data, -1); // cueNameOffset (unused by the parser)
+    AppendS32(data, 0);  // unknown
+    AppendS32(data, -1); // variationOffset
+    AppendS32(data, 0);  // transitionOffset (unused)
+    AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+    AppendS32(data, 0);  // cueHashOffset (unused)
+    AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+    AppendS32(data, static_cast<int32_t>(soundOffset));
+
+    AppendPadded(data, "EffectVarSoundBank", bankNameSize);
+    AppendPadded(data, kLongWaveBankName, 64);
+
+    // Sound: COMPLEX, one track, no RPC.
+    AppendU8(data, 0x01); // SOUND_FLAG_COMPLEX
+    AppendU16(data, 0);   // categoryIndex
+    AppendU8(data, 0xFF); // sound volume raw byte
+    AppendU16(data, 0);   // pitchCents (0 -- effect variation's pitch delta is the only source)
+    AppendU8(data, 0);    // priority
+    AppendU16(data, 0);   // soundLength (skipped)
+    AppendU8(data, 1);    // trackCount
+
+    // Track metadata: high-pass filter, qfactor=6/frequency=8000Hz -- both deliberately different
+    // from the event's own randomized frequency/Q (5000Hz/qfactor=4 below), so the test can prove
+    // the event's values *replaced* these plain authored ones rather than only reading them.
+    AppendU8(data, 0xFF); // track volume raw byte
+    AppendU32(data, trackEventsOffset);
+    AppendU16(data, 0x0605); // filterData: qfactor=6 (upper byte), bit0=1, high-pass bit set
+    AppendU16(data, 8000);   // frequency (Hz), plain base (expected to be overridden)
+
+    // Track event array: one PlayWaveEffectVariation event, degenerate (min==max) on every axis.
+    AppendU8(data, 1); // eventCount
+    AppendU32(data, 4u); // evtInfo: type=FACTEVENT_PLAYWAVEEFFECTVARIATION (4), timestamp=0
+    AppendU16(data, 0);    // randomOffset
+    AppendU8(data, 0xFF);  // separator
+    AppendU8(data, 0);     // flags
+    AppendU16(data, 0);    // waveIdx
+    AppendU8(data, 0);     // wbIdx
+    AppendU8(data, 0);     // loopCount
+    AppendU16(data, 0);    // position
+    AppendU16(data, 0);    // angle
+    AppendU16(data, static_cast<uint16_t>(600));  // minPitch (int16, +600 cents)
+    AppendU16(data, static_cast<uint16_t>(600));  // maxPitch
+    AppendU8(data, kEffectVarVolByte);            // minVol (raw byte -> centibels)
+    AppendU8(data, kEffectVarVolByte);            // maxVol
+    AppendF32(data, 5000.0f);                     // minFreq (Hz)
+    AppendF32(data, 5000.0f);                     // maxFreq
+    AppendF32(data, 4.0f);                        // minQFactor
+    AppendF32(data, 4.0f);                        // maxQFactor
+    AppendU16(data, kEffectVarFlagPitch | kEffectVarFlagVolume | kEffectVarFlagFrequencyQ);
+
+    // Simple cue.
+    AppendU8(data, 0);
+    AppendU32(data, soundOffset);
+
+    AppendU32(data, cueNameStrOffset);
+    AppendU16(data, 0);
+
+    AppendCStr(data, cueName);
+
+    return data;
+}
+
+SoundBank& SharedEffectVariationBank()
+{
+    (void)SharedLongWaveBank(); // must be registered with the engine before GetCue()/Play()
+    static SoundBank bank(&SharedEngine(), WriteFixture(
+        "cna_cue_test", "effectvar.xsb", BuildEffectVarXsbFixtureBytes()));
+    return bank;
+}
+
+TEST(CueTest, PlayWiresEffectVariationPitchIntoSpawnedInstance)
+{
+    auto cue = std::unique_ptr<Cue>(SharedEffectVariationBank().GetCue("EffectVarCue"));
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+
+    // sound.pitchCents == 0 and no RPC codes -> the only pitch contribution is the event's own
+    // degenerate +600-cent draw: CentsToPitch(0 + 600) == 0.5 exactly.
+    EXPECT_FLOAT_EQ(inst->getPitchProperty(), 0.5f);
+}
+
+TEST(CueTest, PlayWiresEffectVariationVolumeIntoSpawnedInstance)
+{
+    auto cue = std::unique_ptr<Cue>(SharedEffectVariationBank().GetCue("EffectVarCue"));
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+
+    // Independent oracle (deliberately separate code, not a call into production, same
+    // convention as PredictWeightedPick above): replicates XactParser.cpp's ReadVolByte/
+    // CentibelsToAmplitude formulas by hand to compute the expected combined amplitude --
+    // soundVolByte(0xFF) * trackVolByte(0xFF) * eventVolByte(50)'s three independent conversions,
+    // multiplied together (matches XactParser.cpp's `wr.volume *= sound.volume` plus this task's
+    // own CentibelsToAmplitude(rngVolume) multiplier -- see Cue.cpp's comment on why that's
+    // exactly equivalent to FAudio's additive-centibel-then-single-convert combination), times
+    // SharedEngine()'s own "Default" category volume byte (also 0xFF, BuildXgsFixtureBytes).
+    auto readVolByteCentibels = [](int b) {
+        return static_cast<float>(3969.0 * std::log10(b / 28240.0) + 8715.0);
+    };
+    auto centibelsToAmplitude = [](float cb) {
+        return static_cast<float>(std::pow(10.0, cb / 2000.0));
+    };
+    const float soundAmp = centibelsToAmplitude(readVolByteCentibels(0xFF));
+    const float trackAmp = centibelsToAmplitude(readVolByteCentibels(0xFF));
+    const float catAmp   = centibelsToAmplitude(readVolByteCentibels(0xFF));
+    const float eventMultiplier = centibelsToAmplitude(readVolByteCentibels(kEffectVarVolByte));
+    const float expected = std::clamp(soundAmp * trackAmp * catAmp * eventMultiplier, 0.0f, 1.0f);
+
+    EXPECT_NEAR(inst->getVolumeProperty(), expected, 1e-4f);
+}
+
+TEST(CueTest, PlayWiresEffectVariationFilterFrequencyAndQIntoSpawnedInstance)
+{
+    auto cue = std::unique_ptr<Cue>(SharedEffectVariationBank().GetCue("EffectVarCue"));
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(*inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 2); // FilterState::Kind::HighPass -- from the track's own filterData bits
+    // qfactor=4 -> 1/4 = 0.25, NOT the track's plain authored qfactor=6 (which would give 0.5) --
+    // proves the event's own randomized Q *replaced* the plain base, not just that a filter of
+    // some kind got applied.
+    EXPECT_NEAR(oneOverQ, 0.25f, 1e-6f);
+    // 5000Hz (the event's own degenerate draw), NOT the track's plain authored 8000Hz.
+    SDL_AudioSpec spec{};
+    ASSERT_TRUE(MIX_GetMixerFormat(CNA::Internal::Audio::GetMixer(), &spec));
+    EXPECT_NEAR(frequency,
+                SoundEffectInstanceTestAccess::CalculateFilterCutoff(5000.0f, static_cast<float>(spec.freq)),
+                1e-4f);
+}
+
 // ===================== RPC volume/pitch (P9-XACT-006/007/008/009) =====================
 //
 // fixture.xgs's two RPC curves (see BuildXgsFixtureBytes/kVolumeRpcCode/kPitchRpcCode) are both
