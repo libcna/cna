@@ -3462,18 +3462,20 @@ restoration can be reverted.
   whole-track-bounding semantics. Both are nontrivial enough to warrant their own confirm-scope-
   first pass before implementation, matching this branch's established practice for real feature
   work.
-* [ ] P10-LOOP-005: Tests for full-sound loop / loop start>0 / loop length<full / loop
+* [x] P10-LOOP-005: Tests for full-sound loop / loop start>0 / loop length<full / loop
   start+length==full / invalid loop region / dispose-while-looping / stop-while-looping.
-  *Note:* **Partially covered.** Existing: loop region correctly propagated from constructor/WAV
-  `smpl` chunk into the instance (`BufferRangeConstructorPropagatesLoopRegionToInstance`,
-  `FromStreamParsesSmplChunkIntoLoopRegion`, `FromStreamWithoutSmplChunkLeavesLoopRegionAtZero`),
-  and looped playback isn't cut off by a non-immediate `Stop()`
-  (`StopFalseDoesNotCutOffLoopedPlaybackImmediately`). **Not covered, left open:** loop
-  start+length exactly equal to full length (an edge case distinct from "full-sound loop" with
-  start=0), an explicitly-invalid loop region (e.g. start+length exceeding the sample's actual
-  length), dispose-while-looping as its own dedicated case (general dispose-cascade tests exist
-  but not one specifically asserting a *looping* instance stops cleanly), and stop-while-looping
-  as a dedicated immediate-stop case (only the non-immediate case above is tested).
+  *Note:* Closed this pass. Added, in `SoundEffectTests.cpp`:
+  `BufferRangeConstructorPropagatesLoopRegionCoveringEntireSound` (start=0, length==full frame
+  count -- distinct from the all-zero default), `...PropagatesLoopRegionEndingExactlyAtFullLength`
+  (start=200, length=800, full=1000 -- start+length==full with a nonzero start), and
+  `...AcceptsLoopRegionExceedingActualSampleLength` (start=900, length=5000 against a 1000-frame
+  sample -- confirms `P9-VALIDATION-002`'s "intentionally not validated, matches FNA's own ctor"
+  decision holds for this specific edge case too: values propagate unchanged, `Play()` doesn't
+  throw/crash). Added, in `SoundEffectInstanceTests.cpp`: `StopTrueCutsOffLoopedPlaybackImmediately`
+  (the immediate-stop counterpart to the existing non-immediate `StopFalseDoesNot...` test) and
+  `DisposeWhileLoopingStopsCleanly` (asserts `IsDisposed`, `State==Stopped`, and the underlying
+  track handle is torn down). All new tests plus the full suite (3294/3296 pass, 2 pre-existing
+  hardware-only skips) verified green.
 * [x] P10-LOOP-006: Document the limitation precisely if backend makes exact loop regions
   impossible.
   *Note:* Already precisely documented, see P10-LOOP-001's citation.
@@ -3737,7 +3739,7 @@ restoration can be reverted.
   | Reverb/aux-send | `SoundEffectInstance::INTERNAL_applyReverb` | Documented no-op | FACT routes to a real aux-send/reverb submix bus | SDL3_mixer has no aux-send/return bus; FNA itself has no caller for the equivalent method either (dead code in the reference) | `ApplyReverbDoesNotThrow` | Permanent unless backend changes (RFC-2) |
   | HRTF/elevation | `SoundEffectInstance::Apply3D` | Pan is a single-axis (listener-right) linear projection; no vertical/elevation channel | Full multi-speaker HRTF with elevation | SDL3_mixer has no positional-audio DSP graph | Direct, `ComposedPanIsCenteredWhenEmitterDirectlyAbove`/`...Below` (P10-3D-003) | Permanent unless backend changes (RFC-2) |
   | Stereo crossfeed | `SoundEffectInstance::Pan`/`Apply3D` | Hard-pan (eliminates the opposite channel at the extremes) | 4-coefficient crossfeed matrix | `MIX_SetTrackStereo` is a 2-value gain pair; sharing the single cooked-callback slot with the shipped filter is a real regression risk (P10-PAN-002) | Indirect, via pan unit tests | Design task recorded (RFC-1); not started |
-  | Loop region approximation | `SoundEffect`/`SoundEffectInstance` loop playback | A bounded loop region truncates the ENTIRE track (including the first playthrough), not just later iterations | `LoopBegin` plays once, then only the loop segment repeats | `MIX_PROP_PLAY_MAX_FRAME_NUMBER` has no per-iteration distinction | Partial (P10-LOOP-005) | Open (P10-LOOP-003/004 investigate a fix) |
+  | Loop region approximation | `SoundEffect`/`SoundEffectInstance` loop playback | A bounded loop region truncates the ENTIRE track (including the first playthrough), not just later iterations | `LoopBegin` plays once, then only the loop segment repeats | `MIX_PROP_PLAY_MAX_FRAME_NUMBER` has no per-iteration distinction | Full, for the propagation/no-crash surface (P10-LOOP-005); the underlying truncation behavior itself remains unfixed | Open (P10-LOOP-003/004 investigate a fix) |
   | XACT RPC unsupported targets | `Cue::EvaluateRpc` | `AttackTime`/`ReleaseTime` always read as manually-set-or-0; filter-frequency/Q and DSP-preset RPC targets parsed but discarded | Live elapsed-time-driven envelopes; live filter/DSP parameter modulation | No elapsed-playback-time tracking; no DSP preset system; filter RPC needs the continuous-tick infra extended into `SoundEffectInstance` (P10-RPC-002/003, P10-FILTER-002/003) | Volume/pitch RPC targets ARE tested and continuous (`P9-XACT-016`) | Open (recorded as concrete future tasks, not permanent) |
   | `Distance`/`OrientationAngle`/`DopplerPitchScalar` RPC variables | `Cue::GetVariable`/`Apply3D` | Recognized as valid variable names but never auto-updated from `Apply3D`'s real computed values | Live values reflecting the last `Apply3D` call | `Apply3D()` never writes back into `variables_` (P10-RPC-002, newly documented this pass) | None | Open |
   | Constructor validation differences | `SoundEffect`, `DynamicSoundEffectInstance` | Offset/count validated (unsigned-arithmetic, overflow-safe) where C++ has no array-bounds safety net FNA relies on; sample rate/channel count NOT validated (matches FNA exactly, diverges from MSDN docs) | MSDN documents range checks FNA itself never enforces | Practical-compatibility policy: match real FNA runtime behavior over stricter, unenforced XNA docs (P9-VALIDATION-001, P10-DYN-001/002) | `ConstructorAcceptsSampleRateBelowXnaDocumentedMinimum` etc. (P10-DYN-003) | Permanent (deliberate FNA-matching choice) |

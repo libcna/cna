@@ -315,6 +315,59 @@ TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionToInstance)
     instance.Play(); // must not throw/crash with a real loop region applied
 }
 
+// P10-LOOP-005: loop region covering the entire sound (loopStart==0, loopLength==full frame
+// count) is a distinct edge case from the default all-zero "loop everything" region -- confirms
+// an explicitly-authored full-length region also propagates correctly and doesn't crash Play().
+TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionCoveringEntireSound)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
+    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
+                       0, 1000);
+
+    SoundEffectInstance instance = effect.CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 0u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 1000u);
+
+    instance.setIsLoopedProperty(true);
+    instance.Play();
+}
+
+// P10-LOOP-005: loopStart+loopLength landing exactly at the sample's full length (with a nonzero
+// start) is distinct from both the all-zero default and the start==0 full-cover case above.
+TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionEndingExactlyAtFullLength)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
+    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
+                       200, 800); // 200 + 800 == 1000, the full frame count
+
+    SoundEffectInstance instance = effect.CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 200u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 800u);
+
+    instance.setIsLoopedProperty(true);
+    instance.Play();
+}
+
+// P9-VALIDATION-002: an explicitly-invalid loop region (start+length exceeding the sample's
+// actual frame count) is intentionally NOT validated/clamped, matching FNA's own ctor -- the
+// values must still propagate exactly as given, and Play() must not throw or crash.
+TEST(SoundEffectTest, BufferRangeConstructorAcceptsLoopRegionExceedingActualSampleLength)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
+    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
+                       900, 5000); // 900 + 5000 far exceeds the 1000-frame sample
+
+    SoundEffectInstance instance = effect.CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 900u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 5000u);
+
+    instance.setIsLoopedProperty(true);
+    instance.Play(); // must not throw/crash despite the region exceeding the buffer
+}
+
 // ===================== FromStream (headless) =====================
 
 TEST(SoundEffectTest, FromStreamEmptyThrowsNotSupported)

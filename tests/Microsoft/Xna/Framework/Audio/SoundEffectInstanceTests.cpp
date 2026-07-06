@@ -173,6 +173,38 @@ TEST_F(SoundEffectInstanceTest, StopFalseDoesNotCutOffLoopedPlaybackImmediately)
     EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
 }
 
+// P10-LOOP-005: the *immediate* Stop() path (default/true), as its own dedicated case distinct
+// from the non-immediate one above -- a looping instance must stop right away instead of
+// finishing its current pass first.
+TEST_F(SoundEffectInstanceTest, StopTrueCutsOffLoopedPlaybackImmediately)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.setIsLoopedProperty(true);
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+
+    inst.Stop(true);
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+}
+
+// P10-LOOP-005: Dispose() while an instance is actively looping must cleanly stop and tear down
+// the track rather than leaving it playing or crashing -- general dispose-cascade tests exist
+// elsewhere (e.g. DisposeIsIdempotent), but none specifically exercise a *looping* instance.
+TEST_F(SoundEffectInstanceTest, DisposeWhileLoopingStopsCleanly)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.setIsLoopedProperty(true);
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+
+    inst.Dispose();
+    EXPECT_TRUE(inst.getIsDisposedProperty());
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr);
+}
+
 TEST_F(SoundEffectInstanceTest, RepeatedPlayWhileAlreadyPlayingDoesNotRestartTrack)
 {
     REQUIRE_DEVICE();
