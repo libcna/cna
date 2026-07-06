@@ -75,6 +75,7 @@ No `IsSupported`/`State` on the base class (those are per-subclass statics/prope
 | Unit conversion | Real | High | m/s² → g (`÷ 9.80665f`), confirmed correct and tested |
 | Android axis remap | `NOXNA`-adjacent internal | Medium | `Detail::ConvertAndroidPortraitToXnaLandscape()`; unit-tested, **never hardware-verified** |
 | 8 `*ForTesting()`/`InjectSynthetic*` hooks | `NOXNA` | — | Test-only |
+| Desktop support policy (`ACCEL-007`) | — | High | Deliberately "fully supported wherever SDL exposes real hardware" — `Desktop` is listed alongside `Android`/`iOS` in `getIsSupportedProperty()`'s allowed-platform check, not a permanent no-op. `Platform::Web` (Emscripten) is excluded, pre-existing and not re-examined by `ACCEL-007` despite SDL itself having a real `SDL_SENSOR_EMSCRIPTEN` backend. |
 
 ## `Microsoft::Devices::Sensors::Gyroscope`
 

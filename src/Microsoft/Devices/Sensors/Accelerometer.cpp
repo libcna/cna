@@ -42,6 +42,25 @@ namespace Microsoft::Devices::Sensors
 
     bool Accelerometer::getIsSupportedProperty()
     {
+        // Task ACCEL-007 (desktop support policy, decided 2026-07-06):
+        // Desktop is deliberately treated the same as Android/iOS here —
+        // if SDL genuinely detects a real SDL_SENSOR_ACCEL device (e.g. a
+        // 2-in-1 laptop with a hardware accelerometer), this returns true
+        // and Start() actually works, exactly like a phone. There is no
+        // XNA/WP7-specific reason to special-case or fake-disable desktop
+        // hardware that genuinely exists — XNA itself never ran on a
+        // desktop with a real accelerometer, so there is no compatibility
+        // *requirement* either way; "fully supported wherever SDL exposes
+        // hardware" was chosen over a permanent desktop no-op because it's
+        // strictly more useful and costs nothing extra (the real SDL probe
+        // below already reports false on desktops with no such hardware).
+        // `Platform::Web` (Emscripten) is excluded even though SDL itself
+        // has a real `SDL_SENSOR_EMSCRIPTEN` backend
+        // (third_party/SDL/src/sensor/emscripten/) — this exclusion
+        // predates this task and was not re-examined here; a future task
+        // wanting to support browser accelerometer access should treat that
+        // as its own separate decision, not an implied consequence of this
+        // one.
         const CNA::Platform currentPlatform = CNA::getCurrentPlatform();
 
         if (!(currentPlatform == CNA::Platform::Android ||

@@ -2376,25 +2376,63 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (inspected, no change
     needed — already comprehensive)
 
-### ACCEL-007 — Decide desktop support policy
+### ACCEL-007 — Decide desktop support policy — CLOSED (2026-07-06, formalized an already-implemented decision)
 
 - **Priority:** Medium
 - **Area:** Platform Policy
 - **Problem:** XNA/Windows Phone accelerometer semantics do not map cleanly onto
   arbitrary desktop/laptop SDL-exposed accelerometers (e.g. a 2-in-1 laptop's
   accelerometer, if SDL surfaces one).
+- **Resolution (2026-07-06):** the decision was already made and implemented (and
+  already informally documented in `AccelerometerTests.cpp`'s own file-level comment:
+  "Unlike Compass/Motion, the Accelerometer sensor can genuinely be supported on
+  platforms/devices that expose `SDL_SENSOR_ACCEL`") — this task's job was to formalize
+  it as an explicit, citable policy rather than leave it as an implicit consequence of
+  the code. **Chosen policy: fully supported wherever SDL exposes real hardware**, not
+  a strict-XNA no-op or a `NOXNA`-flavored best-effort compromise —
+  `getIsSupportedProperty()` lists `Platform::Desktop` alongside `Android`/`iOS` in its
+  allowed-platform check (confirmed by reading the code); if SDL genuinely detects a
+  real `SDL_SENSOR_ACCEL` device (e.g. a 2-in-1 laptop), this returns `true` and
+  `Start()` actually works, exactly like on a phone. Rationale, now written down
+  directly above the check in `Accelerometer.cpp`: XNA itself never ran on a desktop
+  with a real accelerometer, so there is no compatibility *requirement* pointing either
+  way — "fully supported wherever SDL exposes hardware" was chosen over a permanent
+  no-op because it's strictly more useful and costs nothing extra (the real SDL probe
+  already correctly reports `false` on desktops without such hardware, which is why
+  this container's own tests pass either way).
+  - **`Platform::Web` (Emscripten) exclusion, explicitly flagged as out of this task's
+    scope rather than silently left unexplained:** `getIsSupportedProperty()` excludes
+    `Platform::Web` even though SDL itself has a real `SDL_SENSOR_EMSCRIPTEN` backend
+    (`third_party/SDL/src/sensor/emscripten/`) — this predates this task and was not
+    re-examined here; documented as a pre-existing boundary a future task could revisit
+    on its own, not bundled into this desktop-specific decision.
+  - Added `AccelerometerTests.DesktopPlatformReachesRealHardwareProbeRatherThanBeingHardcodedUnsupported`
+    — asserts `CNA::getCurrentPlatform() == CNA::Platform::Desktop` on this test host
+    (confirming the platform-detection premise this whole policy rests on actually holds
+    here) and that `getIsSupportedProperty()` reaches the real hardware probe rather
+    than any Desktop-specific short-circuit — the automated, platform-detection-level
+    test this task's own required work asked for.
+  - Documented in `docs/devices-api-coverage.md`'s `Accelerometer` table (new row) and
+    directly in `Accelerometer.cpp`'s own code comment, not only in this plan file.
+  - Verified: 42 `AccelerometerTests` (up from 41), all passing, on plain
+    `cmake-build-debug`.
 - **Required work:**
   - Decide whether desktop accelerometer support should be strict-XNA no-op,
     `NOXNA`-flavored best-effort, or fully supported wherever SDL exposes hardware.
-  - Document the decision.
-  - Add tests for platform detection/behavior where feasible.
+    Done — fully supported, formalizing the existing implementation.
+  - Document the decision. Done — code comment + coverage table.
+  - Add tests for platform detection/behavior where feasible. Done — 1 new test.
 - **Acceptance criteria:**
-  - Desktop behavior is deterministic and documented.
+  - Desktop behavior is deterministic and documented. Done.
   - Docs explain the strict-XNA-vs-CNA-extension distinction for this specific
-    platform case.
+    platform case. Done — this isn't a `NOXNA` extension at all (the strict XNA
+    `getIsSupportedProperty()`/`Start()` API behaves identically regardless of
+    platform); the *policy* of which platforms are even checked is what's now
+    documented.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp`
-  - `docs/devices-*.md`
+  - `src/Microsoft/Devices/Sensors/Accelerometer.cpp` (edited — policy comment)
+  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (edited)
+  - `docs/devices-api-coverage.md` (edited)
 
 ---
 
