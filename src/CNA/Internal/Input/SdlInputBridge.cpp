@@ -1362,6 +1362,25 @@ namespace CNA::Internal::Input
         return try_convert_sdl_scancode(scancode).value_or(Keys::None);
     }
 
+    std::string SdlInputBridge::GetKeyName(const Microsoft::Xna::Framework::Input::Keys key)
+    {
+        const auto sdlScancode = try_convert_keys_to_sdl_scancode(key);
+        if (!sdlScancode.has_value())
+            return "";
+        const SDL_Keycode keycode = SDL_GetKeyFromScancode(*sdlScancode, SDL_KMOD_NONE, true);
+        const char* name = SDL_GetKeyName(keycode);
+        return name ? name : "";
+    }
+
+    Microsoft::Xna::Framework::Input::Keys SdlInputBridge::GetKeyFromName(const std::string& name)
+    {
+        using Microsoft::Xna::Framework::Input::Keys;
+        const SDL_Keycode keycode = SDL_GetKeyFromName(name.c_str());
+        if (keycode == SDLK_UNKNOWN)
+            return Keys::None;
+        return try_convert_sdl_key(keycode).value_or(Keys::None);
+    }
+
     void SdlInputBridge::SetScancodeModeForTests(const bool enabled)
     {
         g_scancodeModeTestOverride = enabled;

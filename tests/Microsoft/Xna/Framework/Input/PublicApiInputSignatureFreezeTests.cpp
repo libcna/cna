@@ -267,6 +267,9 @@ namespace
     // NOXNA/EXT (input_noxna.md N-002): physical key-name helpers.
     [[maybe_unused]] constexpr auto z_Keyboard_GetScancodeNameEXT = static_cast<std::string(*)(Keys)>(&Keyboard::GetScancodeNameEXT);
     [[maybe_unused]] constexpr auto z_Keyboard_GetScancodeFromNameEXT = static_cast<Keys(*)(const std::string&)>(&Keyboard::GetScancodeFromNameEXT);
+    // NOXNA/EXT (input_noxna.md N-002b): layout-dependent key-name helpers.
+    [[maybe_unused]] constexpr auto z_Keyboard_GetKeyNameEXT = static_cast<std::string(*)(Keys)>(&Keyboard::GetKeyNameEXT);
+    [[maybe_unused]] constexpr auto z_Keyboard_GetKeyFromNameEXT = static_cast<Keys(*)(const std::string&)>(&Keyboard::GetKeyFromNameEXT);
 
     // ----- KeyboardState (struct, XNA) -----
     static_assert(std::is_default_constructible_v<KeyboardState>, "KeyboardState()");

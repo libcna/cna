@@ -39,4 +39,14 @@ namespace Microsoft::Xna::Framework::Input
     {
         return CNA::Internal::Input::SdlInputBridge::GetScancodeFromName(name);
     }
+
+    std::string Keyboard::GetKeyNameEXT(Keys key)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetKeyName(key);
+    }
+
+    Keys Keyboard::GetKeyFromNameEXT(const std::string& name)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetKeyFromName(name);
+    }
 }

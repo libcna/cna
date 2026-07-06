@@ -211,5 +211,11 @@ namespace CNA::Internal::Input
 
         /** @brief NOXNA/EXT: the Keys value for a physical key name, or Keys::None if unrecognized. */
         static Microsoft::Xna::Framework::Input::Keys GetScancodeFromName(const std::string& name);
+
+        /** @brief NOXNA/EXT: the layout-dependent name of a key, or "" if it has none. */
+        static std::string GetKeyName(Microsoft::Xna::Framework::Input::Keys key);
+
+        /** @brief NOXNA/EXT: the Keys value for a layout-dependent key name, or Keys::None if unrecognized. */
+        static Microsoft::Xna::Framework::Input::Keys GetKeyFromName(const std::string& name);
     };
 }

@@ -11,7 +11,7 @@
 ## Phase P1 — pure/deterministic, broadly supported, headless-testable
 - [x] **N-001 `CNA::Input::Clipboard`** — text Get/Set/Has (`SDL_GetClipboardText`/`SetClipboardText`/`HasClipboardText`).
 - [x] **N-002 `Keyboard` scancode-name helpers EXT** — `GetScancodeNameEXT`/`GetScancodeFromNameEXT` (physical, layout-independent).
-- [ ] **N-002b `Keyboard` keycode-name helpers EXT** — `GetKeyNameEXT`/`GetKeyFromNameEXT` (layout-dependent; split off from N-002).
+- [x] **N-002b `Keyboard` keycode-name helpers EXT** — `GetKeyNameEXT`/`GetKeyFromNameEXT` (layout-dependent).
 - [x] **N-003 `Keyboard::GetModStateEXT` + `KeyModifiersEXT`** — modifier flags (Shift/Ctrl/Alt/Gui + Caps/Num/Scroll/Mode) via `SDL_GetModState` seam.
 - [!] **N-004 `Mouse` cursor visibility EXT** — **SKIPPED (superseded, would conflict).** CNA `Game::IsMouseVisible`
   (`Game.hpp:128`) already owns cursor visibility and calls `SDL_ShowCursor()`/`SDL_HideCursor()` with its own
@@ -49,6 +49,14 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-002b done (2026-07-06):** `Keyboard::GetKeyNameEXT(Keys) -> std::string` +
+  `GetKeyFromNameEXT(std::string) -> Keys` — the layout-dependent (virtual-key) name and its inverse,
+  completing the N-002 name helpers. Bridge resolves Keys -> SDL_Scancode -> (keymap)
+  SDL_GetKeyFromScancode -> SDL_GetKeyName; the inverse is SDL_GetKeyFromName -> try_convert_sdl_key.
+  Unmapped key -> "", unrecognized name -> Keys::None. Pinned in the freeze test + documented. Tests
+  `KeyboardKeyNameEXTTest` gate on SDL_INIT_VIDEO (the keymap needs it; Xvfb in CI) with GTEST_SKIP,
+  then assert US-layout names (A/Z/Space), empty for None, name<->key round-trip, unrecognized ->
+  None. `ctest -L input` green; ASan-clean.
 - **N-002 done (2026-07-06):** `Keyboard::GetScancodeNameEXT(Keys) -> std::string` +
   `GetScancodeFromNameEXT(std::string) -> Keys` — the physical, layout-independent key name and its
   inverse (for rebind UIs). Reuses the bridge's existing `try_convert_keys_to_sdl_scancode` /
