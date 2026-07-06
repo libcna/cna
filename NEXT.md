@@ -13,9 +13,10 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
-  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Task 351 is done,
-  **Task 352 is next** (decide explicit support policy for XNA `.fx`/compiled effect bytecode —
-  this is a policy decision for the user, not something to auto-decide; see §8). **Task 351**
+  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–352 are
+  done, **Task 353 is next** (interim safety net: `.fx` bytecode-accepting constructors added to
+  `Effect` must throw a clear not-yet-implemented exception until Phase 74, below, lands — see §8).
+  **Task 351**
   audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
   returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
   subclass uses; the CNA-only `Effect::Apply()` wasn't wrapped in `NOXNA`; and — found while writing
@@ -67,7 +68,27 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   packaging integration, blocked emulator run — see `docs/devices-build.md` §4.1) and its
   Emscripten/Web support is unstarted scaffolding (tracked separately as Phase 69), and documented
   SDL3's own anticipated-but-unverified Android/Web display-enumeration caveats. Docs-only, no
-  code changed, no new bug found.
+  code changed, no new bug found. **Task 352 decided CNA's XNA `.fx`/compiled-effect-bytecode
+  policy: full support** (the user's explicit choice among unsupported/partial/full, presented
+  after Task 351 found CNA's `Effect` has zero bytecode machinery at all). Confirmed via FNA
+  source that FNA's bytecode constructor/clone-constructor delegate everything to FNA3D/MojoShader
+  (FNA3D's own local checkout is an uninitialized empty submodule, so its exact Vulkan-side
+  MojoShader integration couldn't be verified line-by-line — a noted knowledge gap, not asserted
+  fact). Found that MojoShader's full C source (zlib-licensed) is already readable locally at
+  `/rv/data/library/github.com/u3d-community/U3D/Source/ThirdParty/MojoShader` — its
+  `mojoshader_effects.c` already parses exactly XNA's compiled-effect container format, and
+  `mojoshader.c` transpiles D3D9 SM2/3 bytecode to `GLSL`/`GLSL120`/`ARB1`/`NV2`-`NV4` — **no
+  SPIR-V profile exists**, so Vulkan needs an extra GLSL→SPIR-V hop (`glslang`, currently only
+  present locally as Android NDK/Flatpak build tooling, not a vendorable checkout — a real tracked
+  blocker). Given the scope (new native dependency, 2 real translation paths + 1 unknown-feasibility
+  Bgfx path, `Effect`/`Clone()` wiring, real bytecode test fixtures with no XNA Content Pipeline
+  tooling available), opened **new Phase 74** (Tasks 10200–10209, its own reserved task-number
+  block mirroring the WebGPU backend's `10000`+ convention) rather than folding it into Phase 41.
+  Full reasoning in new `docs/fx-bytecode-support-plan.md`. **Re-scoped Tasks 353/354** from their
+  original "assume unsupported" framing to fit the full-support decision: 353 is now an interim
+  throw-on-bytecode safety net until Phase 74 lands; 354's doc now needs to cover what's supported
+  today, the interim guard, and the Phase 74 roadmap. Pure planning task — no code changed, no
+  rebuild needed.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -395,19 +416,22 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 352 — decide explicit support policy for XNA `.fx`/compiled effect bytecode**
-   - Goal: Task 351's audit confirmed CNA's `Effect` base class has **no** FNA-equivalent
-     `Effect(GraphicsDevice, byte[] effectCode)` bytecode constructor at all — `Effect::OnApply()`
-     is pure virtual, and there is no MojoShader (or any) `.fx`-bytecode parsing pipeline anywhere
-     in CNA. This is a genuine policy decision, not something to auto-decide: does CNA (a) fully
-     support compiled `.fx` bytecode (would need a MojoShader-equivalent parser — large effort),
-     (b) partially support it (e.g. parse parameters/techniques metadata but not arbitrary
-     shader assembly, redirecting actual rendering through CNA's existing GLSL `ShaderEffect`
-     path), or (c) explicitly not support it, with any bytecode constructor throwing a clear,
-     documented exception (feeds directly into Task 353's "no silent fake effects" requirement)?
-     **Surface this choice to the user before implementing** — don't pick unilaterally.
-   - Files: likely just a decision recorded in `GRAPHICS_TASKS.md`/`docs/`; implementation is
-     Tasks 353–354's job once the policy is chosen.
+1. **`GRAPHICS_TASKS.md` Task 353 — interim safety net: throw on any `.fx` bytecode constructor until Phase 74 lands**
+   - Goal: Task 352 decided CNA's XNA `.fx`/compiled-effect-bytecode policy is **full support**
+     (user's explicit choice), but the real implementation is a large, multi-task effort now
+     tracked as new **Phase 74** (`docs/fx-bytecode-support-plan.md`, Tasks 10200–10209 — vendor
+     MojoShader, container-format parsing, EasyGL/Vulkan GPU-shader-translation paths, Bgfx
+     feasibility investigation, `Effect`/`Clone()` wiring, real bytecode test fixtures). Until that
+     lands, any `.fx` bytecode-accepting constructor added to `Effect` must throw a clear,
+     documented not-yet-implemented exception rather than silently producing a broken/fake effect.
+   - Files: `Effect.hpp`/`.cpp` — add the constructor signature matching FNA's
+     `Effect(GraphicsDevice, byte[] effectCode)` (via `SharpRuntime`'s `bytecs` alias) that
+     immediately throws (e.g. `std::runtime_error` or a dedicated `NotImplementedException`-style
+     type, check `sharp-runtime` for the established convention) with a message pointing at
+     `ShaderEffect` as the currently-supported custom-shader path and at Phase 74's tracking issue.
+   - Verification: a test asserting the constructor throws with a clear, non-empty message; confirm
+     it does NOT silently construct a partially-broken `Effect` (empty `Parameters`/`Techniques`
+     would be exactly the kind of "silent fake effect" this task exists to prevent).
 
 2. **`GRAPHICS_TASKS.md` Task 883 — implement `Effect::Clone()` (new, opened by Task 351)**
    - Goal: FNA's `Effect` has a public virtual `Clone()` (used by every stock effect, each
