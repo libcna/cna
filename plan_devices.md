@@ -5027,7 +5027,7 @@ not an alternate spelling to preserve.
   now confirmed passing together in one full run, not just individually at the time
   each was added.
 
-### VERIFY-002 — Run sanitizer verification
+### VERIFY-002 — Run sanitizer verification — CLOSED (2026-07-06)
 
 - **Priority:** High
 - **Area:** Verification
@@ -5051,6 +5051,34 @@ not an alternate spelling to preserve.
   - `CMakePresets.json`
   - `tests/Microsoft/Devices/`
   - `tests/Microsoft/Devices/Sensors/`
+- **Resolution:** Built and ran the full `VERIFY-001` filter (all 21 Devices/Sensors
+  test suites, 343 tests — includes `SensorBaseTests`/`CompassTests`/`MotionTests`/
+  `AndroidSensorBridgeTests`/`SensorSubsystemOwnershipTests`, i.e. every lifecycle/
+  callback suite this task names) under all three sanitizer presets:
+  - **`devices-asan`:** `343 tests ran, [PASSED] 341, [SKIPPED] 2` (same two expected
+    hardware-gated skips). **Zero ASan reports.**
+  - **`devices-ubsan`:** `343 tests ran, [PASSED] 341, [SKIPPED] 2`. **3 UBSan reports,
+    all pre-existing** — `Matrix.cpp:249`/`Vector3.cpp:117` (×2), signed-integer-overflow
+    in `Microsoft::Xna::Framework` float-bit-pattern integer arithmetic. Re-verified the
+    classification rather than trusting the many identical prior entries in this same
+    plan file (lines 284/1516/1592/1675/1756/1820/1877/1945/4230/4747, going back to
+    `DEV-BUILD-002`): confirmed by reading the actual file/line each report names —
+    neither is in `Microsoft::Devices`/`Microsoft::Devices::Sensors`, both are the same
+    long-standing `Xna::Framework::Matrix`/`Vector3` finding this session did not touch
+    or introduce. Classification still accurate.
+  - **`devices-tsan`:** `343 tests ran, [PASSED] 341, [SKIPPED] 2`. **37 TSan reports,
+    all the same single location** (verified via `grep`/`sort`/`uniq -c` on the
+    `SUMMARY:` lines, not eyeballed) — `sharp-runtime/src/System/TimeSpan.cpp:55`,
+    `TimeSpan::copy_count`'s non-atomic increment, the exact same pre-existing,
+    already-classified-as-out-of-scope race this plan has recorded at least nine
+    times before (same line numbers referenced above). Re-verified rather than
+    assumed: still not in `Microsoft::Devices` code, still the same root cause. This
+    session additionally gave it real, permanent tracking for the first time —
+    `SDL-SENSOR-004` (this plan, Section 11) — rather than leaving it as a repeated
+    "same pre-existing race" aside with no actual follow-up task, closing a real gap
+    in how this long-known finding was being handled.
+  - **Zero failures, zero new/unexplained findings, across all three presets.** No new
+    follow-up task was needed beyond the already-created `SDL-SENSOR-004`.
 
 ### VERIFY-003 — Run a strict XNA API compile check
 
