@@ -2658,24 +2658,64 @@ not an alternate spelling to preserve.
     `Accelerometer`)
   - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` (edited)
 
-### GYRO-005 — Add fake gyroscope backend for tests
+### GYRO-005 — Add fake gyroscope backend for tests — CLOSED (2026-07-06, confirmed already comprehensive, one wording discrepancy documented)
 
 - **Priority:** High
 - **Area:** Tests / Architecture
 - **Problem:** CI should not require physical gyroscope hardware, matching
   `ACCEL-006`'s equivalent concern for `Accelerometer`.
+- **Resolution (2026-07-06):** read `GyroscopeTests.cpp` end to end (35 tests) —
+  coverage mirrors (and in one area exceeds) `Accelerometer`'s already-confirmed
+  comprehensive set (`ACCEL-006`): simulated samples
+  (`InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported`,
+  `CurrentValueChangedReceivesExpectedReading`), unsupported state
+  (`GetCurrentValuePropertyThrowsWhenUnsupported`, `StartOnUnsupportedPlatformThrows`),
+  stop-during-callback and self-destruction
+  (`StopPreventsSubsequentSyntheticEventFromDispatching`,
+  `DisposeFromWithinOwnCallbackDoesNotDeadlock`,
+  `SelfDestroyingFromOwnCallbackDuringInjectSyntheticSensorUpdateDoesNotUseAfterFree`,
+  `SelfDestroyingFromOwnCallbackDuringBatchDispatchDoesNotUseAfterFree` — this last one
+  has **no** `Accelerometer` equivalent, since `Gyroscope` has no `ReadingChanged`-style
+  post-dispatch touch of `this` and is therefore fully self-destroy-safe, Task P8-1's
+  own conclusion, giving it strictly *more* coverage of this exact scenario than
+  `Accelerometer`). No gap found; no new fake-backend abstraction needed, for the same
+  architectural reason as `ACCEL-006` (the real SDL-backed path runs on every desktop
+  platform this container builds for, unlike `Compass`/`Motion`'s Android-only
+  backends).
+  - **One acceptance-criterion wording discrepancy, documented rather than silently
+    ignored:** this task's own acceptance criteria say "the fake backend supports
+    deterministic, test-controlled timestamps" — but `InjectSyntheticSensorUpdate()`'s
+    own doc comment states the resulting reading's `Timestamp` "is always the real
+    wall-clock time of the call (Task P4-7), not a synthetic value," and this is a
+    deliberate design choice (identical to `Accelerometer`'s), not an oversight. No
+    test-controlled/injectable timestamp exists for either sensor's synthetic-injection
+    path. This is intentional — `SENSORBASE-001`'s own throttle-testing approach instead
+    passes synthetic `std::chrono::steady_clock::time_point` values directly into
+    `SensorBase<T>::ShouldAcceptUpdateAt()` at the base-class level for deterministic
+    timing tests, rather than making the *reading's own* `Timestamp` field injectable —
+    the two are different concerns (throttle-decision timing vs. the reported reading's
+    own timestamp value), and `READINGS-003` is this plan's dedicated task for the
+    latter's policy. Not re-opened or changed here.
 - **Required work:**
   - Confirm/extend the existing `NOXNA` testing hooks
     (`InjectSyntheticSensorUpdate`/`SetStartedForTesting`/`SetSupportedForTesting`,
     already present on `Gyroscope`) to cover simulated samples, backend errors,
-    unsupported state, and stop-during-callback.
+    unsupported state, and stop-during-callback. Done — all covered; "backend errors"
+    has no distinct scenario at this level (same conclusion as `VIB-009`/`ACCEL-006` —
+    the real SDL path either delivers events or doesn't, no injectable failure mode
+    exists to fake here either).
 - **Acceptance criteria:**
-  - Unit tests cover `Gyroscope` fully without SDL hardware present.
-  - The fake backend supports deterministic, test-controlled timestamps.
+  - Unit tests cover `Gyroscope` fully without SDL hardware present. Confirmed.
+  - The fake backend supports deterministic, test-controlled timestamps. Not literally
+    true — see the documented discrepancy above; the reading's `Timestamp` is always
+    real wall-clock by design, and the throttle-decision timing (the thing that
+    actually needs deterministic control for testing) already has its own separate,
+    genuinely test-controlled seam at the `SensorBase<T>` level.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/Gyroscope.hpp`
-  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp`
-  - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`
+  - `include/Microsoft/Devices/Sensors/Gyroscope.hpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp` (inspected, no change needed —
+    already comprehensive)
 
 ---
 
