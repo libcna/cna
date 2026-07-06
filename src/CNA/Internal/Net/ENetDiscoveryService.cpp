@@ -91,9 +91,18 @@ namespace CNA::Internal::Net
             enet_socket_send(sock, &address, &buffer, 1);
         }
 
-        void ReplyToQuery(ENetSocket sock, const ENetAddress& queryingAddress)
+        void ReplyToQuery(ENetSocket sock, const ENetAddress& queryingAddress, const DiscoveryQueryMessage& query)
         {
             if (registeredHost_ == nullptr)
+            {
+                return;
+            }
+
+            // Task 1.5: SessionTypeFilter was written by every querying client but never actually
+            // read back out server-side - a registered host used to answer *any* Query datagram
+            // regardless of the claimed filter. Only reply if this host's own session type is what
+            // the client is actually searching for.
+            if (query.SessionTypeFilter != registeredHost_->getSessionTypeProperty())
             {
                 return;
             }
@@ -132,7 +141,7 @@ namespace CNA::Internal::Net
                 switch (NetDiscoveryProtocol::PeekTag(data))
                 {
                     case DiscoveryMessageTag::Query:
-                        ReplyToQuery(sock, fromAddress);
+                        ReplyToQuery(sock, fromAddress, NetDiscoveryProtocol::DecodeQuery(data));
                         break;
                     case DiscoveryMessageTag::Announce:
                         if (currentResults_ != nullptr)

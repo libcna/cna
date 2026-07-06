@@ -14,8 +14,10 @@
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 #include <arpa/inet.h>
+#include <array>
 #include <chrono>
 #include <cstring>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
@@ -167,6 +169,23 @@ namespace {
         EXPECT_EQ(sent, static_cast<ssize_t>(bytes.size()));
         close(sock);
     }
+
+    // Task 1.5: waits up to timeoutMs for one datagram on an already-connected/used socket, without
+    // consuming it if none arrives in time. Returns true iff a datagram was actually read.
+    bool TryReceiveWithTimeout(int sock, uint32_t timeoutMs) {
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(sock, &readfds);
+        timeval tv{};
+        tv.tv_sec = static_cast<time_t>(timeoutMs / 1000);
+        tv.tv_usec = static_cast<suseconds_t>((timeoutMs % 1000) * 1000);
+        if (select(sock + 1, &readfds, nullptr, nullptr, &tv) <= 0)
+        {
+            return false;
+        }
+        std::array<char, 1500> buf{};
+        return recv(sock, buf.data(), buf.size(), 0) > 0;
+    }
 }
 
 // Task 1.3: HandleReceived/DecodeAnnounce throwing mid-poll (here, via Task 1.1's negative-index
@@ -224,5 +243,62 @@ TEST(ENetDiscoveryServiceTest, PollIgnoresMalformedAnnounceWhileIdlingAndDiscove
     std::vector<AvailableNetworkSession> found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
     ASSERT_EQ(found.size(), 1u);
     EXPECT_EQ(found[0].getHostGamertagProperty(), "HostPlayer");
+}
+
+// Task 1.5: ReplyToQuery used to answer any Query datagram regardless of its SessionTypeFilter -
+// DecodeQuery was never even called server-side. FindSessions() itself can't exercise this (it
+// early-returns {} for any non-SystemLink filter before sending anything on the wire - see its own
+// first few lines), so this test talks to the discovery port directly with a raw socket, exactly
+// as an external process using a different NetworkSessionType would.
+TEST(ENetDiscoveryServiceTest, ReplyToQueryOnlyAnswersWhenSessionTypeFilterMatchesTheHost) {
+    SystemLinkSessionFixture host("HostPlayer"); // the host's own session type is SystemLink
+
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    ASSERT_GE(sock, 0) << "failed to create a raw UDP socket for this test: " << strerror(errno);
+
+    sockaddr_in destAddr{};
+    destAddr.sin_family = AF_INET;
+    destAddr.sin_port = htons(kTestDiscoveryPort);
+    ASSERT_EQ(inet_pton(AF_INET, "127.0.0.1", &destAddr.sin_addr), 1);
+
+    DiscoveryQueryMessage mismatchedQuery;
+    mismatchedQuery.ProtocolVersion = kDiscoveryProtocolVersion;
+    mismatchedQuery.SessionTypeFilter = NetworkSessionType::PlayerMatch;
+    auto mismatchedBytes = NetDiscoveryProtocol::Encode(mismatchedQuery);
+    ssize_t sent = sendto(sock, mismatchedBytes.data(), mismatchedBytes.size(), 0,
+                           reinterpret_cast<const sockaddr*>(&destAddr), sizeof(destAddr));
+    ASSERT_EQ(sent, static_cast<ssize_t>(mismatchedBytes.size()));
+
+    bool gotReply = false;
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+    while (std::chrono::steady_clock::now() < deadline && !gotReply)
+    {
+        host.session->Update();
+        gotReply = TryReceiveWithTimeout(sock, 5);
+    }
+    EXPECT_FALSE(gotReply) << "host replied to a Query explicitly filtering for a different, "
+                              "unrelated session type than its own";
+
+    // Sanity check on the very same socket: a query with a matching filter DOES get a reply -
+    // proves the "no reply" above reflects the filter check, not a broken test setup that could
+    // never observe a reply either way.
+    DiscoveryQueryMessage matchingQuery;
+    matchingQuery.ProtocolVersion = kDiscoveryProtocolVersion;
+    matchingQuery.SessionTypeFilter = NetworkSessionType::SystemLink;
+    auto matchingBytes = NetDiscoveryProtocol::Encode(matchingQuery);
+    sent = sendto(sock, matchingBytes.data(), matchingBytes.size(), 0,
+                   reinterpret_cast<const sockaddr*>(&destAddr), sizeof(destAddr));
+    ASSERT_EQ(sent, static_cast<ssize_t>(matchingBytes.size()));
+
+    gotReply = false;
+    deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+    while (std::chrono::steady_clock::now() < deadline && !gotReply)
+    {
+        host.session->Update();
+        gotReply = TryReceiveWithTimeout(sock, 5);
+    }
+    EXPECT_TRUE(gotReply) << "host did not reply to a Query with a matching session type filter";
+
+    close(sock);
 }
 #endif // !defined(__EMSCRIPTEN__) && !defined(_WIN32)

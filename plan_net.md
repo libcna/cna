@@ -150,15 +150,27 @@ resource consumption, or a crashed process — not just XNA-fidelity gaps.
   fix (`git stash pop`) and reran — all pass; full suite: **3237/3239 passing** (2 expected
   accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 1.5** — Fix `ReplyToQuery` never actually decoding the incoming `Query` message.
+- [x] **Task 1.5** — Fix `ReplyToQuery` never actually decoding the incoming `Query` message.
   Confirmed (`ENetDiscoveryService.cpp`, `HandleReceived`, ~lines 117-167): on a `Query`-tagged
-  datagram, `ReplyToQuery` is called directly without ever calling `NetDiscoveryProtocol::DecodeQuery`
-  — `SessionTypeFilter` is written by clients but completely ignored server-side, so a registered
-  host replies to *any* `Query` datagram regardless of the claimed filter. Fix: decode the query and
-  only reply if the host's own session type matches the requested filter (or document why filtering
-  is intentionally not enforced, if that's a deliberate simplification — but as-is this looks like an
-  unintentional gap, not a documented deviation). Add a test asserting a host of type X does not
-  reply to a query explicitly filtering for type Y.
+  datagram, `ReplyToQuery` was called directly without ever calling `NetDiscoveryProtocol::DecodeQuery`
+  — `SessionTypeFilter` was written by clients but completely ignored server-side, so a registered
+  host replied to *any* `Query` datagram regardless of the claimed filter.
+  **Fixed:** `HandleReceived`'s `Query` case now calls `NetDiscoveryProtocol::DecodeQuery(data)` and
+  passes the result into `ReplyToQuery`, which early-returns (no reply sent) if
+  `query.SessionTypeFilter != registeredHost_->getSessionTypeProperty()`.
+  **Added `ENetDiscoveryServiceTest.ReplyToQueryOnlyAnswersWhenSessionTypeFilterMatchesTheHost`**:
+  since the public `FindSessions()` itself early-returns `{}` for any non-`SystemLink` filter before
+  sending anything on the wire (so it can't exercise this path), the test talks to the discovery
+  port directly with its own raw UDP socket — exactly as an external process using a different
+  `NetworkSessionType` would. Sends a `Query` with `SessionTypeFilter = PlayerMatch` against a
+  `SystemLink` host and confirms, over a 300ms window of real `Update()` pumping, no reply ever
+  arrives; then sends a second `Query` on the same socket with a matching `SystemLink` filter and
+  confirms a reply *does* arrive — a sanity check proving the first assertion reflects the actual
+  filter check, not a test harness that could never observe a reply either way.
+  **Verified the bug is real, not theoretical:** temporarily reverted just this fix (`git stash`)
+  and reran the new test — failed with `gotReply` unexpectedly `true` (the host answered the
+  mismatched-filter query); restored the fix and reran — passes. Full suite: **3238/3240 passing**
+  (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 1.6** — Validate the discovery protocol version field is actually checked. Confirmed
   (`NetDiscoveryProtocol.hpp`, `kDiscoveryProtocolVersion`): the version is written on the wire by
