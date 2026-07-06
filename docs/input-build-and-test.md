@@ -138,8 +138,8 @@ option to pick another backend). Verified in `cmake/ThirdPartySDL.cmake` and `CM
 
 | Metric | Count |
 |--------|-------|
-| Full `CnaTests` suite | **3290 passed / 2 skipped** |
-| Canonical input filter (the filter above) | **301 passed** |
+| Full `CnaTests` suite | **3303 passed / 2 skipped** |
+| Canonical input filter (the filter above) | **314 passed** |
 
 Notes:
 - The 2 skipped tests are Devices sensor tests (`AccelerometerTests` / `GyroscopeTests`

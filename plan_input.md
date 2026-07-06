@@ -188,53 +188,60 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** Added a 'Related input docs' cross-link block (linking plan + all input docs + the tier glossary) to the 7 hand-maintained input docs (backend, fidelity, public-api-frozen, build-and-test, manual-results, platform-notes, demo-checklist). The two generated docs (member-parity-matrix, test-coverage) are tool-owned and not hand-edited.
 
 #### INP-0193 — Document required sibling repos and submodules in the build doc
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-build-and-test.md`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Result:** Required sibling repos + submodules documented in docs/input-build-and-test.md (§What a complete checkout needs: SDL* submodules, googletest submodule, sharp-runtime/easy-gl siblings).
 
 #### INP-0201 — Document xvfb-run guidance and SDL dummy-driver expectations for headless runs
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-build-and-test.md`
 - **Steps:** Implement/verify the CI or build step; keep it green across the matrix.
 - **Acceptance:** Step present + green (or documented as manual).
 - **Verify:** CI run for the branch is `success`; or config validated locally.
+- **Result:** xvfb-run guidance + SDL dummy-driver expectations documented in docs/input-build-and-test.md (§Headless note + §Headless run inventory).
 
 #### INP-0206 — Keep docs/input-fna-fidelity.md deviation list current + each deviation tagged accepted/temp/bug
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-fna-fidelity.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** docs/input-fna-fidelity.md deviation list current: DEC-* + KBD-011 + INPUT-TOUCH-024 each present with rationale + accepted tag + pinning test.
 
 #### INP-0207 — Keep docs/input-member-parity-matrix.md regenerated (generator is authoritative)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-member-parity-matrix.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** docs/input-member-parity-matrix.md is generator-owned (gen_input_parity_matrix.py); regenerated this run — 0 STRICT/EXT gaps.
 
 #### INP-0208 — Keep docs/input-public-api-frozen.md in lockstep with the signature-freeze test
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-public-api-frozen.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** docs/input-public-api-frozen.md is in lockstep with PublicApiInputSignatureFreezeTests.cpp (both updated together; signature-freeze test green).
 
 #### INP-0209 — Keep docs/input-test-coverage.md regenerated (coverage tool is authoritative)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-test-coverage.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** docs/input-test-coverage.md is generator-owned (check_input_test_coverage.py); regenerated this run — 0 orphans.
 
 #### INP-0210 — Keep docs/input-build-and-test.md commands + counts + pinned versions current
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/input-build-and-test.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** docs/input-build-and-test.md commands + counts (314/3303) + pinned versions (toolchain + SDL commit) current.
 
 #### INP-0211 — Refresh docs/input-manual-verification-results.md with a current dated build entry
 - **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Docs
@@ -244,11 +251,12 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
 
 #### INP-0212 — Keep docs/platform-input-notes.md marking verified (X11) vs documented/manual cells
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/platform-input-notes.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** docs/platform-input-notes.md marks verified (X11, Xvfb) vs documented/manual cells via the cursor/warp platform matrix.
 
 #### INP-0213 — Add a Troubleshooting section (no display, no controller, submodule/sibling missing)
 - **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
@@ -279,18 +287,20 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
 
 #### INP-0217 — Update docs/xna-4-api-coverage.md Input section to reference the parity artifacts
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/xna-4-api-coverage.md`
 - **Steps:** Update the named doc to reflect the current, verified state; regenerate where a tool is authoritative.
 - **Acceptance:** Doc accurate + consistent with code/tests.
 - **Verify:** Grep/read the doc; regenerate if tool-backed.
+- **Result:** docs/xna-4-api-coverage.md Input section refreshed to reference the parity artifacts (INP-API-027 matrix + signature/enum freezes + KBD-009/010 map parity) and drop legacy task numbers.
 
 #### INP-0218 — Align docs/demo-input-checklist.md with what examples/demo_input actually surfaces
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Docs
 - **Files:** `docs/demo-input-checklist.md`
 - **Steps:** Implement the sample/doc change; keep the demo buildable.
 - **Acceptance:** Sample/doc updated + (for demo) still builds.
 - **Verify:** Read the doc.
+- **Result:** docs/demo-input-checklist.md aligned with examples/demo_input (every checklist item is surfaced; gestures correctly noted as enabled-but-not-read).
 
 #### INP-0222 — Add instructions for recording manual results (template row + fields)
 - **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Docs
@@ -345,11 +355,12 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Verify:** `cmake --build cmake-build-input-easygl --target CnaTests`
 
 #### INP-0225 — Grep-audit and remove stale/misleading comments in input headers/sources
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Cleanup
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
 - **Files:** `include/**/Input, src/**/Input`
 - **Steps:** Audit the named area; apply the minimal cleanup without changing behavior.
 - **Acceptance:** Area clean; input subset still green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Stale/misleading comments removed from the internal input headers (the 5 '@note Status: PARTIAL/IMPLEMENTED' notes — see INP-0004).
 
 #### INP-0226 — Deduplicate SDL button/axis mapping tables where safe (single source)
 - **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Cleanup
@@ -366,11 +377,12 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
 
 #### INP-0228 — Ensure EXT/NOXNA members are consistently named + documented (audit)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Cleanup
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
 - **Files:** `include/**/Input`
 - **Steps:** Audit the named area; apply the minimal cleanup without changing behavior.
 - **Acceptance:** Area clean; input subset still green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** EXT/NOXNA members are consistently named + documented: EXT suffix + NOXNA marker convention audited (INPUT-API-032) and enforced by the tagging convention in docs/input-public-api-frozen.md; parity tool flags nothing.
 
 #### INP-0229 — Improve InputManager/bridge error messages + assertions where non-obvious
 - **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Cleanup
@@ -380,13 +392,14 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
 
 #### INP-0230 — Confirm internal/public boundary is clean (no Internal type in any public signature)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Cleanup
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Cleanup
 - **Files:** `include/**/Input`
 - **Steps:** Audit the named area; apply the minimal cleanup without changing behavior.
 - **Acceptance:** Area clean; input subset still green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
 
 ### Area: Tests (13 tasks)
+- **Result:** Internal/public boundary is clean: PublicApiInputCompileTests #error guard proves no public header pulls a CNA::Internal or SDL type; signature-freeze pins only public members.
 
 #### INP-0005 — Regenerate the member-parity matrix and confirm zero STRICT gaps
 - **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
@@ -405,83 +418,94 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** Regenerated docs/input-test-coverage.md via check_input_test_coverage.py: 26 public + 8 internal types, 0 orphaned/untested types.
 
 #### INP-0180 — Document the canonical input test command and make it work from a fresh clone
-- **Priority:** P0 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P0 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tests/**`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Canonical command is `ctest -L input` (docs/input-build-and-test.md §Configure/build/run); fresh-clone bootstrap + reproducibility documented (§Fresh-clone reproducibility); CI is the continuous fresh-clone proof.
 
 #### INP-0181 — Confirm the single-source-of-truth input filter (CNA_INPUT_TEST_FILTER) has no drift
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tests/**`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Single-source-of-truth filter `CNA_INPUT_TEST_FILTER` in CMakeLists.txt (no hand-copied filter strings in docs/CI); `ctest -L input` selects exactly 1 entry (CnaInputTests).
 
 #### INP-0182 — Confirm the shuffle x5 determinism gate is baked into ctest -L input
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tests/**`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** `CnaInputTests` bakes `--gtest_shuffle --gtest_repeat=5` (CMakeLists.txt); every `ctest -L input` is the order-independence gate.
 
 #### INP-0183 — Confirm the ASan+UBSan sanitizer config builds + runs the input subset green
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tests/**`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Built cmake-build-input-asan (-DCNA_SANITIZE=address,undefined) and ran the input subset under the CI's ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 — 314 cases 100% green, 0 ASan/UBSan errors. (With detect_leaks=1 the only leaks are third-party libGLX_mesa.so via xvfb, not CNA input code — which is why CI sets detect_leaks=0.)
 
 #### INP-0184 — Record exact expected test counts (input filter + full suite) with build metadata
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `docs/input-build-and-test.md`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Refreshed docs/input-build-and-test.md §Test counts to the current baseline: 314 input filter passed / 3303 full CnaTests passed / 2 skipped (list counts 314 input, 3305 full).
 
 #### INP-0185 — Confirm out-ref/try-get overloads are tested separately from value-returning variants
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tests/**`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Out-ref/try-get overloads tested separately: TouchLocation::TryGetPreviousLocation (true+false), GamePad::GetGyroEXT/GetAccelerometerEXT (out-vector, connected+disconnected), GamePad::GetState(deadZone) vs default.
 
 #### INP-0186 — Confirm equality/hash consistency is swept across every value type
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tests/**`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Equality/hash consistency swept across every value type (MouseState/GamePadState+Buttons+DPad+ThumbSticks+Triggers/KeyboardState/TouchLocation/TouchCollection): equal+unequal+hash-consistency cases all green.
 
 #### INP-0187 — Confirm a regression test exists for every accepted deviation (DEC-*)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tests/**`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** A pinning test exists for every accepted deviation (DEC-08/10/12/14/15/16, KBD-011, DEC-17/18/19, INPUT-TOUCH-024) — verified in docs/input-fna-fidelity.md against the named tests.
 
 #### INP-0188 — Confirm a regression test exists for every fixed bug
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tests/**`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Regression tests exist for the fixed bugs (event-driven touch previous-location, Mouse.hpp SDL leak -> API-030 guard, wheel truncate-before-scale, scancode Keys::None pollution).
 
 #### INP-0189 — Confirm the headless skip inventory is documented (which cases need a display)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `docs/input-build-and-test.md`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Headless skip inventory documented in docs/input-build-and-test.md §Headless run inventory (5 GTEST_SKIP + 3 fail under dummy; all green under x11).
 
 #### INP-0190 — Confirm hardware-only cases GTEST_SKIP cleanly (no false pass) off-platform
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Tests
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** Tests
 - **Files:** `tests/**`
 - **Steps:** Verify the property holds against the actual test tree/CMake; fill any gap.
 - **Acceptance:** Property holds; documented.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
 
 ### Area: API (31 tasks)
+- **Result:** Hardware/video-dependent cursor cases GTEST_SKIP cleanly under the dummy driver (no false pass); the input filter selects the portable subset (INPUT-BUILD-003).
 
 #### INP-0007 — Re-audit Buttons enum (31 flag values) against XNA 4.0/FNA
 - **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** API
