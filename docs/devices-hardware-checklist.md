@@ -171,7 +171,9 @@ of Task P5-7, it delegates to the exact same
 angular rate — the raw values represent), also covered by
 `AndroidSensorOrientationTests.cpp`.
 
-**Steps:**
+**Steps (Task GYRO-003, re-confirmed 2026-07-06 — same landscape-only scope as Section 1,
+see `ACCEL-004`'s correction: the demo's window never reaches a portrait orientation, so
+there are no separate portrait rotation cases to test here either):**
 1. Same device/rotation setup as Section 1.
 2. Rotate the physical device around each of its three axes in turn (yaw, pitch, roll)
    and confirm `GyroscopeReading.RotationRate`'s sign for each axis matches an intuitive

@@ -2551,7 +2551,7 @@ not an alternate spelling to preserve.
   - `third_party/SDL/src/sensor/windows/SDL_windowssensor.c` (read-only research —
     vendored, not edited)
 
-### GYRO-003 — Verify gyroscope axes and Android orientation remap
+### GYRO-003 — Verify gyroscope axes and Android orientation remap — hardware verification still outstanding; existing coverage re-confirmed (2026-07-06)
 
 - **Priority:** Critical
 - **Area:** Sensor Math / Hardware QA
@@ -2560,20 +2560,68 @@ not an alternate spelling to preserve.
   separate task because the two sensors' remap code, while sharing
   `Detail::AndroidSensorOrientation`, are applied independently in
   `Accelerometer.cpp`/`Gyroscope.cpp` and must each be checked.
+- **Progress (2026-07-06):** physical-device verification remains genuinely
+  outstanding — same standing limitation as `ACCEL-004`, no Android hardware available
+  this session. What was re-confirmed:
+  - **`Gyroscope.cpp`'s own remap code and doc comment were already corrected as part
+    of `ACCEL-004`** (both files share the exact same
+    `Detail::ConvertAndroidPortraitToXnaLandscape()` function and the same wrong
+    "`android:screenOrientation="sensorLandscape"`" claim was present in both —
+    `ACCEL-004` fixed `Gyroscope.cpp`'s copy of that comment in the same pass, not
+    left for this task to duplicate).
+  - **Automated math coverage, confirmed already complete for gyroscope-shaped
+    inputs, not just accelerometer-shaped ones:** `AndroidSensorOrientationTests.cpp`'s
+    `GyroscopeRotation90NegatesY`/`GyroscopeRotation270NegatesX` explicitly use
+    radians/second-scaled magnitudes (distinct from the accelerometer tests' g-scaled
+    ones) against the same shared pure function, and the semantic tests
+    (`RightTiltIsAlwaysPositiveYRegardlessOfRotation`, etc.) already apply uniformly to
+    both sensor shapes since the remap math itself doesn't distinguish between them
+    (confirmed by reading the shared function — Task P5-7's own explicit design
+    choice).
+  - **Hardware checklist (Section 2) re-examined and its scope narrowed to match reality**:
+    added a note that, like Section 1's accelerometer case, there are no separate
+    portrait-orientation rotation cases to test — the demo's window never reaches a
+    portrait orientation (`ACCEL-004`'s finding applies identically here, since it's
+    about the window/orientation-lock mechanism, not anything accelerometer-specific).
+  - **Deliberately not attempting to independently re-derive whether the shared
+    linear-tilt-reasoned sign convention is the mathematically correct transform for
+    angular velocity specifically:** this exact class of question (re-deriving the
+    remap from rotation geometry alone, independent of the already-trusted empirical
+    convention) was already attempted once for the accelerometer's own forward/backward
+    axis (Task P6-7) and found to produce a contradiction on the first attempt — the
+    prior session chose to trust the empirical Y-axis convention rather than a
+    from-scratch geometric re-derivation. Repeating that exercise here, without
+    hardware to check the result against, risks introducing an incorrect "fix" with no
+    way to verify it in this container. Left as the same open, hardware-only question
+    the existing checklist Section 2 already honestly states ("no single authoritative
+    WP7 sign convention documented for gyroscope... use internal consistency... as the
+    primary correctness bar").
 - **Required work:**
-  - Define expected axis behavior for rotation around each of the three axes.
+  - Define expected axis behavior for rotation around each of the three axes. Already
+    defined as "internal consistency, no absolute documented sign" — re-confirmed,
+    not newly derived (no authoritative WP7 rotation-sign reference exists to derive
+    one from, per the checklist's own existing statement).
   - Add a hardware checklist entry for X/Y/Z-axis rotations in portrait and landscape.
-  - Adjust remap code if hardware results disagree with current assumptions.
+    Entry already existed (Section 2); narrowed to landscape-only, matching
+    `ACCEL-004`'s finding that portrait is unreachable.
+  - Adjust remap code if hardware results disagree with current assumptions. N/A yet —
+    no hardware results exist to compare against.
 - **Acceptance criteria:**
-  - Manual hardware results are recorded per device tested.
-  - Automated math tests cover the remapping logic itself.
+  - Manual hardware results are recorded per device tested. Not yet — hardware
+    unavailable.
+  - Automated math tests cover the remapping logic itself. Confirmed already
+    comprehensive for both sensor shapes.
   - Code comments state exactly which coordinate convention has been verified, and on
-    what.
+    what. Done — states plainly that zero real-device verification has occurred,
+    consistent with `ACCEL-004`'s equivalent correction.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`
-  - `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp`
-  - `docs/devices-hardware-checklist.md`
+  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp` (already edited by `ACCEL-004`; no
+    further change needed here)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp` (already
+    edited by `ACCEL-004`; inspected, no further change needed)
+  - `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp` (inspected, no
+    change needed — already comprehensive for both sensor shapes)
+  - `docs/devices-hardware-checklist.md` (edited — scope note)
 
 ### GYRO-004 — Apply `TimeBetweenUpdates` — CLOSED (2026-07-06)
 
