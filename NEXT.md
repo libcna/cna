@@ -11,13 +11,47 @@ toolchain in this environment. Branch: `feature/devices`.
 **Main goal on this branch:** bring `Microsoft::Devices`, `Microsoft::Devices::Sensors`,
 and `VibrateController` to verified XNA 4.0 / Windows Phone 7 compatibility — not just
 "compiles and doesn't crash," but a documented, tested public API surface with a clear
-strict-XNA-vs-`NOXNA` boundary.
+strict-XNA-vs-`NOXNA` boundary. **A second, newer initiative** extends this with a
+brand-new `CNA::Devices` namespace (not XNA-facing at all) for CNA-only device
+capabilities SDL3 exposes that WP7 never had — see Section 1a.
 
-**Current development phase: `plan_devices.md` is effectively done.** All 74 tasks are
-CLOSED except three, all intentionally left open because they need something this
-container cannot provide (real hardware or a maintainer decision) — see Section 4.
-Tasks were picked up one at a time, each with its own build+test(+sanitizer)
-verification and its own commit.
+**`plan_devices.md` is effectively done.** All 74 tasks are CLOSED except three, all
+intentionally left open because they need something this container cannot provide
+(real hardware or a maintainer decision) — see Section 4. Tasks were picked up one at
+a time, each with its own build+test(+sanitizer) verification and its own commit.
+
+### 1a. `CNA::Devices` — new NOXNA namespace (2026-07-07)
+
+`noxna_devices.md` (repo root) is an analysis of what CNA-specific device
+capabilities could be added, grounded in SDL3 headers/backends already vendored in
+`third_party/SDL`. `plan_cna_devices.md` (repo root) turned it into concrete tasks —
+**all 11 are now CLOSED.** Implemented, under a new `CNA_DEVICES` CMake option
+(default `OFF`, mirrors `CNA_NOXNA`'s existing pattern): `CNA::Devices::PowerInfo`,
+`Locale`, `Clipboard`, `UrlLauncher`, `SystemInfo`, `DisplayInfo`, `FileDialog`,
+`SystemTray` (Phases 1-3, 36 new tests, `devices-asan`/`devices-ubsan` clean). `Camera`
+(Phase 4) is deliberately design-only — see `docs/cna-devices-camera-design.md` — no
+`Camera` class exists yet.
+
+**Two real corrections this work found in its own source analysis** (`noxna_devices.md`
+was updated to match): `FileDialog` has a real Android SDL3 backend — the original
+"desktop-only" claim was wrong, caught by reading `third_party/SDL/src/dialog/`
+directly rather than trusting the analysis. `SystemTray` genuinely is desktop-only —
+checked the same way, confirmed accurate this time.
+
+**Two real bugs caught during this work, both instructive:** (1) an early `FileDialog`
+test draft called the real backend directly and left four orphaned `zenity` processes
+running on the real desktop session — fixed by giving `FileDialog` a swappable
+`Detail::IFileDialogBackend`, and applying that lesson to `SystemTray` from the start.
+(2) A `SystemTrayTests.cpp` use-after-free (reading a freed fake backend's field after
+its owning `SystemTray` was destroyed) that the **plain, non-sanitizer build did not
+catch at all** — only `devices-asan` caught it, a concrete demonstration of why this
+project always verifies under sanitizers before calling a class-with-lifetime-concerns
+done.
+
+**Do not implement `Camera` without reading `docs/cna-devices-camera-design.md`
+first** — it documents real open questions (RGBA format negotiation, permission-event
+ownership, multi-camera support, device-loss recovery) and a recommended narrow first
+scope.
 
 **Important architectural decisions:**
 - Public API names/signatures match XNA 4.0 (or, for `Microsoft::Devices`, the archived
@@ -208,6 +242,14 @@ docs/devices-thread-safety.md               ← consolidated thread-safety contr
 docs/devices-android.md                     ← consolidated Android-specific reference
 docs/location-future-plan.md                ← why GPS/location isn't here
 plan_devices.md                             ← the plan (2026-07-05); effectively done, 3 tasks OPEN
+
+include/CNA/Devices/                        ← CNA::Devices public headers (NOXNA, non-XNA)
+include/CNA/Devices/Detail/                 ← internal-only backend interfaces (IFileDialogBackend, ITrayBackend)
+src/CNA/Devices/                            ← CNA::Devices implementations
+tests/CNA/Devices/                          ← Google Test suites per class
+docs/cna-devices-camera-design.md           ← Camera design note (not implemented yet)
+noxna_devices.md                            ← the CNA::Devices analysis (2026-07-06)
+plan_cna_devices.md                         ← the CNA::Devices plan (2026-07-07); all 11 tasks CLOSED
 ```
 
 - **`SensorBase<T>`** owns `CurrentValue`, `IsDataValid`, `TimeBetweenUpdates`,
@@ -230,6 +272,13 @@ plan_devices.md                             ← the plan (2026-07-05); effective
 - **`VibrateController`:** SDL3 haptic-backed only; no native Android bridge (confirmed
   unnecessary — SDL3's own Android haptic backend already reaches `Context.VIBRATOR_SERVICE`
   directly, see `docs/devices-android.md`).
+- **`CNA::Devices` (new, separate from the above):** gated behind `CNA_DEVICES` CMake
+  option (default OFF, mirrors `CNA_NOXNA`). No `NOXNA` marker on its own members — the
+  namespace itself signals "not XNA." `FileDialog`/`SystemTray` learned the hard way
+  (see Section 1a) that any class whose real backend has a side effect an automated
+  test can't safely trigger (a real dialog, a real tray icon, and — if implemented — a
+  real camera) needs a `Detail::I<X>Backend` interface from day one, not retrofitted
+  after an incident.
 - **Boundaries — do not cross:**
   - `third_party/SDL` is vendored with its own `CLAUDE.md` forbidding AI-authored
     contributions — read-only for research.
@@ -259,6 +308,11 @@ cmake -S . -B cmake-build-debug \
 # Build:
 cmake --build cmake-build-debug --target CNA -j$(nproc)
 cmake --build cmake-build-debug --target CnaTests -j$(nproc)
+
+# CNA::Devices needs its own flag (default OFF) -- reconfigure with it on, then build/test:
+cmake -S . -B cmake-build-debug -DCNA_DEVICES=ON
+cmake --build cmake-build-debug --target CnaTests -j$(nproc)
+./cmake-build-debug/CnaTests --gtest_filter="PowerInfoTests.*:LocaleTests.*:ClipboardTests.*:UrlLauncherTests.*:SystemInfoTests.*:DisplayInfoTests.*:FileDialogTests.*:SystemTrayTests.*"
 
 # Devices-only filter (exact suite names, 21 suites / 343 cases):
 ./cmake-build-debug/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
