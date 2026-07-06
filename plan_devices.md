@@ -2493,25 +2493,63 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp` (inspected, no change needed)
   - `docs/devices-api-coverage.md` (edited — citation added)
 
-### GYRO-002 — Verify gyroscope units
+### GYRO-002 — Verify gyroscope units — CLOSED (2026-07-06, confirmed correct via SDL3 source across two real platform backends, no code change)
 
 - **Priority:** Critical
 - **Area:** Sensor Math
 - **Problem:** XNA expects angular velocity in a specific, documented unit; SDL3's raw
   gyroscope unit per platform must be confirmed and converted if it differs, the same
   way `ACCEL-003` does for the accelerometer.
+- **Resolution (2026-07-06):** confirmed at the same three levels as `ACCEL-003`:
+  - **Real WP7 documented unit:** fetched `GyroscopeReading.RotationRate`'s own archived
+    MSDN page directly (`hh239090(v=vs.105)`, `ms:assetid`
+    `P:Microsoft.Devices.Sensors.GyroscopeReading.RotationRate`, confirmed genuine, not
+    a mismatch like `ACCEL-001`'s finding): *"Gets the rotational velocity around each
+    axis of the device, in radians per second."*
+  - **SDL3's own public contract:** `third_party/SDL/include/SDL3/SDL_sensor.h`:
+    *"The gyroscope returns the current rate of rotation in radians per second."*
+    Matches the real WP7 unit exactly — no conversion should be needed if SDL is
+    trusted, which the next two checks verify rather than assume.
+  - **Android backend, read directly (same `SDL_androidsensor.c` file `ACCEL-003`
+    read):** passes NDK `ASensorEvent` data straight through with zero conversion,
+    correct since `ASENSOR_TYPE_GYROSCOPE` already reports radians/second natively.
+  - **Windows backend, read directly (`SDL_windowssensor.c`):** Windows' native Sensor
+    API reports gyroscope values in **degrees per second**
+    (`SDL_SENSOR_DATA_TYPE_ANGULAR_VELOCITY_{X,Y,Z}_DEGREES_PER_SECOND`) — a real
+    per-platform unit difference, unlike the accelerometer case where Windows' native
+    unit (g) still needed converting to match SDL's contract. SDL's own backend already
+    converts: `values[i] = (float)valueX.dblVal * (SDL_PI_F / 180.0f)` — degrees → radians
+    — before calling `SDL_SendSensorUpdate()`. Confirms SDL3 normalizes every platform to
+    radians/second itself, exactly like the accelerometer's m/s² normalization.
+  - **Conclusion: no code change needed.** CNA's existing pass-through (no conversion
+    applied in `Gyroscope::DispatchSensorReading()`) was already correct — SDL's own
+    output is already in the same unit the real WP7 API documents. Added a citation
+    comment directly above the pass-through in `Gyroscope.cpp` naming both MSDN and
+    SDL3 sources.
+  - **Tests:** already comprehensive and already pin specific numeric expectations
+    (not just "doesn't crash") — confirmed by reading `GyroscopeTests.cpp`: injected raw
+    values are asserted to produce an *exactly equal* `RotationRate` (pass-through,
+    `EXPECT_EQ`), across multiple tests with distinct values. No new test needed.
 - **Required work:**
-  - Verify the expected XNA unit for `GyroscopeReading.RotationRate`.
+  - Verify the expected XNA unit for `GyroscopeReading.RotationRate`. Done — direct
+    citation.
   - Verify SDL3's actual gyroscope unit per platform (read `third_party/SDL` backend
-    source, not just top-level docs).
-  - Add or adjust conversion, with tests using known raw values.
+    source, not just top-level docs). Done — Android and Windows backends read
+    directly; found a real per-platform unit difference (Windows reports
+    degrees/second natively) that SDL itself already normalizes away.
+  - Add or adjust conversion, with tests using known raw values. N/A — no conversion
+    needed at the CNA layer; existing tests already use known raw values.
 - **Acceptance criteria:**
-  - Reading values use the documented, XNA-compatible unit.
+  - Reading values use the documented, XNA-compatible unit. Confirmed.
   - Tests fail if the conversion is removed or changed incorrectly (i.e. the test
-    actually pins a specific numeric expectation, not just "doesn't crash").
+    actually pins a specific numeric expectation, not just "doesn't crash"). Confirmed,
+    already true.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp`
-  - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Gyroscope.cpp` (edited — citation comment)
+  - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp` (inspected, no change needed)
+  - `docs/devices-api-coverage.md` (edited — citation added)
+  - `third_party/SDL/src/sensor/windows/SDL_windowssensor.c` (read-only research —
+    vendored, not edited)
 
 ### GYRO-003 — Verify gyroscope axes and Android orientation remap
 

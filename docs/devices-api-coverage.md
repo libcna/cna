@@ -85,7 +85,7 @@ event in the real API).
 | Member | Real/NOXNA | Confidence | Notes |
 |---|---|---|---|
 | `getStateProperty()` | `NOXNA` | High | Real `Gyroscope` has no `State` (MSDN `hh239201`, re-confirmed `GYRO-001`: Properties table lists only `CurrentValue`/`IsDataValid`/`IsSupported`/`TimeBetweenUpdates`, all inherited from `SensorBase<T>` except `IsSupported`) |
-| Unit | Real | High | rad/s, no conversion (matches SDL3's own doc and WP7's documented unit) |
+| Unit | Real | High | rad/s, no conversion (matches SDL3's own doc and WP7's documented unit, MSDN `hh239090`, re-confirmed `GYRO-002`) |
 | Self-destroy-from-own-callback safety | Real | — | Fully safe (unlike `Accelerometer`, which has the extra `ReadingChanged` check) |
 
 ## `Microsoft::Devices::Sensors::Compass`

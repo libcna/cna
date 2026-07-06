@@ -381,6 +381,15 @@ namespace Microsoft::Devices::Sensors
     {
         GyroscopeReading gyroscopeReading;
 
+        // Task GYRO-002 (re-verified 2026-07-06): no unit conversion here,
+        // deliberately -- SDL3 documents its own SDL_SENSOR_GYRO output as
+        // "the current rate of rotation in radians per second"
+        // (third_party/SDL/include/SDL3/SDL_sensor.h), and the real WP7
+        // GyroscopeReading.RotationRate is documented identically: "Gets
+        // the rotational velocity around each axis of the device, in
+        // radians per second" (archived MSDN `hh239090(v=vs.105)`). Both
+        // sides already agree on the same unit, so a straight pass-through
+        // is correct.
         const bool valid = true;
         setIsDataValidProperty(valid);
 
