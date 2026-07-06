@@ -739,6 +739,22 @@ namespace Microsoft::Xna::Framework::Audio
                 // picked, not merely one-of-N uniformly. This applies to every non-interactive
                 // table type (wave/sound/compact_wave) -- FAudio itself uses the identical
                 // algorithm for all of them.
+                //
+                // P11-XACT-004: FAudio's own boundary check is `value > (max - weight)`, correct
+                // for its *continuous* float draw (`FACT_INTERNAL_rng() * max`, where landing
+                // exactly on an integer boundary has zero probability) but NOT for this discrete
+                // integer draw copied verbatim from it -- see P11-XACT-002's `WeightedPickExcluding`
+                // (Cue.cpp, same fix, fuller derivation in its comment) for why a strict `>` here
+                // systematically steals one unit of probability mass from every entry except the
+                // implicit index-0 fallback, collapsing to a total (not just approximate) bias for
+                // small/equal weights (e.g. two equal-weight-1 entries never pick index 1 at all).
+                // `>=` reproduces FAudio's continuous per-entry probability mass exactly. A prior
+                // pass (`P10-VAR-002/005`) explicitly compared this loop against FAudio's C source
+                // character-for-character and concluded `>` was a correct byte-for-byte port --
+                // structurally true, but that comparison never accounted for FAudio's `next` being
+                // continuous while this draw is discrete, which is exactly what `P11-XACT-002`
+                // caught while writing an equal-weight regression test for its own copy of this
+                // pattern (`plan_audio.md`, `P11-XACT-004`).
                 uint32_t totalWeight = 0;
                 for (const auto& e : var.entries)
                     totalWeight += static_cast<uint32_t>(e.weightMax) - e.weightMin;
@@ -759,7 +775,7 @@ namespace Microsoft::Xna::Framework::Audio
                     {
                         const uint32_t weight =
                             static_cast<uint32_t>(var.entries[i].weightMax) - var.entries[i].weightMin;
-                        if (value > (remaining - weight))
+                        if (value >= (remaining - weight))
                         {
                             pick = static_cast<uint16_t>(i);
                             break;

@@ -671,10 +671,34 @@ namespace
         return bank;
     }
 
+    // P11-XACT-004: 2 entries of EQUAL weight (1 and 1) -- the discretization case where the
+    // pre-fix `>` boundary comparison collapsed to a *total* bias (entry 1 could never be picked
+    // at all, see Cue.cpp's comment), unlike every other fixture on this page, which only ever
+    // uses skewed weights that mask the same bug as a small statistical error instead of a hard
+    // impossibility.
+    const std::string& XsbTwoEqualWeightEntriesFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_cue_test", "fixture_weighted_equal.xsb",
+            BuildXsbFixtureBytesWithWeightedVariationN("WeightedEqual", {
+                {0, 0, 1}, {1, 0, 1},
+            }));
+        return path;
+    }
+
+    SoundBank& SharedTwoEqualWeightEntriesBank()
+    {
+        static SoundBank bank(&SharedEngine(), XsbTwoEqualWeightEntriesFixturePath());
+        return bank;
+    }
+
     // Independently replicates Cue::Play()'s non-interactive weighted-variation selection
     // (Cue.cpp), for cross-checking against a seeded Cue::Play() outcome in a test. Deliberately
     // separate code, not a call into production -- mirrors FAudio's own get_active_variation_index
     // algorithm (see Cue.cpp's citation), transcribed independently here as a controlled oracle.
+    // P11-XACT-004: uses `>=` (not `>`), matching Cue.cpp's own fix -- see its comment for why a
+    // strict `>` (FAudio's own boundary check, correct only for FAudio's continuous float draw)
+    // is wrong for this discrete integer draw.
     uint16_t PredictWeightedPick(unsigned int seed, const std::vector<uint32_t>& weights)
     {
         uint32_t total = 0;
@@ -690,7 +714,7 @@ namespace
         for (int32_t i = static_cast<int32_t>(weights.size()) - 1; i > 0; --i)
         {
             const uint32_t weight = weights[static_cast<std::size_t>(i)];
-            if (value > (remaining - weight))
+            if (value >= (remaining - weight))
             {
                 pick = static_cast<uint16_t>(i);
                 break;
@@ -3020,8 +3044,21 @@ TEST(CueTest, PlayWeightedVariationFavorsHigherWeightEntryStatistically)
 // `else` / "Random" branch) confirms it is a byte-for-byte port: same reverse-index loop bound
 // (`i = entryCount-1` down to `i > 0`, entry 0 is an implicit fallback never explicitly checked),
 // same single `remaining -= weight` per non-matching iteration (not applied twice in any branch
-// -- no such bug exists), same strict `>` (not `>=`) boundary comparison. No fix was needed; the
-// tests below exist to lock this proof down and to give this branch real, deterministic-by-
+// -- no such bug exists). **Correction (P11-XACT-004):** the original audit's "same strict `>`
+// (not `>=`) boundary comparison, no fix was needed" conclusion was wrong -- it verified the
+// comparison *character* matched FAudio's C source, but never accounted for FAudio's own `next`
+// being a *continuous* float draw (`FACT_INTERNAL_rng() * max`) where a strict `>` is correct,
+// versus this code's *discrete* integer draw, where it isn't: `>` silently steals one unit of
+// probability mass from every explicitly-checked entry (transferred to whichever entry is checked
+// right after it, ultimately piling up on index 0's implicit fallback), invisible for the skewed
+// weights every test below originally used (1-2% relative error) but a *total* bias for
+// small/equal weights -- found while adding an equivalent regression test for `P11-XACT-002`'s own
+// copy of this exact pattern. Fixed to `>=`, which reproduces FAudio's continuous per-entry
+// probability mass exactly (worked out by hand: entry `j`'s discrete slot becomes exactly
+// `weight[j]` consecutive integers out of `total`, for any weight distribution). `PredictWeightedPick`
+// below was updated to match, and `PlayWeightedVariationWithTwoEqualWeightEntriesSelectsBoth` adds
+// the small/equal-weight coverage this file never had. The tests below still exist to lock this
+// (corrected) proof down and to give this branch real, deterministic-by-
 // construction and deterministic-by-seed coverage (multiple entries, zero-weight entries) instead
 // of only the single pre-existing statistical test above.
 
@@ -3061,6 +3098,24 @@ TEST(CueTest, PlayWeightedVariationWithFourEntriesMatchesIndependentReplicaForSe
 
         EXPECT_EQ(CueTestAccess::CategoryIndex(*cue), expected) << "seed " << seed;
     }
+}
+
+// P11-XACT-004: regression test for the discretization bug the pre-fix `>` boundary comparison
+// had -- with 2 equal-weight-1 entries (total=2, draw in {0,1}), the old code could NEVER select
+// entry 1 (both draws resolved to entry 0), a total, not statistical, bias. 60 fresh-cue trials
+// give a (1/2)^60 false-negative probability under the fix, effectively zero.
+TEST(CueTest, PlayWeightedVariationWithTwoEqualWeightEntriesSelectsBoth)
+{
+    CueTestAccess::SeedRng(9001);
+    bool sawEntry0 = false, sawEntry1 = false;
+    for (int i = 0; i < 60; ++i)
+    {
+        auto cue = std::unique_ptr<Cue>(SharedTwoEqualWeightEntriesBank().GetCue("WeightedEqual"));
+        cue->Play();
+        if (CueTestAccess::CategoryIndex(*cue) == 1) sawEntry1 = true; else sawEntry0 = true;
+    }
+    EXPECT_TRUE(sawEntry0);
+    EXPECT_TRUE(sawEntry1);
 }
 
 // P9-XACT-002/003/004: interactive (type==3) variation tables select by a bound variable's

@@ -4550,26 +4550,37 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
   (`P10-FILTER-002/003/004/006`) -- effect variation's randomized pitch/frequency/Q would need to
   combine with, not silently override, whatever those already contribute. *Files:* `XactTypes.hpp`,
   `XactParser.cpp`, `Cue.cpp`, `SoundEffectInstance.cpp`.
-* [ ] P11-XACT-004: Fix the pre-existing sound-level variation-table weighted lottery's (`Cue::Play()`'s
+* [x] P11-XACT-004: Fix the pre-existing sound-level variation-table weighted lottery's (`Cue::Play()`'s
   `SOUND_VARIATION_TYPE` non-interactive branch, `P9-XACT-002`/`P10-VAR-004`) discrete-vs-continuous
   boundary bug -- discovered as a side effect of implementing `P11-XACT-002` above, in the *new*
   `WeightedPickExcluding` helper, which copied this same pattern.
-  *Status:* Open. Real FAudio's weighted lottery draws a *continuous* float (`FACT_INTERNAL_rng() *
-  max`), so its boundary check (`next > (max - weight)`) has zero probability of landing exactly on
-  the boundary; the pre-existing sound-level lottery (lines ~732-758 of `Cue.cpp`, a separate,
-  earlier copy of this same pattern predating `P11-XACT-002`) instead draws a *discrete* integer
-  via `std::uniform_int_distribution<uint32_t>(0, totalWeight - 1)` and reuses FAudio's own `>`
-  boundary check verbatim -- for two entries of equal weight (e.g. `weightMin=0,weightMax=1` on
-  both), this always resolves to entry 0, never entry 1, a total (not statistical) bias, not just
-  a rounding-error skew. Every existing test for this code path (`PlayWeightedVariationFavors...`,
-  `...WithAllWeightOnFirstEntry...`, `...WithFourEntriesMatchesIndependentReplica...`) uses
-  intentionally skewed weights (e.g. 1 vs. 99), which happens to mask the bug -- the discretization
-  error is proportionally tiny at that skew, so none of them would fail. `P11-XACT-002`'s own
-  `WeightedPickExcluding` had the identical bug and was fixed there (see its note above) by
-  changing the comparison to `next >= (remaining - weight)`; the same one-line fix (plus a new
-  small/equal-weight regression test, mirroring `PlayResolvesTrackVariationEventToOneOfTheAuthored
-  Candidates`'s discovery method) should close this out. *Files:* `Cue.cpp` (the
-  `SOUND_VARIATION_TYPE` branch inside `Play()`), `CueTests.cpp`.
+  *Note:* Closed. Changed `Cue.cpp`'s `SOUND_VARIATION_TYPE` branch's boundary check from
+  `value > (remaining - weight)` (FAudio's own comparison, copied verbatim) to
+  `value >= (remaining - weight)`, matching the exact fix `P11-XACT-002` made to its own copy of
+  this pattern (`WeightedPickExcluding`) -- see that task's note for the full derivation of why
+  FAudio's real *continuous* float draw (`FACT_INTERNAL_rng() * max`) needs `>`, but this code's
+  *discrete* integer draw (`std::uniform_int_distribution<uint32_t>(0, totalWeight - 1)`) needs
+  `>=` to reproduce the same per-entry probability mass exactly (worked out by hand: with `>=`,
+  entry `j`'s discrete slot becomes exactly `weight[j]` consecutive integers out of `total`, for
+  any weight distribution -- with the original `>`, every explicitly-checked entry loses exactly
+  one unit of probability mass to whichever entry is checked immediately after it, ultimately
+  piling all of it onto index 0's implicit fallback; invisible for skewed weights, e.g. 98/100 vs.
+  the true 99/100 for a 1-vs-99 split, a total impossibility for e.g. two equal-weight-1 entries
+  where index 1 could never be selected at all). Also fixed the independent oracle
+  `PredictWeightedPick` (`CueTests.cpp`) to the same `>=`, and corrected the `P10-VAR-002/005`
+  comment block above `PlayWeightedVariationWithFourEntriesMatchesIndependentReplicaForSeededRng`,
+  which had explicitly (and, it turns out, incorrectly) concluded `>` was a verified-correct
+  byte-for-byte port needing no fix -- that earlier line-by-line audit compared the comparison
+  *character* against FAudio's C source but never accounted for the continuous-vs-discrete draw
+  distinction, the exact same class of oversight this task's own discovery corrects. New test:
+  `PlayWeightedVariationWithTwoEqualWeightEntriesSelectsBoth` (`SharedTwoEqualWeightEntriesBank()`,
+  a 2-entry equal-weight-1 fixture via the existing generic `BuildXsbFixtureBytesWithWeightedVariationN`
+  helper -- no new byte-layout work needed), 60 fresh-`Play()` trials asserting both entries get
+  selected; `git stash`-verified (fails pre-fix: 0/60 select entry 1, confirming the total-bias
+  claim empirically, not just by derivation). Full suite 3348/3350 pass (was 3347/3349), no
+  regressions, including the pre-existing seeded-replica test (`...WithFourEntriesMatchesIndependent
+  ReplicaForSeededRng`), whose "independent oracle" changed in lockstep with the production fix so
+  it continues to agree. *Files:* `Cue.cpp`, `CueTests.cpp`.
 
 ## Phase 11.8 — `FrameworkDispatcher` Audio-pump parity
 
