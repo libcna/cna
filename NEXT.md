@@ -118,6 +118,13 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11" sections.
 
+- **`P11-PAN-001`** — deliberately **not attempted**, not forgotten. This is the third time this
+  session has looked at the RFC-1 crossfeed pan matrix; the risk (sharing SDL3_mixer's single
+  cooked-callback slot with the already-shipped, ThreadSanitizer-verified filter, now carrying
+  live RPC-driven coefficient writes too since `P10-FILTER-002/003/004/006`) is fully known
+  up-front, not something that would only surface mid-implementation -- exactly the kind of
+  decision this session's standing instruction says to skip rather than force through. Left open
+  in `plan_audio.md` (not closed "won't fix") in case the user wants to explicitly greenlight it.
 - **`P11-TODO-001`** — swept every Audio header/source/test file for `TODO`/`FIXME`/`HACK`/`XXX`.
   Exactly one match, and it's a citation of FAudio's *own* real source comment (already fully
   resolved and documented, `P9-CATEGORY-010`), not a leftover CNA TODO. Zero genuine unresolved

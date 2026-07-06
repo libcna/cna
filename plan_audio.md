@@ -4418,14 +4418,21 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
 
 * [ ] P11-PAN-001: Attempt RFC-1 (internal post-SDL3_mixer float-PCM mixing layer for real
   4-coefficient stereo crossfeed), the design already sketched in Phase 10's `P10-PAN-003`.
-  *Status:* Open. Real feature work with real regression risk to the already-shipped,
-  ThreadSanitizer-verified `T-4C` DSP filter (both would need to share the single SDL3_mixer
-  cooked-callback slot). Attempt only with a full dedicated regression/concurrency test pass
-  *before* touching the shipped filter tests, per RFC-1's own risk note -- if the risk proves
-  concrete during implementation (not just theoretical), stop, revert, and document why rather
-  than force it through. This is exactly the kind of task this autonomous pass's own standing
-  instruction says to skip (not force through) if it turns out to need the user's judgment call
-  partway through.
+  *Status:* **Skipped, not attempted, this pass -- deliberately, not forgotten.** This is the
+  third time this same session has looked at this exact work: `P10-PAN-002` assessed it as "too
+  risky relative to its payoff" and deferred; the standalone `P10-PAN-002` reaffirm pass (after
+  `P10-FILTER-002/003/004/006` landed) confirmed the risk is if anything *higher* now, since the
+  single SDL3_mixer cooked-callback slot a crossfeed implementation would need to share is now
+  carrying real continuous per-tick RPC-driven filter-coefficient writes on top of the existing
+  filter, not just the original one-shot filter. Attempting a real rewrite of that same
+  already-shipped, ThreadSanitizer-verified real-time-audio-callback code for a cosmetic panning
+  improvement, with no fresh signal that the user's risk tolerance has changed since the second
+  assessment, is exactly the kind of decision this autonomous pass's own standing instruction says
+  to skip rather than force through -- not "stop partway through if it gets risky" (the risk here
+  is already fully known up front, not something that would only reveal itself mid-implementation).
+  Not attempted; `CHECKLIST.md` CP-19/RFC-1's existing note stands unchanged. Left open (not
+  closed as "won't fix") in case the user wants to explicitly greenlight it with full awareness of
+  the now-twice-reaffirmed risk.
 
 ## Phase 11.7 — XactParser deep re-audit for uncommon/unhandled XACT features
 
