@@ -212,7 +212,7 @@ independent task instead of guessing.
   new `CNA::Devices` suites together: 358 tests, 356 passed, 2 pre-existing expected
   skips, zero regressions.
 
-### DEVICES-CNA-005 — `SystemInfo`
+### DEVICES-CNA-005 — `SystemInfo` — CLOSED (2026-07-07)
 
 - **Priority:** Medium
 - **SDL3 API:** `SDL_cpuinfo.h` — `SDL_GetNumLogicalCPUCores()`, `SDL_GetSystemRAM()`.
@@ -225,6 +225,16 @@ independent task instead of guessing.
     host (a container always has at least 1 logical core and some RAM reported).
 - **Acceptance criteria:** builds/tests pass.
 - **Suggested files:** new files only.
+- **Resolution:** Created `SystemInfo.hpp`/`.cpp` (static class, two properties),
+  deliberately scoped to exactly the two functions this task named — no SIMD-flag
+  wrapping added. Added `tests/CNA/Devices/SystemInfoTests.cpp` (3 tests): both values
+  positive on this container, plus a determinism check (repeated calls return the same
+  value within one process, since neither CPU core count nor RAM changes at runtime).
+  Build: `cmake --build cmake-build-debug --target CNA`/`--target CnaTests` (both
+  clean). **This closes every individual Phase 1 capability task** — full existing
+  filter plus all five new `CNA::Devices` suites together: 361 tests, 359 passed, 2
+  pre-existing expected skips, zero regressions. `DEVICES-CNA-006` (the dedicated
+  Phase 1 sanitizer verification pass) is next.
 
 ### DEVICES-CNA-006 — Phase 1 verification pass
 
@@ -336,6 +346,10 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — DEVICES-CNA-005 CLOSED.** `CNA::Devices::SystemInfo` implemented, 3
+  tests. **All five Phase 1 capabilities now implemented.** Full suite 361/361 (359
+  pass + 2 expected skips). Next: `DEVICES-CNA-006` (Phase 1 sanitizer verification
+  pass).
 - **2026-07-07 — DEVICES-CNA-004 CLOSED.** `CNA::Devices::UrlLauncher` implemented, 3
   tests (each honestly scoped to "does not crash/hang", no return-value assumption).
   Full suite 358/358 (356 pass + 2 expected skips). Next: `DEVICES-CNA-005`
