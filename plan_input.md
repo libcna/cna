@@ -1173,12 +1173,21 @@ falls to NONE, emits nothing). **Files changed:** `tests/CNA/Internal/Input/Gest
 (+1 test). **Tests:** pass. **Behavior verified:** HorizontalDrag fires only for `ax > ay` movement.
 **Remaining risk:** none.
 
-## P6-009 — Verify vertical drag
-- [ ] Test drag start.
-- [ ] Test drag delta.
-- [ ] Test drag complete.
-- [ ] Test horizontal movement rejection if required.
-- [ ] Add tests.
+## P6-009 — Verify vertical drag `[x]`
+- [x] Test drag start.
+- [x] Test drag delta.
+- [x] Test drag complete.
+- [x] Test horizontal movement rejection if required.
+- [x] Add tests.
+
+**Result (2026-07-06):** Start + delta already covered
+(`VerticalDragFiresWhenMovementIsPredominantlyVertical` → `Delta.X==0, Delta.Y==100`). **Added the two gap
+tests:** `DragCompleteFiresAfterAVerticalDrag` (a VerticalDrag ended by release fires DragComplete with the
+release finger id — the detector treats `DRAGGING_V` as `wasDragging`) and
+`VerticalDragRejectsPredominantlyHorizontalMovement` (only VerticalDrag enabled, an `ax > ay` move past 35px
+starts no drag). **Files changed:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+2 tests).
+**Tests:** pass. **Behavior verified:** VerticalDrag fires only for `ay > ax` movement and completes on
+release. **Remaining risk:** none.
 
 ## P6-010 — Verify free drag
 - [ ] Test drag start.

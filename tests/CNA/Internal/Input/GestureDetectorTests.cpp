@@ -316,6 +316,37 @@ TEST_F(GestureDetectorTest, VerticalDragFiresWhenMovementIsPredominantlyVertical
     DrainGestures();
 }
 
+// P6-009(c): a VerticalDrag that ends with a release fires DragComplete carrying the release finger id.
+TEST_F(GestureDetectorTest, DragCompleteFiresAfterAVerticalDrag)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::VerticalDrag | GestureType::DragComplete);
+
+    Press(61, 0.5f, 0.5f);
+    Move(61, 0.5f, 0.6f, 0.0f, 0.1f); // starts a VerticalDrag
+    DrainGestures();
+
+    Release(61, 0.5f, 0.6f);
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::DragComplete);
+    EXPECT_EQ(sample.getFingerIdEXTProperty(), 61);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+// P6-009(d): with only VerticalDrag enabled, a predominantly-horizontal move (ax > ay) past the threshold
+// starts NO drag — hdrag/fdrag are disabled, so the detector falls through to NONE and emits nothing.
+TEST_F(GestureDetectorTest, VerticalDragRejectsPredominantlyHorizontalMovement)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::VerticalDrag);
+
+    Press(62, 0.5f, 0.5f);
+    Move(62, 0.6f, 0.5f, 0.1f, 0.0f); // pixel delta (100, 0): ax > ay
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+
+    Release(62, 0.6f, 0.5f);
+    DrainGestures();
+}
+
 TEST_F(GestureDetectorTest, FreeDragFiresForDiagonalMovementWhenOnlyFreeDragIsEnabled)
 {
     TouchPanel::setEnabledGesturesProperty(GestureType::FreeDrag);
