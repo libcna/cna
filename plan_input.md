@@ -712,10 +712,118 @@ tests / 45 suites** (was 378 — **+4** this audit: `IsKeyUpIsTheComplementOfIsK
 → **381 PASSED, zero sanitizer reports** (halt_on_error=1). **Files changed:** none (build + run + record).
 **Remaining risk:** none.
 
-## A8-005 — Final perfection statement `[ ]`
-- [ ] Write a final status: per-type member coverage, tests-per-member confirmation, deviations, manual-HW
-  status (`[!]`), remaining risks. Do not overstate. Mark this plan complete only when all non-blocked tasks
-  are done.
+## A8-005 — Final perfection statement `[x]`
+- [x] Write a final status (below).
+
+### Final per-type audit statement (2026-07-06)
+
+**Scope covered.** All **26 public XNA/EXT types** (8 enums, KeyboardState/Keyboard, MouseState/Mouse/
+MouseCursor, 7 GamePad types, 5 Touch types, TextInputEXT) and **4 internal classes** (InputManager,
+GestureDetector, SdlGamepadBackend/ISdlGamepadBackend, SdlInputBridge) were re-audited **member by member**
+against the FNA source.
+
+**Member parity — complete.** Every public member is present and matches FNA in name/signature/value/behavior
+(parity matrix: 26 types, **0 STRICT/EXT gaps, 0 FNA-only**). Correct tier tagging was confirmed *by checking
+FNA*, not assumed: `MouseCursor`/`Mouse::SetCursor` are genuinely absent from FNA → correctly `NOXNA`;
+`TouchCollection::FindById` and `GestureSample::FingerId(2)EXT` ARE genuine FNA/XNA API → correctly *not*
+mis-tagged; FNA's gesture-plumbing (`EnqueueGesture`/`SetFinger`/`Update`/`INTERNAL_onTouchEvent`) is
+`internal` → correctly `NOXNA`.
+
+**Behavior — verified FNA-faithful.** Spot-verified line-by-line where logic is non-trivial: MouseState 8-arg
+ctor slot order; GamePadDPad ctor order + bit-weighted hash; GamePadThumbSticks dead-zone (None/Independent/
+Circular) + `Left+37*Right` hash; GamePadTriggers clamp + `WithinEpsilon` equality (FNA-faithful, not a
+deviation); GamePadState `IsButtonDown`/`IsButtonUp` = `(buttons & b) [==|!=] b`; KeyboardState 8×32 XOR hash;
+TouchLocation `Id+Position` hash; Keys 160-value byte-identity.
+
+**Tests per member — confirmed, gaps closed.** Every member has a named test (directly or via the public API
+it backs). **+4 tests added** to close real gaps: dedicated `IsKeyUp` (KeyboardState) and `IsButtonUp`
+(GamePadState) complement tests; a **35-flag strict isolation guard** for `GamePadCapabilities` (catches any
+getter↔field mis-wiring); a functional `TouchPanel::WindowHandle` round-trip (was signature-frozen only).
+
+**Fix/improve.** Removed dead code: `InputManager::GetGamePadState` (zero callers repo-wide; body delegated
+backwards to the public `GamePad::GetState`). Behavior-neutral.
+
+**Verification.** `ctest -L input` = 100% on all four backends (EasyGL/Vulkan/bgfx/SDL_RENDERER), **382 tests /
+45 suites**; **ASan+UBSan-clean** (381). No public API drift (signature + enum freeze green; parity matrix
+unchanged).
+
+**Manual/HW status — unchanged (`[!]`).** Real-hardware actuation (rumble/LED/sensors), real IME composition,
+and high-DPI pixel scaling remain manual-only (prior plan's Phase 11 in git history).
+
+**Not overstated:** this pass audited **member existence + parity + per-member tests + spot-checked behavior**.
+A deeper **line-by-line source-LOGIC** audit of every `src/` file (does each behave exactly like XNA 4.0) is
+the next phase below.
+
+---
+
+# Phase 9 — Source-logic behavioral audit (per user directive, 2026-07-06)
+
+> **Goal (user directive):** thoroughly check the **LOGIC** of every CNA input source file — does it behave
+> like XNA 4.0 (or as close as possible)? — and **fix/improve** where it diverges. This goes deeper than the
+> per-type member audit above: it reads each `src/` method body line-by-line against the FNA implementation
+> and validates the actual computation (branches, math, edge cases, ordering), not just presence + a test.
+> One task per source file (or tight group). **One task = one commit, never batched.** Fixes get tests +
+> re-run the gate (and ASan if behavior changed). Genuine FNA divergences are either fixed or documented as
+> `DEC-*`.
+
+## L-001 — `KeyboardState.cpp` logic `[ ]`
+- [ ] Line-by-line vs FNA `KeyboardState.cs`: indexer/IsKeyDown/IsKeyUp lookup, GetPressedKeys ordering,
+  the 8×32-bit XOR GetHashCode + `InternalSetKey` bounds, Equals set-compare. Fix/doc any divergence.
+
+## L-002 — `MouseState.cpp` logic `[ ]`
+- [ ] vs FNA `MouseState.cs`: field packing, `==` field-by-field compare, ToString format, hash choice.
+
+## L-003 — `Mouse.cpp` logic `[ ]`
+- [ ] vs FNA `Mouse.cs`: GetState assembly, SetPosition (relative-mode guard + warp), WindowHandle
+  resolution, relative-mode get/set, ClickedEXT dispatch.
+
+## L-004 — `MouseCursor.cpp` logic `[ ]`
+- [ ] Cursor ownership/move/dispose lifecycle; FromTexture2D surface build + format validation + hotspot.
+
+## L-005 — `GamePadButtons.cpp` / `GamePadDPad.cpp` logic `[ ]`
+- [ ] Flag→property extraction; FromButtonArray OR-combine; DPad bit-weighted hash vs FNA.
+
+## L-006 — `GamePadThumbSticks.cpp` logic `[ ]`
+- [ ] Dead-zone math (ExcludeAxisDeadZone, IndependentAxes, Circular, square-clamp) line-by-line vs FNA.
+
+## L-007 — `GamePadTriggers.cpp` logic `[ ]`
+- [ ] Clamp, trigger-threshold dead-zone, WithinEpsilon equality, bit-hash vs FNA.
+
+## L-008 — `GamePadState.cpp` logic `[ ]`
+- [ ] Ctor button/trigger/thumbstick→Buttons packing (StickToButtons/TriggerToButton thresholds),
+  IsButtonDown/Up bit ops, equality incl. packet number, hash vs FNA.
+
+## L-009 — `GamePad.cpp` logic `[ ]`
+- [ ] GetState dead-zone application, GetCapabilities assembly, SetVibration/EXT forwarding vs FNA policy.
+
+## L-010 — `TouchCollection.cpp` logic `[ ]`
+- [ ] Indexer/CopyTo/IndexOf/Contains/mutators over the vector; advisory IsReadOnly; FindById out-semantics.
+
+## L-011 — `TouchLocation.cpp` logic `[ ]`
+- [ ] TryGetPreviousLocation both paths, Equals (all 5 fields), Id+Position hash, ToString format vs FNA.
+
+## L-012 — `TouchPanel.cpp` logic `[ ]`
+- [ ] GetState slot vs InputManager path + MAX_TOUCHES cap, GetCapabilities, SetFinger release/press
+  branches, coordinate scaling, EnqueueGesture/ReadGesture queue, Update ordering vs FNA.
+
+## L-013 — `GestureDetector.cpp` logic `[ ]`
+- [ ] The full gesture state machine vs FNA `GestureDetector.cs`: every OnPressed/OnMoved/OnReleased/OnUpdate
+  branch, thresholds, velocity low-pass, pinch/drag/tap/hold/flick transitions. Deepest logic file.
+
+## L-014 — `InputManager.cpp` logic `[ ]`
+- [ ] Accumulated-state mutation/read for each subsystem; touch previous-location + Pressed→Moved promotion
+  + RemoveAfterSnapshot; packet-number bump rules; reset fan-out determinism.
+
+## L-015 — `SdlInputBridge.cpp` logic `[ ]`
+- [ ] Every ProcessEvent case's translation vs FNA `SDL3_FNAPlatform.cs`: axis normalization/Y-inversion,
+  button/key maps, UTF-8 decode, control-char + Ctrl+V, finger-id mapping, coordinate scaling, gamepad
+  slot lifecycle. Largest bridge logic.
+
+## L-016 — `TextInputEXT.cpp` / `SdlGamepadBackend.cpp` logic `[ ]`
+- [ ] TextInputEXT window-guarded SDL calls + INTERNAL dispatch; SdlGamepadBackend real SDL wrappers.
+
+## L-017 — Final logic-audit statement `[ ]`
+- [ ] Summarize logic divergences found (fixed vs documented `DEC-*`), re-run all gates + ASan, record.
 
 ---
 
