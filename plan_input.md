@@ -781,18 +781,22 @@ mouse-state reset. **Remaining risk:** none.
 
 # Phase 5 — Touch state correctness
 
-## P5-001 — Audit `TouchCollection` read-only behavior
-- [ ] `TouchCollection::IsReadOnly` currently claims read-only behavior.
-- [ ] Verify XNA/FNA behavior for mutation methods.
-- [ ] Make mutation methods throw/not supported if strict XNA requires it.
-- [ ] Or clearly mark mutable behavior as C++ deviation.
-- [ ] Add tests for `Add`, `Clear`, `Insert`, `Remove`, `RemoveAt`, and non-const indexing.
+## P5-001 — Audit `TouchCollection` read-only behavior `[x]`
+- [x] `TouchCollection::IsReadOnly` currently claims read-only behavior.
+- [x] Verify XNA/FNA behavior for mutation methods.
+- [x] Make mutation methods throw/not supported if strict XNA requires it.
+- [x] Or clearly mark mutable behavior as C++ deviation.
+- [x] Add tests for `Add`, `Clear`, `Insert`, `Remove`, `RemoveAt`, and non-const indexing.
 
-## P5-002 — Verify `TouchCollection::CopyTo`
-- [ ] Compare CNA behavior against XNA/FNA.
-- [ ] Decide how to represent C# array overwrite semantics in C++.
-- [ ] Add tests for offset, insufficient capacity, empty collection, and invalid offset.
-- [ ] Document any unavoidable C++ deviation.
+**Result (2026-07-06):** External-audit priority #1. **Verified against FNA (`TouchCollection.cs`):** FNA's `IsReadOnly` getter is hard-coded `true`, but that flag is *advisory* — its `Add`/`Clear`/`Insert`/`Remove`/`RemoveAt` and settable indexer all actually mutate the backing `List<TouchLocation>` when it is non-null (the state `TouchPanel.GetState` returns). The FNA source comment claiming a `NotSupportedException` is aspirational, not what the code does. **Decision: do NOT make mutation throw** — that would diverge from FNA's implemented behavior (the authoritative reference). CNA is already faithful (mutation succeeds, `IsReadOnly` stays true). The one unavoidable C++ deviation: FNA's default/`null`-backed collection throws `NullReferenceException` on mutation and `ArgumentOutOfRangeException` on the getter indexer; CNA's backing is a value `std::vector`, so a default collection is empty-and-mutable instead. **Files changed:** `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` (corrected the misleading `getIsReadOnlyProperty` doc — it previously claimed "does not support mutation" — to document the advisory flag + the deviation). **Tests:** mutation coverage already existed (`AddClearRemoveRemoveAtAndInsertMutateCollection`, `OperatorIndexConstAndMutableAccessTouchLocations`, `IndexerThrowsOnOutOfRangeAccess`, `IsReadOnlyIsAlwaysTrue`); **added** `IsReadOnlyIsAdvisoryAndMutationStillSucceedsLikeFna` pinning the intentional deviation crisply. **Remaining risk:** none.
+
+## P5-002 — Verify `TouchCollection::CopyTo` `[x]`
+- [x] Compare CNA behavior against XNA/FNA.
+- [x] Decide how to represent C# array overwrite semantics in C++.
+- [x] Add tests for offset, insufficient capacity, empty collection, and invalid offset.
+- [x] Document any unavoidable C++ deviation.
+
+**Result (2026-07-06):** FNA's `CopyTo` delegates to `List<T>.CopyTo` (overwrites pre-allocated slots of a fixed array; null/empty is a no-op). CNA's destination is a growable `std::vector`, so it **inserts** at `arrayIndex` (documented deviation in `TouchCollection.cpp`) and guards the index (bad index → `std::out_of_range`, mapping FNA's `ArgumentOutOfRangeException`). "Insufficient capacity" is N/A — a vector grows. **Tests:** offset/invalid-offset/non-zero-index already covered (`CopyToAppendsAllElementsInOrder`, `CopyToThrowsOnOutOfRangeIndexInsteadOfUndefinedBehavior`, `CopyToInsertsAtValidNonZeroIndex`); **added** `CopyToFromEmptyCollectionIsANoOp`. **Remaining risk:** none.
 
 ## P5-003 — Verify `TouchCollection` enumeration
 - [ ] Test begin/end iteration.
@@ -816,16 +820,20 @@ mouse-state reset. **Remaining risk:** none.
   - Moved
 - [ ] Add regression tests.
 
-## P5-006 — Audit `TouchPanel::GetState`
-- [ ] Inspect both internal touch slot path and `InputManager` fallback path.
-- [ ] Ensure the two paths cannot diverge in production.
-- [ ] Add tests for each path.
-- [ ] Document which path is authoritative.
+## P5-006 — Audit `TouchPanel::GetState` `[x]`
+- [x] Inspect both internal touch slot path and `InputManager` fallback path.
+- [x] Ensure the two paths cannot diverge in production.
+- [x] Add tests for each path.
+- [x] Document which path is authoritative.
 
-## P5-007 — Fix duplicated condition in `TouchPanel::SetFinger`
-- [ ] Remove duplicate nested condition.
-- [ ] Add regression tests around first touch, moved touch, and released touch.
-- [ ] Ensure no behavior accidentally changes unless intended.
+**Result (2026-07-06):** External-audit priority #5. `GetState` first builds `validTouches_` from the `touches_` slot array (the FNA `SetFinger`-fed poll path); if that is empty it falls back to `InputManager::GetTouchState()` (CNA's event-driven path), capping at `MAX_TOUCHES` (DEC-10). **Cannot diverge in production:** `SetFinger` is never called on the real (event-driven) path, so `touches_` stays all-`Invalid` and `GetState` always uses the InputManager fallback — only one path is ever live in production; the slot path exists for a future poll-based platform and for tests. This is documented in `TouchPanel.cpp:130-137`. **Tests:** both paths + exclusivity (no double-report) already covered by `GetStateFallsBackToInputManagerWhenTouchesArrayEmpty` and `GetStatePrefersTouchesArrayAndDoesNotDoubleReport`. **Authoritative path:** InputManager fallback (production). **Remaining risk:** none.
+
+## P5-007 — Fix duplicated condition in `TouchPanel::SetFinger` `[x]`
+- [x] Remove duplicate nested condition.
+- [x] Add regression tests around first touch, moved touch, and released touch.
+- [x] Ensure no behavior accidentally changes unless intended.
+
+**Result (2026-07-06):** External-audit priority #4. **Verified line-by-line against FNA `TouchPanel.cs:165-217`:** the current CNA `SetFinger` has exactly ONE release condition (`prev.State != Invalid && prev.State != Released` → Released, else Invalid) and one press/move condition — **no duplicate remains** (any historical duplication was already removed before this audit; `git log` shows the release condition present in its correct single form). No source change needed. Structure matches FNA exactly; the two documented CNA additions are the `index` bounds guard (`std::out_of_range`) and `touchDeviceExists_ = true` + the `updateInputManagerTouch` cross-write (slot-path→InputManager mirroring). **Tests:** first-touch (Pressed) and moved already covered by `UpdatePropagatesTouchesToPreviousForSlotPathContinuity`; **added** `SetFingerReleaseOfHeldFingerProducesReleasedWithPreviousLocation` (NO_FINGER release of a held finger → Released + previous) and `SetFingerReleaseWithNoPriorFingerInsertsInvalidAndReportsNothing` (else branch → Invalid, slot dropped) — covering both branches of the release condition as a regression guard. **Remaining risk:** none.
 
 ## P5-008 — Verify touch previous-location tracking
 - [ ] Test Pressed has invalid previous location.

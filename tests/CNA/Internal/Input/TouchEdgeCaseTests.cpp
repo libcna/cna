@@ -95,6 +95,40 @@ TEST_F(TouchEdgeCaseTest, UpdatePropagatesTouchesToPreviousForSlotPathContinuity
     EXPECT_EQ(prev.getPositionProperty(), Vector2(10, 20));
 }
 
+// P5-007: the fingerId == NO_FINGER release path (FNA TouchPanel.cs:167-195), "was there a finger here
+// and the user just released it?". A held finger that lifts becomes a single Released touch carrying its
+// previous location. Exercises the first branch of the release condition. (Regression guard for the
+// historical duplicated nested condition — the current code must have exactly one.)
+TEST_F(TouchEdgeCaseTest, SetFingerReleaseOfHeldFingerProducesReleasedWithPreviousLocation)
+{
+    TouchPanel::SetFinger(0, 7, Vector2(10, 20)); // Pressed
+    TouchPanel::Update();
+    TouchPanel::SetFinger(0, 7, Vector2(11, 21)); // Moved
+    ASSERT_EQ(TouchPanel::GetState()[0].getStateProperty(), TouchLocationState::Moved);
+    TouchPanel::Update();
+
+    // Finger lifted: previous was Moved (not Invalid/Released) -> Released, position/previous preserved.
+    TouchPanel::SetFinger(0, TouchPanel::NO_FINGER, Vector2::Zero);
+
+    const TouchCollection s = TouchPanel::GetState();
+    ASSERT_EQ(s.getCountProperty(), 1);
+    EXPECT_EQ(s[0].getIdProperty(), 7);
+    EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Released);
+    EXPECT_EQ(s[0].getPositionProperty(), Vector2(11, 21));
+    TouchLocation prev;
+    ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+    EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Moved);
+}
+
+// P5-007: the else branch of the release condition — releasing a slot that had no prior finger
+// (previous is Invalid) inserts Invalid data so the slot is excluded from GetState() (FNA:181-192).
+TEST_F(TouchEdgeCaseTest, SetFingerReleaseWithNoPriorFingerInsertsInvalidAndReportsNothing)
+{
+    TouchPanel::SetFinger(0, TouchPanel::NO_FINGER, Vector2::Zero); // previous Invalid -> stays Invalid
+    EXPECT_EQ(TouchPanel::GetState().getCountProperty(), 0)
+        << "an empty slot released again must not create a ghost touch";
+}
+
 // --- Task 826: multi-touch edge cases ---
 
 TEST_F(TouchEdgeCaseTest, ReleasingAnUnknownFingerIsSafe)

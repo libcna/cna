@@ -213,6 +213,28 @@ TEST(TouchCollectionTest, IsReadOnlyIsAlwaysTrue)
     EXPECT_TRUE(collection.getIsReadOnlyProperty());
 }
 
+// P5-001 audit resolution: XNA/FNA's TouchCollection.IsReadOnly is hard-coded true, but that flag is
+// advisory only — FNA still mutates the (non-null) backing List returned by TouchPanel.GetState. CNA is
+// faithful: IsReadOnly stays true while Add/Clear/settable-indexer succeed. The one intentional C++
+// deviation is that a default-constructed collection is empty+mutable (value-vector backing) rather than
+// null-backed and throwing NullReferenceException on mutation as a default FNA collection would.
+TEST(TouchCollectionTest, IsReadOnlyIsAdvisoryAndMutationStillSucceedsLikeFna)
+{
+    TouchCollection collection; // default: FNA would be null-backed; CNA is empty + mutable
+    EXPECT_TRUE(collection.getIsReadOnlyProperty());
+
+    EXPECT_NO_THROW(collection.Add(TouchLocation(1, TouchLocationState::Pressed, Vector2::Zero)))
+        << "mutating a default collection must not throw (FNA would NRE; CNA is empty+mutable)";
+    EXPECT_EQ(collection.getCountProperty(), 1);
+    EXPECT_TRUE(collection.getIsReadOnlyProperty()) << "IsReadOnly must remain true after mutation";
+
+    collection[0] = TouchLocation(2, TouchLocationState::Moved, Vector2::Zero); // settable indexer
+    EXPECT_EQ(collection[0].getIdProperty(), 2);
+
+    EXPECT_NO_THROW(collection.Clear());
+    EXPECT_TRUE(collection.getIsReadOnlyProperty());
+}
+
 TEST(TouchCollectionTest, IsConnectedReflectsTouchDeviceExistsFlag)
 {
     TouchPanel::setTouchDeviceExistsProperty(true);
@@ -274,6 +296,23 @@ TEST(TouchCollectionTest, CopyToAppendsAllElementsInOrder)
     collection.CopyTo(destination, 0);
 
     ASSERT_EQ(destination.size(), 2u);
+    EXPECT_EQ(destination[0].getIdProperty(), 1);
+    EXPECT_EQ(destination[1].getIdProperty(), 2);
+}
+
+// P5-002: an empty collection copies nothing and leaves the destination untouched (FNA's CopyTo is a
+// null/empty no-op). A valid index into a non-empty destination stays valid because nothing is inserted.
+TEST(TouchCollectionTest, CopyToFromEmptyCollectionIsANoOp)
+{
+    const TouchCollection empty;
+    std::vector<TouchLocation> destination{
+        TouchLocation(1, TouchLocationState::Pressed, Vector2::Zero),
+        TouchLocation(2, TouchLocationState::Pressed, Vector2::Zero)
+    };
+
+    EXPECT_NO_THROW(empty.CopyTo(destination, 0));
+    EXPECT_NO_THROW(empty.CopyTo(destination, 2)); // index == size() is valid even with nothing to copy
+    ASSERT_EQ(destination.size(), 2u) << "copying an empty collection must not change the destination";
     EXPECT_EQ(destination[0].getIdProperty(), 1);
     EXPECT_EQ(destination[1].getIdProperty(), 2);
 }
