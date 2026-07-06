@@ -1292,6 +1292,129 @@ near-term goal — see the "Do not do yet" style caveats per task below, and ite
   user wants to invest in resolving the automation/permission questions documented in `NEXT.md`
   directly — not assumed, not scheduled, purely optional future work.
 
+### 11e — Rendering Fidelity & Coverage Hardening
+
+Opened after a hands-on deep-dive testing session drove `examples/demo_avatar` interactively
+(not just headless pixel-readback) and found the avatar rendered as a uniform skin-tone mannequin
+with no visible hair/clothing color at all, plus visibly worse forearm deformation on the two
+newest two-armed animations (`Stand1`/`Celebrate`) than on `Stand0`/`Wave`. Scope: make CNA's
+real-rendering Avatar extension (Phase 10) and its content pipeline (Phase 11) actually look and
+perform like a complete avatar system, not just "renders without crashing." This is explicitly
+open-ended, ambitious future work — not all of it needs to land in one sitting.
+
+- [x] **Task 11.17** — Fix `AvatarRenderer::DrawRealEXT`'s per-part tint routing. Root cause:
+  `const bool isHair = part.Name == "hair"` never matched real part names
+  (`CNAAvatarBody`/`Hair`/`Shirt`/`Pants`/`Shoes`), so every part rendered in skin color,
+  including hair. Fixed via a new private `AvatarRenderer::PartTintEXT(name)` helper doing a
+  substring match, and extended `AvatarAppearanceEXT` with `ShirtColor`/`PantsColor`/
+  `ShoesColor` (defaults mirror `generate_materials.py`'s placeholder palette) so clothing has
+  its own tint instead of falling back to skin color by default. Added 6 new
+  `AvatarAppearanceEXTTest` cases (3 default-value, 3 round-trip). Verified visually via
+  `examples/demo_avatar`: before the fix, a uniform tan mannequin; after, distinct dark-brown
+  hair / blue shirt / navy pants / near-black shoes.
+  - Files: `include/.../GamerServices/AvatarAppearanceEXT.hpp`,
+    `include/.../GamerServices/AvatarRenderer.hpp`,
+    `src/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.cpp`,
+    `tests/.../GamerServices/AvatarAppearanceEXTTests.cpp`.
+  - Verify: `cmake --build cmake-build-debug --target CnaTests && cmake-build-debug/CnaTests --gtest_filter="*Avatar*"`.
+
+- [x] **Task 11.18** — Extend `examples/demo_avatar` to exercise all 5 baked animation clips
+  (previously only `Stand0`/`Wave` were wired up, even though `Stand1`/`Clap`/`Celebrate`
+  existed in the pipeline since Task 11.15). Regenerated the committed
+  `examples/demo_avatar/Content/avatar/{male,female}/` from `generate_avatar.py` +
+  `convert_avatar.py --embedded-clips` so all 5 clips are actually present in the shipped
+  demo content (female content additionally rebaked with the `Ponytail`/`LongSleeve`/`Shorts`
+  wardrobe variant, to visually prove Task 11.14's baked-in wardrobe styling too). `Space` now
+  cycles through all 5 clip names instead of toggling 2; the window title shows the active clip
+  and control hints. This was also the first time `Stand1`/`Clap`/`Celebrate` were rendered
+  through the real GPU-skinning path rather than only validated via Blender-side pose-bone
+  dumps — confirmed the already-documented elbow/sleeve tear is visibly worse on these two-arm
+  poses than on `Stand0`/`Wave`.
+  - Files: `examples/demo_avatar/src/AvatarDemo.hpp`, `examples/demo_avatar/src/AvatarDemo.cpp`,
+    `examples/demo_avatar/Content/avatar/{male,female}/**`.
+  - Verify: `cmake --build cmake-build-debug --target cna_demo_avatar && SDL_VIDEODRIVER=x11 DISPLAY=:0 cmake-build-debug/cna_demo_avatar --gender male` — Space cycles Stand0→Stand1→Wave→Clap→Celebrate→Stand0.
+
+- [ ] **Task 11.19** — Real per-part texture support. Today `avatar.skinnedmodel.json` never
+  emits a `"texture"` field even though `ContentManager` can already load one per part
+  (`ContentManager.cpp:704-736`) — solid-color tint (Task 11.17) is the *only* color signal
+  that ever reaches the GPU. Bake actual Blender materials (or a simple UV-mapped placeholder
+  texture per material) through `export_gltf.py`/`convert_avatar.py` into real texture files,
+  and wire the content JSON to reference them, so avatars can look like more than flat-shaded
+  primitives.
+  - Files/modules: `tools/avatar_builder/export_gltf.py`, `tools/avatar_builder/generate_materials.py`,
+    `tools/avatar_asset_pipeline/convert_avatar.py`, `examples/demo_avatar/Content/**`.
+  - Verify: converted content includes a real texture file per part; `examples/demo_avatar`
+    shows textured (not flat-tinted) surfaces; `ContentManager`'s existing texture-loading path
+    needs no C++ changes if the JSON schema it already supports is reused correctly — confirm
+    by reading, don't assume.
+
+- [ ] **Task 11.20** — Weight-painting pass on the confirmed elbow/sleeve tear and zero-weight/
+  over-4-influence vertices (open since Phase 11a, now visually confirmed worse on `Stand1`/
+  `Celebrate` per Task 11.18's finding). Manual vertex-group weight correction in
+  `generate_body.py`/`generate_clothes.py`, not an automatic fix.
+  - Files/modules: `tools/avatar_builder/generate_body.py`, `tools/avatar_builder/generate_clothes.py`.
+  - Verify: pose the clothed avatar through `Wave`/`Clap`/`Celebrate`'s peak fold frames and
+    render a close-up; forearm/hand should no longer visibly separate from the sleeve; re-run
+    `validate_gltf.py` to confirm no new zero-weight vertices were introduced.
+
+- [ ] **Task 11.21** — Runtime wardrobe attach API. Today `SkinnedModelEXT` has no compose/
+  attach entry point — only `AddPartEXT` at load time — so a standalone-converted wardrobe
+  piece (Task 11.14's `generate_wardrobe.py` output) can be converted but never actually worn
+  by an already-loaded, running avatar. Design and add a real attach API (e.g.
+  `SkinnedModelEXT::AttachPartEXT` or a small compose helper) that adds a part (with its own
+  vertex/index buffers and bone-name-based skin-weight remap onto the host model's skeleton) to
+  an already-constructed model.
+  - Files/modules: `include/.../Graphics/SkinnedModelEXT.hpp`,
+    `src/Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.cpp`, likely
+    `tools/avatar_asset_pipeline/convert_avatar.py` (to keep a wardrobe piece's own bone-name
+    tracks importable independent of a specific body's bone index order).
+  - Verify: load a body, then attach a standalone-converted wardrobe piece at runtime, and
+    render both through one `DrawRealEXT` call with correct skinning on the attached piece.
+
+- [ ] **Task 11.22** — Wire `examples/demo_avatar` to exercise Task 11.21's runtime attach API:
+  a CLI flag or in-app key to swap hair/shirt/pants styles on the already-running avatar,
+  proving the attach path end-to-end rather than only via baked-in styles (Task 11.18).
+  - Files/modules: `examples/demo_avatar/src/AvatarDemo.hpp`, `examples/demo_avatar/src/AvatarDemo.cpp`.
+  - Verify: swap a style at runtime via the new control and confirm the mesh visibly changes
+    without restarting the demo.
+  - Depends on: Task 11.21.
+
+- [ ] **Task 11.23** — Expand animation coverage. Only 5/31 `AvatarAnimationPreset` values
+  have real baked clips today (`Stand0`/`Stand1`/`Wave`/`Clap`/`Celebrate`); split the
+  remaining 26 into batches so no single task is unbounded:
+  - **11.23a** — `Stand2`..`Stand7` (6 more generic idle variants, gender-neutral, baked into
+    both genders' content like `Stand0`/`Stand1`).
+  - **11.23b** — the 10 `Female*` presets: `FemaleIdleCheckNails`, `FemaleIdleLookAround`,
+    `FemaleIdleShiftWeight`, `FemaleIdleFixShoe`, `FemaleAngry`, `FemaleConfused`,
+    `FemaleLaugh`, `FemaleCry`, `FemaleShocked`, `FemaleYawn` — baked only into the female
+    content.
+  - **11.23c** — the 10 `Male*` presets: `MaleIdleLookAround`, `MaleIdleStretch`,
+    `MaleIdleShiftWeight`, `MaleIdleCheckHand`, `MaleAngry`, `MaleConfused`, `MaleLaugh`,
+    `MaleCry`, `MaleSurprised`, `MaleYawn` — baked only into the male content.
+  - Files/modules: `tools/avatar_builder/generate_animations.py`,
+    `tools/avatar_builder/validate_gltf.py` (extend `REQUIRED_ANIMATIONS` per batch),
+    `examples/demo_avatar/Content/**` (regenerate after each batch).
+  - Verify per batch: `validate_gltf.py` confirms the new clips exist with nonzero frame
+    ranges; multi-angle Blender renders + numeric pose-bone dumps as Task 11.15 did; real-engine
+    render via `examples/demo_avatar` (learned from Task 11.18 — Blender-side validation alone
+    missed a real-engine-only deformation problem).
+
+- [ ] **Task 11.24** — Pixel-readback regression test guarding Task 11.17's fix class of bug.
+  Extend `examples/avatar_real_render_integration_test.cpp` (or add a sibling test) with two
+  distinctly-positioned, distinctly-named parts (e.g. one whose name contains `"Shirt"`) and a
+  non-default `AvatarAppearanceEXT`, then assert via `GetBackBufferData` that the two parts'
+  rendered pixels differ in the expected way. Today nothing but manual visual inspection would
+  catch a `PartTintEXT` regression.
+  - Files/modules: `examples/avatar_real_render_integration_test.cpp`.
+  - Verify: test fails if `PartTintEXT`'s substring match is reverted to exact-equality
+    against `"hair"`; passes against the current fix.
+
+- [ ] **Task 11.25** — (Speculative, lowest priority, scope not yet designed) A richer
+  appearance/customization model: per-part texture atlases (builds on Task 11.19), a wider
+  skin-tone/hair-color preset palette, and revisiting whether `AvatarAppearanceEXT` should grow
+  beyond simple named-slot tints. Do not start without a fresh scoping pass — this is a
+  placeholder for "there's clearly more here" more than a real, actionable task yet.
+
 ---
 
 ## Dependency Graph
