@@ -734,265 +734,302 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** static_assert(!is_base_of_v<System::Object,T>) block over all class/struct Input types passes; MouseCursor:IDisposable is not an Object subclass — all exempt.
 
 #### INP-0038 — Verify: GamePad::GetState default overload returns IndependentAxes dead-zone state
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadInputTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0039 — Verify: GamePad::GetState(PlayerIndex, GamePadDeadZone) applies the requested mode
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadDeadZoneTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadDeadZoneTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0040 — Verify: GamePad::GetCapabilities reflects a connected device's capability flags
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0041 — Verify: GamePad::GetCapabilities of a disconnected player returns empty capabilities
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0042 — Verify: GamePad::SetVibration returns false and no-ops when no controller is connected
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0043 — Verify: GamePad::SetVibration clamps motor speeds to [0,1]
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0044 — Verify: Invalid/out-of-range PlayerIndex returns a disconnected GamePadState
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadInputTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0045 — Verify: Disconnected-controller GamePadState has all buttons Released and zeroed axes
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadInputTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0046 — Verify: Slot assignment: a connect claims the next free PlayerIndex slot
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadMappingTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadMappingTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0047 — Verify: Slot removal: a disconnect frees the slot and closes the SDL_Gamepad
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0048 — Verify: Four players connect independently without cross-talk
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadMappingTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadMappingTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0049 — Verify: FNA_GAMEPAD_NUM_GAMEPADS env is parsed and clamps the tracked slot count
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0050 — Verify: SDL hotplug add makes a controller visible before the first frame
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0051 — Verify: Duplicate GAMEPAD_ADDED is ignored (no second slot, no leak)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0052 — Verify: Unknown GAMEPAD_REMOVED is ignored safely
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0053 — Verify: More than four pads are refused when no slot is free
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0054 — Verify: Capabilities are read live per query (not cached at connect) — document the decision
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `docs/input-fna-fidelity.md`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** Doc updated; matrix row.
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `input-fna-fidelity.md` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0055 — Verify: All 21 SDL buttons map to the correct XNA Buttons flag
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0056 — Verify: Extended button flags (Misc1/Paddle1-4/TouchPad) map with EXT semantics
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadMappingTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadMappingTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0057 — Verify: Left/right triggers normalize SDL 0..32767 to XNA 0..1
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadTriggersTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadTriggersTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0058 — Verify: Thumbstick X/Y map with Y-axis inversion to XNA up-positive convention
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadThumbSticksTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadThumbSticksTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0059 — Verify: Dead-zone None passes raw axis values through
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadDeadZoneTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadDeadZoneTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0060 — Verify: Dead-zone IndependentAxes math matches FNA (ExcludeAxisDeadZone rescale)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0061 — Verify: Dead-zone Circular math matches FNA
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadThumbSticksTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadThumbSticksTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0062 — Verify: XInput constants (LeftDeadZone/RightDeadZone/TriggerThreshold) match FNA
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0063 — Verify: Virtual buttons pack from triggers past threshold
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadStateTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0064 — Verify: Virtual buttons pack from thumbstick directions
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadStateTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0065 — Verify: PacketNumber bumps only on button/axis change, not on unchanged reads
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadInputTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0066 — Verify: PacketNumber within-dead-zone axis wobble policy documented + tested
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `GamePadInputTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0067 — Verify: Vibration cancellation: GetCapabilities does not stop active rumble
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0068 — Verify: SetTriggerVibrationEXT support reported and gated by device capability
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0069 — Verify: SetLightBarEXT support reported; no-op when unsupported/disconnected
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0070 — Verify: GetGyroEXT returns data when available, false+zeroed when not
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0071 — Verify: GetAccelerometerEXT returns data when available, false+zeroed when not
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0072 — Verify: GamePadType maps from SDL joystick type (GamePad/Wheel/ArcadeStick/FlightStick)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0073 — Verify: GetGUIDEXT formats vendor+product little-endian hex; 'xinput' for XInput; Valve overrides
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P2 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0074 — Verify: Fake ISdlGamepadBackend covers connect/remove/axis/button/rumble/sensor/GUID paths
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** GamePad
+- **Priority:** P1 · **Status:** `DONE (2026-07-06)` [x] · **Area:** GamePad
 - **Files:** `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
 - **Steps:** Line-check the behavior against FNA (SDL3_FNAPlatform.cs / GamePad.cs); confirm the named test asserts it; if a gap is found, extend the test (fake backend) — do not change behavior without an FNA citation.
 - **Acceptance:** Behavior matches FNA (or a documented deviation); the cited test asserts it and is green.
 - **Verify:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure`
 
 ### Area: Keyboard (23 tasks)
+- **Result:** Behavior line-checked vs FNA (SDL3_FNAPlatform.cs / GamePad.cs); asserted by `SdlGamepadBackendTests.cpp` — part of the 96-test gamepad suite run green this session (FakeGamepadTest / SdlGamepadBackendTest / GamePad*Test).
 
 #### INP-0075 — Verify: Keyboard::GetState() returns the accumulated pressed-key set
 - **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Keyboard
