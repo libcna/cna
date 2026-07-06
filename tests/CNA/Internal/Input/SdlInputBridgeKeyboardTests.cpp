@@ -168,6 +168,53 @@ TEST_F(SdlInputBridgeKeyboardTest, KeycodeMapCoversLettersDigitsNumpadOemModifie
     }
 }
 
+// P2-009: left/right Shift, Control, Alt each map to their OWN distinct Keys value through the real
+// KEY_DOWN path (the keycode map above only spot-checks the left variants), and the three lock keys
+// (CapsLock / NumLock / Scroll) map through too. Also pins "no accidental merging" — XNA/FNA keep the
+// left and right modifier as separate Keys, so pressing one must NOT light the other.
+TEST_F(SdlInputBridgeKeyboardTest, ModifierAndLockKeysMapToDistinctKeysWithoutMerging)
+{
+    struct Case { SDL_Keycode key; Keys expected; const char* name; };
+    const Case cases[] = {
+        {SDLK_LSHIFT, Keys::LeftShift,    "LeftShift"},
+        {SDLK_RSHIFT, Keys::RightShift,   "RightShift"},
+        {SDLK_LCTRL,  Keys::LeftControl,  "LeftControl"},
+        {SDLK_RCTRL,  Keys::RightControl, "RightControl"},
+        {SDLK_LALT,   Keys::LeftAlt,      "LeftAlt"},
+        {SDLK_RALT,   Keys::RightAlt,     "RightAlt"},
+        {SDLK_CAPSLOCK,      Keys::CapsLock, "CapsLock"},
+        {SDLK_NUMLOCKCLEAR,  Keys::NumLock,  "NumLock"},
+        {SDLK_SCROLLLOCK,    Keys::Scroll,   "Scroll"},
+    };
+    for (const Case& c : cases)
+    {
+        InputManager::ResetForTests();
+        SdlInputBridge::ProcessEvent(keyDownWithKeycode(c.key));
+        EXPECT_TRUE(Keyboard::GetState().IsKeyDown(c.expected)) << c.name;
+        EXPECT_EQ(Keyboard::GetState().GetPressedKeys().size(), 1u)
+            << c.name << " must light exactly one key";
+    }
+
+    // No accidental merging: each side is independent of its mirror.
+    struct Pair { SDL_Keycode key; Keys pressed; Keys mirror; const char* name; };
+    const Pair pairs[] = {
+        {SDLK_LSHIFT, Keys::LeftShift,    Keys::RightShift,   "LShift!=RShift"},
+        {SDLK_RSHIFT, Keys::RightShift,   Keys::LeftShift,    "RShift!=LShift"},
+        {SDLK_LCTRL,  Keys::LeftControl,  Keys::RightControl, "LCtrl!=RCtrl"},
+        {SDLK_RCTRL,  Keys::RightControl, Keys::LeftControl,  "RCtrl!=LCtrl"},
+        {SDLK_LALT,   Keys::LeftAlt,      Keys::RightAlt,     "LAlt!=RAlt"},
+        {SDLK_RALT,   Keys::RightAlt,     Keys::LeftAlt,      "RAlt!=LAlt"},
+    };
+    for (const Pair& p : pairs)
+    {
+        InputManager::ResetForTests();
+        SdlInputBridge::ProcessEvent(keyDownWithKeycode(p.key));
+        EXPECT_TRUE(Keyboard::GetState().IsKeyDown(p.pressed)) << p.name;
+        EXPECT_FALSE(Keyboard::GetState().IsKeyDown(p.mirror))
+            << p.name << " — the mirror modifier must stay up (no merging)";
+    }
+}
+
 TEST_F(SdlInputBridgeKeyboardTest, UnmappedKeycodeIsDroppedNotMarkedNone)
 {
     // DEC-16: SDLK_UNKNOWN (and any unmapped keycode) is dropped rather than marked Keys::None pressed.

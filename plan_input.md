@@ -294,63 +294,148 @@ bitfield store silently drops it). This is not producible from real hardware or 
 rather than filtering at construction, which would be a broader behavioral change to the public
 constructors. Tracked here for P12 sign-off.
 
-## P2-003 — Verify `KeyboardState` default behavior
-- [ ] Test default state has no pressed keys.
-- [ ] Test `IsKeyDown` and `IsKeyUp`.
-- [ ] Test equality and inequality.
-- [ ] Test hash stability.
+## P2-003 — Verify `KeyboardState` default behavior `[x]`
+- [x] Test default state has no pressed keys.
+- [x] Test `IsKeyDown` and `IsKeyUp`.
+- [x] Test equality and inequality.
+- [x] Test hash stability.
 
-## P2-004 — Verify `KeyboardState::GetPressedKeys`
-- [ ] Verify returned keys are deterministic.
-- [ ] Verify sorting order matches CNA's documented XNA-compatible policy.
-- [ ] Verify duplicates are impossible.
-- [ ] Add tests with multiple keys.
+**Result (2026-07-06):** All four covered by pre-existing tests, re-verified green ×5 shuffled:
+`DefaultConstructorHasNoPressedKeys` + `GetPressedKeysReturnsEmptyForDefaultState` (default empty),
+`IndexerMatchesGetItemAndIsKeyDown` (IsKeyDown/IsKeyUp/operator[]), `EqualStatesCompareEqual` +
+`UnequalStatesCompareUnequal` (==/!=), `GetHashCodeIsConsistentForEqualStates` +
+`GetHashCodeOfEmptyStateIsZero` (hash stability). **Files changed:** none (coverage confirmed).
+**Remaining risk:** none.
 
-## P2-005 — Audit SDL keycode mapping
-- [ ] Compare SDL keycode to XNA `Keys` conversion.
-- [ ] Add missing mappings where SDL has reliable equivalents.
-- [ ] Do not guess mappings that are platform-layout dependent.
-- [ ] Document unmappable keys.
+## P2-004 — Verify `KeyboardState::GetPressedKeys` `[x]`
+- [x] Verify returned keys are deterministic.
+- [x] Verify sorting order matches CNA's documented XNA-compatible policy.
+- [x] Verify duplicates are impossible.
+- [x] Add tests with multiple keys.
 
-## P2-006 — Audit SDL scancode mapping
-- [ ] Compare SDL scancode to XNA `Keys` conversion.
-- [ ] Ensure scancode mode is deterministic for physical keyboard layout.
-- [ ] Add tests for representative keys.
-- [ ] Document scancode/keycode tradeoffs.
+**Result (2026-07-06):** Covered by `GetPressedKeysIsSortedByAscendingNumericValue` (deterministic
+ascending-numeric order = CNA's documented FNA-compatible policy, KeyboardState.cpp:39-45),
+`GetPressedKeysContainsOnlyPressedKeys` and `GetStateReflectsPressedAndReleasedKeys` (multi-key).
+Duplicates are structurally impossible: the backing store is `std::unordered_set<Keys>`, so no test
+can construct a duplicate. **Files changed:** none (coverage confirmed).
+**Remaining risk:** none.
 
-## P2-007 — Verify key repeat behavior
-- [ ] Ensure key repeat does not create false press/release transitions.
-- [ ] Ensure repeated keydown may still produce text input if intended.
-- [ ] Add tests for repeated SDL keydown events.
+## P2-005 — Audit SDL keycode mapping `[x]`
+- [x] Compare SDL keycode to XNA `Keys` conversion.
+- [x] Add missing mappings where SDL has reliable equivalents.
+- [x] Do not guess mappings that are platform-layout dependent.
+- [x] Document unmappable keys.
 
-## P2-008 — Verify focus loss behavior
-- [ ] Determine what happens when window focus is lost.
-- [ ] Ensure pressed keys are cleared or behavior is documented.
-- [ ] Add SDL bridge test for focus lost if supported.
-- [ ] Add manual validation task if needed.
+**Result (2026-07-06):** The keycode map (`try_convert_sdl_key`, SdlInputBridge.cpp) was previously
+diffed line-by-line against FNA's `INTERNAL_keyMap` and is byte-identical on all 122 shared keycodes
+(INPUT-KBD-009); the only intentional differences are DEC-16 (SDLK_UNKNOWN dropped, not marked
+`Keys::None`) and DEC-17 (SDLK_AC_BACK → Escape). Layout-dependent keys are deliberately NOT guessed:
+accented/non-ASCII codepoints are dropped and reach games via TextInputEXT. Covered end-to-end by
+`KeycodeMapCovers…`, `UnmappedKeycodeIsDroppedNotMarkedNone`, `LocaleUnmappedKeycodeIsDropped…`,
+`NonUsLayoutAccentedKeysAreUnmappedInKeycodeMode`, `NordicOemKeysMapToTheirOemKeyMatchingFna`,
+`SdlMediaBrowserKeysAreUnmappedExceptVolumeMatchingFna`. Unmappable keys documented in
+`docs/input-fna-fidelity.md`. **Files changed:** none (coverage confirmed).
+**Remaining risk:** none for the shared map; physical non-US layout OEM positions are hardware-gated
+(see P2-010).
 
-## P2-009 — Verify modifier keys
-- [ ] Test left/right Shift.
-- [ ] Test left/right Control.
-- [ ] Test left/right Alt.
-- [ ] Test CapsLock, NumLock, and ScrollLock if supported.
-- [ ] Verify no accidental merging unless XNA does so.
+## P2-006 — Audit SDL scancode mapping `[x]`
+- [x] Compare SDL scancode to XNA `Keys` conversion.
+- [x] Ensure scancode mode is deterministic for physical keyboard layout.
+- [x] Add tests for representative keys.
+- [x] Document scancode/keycode tradeoffs.
 
-## P2-010 — Verify OEM keys
-- [ ] Test all mapped OEM punctuation keys.
-- [ ] Verify US keyboard behavior.
-- [ ] Add manual validation tasks for CZ, DE, FR/AZERTY, and other layouts.
-- [ ] Document layout-dependent behavior.
+**Result (2026-07-06):** The scancode map (`try_convert_sdl_scancode`) was diffed against FNA's
+`INTERNAL_scanMap` and is byte-identical on all 122 shared scancodes; the only differences are the
+three CNA drops (UNKNOWN / NONUSHASH / NONUSBACKSLASH — INPUT-KBD-011). Scancode mode is
+layout-independent by construction (keyed on physical position). Covered by
+`ScancodeMapUsedWhenScancodeModeForced`, `ScancodeModeIgnoresTheLayoutDependentKeycode`,
+`IsoLayoutExtraScancodesAreDroppedNotMarkedNone`, `GetKeyFromScancodeEXTIsIdentityInScancodeMode`,
+`GetKeyFromScancodeEXTTranslatesInNormalMode`. Tradeoffs documented in `docs/input-fna-fidelity.md`
+/ `docs/platform-input-notes.md` (keycode = layout symbol, scancode = physical position).
+**Files changed:** none (coverage confirmed). **Remaining risk:** none.
 
-## P2-011 — Verify Android/browser special keys
-- [ ] Verify Back/Menu behavior if CNA supports mobile/browser input.
-- [ ] Ensure mappings are documented as platform-specific.
-- [ ] Add tests where fake SDL events can represent these keys.
+## P2-007 — Verify key repeat behavior `[x]`
+- [x] Ensure key repeat does not create false press/release transitions.
+- [x] Ensure repeated keydown may still produce text input if intended.
+- [x] Add tests for repeated SDL keydown events.
 
-## P2-012 — Verify keyboard reset for tests/runtime
-- [ ] Ensure `InputManager::ResetAllForTests` clears keyboard state.
-- [ ] Ensure no stale key state leaks between tests.
-- [ ] Add regression tests.
+**Result (2026-07-06):** Covered by `KeyRepeatKeepsKeyDownWithoutSpuriousTransitions` — a
+`repeat=true` KEY_DOWN keeps the key down without a phantom up/down transition. Text-input decoupling
+(repeat still feeds TextInputEXT) is a separate SDL_EVENT_TEXT_INPUT path, covered by the text-input
+tests (DEC-19 repeat gate applies to the bridge's own synthetic repeats, not SDL's). **Files
+changed:** none (coverage confirmed). **Remaining risk:** none.
+
+## P2-008 — Verify focus loss behavior `[x]`
+- [x] Determine what happens when window focus is lost.
+- [x] Ensure pressed keys are cleared or behavior is documented.
+- [x] Add SDL bridge test for focus lost if supported.
+- [x] Add manual validation task if needed.
+
+**Result (2026-07-06):** Behavior is documented DEC-15 / INPUT-KBD-020: CNA matches FNA — a
+focus-loss does NOT clear accumulated key state (FNA only sets `IsActive=false`); games gate input
+on `Game.IsActive`. A beyond-FNA transient clear was considered and rejected. Pinned by
+`WindowFocusLostDoesNotClearHeldKeysMatchingFna` and `WindowLifecycleEventsDoNotCorruptKeyboardState`
+(minimize/restore/maximize/close-request are no-ops for keyboard state). **Files changed:** none
+(coverage confirmed). **Remaining risk:** none.
+
+## P2-009 — Verify modifier keys `[x]`
+- [x] Test left/right Shift.
+- [x] Test left/right Control.
+- [x] Test left/right Alt.
+- [x] Test CapsLock, NumLock, and ScrollLock if supported.
+- [x] Verify no accidental merging unless XNA does so.
+
+**Result (2026-07-06):** Found a genuine gap — the keycode-map test only spot-checked the *left*
+modifiers, so the right variants + lock keys were mapped in source (SdlInputBridge.cpp:495-542) but
+never exercised end-to-end, and "no accidental merging" was unasserted. **Added test
+`ModifierAndLockKeysMapToDistinctKeysWithoutMerging`**: drives KEY_DOWN for LShift/RShift/LCtrl/RCtrl/
+LAlt/RAlt/CapsLock/NumLock(SDLK_NUMLOCKCLEAR)/ScrollLock and asserts each maps to its own distinct
+`Keys` and lights exactly one key; then asserts each left↔right pair is independent (pressing one
+leaves the mirror up — XNA keeps them separate). **Files changed:**
+`tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp` (+1 test). **Tests:**
+`SdlInputBridgeKeyboardTest.*` 17/17 pass shuffled ×3. **Behavior verified:** 9 modifier/lock keys +
+6 no-merge pairs. **Remaining risk:** none (CapsLock/NumLock as toggle *state* — i.e. LED/locked —
+is not an XNA concept; XNA only reports the key press, which is what CNA does).
+
+## P2-010 — Verify OEM keys `[x]`
+- [x] Test all mapped OEM punctuation keys.
+- [x] Verify US keyboard behavior.
+- [!] Add manual validation tasks for CZ, DE, FR/AZERTY, and other layouts. — deferred to Phase 11
+- [x] Document layout-dependent behavior.
+
+**Result (2026-07-06):** US-layout OEM punctuation is covered: `KeycodeMapCovers…` asserts
+OemSemicolon/OemComma/OemPeriod; the Nordic OEM exception (æ→OemQuotes, ø→OemSemicolon) is pinned by
+`NordicOemKeysMapToTheirOemKeyMatchingFna`; non-US accented keys drop (`NonUsLayoutAccentedKeys…`).
+Layout-dependent behavior is documented in `docs/platform-input-notes.md`. **The physical CZ/DE/
+FR-AZERTY OEM-position validation is genuinely hardware/layout-gated** (needs a real keyboard with
+that layout active) — it cannot be faked deterministically because SDL delivers the layout's symbol
+as the keycode, which is exactly what the drop/Nordic tests already cover at the codepoint level. See
+the manual checklist (`docs/demo-input-checklist.md`) and Phase 11. **Files changed:** none (coverage
+confirmed). **Remaining risk:** manual per-layout confirmation outstanding (Phase 11).
+
+## P2-011 — Verify Android/browser special keys `[x]`
+- [x] Verify Back/Menu behavior if CNA supports mobile/browser input.
+- [x] Ensure mappings are documented as platform-specific.
+- [x] Add tests where fake SDL events can represent these keys.
+
+**Result (2026-07-06):** `AndroidBackButtonMapsToEscape` pins DEC-17 (SDLK_AC_BACK → Escape, a CNA
+convenience so "back" acts as cancel/exit); `SdlMediaBrowserKeysAreUnmappedExceptVolumeMatchingFna`
+pins that browser/media keys (AC_HOME/SEARCH, media transport) are dropped except VolumeUp/Down,
+matching FNA. Platform-specific nature documented in `docs/input-fna-fidelity.md` (DEC-17) and
+`docs/platform-input-notes.md`. **Files changed:** none (coverage confirmed). **Remaining risk:**
+none (real on-device Back/Menu is in the manual checklist).
+
+## P2-012 — Verify keyboard reset for tests/runtime `[x]`
+- [x] Ensure `InputManager::ResetAllForTests` clears keyboard state.
+- [x] Ensure no stale key state leaks between tests.
+- [x] Add regression tests.
+
+**Result (2026-07-06):** `ResetForTests()` reassigns the whole `InternalInputState{}` (zero-inits
+`PressedKeys`); `ResetAllForTests()` fans out to every subsystem reset (InputManager.cpp:124-135).
+Regression pinned by `InputResetAllForTests.ClearsAccumulatedInputManagerState` (SetKeyState(A) →
+ResetAllForTests → IsKeyDown(A) false). No stale leaks: every SDL bridge test fixture calls
+`InputManager::ResetForTests()` in SetUp *and* TearDown, and the suite runs `--gtest_shuffle
+--gtest_repeat=5` green. **Files changed:** none (coverage confirmed). **Remaining risk:** none.
 
 ---
 
