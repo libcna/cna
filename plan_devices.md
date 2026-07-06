@@ -934,7 +934,7 @@ not an alternate spelling to preserve.
   - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`
   - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp`
 
-### SENSORBASE-002 — Verify default `TimeBetweenUpdates`
+### SENSORBASE-002 — Verify default `TimeBetweenUpdates` — CLOSED (2026-07-06, Medium-confidence citation, no code change)
 
 - **Priority:** High
 - **Area:** `SensorBase<T>`
@@ -942,19 +942,47 @@ not an alternate spelling to preserve.
   sensor classes via `SensorBase<T>`'s constructor) may not match per-sensor-type XNA/WP7
   defaults — a single shared default is a simplifying assumption that has not been
   checked against a per-class authoritative default.
+- **Resolution (2026-07-06):** the archived MSDN property/class pages for
+  `SensorBase(TSensorReading).TimeBetweenUpdates` (already fetched for `SENSORBASE-008`,
+  MSDN `hh220884`/`hh239315`) document no default value at all in their Remarks
+  sections — the real API's default isn't stated in the reference docs directly.
+  Cross-checked instead against MonoGame's own reimplementation (Medium confidence, same
+  citation tier this project already uses for `SensorState`'s enum values) — MonoGame's
+  `SensorBase()` constructor (`MonoGame.Framework/Devices/Sensors/SensorBase.cs`,
+  `develop` branch) sets `this.TimeBetweenUpdates = TimeSpan.FromMilliseconds(2)` at
+  exactly the shared base-class level, architecturally identical to CNA's own choice —
+  a single default for all four sensor types, not a per-subclass override (the real API
+  has no per-subclass constructor override point for this property at all, since
+  `TimeBetweenUpdates` lives solely on the shared `SensorBase<T>` base). **Conclusion:
+  CNA's existing single 2ms shared default is correct and requires no code change** —
+  a single common default is not just acceptable but the only architecturally possible
+  choice, matching the real API's own class hierarchy. Added one test per concrete
+  sensor class (`AccelerometerTests`/`GyroscopeTests`/`CompassTests`/`MotionTests`
+  `.DefaultTimeBetweenUpdatesIsTwoMilliseconds`) asserting this at the concrete-class
+  level, not just the generic `SensorBase<T>` level `SensorBaseTests.cpp` already
+  covered. Verified: 300/300 tests (up from 296) on plain `cmake-build-debug` and
+  `devices-ubsan` (3 pre-existing UBSan findings unchanged, none in
+  `Microsoft::Devices`).
 - **Required work:**
-  - Verify the expected default for each of the four sensor types individually.
+  - Verify the expected default for each of the four sensor types individually. Done —
+    no per-type default exists or is architecturally possible in the real API; one
+    shared default at the base-class level is correct.
   - Decide whether one common default is acceptable, or whether per-class defaults are
-    required for compatibility.
-  - Add tests asserting whatever default is decided, per class.
+    required for compatibility. Done — one common default, confirmed correct.
+  - Add tests asserting whatever default is decided, per class. Done — 4 new tests.
 - **Acceptance criteria:**
-  - Default values are documented per sensor class, with rationale.
-  - Tests assert the chosen defaults for each of the four classes.
-  - Backend startup actually uses those defaults (ties into `SENSORBASE-001`).
+  - Default values are documented per sensor class, with rationale. Done — this closing
+    note plus the 4 new tests' doc comments.
+  - Tests assert the chosen defaults for each of the four classes. Done.
+  - Backend startup actually uses those defaults (ties into `SENSORBASE-001`). Already
+    true — `SensorBase()`'s constructor sets the default unconditionally for every
+    derived class, confirmed by `SENSORBASE-001`'s own closing work.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/Sensors/SensorBase.hpp`
-  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`
-  - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`
+  - `include/Microsoft/Devices/Sensors/SensorBase.hpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (edited)
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp`
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
 

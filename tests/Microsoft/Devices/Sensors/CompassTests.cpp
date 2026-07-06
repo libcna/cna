@@ -15,6 +15,7 @@
 #include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/TimeSpan.hpp"
 
 using Microsoft::Devices::Sensors::CalibrationEventArgs;
 using Microsoft::Devices::Sensors::Compass;
@@ -23,6 +24,7 @@ using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
 using Microsoft::Xna::Framework::Vector3;
+using System::TimeSpan;
 
 namespace
 {
@@ -80,6 +82,15 @@ TEST(CompassTests, GetIsSupportedPropertyDoesNotCrash)
 TEST(CompassTests, ConstructorSucceedsUnderInstanceLimit)
 {
     EXPECT_NO_THROW({ const Compass c; (void)c; });
+}
+
+// Task SENSORBASE-002: see AccelerometerTests.cpp's identical test for the
+// full rationale (MonoGame cross-check confirms the real WP7 SensorBase<T>'s
+// single shared 2ms default, not a per-sensor-class override).
+TEST(CompassTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
+{
+    const Compass c;
+    EXPECT_EQ(c.getTimeBetweenUpdatesProperty(), TimeSpan::FromMilliseconds(2.0));
 }
 
 TEST(CompassTests, GetStatePropertyReturnsNotSupported)

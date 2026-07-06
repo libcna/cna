@@ -99,6 +99,19 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
+**2026-07-06 — `SENSORBASE-002` closed: default `TimeBetweenUpdates` confirmed
+correct, no code change.** The archived MSDN pages document no default value for
+`SensorBase(TSensorReading).TimeBetweenUpdates` at all. Cross-checked against
+MonoGame's own `SensorBase()` constructor (Medium confidence, same tier already used
+for `SensorState`): sets `TimeSpan.FromMilliseconds(2)` at exactly the shared
+base-class level — architecturally identical to CNA's choice, confirming a single
+2ms default for all four sensor types is correct (the real API has no per-subclass
+override point for this property at all). Added one
+`DefaultTimeBetweenUpdatesIsTwoMilliseconds` test per concrete class
+(`Accelerometer`/`Gyroscope`/`Compass`/`Motion`), not just the existing generic
+`SensorBase<T>`-level one. Verified: 300/300 tests (up from 296) on plain
+`cmake-build-debug` and `devices-ubsan`.
+
 **2026-07-06 — `DEV-BUILD-001` closed: verified an actually fresh clone, found and
 fixed two real bootstrap gaps.** Every prior verification pass had only ever run in an
 environment with everything already provisioned — this pass did a genuine fresh `git

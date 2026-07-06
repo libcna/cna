@@ -18,6 +18,7 @@
 #include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/TimeSpan.hpp"
 
 using Microsoft::Devices::Sensors::AttitudeReading;
 using Microsoft::Devices::Sensors::CalibrationEventArgs;
@@ -29,6 +30,7 @@ using Microsoft::Devices::Sensors::SensorState;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector3;
+using System::TimeSpan;
 
 namespace
 {
@@ -84,6 +86,15 @@ TEST(MotionTests, GetIsSupportedPropertyIsFalse)
 TEST(MotionTests, ConstructorSucceedsUnderInstanceLimit)
 {
     EXPECT_NO_THROW({ const Motion m; (void)m; });
+}
+
+// Task SENSORBASE-002: see AccelerometerTests.cpp's identical test for the
+// full rationale (MonoGame cross-check confirms the real WP7 SensorBase<T>'s
+// single shared 2ms default, not a per-sensor-class override).
+TEST(MotionTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
+{
+    const Motion m;
+    EXPECT_EQ(m.getTimeBetweenUpdatesProperty(), TimeSpan::FromMilliseconds(2.0));
 }
 
 TEST(MotionTests, GetStatePropertyReturnsNotSupported)

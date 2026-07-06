@@ -18,6 +18,7 @@
 #include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/TimeSpan.hpp"
 
 using Microsoft::Devices::Sensors::Gyroscope;
 using Microsoft::Devices::Sensors::GyroscopeReading;
@@ -25,6 +26,7 @@ using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
 using Microsoft::Xna::Framework::Vector3;
+using System::TimeSpan;
 
 // NOTE: Unlike Compass, the Gyroscope sensor can genuinely be supported on
 // platforms/devices that expose SDL_SENSOR_GYRO. These tests branch on the
@@ -70,6 +72,15 @@ TEST(GyroscopeTests, RepeatedSupportProbingDoesNotChangeSubsequentBehavior)
 TEST(GyroscopeTests, ConstructorSucceedsUnderInstanceLimit)
 {
     EXPECT_NO_THROW({ const Gyroscope g; (void)g; });
+}
+
+// Task SENSORBASE-002: see AccelerometerTests.cpp's identical test for the
+// full rationale (MonoGame cross-check confirms the real WP7 SensorBase<T>'s
+// single shared 2ms default, not a per-sensor-class override).
+TEST(GyroscopeTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
+{
+    const Gyroscope g;
+    EXPECT_EQ(g.getTimeBetweenUpdatesProperty(), TimeSpan::FromMilliseconds(2.0));
 }
 
 TEST(GyroscopeTests, GetStatePropertyReflectsSupportStatus)

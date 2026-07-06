@@ -20,6 +20,7 @@
 #include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/TimeSpan.hpp"
 
 using Microsoft::Devices::Sensors::Accelerometer;
 using Microsoft::Devices::Sensors::AccelerometerFailedException;
@@ -29,6 +30,7 @@ using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
 using Microsoft::Xna::Framework::Vector3;
+using System::TimeSpan;
 
 // NOTE: Unlike Compass/Motion, the Accelerometer sensor can genuinely be
 // supported on platforms/devices that expose SDL_SENSOR_ACCEL. These tests
@@ -80,6 +82,21 @@ TEST(AccelerometerTests, RepeatedSupportProbingDoesNotChangeSubsequentBehavior)
 TEST(AccelerometerTests, ConstructorSucceedsUnderInstanceLimit)
 {
     EXPECT_NO_THROW({ const Accelerometer a; (void)a; });
+}
+
+// Task SENSORBASE-002: confirmed via a MonoGame source cross-check (Medium
+// confidence, no direct MSDN Remarks stating a default -- see
+// plan_devices.md's SENSORBASE-002 closing note) that the real WP7
+// SensorBase<T>'s single shared 2ms default (not a per-sensor-class
+// override) is architecturally correct: MonoGame's own SensorBase()
+// constructor sets exactly `TimeSpan.FromMilliseconds(2)` at the shared base
+// class level, matching CNA's identical choice. Asserted here at the
+// concrete Accelerometer level specifically, not just the generic
+// SensorBase<T> level SensorBaseTests.cpp already covers.
+TEST(AccelerometerTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
+{
+    const Accelerometer a;
+    EXPECT_EQ(a.getTimeBetweenUpdatesProperty(), TimeSpan::FromMilliseconds(2.0));
 }
 
 TEST(AccelerometerTests, GetStatePropertyReflectsSupportStatus)
