@@ -77,12 +77,17 @@ stated as unverified rather than assumed.
   `ALooper` wrapper, no JNI). On every other platform both classes keep the same
   permanent stub behavior they always had (`getIsSupportedProperty()` false,
   `Start()` throws). Neither has an iOS backend.
-- **Verified, concrete `getStateProperty()` inconsistency:** `Accelerometer`'s
-  `getStateProperty()` (`include/Microsoft/Devices/Sensors/Accelerometer.hpp`, around
-  line 184) is declared **without** a `NOXNA` marker, while `Gyroscope`'s (line 162),
-  `Compass`'s (line 73), and `Motion`'s (line 77) are all declared **with** `NOXNA`. This
-  is a real, confirmed drift between four sibling classes, not a hypothetical concern —
-  see `DEV-API-003`.
+- **`getStateProperty()`'s `NOXNA` split across the four sensor classes is intentional,
+  not drift — re-confirmed 2026-07-06 (`DEV-API-003`).** `Accelerometer::getStateProperty()`
+  has no `NOXNA` marker while `Gyroscope`/`Compass`/`Motion`'s equivalents all do; this
+  plan's Section 1 draft (written before that re-check) flagged the shape difference as
+  unexplained drift, but a prior pass (`plan_devices_phase2.md` Task P2-17, 2026-07-02)
+  had already resolved the underlying question against archived MSDN "previous-versions"
+  pages: `Accelerometer.State` is real WP7 API (MSDN `ff707930`, cited in `AUDIT.md`'s
+  `Accelerometer` row and `docs/devices-api-coverage.md`), while `Gyroscope.State`
+  (`hh239201`), `Compass.State` (`hh220912`), and `Motion.State` (`hh239189`) do not exist
+  on the real classes — so their `getStateProperty()` is correctly a CNA symmetry
+  extension. No code change needed; see `DEV-API-003`'s closing note.
 - **Verified: `TimeBetweenUpdates` is not enforced by the SDL backends at all.**
   `src/Microsoft/Devices/Sensors/Accelerometer.cpp` and
   `src/Microsoft/Devices/Sensors/Gyroscope.cpp` contain **zero** references to
@@ -307,26 +312,34 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
   - `tests/Microsoft/Devices/`
   - `tests/Microsoft/Devices/Sensors/`
 
-### DEV-API-003 — Standardize `State`/`getStateProperty()` exposure
+### DEV-API-003 — Standardize `State`/`getStateProperty()` exposure — CLOSED, no code change (2026-07-06)
 
 - **Priority:** High
 - **Area:** API Compatibility
-- **Problem:** Confirmed inconsistency (Section 1): `Accelerometer::getStateProperty()`
-  has no `NOXNA` marker; `Gyroscope::getStateProperty()`, `Compass::getStateProperty()`,
-  and `Motion::getStateProperty()` all do.
-- **Required work:**
-  - Verify whether `SensorState`/`State` is true XNA/WP7 public API or a CNA-only
-    extension, from an authoritative reference (not from what this codebase currently
-    happens to do).
-  - Make all four sensor classes consistent with that finding — either all `NOXNA` or
-    all strict XNA.
-  - Add or update tests asserting the chosen policy so a future regression is caught.
-- **Acceptance criteria:**
-  - All four sensor classes expose `getStateProperty()` with the same `NOXNA` status.
-  - If `State` is not real XNA/WP7 API, it is marked `NOXNA` in all four headers
-    (currently only three of four are).
-  - Docs (`DEV-API-001`'s matrix) and tests match the implementation exactly.
-- **Suggested files to inspect or edit:**
+- **Problem as originally stated:** apparent inconsistency (Section 1 draft):
+  `Accelerometer::getStateProperty()` has no `NOXNA` marker; `Gyroscope::getStateProperty()`,
+  `Compass::getStateProperty()`, and `Motion::getStateProperty()` all do.
+- **Resolution (2026-07-06):** not a bug. This exact question was already investigated
+  and answered by an earlier pass, `plan_devices_phase2.md` Task P2-17 (2026-07-02),
+  against archived MSDN "previous-versions" pages (cited in `AUDIT.md`'s per-class rows
+  and `docs/devices-api-coverage.md`):
+  - `Accelerometer.State` is real WP7 API — confirmed against MSDN `ff707930`. Its
+    `getStateProperty()` correctly has **no** `NOXNA` marker.
+  - `Gyroscope.State` (`hh239201`), `Compass.State` (`hh220912`), and `Motion.State`
+    (`hh239189`) do **not** exist on the real classes. Their `getStateProperty()` is a
+    CNA-added symmetry extension, correctly marked `NOXNA`.
+  - The four classes are therefore already consistent with the authoritative reference —
+    "all `NOXNA` or all strict XNA" (this task's original acceptance criterion) was the
+    wrong bar; the real API itself is asymmetric across these four sibling classes.
+  - `getStateProperty()`'s actual runtime behavior (the `SensorState` values it returns)
+    already has test coverage in `AccelerometerTests.cpp`/`GyroscopeTests.cpp`/etc. —
+    `NOXNA` itself is a compile-time-only empty marker macro (`CNAHelper.hpp`), so there
+    is no additional runtime test to add for the marking policy; it is enforced by
+    code/doc review, not `ctest`.
+  - No header or source change made. `docs/devices-api-coverage.md` and `AUDIT.md`
+    already reflect this; this closing note exists so a future pass doesn't re-open the
+    same already-answered question.
+- **Suggested files inspected (no changes needed):**
   - `include/Microsoft/Devices/Sensors/Accelerometer.hpp`
   - `include/Microsoft/Devices/Sensors/Gyroscope.hpp`
   - `include/Microsoft/Devices/Sensors/Compass.hpp`

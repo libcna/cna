@@ -85,12 +85,20 @@ verify anything in this scope, in any session.
 
 ## 3. Recent changes
 
-**2026-07-05 — `plan_devices.md` rewritten from scratch (most recent change, not yet
-acted on).** Replaces every prior plan generation with 70 new tasks across 16 sections,
-grounded in a fresh code inspection rather than old plan claims. Concrete findings from
-that inspection, not yet fixed:
-- `Accelerometer::getStateProperty()` is missing its `NOXNA` marker, while the
-  equivalent `Gyroscope`/`Compass`/`Motion` methods all have it (`DEV-API-003`).
+**2026-07-06 — `DEV-API-003` investigated and closed, no code change.** The
+`getStateProperty()` `NOXNA` split (`Accelerometer` unmarked, `Gyroscope`/`Compass`/
+`Motion` all marked) was re-checked against the archived MSDN citations already recorded
+in `AUDIT.md`/`docs/devices-api-coverage.md` (`plan_devices_phase2.md` Task P2-17,
+2026-07-02): `Accelerometer.State` is real WP7 API (`ff707930`); `Gyroscope.State`
+(`hh239201`), `Compass.State` (`hh220912`), `Motion.State` (`hh239189`) are not real on
+those three classes. The current code already matches the authoritative reference —
+this was a stale re-flagging in the fresh plan's Section 1, not an actual bug. See
+`plan_devices.md`'s `DEV-API-003` closing note. Devices-only `ctest` filter re-run
+clean (280/280 + 2 expected hardware skips) as a sanity check; no header/source edited.
+
+**2026-07-05 — `plan_devices.md` rewritten from scratch.** Replaces every prior plan
+generation with 70 new tasks across 16 sections, grounded in a fresh code inspection
+rather than old plan claims. Concrete findings from that inspection, not yet fixed:
 - `Accelerometer.cpp`/`Gyroscope.cpp` never read `getTimeBetweenUpdatesProperty()` —
   the SDL backends ignore the requested update interval entirely (`SENSORBASE-001`,
   `ACCEL-005`, `GYRO-004`, `SDL-SENSOR-002`).
@@ -161,9 +169,11 @@ prior plan generations, not repeated here):
 
 ## 5. Known bugs and limitations
 
-- **Confirmed bug/inconsistency (queued in new plan, `DEV-API-003`):**
-  `Accelerometer::getStateProperty()` lacks a `NOXNA` marker that
-  `Gyroscope`/`Compass`/`Motion`'s equivalent methods all have.
+- **Not a bug, closed 2026-07-06 (`DEV-API-003`):** `Accelerometer::getStateProperty()`
+  correctly lacks a `NOXNA` marker (real WP7 API, MSDN `ff707930`) while
+  `Gyroscope`/`Compass`/`Motion`'s equivalents correctly have it (no real `State` on
+  those three, MSDN `hh239201`/`hh220912`/`hh239189`) — the four classes were already
+  consistent with the authoritative reference; no code change made.
 - **Confirmed gap (queued, `SENSORBASE-001`/`ACCEL-005`/`GYRO-004`):**
   `TimeBetweenUpdates` has no effect on `Accelerometer`/`Gyroscope`'s actual event
   rate; Android-backed sensors only apply it once, at `Start()` time, not while
@@ -314,20 +324,15 @@ These are pulled directly from the newly-rewritten `plan_devices.md` — read th
 for full context on each. Ordered smallest/cheapest first, not strictly by the plan's
 own priority labels.
 
-1. **Fix the `getStateProperty()` `NOXNA` inconsistency** (plan task `DEV-API-003`).
-   Goal: decide whether `State`/`SensorState` is real XNA/WP7 API or a CNA extension,
-   then make `Accelerometer::getStateProperty()`'s `NOXNA` marking match
-   `Gyroscope`/`Compass`/`Motion` (or vice versa). Files:
-   `include/Microsoft/Devices/Sensors/Accelerometer.hpp` (and the other three headers,
-   if the decision goes the other way). Verify with:
-   `ctest -R "Accelerometer|Gyroscope|Compass|Motion"` after the change, plus a quick
-   grep confirming all four headers now agree.
-2. **Write the exact Devices-only verification command doc** (plan task
+`DEV-API-003` (the `getStateProperty()` `NOXNA` question) is now closed — see Section 3.
+Next smallest remaining tasks:
+
+1. **Write the exact Devices-only verification command doc** (plan task
    `DEV-BUILD-002`). Goal: confirm the filter in Section 7 above still matches every
    current test suite under `tests/Microsoft/Devices/` (none silently dropped), and
    record normal/ASan/TSan/UBSan variants in `docs/devices-build.md`. Files:
    `docs/devices-build.md`. Verify by actually running each documented command once.
-3. **Apply `TimeBetweenUpdates` to the SDL-backed sensors** (plan tasks
+2. **Apply `TimeBetweenUpdates` to the SDL-backed sensors** (plan tasks
    `SENSORBASE-001`, `ACCEL-005`, `GYRO-004`, `SDL-SENSOR-002`). Goal: make
    `Accelerometer`/`Gyroscope` actually throttle their event rate to the requested
    interval — currently a confirmed no-op. Files:
@@ -336,11 +341,11 @@ own priority labels.
    `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`. Verify with a new
    fake-clock/fake-backend test proving throttling, plus
    `ctest -R "Accelerometer|Gyroscope"`.
-4. **Start the public API matrix** (plan task `DEV-API-001`). Goal: one table row per
+3. **Start the public API matrix** (plan task `DEV-API-001`). Goal: one table row per
    public class/method/property/event/exception in scope, marked strict-XNA/WP7-legacy/
    `NOXNA`/internal-only. Files: `docs/devices-api-coverage.md` (extend/verify, don't
    duplicate). Verify by cross-checking a sample of rows against the actual headers.
-5. **Investigate the `cna_demo_devices` Android `SDL3/SDL_main.h` build gap**
+4. **Investigate the `cna_demo_devices` Android `SDL3/SDL_main.h` build gap**
    (Section 4 above; not yet a plan task — scope it as one first). Goal: find why this
    specific target's Android include paths lack an Android-arch SDL3 header set the
    `CNA` library target itself doesn't need. Files: whichever `CMakeLists.txt` defines
