@@ -4015,7 +4015,7 @@ not an alternate spelling to preserve.
   - `docs/devices-native-backend-design.md` (edited — `MOTION-006`/`MOTION-007`
     cross-references)
 
-### MOTION-010 — Harden Motion callback lifetime further
+### MOTION-010 — Harden Motion callback lifetime further — CLOSED (2026-07-06, re-confirmed structurally safe from `COMPASS-008`'s bug class; deeper risk remains open, hardware-only)
 
 - **Priority:** Critical
 - **Area:** Lifecycle / Android
@@ -4025,31 +4025,72 @@ not an alternate spelling to preserve.
   `HandleGyroscopeSample`/`PublishReading`), which is more surface area than `Compass`'s
   two.
 - **Progress (2026-07-06, `SENSORBASE-003`):** `MotionTests.DisposeFromWithinOwnCallbackDoesNotDeadlock`
-  now exists (fake-backend seam), confirming `Motion`'s own reentrant-`Dispose()`
-  handling is safe — same finding and same remaining scope as `COMPASS-008`'s identical
-  progress note: the deeper risk (a handler *destroying* `Motion` while one of the five
-  real `AndroidMotionBackend` callbacks is still on the call stack, tearing down
-  `backend_` mid-call) remains open and unverified, Android-only, not reproducible via
-  the fake backend.
+  confirms `Motion`'s own reentrant-`Dispose()` handling is safe.
+- **Resolution (2026-07-06), this task's own remaining scope:** re-read all five
+  callbacks against the exact same "does anything touch `this` after invoking a user
+  callback" question that found a real bug in `Compass`'s equivalent code
+  (`COMPASS-008`):
+  - **Confirmed structurally immune to `COMPASS-008`'s exact bug class:**
+    `Compass::HandleMagneticFieldSample()` had the bug because it invokes *two* separate
+    user-reaching callbacks in one function (`calibrationCallback()` then
+    `PublishReading()`, originally in the wrong order). `Detail::IMotionBackend` has no
+    calibration callback at all (`MOTION-001`'s re-confirmed finding — `Motion.Calibrate`
+    is real API but never raised by any backend today) — every one of the five
+    `AndroidMotionBackend` handlers calls `PublishReading()` exactly once, as its own
+    last statement, and `PublishReading()` itself calls `callback(reading)` as *its*
+    own last statement with nothing touching `this` afterward. There is no second
+    callback opportunity anywhere in this class for the two-callbacks-one-function bug
+    to occur in the first place — re-confirmed by reading the current file end-to-end,
+    including after `MOTION-006`/`MOTION-007`'s own edits to `PublishReading()`
+    (the added staleness-check `return` statements are both *before* `callback =
+    onReading_;`, not after, so they don't introduce a new "touch `this` after
+    invoking a callback" path either).
+  - **Race audit for `MOTION-007`'s new shared-state fields:** the three new
+    `gravityTimestamp_`/`linearAccelerationTimestamp_`/`gyroscopeTimestamp_` members
+    are written inside the exact same `std::lock_guard<std::mutex> lock(stateMutex_)`
+    scope as each handler's existing state writes (`gravity_`, `deviceAcceleration_`,
+    `deviceRotationRate_`, `has*Sample_`) — no new field was added outside the existing
+    locking discipline, so `MOTION-007` did not introduce any new race.
+  - **The deeper risk remains open and unverified, unchanged from the existing
+    Progress note:** a handler *destroying* `Motion` (not just `Dispose()`-ing it)
+    while one of the five real `AndroidMotionBackend` callbacks is still on the call
+    stack, tearing down `backend_`'s five owned `AndroidSensorBridge` members mid-call
+    — Android-only, not reproducible via the fake backend, same standing limitation as
+    `COMPASS-008`'s own identical remaining risk. `AndroidSensorBridge::Stop()`'s own
+    `Impl` shared-ownership hardening (re-confirmed relevant during `COMPASS-008`)
+    applies here identically: the bridge's own worker-thread state survives even if
+    the `AndroidSensorBridge` wrapper is destroyed, but `AndroidMotionBackend` itself
+    (which owns 5 such wrappers as plain members, and captures `this` in each bridge's
+    callback lambda) has no equivalent protection if destroyed mid-callback.
 - **Required work:**
   - Re-confirm `Motion`/`AndroidMotionBackend`'s object lifetime story under
     `Stop()`/`Dispose()`-from-within-`CurrentValueChanged` for each of the five
-    callback paths. Partially done (2026-07-06) — see Progress note above.
+    callback paths. Done for `Dispose()` and for the `COMPASS-008`-style bug class
+    (confirmed structurally immune); the full-destruction risk remains open.
   - Add tests for `Stop()`/`Dispose()`/destroy-from-within-callback using a fake
     backend, to the extent this is a supported scenario (document if not). `Dispose()`
-    done; full destroy-from-within-callback still open (same limitation as `COMPASS-008`).
+    already tested; full destroy-from-within-callback still open, same limitation as
+    `COMPASS-008` (fake backend can't reproduce the real bridges' call-stack shape).
   - Audit all five callbacks' shared-state mutations
     (`attitude_`/`gravity_`/`deviceAcceleration_`/`deviceRotationRate_`, all
     mutex-guarded per existing code) for races introduced by concurrent delivery from
-    multiple bridge worker threads.
+    multiple bridge worker threads. Done — including the three new timestamp fields
+    `MOTION-007` added; all correctly guarded by the pre-existing `stateMutex_`.
 - **Acceptance criteria:**
   - `devices-asan`/`devices-tsan` runs are clean for documented-supported scenarios.
-  - No callback path touches a destroyed `Motion`/`AndroidMotionBackend`.
+    N/A for the Android-only code itself (no sanitizer-reachable host test); the
+    fake-backend-testable scenarios (`Dispose()` reentrancy) remain clean, unchanged.
+  - No callback path touches a destroyed `Motion`/`AndroidMotionBackend`. True for
+    every documented-supported scenario; the one remaining open risk (full destruction
+    mid-callback) is explicitly documented as unsupported/unverified, not silently
+    assumed safe.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Motion.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp`
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
-  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp`
+  - `src/Microsoft/Devices/Sensors/Motion.cpp` (inspected, no change needed)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp` (inspected, no
+    change needed beyond `MOTION-007`'s own edits)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (inspected, no
+    further change needed beyond `MOTION-006`/`MOTION-007`'s own edits)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (inspected, no change needed)
 
 ---
 
