@@ -1100,7 +1100,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
 
 ## Phase 6 — Net: Further Investigation
 
-- [ ] **Task 6.1** — Investigate and fix `activeAction_` getting permanently stuck if the
+- [x] **Task 6.1** — Investigate and fix `activeAction_` getting permanently stuck if the
   `NetworkSession` constructor throws mid-`EndCreate`/`EndJoin`/`EndJoinInvited`. Confirmed:
   `activeAction_` is only cleared *after* successful construction — a throw (e.g. from an empty
   global-`SignedInGamers` list access) leaves every subsequent `Begin*` call throwing
@@ -1109,6 +1109,28 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   own tests rather than fixing the underlying issue. Decide the correct fix (clear `activeAction_`
   in a `catch`/RAII guard around the constructor call) and add a test proving a failed
   `Create()`/`Join()` doesn't permanently brick subsequent calls.
+
+  On inspection, only `EndCreate` actually has this bug — it constructs the new `NetworkSession`
+  (which can throw via `host_ = localGamers_[0]` when the maxLocalGamers-only overload falls back
+  to an empty global `Gamer::SignedInGamers`) **before** clearing `activeAction_`. `EndJoin` and
+  `EndJoinInvited` already clear `activeAction_` *before* their own `new NetworkSession(...)` call
+  (a different code shape, likely written after `EndCreate`), so a throwing constructor there
+  never left `activeAction_` stuck — confirmed by reading both functions; no change needed for
+  either. `EndFind` never constructs a `NetworkSession` at all and was never at risk.
+
+  Fixed `EndCreate` by wrapping the constructor call in a `try`/`catch(...)` that deletes
+  `activeAction_` and sets it to `nullptr` before rethrowing — the same cleanup the pre-existing
+  success path already performed, just also reachable on the throwing path. Added
+  `NetworkSessionTest.FailedCreateDoesNotPermanentlyStrandActiveAction`: exercises the real
+  empty-global-`SignedInGamers` throw directly (rather than routing around it, as documented in
+  the updated NOTE comment above the test), then proves recovery — a fresh `BeginCreate`/
+  `EndCreate` cycle (using the RAII global-swap technique for a real, non-empty local-gamer list)
+  must succeed afterward instead of throwing `InvalidOperationException`.
+
+  Revert-verify-restore: reverting `EndCreate`'s fix (keeping the new test) reproduced the bug
+  exactly as diagnosed — the recovery `BeginCreate` call threw `InvalidOperationException`
+  ("Operation is not valid due to the current state of the object."). Restored the fix; full
+  suite: **3300/3302 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 6.2** — Audit and fix (or explicitly accept and document) the pointer-identity gamer
   matching in `LocalNetworkGamer.cpp` (`gamer == packet.Gamer`, ~lines 51-52) — a faithfully-preserved

@@ -685,17 +685,35 @@ namespace Microsoft::Xna::Framework::Net
             throw System::ArgumentException("result");
         }
 
-        // FNA hardcodes 69 here instead of forwarding the caller's original maxGamers argument
-        // (which BeginCreate never even stored) — preserved as-is.
-        activeSession_ = new NetworkSession(
-            activeAction_->SessionProperties,
-            activeAction_->SessionType,
-            69,
-            activeAction_->MaxPrivateSlots,
-            activeAction_->MaxLocalGamers,
-            activeAction_->LocalGamers,
-            true // EndCreate: this machine is hosting (see DEFERRED.md item #20)
-        );
+        // Task 6.1: the constructor call below can throw (e.g. the maxLocalGamers-only overload
+        // falls back to an empty global Gamer::SignedInGamers list, making `host_ =
+        // localGamers_[0]` throw) - previously activeAction_ was only cleared *after* this call
+        // succeeded, so a throw here left it permanently non-null, bricking every subsequent
+        // Begin* call for the rest of the process with InvalidOperationException. Clear it in a
+        // catch before rethrowing, same as the already-safe success path below.
+        NetworkSession* created;
+        try
+        {
+            // FNA hardcodes 69 here instead of forwarding the caller's original maxGamers argument
+            // (which BeginCreate never even stored) — preserved as-is.
+            created = new NetworkSession(
+                activeAction_->SessionProperties,
+                activeAction_->SessionType,
+                69,
+                activeAction_->MaxPrivateSlots,
+                activeAction_->MaxLocalGamers,
+                activeAction_->LocalGamers,
+                true // EndCreate: this machine is hosting (see DEFERRED.md item #20)
+            );
+        }
+        catch (...)
+        {
+            delete activeAction_;
+            activeAction_ = nullptr;
+            throw;
+        }
+
+        activeSession_ = created;
 
         // Task 3.2: every End* used to just drop activeAction_ (a bare `= nullptr;`) with no prior
         // delete - `new NetworkSessionAction(...)` in every Begin* permanently leaked one object

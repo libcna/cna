@@ -313,12 +313,48 @@ TEST(NetworkSessionTest, JoinInvitedMakesLocalGamersReportIsHostFalse) {
 // NOTE: the explicit-local-gamers Create()/JoinInvited() overloads always set maxLocalGamers_ to
 // the passed list's size (zero spare capacity — see AddLocalGamerThrowsAtMaxLimit's own comment
 // above), and the maxLocalGamers-only overload falls back to the global Gamer::SignedInGamers,
-// which defaults to empty in this test binary (unsafe to exercise directly — see the NOTE above
-// the Create/BeginCreate/EndCreate family below: an empty list makes the constructor's
-// `host_ = localGamers_[0]` throw, corrupting activeAction_ for the rest of the process). The next
-// test gets spare local-gamer capacity safely by temporarily installing its own one-gamer global
-// list (restored via RAII) before using the maxLocalGamers-only overload, so the constructor's
-// empty-list throw path is never reached.
+// which defaults to empty in this test binary. An empty list makes the constructor's
+// `host_ = localGamers_[0]` throw - Task 6.1 fixed EndCreate so that no longer permanently
+// corrupts activeAction_ (see FailedCreateDoesNotPermanentlyStrandActiveAction just below, which
+// now exercises this throw directly instead of avoiding it). Every other test in this file still
+// gets spare local-gamer capacity safely by temporarily installing its own one-gamer global list
+// (restored via RAII) before using the maxLocalGamers-only overload, simply because that's the
+// realistic, working way to use this overload - not because the empty-list path is unsafe to
+// exercise anymore.
+
+// Task 6.1: EndCreate used to construct the new NetworkSession *before* clearing activeAction_ -
+// a throwing constructor (confirmed reachable via the empty-global-SignedInGamers path documented
+// above) left activeAction_ permanently non-null, bricking every subsequent Begin* call for the
+// rest of the process with InvalidOperationException. Fixed: EndCreate now clears activeAction_ in
+// a catch block before rethrowing, exactly like the pre-existing success path already did.
+TEST(NetworkSessionTest, FailedCreateDoesNotPermanentlyStrandActiveAction) {
+    System::IAsyncResult* result = NetworkSession::BeginCreate(
+        NetworkSessionType::Local, 1, 8, System::AsyncCallback{}, std::any{}
+    );
+
+    EXPECT_THROW(NetworkSession::EndCreate(result), std::exception);
+
+    // The real proof: activeAction_ must not still be stuck - a fresh Begin*/End* cycle (using a
+    // real, non-empty local-gamer list via the same RAII global-swap technique used throughout
+    // this file) must succeed, rather than throwing InvalidOperationException("session already
+    // being created").
+    SignedInGamer gamer = MakeSignedInGamer();
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&gamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    System::IAsyncResult* recovery = NetworkSession::BeginCreate(
+        NetworkSessionType::Local, 1, 8, System::AsyncCallback{}, std::any{}
+    );
+    NetworkSession* session = NetworkSession::EndCreate(recovery);
+    ASSERT_NE(session, nullptr);
+    session->Dispose();
+}
 
 // Task 2.3: AddLocalGamer only did localGamers_.Add(adding); allGamers_.Add(adding); with no event
 // enqueue at all — unlike AddRemoteGamer just below, which explicitly enqueues a GamerJoin event.
