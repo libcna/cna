@@ -12,7 +12,11 @@
 - [x] **N-001 `CNA::Input::Clipboard`** — text Get/Set/Has (`SDL_GetClipboardText`/`SetClipboardText`/`HasClipboardText`).
 - [ ] **N-002 `Keyboard` name helpers EXT** — `GetKeyNameEXT`/`GetScancodeNameEXT`/`GetKeyFromNameEXT`/`GetScancodeFromNameEXT`.
 - [ ] **N-003 `Keyboard::GetModStateEXT` + `KeyModifiersEXT`** — modifier flags (Shift/Ctrl/Alt/Gui + Caps/Num/Scroll lock).
-- [ ] **N-004 `Mouse` cursor visibility EXT** — `SetCursorVisibleEXT`/`getIsCursorVisibleEXT`.
+- [!] **N-004 `Mouse` cursor visibility EXT** — **SKIPPED (superseded, would conflict).** CNA `Game::IsMouseVisible`
+  (`Game.hpp:128`) already owns cursor visibility and calls `SDL_ShowCursor()`/`SDL_HideCursor()` with its own
+  cached `IsMouseVisible_`. A `Mouse::SetCursorVisibleEXT` would be a second path to the same global SDL state
+  and desync Game's cache. `Game.IsMouseVisible` is the XNA-idiomatic API — do not duplicate. (Engineering
+  decision, not an owner question.)
 - [ ] **N-005 Mouse horizontal scroll wheel EXT** — surface SDL `wheel.x` (currently dropped, DEC-18).
 - [ ] **N-006 `TouchLocation::getPressureEXT`** — expose SDL finger pressure (XNA dropped Pressure).
 
