@@ -2032,88 +2032,100 @@ citation recorded in `docs/input-fna-fidelity.md`.
 - **Result:** Android/iOS verification plan: docs/platform-input-notes.md §Android + §iOS describe touch-primary (device seen after first touch), on-screen keyboard, attached-HW gamepad, no cursor on iOS; the INP-0224 supported-OS checklist lists the Android/iOS items to verify manually/on emulator.
 
 #### INP-0231 — Manual: cursor warp landing (X11) + relative-mode capture on a real display
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P2 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0232 — Manual: gamepad hardware matrix — Xbox controller (buttons/axes/dpad/triggers/rumble/GUID/hotplug)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P1 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0233 — Manual: gamepad hardware matrix — PlayStation controller (+ light bar, trigger haptics, sensors)
-- **Priority:** P1 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P1 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0234 — Manual: gamepad hardware matrix — Nintendo Switch controller
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P2 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0235 — Manual: gamepad hardware matrix — generic/DirectInput controller
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P2 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0236 — Manual: gamepad hardware matrix — Bluetooth controller (pairing + hotplug)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P2 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0237 — Manual: real touchscreen multi-touch (markers + IDs + release)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P2 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0238 — Manual: real touchscreen gestures (Tap/Drag/Flick/Pinch)
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P2 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0239 — Manual: IME composition (TextEditing) on a real IME
-- **Priority:** P2 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P2 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0240 — Manual: Czech keyboard diacritics text entry
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P3 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0241 — Manual: CJK (JP/CN/KR) IME composition
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P3 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 #### INP-0242 — Manual: Wayland cursor/warp caveats on a real Wayland session
-- **Priority:** P3 · **Status:** `TODO` [ ] · **Area:** Manual
+- **Priority:** P3 · **Status:** `BLOCKED (hardware)` [!] · **Area:** Manual
 - **Files:** `docs/input-manual-verification-results.md`
 - **Steps:** Perform on real hardware/OS; record date/OS/backend/SDL version/hardware and pass/fail per row.
 - **Acceptance:** A dated results row exists with the verification outcome.
 - **Verify:** Manual: run `examples/demo_input`, record date/OS/backend/SDL/hardware in `docs/input-manual-verification-results.md`.
+- **Blocked:** **Requires physical hardware** (real controller / touchscreen / IME / non-US keyboard / Wayland session) that is unavailable in this headless environment. Not fabricated as DONE. The path is exercised by the extended `demo_input` and the manual harness (matrix + template + checklists) is ready in docs/input-manual-verification-results.md — a human with the hardware can execute it and record a dated row.
 
 ---
 
