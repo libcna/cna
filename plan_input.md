@@ -206,10 +206,25 @@ needed; no gaps found.
 
 # Phase 2 — Keyboard types
 
-## A2-001 — `KeyboardState` (struct) `[ ]`
-- [ ] FNA `Input/KeyboardState.cs`; CNA `KeyboardState.hpp`/`.cpp`; test `KeyboardInputTests.cpp`.
-- [ ] Members: ctors, `getItem`/`operator[]`, `IsKeyDown`/`IsKeyUp`, `GetPressedKeys`, `getCountProperty`,
+## A2-001 — `KeyboardState` (struct) `[x]`
+- [x] FNA `Input/KeyboardState.cs`; CNA `KeyboardState.hpp`/`.cpp`; test `KeyboardInputTests.cpp`.
+- [x] Members: ctors, `getItem`/`operator[]`, `IsKeyDown`/`IsKeyUp`, `GetPressedKeys`,
   `Equals`/`==`/`!=`, `GetHashCode`, `ToString` (NOXNA). Per-member test + FNA behavior.
+
+**Result (2026-07-06):** **13 public members** reviewed against FNA `KeyboardState.cs`. Member map (all
+Doxygen'd): default ctor (NOXNA) → `DefaultConstructorHasNoPressedKeys`; `initializer_list<Keys>` ctor →
+`InitializerListConstructorFlagsGivenKeys`; `unordered_set<Keys>` ctor (NOXNA) →
+`UnorderedSetConstructorFlagsGivenKeys` (the two C++ ctors map FNA's `params Keys[]`); `getItem` +
+`operator[]` (both = FNA's `this[Keys]` indexer) + `IsKeyDown` → `IndexerMatchesGetItemAndIsKeyDown`;
+`GetPressedKeys` → `GetPressedKeysReturnsEmptyForDefaultState` + `...IsSortedByAscendingNumericValue`
+(FNA-faithful ascending order); `Equals`/`==`/`!=` → `EqualStatesCompareEqual` + `UnequalStatesCompareUnequal`;
+`GetHashCode` → `...IsConsistentForEqualStates` + `...OfEmptyStateIsZero` + `...MatchesFNAWordXorFormula`
+(exact FNA 8×32-bit XOR) + 3 OOB-guard tests; `ToString` (NOXNA — FNA has none, documented) →
+`ToStringMatchesFNAValueTypeDefault`. **`IsKeyUp`** was only asserted incidentally inside the indexer test —
+**added a dedicated** `IsKeyUpIsTheComplementOfIsKeyDown` (pressed→up=false, unpressed→up=true, exactly one
+of Down/Up per key; matches FNA `IsKeyUp => !IsKeyDown`). **Members reviewed:** 13/13, each with a named
+test. **Files changed:** `tests/…/KeyboardInputTests.cpp` (+1 test). **Behavior verified:** full
+member + FNA-behavior parity. **Remaining risk:** none.
 
 ## A2-002 — `Keyboard` (static class) `[ ]`
 - [ ] FNA `Input/Keyboard.cs`; CNA `Keyboard.hpp`/`.cpp`; tests `KeyboardInputTests.cpp` + bridge.

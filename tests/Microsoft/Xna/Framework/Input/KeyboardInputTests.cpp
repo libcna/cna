@@ -199,6 +199,23 @@ TEST(KeyboardStateTest, IndexerMatchesGetItemAndIsKeyDown)
     EXPECT_TRUE(state.IsKeyUp(Keys::B));
 }
 
+// A2-001: dedicated IsKeyUp coverage — it is the exact complement of IsKeyDown (FNA
+// KeyboardState.cs:125 `IsKeyUp => !IsKeyDown`). A pressed key reads Up=false / Down=true; an unpressed
+// key reads Up=true / Down=false; for every key exactly one of IsKeyDown/IsKeyUp is true.
+TEST(KeyboardStateTest, IsKeyUpIsTheComplementOfIsKeyDown)
+{
+    const KeyboardState state{Keys::A, Keys::Space};
+
+    EXPECT_FALSE(state.IsKeyUp(Keys::A));       // pressed -> not up
+    EXPECT_TRUE(state.IsKeyDown(Keys::A));
+    EXPECT_TRUE(state.IsKeyUp(Keys::B));        // unpressed -> up
+    EXPECT_FALSE(state.IsKeyDown(Keys::B));
+    for (const Keys k : {Keys::A, Keys::Space, Keys::B, Keys::Enter})
+    {
+        EXPECT_NE(state.IsKeyDown(k), state.IsKeyUp(k)) << "exactly one of Down/Up must hold";
+    }
+}
+
 // ===========================================================================
 // KeyboardState — GetPressedKeys ordering
 // ===========================================================================
