@@ -2034,16 +2034,37 @@ bugs (NEXT.md §4), and some graphics tests are EasyGL-backend-capability-depend
 **Files changed:** none (suite run + record). **Remaining risk:** the 11 Graphics failures belong to the
 Graphics track — do NOT fix here.
 
-## P12-003 — Re-run public API parity
-- [ ] Regenerate parity matrix.
-- [ ] Confirm no strict XNA members are missing.
-- [ ] Confirm all extensions are documented.
-- [ ] Record result.
+## P12-003 — Re-run public API parity `[x]`
+- [x] Regenerate parity matrix.
+- [x] Confirm no strict XNA members are missing.
+- [x] Confirm all extensions are documented.
+- [x] Record result.
 
-## P12-004 — Review all compatibility deviations
-- [ ] List every remaining strict-XNA deviation.
-- [ ] Decide whether to fix or document.
-- [ ] Do not leave accidental deviations undocumented.
+**Result (2026-07-06):** Regenerated `docs/input-member-parity-matrix.md` via
+`tools/input_parity/gen_input_parity_matrix.py`: **26 types, 0 STRICT/EXT gaps, 0 FNA-only members** — i.e.
+no strict-XNA member is missing and no FNA member is unaccounted for. The regenerated file is **byte-identical**
+to the committed one (`git diff` empty), confirming this session introduced **no public API change** (all
+work was tests + docs). All extensions are marked (EXT/NOXNA) in the matrix and documented in
+`docs/input-fna-fidelity.md` (P10-003). **Files changed:** none (matrix regenerated identically).
+**Behavior verified:** full member-level parity, no API drift. **Remaining risk:** none.
+
+## P12-004 — Review all compatibility deviations `[x]`
+- [x] List every remaining strict-XNA deviation.
+- [x] Decide whether to fix or document.
+- [x] Do not leave accidental deviations undocumented.
+
+**Result (2026-07-06):** All remaining deviations are **documented and intentional** — none accidental.
+`docs/input-fna-fidelity.md` carries **13 numbered `DEC-*` deviations** (DEC-06, 08, 09, 10, 12, 13, 14, 15,
+16, 17, 18, 19, 20) plus named non-numbered entries added this session (GetCapabilities-after-first-touch,
+zero-display startup, IME byte-offset); the parity matrix marks per-member C++ deviations; CHECKLIST.md holds
+the accepted-deviation table (GetHashCode → int/size_t, ref/out → value-ref, null-guards omitted for C++
+refs). **Decision per deviation = DOCUMENT** (each is an FNA-faithful or unavoidable-C++ choice, not a bug):
+e.g. DEC-20 touch ordering, `TouchCollection` mutable+advisory `IsReadOnly` (P5-001), event-driven
+`PacketNumber`, `MaximumTouchCount`=4-but-caps-8, keyboard `unordered_set` can store out-of-range Keys
+(P2-002), byte-offset IME `start`/`length`. The only items **not** yet closed are the hardware-gated `[!]`
+manual validations (Phase 11) — those are *unverified*, not *undocumented deviations*. **Files changed:**
+none (review + record). **Behavior verified:** no undocumented/accidental strict-XNA deviation remains.
+**Remaining risk:** none (documented deviations are deliberate).
 
 ## P12-005 — Final Input readiness statement
 - [ ] Write a final status section:
