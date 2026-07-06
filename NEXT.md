@@ -22,7 +22,7 @@ framework/runtime, not a game.
   task list) is fully closed, plus 4 further user-directed follow-ups. **Phase 10**
   (`plan_audio.md`'s "Phase 10 — Audio correctness hardening and XNA/XACT parity", ~90 task IDs
   across 12 groups) is the active, intentionally open-ended task list — **not** a fixed closed
-  set like Phase 9. 16 Phase 10 items are closed so far, across a kickoff pass and two further
+  set like Phase 9. 17 Phase 10 items are closed so far, across a kickoff pass and three further
   self-directed rounds (all 2026-07-06); every remaining candidate is either real feature/
   behavior-decision work or a large mechanical audit (see §8).
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
@@ -41,15 +41,18 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean as of commit `f4f98855` (last verified build+test run at `4c4dc272`). EasyGL
-  backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d`
-  example targets not rebuilt this pass (no Audio public API surface touched, only tests/docs).
-- **Tests:** `CnaTests` whole-suite count is **3321 / 3323 pass** (2 skipped:
+- **Build:** clean, rebuilt and reverified this pass (`P10-RPC-002`). EasyGL backend (Linux
+  default), `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets
+  not rebuilt this pass (no Audio public API surface touched beyond `Cue::Apply3D()`'s internals,
+  not its signature).
+- **Tests:** `CnaTests` whole-suite count is **3324 / 3326 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected — not Audio). The audio-scoped subset (§7's `--gtest_filter` list)
-  was **430 / 430 pass** under a dedicated one-off ASan+UBSan build, repeat-stressed on dispose/
-  fire-and-forget/callback-lifetime/stream-pause-resume risk areas — zero leaks/errors. Also clean
-  under a dedicated ThreadSanitizer build (see §5).
+  hardware-dependent, expected — not Audio; the 3-test increase is `P10-RPC-002`'s new
+  `CueTests.cpp` coverage). The audio-scoped subset (§7's `--gtest_filter` list) was previously
+  **430 / 430 pass** under a dedicated one-off ASan+UBSan build (repeat-stressed on dispose/
+  fire-and-forget/callback-lifetime/stream-pause-resume risk areas — zero leaks/errors) and clean
+  under a dedicated ThreadSanitizer build (see §5); not rerun under ASan/TSan this pass (plain
+  Debug build only), full audio-scoped filter (now 450 tests) verified green under it.
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
@@ -82,6 +85,12 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10" sections.
 
+- **`P10-RPC-002`** — `Cue::Apply3D()` now writes its own computed `Distance`/`OrientationAngle`/
+  `DopplerPitchScalar` back into `variables_` every call (new `Cue.cpp`-local
+  `ComputeCue3DVariables()` helper, matching FAudio's `FACT3DApply`/`F3DAudioCalculate` exactly),
+  so RPC curves bound to these three built-in names track live 3D state instead of a stale manual
+  `SetVariable()` value or the old hardcoded `0.0f`. Three new `CueTests.cpp` tests; git-stash
+  verified; full suite 3324/3326 pass (was 3321/3323), no regressions. See `plan_audio.md`.
 - `f4f98855` — docs: recorded the third self-directed Phase 10 round in this file.
 - `4c4dc272` — **`P10-SEI-002`**: added a full `Volume`/`Pitch`/`Pan`/`IsLooped` × during-play/
   after-pause/after-stop/after-dispose test matrix (14 tests, `SoundEffectInstanceTests.cpp`),
@@ -275,38 +284,37 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-Every pure test-addition / read-only verification-sweep candidate on the Phase 10 list is now
-closed (16 items total). Everything remaining is real feature/behavior-decision work or a large
-mechanical audit — **confirm scope with the user before starting any of these.** Roughly in
-increasing order of scope:
+`P10-RPC-002` closed this pass (17 Phase 10 items total). The remaining open Phase 10 items are
+being worked through sequentially in this same autonomous pass, per two scope decisions the user
+already confirmed on 2026-07-06: the raw-callback seek-back approach for `P10-LOOP-003/004`, and
+skip/reaffirm-only (no implementation) for `P10-PAN-002`. Roughly in increasing order of scope:
 
-1. **`P10-RPC-002`** — wire `Cue::Apply3D()`'s already-computed distance/angle/Doppler values back
-   into `variables_` so RPC curves bound to `"Distance"`/`"OrientationAngle"`/
-   `"DopplerPitchScalar"` see live values instead of whatever was last manually `SetVariable()`-d.
-   *Files:* `src/Microsoft/Xna/Framework/Audio/Cue.cpp`, `AudioEngine.cpp`.
-   *Verify:* new `CueTest` asserting an RPC-bound property tracks `Apply3D` calls; full audio
-   suite green.
-2. **`P10-LOOP-003/004`** — a custom playback-cursor or raw-callback approach so a bounded loop
-   region no longer truncates the first (pre-loop) playthrough. Two concrete approaches already
-   sketched in `plan_audio.md`, neither started.
-   *Files:* `SoundEffectInstance.{hpp,cpp}`.
-   *Verify:* a new test confirming the pre-loop region plays once before entering the loop.
-3. **`P10-FILTER-002/003/004/006`** — RPC-driven live filter frequency/Q targeting, extending the
+1. **`P10-RPC-003/004/007`** — real elapsed-play-time/elapsed-release-time tracking on `Cue`
+   (`std::chrono` timestamps at `Play()`/`StopInternal()`) so the built-in `"AttackTime"`/
+   `"ReleaseTime"` RPC variables stop being permanently unsupported; `maxRpcReleaseTime` RPC-only
+   release timing (blocked on `RPC-003`'s `"ReleaseTime"`); tests for both (blocked on
+   `RPC-003`/`RPC-004`).
+   *Files:* `Cue.{hpp,cpp}`.
+2. **`P10-FILTER-002/003/004/006`** — RPC-driven live filter frequency/Q targeting, extending the
    continuous-tick infra `P9-XACT-016` already built for volume/pitch into
-   `SoundEffectInstance`'s filter setters.
+   `SoundEffectInstance`'s filter setters; verify no click/pop from repeated coefficient writes;
+   tests.
    *Files:* `SoundEffectInstance.cpp`, `Cue.cpp`.
-   *Verify:* new `CueTest`/`SoundEffectInstanceTest` cases; full audio suite green.
+3. **`P10-LOOP-003/004`** — a per-track raw callback (`MIX_SetTrackRawCallback`, the unused
+   cooked-callback-adjacent slot) detecting crossing `loopStart+loopLength` and manually seeking
+   back to `loopStart`, so a bounded loop region plays its pre-loop intro once instead of
+   truncating it. Keeps `MIX_PlayTrack`, the filter cooked-callback, pause/resume, and
+   `MasterVolume` plumbing untouched (user-confirmed approach over the alternative full
+   `SDL_AudioStream` custom-playback rewrite).
+   *Files:* `SoundEffectInstance.{hpp,cpp}`.
 4. **`P10-AUDIT-002/003`** — the full per-member XNA 4.0 Audio API cross-reference at full
    granularity (every property/method/constructor/enum-value/exception), bucketed into
    implemented/tested/approximate/unsupported. Only a class-level table exists today
    (`docs/xna-4-api-coverage.md`).
    *Files:* `docs/xna-4-api-coverage.md`, `plan_audio.md`.
-   *Verify:* no code change; a reviewable table.
-5. **`P10-PAN-002`/RFC-1** and **`P10-HRTF-002`/RFC-2** — the two largest, most invasive items
-   (crossfeed stereo mixing layer; optional FAudio/FACT backend). Explicit design proposals only
-   so far, not started; would need their own confirm-scope round.
-   *Files:* TBD, pending design decision.
-   *Verify:* TBD, pending design decision.
+5. **`P10-PAN-002`** — user-confirmed to skip implementation and keep the documented accepted
+   deviation (`CHECKLIST.md` CP-19, RFC-1); only needs reaffirming that note is still accurate, no
+   code change.
 
 ---
 

@@ -3257,21 +3257,46 @@ restoration can be reverted.
   (3) / `RPC_PARAMETER_FILTERQFACTOR` (4): same -- parsed as targets, never applied to a track's
   live filter (see Phase 10.4). DSP-preset-targeting RPCs (`parameter >= RPC_PARAMETER_COUNT`, i.e.
   `>= 5`): unsupported outright, no DSP preset system exists (`P9-XACT-013`).
-* [ ] P10-RPC-002: Correctly document/implement unsupported built-in RPC variables.
-  *Note (real, previously-underdocumented finding from this pass):* `AttackTime`/`ReleaseTime`:
-  genuinely unsupported, no elapsed-playback/release-time tracking exists on `Cue`/
-  `PlaybackInstance` -- already documented in `CHECKLIST.md`. **`Distance`/`OrientationAngle`/
-  `DopplerPitchScalar`: only *half*-implemented, more precisely than previously documented.**
-  `Cue::IsBuiltInCueVariable()` (`Cue.cpp`) recognizes these three names as *valid* (so
-  `GetVariable`/`SetVariable` don't throw `InvalidOperationException` for them, and an RPC curve
-  *can* be bound to one), but `GetVariable()` returns a hardcoded `0.0f` for any of them that
-  hasn't been explicitly `SetVariable()`-d -- `Cue::Apply3D()` computes real distance/angle/Doppler
-  internally for its own pan/attenuation/pitch math, but never writes those computed values back
-  into `variables_`, so an RPC curve bound to `"Distance"` (for example) would only ever see
-  whatever value was last manually set via `SetVariable("Distance", ...)`, never the actual live
-  distance `Apply3D()` just computed. This is open, not fixed in this pass (real feature work,
-  touches `Apply3D()`'s and `EvaluateRpc()`'s interaction) -- recorded here rather than silently
-  left for someone to rediscover from scratch.
+* [x] P10-RPC-002: Correctly document/implement unsupported built-in RPC variables.
+  *Note:* `AttackTime`/`ReleaseTime` remain genuinely unsupported (no elapsed-playback/release-time
+  tracking exists on `Cue`/`PlaybackInstance` -- already documented in `CHECKLIST.md`, tracked as
+  `P10-RPC-003`). **`Distance`/`OrientationAngle`/`DopplerPitchScalar` fixed this pass.**
+  `Cue::Apply3D()` previously only forwarded to each active `SoundEffectInstance::Apply3D()` for
+  playback (pan/attenuation/Doppler) and never wrote its own computed distance/angle/Doppler back
+  into `variables_`, so `GetVariable("Distance")` (and the other two) only ever reflected a manual
+  `SetVariable()` call or the hardcoded `0.0f` default -- real FAudio's `FACT3DApply` (`FACT3D.c`)
+  unconditionally writes these three built-in variables from its own `F3DAudioCalculate` output
+  (`F3DAudio.c`) on every `Apply3D` call. Added a new `Cue.cpp`-local helper,
+  `ComputeCue3DVariables()`, that independently recomputes the exact same three FAudio-cited
+  quantities in XNA-space (not read back from `SoundEffectInstance::Apply3D()`, a private
+  per-instance call with no return value, whose own Doppler/attenuation are one-shot track-applied
+  values, not cue-level state):
+  - `Distance` = `EmitterToListenerDistance` (`F3DAudioCalculate`, `F3DAudio.c:1464-1466`) --
+    the same `sqrt(dx²+dy²+dz²)` CNA's own `SoundEffectInstance::Apply3D` already computes.
+  - `DopplerPitchScalar` = the raw, pre-global-`SoundEffect.DopplerScale` `DopplerFactor` ratio
+    (`F3DAudio.c:1519-1532`'s `CalculateDoppler`) -- a deliberate duplicate of
+    `SoundEffectInstance.cpp`'s `ComputeDopplerFactor` (`P9-3D-005`; pure, self-contained math, no
+    shared state, matching this file's own precedent for `CentsToPitch`/`EvaluateRpcCurve`), since
+    the per-instance version already folds in the global `DopplerScale` multiplier before
+    returning, which the raw XACT variable must not include.
+  - `OrientationAngle` = `EmitterToListenerAngle` in **degrees** (`F3DAudio.c:1534-1551`) -- `acos`
+    of the emitter-to-listener direction dotted with the emitter's own (unnormalized-as-authored,
+    matching FAudio's own unvalidated assumption) `Forward`, degenerate-distance fallback to
+    `PI/2`, no NaN guard (matching FAudio exactly -- it has none for this specific calculation).
+  Also corrected a stale adjacent comment in `Cue::Apply3D()` that still said "Doppler stays
+  unapplied" -- Doppler has been applied since `P9-3D-004/005`; the comment simply never got
+  updated.
+  *Verify:* three new `CueTests.cpp` tests
+  (`Apply3DUpdatesDistanceVariableToReflectLiveComputedDistance`,
+  `...DopplerPitchScalarVariableToReflectLiveRelativeVelocity`,
+  `...OrientationAngleVariableToReflectLiveRelativeFacing`), each calling `Apply3D()` twice with
+  different listener/emitter geometry to prove the variable tracks the *latest* call rather than a
+  one-time snapshot. The Doppler test reuses the exact geometry/expected ratios (2/3 receding, 2.0
+  approaching) from `SoundEffectInstanceTest.Apply3DAppliesDopplerPitchDown/UpWhen...`, cross-
+  checking the two independent implementations agree. `git stash`-verified: all three fail against
+  pre-fix `Cue.cpp` (reading back the stale `0.0f` default), pass after. Full suite: 3324/3326 pass
+  (was 3321/3323; exactly the 3 new tests, no regressions), same 2 pre-existing hardware-only
+  skips.
 * [ ] P10-RPC-003: Implement `AttackTime`/`ReleaseTime` tracking per Cue/PlaybackInstance.
   *Status:* Open. Would need real elapsed-play-time and elapsed-release-time tracking (a
   `std::chrono` timestamp captured at `Play()`/`StopInternal()` respectively), then wiring those

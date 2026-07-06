@@ -2534,6 +2534,73 @@ TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesPitch)
     cue->Stop(AudioStopOptions::Immediate);
 }
 
+// ===================== Built-in 3D cue variables (P10-RPC-002) =====================
+//
+// Cue::Apply3D() forwards to SoundEffectInstance::Apply3D() for actual playback (pan/
+// attenuation/Doppler), but previously never wrote its own computed distance/angle/Doppler back
+// into variables_, so GetVariable("Distance")/"OrientationAngle"/"DopplerPitchScalar" only ever
+// reflected a manual SetVariable() call (or the hardcoded 0.0f default) -- never Apply3D's own
+// live 3D state, unlike real FAudio's FACT3DApply (FACT3D.c), which writes these three built-in
+// variables on every Apply3D call. None of these need cue->Play() first: Apply3D() computes and
+// stores them regardless of whether any wave reference is currently active.
+
+TEST(CueTest, Apply3DUpdatesDistanceVariableToReflectLiveComputedDistance)
+{
+    auto cue = std::unique_ptr<Cue>(SharedLongBank().GetCue("LongCue"));
+
+    AudioListener listener; // default position: origin
+    AudioEmitter emitter;
+    emitter.setPositionProperty({3.0f, 4.0f, 0.0f}); // 3-4-5 triangle -> distance 5
+    cue->Apply3D(listener, emitter);
+    EXPECT_FLOAT_EQ(cue->GetVariable("Distance"), 5.0f);
+
+    emitter.setPositionProperty({6.0f, 8.0f, 0.0f}); // same ratio, distance 10
+    cue->Apply3D(listener, emitter);
+    EXPECT_FLOAT_EQ(cue->GetVariable("Distance"), 10.0f); // proves this tracks the LATEST call, not a one-time snapshot
+}
+
+// Same geometry as SoundEffectInstanceTest.Apply3DAppliesDopplerPitchDownWhenEmitterRecedes/
+// ...ApproachesL listener at origin, emitter at (10,0,0), moving along X at half the default
+// speed of sound (343.5/2 = 171.75) -- proven there to produce dopplerFactor 2/3 (receding) or
+// 2.0 (approaching). Reused here to cross-check GetVariable("DopplerPitchScalar") reports the
+// exact same raw FACT3DApply-equivalent ratio SoundEffectInstance::Apply3D applies to the track.
+TEST(CueTest, Apply3DUpdatesDopplerPitchScalarVariableToReflectLiveRelativeVelocity)
+{
+    auto cue = std::unique_ptr<Cue>(SharedLongBank().GetCue("LongCue"));
+
+    AudioListener listener; // default position/velocity: origin, stationary
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+
+    emitter.setVelocityProperty({171.75f, 0.0f, 0.0f}); // moving away from the listener
+    cue->Apply3D(listener, emitter);
+    EXPECT_NEAR(cue->GetVariable("DopplerPitchScalar"), 2.0f / 3.0f, 1e-4f);
+
+    emitter.setVelocityProperty({-171.75f, 0.0f, 0.0f}); // moving toward the listener
+    cue->Apply3D(listener, emitter);
+    EXPECT_NEAR(cue->GetVariable("DopplerPitchScalar"), 2.0f, 1e-4f); // proves liveness, not a snapshot
+}
+
+// FAudio's F3DAudioCalculate EMITTER_ANGLE branch: angle between the emitter-to-listener
+// direction and the emitter's own OrientFront. Default Forward is (0,0,-1) (XNA's
+// Vector3.Forward) -- an emitter positioned at +Z relative to the listener faces directly at it
+// (angle 0); positioned at -Z, it faces directly away (angle 180).
+TEST(CueTest, Apply3DUpdatesOrientationAngleVariableToReflectLiveRelativeFacing)
+{
+    auto cue = std::unique_ptr<Cue>(SharedLongBank().GetCue("LongCue"));
+
+    AudioListener listener; // default position: origin
+    AudioEmitter emitter;   // default forward: (0,0,-1)
+
+    emitter.setPositionProperty({0.0f, 0.0f, 5.0f}); // listener directly ahead of the emitter
+    cue->Apply3D(listener, emitter);
+    EXPECT_NEAR(cue->GetVariable("OrientationAngle"), 0.0f, 1e-3f);
+
+    emitter.setPositionProperty({0.0f, 0.0f, -5.0f}); // listener directly behind the emitter
+    cue->Apply3D(listener, emitter);
+    EXPECT_NEAR(cue->GetVariable("OrientationAngle"), 180.0f, 1e-3f); // proves liveness, not a snapshot
+}
+
 // P9-XACT-011: end-to-end wiring test -- "FilterCue" (BuildFilterXsbFixtureBytes) is a real
 // WaveBank-backed complex sound whose single track carries real parsed high-pass filter data
 // (type=2, frequency=8000Hz, qfactor=6 -> oneOverQ=0.5). Play() must reach all the way from

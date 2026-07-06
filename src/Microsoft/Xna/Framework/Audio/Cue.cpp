@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
@@ -13,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <numbers>
 #include <random>
 #include <utility>
 
@@ -88,6 +91,80 @@ namespace Microsoft::Xna::Framework::Audio
         bool IsBuiltInCueVariable(const std::string& name)
         {
             return name == "Distance" || name == "DopplerPitchScalar" || name == "OrientationAngle";
+        }
+
+        // P10-RPC-002: the three values FAudio's FACT3DApply (FACT3D.c) writes into a cue's
+        // built-in "Distance"/"DopplerPitchScalar"/"OrientationAngle" variables every Apply3D call,
+        // computed from F3DAudioCalculate's output (F3DAudio.c). Recomputed independently here
+        // (not read back from SoundEffectInstance::Apply3D, which is a private per-instance call
+        // with no return value, and whose own Doppler/distance-attenuation are one-shot-applied-
+        // to-the-track values, not cue-level state) using the same XNA-space vectors already
+        // exposed on AudioListener/AudioEmitter.
+        struct Cue3DVariables { float distance; float dopplerFactor; float orientationAngleDegrees; };
+
+        Cue3DVariables ComputeCue3DVariables(
+            const Microsoft::Xna::Framework::Audio::AudioListener& listener,
+            const Microsoft::Xna::Framework::Audio::AudioEmitter& emitter)
+        {
+            const auto& lp = listener.getPositionProperty();
+            const auto& ep = emitter.getPositionProperty();
+
+            const float dx = ep.X - lp.X;
+            const float dy = ep.Y - lp.Y;
+            const float dz = ep.Z - lp.Z;
+            const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+            // FAudio's "emitterToListener" vector points from the emitter toward the listener
+            // (listener.Position - emitter.Position), i.e. -(dx,dy,dz) here.
+
+            // Raw, pre-global-DopplerScale ratio -- matches SoundEffectInstance.cpp's
+            // ComputeDopplerFactor (P9-3D-005) exactly; duplicated rather than shared since it's
+            // pure, self-contained math with no shared state, following this file's existing
+            // precedent (CentsToPitch/EvaluateRpcCurve above).
+            float dopplerFactor = 1.0f;
+            const float dopplerScaler = emitter.getDopplerScaleProperty();
+            if (dopplerScaler > 0.0f)
+            {
+                float listenerVelComponent = 0.0f;
+                float emitterVelComponent  = 0.0f;
+                if (distance != 0.0f)
+                {
+                    const auto& lv = listener.getVelocityProperty();
+                    const auto& ev = emitter.getVelocityProperty();
+                    listenerVelComponent = (-dx * lv.X - dy * lv.Y - dz * lv.Z) / distance;
+                    emitterVelComponent  = (-dx * ev.X - dy * ev.Y - dz * ev.Z) / distance;
+                }
+
+                const float speedOfSound = SoundEffect::getSpeedOfSoundProperty();
+                const float scaledSpeedOfSound = speedOfSound / dopplerScaler;
+                listenerVelComponent = std::min(listenerVelComponent, scaledSpeedOfSound);
+                emitterVelComponent  = std::min(emitterVelComponent, scaledSpeedOfSound);
+
+                dopplerFactor = (speedOfSound - dopplerScaler * listenerVelComponent) /
+                                (speedOfSound - dopplerScaler * emitterVelComponent);
+                if (std::isnan(dopplerFactor)) dopplerFactor = 1.0f;
+                dopplerFactor = std::clamp(dopplerFactor, 0.5f, 4.0f);
+            }
+
+            // FAudio's F3DAudioCalculate EMITTER_ANGLE branch: angle between the emitter-to-
+            // listener direction and the emitter's own OrientFront, via acos of their normalized
+            // dot product; a degenerate (near-zero-distance) case falls back to a fixed PI/2. No
+            // NaN guard here, matching FAudio exactly (F3DAudio.c has none for this calculation).
+            float orientationAngleRadians;
+            if (distance < 1.2e-7f)
+            {
+                orientationAngleRadians = std::numbers::pi_v<float> / 2.0f;
+            }
+            else
+            {
+                const auto& forward = emitter.getForwardProperty();
+                const float dp = (-dx * forward.X - dy * forward.Y - dz * forward.Z) / distance;
+                orientationAngleRadians = std::acos(dp);
+            }
+            const float orientationAngleDegrees =
+                orientationAngleRadians * (180.0f / std::numbers::pi_v<float>);
+
+            return {distance, dopplerFactor, orientationAngleDegrees};
         }
     }
 
@@ -349,11 +426,21 @@ namespace Microsoft::Xna::Framework::Audio
         if (isDisposed_) throw System::ObjectDisposedException("Cue");
 
         // SDL3_mixer has no per-cue 3D audio graph (FAudio's FACT3DApply); approximate by
-        // applying the same pan/distance-attenuation SoundEffectInstance::Apply3D already does
-        // (CP-3) to every wave reference currently playing under this cue. Doppler stays
-        // unapplied, matching the accepted deviation documented in CHECKLIST.md.
+        // applying the same pan/distance-attenuation/Doppler SoundEffectInstance::Apply3D already
+        // does (CP-3, P9-3D-005) to every wave reference currently playing under this cue.
         for (auto& pi : active_)
             if (pi.instance) pi.instance->Apply3D(listener, emitter);
+
+        // P10-RPC-002: matches FAudio's FACT3DApply (FACT3D.c), which unconditionally writes
+        // these three built-in variables from its own F3DAudioCalculate output on every Apply3D
+        // call, regardless of whether a voice is currently active -- so an RPC curve bound to
+        // "Distance"/"OrientationAngle"/"DopplerPitchScalar" now tracks this cue's live 3D state
+        // instead of whatever was last manually SetVariable()-d (or the prior hardcoded 0.0f
+        // default).
+        const Cue3DVariables vars3d = ComputeCue3DVariables(listener, emitter);
+        variables_["Distance"]           = vars3d.distance;
+        variables_["DopplerPitchScalar"] = vars3d.dopplerFactor;
+        variables_["OrientationAngle"]   = vars3d.orientationAngleDegrees;
     }
 
     // ── Play ──────────────────────────────────────────────────────────────────
