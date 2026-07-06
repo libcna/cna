@@ -603,10 +603,23 @@ removal — provably behavior-neutral, no caller). **Tests:** `ctest -L input` 1
 **Behavior verified:** every remaining public method is exercised (directly or via the public API it backs).
 **Remaining risk:** none.
 
-## A7-002 — `GestureDetector` `[ ]`
-- [ ] FNA `Input/Touch/GestureDetector.cs`; CNA `GestureDetector.hpp`/`.cpp`; test `GestureDetectorTests.cpp`.
-- [ ] Members: OnPressed/OnMoved/OnReleased/OnUpdate, test-clock hooks, reset. Verify the gesture state
+## A7-002 — `GestureDetector` `[x]`
+- [x] FNA `Input/Touch/GestureDetector.cs`; CNA `GestureDetector.hpp`/`.cpp`; test `GestureDetectorTests.cpp`.
+- [x] Members: OnPressed/OnMoved/OnReleased/OnUpdate, test-clock hooks, reset. Verify the gesture state
   machine + thresholds vs FNA; per-member/behavior test.
+
+**Result (2026-07-06):** The **4 FNA methods** `OnPressed`/`OnMoved`/`OnReleased`/`OnUpdate` are present and
+map FNA's `internal static` ones (CNA keeps them internal to `CNA::Internal::Input`). Plus 4 NOXNA test
+hooks (`ResetForTests`, `EnableTestClock`, `DisableTestClock`, `AdvanceTestClockMilliseconds`). **Coverage:**
+`OnPressed`/`OnMoved`/`OnReleased` have 0 *direct* refs but are exercised through the production entry point
+`TouchPanel::INTERNAL_onTouchEvent` (via the `Press`/`Move`/`Release` helpers) in the **35-test**
+`GestureDetectorTest` suite — the correct integration path. `OnUpdate` also via `TouchPanel::Update`.
+The state machine + every threshold were verified **byte-identical to FNA** in the earlier Phase-6 pass
+(MOVE_THRESHOLD=35, flick vel 100, hold 1s, double-tap 300ms/35px) with exhaustive positive/negative-path
+tests (tap/double-tap/hold/drag×3/flick/pinch + rejections + disabled + reset). Test hooks all directly
+referenced (`AdvanceTestClockMilliseconds` 9, `ResetForTests` 7, `EnableTestClock` 4, `DisableTestClock` 2).
+**Members reviewed:** 4 gesture methods + 4 hooks = all. **Files changed:** none (perfect, no gap; logic
+verified in Phase 6). **Behavior verified:** full gesture state machine vs FNA. **Remaining risk:** none.
 
 ## A7-003 — `SdlGamepadBackend` / `ISdlGamepadBackend` `[ ]`
 - [ ] CNA `SdlGamepadBackend.hpp`/`.cpp`; test `SdlGamepadBackendTests.cpp` + `FakeSdlGamepadBackend.hpp`.
