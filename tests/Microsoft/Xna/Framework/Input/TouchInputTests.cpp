@@ -261,6 +261,22 @@ TEST(TouchInputTest, DisplayWidthHeightAndOrientationGetterAndSetterRoundTrip)
     TouchPanel::setDisplayOrientationProperty(previousOrientation);
 }
 
+// A5-005: TouchPanel::WindowHandle get/set functional round-trip. Previously only the signatures were pinned
+// (PublicApiInputSignatureFreezeTests) — nothing exercised the actual stored value. Mirrors FNA's
+// `TouchPanel.WindowHandle` (an opaque IntPtr the platform stores).
+TEST(TouchInputTest, WindowHandleGetterAndSetterRoundTrip)
+{
+    const std::uintptr_t previous = TouchPanel::getWindowHandleProperty();
+
+    TouchPanel::setWindowHandleProperty(std::uintptr_t{0xABCDEF01u});
+    EXPECT_EQ(TouchPanel::getWindowHandleProperty(), std::uintptr_t{0xABCDEF01u});
+
+    TouchPanel::setWindowHandleProperty(0);
+    EXPECT_EQ(TouchPanel::getWindowHandleProperty(), std::uintptr_t{0});
+
+    TouchPanel::setWindowHandleProperty(previous);
+}
+
 // --- TouchCollection ---
 
 TEST(TouchCollectionTest, CountAndEmptyReflectContents)

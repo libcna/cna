@@ -519,12 +519,34 @@ internal ctor → `InternalConstructorSetsExplicitFingerIds`. **Members reviewed
 **Files changed:** none (perfect, no gap; confirmed FingerIdEXT is FNA API). **Behavior verified:** all
 fields + finger-id defaulting. **Remaining risk:** none.
 
-## A5-005 — `TouchPanel` (static class) `[ ]`
-- [ ] FNA `Input/Touch/TouchPanel.cs`; CNA `Touch/TouchPanel.hpp`/`.cpp`; tests `TouchInputTests.cpp` +
+## A5-005 — `TouchPanel` (static class) `[x]`
+- [x] FNA `Input/Touch/TouchPanel.cs`; CNA `Touch/TouchPanel.hpp`/`.cpp`; tests `TouchInputTests.cpp` +
   `TouchEdgeCaseTests.cpp` + bridge.
-- [ ] Members: `GetState`, `GetCapabilities`, EnabledGestures get/set, IsGestureAvailable, ReadGesture,
+- [x] Members: `GetState`, `GetCapabilities`, EnabledGestures get/set, IsGestureAvailable, ReadGesture,
   DisplayWidth/Height/Orientation, WindowHandle, EnqueueGesture/SetFinger/Update/INTERNAL_onTouchEvent
   (NOXNA), reset. Per-member.
+
+**Result (2026-07-06):** **All 9 FNA public-static members present:** DisplayWidth/Height/Orientation
+get+set, EnabledGestures get+set, IsGestureAvailable, WindowHandle get+set, GetCapabilities, GetState,
+ReadGesture. **NOXNA tagging verified correct:** `EnqueueGesture`, `INTERNAL_onTouchEvent`, `SetFinger`,
+`Update` are all `internal static` in FNA (`TouchPanel.cs:121,126,165,219`) → CNA correctly maps them to
+`NOXNA`; `updateInputManagerTouch`/`setTouchDeviceExists`/`ResetForTests` are CNA/test helpers (NOXNA).
+**Test map:** GetState (many), GetCapabilities (`GetCapabilities*`), EnabledGestures
+(`EnabledGesturesGetterAndSetterRoundTrip`, `DefaultEnabledGesturesIsNone`, `ChangingEnabledGestures…`),
+IsGestureAvailable (`IsGestureAvailableReflectsQueueState`), ReadGesture (`EnqueueGestureAndReadGestureFollow
+FifoOrder`, `ReadGestureThrows…`), DisplayWidth/Height/Orientation (`DisplayWidthHeightAndOrientationGetter
+AndSetterRoundTrip`), EnqueueGesture/SetFinger/Update/INTERNAL_onTouchEvent (gesture + scaling suites),
+ResetForTests (reset suite). **Closed a real gap:** `WindowHandle` was only signature-frozen (no functional
+test) — **added** `TouchInputTest.WindowHandleGetterAndSetterRoundTrip` (set→read→reset-to-0). **Members
+reviewed:** all. **Files changed:** `tests/…/TouchInputTests.cpp` (+1 test). **Behavior verified:** full
+member coverage incl. WindowHandle round-trip. **Remaining risk:** none.
+
+---
+
+**Phase 5 complete (2026-07-06):** all 5 Touch types re-audited member-by-member vs FNA. Every member
+present + correctly tagged (confirmed `FindById` is genuine XNA API not a missing NOXNA; `FingerIdEXT` is
+genuine FNA API; FNA's gesture-plumbing methods are internal→NOXNA). **Added 1 test** (TouchPanel WindowHandle
+functional round-trip). No behavior gaps.
 
 ---
 
