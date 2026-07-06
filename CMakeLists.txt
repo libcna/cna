@@ -1187,6 +1187,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
+        cna_easygl_test(cna_test_easygl_basiceffect_emissive
+                        examples/easygl_basiceffect_emissive_test.cpp)
+        add_test(NAME EasyGL_BasicEffect_Emissive
+                 COMMAND cna_test_easygl_basiceffect_emissive)
+        set_tests_properties(EasyGL_BasicEffect_Emissive PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_alphatest_modes
                         examples/easygl_alphatest_modes_test.cpp)
         add_test(NAME EasyGL_AlphaTestModes
@@ -1967,6 +1976,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
+        cna_vulkan_test(cna_test_vulkan_basiceffect_emissive
+                        examples/vulkan_basiceffect_emissive_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_Emissive
+                 COMMAND cna_test_vulkan_basiceffect_emissive)
+        set_tests_properties(Vulkan_BasicEffect_Emissive PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()
@@ -2084,6 +2102,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_BasicEffect_OneLight
              COMMAND cna_test_bgfx_basiceffect_one_light)
     set_tests_properties(Bgfx_BasicEffect_OneLight PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
+    cna_bgfx_test(cna_test_bgfx_basiceffect_emissive
+                  examples/bgfx_basiceffect_emissive_test.cpp)
+    add_test(NAME Bgfx_BasicEffect_Emissive
+             COMMAND cna_test_bgfx_basiceffect_emissive)
+    set_tests_properties(Bgfx_BasicEffect_Emissive PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

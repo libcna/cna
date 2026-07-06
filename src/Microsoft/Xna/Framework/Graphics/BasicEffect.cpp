@@ -29,9 +29,16 @@ namespace Microsoft::Xna::Framework::Graphics
             if (texture_) p.texture0 = &texture_->GetBackend();
         }
 
-        p.diffuseColor[0] = diffuseColor_.X * alpha_;
-        p.diffuseColor[1] = diffuseColor_.Y * alpha_;
-        p.diffuseColor[2] = diffuseColor_.Z * alpha_;
+        // FNA's EffectHelpers.SetMaterialColor: when lighting is disabled, ambient/directional
+        // lights are never computed at all, so EmissiveColor has to be baked directly into the
+        // forwarded diffuse color (DiffuseColor+EmissiveColor)*Alpha — otherwise it would be
+        // silently dropped, since no lit shader path runs to add it separately. When lighting is
+        // enabled, EmissiveColor is added on the lit path instead (see p.emissiveColor below), so
+        // DiffuseColor stays a plain DiffuseColor*Alpha here.
+        const Vector3 forwardedDiffuse = lightingEnabled_ ? diffuseColor_ : (diffuseColor_ + emissiveColor_);
+        p.diffuseColor[0] = forwardedDiffuse.X * alpha_;
+        p.diffuseColor[1] = forwardedDiffuse.Y * alpha_;
+        p.diffuseColor[2] = forwardedDiffuse.Z * alpha_;
         p.diffuseColor[3] = alpha_;
 
         p.ambientColor[0] = ambientLightColor_.X;
