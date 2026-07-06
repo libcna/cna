@@ -272,6 +272,64 @@ TEST(KeyboardStateTest, GetHashCodeMatchesFNAWordXorFormula)
 }
 
 // ===========================================================================
+// KeyboardState — invalid / out-of-range Keys hardening (P2-002)
+// ===========================================================================
+//
+// FNA's KeyboardState stores pressed keys as eight 32-bit bitfields (keys0..keys7) covering
+// Keys values 0..255; InternalSetKey switches on ((int)key)>>5 with cases 0..7 and no default,
+// so any Keys value outside 0..255 maps to no bitfield and is silently ignored. CNA's
+// GetHashCode mirrors that with an 8-word array indexed by value>>5; without a range guard an
+// out-of-range Keys value (>=256, or a negative value that wraps to a huge unsigned) would
+// write past the array. These tests pin the guard: constructing a state from such values and
+// exercising every accessor must not crash or read/write out of bounds.
+
+TEST(KeyboardStateTest, GetHashCodeIgnoresOutOfRangeKeysValue)
+{
+    // 999 >> 5 == 31, far past the 8-word array; the guard must drop it (contributes no bit),
+    // so the hash equals that of the same state without the out-of-range key.
+    const KeyboardState withInvalid{Keys::A, static_cast<Keys>(999)};
+    const KeyboardState withoutInvalid{Keys::A};
+    EXPECT_EQ(withInvalid.GetHashCode(), withoutInvalid.GetHashCode());
+}
+
+TEST(KeyboardStateTest, GetHashCodeIgnoresNegativeKeysValue)
+{
+    // A negative Keys value casts to a huge unsigned (>= 256) and must be guarded out, not
+    // shifted into an out-of-bounds index.
+    const KeyboardState withNegative{Keys::A, static_cast<Keys>(-1)};
+    const KeyboardState onlyValid{Keys::A};
+    EXPECT_EQ(withNegative.GetHashCode(), onlyValid.GetHashCode());
+}
+
+TEST(KeyboardStateTest, GetHashCodeIgnoresBoundaryKeysValue256)
+{
+    // 256 is the first value past the 0..255 range (256>>5 == 8, one past words[7]); it must be
+    // ignored so the hash matches the empty state.
+    const KeyboardState boundary{static_cast<Keys>(256)};
+    EXPECT_EQ(boundary.GetHashCode(), KeyboardState{}.GetHashCode());
+}
+
+TEST(KeyboardStateTest, AccessorsAreSafeForOutOfRangeKeysValues)
+{
+    // Every public accessor must be memory-safe for out-of-range/negative/unknown Keys, even
+    // though such a state is not producible from real hardware.
+    const KeyboardState state{static_cast<Keys>(999), static_cast<Keys>(-5),
+                              static_cast<Keys>(70000), Keys::A};
+
+    EXPECT_TRUE(state.IsKeyDown(Keys::A));
+    EXPECT_FALSE(state.IsKeyDown(Keys::B));
+    EXPECT_TRUE(state.IsKeyUp(Keys::B));
+
+    // Querying an out-of-range key must not crash.
+    EXPECT_NO_THROW((void)state.IsKeyDown(static_cast<Keys>(999)));
+    EXPECT_NO_THROW((void)state[static_cast<Keys>(-5)]);
+
+    // GetPressedKeys and GetHashCode must not read/write out of bounds regardless of contents.
+    EXPECT_NO_THROW((void)state.GetPressedKeys());
+    EXPECT_NO_THROW((void)state.GetHashCode());
+}
+
+// ===========================================================================
 // KeyboardState — ToString
 // ===========================================================================
 

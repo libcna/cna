@@ -241,17 +241,58 @@ sibling aborts with the exact `git clone …` command (`cmake/ThirdPartySDL.cmak
 
 # Phase 2 — Keyboard correctness
 
-## P2-001 — Audit `Keys` enum completeness
-- [ ] Compare CNA `Keys` against XNA 4.0.
-- [ ] Verify all common XNA key values are present.
-- [ ] Record keys that cannot be mapped from SDL.
-- [ ] Add comments only where useful and non-misleading.
+## P2-001 — Audit `Keys` enum completeness `[x]`
+- [x] Compare CNA `Keys` against XNA 4.0.
+- [x] Verify all common XNA key values are present.
+- [x] Record keys that cannot be mapped from SDL.
+- [x] Add comments only where useful and non-misleading.
 
-## P2-002 — Harden invalid `Keys` handling
-- [ ] Audit all code paths accepting `Keys`.
-- [ ] Ensure invalid enum values cannot cause out-of-bounds access.
-- [ ] Fix `KeyboardState::GetHashCode` if it indexes a fixed bit array without range checks.
-- [ ] Add tests for negative, too-large, and unknown `Keys` values.
+**Result (2026-07-06):** CNA `Keys` is byte-identical to FNA `src/Input/Keys.cs`. A normalized
+(name → decimal value, hex-aware) diff of both enums reports **160 members on each side, zero
+names only-in-CNA, zero names only-in-FNA, zero value mismatches** — including the hex-encoded
+console/OEM/IME members (`ChatPadGreen=0xCA`, `OemAuto=0xF3`, `Kana=0x15`, `Pause=0x13`, …). This
+is already locked by the exhaustive `KeyboardStateTest.KeysValuesMatchXNANumericConstants` table
+(160 members each pinned to its literal VK value) plus a `static_assert` size anchor, so a member
+add/remove/renumber breaks the build or a test (INPUT-KBD-001 / INPUT-API-034). Keys that SDL
+cannot originate on a normal desktop keyboard (console ChatPad colors, IME `Kana`/`Kanji`, some
+OEM cluster entries) remain valid enum values but are not produced by the SDL bridge; this is
+documented in the keycode/scancode mapping tasks (P2-005/P2-006) rather than the enum.
+**Files changed:** none (audit-only; parity already enforced by existing tests).
+**Behavior verified:** name+value parity via normalized enum diff; no comment churn needed.
+**Remaining risk:** none for the enum itself; SDL-origination gaps tracked under P2-005/P2-006.
+
+## P2-002 — Harden invalid `Keys` handling `[x]`
+- [x] Audit all code paths accepting `Keys`.
+- [x] Ensure invalid enum values cannot cause out-of-bounds access.
+- [x] Fix `KeyboardState::GetHashCode` if it indexes a fixed bit array without range checks.
+- [x] Add tests for negative, too-large, and unknown `Keys` values.
+
+**Result (2026-07-06):** Audited every `KeyboardState` path that consumes a `Keys`:
+`IsKeyDown`/`IsKeyUp`/`getItem`/`operator[]` go through `unordered_set::contains` (hash lookup,
+memory-safe for any value); `GetPressedKeys` copies + sorts (safe); `Equals`/`==`/`!=` compare
+sets (safe). The **only** out-of-bounds risk was `GetHashCode`, which indexed a fixed
+`std::array<uint32_t,8>` via `words[value >> 5]`. For a valid key (0..255) `value>>5` is 0..7, but
+an out-of-range enum (≥256) or a negative value cast to a huge unsigned would write past the
+array. Fixed by guarding with `if (value < 256u)` before the write — this mirrors FNA's
+`InternalSetKey`, whose `switch(((int)key)>>5)` has cases 0..7 and **no default**, so an
+out-of-range key maps to no bitfield and contributes nothing to the hash.
+**Files changed:** `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp` (bounds guard + WHY
+comment); `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp` (+4 tests).
+**Tests:** `GetHashCodeIgnoresOutOfRangeKeysValue` (999), `GetHashCodeIgnoresNegativeKeysValue`
+(-1), `GetHashCodeIgnoresBoundaryKeysValue256` (256 → same as empty), and
+`AccessorsAreSafeForOutOfRangeKeysValues` (999/-5/70000 mixed with a valid key through every
+accessor). Ran `CnaTests --gtest_filter='KeyboardStateTest.*:KeyboardInputTest.*'` shuffled ×5:
+**25/25 pass**. Re-ran the hash + hardening subset under **ASan** (`cmake-build-input-asan`,
+`ASAN_OPTIONS=detect_leaks=0:halt_on_error=1`): **7/7 pass, no out-of-bounds report** — proving
+the guard removes the OOB write.
+**Behavior verified:** hash of a state containing an out-of-range key equals the hash of the same
+state without it; no accessor crashes for negative/too-large/unknown keys.
+**Remaining risk (documented deviation):** unlike FNA, CNA's `unordered_set` *can store* an
+out-of-range `Keys`, so `IsKeyDown((Keys)999)` returns `true` in CNA vs `false` in FNA (FNA's
+bitfield store silently drops it). This is not producible from real hardware or the SDL bridge
+(both only emit mapped 0..255 keys) and is memory-safe; left as an accepted minor deviation
+rather than filtering at construction, which would be a broader behavioral change to the public
+constructors. Tracked here for P12 sign-off.
 
 ## P2-003 — Verify `KeyboardState` default behavior
 - [ ] Test default state has no pressed keys.
