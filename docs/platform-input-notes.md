@@ -42,6 +42,14 @@ See also [`docs/input-backend.md`](input-backend.md) (architecture) and
 - Mouse warp, global position, scroll wheel, text input/IME (including the Windows IME composition
   window), and gamepad rumble/trigger-rumble/light-bar are all provided by the SDL3 Windows backend.
 
+## macOS
+
+- **Mouse warp & global position work** through the SDL3 Cocoa backend, like X11 — `Mouse::SetPosition`
+  (`SDL_WarpMouseInWindow`) and `SDL_GetGlobalMouseState` return real values, so warp-landing readback is
+  feasible (unlike Wayland). Relative mouse mode uses Cocoa's associated-cursor / warp suppression.
+- **System cursors** map to the OS theme glyphs; exact pixels are chosen by macOS (as on every platform).
+- Not headless-verifiable in CI here (the CI matrix is Linux); treat macOS specifics as manual-gated.
+
 ## Android
 
 - **Touch is the primary input.** The touch device is only reported as connected *after the first
@@ -112,3 +120,24 @@ US OEM key still map to that OEM key (e.g. the codepoints for `æ`/`ø` resolve 
   vertical `ScrollWheelValue`; `event.wheel.x` is intentionally dropped (task 805).
 - **Input is main-thread only** (all platforms): SDL requires event pumping on the video/window
   thread; see [`docs/input-backend.md`](input-backend.md) §6.
+- **Cursor creation needs `SDL_INIT_VIDEO`** (INPUT-MOUSE-020, all platforms): stock cursors are lazy
+  function-local statics (Meyer's singleton) built on first access — deliberately *not* static-init time,
+  so `SDL_CreateSystemCursor` runs after `SDL_Init(SDL_INIT_VIDEO)`. Without a video subsystem SDL returns
+  a null cursor handle; CNA wraps it gracefully (the handle is null, `Mouse::SetCursor` becomes a no-op,
+  no crash), and the headless cursor tests `GTEST_SKIP` (INPUT-BUILD-008) rather than fail. Under the SDL
+  `dummy` video driver real cursors cannot be created either — CI runs them under Xvfb+x11.
+
+### Cursor & warp caveats — platform matrix (INPUT-MOUSE-022)
+
+| Platform | `SetPosition` warp | Global pos (`SDL_GetGlobalMouseState`) | Warp-landing readback | Relative mode |
+|----------|--------------------|----------------------------------------|-----------------------|---------------|
+| Linux / X11 (incl. XWayland) | ✅ works | ✅ real values | ✅ testable | ✅ warp no-op |
+| Linux / Wayland | ⚠️ focus-gated / clamped | ❌ returns `(0,0)` | ❌ not readable | ✅ pointer-lock |
+| Windows | ✅ works | ✅ real values | ✅ (manual) | ✅ |
+| macOS | ✅ works | ✅ real values | ✅ (manual) | ✅ |
+| Android / iOS | n/a (touch, no cursor) | n/a | n/a | n/a |
+
+Legend: ✅ works / ❌ unavailable / ⚠️ constrained. The X11 row is the only one machine-verified in CI
+(Xvfb+x11); Windows/macOS warp-landing and all real-hardware relative-capture are **manual-only**
+(INPUT-MOUSE-023 tracks the dated manual run). See the per-platform sections above for the details behind
+each cell.

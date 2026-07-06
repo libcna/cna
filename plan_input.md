@@ -1258,7 +1258,7 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 
 - **Result (2026-07-06):** `FromTexture2D` validation is covered by `FromTexture2DCreatesCursorFromColorTexture`, `FromTexture2DAcceptsColorSrgbTexture`, `FromTexture2DRejectsNonColorSurfaceFormat`, and `FromTexture2DThrowsWhenOriginIsOutsideTheTexture`.
 #### INPUT-MOUSE-020 — SDL init assumptions for cursor creation
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse/Platform
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse/Platform
 - **Files:** `MouseCursor.cpp`
 - **Problem:** Cursor creation needs SDL video; tests GTEST_SKIP headless.
 - **Work:** Document the SDL_INIT_VIDEO precondition; ensure graceful behavior when absent.
@@ -1266,6 +1266,11 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Tests:** headless skip is intentional (INPUT-BUILD-008).
 - **Deps:** none.
 
+- **Result (2026-07-06):** Documented the `SDL_INIT_VIDEO` precondition for cursor creation in
+  `docs/platform-input-notes.md` (§Cross-cutting). Stock cursors are lazy Meyer's-singleton statics created
+  on first access (after `SDL_Init`), and when the video subsystem is absent `SDL_CreateSystemCursor`
+  returns null — CNA wraps it gracefully (null handle, `SetCursor` no-op, no crash) and the headless cursor
+  tests `GTEST_SKIP` (INPUT-BUILD-008). No code change (behavior already graceful).
 #### INPUT-MOUSE-021 — `SetCursor` behavior incl. disposed cursor
 - **Priority:** P3 · **Status:** DONE (2026-07-06) · **Area:** Mouse/CNA
 - **Files:** `Mouse.cpp`
@@ -1276,7 +1281,7 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 
 - **Result (2026-07-06):** `SetCursor` incl. disposed cursor is covered by `SetCursorIsSafeNoOpForDisposedCursor` (and the stock-singleton no-op disposal case).
 #### INPUT-MOUSE-022 — Wayland/macOS/Windows cursor & warp caveats
-- **Priority:** P2 · **Status:** TODO · **Area:** Mouse/Platform
+- **Priority:** P2 · **Status:** DONE (2026-07-06) · **Area:** Mouse/Platform
 - **Files:** `docs/platform-input-notes.md`
 - **Problem:** Wayland `SDL_GetGlobalMouseState`→(0,0); warp/landing readback X11-only.
 - **Work:** Consolidate platform caveats; mark which are manual-only.
@@ -1284,6 +1289,11 @@ relative-mode flag cached in `InputManager`. `MouseCursor` is NOXNA MonoGame-der
 - **Tests:** manual (§4 hardware).
 - **Deps:** none.
 
+- **Result (2026-07-06):** Consolidated the cursor/warp platform caveats into a matrix in
+  `docs/platform-input-notes.md` (Linux-X11 / Wayland / Windows / macOS / mobile × SetPosition-warp /
+  global-position / warp-landing-readback / relative-mode), marking which cells are machine-verified (X11
+  only, via Xvfb) vs manual-only (Windows/macOS warp-landing, all real relative capture → INPUT-MOUSE-023).
+  Added the previously-missing macOS section.
 #### INPUT-MOUSE-023 — Manual: cursor warp + relative mouse on real display
 - **Priority:** P2 · **Status:** TODO · **Area:** Mouse/Manual
 - **Files:** `docs/input-manual-verification-results.md`, `examples/demo_input`

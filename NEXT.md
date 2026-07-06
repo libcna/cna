@@ -51,6 +51,10 @@
 
 ## 3. Recent changes (most recent first — this session, all on `feature/input`)
 
+- **INPUT-MOUSE-020/022 — cursor precondition + platform matrix:** documented the `SDL_INIT_VIDEO` cursor
+  precondition (graceful null when absent) and consolidated the cursor/warp caveats into a platform matrix
+  (added the missing macOS section) in `docs/platform-input-notes.md`. Docs-only. (MOUSE-023 warp/relative
+  manual verification remains hardware-gated — cannot be run headlessly.)
 - **INPUT-MOUSE cluster verified (16 tasks) + all-5-button bridge test:** mapped MOUSE-001/002/003/004/005/
   006/008/009/010/012/013/015/016/017/019/021 to the existing 39-case mouse suites (all backed) and added
   `AllFiveButtonsTransitionThroughBridge` (SDL DOWN/UP for all 5 buttons → MouseState transitions) to close
