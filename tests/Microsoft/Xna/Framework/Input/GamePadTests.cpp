@@ -128,6 +128,67 @@ TEST(GamePadCapabilitiesTest, DefaultConstructorHasAllFlagsFalseAndTypeUnknown)
     EXPECT_EQ(caps.getGamePadTypeProperty(), GamePadType::Unknown);
 }
 
+// A4-005: strict isolation guard — setting exactly ONE bool capability must flip ONLY its own getter and
+// leave every other getter false. This is stronger than EveryGetterAndSetterRoundTrips (which sets
+// cumulatively, so a getter mis-wired to an already-set field would still read true); here each getter is
+// checked while only its own setter has fired, so any copy-paste getter↔field mis-wiring across the 35
+// bool properties is caught.
+TEST(GamePadCapabilitiesTest, EachBoolCapabilitySetterAffectsOnlyItsOwnGetter)
+{
+    using C = GamePadCapabilities;
+    struct Pair { void (C::*set)(bool); bool (C::*get)() const; const char* name; };
+    static const Pair pairs[] = {
+        {&C::setIsConnectedProperty, &C::getIsConnectedProperty, "IsConnected"},
+        {&C::setHasAButtonProperty, &C::getHasAButtonProperty, "HasAButton"},
+        {&C::setHasBackButtonProperty, &C::getHasBackButtonProperty, "HasBackButton"},
+        {&C::setHasBButtonProperty, &C::getHasBButtonProperty, "HasBButton"},
+        {&C::setHasDPadDownButtonProperty, &C::getHasDPadDownButtonProperty, "HasDPadDownButton"},
+        {&C::setHasDPadLeftButtonProperty, &C::getHasDPadLeftButtonProperty, "HasDPadLeftButton"},
+        {&C::setHasDPadRightButtonProperty, &C::getHasDPadRightButtonProperty, "HasDPadRightButton"},
+        {&C::setHasDPadUpButtonProperty, &C::getHasDPadUpButtonProperty, "HasDPadUpButton"},
+        {&C::setHasLeftShoulderButtonProperty, &C::getHasLeftShoulderButtonProperty, "HasLeftShoulderButton"},
+        {&C::setHasLeftStickButtonProperty, &C::getHasLeftStickButtonProperty, "HasLeftStickButton"},
+        {&C::setHasRightShoulderButtonProperty, &C::getHasRightShoulderButtonProperty, "HasRightShoulderButton"},
+        {&C::setHasRightStickButtonProperty, &C::getHasRightStickButtonProperty, "HasRightStickButton"},
+        {&C::setHasStartButtonProperty, &C::getHasStartButtonProperty, "HasStartButton"},
+        {&C::setHasXButtonProperty, &C::getHasXButtonProperty, "HasXButton"},
+        {&C::setHasYButtonProperty, &C::getHasYButtonProperty, "HasYButton"},
+        {&C::setHasBigButtonProperty, &C::getHasBigButtonProperty, "HasBigButton"},
+        {&C::setHasLeftXThumbStickProperty, &C::getHasLeftXThumbStickProperty, "HasLeftXThumbStick"},
+        {&C::setHasLeftYThumbStickProperty, &C::getHasLeftYThumbStickProperty, "HasLeftYThumbStick"},
+        {&C::setHasRightXThumbStickProperty, &C::getHasRightXThumbStickProperty, "HasRightXThumbStick"},
+        {&C::setHasRightYThumbStickProperty, &C::getHasRightYThumbStickProperty, "HasRightYThumbStick"},
+        {&C::setHasLeftTriggerProperty, &C::getHasLeftTriggerProperty, "HasLeftTrigger"},
+        {&C::setHasRightTriggerProperty, &C::getHasRightTriggerProperty, "HasRightTrigger"},
+        {&C::setHasLeftVibrationMotorProperty, &C::getHasLeftVibrationMotorProperty, "HasLeftVibrationMotor"},
+        {&C::setHasRightVibrationMotorProperty, &C::getHasRightVibrationMotorProperty, "HasRightVibrationMotor"},
+        {&C::setHasVoiceSupportProperty, &C::getHasVoiceSupportProperty, "HasVoiceSupport"},
+        {&C::setHasLightBarEXTProperty, &C::getHasLightBarEXTProperty, "HasLightBarEXT"},
+        {&C::setHasTriggerVibrationMotorsEXTProperty, &C::getHasTriggerVibrationMotorsEXTProperty, "HasTriggerVibrationMotorsEXT"},
+        {&C::setHasMisc1EXTProperty, &C::getHasMisc1EXTProperty, "HasMisc1EXT"},
+        {&C::setHasPaddle1EXTProperty, &C::getHasPaddle1EXTProperty, "HasPaddle1EXT"},
+        {&C::setHasPaddle2EXTProperty, &C::getHasPaddle2EXTProperty, "HasPaddle2EXT"},
+        {&C::setHasPaddle3EXTProperty, &C::getHasPaddle3EXTProperty, "HasPaddle3EXT"},
+        {&C::setHasPaddle4EXTProperty, &C::getHasPaddle4EXTProperty, "HasPaddle4EXT"},
+        {&C::setHasTouchPadEXTProperty, &C::getHasTouchPadEXTProperty, "HasTouchPadEXT"},
+        {&C::setHasGyroEXTProperty, &C::getHasGyroEXTProperty, "HasGyroEXT"},
+        {&C::setHasAccelerometerEXTProperty, &C::getHasAccelerometerEXTProperty, "HasAccelerometerEXT"},
+    };
+    constexpr std::size_t n = sizeof(pairs) / sizeof(pairs[0]);
+    static_assert(n == 35, "GamePadCapabilities has 35 bool capability flags");
+
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        GamePadCapabilities caps;
+        (caps.*pairs[i].set)(true);
+        for (std::size_t j = 0; j < n; ++j)
+        {
+            EXPECT_EQ((caps.*pairs[j].get)(), i == j)
+                << "set " << pairs[i].name << " -> unexpected value of getter " << pairs[j].name;
+        }
+    }
+}
+
 TEST(GamePadCapabilitiesTest, EveryGetterAndSetterRoundTrips)
 {
     GamePadCapabilities caps;

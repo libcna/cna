@@ -379,10 +379,26 @@ Ctors: default (NOXNA), 2-arg, private dead-zone ctor. **Equality is FNA-faithfu
 3 dead-zone = all. **Files changed:** none (perfect, no gap). **Behavior verified:** clamp + epsilon equality
 (FNA-faithful) + dead-zone + hash. **Remaining risk:** none.
 
-## A4-005 — `GamePadCapabilities` (struct) `[ ]`
-- [ ] FNA `Input/GamePadCapabilities.cs`; CNA `GamePadCapabilities.hpp`/`.cpp`; test (GamePad suites).
-- [ ] Members (~73 decls): IsConnected, GamePadType, every `Has*` property (XNA + EXT), `Equals`/`==`/`!=`,
-  `GetHashCode`. Per-member — this is the largest surface.
+## A4-005 — `GamePadCapabilities` (struct) `[x]`
+- [x] FNA `Input/GamePadCapabilities.cs`; CNA `GamePadCapabilities.hpp`/`.cpp`; test (GamePad suites).
+- [x] Members (~73 decls): IsConnected, GamePadType, every `Has*` property (XNA + EXT). Per-member —
+  the largest surface.
+
+**Result (2026-07-06):** **36 properties** (IsConnected, GamePadType + 34 `Has*`) — a precise diff vs FNA
+`GamePadCapabilities.cs` reports **36=36, 0 CNA-only, 0 FNA-only** (exact match, incl. all EXT: LightBar,
+TriggerVibrationMotors, Misc1, Paddle1-4, TouchPad, Gyro, Accelerometer). The 35 bool properties expose
+**NOXNA setters** (1:1 with getters, confirmed by name diff) mapping FNA's `internal set`; `GamePadType`
+get/set likewise. **No explicit `Equals`/`GetHashCode`/`operator==`** — verified FNA has none either (default
+`ValueType` semantics), so CNA matches. Default ctor (`= default`). **Closed a subtle coverage gap:** the
+existing `EveryGetterAndSetterRoundTrips` sets flags *cumulatively* (a getter mis-wired to an already-set
+field would still read true), so **added** `EachBoolCapabilitySetterAffectsOnlyItsOwnGetter` — a
+table-driven strict isolation test (set exactly one of the 35 flags → only that getter true, all others
+false; `static_assert(n==35)`) that catches any getter↔field mis-wiring. Existing coverage:
+`DefaultConstructorHasAllFlagsFalseAndTypeUnknown`, `EveryGetterAndSetterRoundTrips`,
+`PartialCapabilitiesLeaveUnsetFlagsFalse`, + the EXT capability reflection tests
+(`RumbleSupportReported*`/`GyroAndAccelerometerSupportReported*`). **Members reviewed:** 36 props + setters +
+ctor = all. **Files changed:** `tests/…/GamePadTests.cpp` (+1 isolation test). **Behavior verified:** every
+getter reflects exactly its own field; full FNA property parity. **Remaining risk:** none.
 
 ## A4-006 — `GamePadState` (struct) `[ ]`
 - [ ] FNA `Input/GamePadState.cs`; CNA `GamePadState.hpp`/`.cpp`; test `GamePadStateTests.cpp`.
