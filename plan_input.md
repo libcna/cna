@@ -980,9 +980,24 @@ documented difference:** the clock source — `std::chrono::steady_clock` + an i
 **Files changed:** none (logic verified). **Behavior verified:** the full state machine + byte-identical
 constants + flick filter match FNA. **Remaining risk:** none.
 
-## L-014 — `InputManager.cpp` logic `[ ]`
-- [ ] Accumulated-state mutation/read for each subsystem; touch previous-location + Pressed→Moved promotion
+## L-014 — `InputManager.cpp` logic `[x]`
+- [x] Accumulated-state mutation/read for each subsystem; touch previous-location + Pressed→Moved promotion
   + RemoveAfterSnapshot; packet-number bump rules; reset fan-out determinism.
+
+**Result (2026-07-06):** `InputManager` is CNA's **event-driven accumulator** (architectural deviation from
+FNA's poll model — documented). Logic verified correct: **packet-number bumps are FNA-faithful** —
+`SetGamePadButtonState` captures `before`, sets/clears the flag, and increments `PacketNumber` **only when
+the flag set actually changed**; `SetGamePadAxisValue` increments **only when the axis value actually
+changed** (both = FNA's "packet changes only on a meaningful change", P4-013). The button/axis `switch`
+statements map each `GamePadButton`/`GamePadAxis` 1:1 to its own flag/field (no mis-wiring). Axis values are
+clamped at accumulation (`clamp_signed_unit`/`clamp_positive_unit`) — idempotent on the already-normalized
+bridge values; the final dead-zone/clamp still happens in the `GamePadThumbSticks`/`GamePadTriggers` ctors
+(byte-identical to FNA, L-006/L-007). `GetMouseState` returns the accumulated state and, in **relative mode,
+returns the accumulated delta and drains it** (drain-on-read, DEC-14/P3-007), building `MouseState` with the
+verified 8-arg ctor order. `GetTouchState`'s previous-location + Pressed→Moved promotion + RemoveAfterSnapshot
+(P5-008) emulate FNA's per-frame touch state; the `ResetAllForTests` fan-out is deterministic (Phase 8).
+**Files changed:** none (logic verified). **Behavior verified:** change-gated packet bump + relative
+drain-on-read + touch promotion + 1:1 button/axis mapping. **Remaining risk:** none.
 
 ## L-015 — `SdlInputBridge.cpp` logic `[ ]`
 - [ ] Every ProcessEvent case's translation vs FNA `SDL3_FNAPlatform.cs`: axis normalization/Y-inversion,
