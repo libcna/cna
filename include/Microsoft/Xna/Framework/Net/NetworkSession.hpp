@@ -348,6 +348,16 @@ namespace Microsoft::Xna::Framework::Net
         NOXNA [[nodiscard]] std::size_t GetOwnedGamerCountForTesting() const;
 
         /**
+         * @brief NOXNA: how many `NetworkSessionAction` instances are currently live (`new`'d by
+         * some `Begin*` call, not yet `delete`d by its `End*` counterpart). `NetworkSessionAction`
+         * itself is private, so this forwards to its own `GetInstanceCountForTesting()`. Exists
+         * purely to make Task 3.2's leak fix testable; not part of real XNA.
+         *
+         * @return The number of currently-live instances.
+         */
+        NOXNA [[nodiscard]] static int GetActiveActionInstanceCountForTesting();
+
+        /**
          * @brief Returns the fully-qualified .NET type name of this class.
          * @return A const reference to the type name string.
          */
@@ -723,6 +733,22 @@ namespace Microsoft::Xna::Framework::Net
                 NetworkSessionType type
             );
 
+            /**
+             * @brief Task 3.2: decrements the live-instance counter `GetInstanceCountForTesting()`
+             * reports, so a leaked `NetworkSessionAction` (one `new`'d by a `Begin*` call but never
+             * `delete`d by its `End*` counterpart) is observable.
+             */
+            ~NetworkSessionAction() override;
+
+            /**
+             * @brief NOXNA: how many `NetworkSessionAction` instances are currently live (`new`'d
+             * by some `Begin*` call, not yet `delete`d by its `End*` counterpart). Exists purely to
+             * make Task 3.2's leak fix testable; not part of real XNA.
+             *
+             * @return The number of currently-live instances.
+             */
+            NOXNA static int GetInstanceCountForTesting();
+
             /** @brief Gets the user-defined state supplied to the Begin* call. */
             [[nodiscard]] const std::any& getAsyncStateProperty() const override;
             /** @brief Always false; this stub never completes synchronously. */
@@ -752,6 +778,8 @@ namespace Microsoft::Xna::Framework::Net
             // Mutable: IAsyncResult::getAsyncWaitHandleProperty() is const but returns a
             // non-const WaitHandle&, so the handle exposed through it must be mutable.
             mutable System::Threading::EventWaitHandle asyncWaitHandle_;
+
+            NOXNA static int instanceCount_;
         };
 
         explicit NetworkSession(

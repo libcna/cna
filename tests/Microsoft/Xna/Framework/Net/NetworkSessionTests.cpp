@@ -55,6 +55,24 @@ TEST(NetworkSessionTest, CreateWithExplicitLocalGamers) {
     EXPECT_TRUE(session->getIsDisposedProperty());
 }
 
+// Task 3.2: every End* (EndCreate/EndFind/EndJoin/EndJoinInvited) used to just drop activeAction_
+// (a bare `= nullptr;`) with no prior delete - `new NetworkSessionAction(...)` in every Begin*
+// permanently leaked one object per Begin*/End* cycle. Confirms a full Create() (BeginCreate ->
+// EndCreate) cycle leaves the live-instance count unchanged, proving the action was actually
+// freed, not just forgotten.
+TEST(NetworkSessionTest, CreateDoesNotLeakNetworkSessionAction) {
+    int before = NetworkSession::GetActiveActionInstanceCountForTesting();
+
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+
+    EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before);
+
+    session->Dispose();
+}
+
 TEST(NetworkSessionTest, AllowHostMigrationAndJoinInProgressGetSet) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(

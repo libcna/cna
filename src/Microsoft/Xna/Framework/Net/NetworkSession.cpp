@@ -57,6 +57,19 @@ namespace Microsoft::Xna::Framework::Net
         , isCompleted_(true)
         , asyncWaitHandle_(true, System::Threading::EventResetMode::ManualReset)
     {
+        ++instanceCount_;
+    }
+
+    int NetworkSession::NetworkSessionAction::instanceCount_ = 0;
+
+    NetworkSession::NetworkSessionAction::~NetworkSessionAction()
+    {
+        --instanceCount_;
+    }
+
+    int NetworkSession::NetworkSessionAction::GetInstanceCountForTesting()
+    {
+        return instanceCount_;
     }
 
     const std::any& NetworkSession::NetworkSessionAction::getAsyncStateProperty() const { return asyncState_; }
@@ -260,6 +273,11 @@ namespace Microsoft::Xna::Framework::Net
     std::size_t NetworkSession::GetOwnedGamerCountForTesting() const
     {
         return ownedGamers_.size();
+    }
+
+    int NetworkSession::GetActiveActionInstanceCountForTesting()
+    {
+        return NetworkSessionAction::GetInstanceCountForTesting();
     }
 
     const std::string& NetworkSession::GetTypeName() const
@@ -668,6 +686,10 @@ namespace Microsoft::Xna::Framework::Net
             true // EndCreate: this machine is hosting (see DEFERRED.md item #20)
         );
 
+        // Task 3.2: every End* used to just drop activeAction_ (a bare `= nullptr;`) with no prior
+        // delete - `new NetworkSessionAction(...)` in every Begin* permanently leaked one object
+        // per Begin*/End* cycle.
+        delete activeAction_;
         activeAction_ = nullptr;
         return activeSession_;
     }
@@ -774,6 +796,7 @@ namespace Microsoft::Xna::Framework::Net
         }
 
         NetworkSessionType type = activeAction_->SessionType;
+        delete activeAction_; // Task 3.2
         activeAction_ = nullptr;
 
         if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(type))
@@ -846,6 +869,7 @@ namespace Microsoft::Xna::Framework::Net
         int actionMaxLocalGamers = activeAction_->MaxLocalGamers;
         auto actionLocalGamers = activeAction_->LocalGamers;
         NetworkSessionType actionSessionType = activeAction_->SessionType;
+        delete activeAction_; // Task 3.2
         activeAction_ = nullptr;
 
         activeSession_ = new NetworkSession(
@@ -954,6 +978,7 @@ namespace Microsoft::Xna::Framework::Net
 
         int actionMaxLocalGamers = activeAction_->MaxLocalGamers;
         auto actionLocalGamers = activeAction_->LocalGamers;
+        delete activeAction_; // Task 3.2
         activeAction_ = nullptr;
 
         activeSession_ = new NetworkSession(

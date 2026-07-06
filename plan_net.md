@@ -634,12 +634,28 @@ consistently, or introduce a small internal pool/arena with explicit lifetime ti
   + `ENetBackendTest.*` combined (63 tests) pass cleanly 3x in a row; full suite:
   **3259/3261 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 3.2** — Fix the permanent leak of every `NetworkSessionAction` across the `Begin*`/`End*`
-  async family. Confirmed: `new NetworkSessionAction(...)` at `NetworkSession.cpp` (~lines 524, 554,
-  580, 671, 697, 756, 834, 853); every `End*` (e.g. `EndCreate` ~lines 587-606, `EndFind` ~lines
-  704-722) only does `activeAction_ = nullptr;` with no prior `delete`. Fix as part of the same
-  ownership-model decision as Task 3.1, and add a test/leak-check proving no leak across a full
-  `Begin*`→`End*` cycle.
+- [x] **Task 3.2** — Fix the permanent leak of every `NetworkSessionAction` across the `Begin*`/`End*`
+  async family. Confirmed: `new NetworkSessionAction(...)` at every `Begin*`; every `End*`
+  (`EndCreate`, `EndFind`, `EndJoin`, `EndJoinInvited`) only did `activeAction_ = nullptr;` with no
+  prior `delete`.
+  **Fixed:** added `delete activeAction_;` right before the `= nullptr;` reset in all 4 `End*`
+  methods (after any needed fields have already been copied out into locals, matching each
+  method's existing order).
+  **Added an instance counter to `NetworkSessionAction`** (constructor increments, a new
+  out-of-line destructor decrements) and a `GetInstanceCountForTesting()` static accessor —
+  forwarded through a new `NetworkSession::GetActiveActionInstanceCountForTesting()`, since
+  `NetworkSessionAction` itself is a private nested class.
+  **Added `NetworkSessionTest.CreateDoesNotLeakNetworkSessionAction`**: captures the live-instance
+  count before a full `Create()` (`BeginCreate`→`EndCreate`) cycle and asserts it's unchanged
+  afterward — proving the action was actually freed, not just forgotten.
+  **Verified the bug is real, not theoretical, at two levels:** (1) reverted all 4 source-fix files
+  and reran — failed to even **compile** (`GetActiveActionInstanceCountForTesting` didn't exist);
+  (2) restored the fix, then additionally disabled *only* `EndCreate`'s own `delete activeAction_;`
+  line (keeping the counter infrastructure and the other 3 `End*` fixes intact) and reran — this
+  time a genuine **runtime** failure: instance count stayed at `1` instead of returning to the
+  pre-test baseline of `0`, directly observing the leak rather than just a missing API. Restored
+  fully; full suite: **3260/3262 passing** (2 expected accelerometer/gyroscope skips), no
+  regressions.
 
 - [ ] **Task 3.3** — Fix `NetworkSession` objects themselves never being freed. Confirmed: no code
   path in `src/` or `tests/` ever `delete`s a `NetworkSession*` — `Dispose()` only flips
