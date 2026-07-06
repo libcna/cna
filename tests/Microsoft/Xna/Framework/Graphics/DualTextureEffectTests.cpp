@@ -209,6 +209,7 @@ TEST_F(DualTextureEffectDefaultsTest, CloneCopiesAllProperties)
     fx.setFogEnabledProperty(true);
     fx.setFogStartProperty(1.0f);
     fx.setFogEndProperty(2.0f);
+    fx.setFogColorProperty(Vector3(0.4f, 0.5f, 0.6f));
     fx.setVertexColorEnabledProperty(true);
     fx.setTextureProperty(&tex1);
     fx.setTexture2Property(&tex2);
@@ -222,6 +223,7 @@ TEST_F(DualTextureEffectDefaultsTest, CloneCopiesAllProperties)
     EXPECT_TRUE(clone->getFogEnabledProperty());
     EXPECT_FLOAT_EQ(clone->getFogStartProperty(), 1.0f);
     EXPECT_FLOAT_EQ(clone->getFogEndProperty(), 2.0f);
+    EXPECT_EQ(clone->getFogColorProperty(), Vector3(0.4f, 0.5f, 0.6f));
     EXPECT_TRUE(clone->getVertexColorEnabledProperty());
     EXPECT_EQ(clone->getTextureProperty(), &tex1);
     EXPECT_EQ(clone->getTexture2Property(), &tex2);

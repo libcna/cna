@@ -52,6 +52,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         fogStart_ = src.fogStart_;
         fogEnd_   = src.fogEnd_;
+        if (fogColorParam_) fogColorParam_->SetValue(src.getFogColorProperty());
 
         texture_  = src.texture_;
         texture2_ = src.texture2_;

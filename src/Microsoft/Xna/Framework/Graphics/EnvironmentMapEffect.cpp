@@ -64,6 +64,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         fogStart_ = src.fogStart_;
         fogEnd_   = src.fogEnd_;
+        if (fogColorParam_) fogColorParam_->SetValue(src.getFogColorProperty());
 
         environmentMapAmount_   = src.environmentMapAmount_;
         environmentMapSpecular_ = src.environmentMapSpecular_;

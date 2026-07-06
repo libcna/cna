@@ -51,6 +51,7 @@ namespace Microsoft::Xna::Framework::Graphics
         alpha_              = src.alpha_;
         fogStart_           = src.fogStart_;
         fogEnd_             = src.fogEnd_;
+        if (fogColorParam_) fogColorParam_->SetValue(src.getFogColorProperty());
         alphaFunction_      = src.alphaFunction_;
         referenceAlpha_     = src.referenceAlpha_;
     }
