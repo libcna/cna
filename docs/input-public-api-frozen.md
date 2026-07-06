@@ -220,8 +220,10 @@ override must be added.
 
 ### `MouseState` — struct (XNA)
 - Getters (STRICT): `getXProperty`, `getYProperty` → `int`; `getLeftButtonProperty`, `getRightButtonProperty`, `getMiddleButtonProperty`, `getXButton1Property`, `getXButton2Property` → `ButtonState`; `getScrollWheelValueProperty` → `int`
+- `getHorizontalScrollWheelValueEXTProperty() -> int;` — NOXNA/EXT (SDL `wheel.x`; excluded from Equals/GetHashCode)
 - `MouseState();` — NOXNA
 - `MouseState(int, int, int, ButtonState, ButtonState, ButtonState, ButtonState, ButtonState);` — STRICT
+- `MouseState(int, int, int, ButtonState, ButtonState, ButtonState, ButtonState, ButtonState, int horizontalScrollWheel);` — NOXNA/EXT
 - `bool Equals(const MouseState&) const;` — STRICT
 - `int GetHashCode() const;` — STRICT
 - `std::string ToString() const;` — STRICT

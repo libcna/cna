@@ -1287,18 +1287,20 @@ namespace CNA::Internal::Input
                 break;
             }
         case SDL_EVENT_MOUSE_WHEEL:
-            // Only the vertical wheel is surfaced: XNA 4.0's MouseState and this FNA MouseState
-            // expose a single cumulative ScrollWheelValue (vertical) and no horizontal member, so
-            // event.wheel.x is intentionally dropped (DEC-18; task 805 / former task 749 — closed as
-            // won't-implement; adding a horizontal wheel would be a non-XNA NOXNA extension with
-            // no current consumer). FNA truncates the SDL wheel delta to whole notches BEFORE
-            // scaling by 120 (`(int) evt.wheel.y * 120`, SDL3_FNAPlatform.cs) — the cast binds
-            // tighter than the multiply, so sub-notch fractional motion from high-resolution /
-            // precision trackpads is discarded, keeping ScrollWheelValue a clean multiple of 120
-            // exactly as XNA reports. We cast first to match that; do NOT multiply the float then
-            // cast (that would leak fractional deltas and diverge from FNA/XNA).
+            // Vertical wheel = the XNA-faithful cumulative ScrollWheelValue. FNA truncates the SDL wheel
+            // delta to whole notches BEFORE scaling by 120 (`(int) evt.wheel.y * 120`, SDL3_FNAPlatform.cs)
+            // — the cast binds tighter than the multiply, so sub-notch fractional motion from high-
+            // resolution / precision trackpads is discarded, keeping ScrollWheelValue a clean multiple of
+            // 120 exactly as XNA reports. We cast first to match that; do NOT multiply the float then cast
+            // (that would leak fractional deltas and diverge from FNA/XNA).
             InputManager::AddScrollWheelDelta(
                 static_cast<int>(event.wheel.y) * 120
+            );
+            // Horizontal wheel = a NOXNA/EXT extension (XNA/FNA have no horizontal member). Previously
+            // dropped (DEC-18); now surfaced via MouseState::getHorizontalScrollWheelValueEXTProperty. Same
+            // cast-then-scale-by-120 truncation as the vertical wheel so it stays a clean notch multiple.
+            InputManager::AddHorizontalScrollWheelDelta(
+                static_cast<int>(event.wheel.x) * 120
             );
             break;
         case SDL_EVENT_KEY_DOWN:

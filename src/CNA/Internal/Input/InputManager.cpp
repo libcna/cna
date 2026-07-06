@@ -33,6 +33,7 @@ namespace CNA::Internal::Input
             int X = 0;
             int Y = 0;
             int ScrollWheelValue = 0;
+            int HorizontalScrollWheelValue = 0; // NOXNA/EXT — SDL wheel.x, surfaced via MouseState EXT
             ButtonState LeftButton = ButtonState::Released;
             ButtonState RightButton = ButtonState::Released;
             ButtonState MiddleButton = ButtonState::Released;
@@ -171,6 +172,12 @@ namespace CNA::Internal::Input
     {
         auto& mouseState = getInternalInputState().Mouse;
         mouseState.ScrollWheelValue += delta;
+    }
+
+    void InputManager::AddHorizontalScrollWheelDelta(const int delta)
+    {
+        auto& mouseState = getInternalInputState().Mouse;
+        mouseState.HorizontalScrollWheelValue += delta;
     }
 
     void InputManager::SetMouseRelativeMode(const bool enabled)
@@ -361,7 +368,8 @@ namespace CNA::Internal::Input
             mouseState.MiddleButton,
             mouseState.RightButton,
             mouseState.XButton1,
-            mouseState.XButton2
+            mouseState.XButton2,
+            mouseState.HorizontalScrollWheelValue // NOXNA/EXT 9th arg
         );
     }
 

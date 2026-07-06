@@ -61,6 +61,17 @@ namespace Microsoft::Xna::Framework::Input
          */
         [[nodiscard]] int getScrollWheelValueProperty() const;
 
+        /**
+         * @brief NOXNA/EXT: the cumulative HORIZONTAL scroll wheel value since the game started.
+         *
+         * XNA 4.0 / FNA `MouseState` have no horizontal wheel member, so this is a CNA extension backed by
+         * SDL's `wheel.x` (the vertical `getScrollWheelValueProperty` handles `wheel.y`). Scaled to the same
+         * XNA 120-unit notch. It is deliberately **excluded from `Equals`/`GetHashCode`** so those stay
+         * byte-identical to FNA — it is a pure additive readable field.
+         * @return The cumulative horizontal scroll wheel value.
+         */
+        NOXNA [[nodiscard]] int getHorizontalScrollWheelValueEXTProperty() const;
+
         /** @brief Constructs a MouseState with all values at rest. */
         NOXNA MouseState();
 
@@ -79,6 +90,27 @@ namespace Microsoft::Xna::Framework::Input
                    ButtonState leftButton, ButtonState middleButton,
                    ButtonState rightButton,
                    ButtonState xButton1, ButtonState xButton2);
+
+        /**
+         * @brief NOXNA/EXT: constructs a MouseState including the horizontal scroll wheel value.
+         *
+         * Mirrors the 8-arg XNA constructor but adds `horizontalScrollWheel` as a 9th parameter so CNA's
+         * event pipeline can populate the extension field. The 8-arg constructor above leaves it at 0.
+         * @param x Horizontal position of the cursor.
+         * @param y Vertical position of the cursor.
+         * @param scrollWheel The (vertical) scroll wheel value.
+         * @param leftButton The left mouse button state.
+         * @param middleButton The middle mouse button state.
+         * @param rightButton The right mouse button state.
+         * @param xButton1 The XButton1 state.
+         * @param xButton2 The XButton2 state.
+         * @param horizontalScrollWheel The horizontal scroll wheel value.
+         */
+        NOXNA MouseState(int x, int y, int scrollWheel,
+                         ButtonState leftButton, ButtonState middleButton,
+                         ButtonState rightButton,
+                         ButtonState xButton1, ButtonState xButton2,
+                         int horizontalScrollWheel);
 
         /**
          * @brief Compares this instance with another for equality.
@@ -124,5 +156,6 @@ namespace Microsoft::Xna::Framework::Input
         ButtonState xButton1_;
         ButtonState xButton2_;
         int scrollWheelValue_;
+        int horizontalScrollWheelValue_ = 0; // NOXNA/EXT — see getHorizontalScrollWheelValueEXTProperty
     };
 }

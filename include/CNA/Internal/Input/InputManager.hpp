@@ -124,6 +124,11 @@ namespace CNA::Internal::Input
         static void AddScrollWheelDelta(int delta);
 
         /**
+         * @brief NOXNA/EXT: adds a horizontal mouse wheel delta (SDL wheel.x) to internal state.
+         */
+        static void AddHorizontalScrollWheelDelta(int delta);
+
+        /**
          * @brief Toggles FNA extension relative-mouse-mode accumulation and flushes
          * any pending relative delta (matches SDL3_FNAPlatform's flush-on-enable).
          */

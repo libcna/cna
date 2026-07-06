@@ -282,8 +282,11 @@ namespace
     [[maybe_unused]] constexpr auto z_MouseState_getXButton1Property_6 = static_cast<ButtonState(MouseState::*)() const>(&MouseState::getXButton1Property);
     [[maybe_unused]] constexpr auto z_MouseState_getXButton2Property_7 = static_cast<ButtonState(MouseState::*)() const>(&MouseState::getXButton2Property);
     [[maybe_unused]] constexpr auto z_MouseState_getScrollWheelValueProperty_8 = static_cast<int(MouseState::*)() const>(&MouseState::getScrollWheelValueProperty);
+    // NOXNA/EXT (input_noxna.md N-005): horizontal scroll wheel getter + the 9-arg ctor that populates it.
+    [[maybe_unused]] constexpr auto z_MouseState_getHorizontalScrollWheelValueEXTProperty = static_cast<int(MouseState::*)() const>(&MouseState::getHorizontalScrollWheelValueEXTProperty);
     static_assert(std::is_default_constructible_v<MouseState>, "MouseState()");
     static_assert(std::is_constructible_v<MouseState, int, int, int, ButtonState, ButtonState, ButtonState, ButtonState, ButtonState>, "MouseState(x, y, scrollWheel, left, middle, right, x1, x2)");
+    static_assert(std::is_constructible_v<MouseState, int, int, int, ButtonState, ButtonState, ButtonState, ButtonState, ButtonState, int>, "MouseState(x, y, scrollWheel, left, middle, right, x1, x2, horizontalScrollWheel) [NOXNA/EXT]");
     [[maybe_unused]] constexpr auto z_MouseState_Equals_9 = static_cast<bool(MouseState::*)(const MouseState&) const>(&MouseState::Equals);
     [[maybe_unused]] constexpr auto z_MouseState_GetHashCode_10 = static_cast<int(MouseState::*)() const>(&MouseState::GetHashCode);
     [[maybe_unused]] constexpr auto z_MouseState_ToString_11 = static_cast<std::string(MouseState::*)() const>(&MouseState::ToString);

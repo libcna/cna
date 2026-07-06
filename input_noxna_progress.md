@@ -17,7 +17,7 @@
   cached `IsMouseVisible_`. A `Mouse::SetCursorVisibleEXT` would be a second path to the same global SDL state
   and desync Game's cache. `Game.IsMouseVisible` is the XNA-idiomatic API — do not duplicate. (Engineering
   decision, not an owner question.)
-- [ ] **N-005 Mouse horizontal scroll wheel EXT** — surface SDL `wheel.x` (currently dropped, DEC-18).
+- [x] **N-005 Mouse horizontal scroll wheel EXT** — surface SDL `wheel.x` (currently dropped, DEC-18).
 - [ ] **N-006 `TouchLocation::getPressureEXT`** — expose SDL finger pressure (XNA dropped Pressure).
 
 ## Phase P2 — needs an injectable seam, desktop-strong
@@ -46,6 +46,16 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-005 done (2026-07-06):** Mouse horizontal scroll wheel EXT (reverses DEC-18's drop of `wheel.x`).
+  `MouseState::getHorizontalScrollWheelValueEXTProperty` + a NOXNA 9-arg ctor (8-arg XNA ctor unchanged,
+  leaves it 0); `InputManager` gained a `HorizontalScrollWheelValue` accumulator + `AddHorizontalScroll
+  WheelDelta`; the bridge MOUSE_WHEEL handler now accumulates `(int)wheel.x * 120` (same cast-then-scale
+  notch truncation as vertical). **Excluded from Equals/GetHashCode** so those stay FNA-frozen. Established
+  the "NOXNA-member-on-frozen-type" flow: pinned the getter + 9-arg ctor in `PublicApiInputSignatureFreeze
+  Tests`, documented both in `docs/input-public-api-frozen.md`. Tests: rewrote the old `HorizontalWheelIs
+  Ignored` into independence + 120-notch accumulation + truncation tests, + 3 MouseState ctor/equality
+  tests. `ctest -L input` 100% green; ASan-clean. Files: MouseState.hpp/.cpp, InputManager.hpp/.cpp,
+  SdlInputBridge.cpp, freeze test, frozen-API doc, 2 test files.
 - **N-001 done (2026-07-06):** `CNA::Input::Clipboard` — new public `CNA::Input` namespace established
   (`include/CNA/Input/Clipboard.hpp`, `src/CNA/Input/Clipboard.cpp`). `GetTextEXT`/`SetTextEXT`/`HasTextEXT`
   wrap SDL3 clipboard (SDL_free'd read). Tests `CnaInputClipboardTest` (UTF-8 round-trip + empty) — 2 tests,

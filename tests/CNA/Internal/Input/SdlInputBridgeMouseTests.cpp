@@ -190,6 +190,20 @@ namespace
         SdlInputBridge::ProcessEvent(e);
         return Mouse::GetState().getScrollWheelValueProperty() - before;
     }
+
+    // N-005: drives a horizontal-only wheel event (wheel.x) and returns the delta applied to the NOXNA/EXT
+    // horizontal accumulator.
+    int horizontalWheelDelta(const float x)
+    {
+        const int before = Mouse::GetState().getHorizontalScrollWheelValueEXTProperty();
+        SDL_Event e{};
+        e.type = SDL_EVENT_MOUSE_WHEEL;
+        e.wheel.x = x;
+        e.wheel.y = 0.0f;
+        e.wheel.windowID = 0;
+        SdlInputBridge::ProcessEvent(e);
+        return Mouse::GetState().getHorizontalScrollWheelValueEXTProperty() - before;
+    }
 }
 
 TEST(SdlInputBridgeMouseWheelTest, WholeNotchesScaleBy120)
@@ -205,20 +219,42 @@ TEST(SdlInputBridgeMouseWheelTest, ZeroDeltaLeavesValueUnchanged)
     EXPECT_EQ(wheelDelta(0.0f), 0);
 }
 
-// DEC-18: XNA/FNA MouseState has only a vertical ScrollWheelValue, so SDL's horizontal wheel.x is
-// intentionally ignored (there is no XNA horizontal-wheel property to route it to).
-TEST(SdlInputBridgeMouseWheelTest, HorizontalWheelIsIgnored)
+// N-005 (was DEC-18): SDL's horizontal wheel.x is now surfaced as the NOXNA/EXT horizontal scroll wheel,
+// routed to a SEPARATE accumulator from the vertical XNA ScrollWheelValue. A horizontal-only event must
+// leave the vertical value untouched.
+TEST(SdlInputBridgeMouseWheelTest, HorizontalWheelDoesNotAffectVerticalScrollWheel)
 {
-    const int before = Mouse::GetState().getScrollWheelValueProperty();
+    const int beforeVertical = Mouse::GetState().getScrollWheelValueProperty();
 
     SDL_Event e{};
     e.type = SDL_EVENT_MOUSE_WHEEL;
-    e.wheel.x = 5.0f; // horizontal scroll — no XNA equivalent
+    e.wheel.x = 5.0f; // horizontal only
     e.wheel.y = 0.0f;
     e.wheel.windowID = 0;
     SdlInputBridge::ProcessEvent(e);
 
-    EXPECT_EQ(Mouse::GetState().getScrollWheelValueProperty(), before);
+    EXPECT_EQ(Mouse::GetState().getScrollWheelValueProperty(), beforeVertical)
+        << "horizontal wheel must not touch the vertical ScrollWheelValue";
+}
+
+// N-005: horizontal wheel.x accumulates into getHorizontalScrollWheelValueEXTProperty, scaled by the same
+// XNA 120-unit notch as the vertical wheel.
+TEST(SdlInputBridgeMouseWheelTest, HorizontalWheelAccumulatesInEXTPropertyBy120Notches)
+{
+    EXPECT_EQ(horizontalWheelDelta(1.0f), 120);
+    EXPECT_EQ(horizontalWheelDelta(-1.0f), -120);
+    EXPECT_EQ(horizontalWheelDelta(3.0f), 360);
+    EXPECT_EQ(horizontalWheelDelta(0.0f), 0);
+    // Same cast-then-scale truncation as vertical: sub-notch precision motion is discarded.
+    EXPECT_EQ(horizontalWheelDelta(0.5f), 0);
+}
+
+// N-005: the two wheels are fully independent — a vertical-only event leaves the horizontal EXT value alone.
+TEST(SdlInputBridgeMouseWheelTest, VerticalWheelDoesNotAffectHorizontalEXTValue)
+{
+    const int beforeHorizontal = Mouse::GetState().getHorizontalScrollWheelValueEXTProperty();
+    (void)wheelDelta(2.0f); // vertical only
+    EXPECT_EQ(Mouse::GetState().getHorizontalScrollWheelValueEXTProperty(), beforeHorizontal);
 }
 
 TEST(SdlInputBridgeMouseWheelTest, FractionalSubNotchIsTruncatedBeforeScaling)
