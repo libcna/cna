@@ -1070,9 +1070,16 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   implemented (or explicitly documented as absent) in Task 4.3. **Already satisfied while fixing
   Task 4.3**: `ENetBackendTest.SimulatedLatencyAndPacketLossHaveNoEffectOnRealTraffic`.
 
-- [ ] **Task 5.18** — Add a dedicated test file for `ENetLibrary` (`EnsureInitialized()`'s
+- [x] **Task 5.18** — Add a dedicated test file for `ENetLibrary` (`EnsureInitialized()`'s
   double-init idempotency currently only exercised incidentally by other tests, never directly
-  asserted).
+  asserted). Added `tests/CNA/Internal/Net/ENetLibraryTests.cpp` with
+  `EnsureInitializedDoesNotThrow` and `EnsureInitializedIsIdempotentAcrossManyCalls` (10 repeated
+  calls) — confirms the function-local-static `InitGuard` pattern (only `enet_initialize()`s once
+  per process) is safe to call repeatedly, directly rather than only incidentally via every other
+  Net test transitively calling it through `ENetHostHandle::CreateHost`/`CreateClient`.
+
+  Pure test-coverage addition, no revert-verify applies. New tests: 2/2 passing. Full suite:
+  **3298/3300 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 5.19** — Add ordinal-value/spelling-lock tests for `WriteArbitratedLeaderboard`/
   `WriteUnarbitratedLeaderboard`/`WriteTrueSkill` events — currently zero test coverage, not even a
