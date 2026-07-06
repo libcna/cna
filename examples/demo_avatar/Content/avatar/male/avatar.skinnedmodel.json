@@ -34,8 +34,20 @@
   ],
   "animations": [
     {
+      "name": "Celebrate",
+      "clip": "clips/Celebrate.clip.bin"
+    },
+    {
+      "name": "Clap",
+      "clip": "clips/Clap.clip.bin"
+    },
+    {
       "name": "Stand0",
       "clip": "clips/Stand0.clip.bin"
+    },
+    {
+      "name": "Stand1",
+      "clip": "clips/Stand1.clip.bin"
     },
     {
       "name": "Wave",

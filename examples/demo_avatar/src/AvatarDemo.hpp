@@ -16,6 +16,7 @@
 #include "CNA/CNAHelper.hpp"
 
 #include <memory>
+#include <vector>
 
 // Task 11.11 (Phase 11b): the first real, non-synthetic-fixture proof that
 // AvatarRenderer::EnableRealRenderingEXT/DrawRealEXT (Phase 10) and the
@@ -52,11 +53,13 @@ private:
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::SkinnedModelEXT> model_;
     std::unique_ptr<Microsoft::Xna::Framework::GamerServices::AvatarRenderer> renderer_;
 
-    // Which of the model's two clips (Stand0/Wave) is currently playing, and
-    // how far into it — reset to zero whenever the clip changes so playback
-    // always starts from the clip's own beginning, not wherever the other
-    // clip happened to leave off.
-    std::string currentClip_ = "Stand0";
+    // All 5 AvatarAnimationPreset clips baked into the demo's Content (Task
+    // 11.15: Stand0/Stand1/Wave/Clap/Celebrate) — Space cycles forward through
+    // this list. clipPositionSeconds_ resets to zero on every change so
+    // playback always starts from the clip's own beginning, not wherever the
+    // previous clip happened to leave off.
+    std::vector<std::string> clipNames_{"Stand0", "Stand1", "Wave", "Clap", "Celebrate"};
+    std::size_t currentClipIndex_ = 0;
     double clipPositionSeconds_ = 0.0;
     bool spaceWasDown_ = false;
 

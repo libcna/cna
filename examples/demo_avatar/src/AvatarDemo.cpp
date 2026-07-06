@@ -70,6 +70,10 @@ void AvatarDemo::LoadContent()
     renderer_->setAmbientLightColorProperty(Vector3(0.35f, 0.35f, 0.35f));
     renderer_->setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
     renderer_->setLightDirectionProperty(Vector3(-0.4f, -0.6f, -0.7f));
+
+    getWindowProperty().setTitleProperty(
+        (bodyType_ == AvatarBodyType::Female ? "CNA Avatar Demo [female] - " : "CNA Avatar Demo [male] - ")
+        + clipNames_[currentClipIndex_] + "  (Space: next anim, Left/Right: rotate, Esc: quit)");
 }
 
 void AvatarDemo::Update(GameTime& gameTime)
@@ -88,8 +92,11 @@ void AvatarDemo::Update(GameTime& gameTime)
 
     const bool spaceDown = kb.IsKeyDown(Keys::Space);
     if (spaceDown && !spaceWasDown_) {
-        currentClip_ = (currentClip_ == "Stand0") ? "Wave" : "Stand0";
+        currentClipIndex_ = (currentClipIndex_ + 1) % clipNames_.size();
         clipPositionSeconds_ = 0.0;
+        getWindowProperty().setTitleProperty(
+            (bodyType_ == AvatarBodyType::Female ? "CNA Avatar Demo [female] - " : "CNA Avatar Demo [male] - ")
+            + clipNames_[currentClipIndex_] + "  (Space: next anim, Left/Right: rotate, Esc: quit)");
     }
     spaceWasDown_ = spaceDown;
 
@@ -117,7 +124,7 @@ void AvatarDemo::Draw(const GameTime&)
     renderer_->setProjectionProperty(
         Matrix::CreatePerspectiveFieldOfView(kPiOver4, aspect, 0.1f, 100.0f));
 
-    renderer_->DrawRealEXT(currentClip_, System::TimeSpan::FromSeconds(clipPositionSeconds_), /*loop=*/true);
+    renderer_->DrawRealEXT(clipNames_[currentClipIndex_], System::TimeSpan::FromSeconds(clipPositionSeconds_), /*loop=*/true);
 }
 
 GetTypeNameCPP(AvatarDemo, "AvatarDemo")
