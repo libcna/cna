@@ -704,6 +704,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             set_tests_properties(EasyGL_AvatarRenderer_AttachPart PROPERTIES
                 TIMEOUT 30
                 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+            # Task 11.24: AvatarRenderer::PartTintEXT per-part tint routing regression test.
+            cna_easygl_test(cna_test_avatar_tint_routing
+                            examples/avatar_tint_routing_integration_test.cpp)
+            target_link_libraries(cna_test_avatar_tint_routing PRIVATE CNA_GamerServices)
+            add_test(NAME EasyGL_AvatarRenderer_TintRouting
+                     COMMAND cna_test_avatar_tint_routing)
+            set_tests_properties(EasyGL_AvatarRenderer_TintRouting PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
         endif()
 
         # Task 125: DXT1 texture loaded via FromStream, rendered, pixel readback
