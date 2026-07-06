@@ -692,3 +692,84 @@ TEST(ENetBackendTest, ClientProcessesStateChangeBroadcast) {
     EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Playing);
     EXPECT_EQ(startedCount, 1);
 }
+
+// --- Task 1.4: HandleReceive must not let a decode exception escape Update() ---
+
+// Task 1.4: any Decode* call in HandleReceive throws std::runtime_error on a truncated/malformed
+// payload (BinaryReader::ReadBytes/ReadString throw on underflow) - and this arrives over an
+// already-open ENet channel from a connected peer, with no further payload validation. Confirms
+// the host survives a truncated ClientHello (tag byte with no further data at all) without
+// crashing or throwing out of Update(), and keeps functioning normally afterward for a real,
+// well-formed ClientHello from a second connection.
+TEST(ENetBackendTest, HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    ENetHostHandle badClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* badPeerFromClientSide = badClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(badPeerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (badClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    // A well-formed Encode(ClientHelloMessage) always has at least a tag byte plus a gamertag-count
+    // byte; sending just the tag byte simulates a corrupted/truncated packet - DecodeClientHello's
+    // very first read after the tag (the count byte) hits end-of-stream and throws.
+    Microsoft::Xna::Framework::Net::PacketWriter writer;
+    writer.Write(static_cast<SharpRuntime::bytecs>(MessageTag::ClientHello));
+    auto truncatedBytes = NetPacketCodec::ExtractBytes(writer);
+    ASSERT_EQ(truncatedBytes.size(), 1u);
+    badClient.Send(badPeerFromClientSide, 0, truncatedBytes.data(), truncatedBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    badClient.Flush();
+
+    // Pump enough Update() calls for the truncated packet to actually be received and processed;
+    // none of them may throw or crash the process.
+    for (int i = 0; i < 50; ++i, PollYield()) {
+        EXPECT_NO_THROW(host.session->Update());
+    }
+
+    // The host must still be fully functional afterward: a second, real client connecting and
+    // sending a well-formed ClientHello must still be processed normally.
+    ENetHostHandle goodClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* goodPeerFromClientSide = goodClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(goodPeerFromClientSide, nullptr);
+
+    connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (goodClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    goodClient.Send(goodPeerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    goodClient.Flush();
+
+    int joinCount = 0;
+    host.session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
+    joinCount = 0; // reset past the replay for the host's own pre-existing local gamer
+
+    for (int i = 0; i < 200 && joinCount == 0; ++i, PollYield()) {
+        host.session->Update();
+    }
+
+    EXPECT_EQ(joinCount, 1);
+    NetworkGamer* remoteGamer = nullptr;
+    for (NetworkGamer* g : host.session->getAllGamersProperty()) {
+        if (g->getGamertagProperty() == "RemotePlayer") remoteGamer = g;
+    }
+    EXPECT_NE(remoteGamer, nullptr);
+}

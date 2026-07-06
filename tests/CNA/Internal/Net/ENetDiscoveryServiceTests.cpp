@@ -172,38 +172,57 @@ namespace {
 // Task 1.3: HandleReceived/DecodeAnnounce throwing mid-poll (here, via Task 1.1's negative-index
 // guard) used to leave FindSessions()'s currentResults_ pointing at its own about-to-be-destroyed
 // stack-local `results` vector, since the plain `currentResults_ = nullptr;` reset at the end of
-// FindSessions() was skipped by the exception unwinding straight past it. The *next* real announce
-// processed via Poll() (driven from NetworkSession::Update(), exactly as in production) would then
-// write through that dangling pointer. Confirmed fixed via CurrentResultsGuard's RAII reset.
-TEST(ENetDiscoveryServiceTest, MalformedAnnounceDuringSearchDoesNotLeaveADanglingResultsPointer) {
+// FindSessions() was skipped by the exception unwinding straight past it. Confirmed fixed via
+// CurrentResultsGuard's RAII reset - retained as defense-in-depth even though Task 1.4 below
+// separately stopped HandleReceived from letting DecodeAnnounce's exception escape in the first
+// place (so, unlike when this test was originally written against Task 1.3 alone, FindSessions()
+// no longer throws here at all; it silently drops the malformed packet and keeps searching).
+TEST(ENetDiscoveryServiceTest, MalformedAnnounceDuringSearchIsIgnoredAndDoesNotLeaveADanglingResultsPointer) {
     SystemLinkSessionFixture host("HostPlayer");
 
     // Already sitting in the OS socket receive buffer before FindSessions() below even sends its
     // own query, so it's the first datagram FindSessions()'s poll loop picks up.
     SendRawUdpDatagram(kTestDiscoveryPort, BuildRawAnnounceWithPropertyIndex(-1, 999));
 
-    EXPECT_THROW(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink), std::runtime_error)
-        << "expected the malformed packet to be processed and throw during this call - if it "
-           "didn't, this test isn't actually exercising the exception-mid-poll scenario";
-
-    // Without Task 1.3's fix, currentResults_ would still be dangling here. Send a second,
-    // well-formed-enough announce and pump real Update() calls (-> ENetDiscoveryService::Poll(),
-    // the passive per-frame responder) so, if the pointer were still dangling, this would write
-    // through it right now — exactly the production code path (Poll() runs on every
-    // NetworkSession::Update(), independent of any FindSessions() call being in flight).
-    SendRawUdpDatagram(kTestDiscoveryPort, BuildRawAnnounceWithPropertyIndex(0, 111));
-    auto pumpDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-    while (std::chrono::steady_clock::now() < pumpDeadline)
-    {
-        host.session->Update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
-
-    // The real proof: a completely fresh, well-formed search must still work correctly - no
-    // crash, no corrupted results, exactly as if the malformed packet had never arrived.
-    std::vector<AvailableNetworkSession> found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
+    // Task 1.4: the malformed packet must not crash the process, must not throw out of
+    // FindSessions(), and must not corrupt state so badly that the real host can't still be found
+    // within this very same call.
+    std::vector<AvailableNetworkSession> found;
+    EXPECT_NO_THROW(found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
     ASSERT_EQ(found.size(), 1u);
     EXPECT_EQ(found[0].getHostGamertagProperty(), "HostPlayer");
     EXPECT_EQ(found[0].GetConnectPort(), ENetBackend::GetBoundPort(host.session));
+
+    // A second, completely fresh search must also still work correctly - proof that no lingering
+    // dangling pointer or corrupted static state survived the first call either (the scenario
+    // Task 1.3's CurrentResultsGuard fix specifically targets).
+    std::vector<AvailableNetworkSession> foundAgain = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
+    ASSERT_EQ(foundAgain.size(), 1u);
+    EXPECT_EQ(foundAgain[0].getHostGamertagProperty(), "HostPlayer");
+}
+
+// Task 1.4: a malformed announce arriving while no search is in flight (currentResults_ == nullptr)
+// takes the passive-responder path — ENetDiscoveryService::Poll(), driven from every
+// NetworkSession::Update() regardless of whether anyone is calling FindSessions() at all. Confirms
+// that path also survives a malformed datagram without crashing or wedging discovery for
+// subsequent, legitimate searches.
+TEST(ENetDiscoveryServiceTest, PollIgnoresMalformedAnnounceWhileIdlingAndDiscoveryKeepsWorking) {
+    SystemLinkSessionFixture host("HostPlayer");
+
+    SendRawUdpDatagram(kTestDiscoveryPort, BuildRawAnnounceWithPropertyIndex(-1, 999));
+
+    // Pump real Update() calls (-> Poll(), with currentResults_ == nullptr the whole time - no
+    // FindSessions() is in flight) so the malformed packet is processed via the idle path.
+    auto pumpDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+    while (std::chrono::steady_clock::now() < pumpDeadline)
+    {
+        EXPECT_NO_THROW(host.session->Update());
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    // Discovery must still work normally afterward.
+    std::vector<AvailableNetworkSession> found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
+    ASSERT_EQ(found.size(), 1u);
+    EXPECT_EQ(found[0].getHostGamertagProperty(), "HostPlayer");
 }
 #endif // !defined(__EMSCRIPTEN__) && !defined(_WIN32)

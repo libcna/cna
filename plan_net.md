@@ -103,22 +103,52 @@ resource consumption, or a crashed process — not just XNA-fidelity gaps.
   3/3 clean passes, no flakiness either direction. Full suite: 3235/3237 passing (2 expected
   accelerometer/gyroscope skips).
 
-- [ ] **Task 1.4** — Add exception handling around all `Decode*` calls in
+- [x] **Task 1.4** — Add exception handling around all `Decode*` calls in
   `ENetBackend::HandleReceive` and `ENetDiscoveryService::HandleReceived` so a single malformed
   packet from any connected peer (`ENetBackend.cpp`, `HandleReceive`, ~lines 356-387) or any LAN
   device (`ENetDiscoveryService.cpp`, `HandleReceived`, ~lines 117-163) cannot crash the entire
-  host process. Confirmed: neither file has a single `try`/`catch` anywhere
-  (`grep -n "try\|catch" src/CNA/Internal/Net/*.cpp` returns zero hits), and `BinaryReader::ReadBytes`/`ReadString`
-  throw `std::runtime_error` on underflow, which currently propagates all the way up through
-  `NetworkSession::Update()` into the caller's own game loop — this is a real, unauthenticated,
-  remote denial-of-service against any game built on this framework (LAN discovery is
-  unauthenticated broadcast UDP; connected-channel traffic requires no special payload validation
-  either). Also fix the packet leak noted in the same code path: when an exception fires inside
-  `PumpSession`, `enet_packet_destroy(evt.packet)` (~line 448) is skipped. Fix: wrap packet decoding
-  in try/catch, log/drop the malformed packet, ensure `enet_packet_destroy` always runs (e.g. via
-  RAII), and do not let a decode exception propagate out of `Update()`. Add tests feeding
-  deliberately truncated/malformed packets through both paths and asserting the process keeps
-  running and continues to function correctly afterward.
+  host process. Confirmed: neither file had a single `try`/`catch` anywhere
+  (`grep -n "try\|catch" src/CNA/Internal/Net/*.cpp` returned zero hits), and `BinaryReader::ReadBytes`/`ReadString`
+  throw `std::runtime_error` on underflow, which propagated all the way up through
+  `NetworkSession::Update()` into the caller's own game loop — a real, unauthenticated, remote
+  denial-of-service against any game built on this framework (LAN discovery is unauthenticated
+  broadcast UDP; connected-channel traffic requires no special payload validation either). Also
+  fixed the packet leak in the same code path: when an exception fired inside `PumpSession`,
+  `enet_packet_destroy(evt.packet)` (~line 448) was skipped.
+  **Fixed:** wrapped the whole decode/dispatch `switch` in both `HandleReceive` (`ENetBackend.cpp`)
+  and `HandleReceived` (`ENetDiscoveryService.cpp`) in `try { ... } catch (const std::exception&) { }`
+  — a malformed/truncated packet is now silently dropped instead of throwing out. In
+  `ENetBackend::PumpSession`, replaced the plain post-call `enet_packet_destroy(evt.packet)` with a
+  `ReceivedPacketGuard` RAII type so the destroy always runs, defense-in-depth alongside the
+  try/catch (matching Task 1.3's RAII precedent).
+  **Note:** this changes previously-observed behavior from Task 1.3 — before this task,
+  `ENetDiscoveryService::FindSessions()` propagated a malformed packet's decode exception all the
+  way out to the caller (that was the exact mechanism Task 1.3's regression test relied on to
+  reach the dangling-pointer scenario); after this task, `HandleReceived` catches it internally, so
+  `FindSessions()` no longer throws for a malformed packet at all — it silently ignores it and
+  keeps searching. Updated Task 1.3's test accordingly (renamed
+  `MalformedAnnounceDuringSearchDoesNotLeaveADanglingResultsPointer` →
+  `MalformedAnnounceDuringSearchIsIgnoredAndDoesNotLeaveADanglingResultsPointer`, asserting
+  `EXPECT_NO_THROW` + the real host is still found within the same call, plus a second fresh call
+  to confirm no lingering corruption) — Task 1.3's `CurrentResultsGuard` fix itself is unchanged and
+  kept as defense-in-depth.
+  **Added tests:**
+  `ENetDiscoveryServiceTest.PollIgnoresMalformedAnnounceWhileIdlingAndDiscoveryKeepsWorking`
+  (malformed announce arriving via the passive `Poll()`/`Update()` path, with no `FindSessions()` in
+  flight, doesn't crash and discovery still works afterward) and
+  `ENetBackendTest.HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward` (a connected
+  peer sends a 1-byte truncated `ClientHello` — just the tag byte — confirming `Update()` never
+  throws, then a second, real client connects and completes a normal `ClientHello`/`ServerWelcome`
+  handshake, proving the host keeps functioning fully afterward, not just "didn't crash").
+  **Verified the bug is real, not theoretical:** temporarily reverted just the two `.cpp` fixes
+  (`git stash push` on the two source files only, keeping the new tests) and reran the 3 new/updated
+  tests 3 times — **consistent failures every run**: `HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward`
+  failed with `Update() throws std::runtime_error("Unexpected end of stream.")`, and
+  `MalformedAnnounceDuringSearchIsIgnoredAndDoesNotLeaveADanglingResultsPointer` failed with
+  `FindSessions() throws std::runtime_error("NetDiscoveryProtocol: negative property index")` —
+  exactly the described propagation-out-of-`Update()`/`FindSessions()` DoS, not benign. Restored the
+  fix (`git stash pop`) and reran — all pass; full suite: **3237/3239 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 1.5** — Fix `ReplyToQuery` never actually decoding the incoming `Query` message.
   Confirmed (`ENetDiscoveryService.cpp`, `HandleReceived`, ~lines 117-167): on a `Query`-tagged

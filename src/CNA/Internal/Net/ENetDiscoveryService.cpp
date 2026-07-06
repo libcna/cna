@@ -122,47 +122,59 @@ namespace CNA::Internal::Net
                 return;
             }
 
-            switch (NetDiscoveryProtocol::PeekTag(data))
+            // Task 1.4: this datagram comes off unauthenticated broadcast UDP (any LAN device, or
+            // a spoofed source, can send here) - PeekTag/DecodeAnnounce throw std::runtime_error on
+            // malformed input (see Tasks 1.1/1.2), which used to propagate straight out of Poll()
+            // (called from every NetworkSession::Update()) or FindSessions() into the caller's own
+            // game loop. Drop the offending datagram and keep discovery running instead.
+            try
             {
-                case DiscoveryMessageTag::Query:
-                    ReplyToQuery(sock, fromAddress);
-                    break;
-                case DiscoveryMessageTag::Announce:
-                    if (currentResults_ != nullptr)
-                    {
-                        DiscoveryAnnounceMessage announce = NetDiscoveryProtocol::DecodeAnnounce(data);
-                        std::array<char, 64> ip{};
-                        enet_address_get_host_ip(&fromAddress, ip.data(), ip.size());
-                        std::string address(ip.data());
-
-                        // Dedup by connect port alone: the same query goes out via both broadcast
-                        // and an explicit loopback copy, and on this machine a broadcast send can
-                        // arrive back at our own socket by more than one path (each observed under
-                        // a different source address) — so the same host's reply can legitimately
-                        // arrive more than once. A given ephemeral ENet connect port uniquely
-                        // identifies one hosted session, regardless of which local path its
-                        // announce happened to take.
-                        bool alreadyKnown = std::any_of(
-                            currentResults_->begin(), currentResults_->end(),
-                            [&](const AvailableNetworkSession& existing) {
-                                return existing.GetConnectPort() == announce.ConnectPort;
-                            }
-                        );
-                        if (!alreadyKnown)
+                switch (NetDiscoveryProtocol::PeekTag(data))
+                {
+                    case DiscoveryMessageTag::Query:
+                        ReplyToQuery(sock, fromAddress);
+                        break;
+                    case DiscoveryMessageTag::Announce:
+                        if (currentResults_ != nullptr)
                         {
-                            currentResults_->push_back(AvailableNetworkSession::CreateInternal(
-                                announce.CurrentGamerCount,
-                                announce.HostGamertag,
-                                announce.OpenPrivateSlots,
-                                announce.OpenPublicSlots,
-                                announce.Properties,
-                                QualityOfService::CreateInternal(),
-                                address,
-                                announce.ConnectPort
-                            ));
+                            DiscoveryAnnounceMessage announce = NetDiscoveryProtocol::DecodeAnnounce(data);
+                            std::array<char, 64> ip{};
+                            enet_address_get_host_ip(&fromAddress, ip.data(), ip.size());
+                            std::string address(ip.data());
+
+                            // Dedup by connect port alone: the same query goes out via both broadcast
+                            // and an explicit loopback copy, and on this machine a broadcast send can
+                            // arrive back at our own socket by more than one path (each observed under
+                            // a different source address) — so the same host's reply can legitimately
+                            // arrive more than once. A given ephemeral ENet connect port uniquely
+                            // identifies one hosted session, regardless of which local path its
+                            // announce happened to take.
+                            bool alreadyKnown = std::any_of(
+                                currentResults_->begin(), currentResults_->end(),
+                                [&](const AvailableNetworkSession& existing) {
+                                    return existing.GetConnectPort() == announce.ConnectPort;
+                                }
+                            );
+                            if (!alreadyKnown)
+                            {
+                                currentResults_->push_back(AvailableNetworkSession::CreateInternal(
+                                    announce.CurrentGamerCount,
+                                    announce.HostGamertag,
+                                    announce.OpenPrivateSlots,
+                                    announce.OpenPublicSlots,
+                                    announce.Properties,
+                                    QualityOfService::CreateInternal(),
+                                    address,
+                                    announce.ConnectPort
+                                ));
+                            }
                         }
-                    }
-                    break;
+                        break;
+                }
+            }
+            catch (const std::exception&)
+            {
+                // Malformed/crafted discovery datagram - drop it and keep discovery running.
             }
         }
 

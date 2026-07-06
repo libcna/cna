@@ -11,6 +11,7 @@
 
 #include <enet/enet.h>
 #include <memory>
+#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
@@ -361,30 +362,59 @@ namespace CNA::Internal::Net
                 return;
             }
 
-            switch (NetPacketCodec::PeekTag(data))
+            // Task 1.4: this packet arrived over an already-open ENet channel, but nothing else
+            // validates its payload — a truncated/corrupted packet from any connected peer makes
+            // any Decode* call below throw std::runtime_error (BinaryReader::ReadBytes/ReadString
+            // throw on underflow). Uncaught, that exception used to propagate straight out of
+            // Update() into the caller's own game loop: a remote DoS from a single bad packet. Drop
+            // the offending packet and keep the session running instead.
+            try
             {
-                case MessageTag::ClientHello:
-                    HandleClientHello(session, state, peer, NetPacketCodec::DecodeClientHello(data));
-                    break;
-                case MessageTag::ServerWelcome:
-                    HandleServerWelcome(session, state, NetPacketCodec::DecodeServerWelcome(data));
-                    break;
-                case MessageTag::GamerJoinBroadcast:
-                    HandleGamerJoinBroadcast(session, state, NetPacketCodec::DecodeGamerJoinBroadcast(data));
-                    break;
-                case MessageTag::GamerLeaveBroadcast:
-                    HandleGamerLeaveBroadcast(session, state, NetPacketCodec::DecodeGamerLeaveBroadcast(data));
-                    break;
-                case MessageTag::StateChangeBroadcast:
-                    HandleStateChangeBroadcast(session, state, NetPacketCodec::DecodeStateChangeBroadcast(data));
-                    break;
-                case MessageTag::AppData:
-                    HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
-                    break;
-                default:
-                    break;
+                switch (NetPacketCodec::PeekTag(data))
+                {
+                    case MessageTag::ClientHello:
+                        HandleClientHello(session, state, peer, NetPacketCodec::DecodeClientHello(data));
+                        break;
+                    case MessageTag::ServerWelcome:
+                        HandleServerWelcome(session, state, NetPacketCodec::DecodeServerWelcome(data));
+                        break;
+                    case MessageTag::GamerJoinBroadcast:
+                        HandleGamerJoinBroadcast(session, state, NetPacketCodec::DecodeGamerJoinBroadcast(data));
+                        break;
+                    case MessageTag::GamerLeaveBroadcast:
+                        HandleGamerLeaveBroadcast(session, state, NetPacketCodec::DecodeGamerLeaveBroadcast(data));
+                        break;
+                    case MessageTag::StateChangeBroadcast:
+                        HandleStateChangeBroadcast(session, state, NetPacketCodec::DecodeStateChangeBroadcast(data));
+                        break;
+                    case MessageTag::AppData:
+                        HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
+                        break;
+                    default:
+                        break;
+                }
+            }
+            catch (const std::exception&)
+            {
+                // Malformed/truncated payload - drop it and keep the session alive.
             }
         }
+
+        // Task 1.4: guarantees enet_packet_destroy runs even if HandleReceive somehow still lets
+        // an exception escape (defense-in-depth alongside the try/catch above) - previously a
+        // plain post-call `enet_packet_destroy(evt.packet)` in PumpSession was skipped whenever an
+        // exception unwound past it, leaking the packet.
+        class ReceivedPacketGuard
+        {
+        public:
+            explicit ReceivedPacketGuard(ENetPacket* packet) : packet_(packet) { }
+            ~ReceivedPacketGuard() { enet_packet_destroy(packet_); }
+            ReceivedPacketGuard(const ReceivedPacketGuard&) = delete;
+            ReceivedPacketGuard& operator=(const ReceivedPacketGuard&) = delete;
+
+        private:
+            ENetPacket* packet_;
+        };
     }
 
     bool ENetBackend::RealNetworkingEnabled(NetworkSessionType sessionType)
@@ -444,8 +474,8 @@ namespace CNA::Internal::Net
             }
             else if (evt.type == ENET_EVENT_TYPE_RECEIVE)
             {
+                ReceivedPacketGuard packetGuard(evt.packet);
                 HandleReceive(session, state, evt.peer, evt.packet);
-                enet_packet_destroy(evt.packet);
             }
             else if (evt.type == ENET_EVENT_TYPE_DISCONNECT)
             {
