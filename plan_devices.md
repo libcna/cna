@@ -741,7 +741,7 @@ of facts that grounded the specific tasks below, not an exhaustive audit result.
 "VibrationController" found while doing this work is a naming error to fix (`VIB-001`),
 not an alternate spelling to preserve.
 
-### VIB-001 — Correct terminology everywhere
+### VIB-001 — Correct terminology everywhere — CLOSED (2026-07-06, verified clean, no occurrences found)
 
 - **Priority:** Critical
 - **Area:** Vibration API
@@ -750,23 +750,31 @@ not an alternate spelling to preserve.
   (`include/Microsoft/Devices/VibrateController.hpp`), but docs, comments, tests,
   examples, and any future plan text must be audited to make sure the wrong name never
   creeps in.
+- **Resolution (2026-07-06):** ran a repository-wide, case-insensitive grep for
+  `vibrationcontroller`/`vibration controller` across every file (excluding vendored
+  `third_party/`/`vendor/` and `.git/`). Every hit (9 total, in `plan_devices.md` and
+  `NEXT.md` only) is an explicit warning against the mistake ("not `VibrationController`",
+  "never call it `VibrationController`"), not an actual misuse — confirmed by reading
+  each hit's surrounding line. No occurrence anywhere in `include/`, `src/`, `tests/`,
+  `examples/`, or `docs/` at all. No fix needed; this task's job was to verify, and the
+  verification is now recorded.
 - **Required work:**
   - Grep the whole repository (docs, comments, tests, examples, this plan file's own
     future edits) for "VibrationController" and fix any occurrence found, unless it is
-    explicitly quoting/explaining the common mistake.
+    explicitly quoting/explaining the common mistake. Done — zero real occurrences.
   - Ensure the public class stays exactly `VibrateController` through every task in this
-    section.
+    section. Done, re-confirmed for every VIB task closed alongside this one.
 - **Acceptance criteria:**
-  - Public API uses `VibrateController` everywhere.
+  - Public API uses `VibrateController` everywhere. Confirmed.
   - No documentation, comment, test name, or example accidentally says
-    "VibrationController" as if it were the real name.
+    "VibrationController" as if it were the real name. Confirmed.
 - **Suggested files to inspect or edit:**
-  - `include/Microsoft/Devices/VibrateController.hpp`
-  - `src/Microsoft/Devices/VibrateController.cpp`
-  - `tests/Microsoft/Devices/VibrateControllerTests.cpp`
-  - `examples/demo_devices/`
-  - `docs/devices-*.md`
-  - `plan_devices.md`
+  - `include/Microsoft/Devices/VibrateController.hpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/VibrateController.cpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/VibrateControllerTests.cpp` (inspected, no change needed)
+  - `examples/demo_devices/` (inspected, no change needed)
+  - `docs/devices-*.md` (inspected, no change needed)
+  - `plan_devices.md` (this entry only)
 
 ### VIB-002 — Split XNA phone vibration from SDL haptics
 
