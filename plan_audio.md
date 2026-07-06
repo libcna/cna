@@ -3367,14 +3367,19 @@ restoration can be reverted.
   `CalculateListenerRightMatchesWorldRightForDefaultOrientation`,
   `...RotatesWithListenerFacingDirection`, `...FallsBackToWorldRightWhenDegenerate`
   (`SoundEffectInstanceTests.cpp`).
-* [ ] P10-3D-003: Tests for emitter in front/behind/left/right/above/below listener.
-  *Note:* **Partially covered, not exhaustively.** Front/behind/left/right are covered indirectly
-  via the pure `INTERNAL_calculatePan()` unit tests (`CalculatePanIsFullyRightWhenEmitterDirectlyToTheRight`,
-  `...FullyLeftWhenEmitterDirectlyToTheLeft`, `...CenteredWhenEmitterDirectlyAheadOrBehind`) plus
-  the orientation-aware `Apply3D` tests added this branch. **Above/below (vertical/elevation
-  displacement) has no dedicated test** -- expected behavior is "centered, no pan effect" (pan only
-  ever projects onto the listener's right axis, which is orthogonal to `Up` by construction), but
-  this isn't explicitly asserted anywhere. Left open rather than assumed.
+* [x] P10-3D-003: Tests for emitter in front/behind/left/right/above/below listener.
+  *Note:* Closed this pass. Added a `ComposedPan()` test helper (`SoundEffectInstanceTests.cpp`)
+  that reproduces `Apply3D`'s own two-step pipeline (listener-right projection via
+  `INTERNAL_calculateListenerRight`, then `INTERNAL_calculatePan`) instead of feeding an
+  already-isolated `dx`/distance pair, and six direct tests for the canonical directions against a
+  default-oriented listener: `ComposedPanIsFullyRightWhenEmitterDirectlyToTheRight`,
+  `...FullyLeftWhenEmitterDirectlyToTheLeft`, `...CenteredWhenEmitterDirectlyAhead`,
+  `...CenteredWhenEmitterDirectlyBehind`, `...CenteredWhenEmitterDirectlyAbove`,
+  `...CenteredWhenEmitterDirectlyBelow`. Confirms the previously-unasserted above/below case: an
+  emitter purely on the `Up` axis has zero projection onto the listener's right axis by
+  construction, so pan centers exactly (no divide-by-zero, no stray nonzero value) -- matches the
+  expected behavior noted here previously, now proven rather than assumed. All 6 new tests plus
+  the full suite (3289/3291 pass, 2 pre-existing hardware-only skips) verified green.
 * [x] P10-3D-004: Tests for distance attenuation at zero/reference/large/invalid distance.
   *Note:* Zero distance: `CalculatePanIsCenteredAtZeroDistance` (pan side); attenuation itself
   isn't separately tested at exactly zero distance (would need reading back `MIX_GetTrackGain`
@@ -3730,7 +3735,7 @@ restoration can be reverted.
   | Area | Affected | Observed CNA behavior | Expected XNA/FNA behavior | Reason | Test coverage | Permanent? |
   |---|---|---|---|---|---|---|
   | Reverb/aux-send | `SoundEffectInstance::INTERNAL_applyReverb` | Documented no-op | FACT routes to a real aux-send/reverb submix bus | SDL3_mixer has no aux-send/return bus; FNA itself has no caller for the equivalent method either (dead code in the reference) | `ApplyReverbDoesNotThrow` | Permanent unless backend changes (RFC-2) |
-  | HRTF/elevation | `SoundEffectInstance::Apply3D` | Pan is a single-axis (listener-right) linear projection; no vertical/elevation channel | Full multi-speaker HRTF with elevation | SDL3_mixer has no positional-audio DSP graph | Indirect, via pan unit tests; no dedicated elevation test (P10-3D-003) | Permanent unless backend changes (RFC-2) |
+  | HRTF/elevation | `SoundEffectInstance::Apply3D` | Pan is a single-axis (listener-right) linear projection; no vertical/elevation channel | Full multi-speaker HRTF with elevation | SDL3_mixer has no positional-audio DSP graph | Direct, `ComposedPanIsCenteredWhenEmitterDirectlyAbove`/`...Below` (P10-3D-003) | Permanent unless backend changes (RFC-2) |
   | Stereo crossfeed | `SoundEffectInstance::Pan`/`Apply3D` | Hard-pan (eliminates the opposite channel at the extremes) | 4-coefficient crossfeed matrix | `MIX_SetTrackStereo` is a 2-value gain pair; sharing the single cooked-callback slot with the shipped filter is a real regression risk (P10-PAN-002) | Indirect, via pan unit tests | Design task recorded (RFC-1); not started |
   | Loop region approximation | `SoundEffect`/`SoundEffectInstance` loop playback | A bounded loop region truncates the ENTIRE track (including the first playthrough), not just later iterations | `LoopBegin` plays once, then only the loop segment repeats | `MIX_PROP_PLAY_MAX_FRAME_NUMBER` has no per-iteration distinction | Partial (P10-LOOP-005) | Open (P10-LOOP-003/004 investigate a fix) |
   | XACT RPC unsupported targets | `Cue::EvaluateRpc` | `AttackTime`/`ReleaseTime` always read as manually-set-or-0; filter-frequency/Q and DSP-preset RPC targets parsed but discarded | Live elapsed-time-driven envelopes; live filter/DSP parameter modulation | No elapsed-playback-time tracking; no DSP preset system; filter RPC needs the continuous-tick infra extended into `SoundEffectInstance` (P10-RPC-002/003, P10-FILTER-002/003) | Volume/pitch RPC targets ARE tested and continuous (`P9-XACT-016`) | Open (recorded as concrete future tasks, not permanent) |

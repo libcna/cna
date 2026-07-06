@@ -808,6 +808,65 @@ TEST(SoundEffectInstanceFilterMathTest, CalculateListenerRightFallsBackToWorldRi
     EXPECT_NEAR(right.Z, Vector3::Right.Z, 1e-6f);
 }
 
+namespace
+{
+    // P10-3D-003: reproduces Apply3D's own composition of the two pan primitives (listener-right
+    // projection, then the distance-normalized pan formula) instead of feeding an already-isolated
+    // dx/distance pair -- this is what actually exercises the full pipeline for the six canonical
+    // emitter directions, not just the formula in isolation.
+    float ComposedPan(const Vector3& listenerToEmitter)
+    {
+        const Vector3 right = SoundEffectInstanceTestAccess::CalculateListenerRight(
+            Vector3::Forward, Vector3::Up); // default listener orientation
+        const float rightDisplacement =
+            listenerToEmitter.X * right.X + listenerToEmitter.Y * right.Y + listenerToEmitter.Z * right.Z;
+        return SoundEffectInstanceTestAccess::CalculatePan(rightDisplacement, listenerToEmitter.Length());
+    }
+}
+
+// P10-3D-003: emitter directly to the listener's right -- full geometry pipeline must agree with
+// the isolated-formula test (CalculatePanIsFullyRightWhenEmitterDirectlyToTheRight) above.
+TEST(SoundEffectInstanceFilterMathTest, ComposedPanIsFullyRightWhenEmitterDirectlyToTheRight)
+{
+    EXPECT_NEAR(ComposedPan(Vector3(10.0f, 0.0f, 0.0f)), 1.0f, 1e-6f);
+}
+
+// P10-3D-003: emitter directly to the listener's left.
+TEST(SoundEffectInstanceFilterMathTest, ComposedPanIsFullyLeftWhenEmitterDirectlyToTheLeft)
+{
+    EXPECT_NEAR(ComposedPan(Vector3(-10.0f, 0.0f, 0.0f)), -1.0f, 1e-6f);
+}
+
+// P10-3D-003: emitter directly ahead of the listener (along the default Forward, (0,0,-1)) has no
+// rightward component at all -- must pan dead center.
+TEST(SoundEffectInstanceFilterMathTest, ComposedPanIsCenteredWhenEmitterDirectlyAhead)
+{
+    EXPECT_NEAR(ComposedPan(Vector3(0.0f, 0.0f, -10.0f)), 0.0f, 1e-6f);
+}
+
+// P10-3D-003: emitter directly behind the listener -- same "no rightward component" reasoning as
+// directly ahead; this pan-only approximation cannot and does not distinguish front from behind
+// (documented limitation, CHECKLIST.md).
+TEST(SoundEffectInstanceFilterMathTest, ComposedPanIsCenteredWhenEmitterDirectlyBehind)
+{
+    EXPECT_NEAR(ComposedPan(Vector3(0.0f, 0.0f, 10.0f)), 0.0f, 1e-6f);
+}
+
+// P10-3D-003: emitter directly above the listener. Previously entirely untested (plan_audio.md's
+// gap note) -- vertical displacement is orthogonal to the listener's right axis by construction,
+// so it must produce zero rightward projection and pan dead center, never a divide-by-zero or
+// stray nonzero value.
+TEST(SoundEffectInstanceFilterMathTest, ComposedPanIsCenteredWhenEmitterDirectlyAbove)
+{
+    EXPECT_NEAR(ComposedPan(Vector3(0.0f, 10.0f, 0.0f)), 0.0f, 1e-6f);
+}
+
+// P10-3D-003: emitter directly below the listener -- same reasoning as directly above.
+TEST(SoundEffectInstanceFilterMathTest, ComposedPanIsCenteredWhenEmitterDirectlyBelow)
+{
+    EXPECT_NEAR(ComposedPan(Vector3(0.0f, -10.0f, 0.0f)), 0.0f, 1e-6f);
+}
+
 // INTERNAL_applyXactTrackFilter dispatches filterType 0/1/2 to the matching Low/Band/HighPass
 // method and threads the converted oneOverQ through -- verified via the test-only filter-state
 // getter rather than the recursive math (already pinned down above for the plain float-cutoff
