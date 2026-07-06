@@ -834,14 +834,25 @@ locations differing only in State collide in hash but are unequal). **Files chan
 `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` (+1 test). **Tests:** `TouchLocationTest.*` 10/10
 pass. **Behavior verified:** ctor/field/previous/equality/hash parity with FNA. **Remaining risk:** none.
 
-## P5-005 — Verify `TouchLocationState`
-- [ ] Freeze numeric values.
-- [ ] Test state transitions:
+## P5-005 — Verify `TouchLocationState` `[x]`
+- [x] Freeze numeric values.
+- [x] Test state transitions:
   - Invalid
   - Released
   - Pressed
   - Moved
-- [ ] Add regression tests.
+- [x] Add regression tests.
+
+**Result (2026-07-06):** Verified against FNA `TouchLocationState.cs`: exactly four sequential members
+`Invalid=0, Released=1, Pressed=2, Moved=3` — CNA is byte-identical. Numeric values are frozen by
+`TouchLocationStateTest.ValuesMatchXnaSequentialConstants` (all four pinned to 0/1/2/3; a renumber fails the
+test). The four **state transitions** are exercised by the touch state-machine suites: Pressed→Moved is
+`GetStateReflectsCurrentTouchSnapshot`; the Released terminal (returned once then dropped) is
+`ReleasedTouchIsReturnedOnceAndThenRemoved`; the Invalid/Released release-condition branches are
+`SetFingerReleaseOfHeldFingerProducesReleasedWithPreviousLocation` +
+`SetFingerReleaseWithNoPriorFingerInsertsInvalidAndReportsNothing` (P5-007). **Files changed:** none
+(freeze + transition coverage already present). **Behavior verified:** enum value + transition parity with
+FNA. **Remaining risk:** none.
 
 ## P5-006 — Audit `TouchPanel::GetState` `[x]`
 - [x] Inspect both internal touch slot path and `InputManager` fallback path.
