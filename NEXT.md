@@ -13,9 +13,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `GRAPHICS_TASKS.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–40 are complete. **Phase 41 (Effect base class and
-  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–353 are
-  done, **Task 354 is next** (developer-facing docs covering `ShaderEffect` vs the Task 353 interim
-  guard vs the Phase 74 roadmap — see §8).
+  compiled effect compatibility, `GRAPHICS_TASKS.md` Tasks 351–360) is open** — Tasks 351–354 are
+  done, **Task 355 is next** ("Verify `EffectPass::Apply` updates current effect state consistently"
+  — see §8). Task 354 closed out the `.fx`-bytecode-policy sub-thread (Tasks 351–354); it does
+  **not** close Phase 41 — Tasks 355–360 (`EffectPass`/`EffectTechnique`/parameter-lookup
+  verification) remain open.
   **Task 351**
   audited `Effect` against FNA's `Graphics/Effect/Effect.cs` and fixed 3 real bugs: `GetTypeName()`
   returned bare `"Effect"` instead of the fully-qualified name every other `GraphicsResource`
@@ -103,7 +105,16 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   the no-bytecode constructor uses and confirming both new tests fail, then reverting. Full
   3-backend regression, zero new failures: EasyGL 3368/3371 (3 pre-existing, unchanged). Vulkan
   3290/3304 (13 pre-existing + 1 reconfirmed order-dependent `Vulkan_RenderTargetUsage` flake).
-  Bgfx 3274/3274 (100%).
+  Bgfx 3274/3274 (100%). **Task 354** wrote the developer-facing counterpart to
+  `docs/fx-bytecode-support-plan.md`: new `docs/shader-effect-vs-fx-bytecode.md`, verified against
+  real source rather than invented — `ShaderEffect(device, vertSrc, fragSrc)` takes raw GLSL
+  strings on EasyGL but pre-compiled SPIR-V bytes (packed into `std::string`) on Vulkan (same
+  constructor, different parameter *content* per backend, confirmed from
+  `examples/easygl_shader_effect_test.cpp`/`examples/vulkan_shader_effect_test.cpp`), quotes Task
+  353's exact thrown exception text read directly from `Effect.cpp`, states plainly that Bgfx's
+  `ShaderEffect` backend is a no-op stub, gives "hand-port the original HLSL to GLSL/SPIR-V today"
+  as practical porting guidance, and summarizes Phase 74's 8-step roadmap without duplicating
+  `docs/fx-bytecode-support-plan.md`. Docs-only, no code changed, no rebuild needed.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -431,28 +442,23 @@ There is no known reproducible failing build command right now (see §4).
 
 In priority order:
 
-1. **`GRAPHICS_TASKS.md` Task 354 — developer-facing docs: `ShaderEffect` vs XNA `Effect` bytecode**
-   - Goal: re-scoped by Task 352 from "document that bytecode is unsupported" to a roadmap doc:
-     what's supported today (`ShaderEffect`'s hand-written GLSL/SPIR-V, stock effects), the interim
-     guard shipped in Task 353 (a real `Effect(GraphicsDevice&, const std::vector<bytecs>&)`
-     constructor exists and throws `System::NotImplementedException` naming Phase 74), and the
-     Phase 74 roadmap for real compiled-`.fx` support (`docs/fx-bytecode-support-plan.md`).
-   - Files: a new developer-facing doc (check `docs/` naming convention — likely
-     `docs/shadereffect-vs-fx-bytecode.md` or similar), cross-linked from
-     `docs/fx-bytecode-support-plan.md` and `docs/xna-4-api-coverage.md`.
-   - Verification: docs-only, no rebuild needed (matching Task 340/350's precedent) — just make sure
-     it accurately reflects Task 353's real constructor signature/exception type/message wording,
-     not a stale "throws `std::runtime_error`" or "unsupported" description.
+1. **`GRAPHICS_TASKS.md` Task 355 — verify `EffectPass::Apply` updates current effect state consistently**
+   - Goal: unit test with a mock/test effect confirming `EffectPass::Apply()` correctly makes its
+     owning effect the device's "current" effect and updates whatever state FNA's real
+     `EffectPass.Apply()` updates. Per FNA source (check `Graphics/Effect/EffectPass.cs`), also
+     verify whether FNA throws `InvalidOperationException` when the pass being applied isn't part
+     of the effect's current `CurrentTechnique` — Task 351's audit found CNA's `EffectPass::Apply()`
+     currently has no such validation and explicitly deferred it to this task.
+   - Files: likely `EffectPass.hpp`/`.cpp`, `tests/.../EffectPassTests.cpp` (check if it exists yet).
+   - Verification: new unit test(s) with genuine discriminating power (temporarily break/omit any
+     fix and confirm the test fails).
 
-   **Task 353 status: done.** Added `Effect(GraphicsDevice&, const std::vector<SharpRuntime::bytecs>&)`
-   matching FNA's `Effect(GraphicsDevice, byte[] effectCode)` signature; body throws
-   `System::NotImplementedException` naming Phase 74/`docs/fx-bytecode-support-plan.md` and pointing
-   at `ShaderEffect`/stock effects as today's alternatives. 2 new tests in `EffectTests.cpp`
-   (`TestEffect` fixture extended with a matching bytecode-forwarding constructor), discriminating
-   power verified (temporarily replaced the throw with the same programmatic setup the no-bytecode
-   constructor uses, confirmed both new tests fail, reverted). Full 3-backend regression, zero new
-   failures: EasyGL 3368/3371 (3 pre-existing, unchanged). Vulkan 3290/3304 (13 pre-existing + 1
-   reconfirmed order-dependent `Vulkan_RenderTargetUsage` flake). Bgfx 3274/3274 (100%).
+   **Task 354 status: done.** Wrote `docs/shader-effect-vs-fx-bytecode.md` — the developer-facing
+   counterpart to `docs/fx-bytecode-support-plan.md`. Covers what's supported today (`ShaderEffect`
+   hand-written GLSL on EasyGL / SPIR-V on Vulkan, all 6 stock effects, Bgfx's `ShaderEffect` no-op
+   stub noted honestly), Task 353's exact thrown exception text (quoted verbatim from `Effect.cpp`),
+   practical "hand-port HLSL to GLSL/SPIR-V today" porting guidance, and a summary of Phase 74's
+   roadmap. Does not close Phase 41 (Tasks 355–360 remain). Docs-only, no rebuild needed.
 
 2. **`GRAPHICS_TASKS.md` Task 883 — implement `Effect::Clone()` (new, opened by Task 351)**
    - Goal: FNA's `Effect` has a public virtual `Clone()` (used by every stock effect, each
@@ -703,60 +709,44 @@ Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md after finishing.
 
-Current status: Phases 1-39 are FULLY COMPLETE. Phase 40 (Viewport, DisplayMode, and adapter
-behavior, GRAPHICS_TASKS.md Tasks 341-350) is open, Tasks 341-348 are ALL DONE, Task 349 next
-(the last remaining task besides Task 350's docs-only closer). EasyGL: 3351/3355 pass (3
-documented pre-existing failures + 1 reconfirmed-flaky unrelated CueTest). Vulkan: 3274/3288 pass
-(13 documented failures + 1 reconfirmed-flaky unrelated CueTest, no order-dependent flake this
-run). Bgfx: 3259/3259 pass (100%, no flakes this run). Caution: run all 3 backends' full ctest
-suites sequentially, never concurrently (see NEXT.md §2); if a single run shows an anomaly beyond
-the documented list, re-run in isolation before treating it as a regression.
+Current status: Phases 1-40 are FULLY COMPLETE. Phase 41 (Effect base class and compiled effect
+compatibility, GRAPHICS_TASKS.md Tasks 351-360) is open, Tasks 351-354 are ALL DONE, Task 355 next.
+Last full 3-backend regression (Task 353, shared GraphicsDevice/Effect code touched): EasyGL
+3368/3371 pass (3 documented pre-existing failures, unchanged). Vulkan 3290/3304 pass (13
+documented failures + 1 reconfirmed order-dependent Vulkan_RenderTargetUsage flake). Bgfx
+3274/3274 pass (100%, no flakes that run). Caution: run all 3 backends' full ctest suites
+sequentially, never concurrently (see NEXT.md §2); if a single run shows an anomaly beyond the
+documented list, re-run in isolation before treating it as a regression.
 
-Tasks 341-344 (Viewport sub-area) and 345-347 (adapter/DisplayMode sub-area) of Phase 40 are fully
-closed - see GRAPHICS_TASKS.md for detail.
+Tasks 351-354 (the Effect-base-class-audit + .fx-bytecode-policy sub-thread of Phase 41) are now
+ALL closed - see GRAPHICS_TASKS.md for detail. Summary: Task 351 audited Effect against FNA and
+fixed 3 real bugs (GetTypeName fully-qualified name, Apply() missing NOXNA, a Dispose()
+name-hiding bug that broke compilation on every concrete effect class), and deferred the
+.fx-bytecode-constructor question to Task 352 and the Clone() gap to new Task 883. Task 352 (a
+user policy decision, not inferred) chose FULL support for compiled XNA .fx bytecode; research
+found MojoShader's zlib-licensed C source already vendorable locally at
+/rv/data/library/github.com/u3d-community/U3D/Source/ThirdParty/MojoShader (parses XNA's
+compiled-effect container already; transpiles D3D9 SM2/3 bytecode to GLSL but has NO SPIR-V
+output, so Vulkan needs an extra GLSL->SPIR-V hop via glslang, not yet vendorable from a local
+checkout). Opened new Phase 74 (Tasks 10200-10208) for the real implementation, documented in
+docs/fx-bytecode-support-plan.md, and re-scoped Tasks 353/354 to fit "full support is the target,
+not yet built." Task 353 shipped the interim guard: added the previously-missing
+Effect(GraphicsDevice&, const std::vector<SharpRuntime::bytecs>&) constructor (matching FNA's
+signature) whose body throws System::NotImplementedException naming Phase 74 and pointing at
+ShaderEffect/stock effects as today's real alternative. Task 354 wrote the developer-facing
+counterpart doc, docs/shader-effect-vs-fx-bytecode.md, covering what works today, what throws and
+why, practical hand-port-to-GLSL/SPIR-V porting guidance, and the Phase 74 roadmap summary.
 
-Task 348 (just done) traced the real window-resize chain end-to-end: SDL_EVENT_WINDOW_RESIZED ->
-Game's event loop -> GameWindow::updateFromSDL() -> GameWindow.ClientSizeChanged ->
-GraphicsDeviceManager::INTERNAL_OnClientSizeChanged -> GraphicsDevice::UpdateViewportFromWindow().
-CONFIRMED a real, deliberate FNA divergence, correctly NOT fixed: FNA forwards the new window size
-into PresentationParameters.BackBufferWidth/Height on every resize (full device Reset); CNA
-doesn't, by design (an existing accurate source comment explains why - would corrupt
-FixedHeightDynamicWidth's virtual-resolution scaling). GENUINE DISCOVERY made while verifying the
-new test's discriminating power (temporarily disabling the ClientSizeChanged subscription, then
-separately breaking GameWindow::OnClientSizeChanged()'s Raise() call): Viewport tracking does NOT
-actually depend on the ClientSizeChanged event at all - GraphicsDevice::Present() unconditionally
-refreshes it every frame, a STRONGER guarantee than FNA's - so the event chain itself needed its
-own, separately-discriminating check (added as check 4 in the new test). Closed a real
-test-coverage gap: Task 227's easygl_backbuffer_resize_test.cpp only exercises the GDM-API-driven
-resize path; new examples/easygl_real_window_resize_test.cpp (EasyGL_RealWindowResize) calls
-SDL_SetWindowSize() directly on the live window and checks 4 things: Viewport height pinned,
-Viewport width changes, BackBufferWidth/Height unchanged (regression marker), ClientSizeChanged
-fires. EasyGL-only (Vulkan/Bgfx have no virtual-resolution scaling to pin). NEW FINDINGS DEFERRED
-TO TASK 882: PresentationMode::Letterbox/Overscan/Stretch/NativeBackBuffer aren't distinctly
-implemented on EasyGL (only FixedHeightDynamicWidth has real logic); Vulkan/Bgfx implement no
-virtual-resolution scaling at all in GetViewportSize() (always raw physical window size); Vulkan's
-SetVirtualResolution() instead triggers RecreateSwapchain(), a materially different mechanism
-needing its own investigation. No production code changed this task (new test + CMakeLists.txt
-registration only).
-
-Tasks 341-348 (Viewport + adapter/DisplayMode + backbuffer-resize sub-areas of Phase 40) are now
-ALL closed.
-
-Next task: GRAPHICS_TASKS.md Task 349 - verify viewport reset after backbuffer resize
-(EasyGL/Vulkan). Closes Phase 40 except for Task 350's docs-only closer. Task 348 confirmed the
-real window-resize chain and that GraphicsDevice::Present() unconditionally refreshes Viewport
-every frame regardless of the ClientSizeChanged event. Task 349 should verify this holds
-specifically for the BACKBUFFER RESIZE case (an explicit GraphicsDeviceManager.ApplyChanges()-
-driven resize, Task 227's own tested path) - does Viewport reset to the new backbuffer's full size
-correctly on both EasyGL and Vulkan, matching FNA's real behavior of resetting
-Viewport/ScissorRectangle to (0,0,newW,newH)? This is the same reset behavior Task 338 already
-implemented for SetRenderTarget-driven resizes (GraphicsDevice::ResetViewportAndScissorForRenderTarget)
-- check whether backbuffer resize goes through the same reset path or a separate one, and whether
-ScissorRectangle (not just Viewport) is included - Task 227's existing test doesn't check
-ScissorRectangle at all. DIRECTLY CONNECTS TO TASK 880 (Viewport has zero real GPU wiring on any
-backend) - cross-reference docs/rendertarget-support.md §9 rather than re-diagnosing from scratch.
-Files: src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp (UpdateViewportFromWindow,
-SetPresentationParameters), examples/easygl_backbuffer_resize_test.cpp (Task 227, extend don't
-duplicate), examples/easygl_real_window_resize_test.cpp (Task 348, new this session).
-Update GRAPHICS_TASKS.md and NEXT.md after finishing.
+Next task: GRAPHICS_TASKS.md Task 355 - verify EffectPass::Apply updates current effect state
+consistently (unit test with mock/test effect). Per Task 351's audit, check FNA's real
+EffectPass.Apply() (Graphics/Effect/EffectPass.cs) for whether it throws InvalidOperationException
+when the pass being applied isn't part of the effect's current CurrentTechnique - CNA's
+EffectPass::Apply() currently has no such validation, and Task 351 explicitly deferred this
+specific check to Task 355 rather than fixing it inline. Files: likely EffectPass.hpp/.cpp,
+tests/Microsoft/Xna/Framework/Graphics/EffectTests.cpp or a new EffectPassTests.cpp (check what
+exists first - EffectTests.cpp was created this phase by Task 351, may already have partial
+EffectPass coverage via TestEffect's fixture). As always: verify genuine discriminating power for
+any new test (temporarily break/omit any fix, confirm the test fails, then revert), full
+3-backend rebuild + regression if production code changes, update GRAPHICS_TASKS.md and NEXT.md,
+commit AND push after finishing (standing instruction - do not wait to be asked).
 ```
