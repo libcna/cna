@@ -893,6 +893,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 419: SpriteBatch Draw sourceRectangle must crop, not stretch the whole texture
+        cna_easygl_test(cna_test_easygl_spritebatch_sourcerect
+                        examples/easygl_spritebatch_sourcerect_test.cpp)
+        add_test(NAME EasyGL_SpriteBatch_SourceRectangleCropping
+                 COMMAND cna_test_easygl_spritebatch_sourcerect)
+        set_tests_properties(EasyGL_SpriteBatch_SourceRectangleCropping PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 168: transformMatrix in SpriteBatch::Begin — translation pixel readback
         cna_easygl_test(cna_test_easygl_transform_matrix
                         examples/easygl_transform_matrix_test.cpp)
