@@ -3568,13 +3568,38 @@ done — "it compiles" is not sufficient.
   clips, 5 real parts. Exit code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/
   gyroscope skips), no regressions (new demo-only files, no library changes).
 
-- [ ] **Task 15.21** — `cna_demo_net_avatar_sync` (bonus, cross-cutting): combines Net + Avatar —
+- [x] **Task 15.21** — `cna_demo_net_avatar_sync` (bonus, cross-cutting): combines Net + Avatar —
   each of two processes loads its own gendered avatar, and every frame sends local position/yaw
   plus current `AvatarAnimationPreset` index over `PacketWriter`/`SendData(SendDataOptions::InOrder)`;
   each process renders both its own and the remote peer's avatar in one 3D scene, moving with arrow
   keys and switching animation with Space — the smallest possible proof that Net and
   Avatar/GamerServices compose the way a real game would use them together (in the spirit of
   `cna-samples/ClientServerSample` but with avatars instead of tanks). Two real processes.
+
+  New files: `examples/demo_net_avatar_sync/src/{SyncGame.hpp,SyncGame.cpp,Main.cpp}`, registered
+  in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
+  `cna_demo_net_client_server_arena`, additionally reusing `demo_avatar`'s `Content/` directory.
+  Real two-process `NetworkSession::Create/Find/Join` (Task 15.1's proven pattern): host loads a
+  Male avatar, client a Female avatar. Each process ALSO pre-loads the *other* gender's content
+  locally to render the remote peer — no avatar asset bytes travel over the wire, only a small
+  per-frame `PacketWriter` payload (`Vector2` position, `float` yaw, `int32` clip index) via
+  `LocalNetworkGamer::SendData(SendDataOptions::InOrder)`, exactly matching how a real game would
+  sync transform + animation state rather than geometry. Arrow keys move/rotate the local avatar;
+  Space cycles its clip (from the same gendered neutral+specific clip list `AvatarDemo`/
+  `DualCompareDemo` already use). Both avatars render in one shared-camera 3D scene every frame.
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` as two real OS processes
+  (`--host --smoke 180` / `--join --smoke 180`, one second apart), both exiting `0`. Host log:
+  Male avatar at `x=-1.50` drifting in its own deterministic direction, clip cycling correctly,
+  `haveRemote` flipping to `true` once the client's first packet arrived, remote position/clip
+  tracking the client's real reported state. Client log: Female avatar at `x=+1.50` drifting the
+  *opposite* deterministic direction (proving both directions of the sync are real and
+  independent, not a shared/mirrored value), remote position/clip tracking the host's real state,
+  plus an incidental `SessionEnded` firing when the host exited first (same proof pattern already
+  established in Task 15.1). Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope
+  skips), no regressions (new demo-only files, no library changes).
+
+**Phase 15 complete — 21/21.**
 
 ---
 
