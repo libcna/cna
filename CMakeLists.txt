@@ -613,6 +613,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         target_link_libraries(cna_demo_packet_roundtrip PRIVATE CNA_Net SHARP_RUNTIME)
     endif()
 
+    # Task 15.3: cna_demo_qos_probe - QualityOfService/NetworkGamer::RoundtripTime measured
+    # between two real gamers over real ENet. Console-only, no windowing - needs
+    # CNA_GamerServices (SignedInGamer) and CNA_Net (NetworkSession/QualityOfService).
+    if(CNA_ENABLE_NET)
+        add_executable(cna_demo_qos_probe
+            examples/demo_qos_probe/src/Main.cpp
+        )
+        target_link_libraries(cna_demo_qos_probe PRIVATE CNA_GamerServices CNA_Net SHARP_RUNTIME)
+    endif()
+
     # EasyGL integration tests (Task 85, 86, 87)
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
