@@ -3006,12 +3006,41 @@ done — "it compiles" is not sufficient.
   Task 15.1). Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no
   regressions (new demo-only files, no library changes).
 
-- [ ] **Task 15.7** — `cna_demo_session_lifecycle_events`: `NetworkSession::StartGame()`/`EndGame()`,
+- [x] **Task 15.7** — `cna_demo_session_lifecycle_events`: `NetworkSession::StartGame()`/`EndGame()`,
   `NetworkSessionState` transitions (Lobby→Playing→Ended), `GameStarted`/`GameEnded` events, and a
   manual `Raise()` of `WriteArbitratedLeaderboard`/`WriteUnarbitratedLeaderboard`/`WriteTrueSkill`
   to prove the delegate wiring works even though the real port never triggers them automatically —
   an honest spotlight on that documented gap. Console-only, single process,
   `NetworkSessionType::Local`.
+
+  New file: `examples/demo_session_lifecycle_events/src/Main.cpp`, registered in `CMakeLists.txt`
+  under `CNA_ENABLE_NET` linking `CNA_GamerServices`/`CNA_Net` (console-only, no windowing).
+
+  **Corrected an imprecision in this task's own original description while reading
+  `NetworkSession.cpp` directly**: `EndGame()` transitions `Playing` back to `Lobby` (raising
+  `GameEnded`), not to `Ended` — the natural round-trip is Lobby→Playing→Lobby, not
+  Lobby→Playing→Ended. Reaching `Ended` requires the local gamer to actually leave the session
+  (real disconnect/session-end paths all funnel through `NetworkSession::RemoveGamer`, which is
+  public); the demo calls it explicitly to complete a genuine, full
+  Lobby→Playing→Lobby→Ended tour instead of asserting a transition that doesn't exist.
+
+  Confirmed the delegate-wiring/no-automatic-firing gap by `grep`ping for
+  `WriteArbitratedLeaderboard.Raise`/`WriteUnarbitratedLeaderboard.Raise`/`WriteTrueSkill.Raise`
+  across `src/` before writing a word of demo code: zero real call sites exist anywhere in
+  production code — these three delegates are declared and fully subscribable, but nothing ever
+  invokes them outside of this demo's own manual `Raise()` calls. (FNA's own reference never
+  implemented a real arbitration/leaderboard-writing pipeline either, so this is a genuine,
+  pre-existing parity gap, not something this task discovered as new.)
+
+  Ran the built demo directly (no networking, so no two-process verification needed): printed
+  `Initial state: Lobby`; `StartGame()`+`Update()` → `GameStarted fired` → `Playing`;
+  `EndGame()`+`Update()` → `GameEnded fired` → back to `Lobby` (with the corrected-transition note
+  printed inline); manually raised all 3 leaderboard delegates, each printing its own fire
+  confirmation with the local gamer's name and `isLeaving=false`; `RemoveGamer(localGamer,
+  HostEndedSession)`+`Update()` → `SessionEnded fired` → `Ended`; final summary line
+  `leaderboardDelegateFireCount=3` (exactly the 3 manual calls, nothing more). Exit code `0`. Full
+  suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no regressions (new
+  demo-only file, no library changes).
 
 - [ ] **Task 15.8** — `cna_demo_gamerservices_signin_presence`: `GamerServicesComponent`
   registration, the resulting population of `Gamer::SignedInGamers` (4 stub gamers), `SignedInGamer::SignedIn`/
