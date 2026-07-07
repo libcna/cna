@@ -1240,12 +1240,36 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   applies. Full suite: **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no
   regressions.
 
-- [ ] **Task 6.5** — Investigate whether `SO_REUSEADDR` (used for the shared discovery UDP port
+- [x] **Task 6.5** — Investigate whether `SO_REUSEADDR` (used for the shared discovery UDP port
   61190, which two independent OS processes both bind in `TwoProcessLoopbackTest.cpp`) actually
   guarantees reliable delivery of unicast datagrams to multiple same-port listeners on all target
   platforms (Linux/Windows/Web/Android), or whether `SO_REUSEPORT` (or a different design) would be
   more correct. Document the finding either way (this "apparently works today" per existing test
   passes, but isn't explicitly audited/documented as reliable).
+
+  Documented at the `ENET_SOCKOPT_REUSEADDR` call site in `ENetDiscoveryService.cpp`. Key
+  findings: confirmed **reliable on Linux** (this project's primary dev/CI target) via two
+  independent pieces of direct evidence — `TwoProcessLoopbackTest.cpp`'s own repeated real
+  two-process runs (both roles independently reach this exact bind via `NetworkSession::Create(
+  SystemLink, ...)`), and Task 6.3's own harness work, where a plain socket **without**
+  `SO_REUSEADDR` was directly observed failing to bind against a `SO_REUSEADDR` socket already
+  holding the port — consistent with POSIX's documented rule that every socket sharing a UDP port
+  must itself set the option. Windows' `SO_REUSEADDR` has different, well-documented (looser)
+  semantics than POSIX; not independently verified in this Linux-only sandbox, but the difference
+  only affects whether `bind()` itself succeeds, not a correctness concern in the direction that
+  matters here. Web (Emscripten) already has this entire class permanently disabled (existing
+  class-level doc comment). Android is Linux-kernel-based, expected to match POSIX, not
+  independently verified here either. `SO_REUSEPORT` isn't used and isn't needed: this is a
+  client-queries/host-replies model with no per-connection load-balancing to distribute.
+
+  Also documented *why* which-socket-receives-which-datagram is inherently OS-arbitrary regardless
+  of the exact option used, and why that's already handled correctly: the existing "Dedup by
+  connect port alone" logic in `PollOnce` (just below the option-setting code) was already written
+  to treat a query/reply arriving more than once, via more than one local path, as an expected case
+  — the real, correct mitigation for this arbitrariness, not a workaround for a bug.
+
+  Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
+  **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 6.6** — Investigate and fix (in `sharp-runtime`, coordinating per that repo's own
   modification rule) the endianness asymmetry between `BinaryWriter::Write(Single/double)` (raw

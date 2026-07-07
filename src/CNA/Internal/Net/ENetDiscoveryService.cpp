@@ -57,6 +57,35 @@ namespace CNA::Internal::Net
             {
                 throw std::runtime_error("Failed to create discovery UDP socket.");
             }
+            // Task 6.5: lets multiple independent OS processes on the same machine each bind this
+            // exact well-known port (kDiscoveryPort) simultaneously - required so two genuinely
+            // separate NetworkSession-hosting processes (see TwoProcessLoopbackTest.cpp, where
+            // both the host and client role each independently call NetworkSession::Create with
+            // NetworkSessionType::SystemLink, and therefore each independently reach this exact
+            // bind) don't fail to bind at all. Confirmed empirically reliable on Linux (this
+            // project's primary dev/CI target): POSIX UDP requires SO_REUSEADDR on *every* socket
+            // sharing a port for the bind itself to succeed on all of them (a socket without it
+            // cannot coexist with one that has it - directly observed while building Task 6.3's
+            // own test harness, where a plain, non-REUSEADDR blocking socket failed to bind
+            // against a REUSEADDR socket that already held the port), and TwoProcessLoopbackTest's
+            // own repeated real two-process runs are direct, ongoing proof this exact scenario
+            // works in practice, not just in theory. Windows' SO_REUSEADDR has different, looser,
+            // well-documented semantics than POSIX (it can permit binding over an already-bound
+            // socket regardless of that other socket's own REUSEADDR state) - not independently
+            // verified on Windows in this sandboxed, Linux-only dev environment, but if anything
+            // this makes bind() succeeding there less of a concern, not more. Web (Emscripten) has
+            // this entire class permanently disabled already (see the class's own doc comment) -
+            // moot there. Android is Linux-kernel-based and expected to match POSIX, but likewise
+            // not independently verified here.
+            //
+            // Which specific socket actually *receives* a given incoming datagram when multiple
+            // sockets share one port is inherently OS-arbitrary either way (unlike SO_REUSEPORT,
+            // which isn't used here and isn't needed for this client-queries/host-replies model -
+            // there is no per-connection load-balancing to distribute). PollOnce's own dedup logic
+            // just below (see "Dedup by connect port alone") already treats a query/reply
+            // potentially arriving more than once, via more than one local path, as an expected,
+            // handled case rather than an error - the correct mitigation for that arbitrariness,
+            // not a workaround for a bug.
             enet_socket_set_option(sock, ENET_SOCKOPT_REUSEADDR, 1);
             enet_socket_set_option(sock, ENET_SOCKOPT_BROADCAST, 1);
             enet_socket_set_option(sock, ENET_SOCKOPT_NONBLOCK, 1);
