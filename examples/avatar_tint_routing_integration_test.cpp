@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -127,6 +128,9 @@ protected:
         device.Clear(Color(0, 128, 0, 255));
         device.SetDepthTestEnabled(false);
         device.setBlendStateProperty(BlendState::Opaque);
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
+        // RasterizerState — needs CullNone (missed by Task 896's own file audit).
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
 
         auto model = BuildTwoPartModel(device, whiteTex_);
 
