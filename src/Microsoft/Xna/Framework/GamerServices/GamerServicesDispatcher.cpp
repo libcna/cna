@@ -10,6 +10,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 {
     bool GamerServicesDispatcher::isInitialized_ = false;
     SharpRuntime::IntPtr GamerServicesDispatcher::windowHandle_ = 0;
+    std::size_t GamerServicesDispatcher::freedGamerCount_ = 0;
     System::EventHandler<System::EventArgs> GamerServicesDispatcher::InstallingTitleUpdate;
 
     bool GamerServicesDispatcher::getIsInitializedProperty() { return isInitialized_; }
@@ -22,6 +23,19 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         // FNA also hooks AppDomain.CurrentDomain.ProcessExit to reset IsInitialized to false
         // on process exit. There is no equivalent hook in C++; intentionally omitted.
+
+        // Task 7.5: GamerCollection<T> holds non-owning raw pointers (matching real XNA's
+        // read-only-collection API shape), and Gamer::setSignedInGamersProperty() below only
+        // deletes the previous SignedInGamerCollection wrapper itself, not its contents - a
+        // second Initialize() call previously leaked the first call's 4 SignedInGamer objects
+        // permanently. Free them explicitly first (a harmless no-op the first time this runs,
+        // since getSignedInGamersProperty() lazily returns an empty collection until Initialize()
+        // has run at least once).
+        for (SignedInGamer* previous : *Gamer::getSignedInGamersProperty())
+        {
+            delete previous;
+            ++freedGamerCount_;
+        }
 
         std::vector<SignedInGamer*> startGamers;
         startGamers.push_back(new SignedInGamer(SignedInGamer::CreateInternal(
@@ -59,5 +73,10 @@ namespace Microsoft::Xna::Framework::GamerServices
             Update();
         }
         return isInitialized_;
+    }
+
+    std::size_t GamerServicesDispatcher::GetFreedGamerCountForTesting()
+    {
+        return freedGamerCount_;
     }
 }

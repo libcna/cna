@@ -5,6 +5,7 @@
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
 #include "System/IServiceProvider.hpp"
+#include <cstddef>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -58,8 +59,19 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         static bool UpdateAsync();
 
+        /**
+         * @brief Task 7.5: the number of previously-signed-in `SignedInGamer` objects freed by
+         * `Initialize()` calls so far (0 for the very first call; 4 for every call after that,
+         * since `Initialize()` always frees the previous 4 before creating a fresh set). Exists
+         * purely to make Task 7.5's leak fix testable; not part of real XNA.
+         *
+         * @return The cumulative number of previous-generation gamers freed.
+         */
+        NOXNA [[nodiscard]] static std::size_t GetFreedGamerCountForTesting();
+
     private:
         static bool isInitialized_;
         static SharpRuntime::IntPtr windowHandle_;
+        static std::size_t freedGamerCount_;
     };
 }

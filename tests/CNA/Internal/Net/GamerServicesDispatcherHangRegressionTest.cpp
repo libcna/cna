@@ -88,3 +88,30 @@ TEST(GamerServicesDispatcherHangRegressionTest, GetAchievementsDoesNotHangWhenGa
                              "this is exactly the Task 7.1 GetAchievements() hang regressing";
     EXPECT_EQ(exitCode, 0) << "harness exited with unexpected code " << exitCode;
 }
+
+// Task 7.5: not a hang - reuses this same harness/isolation infrastructure for a memory-leak
+// regression instead (GamerServicesDispatcher::Initialize()'s process-lifetime isInitialized_
+// static needs the same process isolation either way). A second Initialize() call used to leak
+// the first call's 4 SignedInGamer objects permanently (GamerCollection<T> holds non-owning raw
+// pointers, and Gamer::setSignedInGamersProperty() only deletes the previous
+// SignedInGamerCollection wrapper, not its contents). The harness's own
+// GamerServicesDispatcher::GetFreedGamerCountForTesting() check does the real verification;
+// this test only confirms the harness process actually completes and reports success.
+TEST(GamerServicesDispatcherHangRegressionTest, SecondInitializeDoesNotLeakThePreviousFourGamers) {
+    pid_t pid = -1;
+    char* argv[] = {
+        const_cast<char*>(CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH),
+        const_cast<char*>("--mode=initialize-leak-check"),
+        nullptr
+    };
+    int rc = posix_spawn(&pid, CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH, nullptr, nullptr, argv, environ);
+    ASSERT_EQ(rc, 0) << "posix_spawn(" << CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH << ") failed: " << strerror(rc);
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
+    int exitCode = -1;
+    bool finished = WaitWithWatchdog(pid, deadline, &exitCode);
+
+    EXPECT_TRUE(finished) << "harness did not exit before the watchdog deadline and was killed";
+    EXPECT_EQ(exitCode, 0) << "harness exited with unexpected code " << exitCode
+                            << " — the second Initialize() call likely leaked or freed the wrong count";
+}

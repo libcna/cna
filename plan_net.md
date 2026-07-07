@@ -1487,7 +1487,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   predicted symptoms exactly — no throw, and `Count` inflated from 0 to 1. Restored the fix; full
   suite: **3304/3306 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 7.5** — Fix `GamerServicesDispatcher::Initialize()` leaking the previous 4
+- [x] **Task 7.5** — Fix `GamerServicesDispatcher::Initialize()` leaking the previous 4
   `SignedInGamer` objects when called a second time. Confirmed: `Initialize()` heap-allocates 4 new
   `SignedInGamer*` every call, wraps them in a new `SignedInGamerCollection`, then calls
   `Gamer::setSignedInGamersProperty(...)`. That setter deletes the old `SignedInGamerCollection`
@@ -1500,6 +1500,31 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   overwriting (ties into the same ownership-model question as Net's Phase 3 — consider a consistent
   approach across both namespaces). Add a leak-check test (or at minimum a test with an
   instance-counting test double) proving no leak across two `Initialize()` calls.
+
+  Fixed: `Initialize()` now iterates `*Gamer::getSignedInGamersProperty()` and `delete`s every
+  previous-generation `SignedInGamer*` *before* constructing the fresh set of 4 — a harmless
+  no-op the very first time it runs, since `getSignedInGamersProperty()` lazily returns an empty
+  collection until `Initialize()` has run at least once.
+
+  For the "instance-counting test double" the task suggests: rather than retrofitting `Rule of
+  Five` onto `SignedInGamer` (a value type that's freely copied/moved elsewhere in this codebase,
+  where a naive constructor/destructor counter would risk under/over-counting across copies)
+  purely to make one leak scenario testable, added `GamerServicesDispatcher::
+  GetFreedGamerCountForTesting()` (a `NOXNA` counter incremented once per actual `delete` in the
+  loop above) — directly, deterministically proving the exact code path runs the expected number
+  of times, scoped to `Initialize()` itself rather than to `SignedInGamer`'s general lifetime.
+
+  Extended the existing `tools/net/gamerservices_dispatcher_harness.cpp` with a
+  `--mode=initialize-leak-check` flag (same process-isolation reasoning as Tasks 12.1/7.1 —
+  `isInitialized_` is a process-lifetime static with no reset hook) and added
+  `GamerServicesDispatcherHangRegressionTest.SecondInitializeDoesNotLeakThePreviousFourGamers`:
+  confirms `GetFreedGamerCountForTesting() == 0` before a second `Initialize()` call and `== 4`
+  after it.
+
+  Revert-verify-restore: reverting just the delete-loop (keeping the counter and the new test)
+  reproduced the exact predicted symptom — harness reported "expected exactly 4 freed gamers ...
+  got 0". Restored the fix; full suite: **3305/3307 passing** (2 expected accelerometer/gyroscope
+  skips), no regressions.
 
 - [ ] **Task 7.6** — Move `SignedInGamer::SignedIn`/`SignedOut` static events off the incorrect
   `NOXNA` tag — they are genuine, fully public XNA 4.0 API (confirmed against FNA's

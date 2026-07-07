@@ -30,6 +30,13 @@
 // which (same reasoning as above) never happens once GamerServicesDispatcher::Initialize() has
 // run. Needs the same process isolation as the default mode, for the same reason.
 //
+// --mode=initialize-leak-check (Task 7.5): Initialize() heap-allocates 4 new SignedInGamer every
+// call, but GamerCollection<T> holds non-owning raw pointers and
+// Gamer::setSignedInGamersProperty() only deletes the previous SignedInGamerCollection wrapper,
+// not its contents - a second Initialize() call used to leak the first call's 4 SignedInGamer
+// objects permanently. Needs the same process isolation as the other modes, for the same reason
+// (isInitialized_ is itself a process-lifetime static with no reset hook).
+//
 // Exit codes: 0 success, 2 unexpected exception/state, 64 bad usage. (No internal timeout code:
 // if a bug regresses, this process hangs and is killed by the outer test's watchdog instead.)
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
@@ -85,6 +92,25 @@ namespace {
         }
         return 0;
     }
+
+    int RunInitializeLeakCheck() {
+        // main() already called Initialize() once before dispatching here - nothing to free yet.
+        if (GamerServicesDispatcher::GetFreedGamerCountForTesting() != 0) {
+            std::fprintf(stderr, "expected 0 freed gamers before the second Initialize() call, got %zu\n",
+                         GamerServicesDispatcher::GetFreedGamerCountForTesting());
+            return 2;
+        }
+
+        NullServiceProvider services;
+        GamerServicesDispatcher::Initialize(services);
+
+        std::size_t freed = GamerServicesDispatcher::GetFreedGamerCountForTesting();
+        if (freed != 4) {
+            std::fprintf(stderr, "expected exactly 4 freed gamers after the second Initialize() call, got %zu\n", freed);
+            return 2;
+        }
+        return 0;
+    }
 }
 
 int main(int argc, char** argv) {
@@ -106,7 +132,10 @@ int main(int argc, char** argv) {
         if (mode == "get-achievements") {
             return RunGetAchievementsCheck();
         }
-        std::fprintf(stderr, "Usage: %s [--mode=network-session|get-achievements]\n", argv[0]);
+        if (mode == "initialize-leak-check") {
+            return RunInitializeLeakCheck();
+        }
+        std::fprintf(stderr, "Usage: %s [--mode=network-session|get-achievements|initialize-leak-check]\n", argv[0]);
         return 64;
     } catch (const std::exception& ex) {
         std::fprintf(stderr, "Unhandled exception: %s\n", ex.what());
