@@ -3409,13 +3409,41 @@ done — "it compiles" is not sufficient.
   with code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
   regressions (new demo-only files, no library changes).
 
-- [ ] **Task 15.16** — `cna_demo_avatar_wardrobe_hotswap`: `SkinnedModelEXT::AttachPartEXT`/
+- [x] **Task 15.16** — `cna_demo_avatar_wardrobe_hotswap`: `SkinnedModelEXT::AttachPartEXT`/
   `RemovePartEXT` (Task 11.4/11.5) used repeatedly *at runtime* — Tab cycles live between baked-in
   hair, `wardrobe/hair_Cap`, and `wardrobe/hair_Ponytail`, removing the old hair part and
   re-attaching, with the avatar visibly changing hairstyle without restarting the process. Depends
   on Tasks 11.4/11.5/12.1 landing first (otherwise this demo would need the same manual workaround
   `AvatarDemo.cpp` already has, which somewhat defeats its own purpose as a proof of the *engine*
   API). Single process, reuses `demo_avatar`'s Content/renderer.
+
+  New files: `examples/demo_avatar_wardrobe_hotswap/src/{HotswapDemo.hpp,HotswapDemo.cpp,
+  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
+  gate as `cna_demo_avatar`, reusing `demo_avatar`'s `Content/` directory via the same
+  `copy_directory` POST_BUILD pattern. Tab cycles a 3-state cycle (baked-in → Cap → Ponytail →
+  baked-in → …); Cap/Ponytail states call `model_->AttachPartEXT(std::move(*wardrobePiece))`
+  directly (its own confirmed-fixed replace-by-name semantics remove the previous hair part
+  automatically — no manual pre-removal needed, unlike `AvatarDemo.cpp`'s workaround before that
+  fix landed).
+
+  **Worked out the one real design problem before writing any code**: there is no
+  `wardrobe/hair_baked` folder to `AttachPartEXT` from, and `RemovePartEXT` already frees a
+  replaced part's GPU buffers the moment it's swapped out — so restoring "baked-in" hair cannot
+  be another `AttachPartEXT` call. Confirmed `ContentManager::Unload()`'s actual implementation
+  first (`loadedAssets_.clear(); textureCache_.clear();`) — it only clears the cache *map*, so
+  this demo's own `model_`/`renderer_` (independent `shared_ptr`/owning references) can never
+  dangle from it. Restoring baked-in hair therefore calls `Unload()` then re-`Load`s the base
+  avatar fresh from disk (bypassing the now-cleared cache), rebuilding the renderer around the new
+  instance exactly like `LoadContent()` does the first time.
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 300`, one
+  deterministic swap every 45 frames): console log showed the full 6-swap sequence in order —
+  `Cap → Ponytail → baked-in → Cap → Ponytail → baked-in` — proving both directions work
+  repeatedly across multiple cycles, not just a single one-shot swap: `AttachPartEXT`'s
+  replace-by-name correctly handles wardrobe-to-wardrobe swaps (Cap→Ponytail), and the
+  `Unload()`+reload path correctly restores baked-in hair every time it's cycled back to. Exit
+  code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
+  regressions (new demo-only files, no library changes).
 
 - [ ] **Task 15.17** — `cna_demo_avatar_appearance_tint_studio`: `AvatarAppearanceEXT`'s 5 tint
   slots (Skin/Hair/Shirt/Pants/Shoes) and `AvatarRenderer::SetAppearanceEXT` as a live color
