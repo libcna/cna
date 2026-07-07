@@ -2153,13 +2153,27 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   behavior without a virtual destructor, and if that need ever arises, a virtual destructor must
   be added first. No behavior change; build-verified only (comment-only edit).
 
-- [ ] **Task 10.6** — Re-verify `LeaderboardReader`'s page-slicing constructor loop bound
+- [x] **Task 10.6** — Re-verify `LeaderboardReader`'s page-slicing constructor loop bound
   (`for (int i = pageStart_; i < pageSize_ && i < entryCache_.size(); ++i)`) against every current
   and future caller of `CreateInternal`. Confirmed this faithfully matches FNA's own identical
   (non-obvious) bound — correctly *not* a cna-introduced bug — but correctness depends entirely on
   whatever populates `entryCache_` already being consistent with this bound. Add a doc comment (or
   an assertion) making this precondition explicit for any future caller, so the non-obvious FNA
   fidelity isn't accidentally "fixed away" later by someone unaware of why it looks odd.
+
+  Re-confirmed byte-for-byte against FNA's real internal constructor
+  (`for (int i = PageStart; i < pageSize && i < entryCache.Count; i += 1)`) — exact match, genuine
+  upstream quirk. Traced every current caller of `CreateInternal`: there are none in production —
+  every real `BeginRead`/`EndRead` overload unconditionally throws `NotSupportedException` (a stub
+  API surface matching FNA), so `CreateInternal` is only ever reached from test code today, and
+  the precondition has no live caller to violate yet. Added a full doc comment to
+  `CreateInternal`'s declaration in `LeaderboardReader.hpp` spelling out the precondition
+  explicitly for any future caller: `entries` must already be pre-sliced to exactly the
+  `[start, start + size)` page before being passed in, since the constructor trusts its input
+  completely and never re-derives the slice itself — passing a full, un-sliced leaderboard would
+  silently produce a wrong page. No behavior change; build-verified only (comment-only edit).
+
+**Phase 10 complete — 6/6.**
 
 ---
 
