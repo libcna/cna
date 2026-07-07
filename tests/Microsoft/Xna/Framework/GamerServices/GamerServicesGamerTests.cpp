@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include "SignedInGamerTestAccess.hpp"
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 
@@ -453,7 +454,7 @@ TEST(SignedInGamerTest, SignedInEventFires) {
             seen = e.getGamerProperty();
         }
     );
-    SignedInGamer::OnSignIn(&gamer);
+    SignedInGamerTestAccess::OnSignIn(&gamer);
     EXPECT_EQ(&gamer, seen);
     SignedInGamer::SignedIn.Remove(token);
 }
@@ -466,7 +467,7 @@ TEST(SignedInGamerTest, SignedOutEventFires) {
             seen = e.getGamerProperty();
         }
     );
-    SignedInGamer::OnSignOut(&gamer);
+    SignedInGamerTestAccess::OnSignOut(&gamer);
     EXPECT_EQ(&gamer, seen);
     SignedInGamer::SignedOut.Remove(token);
 }

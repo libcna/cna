@@ -1540,12 +1540,27 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   No revert-verify applies (marker-only, no behavior change). Full suite: **3305/3307 passing**
   (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 7.7** — Change `SignedInGamer::OnSignIn`/`OnSignOut` from `public static ... NOXNA` to
+- [x] **Task 7.7** — Change `SignedInGamer::OnSignIn`/`OnSignOut` from `public static ... NOXNA` to
   `private static` + `friend class GamerServicesDispatcher`, matching this project's own documented
   convention for C# `internal` members (per `CHECKLIST.md`). Confirmed FNA declares these `internal
   static void OnSignIn/OnSignOut(...)`. The only caller anywhere in the codebase today is
   `GamerServicesDispatcher.cpp` (`OnSignIn`); `OnSignOut` currently has zero callers at all. Add the
   `friend` declaration and verify the build still passes after tightening visibility.
+
+  Moved both to `private:`, added `friend class GamerServicesDispatcher;`, and (following this
+  codebase's own established `*TestAccess` convention — e.g. `SoundEffectInstanceTestAccess`,
+  `CueTestAccess`, `AudioEngineTestAccess`) added `NOXNA friend struct SignedInGamerTestAccess;`
+  plus a new `tests/Microsoft/Xna/Framework/GamerServices/SignedInGamerTestAccess.hpp`, since the
+  two existing direct-call tests (`SignedInEventFires`/`SignedOutEventFires`) needed to keep
+  exercising these now-private raisers. Updated `GamerServicesGamerTests.cpp` to call through
+  `SignedInGamerTestAccess::OnSignIn`/`OnSignOut` instead of `SignedInGamer::OnSignIn`/`OnSignOut`
+  directly.
+
+  Revert-verify via compile error (consistent with this session's established practice for
+  test-only NOXNA API changes): temporarily reverted the two call sites back to the direct,
+  now-private form — confirmed the build fails with "is private within this context" for both.
+  Restored the `TestAccess` indirection; full suite: **3305/3307 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 7.8** — Fix `GamerCollection<T>::GamerCollectionEnumerator::getCurrent()` having no
   bounds check — undefined behavior, not a catchable exception like FNA's equivalent. Confirmed:

@@ -180,20 +180,6 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         static System::EventHandler<SignedOutEventArgs> SignedOut;
 
-        /**
-         * @brief Raises the SignedIn event for the given gamer.
-         *
-         * @param gamer The gamer that signed in.
-         */
-        NOXNA static void OnSignIn(SignedInGamer* gamer);
-
-        /**
-         * @brief Raises the SignedOut event for the given gamer.
-         *
-         * @param gamer The gamer that signed out.
-         */
-        NOXNA static void OnSignOut(SignedInGamer* gamer);
-
         /** @brief Creates a SignedInGamer for CNA internal use. */
         NOXNA static SignedInGamer CreateInternal(
             const std::string& gamertag,
@@ -203,6 +189,27 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
     private:
+        // Task 7.7: FNA declares these `internal static void OnSignIn/OnSignOut(...)` - the only
+        // real caller anywhere in this codebase is GamerServicesDispatcher (OnSignIn); OnSignOut
+        // currently has zero callers at all. Tightened from `public ... NOXNA` to match this
+        // project's own documented convention for C# `internal` members (see CHECKLIST.md).
+        friend class GamerServicesDispatcher;
+        NOXNA friend struct SignedInGamerTestAccess;
+
+        /**
+         * @brief Raises the SignedIn event for the given gamer.
+         *
+         * @param gamer The gamer that signed in.
+         */
+        static void OnSignIn(SignedInGamer* gamer);
+
+        /**
+         * @brief Raises the SignedOut event for the given gamer.
+         *
+         * @param gamer The gamer that signed out.
+         */
+        static void OnSignOut(SignedInGamer* gamer);
+
         SignedInGamer(
             const std::string& gamertag,
             bool isSignedInToLive,
