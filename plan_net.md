@@ -3370,12 +3370,44 @@ done — "it compiles" is not sufficient.
   3398/3398 passing (2 expected accelerometer/gyroscope skips), no regressions (demo-only files
   across all 7 fixes, no library changes).
 
-- [ ] **Task 15.15** — `cna_demo_avatar_animation_gallery`: a completionist version of
+- [x] **Task 15.15** — `cna_demo_avatar_animation_gallery`: a completionist version of
   `demo_avatar`'s Space-cycling — programmatically iterates **all 31** `AvatarAnimationPreset`
   values (not a hand-picked subset), resolves each via `AvatarAnimationPresetToClipNameEXT`,
   auto-plays/labels each for ~2 seconds before advancing, switching gender and reloading content
   every full cycle so both Male* and Female* presets play against their own gender's baked clips.
   Reuses `demo_avatar`'s window/camera/renderer setup. Single process.
+
+  New files: `examples/demo_avatar_animation_gallery/src/{GalleryDemo.hpp,GalleryDemo.cpp,
+  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
+  gate as `cna_demo_avatar`, reusing `demo_avatar`'s own `Content/` directory via the same
+  `copy_directory` POST_BUILD pattern (not duplicating avatar assets). All 31 presets enumerated
+  in the enum's own declaration order via a `#define`-based macro (same pattern as
+  `AvatarAnimationPresetNamesEXTTests`, Task 13.5) so the list can never silently drift from the
+  real enum.
+
+  **Confirmed the exact gender/clip split before writing the skip logic**: `ls`'d both baked clip
+  directories directly — exactly 21 clip files per gender (11 shared: `Stand0-7`, `Clap`, `Wave`,
+  `Celebrate`; 10 gender-specific `Female*`/`Male*`). A preset incompatible with the currently
+  loaded gender (checked via a plain `"Female"`/`"Male"` name-prefix test) is skipped instantly —
+  no frame delay, no attempt to `DrawRealEXT` a clip that doesn't exist in the loaded content —
+  advancing immediately to the next preset within the same `Update()` call. Once a full 31-slot
+  pass completes (21 played + 10 skipped), the gender flips and content reloads via the same
+  `AvatarBodyTypeToContentNameEXT` + `ContentManager::Load` + `AvatarRenderer::EnableRealRenderingEXT`
+  sequence `demo_avatar`'s own `LoadContent()` uses, so the *next* pass's 21 "compatible" clips
+  are the *other* 21 (its own neutral set plus its own gender-specific 10).
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` for a full real-time run
+  (~120s wall-clock, `--smoke 3720`): console log showed the complete male pass in order (`Stand0`
+  through `MaleYawn`, correctly jumping from `Celebrate [11/31]` straight to
+  `MaleIdleLookAround [22/31]`, silently skipping all 10 `Female*` slots), the
+  "Full pass complete - switching to female and reloading content" transition, then the female
+  pass beginning correctly (`Stand0` through `Wave` observed before the smoke budget ran out).
+  Final smoke summary: `played=31 skipped=10 genderSwitches=1` — exactly 21 (full male pass) + 10
+  (partial female pass) = 31 played, 10 skipped (all from the male pass's `Female*` slots), 1
+  gender switch — precise, predicted proof that both genders' own baked clips get exercised
+  against their own content. A separate, shorter confirming run (`--smoke 600`) exited cleanly
+  with code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
+  regressions (new demo-only files, no library changes).
 
 - [ ] **Task 15.16** — `cna_demo_avatar_wardrobe_hotswap`: `SkinnedModelEXT::AttachPartEXT`/
   `RemovePartEXT` (Task 11.4/11.5) used repeatedly *at runtime* — Tab cycles live between baked-in
