@@ -1,251 +1,244 @@
 # NEXT.md — CNA Input Handoff
 
-> Concise handoff for resuming work later (Claude Code or a human). Based only on the current repo
-> state, recent commits, and this session's build/test runs. No invented features.
+> Concise handoff for resuming work in a fresh context (Claude Code or a human). Based only on the
+> current repo state, recent commits, and this session's build/test runs. No invented features.
 >
-> **Active branch: `feature/input`.** The authoritative task backlog is **`plan_input.md`** — the fresh
-> **XNA 4.0 Input completion plan**, organized as **Phases 0–12 (task IDs `P0-001` … `P12-005`)**. It was
-> rewritten from scratch (commit `cafbbe10`) to drive a systematic repair/harden/validate pass against the
-> FNA reference. This file is a short pointer into it. A separate **Graphics** track lives on `develop`
-> with its own `GRAPHICS_TASKS.md` and the repo's most severe open bug (see §4) — out of scope here.
+> **Active branch: `feature/input`.** Two backlogs have run on it, in order:
+> 1. **`plan_input.md`** — the XNA 4.0 Input **completion/hardening** pass (Phases 0–12). **COMPLETE**
+>    (automated scope; only Phase 11 manual-hardware `[!]` remains). Merge-ready, not merged.
+> 2. **`input_noxna.md`** — the **NOXNA/SDL3 extension** pass: surface SDL3 input capability *beyond*
+>    XNA 4.0 as `NOXNA`/`EXT` members and new `CNA::Input` types. **← THIS IS THE ACTIVE WORK.**
+>    Live tracker + per-task log: **`input_noxna_progress.md`** (repo root). Analysis/design doc:
+>    **`input_noxna.md`** (repo root).
 >
-> **As of 2026-07-06:** Phases 0–4 complete; Phase 5 (Touch) audit-priority items done, verification
-> remainder mostly covered. Branch in sync with `origin/feature/input` at `6585465f`.
+> **As of 2026-07-07:** 18 of the input_noxna.md tasks are done (one commit each, all pushed). What
+> remains is 3 big new subsystems + 1 small item (see §8). Branch in sync with `origin/feature/input`
+> at `462ca465`.
 
 ## 1. Project summary
 
 - **What:** **CNA** is a C++23 reimplementation of the **XNA 4.0** programming model
   (`Microsoft::Xna::Framework`) on **SDL3**, with a pluggable 3D backend layer (EasyGL/OpenGL ES,
-  Vulkan, bgfx, SDL_Renderer). It is a framework/runtime, not a game.
-- **Main goal:** full XNA 4.0 API coverage with **FNA-faithful** behavior, backed by unit tests and
-  verified line-by-line against the FNA reference at `/rv/data/library/github.com/FNA-XNA/FNA/src`.
-- **Current phase (this branch):** executing the **`plan_input.md` Phase 0–12 completion pass** — for each
-  Input type: verify against FNA, fix real behavior bugs (with tests), close test-coverage gaps, and mark
-  each task with status/files/tests/verification in the plan. Strict XNA-compat by default; non-XNA tagged
-  `NOXNA`/`EXT` and documented. Public XNA API must never expose SDL/`CNA::Internal` types.
-- **Key architectural decisions:**
-  - FNA is the authoritative **behavioral** reference (its code, not its comments); deviations are
-    documented in `docs/input-fna-fidelity.md`.
-  - Input is **event-driven**: `SdlInputBridge::ProcessEvent` → `InputManager` (+ `TouchPanel`) →
-    `Get*State()`. (FNA polls; CNA mutates state at SDL-event time.)
-  - Non-XNA members inside `Microsoft::Xna` are tagged `NOXNA` and/or an `EXT` name suffix; `.NET` types
-    live in the sibling repo `sharp-runtime`.
-  - SDL gamepad calls go through an internal injectable seam (`ISdlGamepadBackend`) so runtime gamepad
-    behavior is unit-testable with a fake — never exposed in the public XNA API.
+  Vulkan, bgfx, SDL_Renderer). A framework/runtime, not a game.
+- **FNA reference** (authoritative XNA behavior — its *code*, not its comments):
+  `/rv/data/library/github.com/FNA-XNA/FNA`. NOXNA extensions have no FNA counterpart; for those, SDL3
+  is the reference.
+- **Input is event-driven:** `SdlInputBridge::ProcessEvent` → `InputManager` (+ `TouchPanel`) →
+  `Get*State()`. Public XNA API must NEVER expose SDL or `CNA::Internal` types.
+- **NOXNA rule:** anything inside `Microsoft::Xna` that is not XNA 4.0 carries the `NOXNA` macro and
+  usually an `EXT` name suffix. Brand-new extension types live in the public `CNA::Input` namespace
+  (`include|src/CNA/Input/`), whole class marked `NOXNA`. `.NET`-style helpers live in the sibling
+  repo `sharp-runtime` (`System::MulticastAction<...>`, aliases, etc.).
 
-## 2. Current status
+## 2. Current status (input_noxna.md pass)
 
-- **Build:** clean. This session's edits are **test + doc only** (no `src/` behavior change), and were
-  confirmed **backend-agnostic**: `ctest -L input` = 100% on all four backends (**EasyGL / Vulkan / bgfx /
-  SDL_RENDERER**).
-- **Tests:** the input subset is selected by **`ctest -L input`** (baked `--gtest_shuffle --gtest_repeat=5`
-  order-independence gate), all green shuffled ×5. **~+50 input tests this session** across Phases 5–7
-  (Touch +10, Gesture +17, Text/IME +6, plus the earlier Phase 2–5 work). The only local failures remain the
-  3 `MouseCursor` tests that need real cursors under the SDL `dummy` driver (pass under Xvfb+x11 —
-  environmental, not a bug).
-- **Plan progress (`plan_input.md`):**
-  - **Phases 0–4** — done (real bugs fixed: P2-002 keyboard hash OOB, P3-001 mouse null-window, P4-014
-    vibration NaN).
-  - **Phase 5** (Touch, P5-001..016) — **done**; DEC-20 (ascending touch-id order), GetCapabilities-after-
-    first-touch, zero-display startup divergence documented; P5-015 high-DPI `[!]`→Phase 11.
-  - **Phase 6** (Gesture, P6-001..016) — **done**; +17 tests closing negative-path / axis-rejection /
-    disabled / velocity-gate / direction / reset gaps (audited vs FNA `GestureDetector.cs`); P6-016 `[!]`.
-  - **Phase 7** (Text/IME, P7-001..010) — **done**; +6 tests (empty-text, subscriber order, repeated text,
-    IME byte-offset, zero/neg rectangle); control chars + Ctrl+V confirmed FNA-identical; P7-010 `[!]`.
-  - **Phase 8** (SDL bridge, P8-001..008) — **done**; +4 tests (ignored-event / stale-handle / mouse-
-    lifecycle / suppress-reset); 17-event consumed set enumerated; P8-006 resize/high-DPI-input `[!]`.
-  - **Phase 9** (build/CI, P9-001..009) — **done**; submodule diagnostics + focused target + shuffle×5
-    verified; ASan+UBSan-clean (374); fuzz/golden/signature-freeze confirmed; coverage doc regenerated;
-    decision: no system-SDL (vendored required).
-  - **Phase 10** (docs, P10-001..005) — **done**; added Browser/Emscripten platform-input section; strict-
-    XNA/FNA/NOXNA + platform + manual-checklist docs verified.
-  - **Phase 11** (manual hardware, P11-001..007) — **`[!]` BLOCKED** (real keyboards/mice/gamepads/
-    touchscreen/IME; not headless-executable). Logic is unit-tested; only real-device wiring pending.
-  - **Phase 12** (final gates, P12-001..005) — **done**; input gate 100% (378, 4 backends, ASan); full
-    suite 3356/3369 (11 failures all Graphics-track, zero input); parity 0 gaps; final readiness statement
-    written.
-  - **➜ `plan_input.md` automated/documentation scope is COMPLETE.** Only Phase 11 manual HW remains open.
-    Branch is merge-ready pending the user's merge-vs-hold decision (do NOT merge without explicit ask).
-- **Does NOT work / not headless-verifiable (by design, not code gaps):** real gamepad **actuation**
-  (rumble, trigger haptics, live sensors, OS hot-plug/GUID); real **IME** composition; **Wayland**
-  cursor-landing readback (X11-only); high-DPI touch pixel scaling (headless runs at 1×1). All documented
-  as manual/hardware-gated.
+- **Build:** clean. Every task this pass builds on **EasyGL** (`cmake-build-input-easygl`) and the
+  **ASan** build (`cmake-build-input-asan`); `ctest -L input` = 100% green after each.
+- **18 tasks DONE** (each = its own commit, tested, pushed). See §3 for the commit list and
+  `input_noxna_progress.md` for the full per-task log. Grouped:
+  - **GamePad EXT (poll via `ISdlGamepadBackend`):** N-009 player-index · N-009b battery/power (shared
+    `PowerStateEXT`) · N-010 metadata (name/path/serial/firmware/steam-handle) · N-010b connection-state
+    · N-011 button-labels · N-008 touchpad fingers.
+  - **Keyboard EXT:** N-003 `GetModStateEXT` (+ `KeyModifiersEXT` flags) · N-002 scancode-name helpers ·
+    N-002b keycode-name helpers.
+  - **Mouse / Touch EXT:** N-005 horizontal scroll-wheel · N-006 `TouchLocation::getPressureEXT` ·
+    N-016 capture + global-position/warp.
+  - **New `CNA::Input` types:** N-001 `Clipboard` · N-018 `Power` · N-015 `Sensors` · N-017
+    `InputDevices` (enumeration) · N-017b InputDevices hot-plug events.
+  - **Text:** N-014 `TextInputEXT::TextEditingCandidatesEXT` (IME candidate list).
+- **Skipped:** **N-004** (Mouse cursor-visibility EXT) — would conflict with the existing
+  `Game::IsMouseVisible` path (which already calls `SDL_ShowCursor`). Engineering decision, not an
+  owner question. Recorded in `input_noxna_progress.md`.
+- **Not headless-verifiable (by design):** real gamepad/joystick/haptic **actuation**, real **IME**
+  composition, live **sensors**, OS **hot-plug** on physical hardware. The injectable seams + fakes
+  prove translation/plumbing; real-device wiring is manual `[!]`.
 
-## 3. Recent changes (most recent first — this session, all on `feature/input`)
+## 3. This session's commits (most recent first, all on `feature/input`, all pushed)
 
-Three genuine behavior bugs were found and fixed (each with tests + ASan verification); everything else was
-verification against FNA plus closing real test-coverage gaps. No public XNA signature/enum changes.
+```
+462ca465 input(N-014):  TextInputEXT IME candidate-list event
+8096705d input(N-017b): InputDevices mouse/keyboard hot-plug events
+653915bc input(N-008):  GamePad touchpad-finger EXT (poll-based)
+2194b7b9 input(N-015):  CNA::Input::Sensors host-device motion sensors
+913276e5 input(N-016):  Mouse capture + global-position/warp EXT
+5744fbbe input(N-017):  CNA::Input::InputDevices enumeration
+4931b85c input(N-002b): Keyboard keycode-name EXT helpers
+a88cd367 input(N-002):  Keyboard scancode-name EXT helpers
+d1a9082e input(N-003):  Keyboard::GetModStateEXT + KeyModifiersEXT flags
+978315ea input(N-006):  TouchLocation finger-pressure EXT
+f702aa54 input(N-018):  CNA::Input::Power system battery extension
+3a0c362c input(N-010b): GamePad connection-state EXT (wired/wireless)
+fc9836c8 input(N-010):  GamePad device-metadata EXT getters
+67b6269b input(N-011):  GamePad button-label EXT (glyph per controller type)
+d9c6c77a input(N-009b): GamePad battery/power EXT + shared PowerStateEXT enum
+a0325dc8 input(N-009):  GamePad player-index EXT via injectable gamepad seam
+d6aa0e23 input(N-005):  Mouse horizontal scroll wheel EXT
+ca88dd23 input(N-001):  CNA::Input::Clipboard — SDL3 clipboard text
+```
 
-- **`6585465f` — Phase 5 (Touch) audit-priority items (P5-001/002/006/007):** no behavior change warranted.
-  - **P5-001** (external-audit #1) `TouchCollection` read-only: FNA's `IsReadOnly` is hard-coded `true` but
-    **advisory** — `Add`/`Clear`/`Insert`/`Remove`/`RemoveAt` + settable indexer still mutate the non-null
-    backing list. CNA is faithful; making mutation throw would *diverge* from FNA. Fixed the misleading
-    `getIsReadOnlyProperty` doc (`TouchCollection.hpp`) + added `IsReadOnlyIsAdvisoryAndMutationStillSucceedsLikeFna`.
-  - **P5-002** `CopyTo`: added `CopyToFromEmptyCollectionIsANoOp`.
-  - **P5-006** (audit #5) `GetState` dual path: slot vs InputManager fallback — cannot diverge in production
-    (`SetFinger` never runs on the real event path); both paths already tested; authoritative path documented.
-  - **P5-007** (audit #4) `SetFinger` "duplicated condition": verified line-by-line vs FNA — **no duplicate
-    exists** in current code. Added the two missing NO_FINGER release-branch tests.
-- **`b612b413` — Phase 4 (GamePad) (P4-001..020):** source verified FNA-faithful (Buttons/GamePadState/DPad/
-  ThumbSticks/Triggers, dead-zone, button/axis/type mapping, GUID).
-  - **Bug fixed:** `SetVibration`/`SetTriggerVibration` cast a possibly-NaN float to `Uint16` (`std::clamp`
-    propagates NaN; NaN→int is UB in C++). Added `motor_level()` → NaN→0 (matching C# `(ushort)NaN`),
-    +Inf→full, −Inf→0. ASan-clean.
-  - **+15 tests** (gamepad 96→111): vibration clamp/NaN, trigger vibration, light bar, sensor lazy-enable-once,
-    slot reuse, stale-state clear on disconnect, packet-number stability, extended GamePadType map, gamepad reset.
-    Fake backend gained `lastTriggerLow/High` + `setSensorEnabledCalls` introspection.
-- **`aeaa7c23` — Phase 3 (Mouse) (P3-001..012):** **bug fixed** — `Mouse::SetPosition` passed a null window to
-  `SDL_WarpMouseInWindow` (UB); added a null-window guard mirroring the relative-mode methods. +tests
-  (unknown-button ignore P3-004, mouse reset P3-012, no-window SetPosition).
-- **`219ce410` + `d9c3de06` — Phase 2 (Keyboard) (P2-001..012):** **bug fixed** — `KeyboardState::GetHashCode`
-  wrote out of bounds (`words[value>>5]` on an 8-word array) for an invalid `Keys` ≥256 / negative; added a
-  bounds guard per FNA's `InternalSetKey`. ASan-clean. +tests (OOB/negative/boundary hash, right-modifier/lock
-  no-merge). `Keys` confirmed byte-identical to FNA (160 members).
-- **`8323bffd` / `2a201814` / `cafbbe10` — Phases 0–1 + plan reset:** replaced `plan_input.md` with the fresh
-  XNA 4.0 completion plan; recorded baseline/inventory/scope; verified authoritative API parity.
+## 4. THREE reusable patterns (follow these — every remaining task fits one)
 
-> Earlier on this same branch (before the plan reset): an **INPUT-*** hardening pass (`f0a185ca` `ctest -L
-> input` label, `d2adefd8` EXT/NOXNA tagging, `2ec61806` signature freeze, `ca9bd074` Keys/enum ABI parity,
-> `bcf1b92b` bridge fuzz). Those guardrails are still in force (see §6).
+**Pattern 1 — GamePad-seam extension (poll-based).** For "more of an existing gamepad concept."
+1. Add a `virtual` to `ISdlGamepadBackend` (`include/CNA/Internal/Input/SdlGamepadBackend.hpp`); real
+   impl = the SDL call (`src/.../SdlGamepadBackend.cpp`); fake impl reads a new
+   `FakeGamepadConfig` field + records calls (`tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`).
+2. `SdlInputBridge::X(PlayerIndex, …)` resolves the slot (`get_sdl_gamepad_for_player`) and returns a
+   safe default (0 / false / Unknown, out-params reset) when disconnected.
+3. Public `GamePad::XEXT(...)` (NOXNA) delegates to the bridge.
+4. Pin in `PublicApiInputSignatureFreezeTests.cpp` + document in `docs/input-public-api-frozen.md`.
+5. Tests in `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp` (fixture `FakeGamepadTest`).
+Examples: N-008/009/009b/010/010b/011.
 
-## 4. Current blocker / main problem
+**Pattern 2 — NOXNA member on a frozen XNA type.** For adding data XNA dropped (e.g. pressure).
+- Keep the new field OUT of `Equals`/`GetHashCode`/`ToString` (those stay FNA-frozen —
+  `has_frozen_equality` still holds); add NOXNA **constructor overload(s)**, not a public setter.
+- Pin the getter + new ctors in the freeze test + document, SAME commit.
+Examples: N-005 (`MouseState` horizontal wheel), N-006 (`TouchLocation` pressure).
 
-- **Input track: no hard functional blocker.** It builds on all 4 backends and the input suite passes
-  (headless: the 3 `MouseCursor` tests require Xvfb, not a bug). Work is proceeding phase-by-phase through
-  `plan_input.md`; the next unit of work is simply "finish Phase 5's small remaining gaps, then Phase 6".
-- **No failing command to reproduce.** `ctest -L input` is green (shuffle ×5); the ASan build is exit 0.
-- **Most severe open problem in the repo is on the Graphics track (`develop`), NOT input** — recorded so it
-  is not forgotten, but **do not fix here**: `confirmed bug` **Task 870** (Vulkan `DepthStencilState`
-  largely non-functional — stencil bypassed, `DepthBufferFunction` ignored), **Task 871** (`Clear` ignores
-  `ClearOptions::Stencil`), **Task 872** (`ReferenceStencil` override unwired on all backends). See
-  `GRAPHICS_TASKS.md` (868–872) and `docs/depthstencilstate-support.md`.
+**Pattern 3 — Standalone `CNA::Input` type + injectable *system* seam.** For host-level features.
+- New `ISystemXBackend` (SDL-typed, internal) in `include|src/CNA/Internal/Input/SystemXBackend.*`,
+  real = SDL, plus `SetSystemXBackendForTests(...)`. Public type/methods in `include|src/CNA/Input/`.
+- **Whole-class-NOXNA `CNA::Input` types are ADDITIVE → NO freeze pin** (like `Clipboard`). Test
+  suites MUST be named `CnaInput*` (matched by `CNA_INPUT_TEST_FILTER`). Tests drive the fake.
+- Seams already built this way: `ISystemPowerBackend` (N-018), `ISystemKeyboardBackend` (N-003
+  mod-state), `ISystemDeviceBackend` (N-017), `ISystemMouseBackend` (N-016), `ISystemSensorBackend`
+  (N-015). Mirror any of them for a new one.
 
-## 5. Known bugs and limitations (input track)
+**Enums / flags** live in their own `include/CNA/Input/*.hpp` headers (`PowerState`, `KeyModifiers`
+w/ constexpr bit-ops like `Buttons`, `GamePadButtonLabel`, `GamePadConnectionState`, `SensorType`).
+**Events** use `System::MulticastAction<Args...>` (`sharp-runtime`) fired from the bridge via an
+`INTERNAL_On…` dispatcher (see N-014 candidates, N-017b hot-plug).
 
-- `needs verification / by-design` — real-hardware gamepad **actuation** (rumble, trigger haptics, live
-  sensors, OS hot-plug/GUID) is not headless-verifiable; the fake backend proves translation/bookkeeping
-  only. Real controllers untested. (Phase 11 = manual hardware; expected to be marked `[!]` blocked.)
-- `incomplete` — **Phase 5 remaining gaps** (small): no test for `TouchCollection::begin()/end()` iteration
-  order (P5-003); no test asserting reset empties the gesture queue / clears `previousTouches_` (P5-016);
-  no explicit high-DPI touch pixel-scaling test (P5-015 — hard headless, likely `[!]`).
-- `incomplete` — **Phases 6–12 not started** (Gesture verification, Text/IME incl. real IME, SDL-bridge
-  audit, build/CI closeout, docs, manual hardware, final gates).
-- Documented **intentional FNA deviations** (not bugs — `docs/input-fna-fidelity.md`):
-  `FNA_GAMEPAD_NUM_GAMEPADS` clamped to 4; event-driven `PacketNumber` (within-dead-zone wobble can bump
-  it — `not asserted`); partial-field `GamePadState::GetHashCode`; `MaximumTouchCount` reports 4 but the
-  event path caps at 8; GUID/caps live vs FNA cached-at-connect; `TouchCollection` mutable+advisory
-  `IsReadOnly` and default collection empty-not-null (P5-001).
-- `suspected` (cannot occur via CNA's own API) — Mouse relative-mode cache could desync if SDL relative
-  mode is toggled outside `Mouse::setIsRelativeMouseModeEXTProperty` (DEC-14 accepted this).
+## 5. Per-task discipline (do this for EVERY task — do not batch)
 
-## 6. Architecture notes
+1. Implement one task (one `N-xxx`). If a task is large, split it (e.g. N-009→N-009b) — still one
+   commit each. NEVER bundle unrelated tasks.
+2. Build: `ninja -C cmake-build-input-easygl CnaTests`.
+3. Test: `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input`
+   (must be 100%). Run your new tests directly by `--gtest_filter` too.
+4. ASan: `ninja -C cmake-build-input-asan CnaTests` + run your new tests under it.
+5. If the API surface changed on a **frozen/EXT-on-XNA** member → update the signature-freeze test +
+   `docs/input-public-api-frozen.md` in the same commit. (Additive whole-NOXNA `CNA::Input` types
+   need neither.)
+6. Mark the task `[x]` in `input_noxna_progress.md` and add a Log entry (what/why/files/tests).
+7. Commit staging files **by explicit name** (NEVER `git add -A`), message `input(N-xxx): …` with the
+   standard trailer (`Co-Authored-By:` + `Claude-Session:`). Then `git push`. **Do NOT merge.**
+- **Skip any task that needs an owner decision** (like N-004) — record why in the tracker, move on.
+- New source files under `src/**` and `tests/**` are auto-globbed (CONFIGURE_DEPENDS); `ninja` will
+  reconfigure. New `CNA::Input` test suites must be named `CnaInput<Type>Test`.
 
-- **Main modules:**
-  - `src/CNA/Internal/Input/SdlInputBridge.cpp` — the single funnel: SDL events → `InputManager` /
-    `TouchPanel` / `Mouse` / `TextInputEXT`. Owns gamepad slot maps, finger-id map, UTF-8 decode, env
-    parsing, gamepad-subsystem init, and the vibration/LED/sensor calls (through `ISdlGamepadBackend`).
-  - `src/CNA/Internal/Input/InputManager.cpp` — accumulated input-state singleton (keyboard / mouse /
-    4 gamepads / touch) + `Get*State()` snapshots + `ResetForTests()` / `ResetAllForTests()`.
-  - `src/CNA/Internal/Input/GestureDetector.cpp` — gesture state machine (has a test clock).
-  - `include|src/CNA/Internal/Input/SdlGamepadBackend.*` — `ISdlGamepadBackend` seam + real impl; the fake
-    is `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp` (introspection: open/close/rumble/led/sensor
-    counters, `lastRumbleLow/High`, `lastTriggerLow/High`, `lastLedR/G/B`, `setSensorEnabledCalls`).
-  - `include/Microsoft/Xna/Framework/Input/**` — the XNA-facing public API (26 headers).
-- **Data flow:** host loop → `Game::PollEvents` → `SdlInputBridge::ProcessEvent(event)` → mutate
-  `InputManager` / `TouchPanel` → game reads `GamePad::GetState` / `Keyboard::GetState` / `Mouse::GetState`
-  / `TouchPanel::GetState`.
-- **Invariants (keep true):** state updates at event-processing time; gamepad subsystem initialized once at
-  startup + lazily in `ProcessEvent` (both idempotent); packet number bumps only on a real state change;
-  `ResetAllForTests()` restores a deterministic baseline **and** re-installs the real SDL gamepad backend
-  (fake is test-only); tests must stay order-independent under shuffle ×5.
-- **Boundaries / API rules that must stay stable (enforced by guards):**
-  - Public XNA names/signatures are **frozen** — `PublicApiInputSignatureFreezeTests.cpp` + golden
-    `docs/input-public-api-frozen.md`. A change must update BOTH in the same commit.
-  - Enum **values** are frozen — exhaustive enum-value suites; renumbering fails a test.
-  - No public header may leak SDL — `PublicApiInputCompileTests.cpp` `#error` guard.
-  - Do **not** expose `ISdlGamepadBackend` or any `CNA::Internal` type in the XNA layer.
-  - Every non-XNA member carries `NOXNA` and/or an `EXT` suffix.
+## 6. Remaining tasks (§8 has ordering; each is big enough to deserve fresh context)
+
+- **N-007 `CNA::Input::Joystick` (raw joystick — BIGGEST).** Whole new subsystem, Pattern 3-style but
+  bigger. Needs a **new `ISdlJoystickBackend` seam + fake** (keep it SEPARATE from the gamepad seam —
+  a gamepad is a *mapped* joystick; this is the raw device). SDL: `SDL_GetJoysticks`,
+  `SDL_OpenJoystick`, `SDL_GetJoystickAxis/Button/Hat/Ball`, `SDL_GetNumJoystickAxes/Buttons/Hats/Balls`,
+  `SDL_GetJoystickName/ID/GUID/Type/PowerInfo`, events `SDL_EVENT_JOYSTICK_{ADDED,REMOVED,AXIS_MOTION,
+  BUTTON_{DOWN,UP},HAT_MOTION,BALL_MOTION}`. Shape: `Joysticks::GetJoysticksEXT()` (id+name list),
+  `Joysticks::GetState(index) -> JoystickStateEXT` (axes[]/buttons[]/hats[]/balls[]) +
+  `GetCapabilities`/connect events. Test via a fake feeding canned axis/button/hat values. **Testable
+  with a virtual joystick fake — no real hardware needed.**
+- **N-013 `CNA::Input::Haptics` (SDL_haptic — BIG).** Force-feedback beyond simple rumble. SDL:
+  `SDL_haptic.h` — `SDL_OpenHapticFromJoystick`/`SDL_OpenHaptic`, `SDL_CreateHapticEffect`,
+  `SDL_RunHapticEffect`, `SDL_UpdateHapticEffect`, `SDL_StopHapticEffect`, `SDL_SetHapticGain`,
+  `SDL_SetHapticAutocenter`, effect types constant/periodic/ramp/condition/custom (`SDL_HapticEffect`
+  union). Shape: `CNA::Input::Haptics` with an effect-builder + play/stop, behind an injectable seam +
+  fake. **Real actuation is manual `[!]`** — the fake verifies the effect-struct building + call
+  plumbing. Platform: Win/Lin ✓, mac ~, Android/Web ✗.
+- **N-012 `CNA::Input::Pen` (stylus — BIG, event-driven).** Unlike the poll-based gamepad EXT, this is
+  **event-sourced** (Pattern: decode in the bridge, accumulate a `PenState` in `InputManager` like
+  mouse/touch). SDL: events `SDL_EVENT_PEN_{DOWN,UP,MOTION,BUTTON_DOWN,BUTTON_UP,AXIS}`, axes
+  pressure/tilt-x/tilt-y/rotation/distance/eraser (`SDL_PenAxis`). Shape:
+  `CNA::Input::Pen::GetState() -> PenStateEXT` (position, pressure, tilt, rotation, buttons, eraser).
+  Test via synthetic pen events through `SdlInputBridge::ProcessEvent` (like the touch tests).
+- **N-014b `TextInputEXT::StartTextInputWithTypeEXT` (small).** Input-type hints for the on-screen
+  keyboard / IME: `StartTextInputWithTypeEXT(TextInputTypeEXT {Text,TextName,TextEmail,TextUsername,
+  TextPassword…,Number,NumberPassword})` via `SDL_StartTextInputWithProperties` +
+  `SDL_PROP_TEXTINPUT_TYPE_NUMBER`. Note: `TextInputEXT` calls SDL **directly** (no seam) and its
+  tests are real-window/Xvfb-gated — testability mirrors the existing `StartTextInput`, so this is
+  more about correct property mapping than a deterministic seam test. Consider a small seam if you
+  want a deterministic mapping test.
+
+(`input_noxna.md` §6.1–6.8 / §5.1–5.5 has the full per-feature analysis, platform matrix, and P1–P3
+priorities for all of the above.)
 
 ## 7. Useful commands
 
 ```bash
-# Configure + build tests (EasyGL; swap backend for VULKAN / BGFX / SDL_RENDERER):
+# Build the input test binary (EasyGL is the primary dev backend for this pass):
+ninja -C cmake-build-input-easygl CnaTests
+# (First-time configure, if a build dir is missing — swap EASYGL for VULKAN/BGFX/SDL_RENDERER:)
 cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-input-easygl --target CnaTests -j"$(nproc)"
 
-# Run the input subset — THE canonical gate (baked shuffle x5, order-independence):
-ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
-# List what that selects (must be exactly 1 entry: CnaInputTests):
-ctest --test-dir cmake-build-input-easygl -N -L input
-
-# Headless box: MouseCursor tests need real cursors — run under a virtual X server:
+# THE gate — input subset (baked --gtest_shuffle --gtest_repeat=5), must be 100%:
 xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 
-# Run a focused subset directly (e.g. gamepad or touch):
-xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-easygl/CnaTests --gtest_filter='*GamePad*:*Gamepad*'
-xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-easygl/CnaTests --gtest_filter='*Touch*'
+# Run your new tests directly:
+xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-easygl/CnaTests --gtest_filter='FakeGamepadTest.*'
 
-# Sanitizer build (ASan+UBSan) + run (Mesa libGLX leaks at exit are third-party):
-cmake --build cmake-build-input-asan --target CnaTests -j"$(nproc)"
-xvfb-run -a env SDL_VIDEODRIVER=x11 ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
-  ./cmake-build-input-asan/CnaTests --gtest_filter='*FakeGamepad*:*SetVibration*'
-
-# Watch CI (no gh token assumed — unauthenticated API):
-curl -s "https://api.github.com/repos/openeggbert/cna/actions/runs?per_page=1" | grep -E '"head_sha"|"status"|"conclusion"'
+# ASan build + run your subset (after any src/ change):
+ninja -C cmake-build-input-asan CnaTests
+xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-asan/CnaTests --gtest_filter='<your suite>*'
 ```
-No lint/format config for the input track. There is **no failing input command to reproduce**.
+`CNA_INPUT_TEST_FILTER` (CMakeLists.txt ~1952) selects the `-L input` set; it already includes
+`*CnaInput*`, `*GamePad*`, `*Keyboard*`, `*Mouse*`, `*Touch*`, `*SdlInputBridge*`, `*PublicApiInput*`,
+etc. Name new suites so one of those globs matches.
 
-## 8. Next smallest tasks (input track, ordered)
+## 8. Order to resume (input_noxna.md)
 
-1. **P5-003 — `TouchCollection` iteration-order test.**
-   - Goal: assert `for (const auto& t : collection)` (begin/end) yields elements in insertion order.
-   - Files: `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` (test only).
-   - Verify: `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-easygl/CnaTests --gtest_filter='*TouchCollection*'`.
-2. **P5-016 — touch-reset completeness test.**
-   - Goal: assert `TouchPanel::ResetForTests()` empties the gesture queue (`getIsGestureAvailableProperty()==false`)
-     and clears `previousTouches_` slot continuity (a moved finger after reset reads Pressed, not Moved).
-   - Files: `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp` (test only).
-   - Verify: `... --gtest_filter='*TouchEdgeCase*:*InputResetAllForTests*'`.
-3. **P5-015 / P5-004 / P5-005 / P5-008..014 — record verified-covered in `plan_input.md`.**
-   - Goal: mark the already-covered Phase 5 verification tasks `[x]` with their existing test names; mark the
-     high-DPI pixel-scaling sub-item `[!]` blocked (headless runs at 1×1) with a Phase-11 follow-up.
-   - Files: `plan_input.md` (doc only). Verify: none (doc); then run `ctest -L input` to confirm still green.
-4. **Phase 6 — Gesture correctness** (`plan_input.md` P6-*). Start by mapping `GestureDetectorTest` +
-   `SdlInputBridgeTouchGestureTests.cpp` coverage to the P6 task list, then fix/close real gaps.
-   - Files: `src/CNA/Internal/Input/GestureDetector.cpp`, `tests/.../GestureDetectorTest*`. Verify: `ctest -L input`.
+1. **Read `input_noxna_progress.md`** (task list + Log + notes) and the relevant `input_noxna.md`
+   §6/§5 subsection for the chosen task.
+2. **N-014b** first (smallest, closes the IME story), OR jump to a big one if you prefer momentum.
+3. **N-012 Pen** — highest-value of the big three, and event-driven testing infra already exists
+   (touch tests show the synthetic-event pattern).
+4. **N-007 Joystick** — biggest; new `ISdlJoystickBackend` seam + fake, then `JoystickStateEXT`.
+5. **N-013 Haptics** — last; effect-builder behind a seam, real actuation `[!]`.
+One task = one commit (§5). Split any task that grows (precedent: N-009b, N-010b, N-002b, N-017b).
 
-After Phase 5 is fully recorded, continue phase-by-phase: 6 (Gesture) → 7 (Text/IME) → 8 (SDL bridge) →
-9 (build/CI) → 10 (docs) → 11 (manual HW, expected `[!]`) → 12 (final gates). One task = one commit;
-update the matching `plan_input.md` task block (status/files/tests/verification) in the same commit.
+## 9. Boundaries / guards that must stay stable
 
-## 9. Do not do yet
+- **Public XNA names/signatures are frozen** — `PublicApiInputSignatureFreezeTests.cpp` + golden
+  `docs/input-public-api-frozen.md`. An EXT-on-XNA member must update BOTH in the same commit.
+  Whole-NOXNA standalone `CNA::Input` types are additive → not pinned (like `Clipboard`/`Power`).
+- **Enum values frozen** (exhaustive enum-value suites); no renumbering.
+- **No public header may leak SDL** — `PublicApiInputCompileTests.cpp` `#error` guard. Opaque
+  `uintptr_t` / forward-decl only in public headers; SDL types live only in `CNA::Internal`/seams.
+- **Do NOT expose** `ISdlGamepadBackend` or any `CNA::Internal` type in the XNA layer.
+- **Single-funnel event design** — keep SDL→`SdlInputBridge::ProcessEvent`→`InputManager`; don't
+  refactor it broadly.
+- **Reset discipline:** anything with process-wide static state (events, seams) needs a
+  `ResetForTests`/`SetSystem*BackendForTests(nullptr)` in the test fixture — the `-L input` gate runs
+  shuffled ×5, so tests must be order-independent.
 
-- **No public XNA API changes** (names / signatures / enum values are frozen and guarded); if unavoidable,
-  update the signature-freeze test + `docs/input-public-api-frozen.md` in the **same** commit.
-- **No broad refactor** of `SdlInputBridge` / `InputManager` — keep the single-funnel event design.
-- **No behavior change that diverges from FNA** without checking the FNA *source* (not its comments) and
-  recording it in `docs/input-fna-fidelity.md`. (Reminder from P5-001: FNA's own comments can be misleading.)
-- **No exposing** `ISdlGamepadBackend` or any `CNA::Internal` type in the XNA layer.
-- **No Graphics work on this branch** — Task 870/871/872 belong to the Graphics track (`GRAPHICS_TASKS.md`);
-  don't fix them here or edit that file without deliberately switching context.
+## 10. Do NOT do
+
 - **No merge** of `feature/input` to `develop`/`master` without explicit confirmation.
-- **No `git add -A`/`git add .`** — stage files by explicit name (this repo carries unrelated local changes).
-- **No new large abstractions** for the hardware-gated items — they are manual/hardware, not missing code.
-- **No skipping/batching** unrelated `plan_input.md` tasks — execute in order, one task = one commit, and
-  never mark a task done only because it compiles (it must be verified against FNA + tested).
+- **No `git add -A` / `git add .`** — stage by explicit name (repo carries unrelated local changes,
+  e.g. vendored dirs).
+- **No batching** — one `N-xxx` = one commit; skip (don't guess) anything needing an owner decision.
+- **No public XNA API change** without updating the freeze test + frozen-API doc in the same commit.
+- **No Graphics work here** — the repo's most severe open bug is on the Graphics track (`develop`):
+  Task **870** (Vulkan `DepthStencilState` largely non-functional), **871** (`Clear` ignores
+  `ClearOptions::Stencil`), **872** (`ReferenceStencil` unwired). See `GRAPHICS_TASKS.md` /
+  `docs/depthstencilstate-support.md`. Do NOT fix here.
+- **No large abstraction for hardware-gated bits** — real actuation/IME/sensors are manual `[!]`,
+  not missing code; the seam+fake proves the plumbing.
 
-## 10. Resume prompt
+## 11. Resume prompt
 
 ```
-Read NEXT.md first. Then, working on branch feature/input against the plan_input.md Phase 0–12 backlog:
-- Inspect ONLY the files needed for the first task in NEXT.md §8 (do not read the whole tree, and do not
-  re-read the obsolete pre-reset plan history).
-- Do NOT refactor unrelated code, do NOT change the public XNA API (frozen + guarded), and do NOT touch the
-  Graphics track (GRAPHICS_TASKS.md / Task 870-872) unless explicitly asked.
-- Make ONE small, verified improvement (start with §8 task 1). Verify each behavior fix against the FNA
-  source at /rv/data/library/github.com/FNA-XNA/FNA/src — FNA's code is authoritative, its comments are not.
-- Run the relevant command from NEXT.md §7; the input subset must stay green via `ctest -L input`
-  (shuffle x5 baked in). If a fix touches source, also confirm the ASan build is clean.
-- Update the matching plan_input.md task block (status/files/tests/verification) and NEXT.md (§2, §3, §8) in
-  the same commit. One task = one commit; stage files by explicit name. Do not push/merge without asking.
+Read NEXT.md, then input_noxna_progress.md. You are continuing the input_noxna.md NOXNA/SDL3 input-
+extension pass on branch feature/input (the plan_input.md XNA-completion pass is already done).
+
+- Pick the next task from NEXT.md §8 (start with N-014b, or N-012 Pen for a bigger one). Implement
+  exactly ONE task following the matching reusable pattern in NEXT.md §4.
+- Follow the per-task discipline in NEXT.md §5: build cmake-build-input-easygl + ASan, keep
+  `ctest -L input` 100% green (shuffle x5), pin any EXT-on-XNA member in the signature-freeze test +
+  docs/input-public-api-frozen.md, update input_noxna_progress.md ([x] + Log entry), commit
+  `input(N-xxx): ...` with the standard trailer staging files by explicit name, then push.
+- Respect NEXT.md §9 boundaries and §10 do-nots: no SDL in public headers, no CNA::Internal in the
+  XNA layer, no merge, no Graphics work, one task = one commit, split a task if it grows.
+- New standalone types go in CNA::Input with a whole-class NOXNA and an injectable ISystemXBackend
+  seam + fake (see the existing SystemPower/SystemMouse/SystemSensor/SystemDevice seams). New test
+  suites must be named CnaInput* so ctest -L input picks them up.
 ```
