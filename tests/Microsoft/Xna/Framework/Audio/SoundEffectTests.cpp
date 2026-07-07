@@ -739,6 +739,25 @@ TEST(SoundEffectTest, PlayReturnsTrue)
     EXPECT_TRUE(fx->Play(0.5f, 0.0f, 0.25f));
 }
 
+// P11-PAN-002 (RFC-1 for the fire-and-forget path): hard pan (pan = ±1) is exactly the case that
+// used to hard-eliminate the opposite channel outright (CHECKLIST.md CP-19) before this fix
+// registered a real crossfeed-matrix cooked callback on the fire-and-forget track (matching
+// P11-PAN-001's design for SoundEffectInstance -- SoundEffect::Play() computes the matrix once,
+// via the same SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix already unit-tested by
+// P11-PAN-001's SoundEffectInstanceFilterMathTest suite). This is a smoke/non-crash test, not a
+// sample-level verification -- the fire-and-forget path exposes no way for a test to reach the
+// MIX_Track it internally creates and destroys (same limitation P12-PITCH-001 already noted for
+// this exact call path), so the underlying matrix math's correctness is what P11-PAN-001's own
+// pure-math tests already establish; this only proves the new cooked-callback registration/
+// stereo-forcing plumbing doesn't crash across the full pan range, including both hard extremes.
+TEST(SoundEffectTest, PlayWithHardPanDoesNotCrash)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    EXPECT_TRUE(fx->Play(1.0f, 0.0f, 1.0f));
+    EXPECT_TRUE(fx->Play(1.0f, 0.0f, -1.0f));
+}
+
 TEST(SoundEffectTest, PlayThrowsOnPanOutOfRange)
 {
     // Matches SoundEffectInstance::setPanProperty's validation (CP-2): Pan is range-checked,

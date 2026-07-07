@@ -67,24 +67,27 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P12-VAR-001`, on top of `P12-CATEGORY-001`,
-  `P12-PAUSE-001`, `P12-DOC-001`, `P12-PITCH-001`, `P11-PAN-001`, `P11-XACT-003/004/002`,
-  `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`, and everything in
-  Phase 10). EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked. Required a
-  one-line unrelated unblock first (`GamerProfile.cpp`'s `RegionInfo::CurrentRegion()` call,
-  renamed upstream in sharp-runtime -- see §3). `cna_demo_sound`/`cna_demo_2d` example targets not
-  rebuilt this pass (no Audio *public XNA* API surface touched by any Phase 12 work so far --
-  `P12-VAR-001`'s new `AudioEngine`/`Cue` methods are all `NOXNA`/private).
-- **Tests:** `CnaTests` whole-suite count is **3396 / 3398 pass** (2 skipped:
+- **Build:** clean, rebuilt and reverified this pass (`P11-PAN-002`, on top of `P12-VAR-001`,
+  `P12-CATEGORY-001`, `P12-PAUSE-001`, `P12-DOC-001`, `P12-PITCH-001`, `P11-PAN-001`,
+  `P11-XACT-003/004/002`, `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`,
+  `P11-CHECKLIST-001`, and everything in Phase 10). EasyGL backend (Linux default),
+  `SOUND_ENABLED` on, SDL3_mixer linked. Required a one-line unrelated unblock first
+  (`GamerProfile.cpp`'s `RegionInfo::CurrentRegion()` call, renamed upstream in sharp-runtime --
+  see §3). `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt this pass (no Audio
+  *public XNA* API surface touched -- `P11-PAN-002`'s changes are all internal to
+  `SoundEffect.cpp`'s anonymous namespace).
+- **Tests:** `CnaTests` whole-suite count is **3397 / 3399 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected — not Audio; the 14-test increase since the last sync is
-  `P12-VAR-001`'s new variable-accessibility/clamping coverage, see §3). Prior sync's 3-test
-  increase was `P12-CATEGORY-001`'s new category-hierarchy-cascade coverage. The audio-scoped
-  subset (§7's `--gtest_filter` list) was reverified under a **fresh one-off ThreadSanitizer
-  build** during `P11-PAN-001` (497/497 pass, zero `WARNING: ThreadSanitizer` reports); not
-  re-run for `P12-PITCH-001`/`P12-PAUSE-001`/`P12-CATEGORY-001`/`P12-VAR-001` (none touch
-  threading/ownership surface). A fresh dedicated ASan+UBSan build (466/466 pass at the time) was
-  last run during the post-Phase-10 sweep.
+  hardware-dependent, expected — not Audio; the 1-test increase since the last sync is
+  `P11-PAN-002`'s new `PlayWithHardPanDoesNotCrash` smoke test, see §3). Prior sync's 14-test
+  increase was `P12-VAR-001`'s new variable-accessibility/clamping coverage. The audio-scoped
+  subset (§7's `--gtest_filter` list) was reverified under **two** fresh one-off sanitizer
+  builds this pass: ThreadSanitizer during `P11-PAN-001` (497/497 pass, zero `WARNING:
+  ThreadSanitizer` reports, not re-run for `P11-PAN-002` -- no new threading surface, only a
+  mutex-protected deferred-free queue) and a **fresh ASan+UBSan build specifically for
+  `P11-PAN-002`** (522/522 pass, zero errors/leaks -- this one caught and drove a real fix, see
+  §3). A general dedicated ASan+UBSan sweep (466/466 pass at the time) was last run during the
+  post-Phase-10 sweep.
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
@@ -138,6 +141,28 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12" s
   extremely recent Phase 9-11 work there), and `Microphone`/the 3 exception classes. Follow-up
   tasks (`P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`, `P12-DOC-001`, plus
   the pre-existing `P11-PAN-002`) tracked in `plan_audio.md`, being worked one at a time.
+- **`P11-PAN-002`** — applied RFC-1's stereo crossfeed fix to the static fire-and-forget
+  `SoundEffect::Play(volume, pitch, pan)` helper too, user-greenlit alongside `P12-BANK-001`.
+  New `FireAndForgetPanState` (holds the already-computed 4-coefficient matrix, computed once by
+  `Play()` itself since the cooked-callback trampoline that reads it can't call the private,
+  friended matrix function directly) drives a new cooked callback on the fire-and-forget track,
+  same design as `P11-PAN-001`. **Found and fixed a real bug via this task's own ASan
+  verification**: the first version freed the pan state directly inside the SDL3_mixer "track
+  stopped" callback -- a genuine, reproducible heap-use-after-free (confirmed by a fresh one-off
+  ASan+UBSan build), because SDL3_mixer's `MixerCallback` can invoke the stopped callback
+  *partway through* pulling a track's final audio buffer, then still deliver that buffer to the
+  cooked callback moments later in the same synchronous mixer-thread call -- traced into
+  SDL3_mixer's own C source to confirm the exact mechanism. Fixed by deferring the free to the
+  next fire-and-forget `Play()` call (a mutex-protected queue, drained opportunistically) --
+  the *first* version of that fix then leaked 120 bytes/6 allocations at process exit under ASan
+  (whenever the last-ever fire-and-forget sound had no later `Play()` call to drain it), closed
+  by wrapping the queue in an RAII struct with its own destructor instead of bare namespace-scope
+  statics. New `PlayWithHardPanDoesNotCrash` smoke test (this path exposes no way to reach its
+  internal `MIX_Track` for sample-level verification, same limitation `P12-PITCH-001` already
+  hit here; the underlying matrix math is what `P11-PAN-001`'s own tests already verify, reused
+  as-is). Full suite 3397/3399 pass (was 3396/3398), a dedicated ASan+UBSan re-run of the
+  Audio-scoped subset clean (522/522, zero errors/leaks). **This closes every outstanding Phase
+  11/12 Audio finding except `P12-BANK-001`, in progress next.** See `plan_audio.md`.
 - **`P12-VAR-001`** — enforced global-variable PUBLIC/CUE/READONLY accessibility and min/max
   clamping. Independently re-read `FACT.c`'s two variable-index resolvers first, which surfaced
   a deeper finding than the audit originally described: `AudioEngine::GetGlobalVariable`/
@@ -692,8 +717,9 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**Phase 11 is fully closed.** `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly
-**rejected** by the user 2026-07-07 -- staying on SDL3_mixer (see §9).
+**Phase 11 is fully closed**, including its one deliberate follow-up (`P11-PAN-002`,
+user-greenlit 2026-07-07, see §3). `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was
+explicitly **rejected** by the user the same day -- staying on SDL3_mixer (see §9).
 
 **Phase 12 (fresh logic-correctness audit, user-requested 2026-07-07) found 6 candidate gaps --
 5 are closed:** `P12-PITCH-001` fixed (real bug); `P12-DOC-001` fixed (docs); `P12-CATEGORY-001`
@@ -703,13 +729,16 @@ domain when real FACT has two separate ones, see §3); `P12-PAUSE-001` investiga
 be a **false positive** -- `Cue::state_` already stays `Playing` throughout a pause (the
 independent `paused_` bool, `P9-LIFECYCLE-013`), so the audit's finding did not reproduce; a new
 passing regression test (`InstanceLimitStillCountsAPausedCue`) locks in the already-correct
-behavior with zero code change. **One remains, and it needs the user, not autonomous
-self-selection:**
+behavior with zero code change.
+
+**One item remains, user-greenlit 2026-07-07, next up:**
 
 1. **`P12-BANK-001`** -- `SoundBank`/`WaveBank::Dispose()` doesn't force-stop cues still using the
-   bank, unlike real FACT. **Needs a design decision, not just an implementation** (a `GetCue()`'d
-   `Cue*` is currently documented as caller-owned) -- see `plan_audio.md` P12-AUDIT-004 for the
-   full tension.
+   bank, unlike real FACT. User chose the "implement a real force-stop cascade" option (not the
+   "document as accepted deviation" alternative also offered) -- this changes the currently-
+   documented "a `GetCue()`'d `Cue*` is caller-owned" contract, so needs care around who's allowed
+   to force-stop a cue neither bank nominally owns. See `plan_audio.md` P12-AUDIT-004 for the
+   full tension and design options already scoped out.
 
 **With `P12-BANK-001` needing user input, Phase 12 has no further self-selectable Audio work.**
 

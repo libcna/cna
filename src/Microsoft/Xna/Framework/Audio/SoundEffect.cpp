@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 #include <istream>
+#include <mutex>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
@@ -60,8 +61,103 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
     namespace
     {
-        void SDLCALL OnFireAndForgetStopped(void* /*userdata*/, MIX_Track* track)
+        // P11-PAN-002 (RFC-1 for the fire-and-forget path): minimal per-track pan-only state.
+        // Unlike SoundEffectInstance's FilterState (P11-PAN-001), a fire-and-forget track never
+        // has a filter to share the single SDL3_mixer cooked-callback slot with -- none of
+        // P11-PAN-001's original shared-slot regression risk applies here at all, so this is
+        // intentionally much smaller: just the crossfeed matrix. Holds the already-computed
+        // 4 coefficients (not just `pan`) because the matrix is only ever computed once, at
+        // Play() time, by a SoundEffect member function (a friend of SoundEffectInstance) --
+        // FireAndForgetPanCallback below is a free-function SDL trampoline, not a class member,
+        // so it can't call the private, friended INTERNAL_calculatePanCrossfeedMatrix itself.
+        // Heap-allocated with a lifetime tied to the track itself, freed in
+        // OnFireAndForgetStopped below (which already runs exactly once, when this track is
+        // destroyed on natural completion).
+        struct FireAndForgetPanState
         {
+            bool  active = false; // false: pan == 0 at Play() time, matrix is the identity
+            float ll = 1.0f, rl = 0.0f, lr = 0.0f, rr = 1.0f;
+        };
+
+        // Applies the already-computed crossfeed matrix (see FireAndForgetPanState above) to
+        // interleaved stereo PCM -- matches ApplyPanCrossfeed's identical transform in
+        // SoundEffectInstance.cpp. Only meaningful for `channels == 2`; `!active` (pan == 0.0f at
+        // Play() time, the common case -- most fire-and-forget sounds never pan) skips the
+        // transform entirely.
+        void SDLCALL FireAndForgetPanCallback(void* userdata, MIX_Track* /*track*/,
+                                               const SDL_AudioSpec* spec, float* pcm, int samples)
+        {
+            const auto* state = static_cast<const FireAndForgetPanState*>(userdata);
+            if (spec->channels != 2 || !state->active) return;
+
+            for (int i = 0; i + 2 <= samples; i += 2)
+            {
+                const float l = pcm[i];
+                const float r = pcm[i + 1];
+                pcm[i]     = l * state->ll + r * state->rl;
+                pcm[i + 1] = l * state->lr + r * state->rr;
+            }
+        }
+
+        // P11-PAN-002: NOT freed directly in OnFireAndForgetStopped below -- caught by a real,
+        // reproducible ASan heap-use-after-free during this task's own verification pass.
+        // SDL3_mixer's MixerCallback (SDL_mixer.c) can invoke the STOPPED callback *partway
+        // through* pulling a track's FINAL buffer of audio (when the track's underlying data
+        // runs dry mid-pull, inside SDL_GetAudioStreamData on the track's output_stream), then
+        // still deliver that already-pulled final buffer to the COOKED callback
+        // (FireAndForgetPanCallback above) moments later, in the same synchronous mixer-thread
+        // call -- so the cooked callback can genuinely still read this track's userdata AFTER
+        // the stopped callback already ran. MIX_DestroyTrack's own documented behavior
+        // ("destroying a track from the mixer thread itself... will cause it to be destroyed as
+        // soon as this iteration of the mixer thread is not using it") is SDL3_mixer solving this
+        // exact problem for the *track* -- panState needs the same deferred treatment, which
+        // SDL3_mixer has no API for app-owned userdata, so it's deferred manually to the next
+        // fire-and-forget Play() call instead (DrainPendingPanStateCleanup, below), which is
+        // always safely later than any mixer-thread activity for this track/iteration.
+        //
+        // Wrapped in a struct with its own destructor (rather than bare namespace-scope statics)
+        // so a static-duration instance frees any still-pending entries at program exit too --
+        // otherwise the last fire-and-forget sound(s) played before exit, with no later Play()
+        // call to opportunistically drain them, would show up as a real (if tiny and harmless)
+        // ASan leak report, which this project's testing culture treats as a bar worth clearing.
+        struct PendingPanStateCleanup
+        {
+            std::mutex mutex;
+            std::vector<FireAndForgetPanState*> pending;
+
+            void Queue(FireAndForgetPanState* state)
+            {
+                if (!state) return;
+                std::lock_guard<std::mutex> lock(mutex);
+                pending.push_back(state);
+            }
+
+            // Called from Play() (main/calling thread) before creating a new fire-and-forget
+            // track -- by the time any NEW Play() call happens, the mixer thread has long since
+            // finished processing whatever iteration queued these for cleanup, so freeing them
+            // here is safe.
+            void Drain()
+            {
+                std::vector<FireAndForgetPanState*> toDelete;
+                {
+                    std::lock_guard<std::mutex> lock(mutex);
+                    toDelete.swap(pending);
+                }
+                for (auto* state : toDelete)
+                    delete state;
+            }
+
+            ~PendingPanStateCleanup()
+            {
+                Drain();
+            }
+        };
+
+        PendingPanStateCleanup g_pendingPanStateCleanup;
+
+        void SDLCALL OnFireAndForgetStopped(void* userdata, MIX_Track* track)
+        {
+            g_pendingPanStateCleanup.Queue(static_cast<FireAndForgetPanState*>(userdata));
             MIX_DestroyTrack(track);
         }
 
@@ -339,6 +435,12 @@ namespace Microsoft::Xna::Framework::Audio
         pitch = (pitch < -1.0f) ? -1.0f : ((pitch > 1.0f) ? 1.0f : pitch);
 
 #ifdef SOUND_ENABLED
+        // P11-PAN-002: opportunistically free any FireAndForgetPanState from a previously
+        // finished fire-and-forget track -- see PendingPanStateCleanup's own comment for why
+        // this can't happen directly in OnFireAndForgetStopped (a real ASan-caught
+        // heap-use-after-free otherwise).
+        g_pendingPanStateCleanup.Drain();
+
         auto* audio = static_cast<MIX_Audio*>(getNativeAudioHandle());
         if (!audio)
         {
@@ -362,10 +464,25 @@ namespace Microsoft::Xna::Framework::Audio
         // master gain stage) -- not baked into each track's own gain, which would double-apply it.
         MIX_SetTrackGain(track, volume);
 
-        MIX_StereoGains stereo{};
-        stereo.left  = (pan < 0.0f) ? 1.0f : (1.0f - pan);
-        stereo.right = (pan > 0.0f) ? 1.0f : (1.0f + pan);
-        MIX_SetTrackStereo(track, &stereo);
+        // P11-PAN-002 (RFC-1 for the fire-and-forget path): SDL3_mixer's own per-channel stereo
+        // gain has no crossfeed term (CHECKLIST.md CP-19), so it's fixed to unity here and this
+        // track's own pan state (FireAndForgetPanCallback above) owns 100% of the stereo image
+        // instead, matching P11-PAN-001's design for SoundEffectInstance.
+        static const MIX_StereoGains kUnityStereo{1.0f, 1.0f};
+        MIX_SetTrackStereo(track, &kUnityStereo);
+
+        auto* panState = new FireAndForgetPanState{};
+        if (pan != 0.0f)
+        {
+            // Computed once here, not in FireAndForgetPanCallback -- SoundEffect::Play() is a
+            // member function (a friend of SoundEffectInstance), so it can call the private,
+            // canonical matrix implementation directly; the callback itself cannot (see
+            // FireAndForgetPanState's own comment above).
+            panState->active = true;
+            SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix(
+                pan, panState->ll, panState->rl, panState->lr, panState->rr);
+        }
+        MIX_SetTrackCookedCallback(track, FireAndForgetPanCallback, panState);
 
         if (pitch != 0.0f)
         {
@@ -377,11 +494,14 @@ namespace Microsoft::Xna::Framework::Audio
             MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
         }
 
-        // Auto-destroy track when playback finishes.
-        MIX_SetTrackStoppedCallback(track, OnFireAndForgetStopped, nullptr);
+        // Auto-destroy track (and free panState) when playback finishes.
+        MIX_SetTrackStoppedCallback(track, OnFireAndForgetStopped, panState);
 
         if (!MIX_PlayTrack(track, 0))
         {
+            // MIX_PlayTrack failing means the track never actually started, so
+            // OnFireAndForgetStopped will never fire for it -- free panState here instead.
+            delete panState;
             MIX_DestroyTrack(track);
             return false;
         }

@@ -4490,21 +4490,47 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
   `CHECKLIST.md` CP-19 updated to reflect the fix and the one remaining (separately-tracked,
   fire-and-forget-only) gap.
 
-* [ ] P11-PAN-002: apply RFC-1's same stereo crossfeed fix to the static, fire-and-forget
+* [x] P11-PAN-002: apply RFC-1's same stereo crossfeed fix to the static, fire-and-forget
   `SoundEffect::Play(volume, pitch, pan)` helper (`SoundEffect.cpp`), discovered as a scope
   boundary while implementing P11-PAN-001 above.
-  *Status:* Not started -- deliberately scoped out of P11-PAN-001, which only touched
-  `SoundEffectInstance`. This path has its own separate `MIX_StereoGains`/`MIX_SetTrackStereo`
-  call with no `SoundEffectInstance`/`FilterState`/cooked-callback machinery at all (this helper
-  never had a filter either), so it still hard-eliminates the opposite channel on a stereo source
-  at hard pan. Unlike P11-PAN-001's original risk (sharing a slot with an already-shipped,
-  load-bearing filter), this path has NO existing cooked callback to share/regress -- adding one
-  here is lower-risk, just needs its own small heap-allocated per-track pan-only state object
-  (a single `float pan`, not a full `FilterState`) with a lifetime tied to
-  `OnFireAndForgetStopped`'s existing track-teardown callback (currently ignores `userdata`,
-  `SoundEffect.cpp`) so it's freed exactly when the track is destroyed. Left open, not attempted
-  this pass, since it's a distinct file/code path from P11-PAN-001's own commit and this project's
-  "one task = one commit" convention.
+  *Status:* Fixed, user-greenlit 2026-07-07 (asked alongside `P12-BANK-001`). SDL3_mixer's own
+  stereo gain is fixed to unity (matching P11-PAN-001's design); a new `FireAndForgetPanState`
+  (heap-allocated, holds the already-computed 4-coefficient crossfeed matrix, NOT just `pan` --
+  the matrix is computed once by `Play()` itself, a friend of `SoundEffectInstance`, since the
+  cooked-callback trampoline that reads it is a free function and can't call the private,
+  friended `INTERNAL_calculatePanCrossfeedMatrix` itself) drives a new cooked callback
+  (`FireAndForgetPanCallback`) registered on the fire-and-forget track.
+  **Found and fixed a real bug via this task's own ASan verification pass**: the first version of
+  this fix freed `FireAndForgetPanState` directly inside `OnFireAndForgetStopped` (the SDL3_mixer
+  "track stopped" callback) -- a genuine, reproducible heap-use-after-free, confirmed by a
+  one-off ASan+UBSan build. Root cause, traced into SDL3_mixer's own source
+  (`third_party/SDL_mixer/src/SDL_mixer.c`): `MixerCallback` can invoke the STOPPED callback
+  *partway through* pulling a track's FINAL buffer (when the track's input runs dry mid-pull,
+  inside `SDL_GetAudioStreamData` on the track's `output_stream`), then still deliver that
+  already-pulled final buffer to the COOKED callback moments later, in the same synchronous
+  mixer-thread call -- so the cooked callback can genuinely still read the userdata *after* the
+  stopped callback already ran and freed it. `MIX_DestroyTrack`'s own documented behavior
+  ("destroying a track from the mixer thread itself... will cause it to be destroyed as soon as
+  this iteration of the mixer thread is not using it") is SDL3_mixer solving this exact problem
+  for the *track itself*; a plain heap `delete` has no such protection. Fixed by deferring the
+  free to the *next* fire-and-forget `Play()` call instead (a `PendingPanStateCleanup` struct,
+  `mutex`-protected queue drained at the top of `Play()`, plus its own destructor so any
+  still-pending entries at program exit don't show up as an ASan leak either -- confirmed: the
+  very first fix attempt, before adding the destructor, DID leak 120 bytes/6 allocations at
+  process exit under ASan, closed by wrapping the queue in an RAII struct instead of bare
+  namespace-scope statics).
+  *Tests:* new `SoundEffectTest.PlayWithHardPanDoesNotCrash` (pan = ±1, the exact case that used
+  to hard-eliminate the opposite channel) -- a smoke/non-crash test, not sample-level
+  verification, since this fire-and-forget path exposes no way for a test to reach the internal
+  `MIX_Track` it creates and destroys (same limitation `P12-PITCH-001` already noted for this
+  exact call path); the underlying crossfeed math is what `P11-PAN-001`'s own
+  `SoundEffectInstanceFilterMathTest` suite already verifies directly, since this task reuses
+  that exact function. `git stash`-verified in the unusual sense that applies here: the new smoke
+  test doesn't distinguish old-vs-new behavior on its own (the *old* linear-panning code never
+  crashed either, it was just wrong -- undetectable by a non-crash test), so the real
+  before/after evidence is the ASan run itself (genuine UAF before the fix, zero errors/leaks
+  after, both confirmed via a fresh one-off ASan+UBSan build of the full Audio-scoped subset,
+  522/522 pass). Full suite 3397/3399 pass (was 3396/3398; +1 new test), no regressions.
 
 * [x] P11-RFC2-001: formally close `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) as
   rejected, per the user's explicit decision (2026-07-07), asked alongside the `P11-PAN-001`
