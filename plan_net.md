@@ -3279,10 +3279,37 @@ done — "it compiles" is not sufficient.
   passing (2 expected accelerometer/gyroscope skips), no regressions (new demo-only files, no
   library changes).
 
-- [ ] **Task 15.13** — `cna_demo_gamer_profile_privileges`: `GamerProfile` (`GamerScore`,
+- [x] **Task 15.13** — `cna_demo_gamer_profile_privileges`: `GamerProfile` (`GamerScore`,
   `GamerZone`, `Motto`, `Region`, `Reputation`, `TitlesPlayed`, `TotalAchievements`, via
   `CreateInternal`) and `GamerPrivileges`. Left/Right cycles through the 4 stub `SignedInGamers`,
   showing each one's profile card and privilege flags. Single process.
+
+  New files: `examples/demo_gamer_profile_privileges/src/{ProfileGame.hpp,ProfileGame.cpp,
+  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
+  gate as `cna_demo_avatar`. Real `GamerServicesComponent` registration (Task 15.8's pattern).
+  Left/Right cycles the selected gamer (edge-triggered), calling `Gamer::GetProfile()` (a real,
+  heap-allocated, caller-owned `GamerProfile*` — disposed/deleted before each re-select) and
+  reading `SignedInGamer::getPrivilegesProperty()` (a plain const reference, no allocation) for
+  the currently-selected gamer's card.
+
+  **Confirmed before writing any demo code that neither `GamerProfile::CreateInternal()` nor
+  `GamerPrivileges::CreateInternal()` take any per-gamer configuration at all** — both are
+  parameterless factories over a single hardcoded default constructor (`GamerScore=0,
+  GamerZone=Pro, Motto="", Region=RegionInfo::CurrentRegion(), Reputation=5.0,
+  TitlesPlayed=1, TotalAchievements=0` and `AllowCommunication=Everyone,
+  AllowOnlineSessions=true, AllowPremiumContent=true, AllowProfileViewing=Everyone,
+  AllowPurchaseContent=true, AllowTradeContent=true, AllowUserCreatedContent=Everyone`
+  respectively). So all 4 stub gamers show identical profile/privilege cards — documented this
+  honestly in the demo's own header comment and a one-time startup console line, rather than
+  fabricating per-gamer variation the real API has no way to produce.
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 180`, one
+  deterministic cycle every 30 frames): startup line confirmed 4 signed-in gamers and the
+  identical-cards expectation; smoke summary after 6 cycles (`0→1→2→3→0→1→2`, matching
+  `selectedIndex=2 = 6 mod 4`) read `gamerScore=0 gamerZone=Pro allowCommunication=Everyone` —
+  exactly the predicted hardcoded defaults. Exit code `0`. Full suite: 3398/3398 passing (2
+  expected accelerometer/gyroscope skips), no regressions (new demo-only files, no library
+  changes).
 
 - [ ] **Task 15.14** — `cna_demo_friends_and_gamercard`: `FriendCollection` (via `CreateInternal`)
   and the no-op `Guide::ShowGamerCard`/`ShowFriendRequest`/`ShowFriends`/`ShowComposeMessage` calls.
