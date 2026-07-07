@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include <cstdio>
@@ -63,6 +64,9 @@ protected:
         fx.VertexColorEnabled = true;
         fx.Apply();
 
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real
+        // default RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
 
         const Rectangle reg(vp.getWidthProperty() / 2, vp.getHeightProperty() / 2, 1, 1);

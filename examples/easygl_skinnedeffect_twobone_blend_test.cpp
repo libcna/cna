@@ -28,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -96,6 +97,10 @@ protected:
         fx.SetBoneTransforms(bones);
         fx.setWeightsPerVertexProperty(2);
         fx.EnableDefaultLighting();
+        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): the standard NDC
+        // quad winding used throughout this pixel-test family is culled once the real default
+        // RasterizerState reaches the GPU.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
         fx.Apply();
 
         // Quad covering NDC x: -1..0, y: -1..1. All vertices split 0.5/0.5 across bones 0/1;

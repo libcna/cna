@@ -38,6 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -104,6 +105,9 @@ class BufferUsageTest : public Game
         fx.VertexColorEnabled = true;
         fx.Apply();
         dev.SetVertexBuffer(&vb);
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real
+        // default RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         dev.SetVertexBuffer(nullptr);
         Color got = readCenter(dev);

@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -90,6 +91,9 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
+        // Task 896 finding (mirrors the Bgfx sibling\'s Task 364/884 fix): this quad\'s
+        // winding is culled under FNA\'s real default RasterizerState.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         const Color kTex(200, 100, 50, 255);
         const Color kTranslucentCube(0, 0, 0, 128);

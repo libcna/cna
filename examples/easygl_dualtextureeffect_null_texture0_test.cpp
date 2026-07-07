@@ -34,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -99,6 +100,10 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
+        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
+        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // this quad's winding is culled unless explicitly disabled.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         const Color kBlack(0, 0, 0, 255);
         const Color kDistinctivePrev(200, 20, 20, 255); // "previous draw" texture0

@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
@@ -320,6 +321,9 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
+        // Task 896 finding: FillQuad()'s TL/BL/BR winding is CCW/back-facing under CNA's real
+        // default RasterizerState — needs CullNone (shared by all 4 stride sub-tests below).
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         testMappingTable();
         testStride16(dev);

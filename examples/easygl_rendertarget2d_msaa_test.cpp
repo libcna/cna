@@ -35,6 +35,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -65,6 +66,10 @@ class RenderTarget2DMsaaTest : public Game
                            DepthFormat::None, multiSampleCount, RenderTargetUsage::DiscardContents);
 
         device.setBlendStateProperty(BlendState::Opaque);
+        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
+        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // this triangle's winding is culled unless explicitly disabled.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
 
         device.SetRenderTarget(&rt);
         device.Clear(Color(0, 0, 0, 255));

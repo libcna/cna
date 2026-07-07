@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -129,6 +130,9 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
+        // Task 896 finding: drawFullScreen()/drawLeftHalf()'s winding is CCW/back-facing
+        // under CNA's real default RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         // Keep the BasicEffect alive for the entire frame so currentEffect_ stays valid.
         BasicEffect fx(dev);

@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 
@@ -94,6 +95,10 @@ class AlphaTestVertexColorVulkanTest : public Game
         fx.setAlphaProperty(kEffectAlpha);
         fx.setAlphaFunctionProperty(CompareFunction::Greater);
         fx.setReferenceAlphaProperty(referenceAlpha);
+        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): the standard NDC
+        // quad winding used throughout this pixel-test family is culled once the real default
+        // RasterizerState reaches the GPU.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         fx.Apply();
 
         Color got(0, 0, 0, 0);

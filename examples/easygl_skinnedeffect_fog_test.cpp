@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -143,6 +144,10 @@ protected:
     {
         auto& dev = getGraphicsDeviceProperty();
         dev.SetDepthTestEnabled(false);
+        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
+        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // this quad's winding is culled unless explicitly disabled.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         Texture2D tex(dev, 1, 1);
         tex.SetData(&kWhite, 1);

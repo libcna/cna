@@ -56,6 +56,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 
@@ -133,6 +134,9 @@ class AlphaTestVertexColorDiffuseTest : public Game
         {
             dev.Clear(kBlack);
             dev.setBlendStateProperty(BlendState::Opaque);
+            // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real
+            // default RasterizerState — needs CullNone.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             got = readCenter(dev);
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)

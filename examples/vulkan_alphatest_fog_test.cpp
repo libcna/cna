@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -106,6 +107,10 @@ class AlphaTestFogVulkanTest : public Game
         fx.setFogColorProperty(kFogColor);
         fx.setFogStartProperty(kFogStart);
         fx.setFogEndProperty(kFogEnd);
+        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): the standard NDC
+        // quad winding used throughout this pixel-test family is culled once the real default
+        // RasterizerState reaches the GPU.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         fx.Apply();
 
         const Vector3 tl(-1.0f,  1.0f, z), bl(-1.0f, -1.0f, z);

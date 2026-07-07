@@ -27,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -75,6 +76,10 @@ protected:
         fx.setWorldProperty(Matrix::getIdentityProperty());
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());
+        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): the standard NDC
+        // quad winding used throughout this pixel-test family is culled once the real
+        // default RasterizerState reaches the GPU.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
         fx.Apply();
 
         // Full-screen quad (NDC -1..1).  Vulkan Y-flip in vertex shader preserves

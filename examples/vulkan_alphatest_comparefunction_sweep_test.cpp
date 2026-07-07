@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -67,6 +68,10 @@ class VulkanAlphaTestCompareFunctionSweepTest : public Game
         fx.setAlphaProperty(alpha);
         fx.setReferenceAlphaProperty(kReference);
         fx.setAlphaFunctionProperty(func);
+        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): the standard NDC
+        // quad winding used throughout this pixel-test family is culled once the real default
+        // RasterizerState reaches the GPU.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         fx.Apply();
 
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);

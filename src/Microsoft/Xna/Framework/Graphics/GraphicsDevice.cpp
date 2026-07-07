@@ -168,6 +168,13 @@ namespace Microsoft::Xna::Framework::Graphics
         applyPresentationParametersToWindow();
         createBackend();
         UpdateViewportFromWindow();
+
+        // Task 896: rasterizerState_ above was only ever set as a C++-level field, never
+        // pushed to the backend's actual GPU state — every backend started from its own
+        // hardcoded internal default (EasyGL/Vulkan: effectively CullNone; Bgfx: CullCCW,
+        // the only one that happened to already match FNA's real default) until a game
+        // explicitly set RasterizerState itself. Sync all 3 backends to the real default now.
+        setRasterizerStateProperty(rasterizerState_);
     }
 
     GraphicsDevice::~GraphicsDevice()

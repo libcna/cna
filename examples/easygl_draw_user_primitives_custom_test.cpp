@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -108,6 +109,8 @@ class DrawUserPrimitivesCustomTest : public Game
         fx.Apply();
 
         auto vd = makeVD();
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2, vd);
 
         const Color got = readCenter(dev);
@@ -136,6 +139,8 @@ class DrawUserPrimitivesCustomTest : public Game
         fx.Apply();
 
         auto vd = makeVD();
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 1, 2, vd);
 
         const Color got = readCenter(dev);

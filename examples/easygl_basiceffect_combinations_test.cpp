@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
@@ -96,6 +97,10 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
+        // Task 896 finding: this file's shared quad winding (kTL/kBL/kBR/kTR, used by all 5
+        // sub-cases below) is CCW/back-facing under CNA's real default RasterizerState —
+        // needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         // ── Shared textures ───────────────────────────────────────────────
         Texture2D blueTex(dev, 1, 1);

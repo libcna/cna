@@ -25,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -70,6 +71,10 @@ protected:
             // Note: SetDepthTestEnabled/setBlendStateProperty are not exercised here — the Bgfx
             // backend does not yet wire 3D depth/blend state changes (see bgfx_render_target_usage_test.cpp).
             dev.Clear(Color(0, 0, 0, 255));
+            // Task 896 finding: the shared quad's winding is CCW/back-facing under CNA's real
+            // default RasterizerState — needs CullNone. Bgfx already culls CCW today, but this
+            // test only checks for "no crash", not pixel correctness, so it was silently masked.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
             const Color kWhite(255, 255, 255, 255);
             const Color kBlue (  0,   0, 255, 255);

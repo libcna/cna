@@ -52,6 +52,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
@@ -162,6 +163,9 @@ class BasicEffectSpecularTest : public Game
             dev.Clear(Color(0, 0, 0, 255));
             dev.setBlendStateProperty(BlendState::Opaque);
             fx.Apply();
+            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
+            // is culled by the real default RasterizerState once EasyGL pushes it at construction.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             got = readCenter(dev);
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)

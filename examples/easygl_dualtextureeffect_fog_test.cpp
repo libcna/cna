@@ -37,6 +37,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -127,6 +128,10 @@ class DualTextureFogTest : public Game
         {
             dev.Clear(Color(0, 0, 0, 255));
             dev.setBlendStateProperty(BlendState::Opaque);
+            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
+            // GraphicsDevice's real default RasterizerState is pushed to every backend,
+            // this quad's winding is culled unless explicitly disabled.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             got = readCenter(dev);
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)

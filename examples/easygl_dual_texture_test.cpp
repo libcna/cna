@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -82,6 +83,9 @@ protected:
             { Vector3( 1.0f, -1.0f, 0.0f), Vector2(1.0f, 0.0f) },
             { Vector3( 1.0f,  1.0f, 0.0f), Vector2(1.0f, 1.0f) },
         };
+        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
+        // is culled by the real default RasterizerState once EasyGL pushes it at construction.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
 
         // Centre pixel: magenta × yellow = (1,0,1)×(1,1,0) = (1,0,0) = red.

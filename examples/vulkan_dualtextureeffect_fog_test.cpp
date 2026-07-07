@@ -35,6 +35,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -119,6 +120,9 @@ class DualTextureFogVulkanTest : public Game
         {
             dev.Clear(kBlack);
             dev.setBlendStateProperty(BlendState::Opaque);
+            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's
+            // winding is culled under FNA's real default RasterizerState.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             got = readCenter(dev);
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)

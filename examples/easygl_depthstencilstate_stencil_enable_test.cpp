@@ -54,6 +54,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
@@ -78,6 +79,9 @@ namespace
             { Vector3(x1, -1.0f, 0.5f), color },
             { Vector3(x1,  1.0f, 0.5f), color },
         };
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real
+        // default RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
     }
 

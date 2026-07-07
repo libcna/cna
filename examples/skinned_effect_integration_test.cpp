@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -111,6 +112,9 @@ protected:
         VertexBuffer vb(device, 6);
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
         device.SetVertexBuffer(&vb);
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
+        // RasterizerState — needs CullNone.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
         // Read back three pixels.

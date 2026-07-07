@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
@@ -98,6 +99,9 @@ class VertexFormatsTest : public Game
         BasicEffect fx(dev);
         fx.VertexColorEnabled = true;
         fx.Apply();
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
+        // RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         dev.SetVertexBuffer(nullptr);
 
@@ -123,6 +127,9 @@ class VertexFormatsTest : public Game
         BasicEffect fx(dev);
         fx.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
         fx.Apply();
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
+        // RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         dev.SetVertexBuffer(nullptr);
 
@@ -148,6 +155,9 @@ class VertexFormatsTest : public Game
         BasicEffect fx(dev);
         fx.VertexColorEnabled = true;
         fx.Apply();
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
+        // RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         dev.SetVertexBuffer(nullptr);
 
@@ -176,6 +186,9 @@ class VertexFormatsTest : public Game
         fx.setLightingEnabledProperty(false);
         fx.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
         fx.Apply();
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
+        // RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         dev.SetVertexBuffer(nullptr);
 

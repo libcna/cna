@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
@@ -66,6 +67,9 @@ protected:
 
         device.SetDepthTestEnabled(false);
         device.setBlendStateProperty(BlendState::Opaque);
+        // Task 896 finding: both scenes' quad winding is CCW/back-facing under CNA's real
+        // default RasterizerState — needs CullNone.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
 
         // ── Scene (a): vertex-colour-only mid-grey quad ──────────────────────
         Color vertexColorPixel(0, 0, 0, 0);

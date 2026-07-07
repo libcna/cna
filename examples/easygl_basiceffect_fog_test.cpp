@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include <cmath>
@@ -109,6 +110,9 @@ protected:
             fx.Apply();
 
             makeQuad(0.0f, kBlue);
+            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
+            // is culled by the real default RasterizerState once EasyGL pushes it at construction.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
             const bool isBlue = got.getBProperty() > 200
@@ -131,6 +135,9 @@ protected:
             fx.Apply();
 
             makeQuad(0.5f, kBlue);
+            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
+            // is culled by the real default RasterizerState once EasyGL pushes it at construction.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
             const int r = got.getRProperty(), g = got.getGProperty(), b = got.getBProperty();
@@ -155,6 +162,9 @@ protected:
             fx.Apply();
 
             makeQuad(0.9f, kBlue);
+            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
+            // is culled by the real default RasterizerState once EasyGL pushes it at construction.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
             const bool isRed = got.getRProperty() > 200

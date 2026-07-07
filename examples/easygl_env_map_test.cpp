@@ -35,6 +35,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -110,6 +111,9 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
+        // Task 896 finding: the shared quad's winding is CCW/back-facing under CNA's real
+        // default RasterizerState — needs CullNone (all 4 draw calls below reuse it).
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         // Shared resources.
         const Color kBlack(  0,   0,   0, 255);

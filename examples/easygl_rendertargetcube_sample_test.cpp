@@ -33,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -129,6 +130,9 @@ protected:
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());
         fx.Apply();
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
+        // RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
 
         Color got = readCenter(dev);

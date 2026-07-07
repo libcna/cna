@@ -48,6 +48,7 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
@@ -222,6 +223,10 @@ protected:
 
         auto& device = getGraphicsDeviceProperty();
         device.SetDepthTestEnabled(true);
+        // Task 896 finding: AddBox()'s per-face winding is CCW/back-facing under CNA's real
+        // default RasterizerState on every axis-aligned face spot-checked (+X/+Z/-Z) — the
+        // whole scene would otherwise render as an empty sky once the correct default lands.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
 
         effect_ = std::make_unique<BasicEffect>(device);
         effect_->VertexColorEnabled = true;

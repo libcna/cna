@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -102,6 +103,9 @@ protected:
         fx.Apply();
 
         device.setDepthStencilStateProperty(DepthStencilState::Default);
+        // Task 896 finding: DrawFullQuad()'s winding is CCW/back-facing under CNA's real
+        // default RasterizerState — needs CullNone.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
         DrawFullQuad(device, 0.2f, Color(0, 255, 0, 255));  // near, green — should win
         DrawFullQuad(device, 0.8f, Color(255, 0, 0, 255));  // far, red — must be rejected
 

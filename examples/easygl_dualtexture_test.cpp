@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -108,6 +109,10 @@ protected:
             { Vector3( 1.0f, -1.0f, 0.0f), Vector2(1.0f, 0.0f) },
             { Vector3( 1.0f,  1.0f, 0.0f), Vector2(1.0f, 1.0f) },
         };
+
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
+        // RasterizerState — needs CullNone. Set once; persists across all 4 draw calls below.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         // ── (a) tex1=white, tex2=blue → blue ─────────────────────────────
         {

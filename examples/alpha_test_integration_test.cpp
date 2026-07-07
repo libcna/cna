@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -100,6 +101,9 @@ protected:
             { Vector3(1.0f, -1.0f, 0.0f), Vector2(0.75f, 0.5f) },
             { Vector3(1.0f,  1.0f, 0.0f), Vector2(0.75f, 0.5f) },
         };
+        // Task 896 finding: both half-quads' winding is CCW/back-facing under CNA's real
+        // default RasterizerState — needs CullNone.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 4);
 
         // Read back one pixel from each half.

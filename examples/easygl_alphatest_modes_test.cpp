@@ -27,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -106,6 +107,9 @@ protected:
             fx.setAlphaFunctionProperty(tc.func);
             fx.Apply();
 
+            // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real
+            // default RasterizerState — needs CullNone.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
 
             Color got(0, 0, 0, 0);

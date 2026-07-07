@@ -34,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -87,6 +88,9 @@ class AlphaTestCompareFunctionSweepTest : public Game
         fx.setAlphaFunctionProperty(func);
         fx.Apply();
 
+        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
+        // is culled by the real default RasterizerState once EasyGL pushes it at construction.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
 
         const auto& vp = dev.getViewportProperty();

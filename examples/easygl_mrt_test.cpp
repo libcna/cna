@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
@@ -97,6 +98,8 @@ protected:
             { Vector3( 1.0f, -1.0f, 0.0f), green },
             { Vector3( 1.0f,  1.0f, 0.0f), green },
         };
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default RasterizerState — needs CullNone.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.DrawUserPrimitives(PrimitiveType::TriangleList, greenQuad, 0, 2);
 
         // --- Back to backbuffer ---
