@@ -3445,11 +3445,28 @@ done — "it compiles" is not sufficient.
   code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
   regressions (new demo-only files, no library changes).
 
-- [ ] **Task 15.17** — `cna_demo_avatar_appearance_tint_studio`: `AvatarAppearanceEXT`'s 5 tint
+- [x] **Task 15.17** — `cna_demo_avatar_appearance_tint_studio`: `AvatarAppearanceEXT`'s 5 tint
   slots (Skin/Hair/Shirt/Pants/Shoes) and `AvatarRenderer::SetAppearanceEXT` as a live color
   customization screen. Number keys 1-5 select a slot, Up/Down cycle preset swatch colors, avatar
   re-tints on the next `DrawRealEXT` call with an on-screen swatch row showing the 5 current colors.
   Single process.
+
+  New files: `examples/demo_avatar_appearance_tint_studio/src/{TintStudioDemo.hpp,
+  TintStudioDemo.cpp,Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND
+  NOT EMSCRIPTEN` gate as `cna_demo_avatar`, reusing its `Content/` directory. Number keys 1-5
+  select the active slot; Up/Down cycle that slot's color through a shared 6-color preset palette
+  (wrapping both directions); every change rebuilds the whole `AvatarAppearanceEXT` from all 5
+  slots' current palette indices and calls `SetAppearanceEXT` again, so the avatar's next
+  `DrawRealEXT` picks up the new tint. `SpriteBatch` draws a 5-swatch row (one filled rectangle per
+  slot's current color) with a white outline around the currently-selected slot.
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 200`, one
+  deterministic slot-cycle every 20 frames): console log showed all 5 slots
+  (Skin/Hair/Shirt/Pants/Shoes) cycling through the palette in round-robin order across 2 full
+  rounds (10 total changes), each reapplying `SetAppearanceEXT` immediately. Final summary
+  `paletteIndices=[2,2,2,2,2]` — exactly the expected state after cycling every slot forward by 2
+  full 20-frame steps. Exit code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/
+  gyroscope skips), no regressions (new demo-only files, no library changes).
 
 - [ ] **Task 15.18** — `cna_demo_avatar_dual_compare`: two independent `AvatarRenderer`/
   `SkinnedModelEXT` instances alive and drawing simultaneously (not yet exercised anywhere — all
