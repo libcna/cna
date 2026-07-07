@@ -2553,8 +2553,12 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   this same code path). Full suite: 3394/3394 passing (2 expected accelerometer/gyroscope skips),
   no regressions.
 
-- [ ] **Task 13.4** — Add a test for `EnableRealRenderingEXT`/`SetAppearanceEXT` called after
+- [x] **Task 13.4** — Add a test for `EnableRealRenderingEXT`/`SetAppearanceEXT` called after
   `Dispose()` — see Task 11.6 (this is the test half of that fix; do them together).
+
+  Already done together with Task 11.6 itself: `EnableRealRenderingThrowsAfterDispose` and
+  `SetAppearanceThrowsAfterDispose` were added and revert-verified as part of that task's own
+  commit. No further work needed here.
 
 - [ ] **Task 13.5** — Extend `AvatarAnimationPresetNamesEXTTest::NameMatchesEnumeratorSpelling` to
   check all 31 presets for exact string spelling, not just 4 of them. Confirmed the other 27
