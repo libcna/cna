@@ -37,7 +37,13 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   marked done directly. **Task 404 verified `GetBoneTransforms` returns a genuinely independent
   copy, not an alias** — zero bugs found; confirmed `EffectParameter::GetValueMatrixArray()`
   builds a brand-new `std::vector<Matrix>` from scratch every call, matching FNA's own
-  array-allocating semantics. Phase 45 ("EnvironmentMapEffect exactness", Tasks
+  array-allocating semantics. **Task 406 (first real pixel test in this phase) confirmed the
+  identity bone palette produces zero deformation on all 3 backends — zero bugs found**, but
+  surfaced a real Bgfx-specific *test-harness* pitfall (not a `SkinnedEffect`/backend bug):
+  reading 3 distinct screen rectangles from a single rendered Bgfx frame only reliably reflects
+  the *first* read — every prior multi-region Bgfx pixel test in this project reads exactly one
+  rectangle per draw+retry pass, a convention this task's test now also follows. Phase 45
+  ("EnvironmentMapEffect exactness", Tasks
   391–400) is
   **CLOSED** — Task 400 wrote `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399:
   property/default audit (zero bugs, Task 391), a real `Clone()`-drops-`FogColor` bug found and
@@ -101,14 +107,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 404.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 406.
 
-### Test status (last verified: Task 404)
-- **EasyGL, full `ctest -j1`:** 3605/3608 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 406)
+- **EasyGL, full `ctest -j1`:** 3606/3609 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3525/3538 pass. 13 documented pre-existing failures (see §5),
+- **Vulkan, full `ctest -j1`:** 3526/3539 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3509/3509 pass — 100%, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3510/3510 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -268,7 +274,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 404 | **Verify-only, zero bugs found**: confirmed `GetBoneTransforms` returns a genuinely independent copy (`EffectParameter::GetValueMatrixArray()` builds a brand-new `std::vector<Matrix>` every call, matching FNA's own array-allocating semantics). Added `GetBoneTransformsReturnsIndependentCopy`, discriminating by construction (mutating the first call's result and confirming a second call is unaffected). |
+| — | 406 | **Opens the phase's first real pixel test, verify-only, zero `SkinnedEffect`/backend bugs found**: confirmed an identity bone palette (`Bones[0]=Identity`, `WeightsPerVertex=1`) produces zero mesh deformation on all 3 backends — direct contrast with the pre-existing Task 123 integration test. Surfaced a genuinely new Bgfx *test-harness* pitfall: `GetBackBufferData()` only reliably reflects the first read call per rendered frame; reading 3 rectangles from one frame silently returned blank data for reads 2 and 3. Fixed by refactoring to a `renderAndRead()` helper doing one full clear+draw+retry+read pass per checkpoint — now the established pattern for future multi-point Bgfx tests. |
+| `aa101253` | 404 | **Verify-only, zero bugs found**: confirmed `GetBoneTransforms` returns a genuinely independent copy (`EffectParameter::GetValueMatrixArray()` builds a brand-new `std::vector<Matrix>` every call, matching FNA's own array-allocating semantics). Added `GetBoneTransformsReturnsIndependentCopy`, discriminating by construction (mutating the first call's result and confirming a second call is unaffected). |
 | `43dcf220` | 403/405 | **Documentation only, no new code**: both tasks already fully satisfied by Task 402's own `SetBoneTransformsAcceptsExactlyMaxBones`/`SetBoneTransformsThrowsWhenExceedingMaxBones` tests. Marked done in `plan_graphics.md`, no test/production changes. |
 | `5b8f1c56` | 402 | **52 new unit tests, regression guard for Task 401's fix**: wrote `SkinnedEffectTests.cpp` from scratch (zero prior coverage). `Clone()` test deliberately sets `SpecularColor`/`SpecularPower` before cloning — `git stash`-confirmed it fails exactly as predicted with Task 401's fix reverted. Also fixed an unrelated build-breaking discovery: `SkinnedEffect::MaxBones` had no out-of-line definition, causing a linker error the moment any code took its address. |
 | `eb68b5bc` | 401 | **Opens Phase 46. Real, confirmed bug found and fixed**: `SkinnedEffect`'s `Clone()` never preserved `SpecularColor`/`SpecularPower` — the identical bug shape Task 392 fixed for `FogColor` across 4 stock effects, undetected here since `SkinnedEffect` had zero prior test coverage. All property defaults, `MaxBones`/bone bounds-checking, and `OnApply()`'s shader-index formula confirmed matching FNA exactly. Opened Tasks 893 (`DirectionalLight1`/`2` unforwarded), 894 (zero specular GPU implementation), and 895 (`WeightsPerVertex` complete GPU no-op on all 3 backends). |
@@ -403,6 +410,7 @@ direct code reading.
 | Needs verification | Whether Bgfx's window actually has a physical stencil buffer has not been checked. | — |
 | Incomplete, by design | Stride-keyed vertex layout only supports strides 16/20/24/32/52. Vulkan has no `Tangent`/`Binormal` mapping. `SurfaceFormat` support is Color-only for real GPU formats. `SDL_Renderer` has no 3D at all. | — |
 | Risky assumption | `GraphicsDevice`'s user-primitive scratch buffers never shrink — fine for typical use, but memory stays at the high-water mark for the device's lifetime. | — |
+| Confirmed, test-harness only, worked around | Bgfx's `GetBackBufferData()` only reliably reflects the *first* read call per rendered frame — reading multiple distinct rectangles from a single frame returns stale/blank data for reads after the first. Every multi-point Bgfx pixel test in this project reads exactly one rectangle per draw+retry pass as a result (Task 406 established a `renderAndRead()`-style per-checkpoint helper for new tests). | — |
 
 ---
 
@@ -495,19 +503,19 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 46 (Task 406 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 46 (Task 407 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 406 — pixel test: identity bone palette**
-   - Goal: the first real pixel/rendering test for `SkinnedEffect` in this phase (Tasks 401-405
-     were all unit tests / audits, no GPU rendering exercised yet). Render a simple skinned quad
-     with the default identity bone palette (every bone = `Matrix.Identity`, the effect's own
-     constructor default) and confirm the mesh renders with **no deformation at all** — pixel
-     output should exactly match an equivalent `BasicEffect`/un-skinned draw of the same geometry,
-     proving the skinning math correctly degenerates to a no-op when every bone transform is
-     identity (`sum of weights * Identity = Identity` regardless of weight distribution). This is
-     the natural baseline before Tasks 407/408 introduce real bone deformation.
-   - Files: new `examples/{easygl,vulkan,bgfx}_skinnedeffect_identity_bones_test.cpp`.
+1. **Task 407 — pixel test: single translation bone**
+   - Goal: render a skinned quad bound 100% to bone 0 (`weight=1`, all others `0`), with bone 0 set
+     to a real, non-identity translation (`Matrix.CreateTranslation`), and confirm the mesh shifts
+     by exactly that translation on all 3 backends. Task 406 already established the identity-bone
+     no-deformation baseline; this task is the natural next step, proving actual bone deformation
+     is applied. The pre-existing Task 123 `examples/skinned_effect_integration_test.cpp` already
+     exercises this exact scenario informally (bone 0 = `+0.5` X translation) — likely reusable as
+     the starting point for a formalized, Phase-46-numbered pixel test per backend, following
+     Task 406's own `renderAndRead()` per-checkpoint pattern on Bgfx.
+   - Files: new `examples/{easygl,vulkan,bgfx}_skinnedeffect_translation_bone_test.cpp`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -631,7 +639,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 406).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 407).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -694,8 +702,31 @@ Matrix.Identity -- discriminating power confirmed by construction (had GetValueM
 returned an alias instead of a copy, the mutation would have corrupted the underlying storage
 and the second call would read back the corrupted value). 1 new test added
 (GetBoneTransformsReturnsIndependentCopy), all 53 tests in SkinnedEffectTests.cpp green. No
-production code changed. Task 406 (NEXT) is the phase's first real pixel/rendering test --
-identity bone palette should produce zero deformation.
+production code changed.
+
+Task 406 was the phase's first real pixel/rendering test -- confirmed an identity bone palette
+(every one of the 72 default bone slots = Matrix.Identity, no SetBoneTransforms call made) produces
+ZERO mesh deformation on all 3 backends, a direct contrast with the pre-existing Task 123
+examples/skinned_effect_integration_test.cpp (same quad geometry/stride-52 layout, but bone 0 set
+to a +0.5 X translation there). Zero SkinnedEffect/backend bugs found. FOUND A GENUINELY NEW
+Bgfx-specific TEST-HARNESS pitfall (not a product bug): reading 3 distinct screen rectangles from
+a single rendered Bgfx frame inside one retry-loop iteration only reliably returns correct data
+for the FIRST read -- subsequent reads in the same frame return stale/blank data. Confirmed by
+auditing every existing bgfx_*_test.cpp in the project: all of them already read exactly one
+rectangle per draw+retry pass, a convention this task's initial implementation violated by
+accident. FIXED (the test, not production code) by refactoring to a renderAndRead() helper that
+performs its own full clear+draw+retry-loop+single-read pass per checkpoint (3 independent render
+passes instead of 1 pass with 3 reads) -- now the established pattern for future multi-point Bgfx
+pixel tests (see NEXT.md §5). Also worked around the already-known Bgfx SetDepthTestEnabled
+throw-stub (Task 375) by omitting the call entirely, matching the bgfx_dual_texture_test.cpp
+precedent. 1/1 PASS on all 3 backends, exact match. Added
+examples/{easygl,vulkan,bgfx}_skinnedeffect_identity_bones_test.cpp. No production code changed.
+
+Task 407 (NEXT) is the natural next step: pixel test with a single non-identity translation bone
+(bone 0 = Matrix.CreateTranslation, weight=1), confirming the mesh actually shifts by that
+translation on all 3 backends -- the pre-existing Task 123 integration test already exercises this
+scenario informally and is likely reusable as a starting point for a formalized, Phase-46-numbered
+test per backend, following Task 406's own renderAndRead() pattern on Bgfx.
 
 Phase 45 ("EnvironmentMapEffect exactness", Tasks 391-400) CLOSED with Task 400
 (docs/environmentmapeffect-support.md, full synthesis of Tasks 391-399). Summary of what it
@@ -751,14 +782,14 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 46's remaining tasks.
 
-Last full 3-backend regression (Task 404 — pure verification, 1 new test, no production code
-changed):
-EasyGL 3605/3608 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3525/3538 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3509/3509 pass (100%, no flakes this run).
+Last full 3-backend regression (Task 406 — verify-only + a Bgfx test-harness fix, 1 new test, no
+production code changed):
+EasyGL 3606/3609 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3526/3539 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3510/3510 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46 found, read plan_graphics.md
-directly (Tasks 351-404) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-406) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

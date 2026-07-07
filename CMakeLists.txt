@@ -794,6 +794,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 406: SkinnedEffect identity bone palette should produce zero deformation
+        cna_easygl_test(cna_test_easygl_skinnedeffect_identity_bones
+                        examples/easygl_skinnedeffect_identity_bones_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_IdentityBones
+                 COMMAND cna_test_easygl_skinnedeffect_identity_bones)
+        set_tests_properties(EasyGL_SkinnedEffect_IdentityBones PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_easygl_test(cna_test_easygl_rendertargetcube_sample
                         examples/easygl_rendertargetcube_sample_test.cpp)
@@ -2033,6 +2042,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 406: SkinnedEffect identity bone palette should produce zero deformation
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_identity_bones
+                        examples/vulkan_skinnedeffect_identity_bones_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_IdentityBones
+                 COMMAND cna_test_vulkan_skinnedeffect_identity_bones)
+        set_tests_properties(Vulkan_SkinnedEffect_IdentityBones PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_sample
                         examples/vulkan_rendertargetcube_sample_test.cpp)
@@ -2400,6 +2418,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_EnvironmentMapEffect_Combined
              COMMAND cna_test_bgfx_environmentmapeffect_combined)
     set_tests_properties(Bgfx_EnvironmentMapEffect_Combined PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 406: SkinnedEffect identity bone palette should produce zero deformation
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_identity_bones
+                  examples/bgfx_skinnedeffect_identity_bones_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_IdentityBones
+             COMMAND cna_test_bgfx_skinnedeffect_identity_bones)
+    set_tests_properties(Bgfx_SkinnedEffect_IdentityBones PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
