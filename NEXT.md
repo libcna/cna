@@ -41,8 +41,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   the test fail exactly as predicted. **Task 416 fulfilled Task 165's ask, closing the
   per-`SpriteSortMode` test arc (Tasks 412–416) — zero bugs found**: confirmed
   `SpriteSortMode::BackToFront` sorts by descending `layerDepth`, the mirror image of Task 415,
-  independently confirmed the same way. Task 417 (first real GPU pixel test in this phase) is
-  next.
+  independently confirmed the same way. **Task 417 (first real GPU pixel test in this phase)
+  confirmed `SpriteBatch::Draw`'s rotation genuinely pivots around the caller's `origin` point,
+  matching FNA's real formula term-for-term — zero bugs found**, independently confirmed by
+  temporarily hardcoding `origin=(0,0)` in EasyGL's `Draw()` and watching 2 of 3 checks fail
+  exactly as predicted. Task 418 (scale overloads) is next.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -120,14 +123,15 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 416.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 417
+  (EasyGL only — no shared code changed, Vulkan/Bgfx untouched and unverified this task).
 
-### Test status (last verified: Task 416)
-- **EasyGL, full `ctest -j1`:** 3621/3624 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 417 for EasyGL; Task 416 for Vulkan/Bgfx)
+- **EasyGL, full `ctest -j1`:** 3622/3625 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3541/3554 pass. 13 documented pre-existing failures (see §5),
-  exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3525/3525 pass — 100%, no flakes this run.
+- **Vulkan, full `ctest -j1`:** 3541/3554 pass (as of Task 416). 13 documented pre-existing
+  failures (see §5), exact-name match, no flakes.
+- **Bgfx, full `ctest -j1`:** 3525/3525 pass (as of Task 416) — 100%, no flakes.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -287,7 +291,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 416 | **Verify-only, zero bugs found, closes the per-`SpriteSortMode` test arc (Tasks 412–416)**: fulfills Task 165 — confirmed `SpriteSortMode::BackToFront` sorts by descending `layerDepth`, the mirror image of Task 415, reusing its exact test shape with sort mode and expected order reversed. Independently verified discriminating power the same way. |
+| — | 417 | **Verify-only, zero bugs found (EasyGL).** First real GPU pixel test in Phase 47: confirmed `SpriteBatch::Draw`'s rotation genuinely pivots around the caller's `origin` point, matching FNA's real `GenerateVertexInfo` formula term-for-term. Independently verified discriminating power: temporarily hardcoded `origin=(0,0)` in EasyGL's `Draw()` and confirmed 2 of 3 checks fail exactly as predicted. |
+| `1294cd32` | 416 | **Verify-only, zero bugs found, closes the per-`SpriteSortMode` test arc (Tasks 412–416)**: fulfills Task 165 — confirmed `SpriteSortMode::BackToFront` sorts by descending `layerDepth`, the mirror image of Task 415, reusing its exact test shape with sort mode and expected order reversed. Independently verified discriminating power the same way. |
 | `39e4d62b` | 415 | **Verify-only, zero bugs found**: fulfills Task 164 — confirmed `SpriteSortMode::FrontToBack` sorts by ascending `layerDepth`, using the task's own example depths (0.5, 0.1, 0.9). Independently verified discriminating power: temporarily disabled the `FrontToBack` sort branch and confirmed the test fails exactly as predicted (order reverted to raw submission order). |
 | `b00ed8ba` | 414 | **Verify-only, zero bugs found**: fulfills Task 163 — confirmed `SpriteSortMode::Texture` groups draws by texture pointer (adjacency, not a predicted order since that depends on runtime addresses) while preserving `stable_sort`'s within-group submission order. Independently verified discriminating power: temporarily disabled the `Texture` sort branch and confirmed the test fails exactly as predicted (interleaved draw stayed un-grouped). |
 | `80ba1276` | 413 | **Verify-only, zero bugs found**: fulfills Task 162 — confirmed `SpriteSortMode::Deferred` preserves original `Draw()` submission order (no sort at all). Independently verified discriminating power: temporarily added an unconditional `std::reverse()` before the flush loop and confirmed the test fails exactly as predicted (recorded order came back reversed). |
@@ -526,21 +531,19 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 47 (Task 417 fully scoped in `plan_graphics.md`,
-the phase's first real GPU pixel test);
+In priority order — the first continues Phase 47 (Task 418 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 417 — pixel test: rotation around origin (EasyGL)**
-   - Goal: the per-`SpriteSortMode` mock-backend test arc (Tasks 412–416) is now closed; this
-     task switches to real GPU pixel-readback tests for `SpriteBatch`'s actual draw math,
-     starting with rotation. Draw a sprite with a non-zero `rotation` and a non-trivial `origin`
-     (not the top-left corner) and verify via pixel readback that the sprite rotates around the
-     specified origin point rather than around the destination rectangle's top-left corner (a
-     common off-by-one-concept bug in sprite rotation math). A simple, asymmetric test texture
-     (e.g. one distinctly-colored corner) makes the rotation direction/pivot observable via a
-     single pixel read.
-   - Files: new `examples/easygl_spritebatch_rotation_test.cpp` (or similar), registered in
-     `CMakeLists.txt`.
+1. **Task 418 — pixel test: scalar and Vector2 scale overloads produce expected size (EasyGL)**
+   - Goal: verify `SpriteBatch::Draw`'s scale-taking overloads (`Draw(texture, position,
+     sourceRectangle, color, rotation, origin, scale, effects, layerDepth)` — both the scalar
+     `float scale` and `Vector2 scale` variants) actually scale the drawn sprite's on-screen size
+     by the given factor relative to the source rectangle, for both uniform and non-uniform
+     (`Vector2`) scale. A simple test texture with a distinguishable marker plus pixel reads at
+     the sprite's expected scaled edges (e.g. just inside vs. just outside the scaled bounding
+     box) should discriminate a correct implementation from one that ignores scale or applies it
+     incorrectly (e.g. only to one axis).
+   - Files: new `examples/easygl_spritebatch_scale_test.cpp`, registered in `CMakeLists.txt`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -664,7 +667,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 417).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 418).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -763,13 +766,27 @@ Independently verified discriminating power: temporarily disabled the BackToFron
 rebuilt -- the test failed exactly as predicted (order reverted to raw submission order); reverted
 and reconfirmed all 12 SpriteBatch mock-backend tests green. No production code changed.
 
-Task 417 (NEXT) switches Phase 47 to real GPU pixel-readback tests for SpriteBatch's actual draw
-math (the mock-backend infrastructure/sort-mode arc, Tasks 411-416, is now fully closed). Pixel
-test: rotation around origin (EasyGL) -- draw a sprite with a non-zero rotation and a non-trivial
-origin (not the top-left corner) and verify via pixel readback that the sprite rotates around the
-specified origin point rather than around the destination rectangle's top-left corner. A simple,
-asymmetric test texture (e.g. one distinctly-colored corner) makes the rotation direction/pivot
-observable via a single pixel read.
+Task 417 (first real GPU pixel test in Phase 47) verified rotation around origin -- verify-only,
+zero bugs found. Read FNA's real SpriteBatch.cs GenerateVertexInfo formula directly: origin is
+subtracted from each source-space corner BEFORE rotation, so the origin point itself always maps
+to exactly (destinationX, destinationY), invariant under rotation -- the defining property of a
+true pivot. Read CNA's EasyGL Draw() implementation directly: algebraically identical to FNA's
+formula, term-for-term. Designed a discriminating test: 100x100 texture (top-left 20x20=Red
+marker, rest=Blue) at destinationRectangle=(200,150,100,100), origin=(100,100) (source's own
+bottom-right corner, diagonally opposite the marker), rotated 90 degrees. Hand-derived expected
+marker position from FNA's formula: (290,60) -- distinct from both the unrotated position
+(110,60) and the origin's own fixed point (200,150). All 3 checks (marker at (290,60)=Red, sprite
+interior (250,100)=Blue, outside entirely (50,50)=clear) passed with exact predicted values on
+the first attempt. Independently verified discriminating power: temporarily hardcoded
+ox=oy=0 in EasyGLGraphicsBackend.cpp (simulating origin-ignored-during-pivot bug) and rebuilt --
+2 of 3 checks failed exactly as predicted; reverted and reconfirmed. No production code changed.
+Added examples/easygl_spritebatch_rotation_test.cpp. EasyGL-only task, no shared code touched,
+Vulkan/Bgfx unaffected/unverified.
+
+Task 418 (NEXT) is the natural next step: pixel test verifying the scalar and Vector2 scale
+overloads of SpriteBatch::Draw produce the expected on-screen sprite size (uniform and
+non-uniform scale), using pixel reads just inside vs. just outside the scaled bounding box to
+discriminate correct scaling from ignored/wrong-axis-only scaling.
 
 Phase 46 ("SkinnedEffect exactness", Tasks 401-410) CLOSED with Task 410
 (docs/skinnedeffect-support.md, full synthesis of Tasks 401-409). Summary of what it found/fixed:
@@ -847,14 +864,13 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 47's tasks.
 
-Last full 3-backend regression (Task 416 — verify-only, 1 new test per backend, no production
-code changed):
-EasyGL 3621/3624 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3541/3554 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3525/3525 pass (100%, no flakes this run).
+Last full regression: Task 417 was EasyGL-only (no shared code touched) --
+EasyGL 3622/3625 pass (3 documented pre-existing failures, no flakes this run, +1 new test).
+Vulkan/Bgfx last verified at Task 416: Vulkan 3541/3554 pass (13 documented pre-existing
+failures, exact-name match, no flakes); Bgfx 3525/3525 pass (100%, no flakes).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-416) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-417) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

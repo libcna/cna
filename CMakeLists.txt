@@ -875,6 +875,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 417: SpriteBatch Draw rotation must pivot around the specified origin
+        cna_easygl_test(cna_test_easygl_spritebatch_rotation
+                        examples/easygl_spritebatch_rotation_test.cpp)
+        add_test(NAME EasyGL_SpriteBatch_RotationAroundOrigin
+                 COMMAND cna_test_easygl_spritebatch_rotation)
+        set_tests_properties(EasyGL_SpriteBatch_RotationAroundOrigin PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 168: transformMatrix in SpriteBatch::Begin — translation pixel readback
         cna_easygl_test(cna_test_easygl_transform_matrix
                         examples/easygl_transform_matrix_test.cpp)
