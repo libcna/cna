@@ -3086,6 +3086,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 904: GetOrCreatePipelineFogTex3D's missing msaa-aware render-pass check.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_textured_msaa
+                        examples/vulkan_basiceffect_textured_msaa_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_TexturedMsaa
+                 COMMAND cna_test_vulkan_basiceffect_textured_msaa)
+        set_tests_properties(Vulkan_BasicEffect_TexturedMsaa PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 367: BasicEffect pixel test — TextureEnabled=true AND VertexColorEnabled=true
         cna_vulkan_test(cna_test_vulkan_basiceffect_texture_vertexcolor_enabled
                         examples/vulkan_basiceffect_texture_vertexcolor_enabled_test.cpp)

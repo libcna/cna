@@ -4308,8 +4308,14 @@ namespace CNA::Internal::Backends::Vulkan
         pci.pColorBlendState    = &cbs;
         pci.pDynamicState       = &dyn;
         pci.layout              = pipelineLayoutFogTex3D_;
+        // Task 904: this was missing the msaa-aware ternary every sibling pipeline-creation
+        // function has (e.g. GetOrCreatePipelineFogColored3D above), unconditionally using
+        // renderPass_ (a 1-sample render pass) even when ms.rasterizationSamples above was set
+        // to sampleCount_ (>1) -- a real VkPipelineMultisampleStateCreateInfo/render-pass
+        // sample-count mismatch, dormant until a test combines backbuffer MSAA with a textured
+        // BasicEffect/DualTextureEffect draw (stride 20/24).
         pci.renderPass = (colorAttachmentCount <= 1)
-                         ? renderPass_
+                         ? ((msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_)
                          : GetOrCreateMRTRenderPass(colorAttachmentCount);
         pci.subpass = 0;
 
