@@ -58,7 +58,15 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   mock backend in Tasks 415/416) actually determines which of 2 overlapping opaque sprites is
   visible, via a real GPU pixel test deliberately submitted in reverse order from the correct
   sort order — independently confirmed by disabling the sort and watching the overlap check fail
-  exactly as predicted. Task 664 (Vulkan `SpriteBatch` multi-`Begin`/`End` bug) is next.
+  exactly as predicted. **Task 664 fixed the confirmed Vulkan `SpriteBatch` multi-`Begin`/`End`-
+  per-frame bug** — root cause isolated via instrumentation/tracing first (per this task's own
+  instruction, not guess-fixed): `Begin()` destructively cleared the *same* mutable vectors a
+  prior `End()` had just populated, and a second, previously-masked bug meant the per-frame
+  sprite VB/IB harvest always wrote to a hardcoded offset 0 instead of an accumulating cursor.
+  Fixed by moving each `Begin`/`End` cycle's geometry into its own independently-owned
+  `BatchSnapshot` at `End()`, and giving the harvest a genuine running offset mirroring the
+  already-correct 3D draw path. New regression test confirmed via `git stash` revert-and-refail.
+  Task 665 (`SpriteBatch.Begin()`'s `SamplerState` no-op on Vulkan) is next.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -136,14 +144,17 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 420
-  (EasyGL only — net production-code diff is zero, Vulkan/Bgfx untouched and unverified this task).
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 664
+  (Vulkan; EasyGL last verified Task 420, Bgfx untouched/unverified since Task 416).
 
-### Test status (last verified: Task 420 for EasyGL; Task 416 for Vulkan/Bgfx)
-- **EasyGL, full `ctest -j1`:** 3625/3628 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3541/3554 pass (as of Task 416). 13 documented pre-existing
-  failures (see §5), exact-name match, no flakes.
+### Test status (last verified: Task 664 for Vulkan; Task 420 for EasyGL; Task 416 for Bgfx)
+- **EasyGL, full `ctest -j1`:** 3625/3628 pass (as of Task 420). 3 pre-existing/documented
+  failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`,
+  `EasyGL_GraphicsDevice_ReferenceStencil`.
+- **Vulkan, full `ctest -j1`:** 3543/3555 pass. 12 of the 13 documented pre-existing failures
+  reproduced exact-name-match; `Vulkan_RenderTargetCube_SampleAfterUnbind` (Task 876's own
+  already-documented flaky failure) passed this run — reran 5× in isolation and passed every
+  time, confirming pre-existing flakiness, not a regression.
 - **Bgfx, full `ctest -j1`:** 3525/3525 pass (as of Task 416) — 100%, no flakes.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
@@ -274,8 +285,7 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   `TextureCube::DDSFromStreamEXT` is a non-functional stub (Task 663).
 - `Texture2D::SetData(level>0,...)` is a silent no-op on Vulkan/Bgfx; EasyGL's non-mip-aware
   filters render solid black on mip-incomplete textures (Task 867).
-- `SpriteBatch`'s `SamplerState` is a no-op on Vulkan/Bgfx (EasyGL only). Multiple
-  `SpriteBatch::Begin()`/`End()` per frame on Vulkan: only the last batch renders.
+- `SpriteBatch`'s `SamplerState` is a no-op on Vulkan/Bgfx (EasyGL only, Task 665).
 - `Texture3D` sampling cannot be wired into any shader without an architecture change (Task 863).
 - Bgfx: `SpriteBatch::Draw`ing a `RenderTarget2D`/`RenderTargetCube` reads the wrong handle type via
   an invalid `static_cast` — samples wrong/garbage data, doesn't crash (Tasks 873/874).
@@ -304,7 +314,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 420 | **Verify-only, zero bugs found, closes Phase 47's core `SpriteBatch` test arc (Tasks 411–420).** Proved that `layerDepth`-driven draw order (already verified via mock backend in Tasks 415/416) actually determines which of 2 overlapping opaque sprites is visible, via a real GPU pixel test deliberately submitted in reverse order from the correct sort order. Independently verified discriminating power by disabling the sort and confirming the overlap check fails exactly as predicted. |
+| — | 664 | **Real, confirmed Vulkan bug found and FIXED.** Root cause isolated via instrumentation/tracing (per this task's own instruction, not guess-fixed): `VulkanSpriteBatchBackend::Begin()` destructively cleared the same mutable vectors a prior `End()` had just populated, before the once-per-frame harvest could read them; a second, latent bug meant the harvest always wrote to a hardcoded offset 0 instead of an accumulating cursor. Fixed with a per-cycle `BatchSnapshot` moved into `activeBatches_` at `End()`, plus a genuine running `vbOff`/`ibOff` cursor mirroring the already-correct 3D draw path. New `Vulkan_SpriteBatch_MultiBeginEnd` regression test confirmed via `git stash` revert-and-refail. |
+| `718f6499` | 420 | **Verify-only, zero bugs found, closes Phase 47's core `SpriteBatch` test arc (Tasks 411–420).** Proved that `layerDepth`-driven draw order (already verified via mock backend in Tasks 415/416) actually determines which of 2 overlapping opaque sprites is visible, via a real GPU pixel test deliberately submitted in reverse order from the correct sort order. Independently verified discriminating power by disabling the sort and confirming the overlap check fails exactly as predicted. |
 | `13baad58` | 419 | **Verify-only, zero bugs found (EasyGL).** Confirmed `SpriteBatch::Draw`'s `sourceRectangle` genuinely crops the sampled texture region (2x2 grid of solid-color cells, one cell selected and stretched, entire drawn sprite uniformly that cell's color). Independently verified discriminating power: temporarily forced whole-texture UVs and confirmed both cropping checks fail exactly as predicted. |
 | `f3cbbe55` | 418 | **Verify-only, zero bugs found (EasyGL).** Confirmed `SpriteBatch::Draw`'s scalar and `Vector2` scale overloads produce exact expected destination sizes, including non-uniform `Vector2` scale. Independently verified discriminating power twice: temporarily forced each axis-mixing bug (`scale.X`-for-both, `scale.Y`-for-both) and confirmed the corresponding check fails exactly as predicted each time. |
 | `a643fc25` | 417 | **Verify-only, zero bugs found (EasyGL).** First real GPU pixel test in Phase 47: confirmed `SpriteBatch::Draw`'s rotation genuinely pivots around the caller's `origin` point, matching FNA's real `GenerateVertexInfo` formula term-for-term. Independently verified discriminating power: temporarily hardcoded `origin=(0,0)` in EasyGL's `Draw()` and confirmed 2 of 3 checks fail exactly as predicted. |
@@ -428,7 +439,6 @@ direct code reading.
 | Confirmed, real, not fixed, root cause not isolated | Vulkan: sampling a `RenderTargetCube` via `EnvironmentMapEffect` after unbinding renders black instead of actual content. | Task 876 |
 | Confirmed, format-fidelity gap, not fixed | No backend honors the exact requested `DepthStencilFormat` for a render target's depth/stencil attachment. Core depth-test functionality itself works (Task 335). | Task 877 |
 | Confirmed, architectural, deliberate | `GraphicsDevice` stores state objects by value, unlike FNA's reference-type aliasing. No game code here relies on FNA's behavior. | Task 869 |
-| Confirmed bug | `SpriteBatch` with multiple `Begin()`/`End()` per frame on Vulkan: only the last batch renders. | — |
 | Confirmed, incomplete | `SpriteBatch`'s `SamplerState` (`Begin()`) is a no-op on Vulkan/Bgfx (EasyGL only). | — |
 | Confirmed, pre-existing | `EasyGL_MRT_TwoAttachments`: attachment 1 stays black with 2 render targets. | Task 145 |
 | Confirmed, minor, not fixed | `SetRenderTargets`'s simultaneous-target cap doesn't match FNA's real `MAX_RENDERTARGET_BINDINGS=4`. | Task 881 |
@@ -547,23 +557,22 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 47 (Task 664 fully scoped in `plan_graphics.md`,
+In priority order — the first continues Phase 47 (Task 665 fully scoped in `plan_graphics.md`,
 a real Vulkan bug fix, not a pixel test);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 664 — fix Vulkan: multiple `SpriteBatch::Begin()`/`End()` calls per frame — only the
-   last batch renders**
-   - Goal: confirmed bug (session 2026-07-02, see NEXT.md §5) — 2+ `Begin()`/`Draw()`/`End()`
-     cycles in one `Draw(GameTime)`, each drawing a distinct-colour quad to a distinct screen
-     region, should render both regions correctly but currently only the last one renders. Root
-     cause not yet isolated — likely `VulkanSpriteBatchBackend` reuses/overwrites a single
-     per-frame vertex/index staging buffer or descriptor set across `Begin`/`End` cycles instead
-     of flushing or double-buffering per batch. Per `plan_graphics.md`'s own note: **do not
-     guess-fix — instrument/trace the Vulkan command recording first** to isolate the actual root
-     cause before attempting a fix.
-   - Files: likely `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`'s
-     `VulkanSpriteBatchBackend` implementation; new `examples/vulkan_spritebatch_multi_begin_end_test.cpp`
-     as a regression guard once fixed.
+1. **Task 665 — fix Vulkan: `SpriteBatch::Begin()`'s `SamplerState` (Filter/AddressU/AddressV)
+   has no effect**
+   - Goal: `VulkanSpriteBatchBackend` doesn't override `SetSamplerFilter`/`SetSamplerAddressMode`
+     at all (mirrors the pre-Task-269 EasyGL bug, same root cause, different backend). Fix shape:
+     mirror Task 269's EasyGL fix — store pending filter/address values set via
+     `SetSamplerFilter`/`SetSamplerAddressMode`, apply via the existing per-slot `VkSampler` cache
+     (Task 118, `GetOrCreateTexSamplerDescSet`) at flush time, slot 0. Verify UV is not separately
+     clamped anywhere in the Vulkan sprite draw path (mirrors the second EasyGL bug Task 269
+     found — check before assuming only the sampler wiring is missing).
+   - Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`'s
+     `VulkanSpriteBatchBackend` implementation; new `Vulkan_TextureAddressMode` pixel-readback
+     test analogous to `EasyGL_TextureAddressMode`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -687,7 +696,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 664).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 665).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -849,12 +858,47 @@ the overlap check failed exactly as predicted (Red instead of Blue); reverted, n
 diff zero. No production code changed. Added examples/easygl_spritebatch_layerdepth_test.cpp.
 EasyGL-only, Vulkan/Bgfx unaffected/unverified.
 
-Task 664 (NEXT) is a real Vulkan bug fix, not a pixel test: multiple SpriteBatch::Begin()/End()
-calls per frame -- only the last batch renders. Confirmed bug (session 2026-07-02). Root cause
-not yet isolated -- likely VulkanSpriteBatchBackend reuses/overwrites a single per-frame
-vertex/index staging buffer or descriptor set across Begin/End cycles instead of flushing or
-double-buffering per batch. plan_graphics.md's own note: do NOT guess-fix -- instrument/trace the
-Vulkan command recording first to isolate the actual root cause before attempting a fix.
+Task 664 FIXED the confirmed Vulkan SpriteBatch multi-Begin/End-per-frame bug -- real, confirmed
+bug found and fixed. Root cause isolated via instrumentation/tracing first (per plan_graphics.md's
+own instruction, not guess-fixed): 2 compounding mechanisms. (1) VulkanSpriteBatchBackend::Begin()
+unconditionally cleared its own vertices_/indices_/draws_ member vectors -- the SAME mutable
+storage a prior End() had just finished populating. activeBatches_ tracked entries by RAW POINTER
+to that single object, pushed at Begin() time. Since the once-per-frame harvest
+(RecordCommandBuffer, driven by Present()) runs strictly after all of a frame's Begin/Draw/End
+calls, a 2nd Begin() call destroyed the 1st cycle's already-completed geometry before the harvest
+ever got a chance to read it. (2) A second, latent, previously-masked bug: drawSpritesFor's
+harvest loop memcpy'd every activeBatches_ entry to a HARDCODED OFFSET 0 in the shared per-frame
+spriteVB_/spriteIB_ buffers (unlike the already-correct 3D immediate-draw path, draw3DFor, which
+uses a genuine accumulating vbOff/ibOff cursor) -- so even after fixing (1), 2 genuinely distinct
+batches targeting the same RT in one frame would still stomp on each other's GPU-visible memory.
+
+FIXED: added VulkanSpriteBatchBackend::BatchSnapshot (owns vertices/indices/draws/
+customEffectBackend by value); End() now moves the completed cycle's geometry into a freshly
+heap-allocated snapshot and pushes it onto activeBatches_ (changed to
+vector<pair<unique_ptr<BatchSnapshot>, VulkanRTSource*>>) -- not Begin() -- so a 2nd Begin() call
+only ever resets its own not-yet-used working vectors. Gave drawSpritesFor a genuine accumulating
+vbOff/ibOff cursor mirroring draw3DFor's exact pattern (bounds-checked, memcpy'd/bound at the
+running offset, advanced by each snapshot's byte size). Removed the now-unnecessary
+ConsumeDraws()/GetVertices()/GetIndices()/GetDrawCalls()/GetCustomEffectBackend() accessors.
+
+New regression test examples/vulkan_spritebatch_multi_begin_end_test.cpp: 2 independent
+Begin()/Draw()/End() cycles in one Draw(GameTime) (Red left half, Blue right half, matching the
+confirmed repro) -- both regions PASS with exact predicted colors on the first attempt.
+Independently verified discriminating power: git stash-reverted both changed files and rebuilt --
+the pre-fix code reproduced the exact reported symptom (left region = black/clear instead of Red,
+right region correctly Blue); git stash pop-restored and reconfirmed both regions pass.
+
+Full Vulkan rebuild + regression: ctest 3543/3555 (12 of the 13 previously-documented pre-existing
+failures reproduced exact-name-match; Vulkan_RenderTargetCube_SampleAfterUnbind -- Task 876's own
+already-documented flaky failure -- passed this run, reran 5x in isolation and passed every time,
+confirming it's unrelated to this fix, not a regression; +1 new test).
+
+Task 665 (NEXT) is the next real Vulkan bug fix: SpriteBatch::Begin()'s SamplerState
+(Filter/AddressU/AddressV) has no effect. VulkanSpriteBatchBackend doesn't override
+SetSamplerFilter/SetSamplerAddressMode at all (mirrors the pre-Task-269 EasyGL bug, same root
+cause, different backend). Fix shape: mirror Task 269's EasyGL fix -- store pending filter/address
+values, apply via the existing per-slot VkSampler cache (Task 118) at flush time, slot 0. Verify
+UV is not separately clamped anywhere in the Vulkan sprite draw path first.
 
 Phase 46 ("SkinnedEffect exactness", Tasks 401-410) CLOSED with Task 410
 (docs/skinnedeffect-support.md, full synthesis of Tasks 401-409). Summary of what it found/fixed:
@@ -932,14 +976,15 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 47's tasks.
 
-Last full regression: Task 420 was EasyGL-only (net production-code diff zero after
-discriminating-power verification) --
-EasyGL 3625/3628 pass (3 documented pre-existing failures, no flakes this run, +1 new test).
-Vulkan/Bgfx last verified at Task 416: Vulkan 3541/3554 pass (13 documented pre-existing
-failures, exact-name match, no flakes); Bgfx 3525/3525 pass (100%, no flakes).
+Last full regression: Task 664 (Vulkan, real bug fix) --
+Vulkan 3543/3555 pass (12 of 13 documented pre-existing failures reproduced exact-name-match;
+Vulkan_RenderTargetCube_SampleAfterUnbind passed this run, reran 5x in isolation and passed every
+time, confirming pre-existing flakiness not a regression; +1 new test).
+EasyGL last verified at Task 420: 3625/3628 pass (3 documented pre-existing failures, no flakes).
+Bgfx last verified at Task 416: 3525/3525 pass (100%, no flakes).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-420) rather than this file — this file intentionally keeps only a one-line
-summary per task (see §3) to stay a genuinely quick-to-read handoff document.
+directly (Tasks 351-420, 664) rather than this file — this file intentionally keeps only a
+one-line summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

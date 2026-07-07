@@ -208,17 +208,20 @@ namespace CNA::Internal::Backends::Vulkan
                   const Vector2& origin, SpriteEffects effects,
                   float layerDepth) override;
 
-        // Accessors for VulkanGraphicsBackend to harvest draw data at Present()
-        const std::vector<Sprite2DVertex>& GetVertices() const { return vertices_; }
-        const std::vector<uint16_t>&       GetIndices()  const { return indices_; }
-
         struct DrawCall { VkDescriptorSet descSet; uint32_t firstIndex; uint32_t indexCount; };
-        const std::vector<DrawCall>& GetDrawCalls() const { return draws_; }
 
-        void ConsumeDraws();  // called by backend after upload — clears vectors
-
-        // Non-null if the active custom Effect resolved to a VulkanEffectBackend.
-        VulkanEffectBackend* GetCustomEffectBackend() const { return customEffectBackend_; }
+        // A fully independent, frame-lifetime record of one Begin()/End() cycle's geometry.
+        // Pushed onto VulkanGraphicsBackend::activeBatches_ at End() (not Begin()) so that a
+        // 2nd Begin()/Draw()/End() cycle on the same SpriteBatch within one frame can never
+        // clobber the 1st cycle's already-completed data before RecordCommandBuffer() harvests
+        // it at Present() (Task 664 fix — see plan_graphics.md).
+        struct BatchSnapshot
+        {
+            std::vector<Sprite2DVertex> vertices;
+            std::vector<uint16_t>       indices;
+            std::vector<DrawCall>       draws;
+            VulkanEffectBackend*        customEffectBackend = nullptr;
+        };
 
     private:
         VulkanGraphicsBackend*           backend_             = nullptr;
@@ -230,6 +233,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<DrawCall>            draws_;
         const IVulkanSamplable*          currentTexture_      = nullptr;
         uint32_t                         batchFirstIndex_     = 0;
+        VulkanRTSource*                  activeRT_            = nullptr;
 
         void FlushTexture();
     };
@@ -733,8 +737,12 @@ namespace CNA::Internal::Backends::Vulkan
             std::string             markerLabel;
         };
         std::vector<Pending3DDraw>  pending3D_;
-        // pair: (batch, target RT) where RT=nullptr means backbuffer
-        std::vector<std::pair<VulkanSpriteBatchBackend*, VulkanRTSource*>> activeBatches_;
+        // pair: (an independent per-Begin/End-cycle snapshot, target RT) where RT=nullptr means
+        // backbuffer. Owns each snapshot outright (Task 664 fix) so that a 2nd Begin()/End() on
+        // the same SpriteBatch object within one frame cannot clobber the 1st cycle's data —
+        // each snapshot is pushed at End(), independent heap storage, harvested (and destroyed
+        // via activeBatches_.clear()) once per frame in RecordCommandBuffer().
+        std::vector<std::pair<std::unique_ptr<VulkanSpriteBatchBackend::BatchSnapshot>, VulkanRTSource*>> activeBatches_;
 
         // Cached vkCmdInsertDebugUtilsLabelEXT — loaded once after device creation, nullptr if unsupported.
         PFN_vkCmdInsertDebugUtilsLabelEXT pfnCmdInsertDebugLabel_ = nullptr;

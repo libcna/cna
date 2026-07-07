@@ -416,8 +416,8 @@ namespace CNA::Internal::Backends::Vulkan
         draws_.clear();
         currentTexture_  = nullptr;
         batchFirstIndex_ = 0;
+        activeRT_        = backend_->currentRT_;
         active_ = true;
-        backend_->activeBatches_.push_back({this, backend_->currentRT_});
     }
 
     void VulkanSpriteBatchBackend::FlushTexture()
@@ -437,14 +437,24 @@ namespace CNA::Internal::Backends::Vulkan
         customEffectBackend_ = backend_->activeCustomEffect_;
         FlushTexture();
         active_ = false;
-    }
 
-    void VulkanSpriteBatchBackend::ConsumeDraws()
-    {
-        vertices_.clear();
-        indices_.clear();
-        draws_.clear();
-        customEffectBackend_ = nullptr;
+        // Task 664 fix: move this cycle's geometry into its own independent, frame-lifetime
+        // snapshot pushed onto backend_->activeBatches_ NOW (at End(), not Begin()), so a 2nd
+        // Begin()/Draw()/End() cycle on this same object later in the same frame starts from
+        // freshly-cleared vertices_/indices_/draws_ without ever touching (and destroying) this
+        // cycle's already-completed data. Previously activeBatches_ stored a raw `this` pointer
+        // pushed at Begin() time, so a 2nd Begin() call's vertices_.clear() wiped out the 1st
+        // cycle's data in place before RecordCommandBuffer() ever harvested it at Present() —
+        // only the last batch's draws ever survived to be recorded.
+        if (!vertices_.empty() && !draws_.empty())
+        {
+            auto snapshot = std::make_unique<BatchSnapshot>();
+            snapshot->vertices            = std::move(vertices_);
+            snapshot->indices             = std::move(indices_);
+            snapshot->draws               = std::move(draws_);
+            snapshot->customEffectBackend = customEffectBackend_;
+            backend_->activeBatches_.push_back({ std::move(snapshot), activeRT_ });
+        }
     }
 
     void VulkanSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
@@ -3934,23 +3944,34 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("vkBeginCommandBuffer failed");
 
         // Helper: draw all 2D batches for a specific RT (nullptr = backbuffer) into current render pass.
-        // Sprite VB/IB ring buffers are shared across all passes in a frame — callers must
-        // ensure total sprite counts fit within MaxSpriteVertices.
+        // Sprite VB/IB ring buffers are shared across all passes in a frame — each snapshot is
+        // memcpy'd/bound at its own running byte offset (vbOff/ibOff below), mirroring draw3DFor's
+        // already-correct accumulating-cursor pattern, so multiple Begin()/End() cycles (or
+        // multiple SpriteBatch instances) targeting the same RT in one frame compose additively
+        // instead of overwriting each other at a hardcoded offset 0 (Task 664 fix).
         auto drawSpritesFor = [&](VulkanRTSource* targetRT,
                                   float vpW, float vpH)
         {
-            VkPipeline lastBoundPipeline = VK_NULL_HANDLE;
-            for (auto& [batch, batchRT] : activeBatches_) {
+            static constexpr VkDeviceSize kSpriteVBSize = MaxSpriteVertices * sizeof(Sprite2DVertex);
+            static constexpr VkDeviceSize kSpriteIBSize = MaxSpriteIndices  * sizeof(uint16_t);
+            VkPipeline   lastBoundPipeline = VK_NULL_HANDLE;
+            VkDeviceSize vbOff = 0;
+            VkDeviceSize ibOff = 0;
+            for (auto& [snapshot, batchRT] : activeBatches_) {
                 if (batchRT != targetRT) continue;
-                const auto& verts = batch->GetVertices();
-                const auto& inds  = batch->GetIndices();
-                const auto& draws = batch->GetDrawCalls();
+                const auto& verts = snapshot->vertices;
+                const auto& inds  = snapshot->indices;
+                const auto& draws = snapshot->draws;
                 if (verts.empty() || draws.empty()) continue;
 
-                std::memcpy(spriteVBPtr_[currentFrame_], verts.data(),
-                            verts.size() * sizeof(Sprite2DVertex));
-                std::memcpy(spriteIBPtr_[currentFrame_], inds.data(),
-                            inds.size() * sizeof(uint16_t));
+                const VkDeviceSize vbBytes = verts.size() * sizeof(Sprite2DVertex);
+                const VkDeviceSize ibBytes = inds.size()  * sizeof(uint16_t);
+                if (vbOff + vbBytes > kSpriteVBSize || ibOff + ibBytes > kSpriteIBSize) continue;
+
+                std::memcpy(static_cast<uint8_t*>(spriteVBPtr_[currentFrame_]) + vbOff,
+                            verts.data(), vbBytes);
+                std::memcpy(static_cast<uint8_t*>(spriteIBPtr_[currentFrame_]) + ibOff,
+                            inds.data(), ibBytes);
 
                 // Select pipeline: custom SPIR-V effect (Task 119) or built-in 2D.
                 // For backbuffer (targetRT == nullptr) with MSAA, use the MSAA pipeline variant.
@@ -3959,7 +3980,7 @@ namespace CNA::Internal::Backends::Vulkan
                 VkPipeline       activePipe   = useMsaaPipe ? pipeline2DMsaa_ : pipeline2D_;
                 VkPipelineLayout activeLayout = pipelineLayout2D_;
                 const float*     customPC     = nullptr;
-                const auto*      ceb          = batch->GetCustomEffectBackend();
+                const auto*      ceb          = snapshot->customEffectBackend;
                 if (ceb && ceb->GetPipeline() != VK_NULL_HANDLE) {
                     activePipe   = ceb->GetPipeline();
                     activeLayout = ceb->GetPipelineLayout();
@@ -3970,9 +3991,9 @@ namespace CNA::Internal::Backends::Vulkan
                     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, activePipe);
                     lastBoundPipeline = activePipe;
                 }
-                VkDeviceSize off = 0;
-                vkCmdBindVertexBuffers(cb, 0, 1, &spriteVB_[currentFrame_], &off);
-                vkCmdBindIndexBuffer(cb, spriteIB_[currentFrame_], 0, VK_INDEX_TYPE_UINT16);
+                VkDeviceSize vbBindOff = vbOff;
+                vkCmdBindVertexBuffers(cb, 0, 1, &spriteVB_[currentFrame_], &vbBindOff);
+                vkCmdBindIndexBuffer(cb, spriteIB_[currentFrame_], ibOff, VK_INDEX_TYPE_UINT16);
 
                 float vpSize[2] = { vpW, vpH };
                 if (customPC) {
@@ -3991,7 +4012,9 @@ namespace CNA::Internal::Backends::Vulkan
                         activeLayout, 0, 1, &d.descSet, 0, nullptr);
                     vkCmdDrawIndexed(cb, d.indexCount, 1, d.firstIndex, 0, 0);
                 }
-                batch->ConsumeDraws();
+
+                vbOff += vbBytes;
+                ibOff += ibBytes;
             }
         };
 

@@ -2228,6 +2228,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 664: SpriteBatch multiple Begin()/End() cycles per frame must all render
+        cna_vulkan_test(cna_test_vulkan_spritebatch_multi_begin_end
+                        examples/vulkan_spritebatch_multi_begin_end_test.cpp)
+        add_test(NAME Vulkan_SpriteBatch_MultiBeginEnd
+                 COMMAND cna_test_vulkan_spritebatch_multi_begin_end)
+        set_tests_properties(Vulkan_SpriteBatch_MultiBeginEnd PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 338: SetRenderTarget(nullptr) resets Viewport/ScissorRectangle to the backbuffer
         cna_vulkan_test(cna_test_vulkan_rendertarget_viewport_scissor_reset
                         examples/rendertarget_viewport_scissor_reset_test.cpp)
