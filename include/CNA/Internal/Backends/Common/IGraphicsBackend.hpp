@@ -321,6 +321,11 @@ namespace CNA::Internal::Backends
         float eyePositionWorld[3] = {0,0,0};
         /// EnvironmentMapEffect: blend amount for the env map contribution [0,1].
         float envMapAmount = 0.0f;
+        /// EnvironmentMapEffect: when true, the env-map blend factor is Fresnel-weighted
+        /// (`pow(max(1-|dot(eye,normal)|,0),fresnelFactor)*envMapAmount`) instead of flat `envMapAmount`.
+        bool fresnelEnabled = false;
+        /// EnvironmentMapEffect: exponent for the Fresnel edge-weighting term above.
+        float fresnelFactor = 1.0f;
         /// SkinnedEffect: column-major mat4 per bone (72 × 16 floats), zero-initialised.
         float boneTransforms[72 * 16] = {};
         /// SkinnedEffect: number of valid entries in boneTransforms (0 = none).

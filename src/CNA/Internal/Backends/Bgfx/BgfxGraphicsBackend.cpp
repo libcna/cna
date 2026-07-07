@@ -1551,10 +1551,10 @@ namespace CNA::Internal::Backends::Bgfx
             float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
                                params.light0Diffuse[2], 0.0f };
             bgfx::setUniform(light0Diff3DUnif_, diff);
-            float amount[4] = { params.envMapAmount, 0.0f, 0.0f, 0.0f };
+            float amount[4] = { params.envMapAmount, params.fresnelEnabled ? 1.0f : 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(envMapAmountUnif_, amount);
             float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],
-                                   params.envMapSpecular[2], 0.0f };
+                                   params.envMapSpecular[2], params.fresnelFactor };
             bgfx::setUniform(envMapSpecularUnif_, specular);
             if (bgfx::isValid(texColor3DSampler_))
             {

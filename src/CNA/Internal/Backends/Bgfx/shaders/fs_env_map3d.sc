@@ -23,6 +23,10 @@ void main()
     vec4 envSample = textureCube(s_envMap, reflDir);
     vec3 baseColor = litRGB * texColor.xyz;
     float combinedAlpha = u_diffuseColor.w * texColor.w;
-    vec3 rgb = mix(baseColor, envSample.xyz, u_envMapAmount.x) + u_envMapSpecular.xyz * envSample.w * combinedAlpha;
+    float viewAngle = dot(E, N);
+    float blendFactor = (u_envMapAmount.y > 0.5)
+        ? pow(max(1.0 - abs(viewAngle), 0.0), u_envMapSpecular.w) * u_envMapAmount.x
+        : u_envMapAmount.x;
+    vec3 rgb = mix(baseColor, envSample.xyz, blendFactor) + u_envMapSpecular.xyz * envSample.w * combinedAlpha;
     gl_FragColor  = vec4(rgb, combinedAlpha);
 }

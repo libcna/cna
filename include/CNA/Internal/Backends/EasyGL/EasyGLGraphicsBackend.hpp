@@ -391,6 +391,8 @@ namespace CNA::Internal::Backends::EasyGL
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)
             int loc_envmap_amount = -1;  ///< float blend [0,1]
             int loc_envmap_spec   = -1;  ///< vec3 specular tint
+            int loc_fresnel_enabled = -1;  ///< float 0=off 1=on (EnvironmentMapEffect only)
+            int loc_fresnel_factor  = -1;  ///< float exponent (EnvironmentMapEffect only)
             int loc_emissive      = -1;  ///< vec3 emissive+ambient (env map / skinned)
             int loc_eyepos        = -1;  ///< vec3 camera world pos
             int loc_bones         = -1;  ///< mat4[72] bone palette (SkinnedEffect)

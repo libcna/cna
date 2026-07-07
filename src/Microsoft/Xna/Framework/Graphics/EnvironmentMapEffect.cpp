@@ -399,6 +399,8 @@ namespace Microsoft::Xna::Framework::Graphics
         p.envMapSpecular[0] = environmentMapSpecular_.X;
         p.envMapSpecular[1] = environmentMapSpecular_.Y;
         p.envMapSpecular[2] = environmentMapSpecular_.Z;
+        p.fresnelEnabled    = fresnelEnabled_;
+        p.fresnelFactor     = fresnelFactor_;
 
         p.diffuseColor[0] = diffuseColor_.X * alpha_;
         p.diffuseColor[1] = diffuseColor_.Y * alpha_;

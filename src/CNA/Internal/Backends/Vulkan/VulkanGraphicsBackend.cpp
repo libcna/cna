@@ -4711,7 +4711,8 @@ namespace CNA::Internal::Backends::Vulkan
             VkImageView v2d  = vs0 ? vs0->GetVkImageView()       : defaultWhiteView_;
             VkImageView vcub = vtc ? vtc->GetVkCubeImageView()    : defaultWhiteCubeView_;
             d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub);
-            // Pack UBO data: eyePos, diffuse, emissive+envMapAmount, light0Dir, light0Diff, envMapSpecular
+            // Pack UBO data: eyePos, diffuse, emissive+envMapAmount, light0Dir,
+            // light0Diff+fresnelEnabled, envMapSpecular+fresnelFactor
             d.envMapUboData[0]  = params.eyePositionWorld[0];
             d.envMapUboData[1]  = params.eyePositionWorld[1];
             d.envMapUboData[2]  = params.eyePositionWorld[2];
@@ -4723,9 +4724,9 @@ namespace CNA::Internal::Backends::Vulkan
             d.envMapUboData[12] = params.light0Dir[0]; d.envMapUboData[13] = params.light0Dir[1];
             d.envMapUboData[14] = params.light0Dir[2]; d.envMapUboData[15] = 0.f;
             d.envMapUboData[16] = params.light0Diffuse[0]; d.envMapUboData[17] = params.light0Diffuse[1];
-            d.envMapUboData[18] = params.light0Diffuse[2]; d.envMapUboData[19] = 0.f;
+            d.envMapUboData[18] = params.light0Diffuse[2]; d.envMapUboData[19] = params.fresnelEnabled ? 1.f : 0.f;
             d.envMapUboData[20] = params.envMapSpecular[0]; d.envMapUboData[21] = params.envMapSpecular[1];
-            d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = 0.f;
+            d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = params.fresnelFactor;
         } else if (needsDualTex) {
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
             const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
@@ -4819,9 +4820,9 @@ namespace CNA::Internal::Backends::Vulkan
             d.envMapUboData[12] = params.light0Dir[0]; d.envMapUboData[13] = params.light0Dir[1];
             d.envMapUboData[14] = params.light0Dir[2]; d.envMapUboData[15] = 0.f;
             d.envMapUboData[16] = params.light0Diffuse[0]; d.envMapUboData[17] = params.light0Diffuse[1];
-            d.envMapUboData[18] = params.light0Diffuse[2]; d.envMapUboData[19] = 0.f;
+            d.envMapUboData[18] = params.light0Diffuse[2]; d.envMapUboData[19] = params.fresnelEnabled ? 1.f : 0.f;
             d.envMapUboData[20] = params.envMapSpecular[0]; d.envMapUboData[21] = params.envMapSpecular[1];
-            d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = 0.f;
+            d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = params.fresnelFactor;
         } else if (needsDualTex) {
             EnsureDualTexResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);

@@ -2543,6 +2543,8 @@ void main()
 "uniform vec3 uLight0Diffuse;\n"
 "uniform float uEnvMapAmount;\n"
 "uniform vec3 uEnvMapSpecular;\n"
+"uniform float uFresnelEnabled;\n"
+"uniform float uFresnelFactor;\n"
 "uniform vec4 uAlphaTest;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
@@ -2555,7 +2557,11 @@ void main()
 "    vec4 envSample=texture(uEnvMap,reflDir);\n"
 "    vec3 baseColor=litRGB*texColor.rgb;\n"
 "    float combinedAlpha=uDiffuseColor.a*texColor.a;\n"
-"    vec3 rgb=mix(baseColor,envSample.rgb,uEnvMapAmount)+uEnvMapSpecular*envSample.a*combinedAlpha;\n"
+"    float viewAngle=dot(E,N);\n"
+"    float blendFactor=(uFresnelEnabled>0.5)\n"
+"        ? pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount\n"
+"        : uEnvMapAmount;\n"
+"    vec3 rgb=mix(baseColor,envSample.rgb,blendFactor)+uEnvMapSpecular*envSample.a*combinedAlpha;\n"
 "    FragColor=vec4(rgb,combinedAlpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
@@ -2573,10 +2579,12 @@ void main()
         p.loc_emissive      = p.prog.uniform_location("uEmissiveColor");
         p.loc_l0dir         = p.prog.uniform_location("uLight0Dir");
         p.loc_l0diff        = p.prog.uniform_location("uLight0Diffuse");
-        p.loc_envmap_amount = p.prog.uniform_location("uEnvMapAmount");
-        p.loc_envmap_spec   = p.prog.uniform_location("uEnvMapSpecular");
-        p.loc_alphatest     = p.prog.uniform_location("uAlphaTest");
-        p.ready             = true;
+        p.loc_envmap_amount   = p.prog.uniform_location("uEnvMapAmount");
+        p.loc_envmap_spec     = p.prog.uniform_location("uEnvMapSpecular");
+        p.loc_fresnel_enabled = p.prog.uniform_location("uFresnelEnabled");
+        p.loc_fresnel_factor  = p.prog.uniform_location("uFresnelFactor");
+        p.loc_alphatest       = p.prog.uniform_location("uAlphaTest");
+        p.ready               = true;
         CNA_RENDER_LOG("env+mapped3D ready loc_wvp=" << p.loc_wvp);
     }
 
@@ -2759,6 +2767,12 @@ void main()
         if (p.loc_envmap_spec >= 0)
             p.prog.set_uniform(p.loc_envmap_spec,
                 params.envMapSpecular[0], params.envMapSpecular[1], params.envMapSpecular[2]);
+
+        if (p.loc_fresnel_enabled >= 0)
+            p.prog.set_uniform(p.loc_fresnel_enabled, params.fresnelEnabled ? 1.0f : 0.0f);
+
+        if (p.loc_fresnel_factor >= 0)
+            p.prog.set_uniform(p.loc_fresnel_factor, params.fresnelFactor);
 
         // Cube map (unit 1 — bind before texture0 to leave unit 0 active)
         if (p.loc_envmap >= 0)
