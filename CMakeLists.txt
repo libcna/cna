@@ -2945,6 +2945,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 875: Clear()-only render target (no draw call) actually records a render pass
+        cna_vulkan_test(cna_test_vulkan_rt_roundtrip
+                        examples/vulkan_rt_roundtrip_test.cpp)
+        add_test(NAME Vulkan_RenderTarget2D_ClearOnlyRoundtrip
+                 COMMAND cna_test_vulkan_rt_roundtrip)
+        set_tests_properties(Vulkan_RenderTarget2D_ClearOnlyRoundtrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 335: RenderTarget2D depth buffer is real and functional (not just a stored property)
         cna_vulkan_test(cna_test_vulkan_rendertarget2d_depth
                         examples/rendertarget2d_depth_test.cpp)

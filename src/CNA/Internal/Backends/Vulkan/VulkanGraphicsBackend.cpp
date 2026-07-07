@@ -4868,6 +4868,10 @@ namespace CNA::Internal::Backends::Vulkan
     {
         clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
         readbackStagingValid_ = false;  // new frame content invalidates the readback cache
+        // Task 875: mark the currently-bound RT as needing its render pass recorded this frame,
+        // even if no draw call follows.
+        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
+            clearedRTs_.push_back(currentRT_);
     }
 
     void VulkanGraphicsBackend::RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex)
@@ -5193,6 +5197,12 @@ namespace CNA::Internal::Backends::Vulkan
         // ---- Phase 1: off-screen RT passes ----
         // Collect unique render targets referenced this frame.
         std::vector<VulkanRTSource*> usedRTs;
+        // Task 875: an RT explicitly Clear()-ed with no draw call still needs its render pass
+        // recorded (matches FNA/XNA, where Clear() takes effect regardless of what's drawn
+        // afterward) — otherwise its colour image never leaves VK_IMAGE_LAYOUT_UNDEFINED.
+        for (auto* rt : clearedRTs_)
+            if (rt && std::find(usedRTs.begin(), usedRTs.end(), rt) == usedRTs.end())
+                usedRTs.push_back(rt);
         for (auto& [batch, rt] : activeBatches_)
             if (rt && std::find(usedRTs.begin(), usedRTs.end(), rt) == usedRTs.end())
                 usedRTs.push_back(rt);
@@ -5302,6 +5312,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         activeBatches_.clear();
         pending3D_.clear();
+        clearedRTs_.clear();
 
         vkCmdEndRenderPass(cb);
 
@@ -5608,6 +5619,9 @@ namespace CNA::Internal::Backends::Vulkan
     {
         clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
         readbackStagingValid_ = false;  // new frame content invalidates the readback cache
+        // Task 875: see Clear()'s identical fix.
+        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
+            clearedRTs_.push_back(currentRT_);
         // TODO: depth buffer support
     }
 

@@ -894,6 +894,16 @@ namespace CNA::Internal::Backends::Vulkan
         // via activeBatches_.clear()) once per frame in RecordCommandBuffer().
         std::vector<std::pair<std::unique_ptr<VulkanSpriteBatchBackend::BatchSnapshot>, VulkanRTSource*>> activeBatches_;
 
+        // Task 875: render targets explicitly `Clear()`-ed this frame with no accompanying draw
+        // call. `RecordCommandBuffer`'s `usedRTs` list was previously built purely from
+        // `activeBatches_`/`pending3D_` (both draw-call-populated), so a real, XNA-legal
+        // "SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);" pattern with no draw in
+        // between never got its render pass recorded at all — the target's colour image stayed
+        // at VK_IMAGE_LAYOUT_UNDEFINED forever. `Clear()`/`ClearColorAndDepth()` push `currentRT_`
+        // here (when a render target is bound) so `usedRTs` picks it up even with zero draws;
+        // cleared alongside `activeBatches_`/`pending3D_` once per frame in `RecordCommandBuffer()`.
+        std::vector<VulkanRTSource*> clearedRTs_;
+
         // Cached vkCmdInsertDebugUtilsLabelEXT — loaded once after device creation, nullptr if unsupported.
         PFN_vkCmdInsertDebugUtilsLabelEXT pfnCmdInsertDebugLabel_ = nullptr;
 
