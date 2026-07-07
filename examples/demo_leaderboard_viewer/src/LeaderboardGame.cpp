@@ -130,7 +130,11 @@ void LeaderboardGame::Update(GameTime& /*gameTime*/)
 
     // Smoke-test mode has no real keyboard driving it - deterministically page down every 30
     // frames while possible (matching the established Phase 15 deterministic-nudge convention).
-    if (smokeFramesLeft_ >= 0 && smokeFramesLeft_ % 30 == 0 && reader_->getCanPageDownProperty())
+    // Guarded by > 0, not >= 0: once smokeFramesLeft_ reaches 0 it stops decrementing (see the
+    // block below), so an >= 0 check here would keep re-triggering every subsequent frame -
+    // Exit() does not halt Update() immediately (Task 15.14's own discovery of this exact bug
+    // class - naturally bounded here by CanPageDown becoming false, but inconsistent).
+    if (smokeFramesLeft_ > 0 && smokeFramesLeft_ % 30 == 0 && reader_->getCanPageDownProperty())
     {
         ++currentPage_;
         RebuildReaderForCurrentPage();

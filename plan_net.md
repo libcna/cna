@@ -3311,11 +3311,64 @@ done — "it compiles" is not sufficient.
   expected accelerometer/gyroscope skips), no regressions (new demo-only files, no library
   changes).
 
-- [ ] **Task 15.14** — `cna_demo_friends_and_gamercard`: `FriendCollection` (via `CreateInternal`)
+- [x] **Task 15.14** — `cna_demo_friends_and_gamercard`: `FriendCollection` (via `CreateInternal`)
   and the no-op `Guide::ShowGamerCard`/`ShowFriendRequest`/`ShowFriends`/`ShowComposeMessage` calls.
   A friends-list panel plus an on-screen scrolling log printing "ShowGamerCard(...) called" etc.
   every time a key triggers one of those `Guide` calls, since none produce real OS UI otherwise.
   Single process.
+
+  New files: `examples/demo_friends_and_gamercard/src/{FriendsGame.hpp,FriendsGame.cpp,Main.cpp}`,
+  registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
+  `cna_demo_avatar`. 5 fabricated `FriendGamer` entries (via `CreateInternal`, varying
+  Online/Playing/Away/Busy/FriendRequestReceived/FriendRequestSent) wrapped in a real
+  `FriendCollection::CreateInternal` (this demo's own `friendStorage_` vector is the actual owner
+  of the `FriendGamer` objects, matching the class's own documented non-owning-view contract).
+  Up/Down selects a friend; G/R/F/C trigger `ShowGamerCard`/`ShowFriendRequest`/`ShowFriends`/
+  `ShowComposeMessage` respectively, each logging "... called - no-op, no real OS UI" to both the
+  on-screen scrolling log and the console.
+
+  **Found and fixed a real, cross-cutting bug in 8 already-committed Phase 15 demos' smoke-mode
+  logic** while verifying this task's own `--smoke` run: the deterministic-nudge condition in
+  every affected demo used `smokeFramesLeft_ >= 0` instead of `> 0`. Once `smokeFramesLeft_`
+  reaches exactly `0` it stops decrementing (guarded by the *separate* completion-check block's
+  own `> 0` condition), so it stays frozen at `0` forever afterward — and since `Exit()` does not
+  halt `Update()` immediately, several more frames run after the completion line prints. An
+  `>= 0` guard on the nudge condition therefore kept re-triggering on every one of those extra
+  frames; this demo's own `TriggerAction`/`Log` calls made the bug directly visible (the
+  completion line printed once correctly, but "ShowGamerCard(...) called" kept repeating dozens of
+  times afterward). The other 8 already-committed demos have the identical root-cause bug, just
+  silently (no visible duplicate print) because their own post-freeze mutations happened to be
+  harmless no-ops once clamped/bounded, or didn't themselves print anything:
+  - `demo_gamer_roster_hud/RosterGame.cpp` (Task 15.6) — kept toggling `IsReady` forever.
+  - `demo_gamerservices_signin_presence/PresenceGame.cpp` (Task 15.8) — kept cycling gamer 0's
+    `PresenceMode` forever.
+  - `demo_gamer_profile_privileges/ProfileGame.cpp` (Task 15.13) — kept cycling the selected
+    gamer forever.
+  - `demo_session_browser/BrowserGame.cpp` (Task 15.5), `demo_leaderboard_viewer/LeaderboardGame.cpp`
+    (Task 15.10), `demo_achievement_showcase/AchievementGame.cpp` (Task 15.9) — each already had
+    its own separate bounding condition (`!joined_`, `CanPageDown`, `smokeNextAwardIndex_ <
+    tiles_.size()`) that happened to make the `>= 0` mistake harmless in practice.
+  - `demo_simulated_network_conditions/SimGame.cpp` (Task 15.4), `demo_net_client_server_arena/
+    ArenaGame.cpp` (Task 15.1) — no frame-modulo gate at all, so these ran their nudge logic every
+    single frame regardless; harmless (already-clamped dial values / a little extra position
+    drift) but the same inconsistency.
+
+  Fixed all 9 occurrences (the 8 pre-existing demos plus this task's own first draft) by changing
+  the guard to `smokeFramesLeft_ > 0`, with an inline comment at each site explaining why
+  (cross-referencing this task's discovery), rather than silently patching them with no
+  explanation. This is example/demo code only — no production CNA library behavior was affected,
+  and every original task's own already-reported verification numbers (session counts, final
+  selected index, etc.) remain accurate, since those were always computed inside the
+  correctly-guarded `> 0` completion block, not the buggy nudge condition.
+
+  Ran the fixed `cna_demo_friends_and_gamercard` directly under `SDL_VIDEODRIVER=x11
+  DISPLAY=:0` (`--smoke 180`): exactly 6 actions triggered (matching `180/30`), completion line
+  printed exactly once, exit code `0`. Re-ran `cna_demo_gamerservices_signin_presence --smoke 180`
+  after its fix and confirmed the same, already-correct final `PresenceMode` value
+  (`OnlineVersus`) still reported identically (the fix only removes *extra*, unreported, post-
+  completion mutation - it never changed what was already being measured/printed). Full suite:
+  3398/3398 passing (2 expected accelerometer/gyroscope skips), no regressions (demo-only files
+  across all 7 fixes, no library changes).
 
 - [ ] **Task 15.15** — `cna_demo_avatar_animation_gallery`: a completionist version of
   `demo_avatar`'s Space-cycling — programmatically iterates **all 31** `AvatarAnimationPreset`

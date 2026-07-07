@@ -185,8 +185,11 @@ void RosterGame::Update(GameTime& gameTime)
 
     // Smoke-test mode has no real keyboard driving it - deterministically flip Ready every ~60
     // frames so a headless run still shows an observable, verifiable change over time (matching
-    // the established Phase 15 deterministic-nudge convention).
-    if (smokeFramesLeft_ >= 0 && localNetworkGamer_ != nullptr && smokeFramesLeft_ % 60 == 0)
+    // the established Phase 15 deterministic-nudge convention). Guarded by > 0, not >= 0: once
+    // smokeFramesLeft_ reaches 0 it stops decrementing (see the block below), so an >= 0 check
+    // here would keep re-triggering every subsequent frame - Exit() does not halt Update()
+    // immediately (Task 15.14's own discovery of this exact bug class).
+    if (smokeFramesLeft_ > 0 && localNetworkGamer_ != nullptr && smokeFramesLeft_ % 60 == 0)
     {
         localNetworkGamer_->setIsReadyProperty(!localNetworkGamer_->getIsReadyProperty());
     }

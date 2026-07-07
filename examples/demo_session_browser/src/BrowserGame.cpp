@@ -170,7 +170,11 @@ void BrowserGame::Update(GameTime& gameTime)
         // Smoke-test mode has no real keyboard driving it - once at least (smokeSelectIndex_ + 1)
         // entries have been discovered, deterministically select and join that index (matching
         // the deterministic-nudge convention already established for prior Phase 15 demos).
-        if (smokeFramesLeft_ >= 0 && !joined_ &&
+        // Guarded by > 0, not >= 0: once smokeFramesLeft_ reaches 0 it stops decrementing (see
+        // the block below), so an >= 0 check here would keep re-triggering every subsequent frame
+        // - Exit() does not halt Update() immediately (Task 15.14's own discovery of this exact
+        // bug class - naturally bounded here by !joined_, but inconsistent).
+        if (smokeFramesLeft_ > 0 && !joined_ &&
             static_cast<int>(discovered_.size()) > smokeSelectIndex_)
         {
             selectedIndex_ = smokeSelectIndex_;

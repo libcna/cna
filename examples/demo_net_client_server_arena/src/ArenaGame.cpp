@@ -182,8 +182,12 @@ void ArenaGame::Update(GameTime& gameTime)
     if (keys.IsKeyDown(Keys::Down))  { localPosition_.Y += speed * dt; }
 
     // Smoke-test mode has no real keyboard driving it - nudge the square deterministically so a
-    // headless run still produces an observable, verifiable position change over time.
-    if (smokeFramesLeft_ >= 0)
+    // headless run still produces an observable, verifiable position change over time. Guarded
+    // by > 0, not >= 0: once smokeFramesLeft_ reaches 0 it stops decrementing (see the block
+    // below), so an >= 0 check here would keep nudging every subsequent frame after Exit() is
+    // requested, which does not halt Update() immediately (Task 15.14's own discovery of this
+    // exact bug class - harmless here (just a bit more drift before exit) but inconsistent).
+    if (smokeFramesLeft_ > 0)
     {
         localPosition_.X += speed * dt;
     }

@@ -212,8 +212,12 @@ void SimGame::Update(GameTime& gameTime)
 
     // Smoke-test mode has no real keyboard driving it - deterministically move the dials so a
     // headless run still produces an observable, verifiable value change over time (matching
-    // ArenaGame's own deterministic-nudge convention for its position field).
-    if (smokeFramesLeft_ >= 0)
+    // ArenaGame's own deterministic-nudge convention for its position field). Guarded by > 0,
+    // not >= 0: once smokeFramesLeft_ reaches 0 it stops decrementing (see the block below), so
+    // an >= 0 check here would keep re-running every subsequent frame after Exit() is requested,
+    // which does not halt Update() immediately (Task 15.14's own discovery of this exact bug
+    // class - harmless here since both dials are already clamped, but wasteful and inconsistent).
+    if (smokeFramesLeft_ > 0)
     {
         simulatedLatency_ = System::TimeSpan::FromMilliseconds(
             std::min(2000.0, simulatedLatency_.getTotalMillisecondsProperty() + 20.0));
