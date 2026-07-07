@@ -2,7 +2,11 @@
 
 #include <chrono>
 #include <gtest/gtest.h>
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -14,8 +18,13 @@ using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::AnimationClipEXT;
 using Microsoft::Xna::Framework::Graphics::BoneTrackEXT;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::KeyframeEXT;
+using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
 using Microsoft::Xna::Framework::Graphics::SkinnedModelEXT;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 
 namespace
 {
@@ -266,4 +275,98 @@ TEST(SkinnedModelEXTTest, AttachPartSameBoneCountNoPartsIsNoOp)
     wardrobePiece.BoneCount = 19;
     EXPECT_NO_THROW(host.AttachPartEXT(std::move(wardrobePiece)));
     EXPECT_TRUE(host.Parts.empty());
+}
+
+// Tasks 11.4/11.5: real (GPU-backed) part attach/remove coverage. VertexBuffer/IndexBuffer
+// require a real GraphicsDevice to construct (no fake/mock is available - see Task 13.3), but
+// a plain, default-constructed GraphicsDevice works headlessly here exactly like the existing
+// Texture2DTests.cpp fixtures already rely on elsewhere in this same test binary.
+class SkinnedModelEXTPartTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+};
+
+// Task 11.4: AttachPartEXT unconditionally appended every part with no duplicate/slot-replace
+// handling - both shipped wardrobe pieces use the identical part name "CNAAvatarHair", so
+// swapping hairstyles at runtime used to leave two overlapping parts both rendered.
+TEST_F(SkinnedModelEXTPartTest, AttachingSameNamedPartReplacesTheOldOne)
+{
+    SkinnedModelEXT host;
+    host.BoneCount = 1;
+    host.AddPartEXT("CNAAvatarHair",
+                     std::make_unique<VertexBuffer>(gd, 1),
+                     std::make_unique<IndexBuffer>(gd, 1),
+                     std::make_unique<ModelMeshPart>());
+    ASSERT_EQ(1u, host.Parts.size());
+
+    SkinnedModelEXT wardrobe;
+    wardrobe.BoneCount = 1;
+    wardrobe.AddPartEXT("CNAAvatarHair",
+                         std::make_unique<VertexBuffer>(gd, 1),
+                         std::make_unique<IndexBuffer>(gd, 1),
+                         std::make_unique<ModelMeshPart>());
+
+    host.AttachPartEXT(std::move(wardrobe));
+
+    EXPECT_EQ(1u, host.Parts.size());
+    EXPECT_EQ(1u, host.GetOwnedPartCountForTesting());
+    EXPECT_EQ(1u, host.GetOwnedVertexBufferCountForTesting());
+    EXPECT_EQ(1u, host.GetOwnedIndexBufferCountForTesting());
+}
+
+// Task 11.5: erasing directly from the public Parts vector (the previous only available
+// approach) shrank Parts but never touched the corresponding owned GPU-resource vectors - a
+// permanent leak of the old part's VertexBuffer/IndexBuffer/ModelMeshPart/Texture2D. Proves
+// RemovePartEXT actually frees all 4, not just Parts.
+TEST_F(SkinnedModelEXTPartTest, RemovePartFreesOwnedResources)
+{
+    SkinnedModelEXT model;
+    model.BoneCount = 1;
+    model.AddPartEXT("A",
+                      std::make_unique<VertexBuffer>(gd, 1),
+                      std::make_unique<IndexBuffer>(gd, 1),
+                      std::make_unique<ModelMeshPart>(),
+                      Texture2D(gd, 4, 4)); // part "A" owns a real texture
+    model.AddPartEXT("B",
+                      std::make_unique<VertexBuffer>(gd, 1),
+                      std::make_unique<IndexBuffer>(gd, 1),
+                      std::make_unique<ModelMeshPart>()); // part "B" has no texture
+
+    ASSERT_EQ(2u, model.Parts.size());
+    ASSERT_EQ(2u, model.GetOwnedPartCountForTesting());
+    ASSERT_EQ(2u, model.GetOwnedVertexBufferCountForTesting());
+    ASSERT_EQ(2u, model.GetOwnedIndexBufferCountForTesting());
+    ASSERT_EQ(1u, model.GetOwnedTextureCountForTesting());
+
+    model.RemovePartEXT("A");
+
+    EXPECT_EQ(1u, model.Parts.size());
+    EXPECT_EQ("B", model.Parts[0].Name);
+    EXPECT_EQ(1u, model.GetOwnedPartCountForTesting());
+    EXPECT_EQ(1u, model.GetOwnedVertexBufferCountForTesting());
+    EXPECT_EQ(1u, model.GetOwnedIndexBufferCountForTesting());
+    EXPECT_EQ(0u, model.GetOwnedTextureCountForTesting());
+}
+
+TEST_F(SkinnedModelEXTPartTest, RemovePartRemovesAllMatchingNamesNotJustFirst)
+{
+    SkinnedModelEXT model;
+    model.BoneCount = 1;
+    model.AddPartEXT("Dup",
+                      std::make_unique<VertexBuffer>(gd, 1),
+                      std::make_unique<IndexBuffer>(gd, 1),
+                      std::make_unique<ModelMeshPart>());
+    model.AddPartEXT("Dup",
+                      std::make_unique<VertexBuffer>(gd, 1),
+                      std::make_unique<IndexBuffer>(gd, 1),
+                      std::make_unique<ModelMeshPart>());
+    ASSERT_EQ(2u, model.Parts.size());
+
+    model.RemovePartEXT("Dup");
+
+    EXPECT_TRUE(model.Parts.empty());
+    EXPECT_EQ(0u, model.GetOwnedPartCountForTesting());
+    EXPECT_EQ(0u, model.GetOwnedVertexBufferCountForTesting());
+    EXPECT_EQ(0u, model.GetOwnedIndexBufferCountForTesting());
 }

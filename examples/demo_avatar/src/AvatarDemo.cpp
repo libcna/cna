@@ -2,7 +2,6 @@
 
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
 
-#include <algorithm>
 #include <cmath>
 
 using namespace Microsoft::Xna::Framework;
@@ -81,16 +80,13 @@ void AvatarDemo::LoadContent()
     // 11.21) end-to-end at runtime, not just that it compiles: load a standalone
     // wardrobe piece (Content/wardrobe/hair_<Style>/, converted independently via
     // generate_wardrobe.py + convert_avatar.py, Task 11.14) and swap it in for the
-    // avatar's baked-in hair -- remove the old "CNAAvatarHair" part first, since
-    // AttachPartEXT only adds a part, it doesn't replace one by name.
+    // avatar's baked-in hair. AttachPartEXT (Task 11.4) now has its own replace-by-name
+    // semantics, so it removes the old "CNAAvatarHair" part (freeing its GPU resources,
+    // Task 11.5) before attaching the new one -- no manual workaround needed here anymore.
     if (!wardrobeHairStyle_.empty())
     {
         auto wardrobePiece = content.Load<std::shared_ptr<SkinnedModelEXT>>(
             "wardrobe/hair_" + wardrobeHairStyle_ + "/avatar");
-        auto& parts = model_->Parts;
-        parts.erase(std::remove_if(parts.begin(), parts.end(),
-                                    [](const SkinnedModelEXT::PartEXT& p) { return p.Name == "CNAAvatarHair"; }),
-                    parts.end());
         model_->AttachPartEXT(std::move(*wardrobePiece));
     }
 

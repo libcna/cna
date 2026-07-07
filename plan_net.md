@@ -2257,7 +2257,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `cna_test_avatar_tint_routing`) to confirm real content loading is unaffected — all 3 still
   pass. Full suite: 3372/3372 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 11.4** — Add slot/replace-by-name semantics to `SkinnedModelEXT::AttachPartEXT` (or a
+- [x] **Task 11.4** — Add slot/replace-by-name semantics to `SkinnedModelEXT::AttachPartEXT` (or a
   new `ReplacePartEXT`). Confirmed a real, live problem: `AttachPartEXT` unconditionally appends
   every part from `other` into `Parts` with no duplicate/slot-replace handling. Both shipped
   wardrobe pieces (`examples/demo_avatar/Content/wardrobe/hair_Cap/` and `hair_Ponytail/`) use the
@@ -2270,7 +2270,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   workaround once the engine handles it. Add a test attaching two parts with the same name and
   asserting only one remains/renders.
 
-- [ ] **Task 11.5** — Fix the GPU-resource leak in the demo's manual `Parts.erase()` workaround (and
+- [x] **Task 11.5** — Fix the GPU-resource leak in the demo's manual `Parts.erase()` workaround (and
   add a proper engine-level removal API so this can't recur). Confirmed: `AvatarDemo.cpp` (~lines
   90-94) erases entries straight out of the *public* `SkinnedModelEXT::Parts` vector, but the
   corresponding `vertexBuffers_`/`indexBuffers_`/`ownedParts_`/`textures_` `unique_ptr`s (private,
@@ -2280,6 +2280,46 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   as a directly-mutable public vector for this purpose (tie this in with Task 11.4's fix — likely
   one combined API change). Add a test proving a removed part's resources are actually released
   (e.g. via an instance/resource counter).
+
+  Implemented together as one combined change, per this task's own suggestion. Added
+  `SkinnedModelEXT::RemovePartEXT(name)`: erases every part matching `name` from `Parts` *and* the
+  corresponding entries from `vertexBuffers_`/`indexBuffers_`/`ownedParts_` (always parallel arrays
+  to `Parts` — every `AddPartEXT` call and `AttachPartEXT`'s own append loop push to all 4 in
+  lockstep, so a matching index identifies the same part's entries in all 4 at once) and `textures_`
+  (matched by pointer instead, since it's the one non-parallel vector — only populated when a part
+  actually supplied a real texture). `AttachPartEXT` now calls `RemovePartEXT(part.Name)` for every
+  incoming part *before* appending it, giving it real replace-by-name semantics directly (no
+  separate `ReplacePartEXT` needed). Removed `AvatarDemo.cpp`'s manual `Parts.erase(std::remove_if(...))`
+  workaround (and its now-unused `<algorithm>` include) — `AttachPartEXT` alone now does the right
+  thing.
+
+  Kept `Parts` public (read elsewhere: `AvatarRenderer::DrawRealEXT`, the attach-part integration
+  test) rather than restricting its type/visibility — the actual problem was external code
+  *removing* parts by mutating it directly, which `RemovePartEXT` now makes unnecessary; nothing
+  else needs to mutate it.
+
+  Added 4 `NOXNA *ForTesting()` accessors (`GetOwnedVertexBufferCountForTesting`/
+  `GetOwnedIndexBufferCountForTesting`/`GetOwnedPartCountForTesting`/`GetOwnedTextureCountForTesting`)
+  to make the private resource vectors' sizes observable. `VertexBuffer`/`IndexBuffer` require a
+  real `GraphicsDevice` to construct (no fake/mock exists yet — see Task 13.3), but confirmed a
+  plain default-constructed `GraphicsDevice` works headlessly in this environment exactly like the
+  existing `Texture2DTests.cpp` fixtures already rely on — added a `SkinnedModelEXTPartTest`
+  fixture using this same pattern rather than needing a new GPU integration test binary. Added
+  `AttachingSameNamedPartReplacesTheOldOne` (Task 11.4), `RemovePartFreesOwnedResources` (Task
+  11.5, covering all 4 resource kinds including a real texture), and
+  `RemovePartRemovesAllMatchingNamesNotJustFirst`.
+
+  **Revert-verify (2 separate passes):** (1) removed just `AttachPartEXT`'s new
+  `RemovePartEXT(part.Name)` loop — confirmed `AttachingSameNamedPartReplacesTheOldOne` failed
+  (2 parts remained instead of 1); restored, confirmed green. (2) temporarily replaced
+  `RemovePartEXT`'s body with the old demo workaround's exact bug (erase only `Parts`, matching
+  `AvatarDemo.cpp`'s pre-fix code) — confirmed all 3 new tests failed with the owned-resource
+  counts staying at their pre-removal values (proving the leak); restored the real fix, confirmed
+  green. Re-ran all 3 GPU avatar integration tests (`cna_test_avatar_real_render`,
+  `cna_test_avatar_attach_part`, `cna_test_avatar_tint_routing`) plus `cna_demo_avatar
+  --wardrobe-hair Cap` directly (ran cleanly for 5s with no exception, confirming the demo's
+  simplified code path works end-to-end in practice, not just in a unit test) — all unaffected.
+  Full suite: 3375/3375 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 11.6** — Add `isDisposed_` checks to `AvatarRenderer::EnableRealRenderingEXT`/
   `SetAppearanceEXT`. Confirmed (`AvatarRenderer.cpp`, ~lines 121-137): unlike `DrawRealEXT`/`Draw`/

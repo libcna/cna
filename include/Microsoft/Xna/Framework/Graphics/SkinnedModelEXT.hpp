@@ -176,6 +176,13 @@ namespace Microsoft::Xna::Framework::Graphics
          * `ParentBoneIndices`/`BindPoseLocal` arrays with no remapping needed). Does not
          * support attaching a model built from a different skeleton (see @throws).
          *
+         * Task 11.4: replace-by-name — any part(s) of this model already sharing a name
+         * with an incoming part are removed (via RemovePartEXT, freeing their owned GPU
+         * resources) before the incoming part is appended. Without this, re-attaching a
+         * same-named replacement (e.g. swapping hairstyles at runtime) silently left both
+         * the old and new part rendered simultaneously, since this method previously only
+         * ever appended.
+         *
          * @param other Another SkinnedModelEXT sharing this model's exact bone layout;
          *              left with no parts of its own afterward (moved-from).
          * @throws System::ArgumentException if @p other's BoneCount differs from this
@@ -185,6 +192,30 @@ namespace Microsoft::Xna::Framework::Graphics
          *         built from the same canonical skeleton as this model.
          */
         void AttachPartEXT(SkinnedModelEXT&& other);
+
+        /**
+         * @brief Removes every part with the given name, freeing its owned GPU resources.
+         *
+         * @note NOXNA — CNA extension (Task 11.4/11.5). Unlike erasing directly from the
+         * public Parts vector (the previous only available approach, and the direct cause
+         * of Task 11.5's GPU-resource leak — Parts merely holds non-owning descriptors),
+         * this also removes the matching entries from this model's own owned-resource
+         * vectors, actually releasing the underlying VertexBuffer/IndexBuffer/
+         * ModelMeshPart/Texture2D.
+         *
+         * @param name Part name to remove (see PartEXT::Name); every matching part is
+         *             removed, not just the first.
+         */
+        void RemovePartEXT(const std::string& name);
+
+        /** @brief Returns the number of owned vertex buffers, for testing (Task 11.5). */
+        NOXNA [[nodiscard]] std::size_t GetOwnedVertexBufferCountForTesting() const { return vertexBuffers_.size(); }
+        /** @brief Returns the number of owned index buffers, for testing (Task 11.5). */
+        NOXNA [[nodiscard]] std::size_t GetOwnedIndexBufferCountForTesting() const { return indexBuffers_.size(); }
+        /** @brief Returns the number of owned mesh parts, for testing (Task 11.5). */
+        NOXNA [[nodiscard]] std::size_t GetOwnedPartCountForTesting() const { return ownedParts_.size(); }
+        /** @brief Returns the number of owned textures, for testing (Task 11.5). */
+        NOXNA [[nodiscard]] std::size_t GetOwnedTextureCountForTesting() const { return textures_.size(); }
 
     private:
         std::vector<std::unique_ptr<VertexBuffer>> vertexBuffers_;

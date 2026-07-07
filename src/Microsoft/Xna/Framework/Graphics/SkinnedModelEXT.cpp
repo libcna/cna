@@ -70,6 +70,42 @@ namespace Microsoft::Xna::Framework::Graphics
         ownedParts_.push_back(std::move(part));
     }
 
+    void SkinnedModelEXT::RemovePartEXT(const std::string& name)
+    {
+        // Parts/vertexBuffers_/indexBuffers_/ownedParts_ are always parallel arrays (every
+        // AddPartEXT call, and AttachPartEXT's own append loop below, push to all 4 in lockstep),
+        // so a matching index i identifies the same part's entries in all 4 at once. textures_ is
+        // NOT parallel (only populated when a part actually has a real texture), so its matching
+        // entry (if any) is found by pointer instead.
+        for (std::size_t i = 0; i < Parts.size(); )
+        {
+            if (Parts[i].Name != name)
+            {
+                ++i;
+                continue;
+            }
+
+            if (Parts[i].Texture != nullptr)
+            {
+                const Texture2D* texturePtr = Parts[i].Texture;
+                for (std::size_t t = 0; t < textures_.size(); ++t)
+                {
+                    if (textures_[t].get() == texturePtr)
+                    {
+                        textures_.erase(textures_.begin() + static_cast<std::ptrdiff_t>(t));
+                        break;
+                    }
+                }
+            }
+
+            Parts.erase(Parts.begin() + static_cast<std::ptrdiff_t>(i));
+            vertexBuffers_.erase(vertexBuffers_.begin() + static_cast<std::ptrdiff_t>(i));
+            indexBuffers_.erase(indexBuffers_.begin() + static_cast<std::ptrdiff_t>(i));
+            ownedParts_.erase(ownedParts_.begin() + static_cast<std::ptrdiff_t>(i));
+            // Don't increment i - the next element has shifted into position i.
+        }
+    }
+
     void SkinnedModelEXT::AttachPartEXT(SkinnedModelEXT&& other)
     {
         if (other.BoneCount != BoneCount)
@@ -78,6 +114,15 @@ namespace Microsoft::Xna::Framework::Graphics
                 "AttachPartEXT: other.BoneCount (" + std::to_string(other.BoneCount)
                     + ") does not match this model's BoneCount (" + std::to_string(BoneCount) + ")",
                 "other");
+        }
+
+        // Task 11.4: replace-by-name - remove any part(s) this model already has under an
+        // incoming part's name before appending, so re-attaching a same-named replacement (e.g.
+        // swapping hairstyles at runtime) doesn't silently leave both the old and new part
+        // rendered simultaneously.
+        for (const auto& part : other.Parts)
+        {
+            RemovePartEXT(part.Name);
         }
 
         for (auto& part : other.Parts)
