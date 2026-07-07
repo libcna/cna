@@ -3241,7 +3241,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = envMapUBO_[frameIdx];
         bufInfo.offset = 0;
-        bufInfo.range  = 96;  // size of one EnvMapParams block in the shader
+        bufInfo.range  = 128; // size of one EnvMapParams block in the shader (96 + fog, Task 899)
 
         VkWriteDescriptorSet writes[3]{};
         for (uint32_t i = 0; i < 2; ++i) {
@@ -4716,9 +4716,9 @@ namespace CNA::Internal::Backends::Vulkan
                     if (draw.envMapDescSet != VK_NULL_HANDLE && envMapUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = envMapUBOSlot++;
                         const uint32_t uboOff = slot * kEnvMapUBOStride;
-                        if (uboOff + 96 <= kEnvMapUBOStride * kEnvMapUBOMaxDraws) {
+                        if (uboOff + 128 <= kEnvMapUBOStride * kEnvMapUBOMaxDraws) {
                             std::memcpy(static_cast<uint8_t*>(envMapUBOPtr_[currentFrame_]) + uboOff,
-                                        draw.envMapUboData, 96);
+                                        draw.envMapUboData, 128);
                         }
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 pipelineLayoutEnvMap3D_, 0, 1,
@@ -5408,6 +5408,11 @@ namespace CNA::Internal::Backends::Vulkan
             d.envMapUboData[18] = params.light0Diffuse[2]; d.envMapUboData[19] = params.fresnelEnabled ? 1.f : 0.f;
             d.envMapUboData[20] = params.envMapSpecular[0]; d.envMapUboData[21] = params.envMapSpecular[1];
             d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = params.fresnelFactor;
+            // Task 899's noted cheap leftover: fog packed into EnvMapParams' spare tail bytes.
+            d.envMapUboData[24] = params.fogColor[0]; d.envMapUboData[25] = params.fogColor[1];
+            d.envMapUboData[26] = params.fogColor[2]; d.envMapUboData[27] = params.fogEnabled ? 1.f : 0.f;
+            d.envMapUboData[28] = params.fogStart; d.envMapUboData[29] = params.fogEnd;
+            d.envMapUboData[30] = 0.f; d.envMapUboData[31] = 0.f;
         } else if (needsDualTex) {
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
             const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
@@ -5562,6 +5567,11 @@ namespace CNA::Internal::Backends::Vulkan
             d.envMapUboData[18] = params.light0Diffuse[2]; d.envMapUboData[19] = params.fresnelEnabled ? 1.f : 0.f;
             d.envMapUboData[20] = params.envMapSpecular[0]; d.envMapUboData[21] = params.envMapSpecular[1];
             d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = params.fresnelFactor;
+            // Task 899's noted cheap leftover: fog packed into EnvMapParams' spare tail bytes.
+            d.envMapUboData[24] = params.fogColor[0]; d.envMapUboData[25] = params.fogColor[1];
+            d.envMapUboData[26] = params.fogColor[2]; d.envMapUboData[27] = params.fogEnabled ? 1.f : 0.f;
+            d.envMapUboData[28] = params.fogStart; d.envMapUboData[29] = params.fogEnd;
+            d.envMapUboData[30] = 0.f; d.envMapUboData[31] = 0.f;
         } else if (needsDualTex) {
             EnsureDualTexResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);

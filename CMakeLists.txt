@@ -2549,6 +2549,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 899's own noted cheap leftover: env_map3d fog packed into EnvMapParams' spare bytes
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_fog
+                        examples/vulkan_environmentmapeffect_fog_test.cpp)
+        add_test(NAME Vulkan_EnvironmentMapEffect_Fog
+                 COMMAND cna_test_vulkan_environmentmapeffect_fog)
+        set_tests_properties(Vulkan_EnvironmentMapEffect_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()
