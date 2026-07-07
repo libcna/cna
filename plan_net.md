@@ -2653,7 +2653,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   integration tests to confirm real content is unaffected. Full suite: 3395/3395 passing (2
   expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 14.2** — Investigate texture path re-basing's assumption that a manifest always lives
+- [x] **Task 14.2** — Investigate texture path re-basing's assumption that a manifest always lives
   under the content root (`ContentManager.cpp`, ~line 732: `fs::relative(manifestDir / texFile,
   root)`). Confirmed both `Content/avatar/` and `Content/wardrobe/` happen to be nested under the
   same root in every existing test/demo, so this is currently unexercised outside that assumption —
@@ -2661,6 +2661,25 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `cm.Load<Texture2D>()` is unverified. Add a test loading content from a nested-but-still-under-root
   path at minimum, and decide whether the outside-root case needs explicit support or an explicit
   rejection with a clear error.
+
+  Traced how a manifest could ever be loaded from outside the root at all:
+  `ContentManager::BuildAssetPath` does `(fs::path(rootDirectory_) / assetName).string()` — per
+  `std::filesystem::path::operator/` semantics, appending an *absolute* `assetName` to any base
+  path discards the base entirely, so `cm.Load<SkinnedModelEXT>("/absolute/path/avatar")` already
+  lets a manifest live anywhere, root notwithstanding. Empirically tested both the nested-under-root
+  case and the genuinely-outside-root case (an absolute `assetName` pointing at a manifest+texture
+  living in a sibling directory of an otherwise-empty root) — **both already work correctly, no
+  code change needed.** `fs::relative()`'s resulting `..`-laden relative path, re-joined with
+  `root`, still resolves to the correct absolute file when the OS actually opens it — path
+  resolution handles `..` segments lazily at the OS level; no canonicalization is required in
+  advance for this to work. This was a real, previously-unverified assumption, but not a bug.
+
+  Added `TextureLoadsFromNestedButUnderRootManifestDirectory` (a manifest 2 directories deep under
+  root) and `TextureLoadsFromManifestOutsideContentRoot` (root and manifest+texture as sibling
+  directories, manifest reached via an absolute `assetName`), both writing a real 2×2 PNG via
+  `Texture2D::SaveAsPng` and asserting the loaded part's texture round-trips with the correct
+  dimensions. No revert-verify applies (investigation confirmed already-correct behavior, no fix
+  made). Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 14.3** — Polish `examples/demo_avatar/src/Main.cpp`'s CLI argument parsing. Confirmed
   `ParseGenderArg` (~lines 9-21) silently accepts any value other than exactly `"female"` (including

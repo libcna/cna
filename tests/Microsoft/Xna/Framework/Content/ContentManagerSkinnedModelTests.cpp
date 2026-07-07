@@ -5,15 +5,19 @@
 #include <fstream>
 #include <gtest/gtest.h>
 
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SkinnedModelEXT;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 namespace
 {
@@ -237,4 +241,85 @@ TEST_F(ContentManagerSkinnedModelTest, PartNameWithUnbalancedEmbeddedBraceParses
     ASSERT_EQ(2u, model->Parts.size());
     EXPECT_EQ("Weird{Name", model->Parts[0].Name);
     EXPECT_EQ("Second", model->Parts[1].Name);
+}
+
+namespace
+{
+    void WriteTinyPng(GraphicsDevice& gd, const std::filesystem::path& path)
+    {
+        Texture2D tex(gd, 2, 2);
+        std::vector<Color> pixels(4, Color(255, 0, 0, 255));
+        tex.SetData(pixels.data(), 4);
+        tex.SaveAsPng(path.string());
+    }
+}
+
+// Task 14.2: texRootRelative = fs::relative(manifestDir / texFile, root) assumes the manifest
+// lives somewhere under the content root - both Content/avatar/ and Content/wardrobe/ happen to
+// be nested under the same root in every existing test/demo, so this was previously unexercised
+// outside that assumption. Confirms the ordinary (and most common) case still works: a manifest
+// nested several directories deep under the root, with its texture referenced relative to its
+// own directory.
+TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromNestedButUnderRootManifestDirectory)
+{
+    ScratchContentRoot root;
+    const auto manifestDir = root.path() / "nested" / "deep";
+    std::filesystem::create_directories(manifestDir);
+
+    WriteFile(manifestDir / "avatar.skinnedmodel.json",
+              R"({"skeleton": "skeleton.bin", "parts": [)"
+              R"({"name": "Test", "vertices": "a.verts.bin", "indices": "a.idx.bin", )"
+              R"("vertexStride": 52, "texture": "tex.png"}]})");
+    WriteSkeletonWithBoneCount(manifestDir / "skeleton.bin", 0);
+    WriteBytes(manifestDir / "a.verts.bin", std::vector<std::uint8_t>(52, 0));
+    WriteBytes(manifestDir / "a.idx.bin", {});
+    WriteTinyPng(gd, manifestDir / "tex.png");
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("nested/deep/avatar");
+
+    ASSERT_EQ(1u, model->Parts.size());
+    ASSERT_NE(nullptr, model->Parts[0].Texture);
+    EXPECT_EQ(2, model->Parts[0].Texture->getWidthProperty());
+    EXPECT_EQ(2, model->Parts[0].Texture->getHeightProperty());
+}
+
+// Task 14.2: the outside-root case this task specifically calls out as unverified. A manifest
+// can be loaded from entirely outside the content root by passing an absolute assetName (Load()'s
+// own BuildAssetPath: appending an absolute path to the root replaces the whole path, per
+// std::filesystem::path::operator/ semantics) - decide whether this needs explicit support or
+// explicit rejection. Empirically confirmed it already works correctly: fs::relative()'s
+// resulting ".."-laden relative path, re-joined with the root, still resolves to the right
+// absolute file when the OS opens it (path resolution handles ".." lazily; no canonicalization
+// is required in advance). No code change needed - this is already correctly supported, just
+// previously unverified by any test.
+TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromManifestOutsideContentRoot)
+{
+    ScratchContentRoot scratch;
+    const auto root = scratch.path() / "Content";
+    const auto outside = scratch.path() / "Outside";
+    std::filesystem::create_directories(root);
+    std::filesystem::create_directories(outside);
+
+    WriteFile(outside / "avatar.skinnedmodel.json",
+              R"({"skeleton": "skeleton.bin", "parts": [)"
+              R"({"name": "Test", "vertices": "a.verts.bin", "indices": "a.idx.bin", )"
+              R"("vertexStride": 52, "texture": "tex.png"}]})");
+    WriteSkeletonWithBoneCount(outside / "skeleton.bin", 0);
+    WriteBytes(outside / "a.verts.bin", std::vector<std::uint8_t>(52, 0));
+    WriteBytes(outside / "a.idx.bin", {});
+    WriteTinyPng(gd, outside / "tex.png");
+
+    ContentManager cm(nullptr, root.string());
+    cm.setGraphicsDevice(gd);
+
+    // Absolute assetName - the manifest itself lives outside root entirely.
+    auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>((outside / "avatar").string());
+
+    ASSERT_EQ(1u, model->Parts.size());
+    ASSERT_NE(nullptr, model->Parts[0].Texture);
+    EXPECT_EQ(2, model->Parts[0].Texture->getWidthProperty());
+    EXPECT_EQ(2, model->Parts[0].Texture->getHeightProperty());
 }
