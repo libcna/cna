@@ -9,6 +9,7 @@ layout(location = 0) out vec2  fragUV;
 layout(location = 1) out vec3  fragNormal;  // world-space
 layout(location = 2) out vec4  fragTint;
 layout(location = 3) out vec3  fragWorldPos;
+layout(location = 4) out float fragFogFactor;
 
 // 128-byte push constant block (all 3D variants share this layout).
 layout(push_constant) uniform PC {
@@ -37,6 +38,9 @@ layout(set = 0, binding = 1) uniform LitLightParams {
     vec4 light1Specular_pad;
     vec4 light2Specular_pad;
     vec4 specularColorPower;
+    // Task 888: fog, packed into the UBO's previously-unused trailing 32 bytes.
+    vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
+    vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
 } lp;
 
 void main() {
@@ -52,4 +56,9 @@ void main() {
     fragNormal   = normalize(normalMatrix * inNormal);
     fragWorldPos = (lp.world * vec4(inPos, 1.0)).xyz;
     fragTint     = pc.diffuseColor;
+    // Task 888: fog factor from raw object-space Z (matches EasyGL's established formula
+    // exactly). 1.0 = no fog, 0.0 = full fog.
+    fragFogFactor = (lp.fogColorEnabled.w > 0.5)
+        ? clamp((lp.fogStartEnd.y - inPos.z) / max(lp.fogStartEnd.y - lp.fogStartEnd.x, 1e-6), 0.0, 1.0)
+        : 1.0;
 }

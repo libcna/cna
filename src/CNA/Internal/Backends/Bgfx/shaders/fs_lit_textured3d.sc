@@ -1,8 +1,9 @@
-$input v_texcoord0, v_normal, v_color0, v_eyeDir
+$input v_texcoord0, v_normal, v_color0, v_eyeDir, v_fogFactor
 
 #include <bgfx_shader.sh>
 
 SAMPLER2D(s_texColor, 0);
+uniform vec4 u_fogColor;
 
 uniform vec4 u_ambientColor;
 uniform vec4 u_light0Dir;
@@ -48,4 +49,6 @@ void main()
     vec3 litColor = v_color0.rgb * finalLight + u_emissiveColor.xyz;
     gl_FragColor = tex * vec4(litColor, v_color0.a);
     gl_FragColor.rgb += specularRGB * gl_FragColor.a;
+    // Task 888: mix toward FogColor as v_fogFactor -> 0 (matches EasyGL's established formula).
+    gl_FragColor.rgb = mix(u_fogColor.xyz, gl_FragColor.rgb, v_fogFactor);
 }

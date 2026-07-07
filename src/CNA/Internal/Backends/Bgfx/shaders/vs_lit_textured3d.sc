@@ -1,5 +1,5 @@
 $input a_position, a_normal, a_texcoord0
-$output v_texcoord0, v_normal, v_color0, v_eyeDir
+$output v_texcoord0, v_normal, v_color0, v_eyeDir, v_fogFactor
 
 #include <bgfx_shader.sh>
 
@@ -8,6 +8,7 @@ uniform mat4 u_world;
 uniform mat3 u_normalMatrix;
 uniform vec4 u_diffuseColor;
 uniform vec4 u_eyePos;
+uniform vec4 u_fogParams;
 
 void main()
 {
@@ -21,4 +22,9 @@ void main()
     // wrong under ANY non-identity camera, not just non-uniform World scale.
     v_normal      = normalize(mul(u_normalMatrix, a_normal));
     v_eyeDir      = u_eyePos.xyz - worldPos;
+    // Task 888: fog factor from raw object-space Z (matches EasyGL's established formula
+    // exactly). u_fogParams = (fogEnabled, fogStart, fogEnd, unused). 1.0 = no fog, 0.0 = full.
+    v_fogFactor = (u_fogParams.x > 0.5)
+        ? clamp((u_fogParams.z - a_position.z) / max(u_fogParams.z - u_fogParams.y, 1e-6), 0.0, 1.0)
+        : 1.0;
 }

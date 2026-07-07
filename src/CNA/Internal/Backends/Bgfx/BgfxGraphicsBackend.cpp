@@ -763,6 +763,8 @@ namespace CNA::Internal::Backends::Bgfx
                 light2Spec3DUnif_   = bgfx::createUniform("u_light2Specular", bgfx::UniformType::Vec4);
                 specularColorPower3DUnif_ = bgfx::createUniform("u_specularColorPower", bgfx::UniformType::Vec4);
                 vertexColorEn3DUnif_= bgfx::createUniform("u_vertexColorEnabled3D", bgfx::UniformType::Vec4);
+                fogColorUnif_       = bgfx::createUniform("u_fogColor",  bgfx::UniformType::Vec4);
+                fogParamsUnif_      = bgfx::createUniform("u_fogParams", bgfx::UniformType::Vec4);
                 texColor3DSampler_  = bgfx::createUniform("s_texColor",       bgfx::UniformType::Sampler);
                 alphaTestUnif_      = bgfx::createUniform("u_alphaTest",      bgfx::UniformType::Vec4);
                 texColor3DSampler2_ = bgfx::createUniform("s_texColor2",      bgfx::UniformType::Sampler);
@@ -839,6 +841,8 @@ namespace CNA::Internal::Backends::Bgfx
         destroyU(light2Spec3DUnif_);
         destroyU(specularColorPower3DUnif_);
         destroyU(vertexColorEn3DUnif_);
+        destroyU(fogColorUnif_);
+        destroyU(fogParamsUnif_);
         destroyU(lightingEn3DUnif_);
         destroyU(texColor3DSampler_);
         destroyU(alphaTestUnif_);
@@ -1503,6 +1507,15 @@ namespace CNA::Internal::Backends::Bgfx
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         bgfx::setUniform(wvpUniform_, wvp_col);
+
+        // Task 888: fog uniforms are set unconditionally (not per-branch) since bgfx uniforms
+        // are shared by name across every program -- any program declaring u_fogColor/
+        // u_fogParams as inputs picks these up automatically; programs that don't simply ignore
+        // them, no error.
+        float fogColor4[4]  = { params.fogColor[0], params.fogColor[1], params.fogColor[2], 0.0f };
+        bgfx::setUniform(fogColorUnif_, fogColor4);
+        float fogParams4[4] = { params.fogEnabled ? 1.0f : 0.0f, params.fogStart, params.fogEnd, 0.0f };
+        bgfx::setUniform(fogParamsUnif_, fogParams4);
 
         bgfx::setVertexBuffer(0, vb.handle);
         bgfx::setStencil(stencilFront_, stencilBack_);

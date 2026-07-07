@@ -4,6 +4,7 @@ layout(location = 0) in vec2  fragUV;
 layout(location = 1) in vec3  fragNormal;
 layout(location = 2) in vec4  fragTint;
 layout(location = 3) in vec3  fragWorldPos;
+layout(location = 4) in float fragFogFactor;
 
 layout(location = 0) out vec4 outColor;
 
@@ -23,6 +24,10 @@ layout(set = 0, binding = 1) uniform LitLightParams {
     vec4 light1Specular_pad;
     vec4 light2Specular_pad;
     vec4 specularColorPower;     // xyz = material SpecularColor, w = SpecularPower
+    // Task 888: fog, packed into the UBO's previously-unused trailing 32 bytes. Vertex-stage
+    // computes fragFogFactor from fogColorEnabled.w/fogStartEnd; only fogColorEnabled.xyz needed here.
+    vec4 fogColorEnabled;        // xyz = FogColor, w = fogEnabled
+    vec4 fogStartEnd;            // x = fogStart, y = fogEnd, zw = unused
 } lp;
 
 layout(push_constant) uniform PC {
@@ -70,5 +75,7 @@ void main() {
     } else {
         color = fragTint * tex;
     }
+    // Task 888: mix toward FogColor as fragFogFactor -> 0 (matches EasyGL's established formula).
+    color.rgb = mix(lp.fogColorEnabled.xyz, color.rgb, fragFogFactor);
     outColor = color;
 }

@@ -2372,6 +2372,24 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 888: BasicEffect fog on the lit_textured3d (stride-32) pipeline
+        cna_vulkan_test(cna_test_vulkan_basiceffect_fog
+                        examples/vulkan_basiceffect_fog_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_Fog
+                 COMMAND cna_test_vulkan_basiceffect_fog)
+        set_tests_properties(Vulkan_BasicEffect_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 888: AlphaTestEffect fog on the alpha_test3d pipeline
+        cna_vulkan_test(cna_test_vulkan_alphatest_fog
+                        examples/vulkan_alphatest_fog_test.cpp)
+        add_test(NAME Vulkan_AlphaTest_Fog
+                 COMMAND cna_test_vulkan_alphatest_fog)
+        set_tests_properties(Vulkan_AlphaTest_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
         cna_vulkan_test(cna_test_vulkan_basiceffect_emissive
                         examples/vulkan_basiceffect_emissive_test.cpp)
@@ -2697,6 +2715,42 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_AlphaTest_VertexColor
              COMMAND cna_test_bgfx_alphatest_vertexcolor)
     set_tests_properties(Bgfx_AlphaTest_VertexColor PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 888: BasicEffect fog on the colored3d (stride-16) pipeline
+    cna_bgfx_test(cna_test_bgfx_basiceffect_fog
+                  examples/bgfx_basiceffect_fog_test.cpp)
+    add_test(NAME Bgfx_BasicEffect_Fog
+             COMMAND cna_test_bgfx_basiceffect_fog)
+    set_tests_properties(Bgfx_BasicEffect_Fog PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 888: BasicEffect fog on the lit_textured3d (stride-32) pipeline
+    cna_bgfx_test(cna_test_bgfx_basiceffect_lit_fog
+                  examples/bgfx_basiceffect_lit_fog_test.cpp)
+    add_test(NAME Bgfx_BasicEffect_LitFog
+             COMMAND cna_test_bgfx_basiceffect_lit_fog)
+    set_tests_properties(Bgfx_BasicEffect_LitFog PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 888: AlphaTestEffect fog on the alpha_test3d pipeline
+    cna_bgfx_test(cna_test_bgfx_alphatest_fog
+                  examples/bgfx_alphatest_fog_test.cpp)
+    add_test(NAME Bgfx_AlphaTest_Fog
+             COMMAND cna_test_bgfx_alphatest_fog)
+    set_tests_properties(Bgfx_AlphaTest_Fog PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 888: DualTextureEffect fog on the dual_texture3d pipeline
+    cna_bgfx_test(cna_test_bgfx_dualtextureeffect_fog
+                  examples/bgfx_dualtextureeffect_fog_test.cpp)
+    add_test(NAME Bgfx_DualTextureEffect_Fog
+             COMMAND cna_test_bgfx_dualtextureeffect_fog)
+    set_tests_properties(Bgfx_DualTextureEffect_Fog PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

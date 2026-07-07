@@ -2672,10 +2672,13 @@ namespace CNA::Internal::Backends::Vulkan
         // [20..23]: alpha test params {refVal, tolerance, passWeight, failWeight}
         pc[20] = p.alphaTest[0]; pc[21] = p.alphaTest[1];
         pc[22] = p.alphaTest[2]; pc[23] = p.alphaTest[3];
-        // [24]: vertexColorEnabled (Task 887, read only by the stride-24 colored variant's VS);
-        // [25..31]: padding (unused)
+        // [24]: vertexColorEnabled (Task 887, read only by the stride-24 colored variant's VS)
         pc[24] = p.vertexColorEnabled ? 1.f : 0.f;
-        for (int i = 25; i < 32; ++i) pc[i] = 0.f;
+        // [25..30]: fog (Task 888) {fogEnabled, fogStart, fogEnd, fogColor.xyz}; [31]: padding
+        pc[25] = p.fogEnabled ? 1.f : 0.f;
+        pc[26] = p.fogStart; pc[27] = p.fogEnd;
+        pc[28] = p.fogColor[0]; pc[29] = p.fogColor[1]; pc[30] = p.fogColor[2];
+        pc[31] = 0.f;
     }
 
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineAlphaTest3D(
@@ -3407,7 +3410,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = litTexturedUBO_[frameIdx];
         bufInfo.offset = 0;
-        bufInfo.range  = 224;  // size of one LitLightParams block in the shader (Task 886/898)
+        bufInfo.range  = 256;  // size of one LitLightParams block in the shader (Task 886/898/888)
 
         VkWriteDescriptorSet writes[2]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -4427,9 +4430,9 @@ namespace CNA::Internal::Backends::Vulkan
                     if (draw.litTexturedDescSet != VK_NULL_HANDLE && litTexturedUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = litTexturedUBOSlot++;
                         const uint32_t uboOff = slot * kLitTexturedUBOStride;
-                        if (uboOff + 224 <= kLitTexturedUBOStride * kLitTexturedUBOMaxDraws) {
+                        if (uboOff + 256 <= kLitTexturedUBOStride * kLitTexturedUBOMaxDraws) {
                             std::memcpy(static_cast<uint8_t*>(litTexturedUBOPtr_[currentFrame_]) + uboOff,
-                                        draw.litUboData, 224);
+                                        draw.litUboData, 256);
                         }
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 pipelineLayoutLitTextured3D_, 0, 1,
@@ -5077,6 +5080,10 @@ namespace CNA::Internal::Backends::Vulkan
             d.litUboData[50] = params.light2Specular[2]; d.litUboData[51] = 0.f;
             d.litUboData[52] = params.specularColor[0]; d.litUboData[53] = params.specularColor[1];
             d.litUboData[54] = params.specularColor[2]; d.litUboData[55] = params.specularPower;
+            d.litUboData[56] = params.fogColor[0]; d.litUboData[57] = params.fogColor[1];
+            d.litUboData[58] = params.fogColor[2]; d.litUboData[59] = params.fogEnabled ? 1.f : 0.f;
+            d.litUboData[60] = params.fogStart; d.litUboData[61] = params.fogEnd;
+            d.litUboData[62] = 0.f; d.litUboData[63] = 0.f;
         } else {
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
@@ -5206,6 +5213,10 @@ namespace CNA::Internal::Backends::Vulkan
             d.litUboData[50] = params.light2Specular[2]; d.litUboData[51] = 0.f;
             d.litUboData[52] = params.specularColor[0]; d.litUboData[53] = params.specularColor[1];
             d.litUboData[54] = params.specularColor[2]; d.litUboData[55] = params.specularPower;
+            d.litUboData[56] = params.fogColor[0]; d.litUboData[57] = params.fogColor[1];
+            d.litUboData[58] = params.fogColor[2]; d.litUboData[59] = params.fogEnabled ? 1.f : 0.f;
+            d.litUboData[60] = params.fogStart; d.litUboData[61] = params.fogEnd;
+            d.litUboData[62] = 0.f; d.litUboData[63] = 0.f;
         } else {
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
