@@ -37,12 +37,21 @@
 // objects permanently. Needs the same process isolation as the other modes, for the same reason
 // (isInitialized_ is itself a process-lifetime static with no reset hook).
 //
+// --mode=initialize-population-check (Task 9.8): verifies Initialize()'s actual gamer-population
+// behavior (exact stub names/PlayerIndex values, Gamer::getSignedInGamersProperty() ending up
+// with exactly 4 entries, SignedInGamer::OnSignIn firing exactly once per gamer), then exercises
+// Task 7.1's GetAchievements() fix in the same process, once real initialization has actually
+// happened. Needs the same process isolation as the other modes, for the same reason.
+//
 // Exit codes: 0 success, 2 unexpected exception/state, 64 bad usage. (No internal timeout code:
 // if a bug regresses, this process hangs and is killed by the outer test's watchdog instead.)
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInEventArgs.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
+#include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "System/IServiceProvider.hpp"
 
 #include <cstdio>
@@ -51,8 +60,11 @@
 #include <vector>
 
 using namespace Microsoft::Xna::Framework::Net;
+using Microsoft::Xna::Framework::GamerServices::Gamer;
 using Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher;
+using Microsoft::Xna::Framework::GamerServices::SignedInEventArgs;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
+using Microsoft::Xna::Framework::PlayerIndex;
 
 namespace {
     // GamerServicesDispatcher::Initialize() never dereferences its serviceProvider argument;
@@ -111,6 +123,51 @@ namespace {
         }
         return 0;
     }
+
+    int RunInitializePopulationCheck(int signInFireCount) {
+        auto* gamers = Gamer::getSignedInGamersProperty();
+        if (gamers->getCountProperty() != 4) {
+            std::fprintf(stderr, "expected exactly 4 signed-in gamers, got %d\n", gamers->getCountProperty());
+            return 2;
+        }
+
+        static const char* const kExpectedNames[4] = {
+            "Stub Gamer", "Stub Gamer (1)", "Stub Gamer (2)", "Stub Gamer (3)"
+        };
+        static const PlayerIndex kExpectedIndices[4] = {
+            PlayerIndex::One, PlayerIndex::Two, PlayerIndex::Three, PlayerIndex::Four
+        };
+        for (int i = 0; i < 4; ++i) {
+            SignedInGamer* gamer = (*gamers)[i];
+            if (gamer->getGamertagProperty() != kExpectedNames[i]) {
+                std::fprintf(stderr, "gamer %d: expected gamertag \"%s\", got \"%s\"\n",
+                             i, kExpectedNames[i], gamer->getGamertagProperty().c_str());
+                return 2;
+            }
+            if (gamer->getPlayerIndexProperty() != kExpectedIndices[i]) {
+                std::fprintf(stderr, "gamer %d: unexpected PlayerIndex\n", i);
+                return 2;
+            }
+        }
+
+        if (signInFireCount != 4) {
+            std::fprintf(stderr, "expected SignedIn to fire exactly 4 times during Initialize(), got %d\n",
+                         signInFireCount);
+            return 2;
+        }
+
+        // Task 7.1's fix, exercised here in the same isolated process once real initialization
+        // has actually happened (rather than RunGetAchievementsCheck's own freshly-constructed,
+        // never-Initialize()-populated SignedInGamer).
+        SignedInGamer* first = (*gamers)[0];
+        auto achievements = first->GetAchievements();
+        if (achievements.getCountProperty() != 0) {
+            std::fprintf(stderr, "GetAchievements() returned an unexpectedly non-empty collection\n");
+            return 2;
+        }
+
+        return 0;
+    }
 }
 
 int main(int argc, char** argv) {
@@ -123,8 +180,20 @@ int main(int argc, char** argv) {
     }
 
     try {
+        // Subscribed before Initialize() runs (rather than inside RunInitializePopulationCheck)
+        // so the counter observes every SignedIn firing caused by the mandatory Initialize() call
+        // just below, not just ones from a later, redundant second call.
+        int signInFireCount = 0;
+        System::EventHandler<SignedInEventArgs>::Token signInToken = SignedInGamer::SignedIn.Add(
+            [&signInFireCount](System::Object* /*sender*/, const SignedInEventArgs& /*e*/) {
+                ++signInFireCount;
+            }
+        );
+
         NullServiceProvider services;
         GamerServicesDispatcher::Initialize(services);
+
+        SignedInGamer::SignedIn.Remove(signInToken);
 
         if (mode == "network-session") {
             return RunNetworkSessionCheck();
@@ -135,7 +204,13 @@ int main(int argc, char** argv) {
         if (mode == "initialize-leak-check") {
             return RunInitializeLeakCheck();
         }
-        std::fprintf(stderr, "Usage: %s [--mode=network-session|get-achievements|initialize-leak-check]\n", argv[0]);
+        if (mode == "initialize-population-check") {
+            return RunInitializePopulationCheck(signInFireCount);
+        }
+        std::fprintf(stderr,
+                     "Usage: %s [--mode=network-session|get-achievements|initialize-leak-check|"
+                     "initialize-population-check]\n",
+                     argv[0]);
         return 64;
     } catch (const std::exception& ex) {
         std::fprintf(stderr, "Unhandled exception: %s\n", ex.what());

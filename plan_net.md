@@ -1934,7 +1934,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   already-correct code from Task 8.2). Full suite: 3365/3365 passing (2 expected
   accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 9.8** — Add an out-of-process test (mirroring
+- [x] **Task 9.8** — Add an out-of-process test (mirroring
   `tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp`'s isolation pattern) for
   `GamerServicesDispatcher::Initialize()`'s actual gamer-population behavior. Confirmed nothing
   currently verifies: the 4 stub gamers get the exact names `"Stub Gamer"`/`"Stub Gamer (1)"`/`"(2)"`/`"(3)"`;
@@ -1942,6 +1942,25 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   ends up with exactly 4 entries; `SignedInGamer::OnSignIn()` fires once per gamer. Ideally also
   exercise Task 7.1's `GetAchievements()` fix in the same isolated process, proving it doesn't hang
   once real initialization has actually happened.
+
+  Added `--mode=initialize-population-check` to `tools/net/gamerservices_dispatcher_harness.cpp`:
+  subscribes an `int` counter to `SignedInGamer::SignedIn` *before* `main()`'s existing mandatory
+  `Initialize()` call (so it observes every firing caused by that first, real initialization, not
+  just a later redundant second call), then verifies all 4 gamertags/`PlayerIndex` values in order,
+  `getCountProperty() == 4`, `signInFireCount == 4`, and finally calls `GetAchievements()` on the
+  first populated gamer to exercise Task 7.1's fix post-real-initialization (unlike
+  `RunGetAchievementsCheck`'s own freshly-constructed, never-`Initialize()`-populated
+  `SignedInGamer`). Added `GamerServicesDispatcherHangRegressionTest.InitializePopulatesFourStubGamersCorrectly`,
+  spawning the harness with this new mode and the same watchdog pattern as the other 3 tests in
+  that file.
+
+  Revert-verify performed despite this being additive (no prior bug — wanted proof the new
+  assertions actually detect a real mismatch, not just that they compile): temporarily changed
+  `"Stub Gamer (1)"`'s `PlayerIndex` from `Two` to `Three` in
+  `GamerServicesDispatcher::Initialize()`. Confirmed the harness printed `"gamer 1: unexpected
+  PlayerIndex"` and exited 2, and the new gtest failed with exactly that message. Restored the
+  correct `PlayerIndex::Two` and confirmed green again. Full suite: 3366/3366 passing (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 9.9** — Add a populated-collection test for `SignedInGamerCollectionTest::operator[](PlayerIndex)`.
   Confirmed the existing test only covers the empty-collection case (returns `nullptr` for any

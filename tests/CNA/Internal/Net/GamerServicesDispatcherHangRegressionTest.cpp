@@ -115,3 +115,28 @@ TEST(GamerServicesDispatcherHangRegressionTest, SecondInitializeDoesNotLeakThePr
     EXPECT_EQ(exitCode, 0) << "harness exited with unexpected code " << exitCode
                             << " — the second Initialize() call likely leaked or freed the wrong count";
 }
+
+// Task 9.8: verifies Initialize()'s actual gamer-population behavior end to end - exact stub
+// gamertags/PlayerIndex values, Gamer::getSignedInGamersProperty() ending up with exactly 4
+// entries, and SignedInGamer::OnSignIn firing exactly once per gamer - then exercises Task 7.1's
+// GetAchievements() fix in the same process, once real initialization has actually happened.
+// Needs the exact same process isolation as the tests above, for the same reason.
+TEST(GamerServicesDispatcherHangRegressionTest, InitializePopulatesFourStubGamersCorrectly) {
+    pid_t pid = -1;
+    char* argv[] = {
+        const_cast<char*>(CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH),
+        const_cast<char*>("--mode=initialize-population-check"),
+        nullptr
+    };
+    int rc = posix_spawn(&pid, CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH, nullptr, nullptr, argv, environ);
+    ASSERT_EQ(rc, 0) << "posix_spawn(" << CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH << ") failed: " << strerror(rc);
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
+    int exitCode = -1;
+    bool finished = WaitWithWatchdog(pid, deadline, &exitCode);
+
+    EXPECT_TRUE(finished) << "harness did not exit before the watchdog deadline and was killed";
+    EXPECT_EQ(exitCode, 0) << "harness exited with unexpected code " << exitCode
+                            << " — Initialize()'s gamer population, naming, PlayerIndex "
+                               "assignment, or SignedIn firing diverged from what's expected";
+}
