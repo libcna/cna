@@ -821,6 +821,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 409: cross-backend SkinnedEffect capstone (identity + single-bone + two-bone blend)
+        cna_easygl_test(cna_test_easygl_skinnedeffect_combined
+                        examples/easygl_skinnedeffect_combined_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_Combined
+                 COMMAND cna_test_easygl_skinnedeffect_combined)
+        set_tests_properties(EasyGL_SkinnedEffect_Combined PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_easygl_test(cna_test_easygl_rendertargetcube_sample
                         examples/easygl_rendertargetcube_sample_test.cpp)
@@ -2087,6 +2096,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 409: cross-backend SkinnedEffect capstone (identity + single-bone + two-bone blend)
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_combined
+                        examples/vulkan_skinnedeffect_combined_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_Combined
+                 COMMAND cna_test_vulkan_skinnedeffect_combined)
+        set_tests_properties(Vulkan_SkinnedEffect_Combined PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_sample
                         examples/vulkan_rendertargetcube_sample_test.cpp)
@@ -2481,6 +2499,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_SkinnedEffect_TwoBoneBlend
              COMMAND cna_test_bgfx_skinnedeffect_twobone_blend)
     set_tests_properties(Bgfx_SkinnedEffect_TwoBoneBlend PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 409: cross-backend SkinnedEffect capstone (identity + single-bone + two-bone blend)
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_combined
+                  examples/bgfx_skinnedeffect_combined_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_Combined
+             COMMAND cna_test_bgfx_skinnedeffect_combined)
+    set_tests_properties(Bgfx_SkinnedEffect_Combined PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
