@@ -46,7 +46,12 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   formalized the pre-existing (Task 123) EasyGL-only translation-bone test into all 3 backends
   for the first time — zero bugs found**, confirming a single real (non-identity)
   `Matrix.CreateTranslation` bone correctly shifts the mesh on EasyGL, Vulkan, and Bgfx alike,
-  reusing Task 406's own `renderAndRead()` helper on Bgfx. Phase 45
+  reusing Task 406's own `renderAndRead()` helper on Bgfx. **Task 408 verified genuine 2-bone
+  weighted blending on all 3 backends — zero bugs found**, using a deliberately discriminating
+  bone pair (`Translate(-0.5,0,0)`/`Translate(+1.5,0,0)`, weights `0.5`/`0.5` → blended shift
+  `+0.5`, distinct from either bone's own individual shift) and independently confirming
+  discriminating power by temporarily swapping to weights `(1,0)` and observing the predicted
+  `-0.5`-shift swap before restoring the real test. Phase 45
   ("EnvironmentMapEffect exactness", Tasks
   391–400) is
   **CLOSED** — Task 400 wrote `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399:
@@ -111,14 +116,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 407.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 408.
 
-### Test status (last verified: Task 407)
-- **EasyGL, full `ctest -j1`:** 3607/3610 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 408)
+- **EasyGL, full `ctest -j1`:** 3608/3611 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3527/3540 pass. 13 documented pre-existing failures (see §5),
+- **Vulkan, full `ctest -j1`:** 3528/3541 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3511/3511 pass — 100%, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3512/3512 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -278,7 +283,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 407 | **Verify-only, zero bugs found**: formalized the pre-existing (Task 123) EasyGL-only `skinned_effect_integration_test.cpp` translation-bone scenario into Phase 46's own per-backend naming convention, extending it to Vulkan and Bgfx for the first time. All 3 backends produced the exact predicted output on the first attempt, confirming a real non-identity `Matrix.CreateTranslation` bone correctly shifts the mesh everywhere. Bgfx reused Task 406's `renderAndRead()` helper. |
+| — | 408 | **Verify-only, zero bugs found**: confirmed genuine 2-bone weighted blending (`skinMat = w0×Bones[i0] + w1×Bones[i1]`) on all 3 backends using a deliberately discriminating bone pair whose blended result differs from either bone's own individual shift. Independently verified discriminating power by temporarily swapping to a `(1,0)` weight split and observing the predicted `-0.5`-shift swap (quad moves to the *left* read-back point instead of centre) before restoring the real `0.5`/`0.5` test. |
+| `8906d776` | 407 | **Verify-only, zero bugs found**: formalized the pre-existing (Task 123) EasyGL-only `skinned_effect_integration_test.cpp` translation-bone scenario into Phase 46's own per-backend naming convention, extending it to Vulkan and Bgfx for the first time. All 3 backends produced the exact predicted output on the first attempt, confirming a real non-identity `Matrix.CreateTranslation` bone correctly shifts the mesh everywhere. Bgfx reused Task 406's `renderAndRead()` helper. |
 | `fa5f026a` | 406 | **Opens the phase's first real pixel test, verify-only, zero `SkinnedEffect`/backend bugs found**: confirmed an identity bone palette (`Bones[0]=Identity`, `WeightsPerVertex=1`) produces zero mesh deformation on all 3 backends — direct contrast with the pre-existing Task 123 integration test. Surfaced a genuinely new Bgfx *test-harness* pitfall: `GetBackBufferData()` only reliably reflects the first read call per rendered frame; reading 3 rectangles from one frame silently returned blank data for reads 2 and 3. Fixed by refactoring to a `renderAndRead()` helper doing one full clear+draw+retry+read pass per checkpoint — now the established pattern for future multi-point Bgfx tests. |
 | `aa101253` | 404 | **Verify-only, zero bugs found**: confirmed `GetBoneTransforms` returns a genuinely independent copy (`EffectParameter::GetValueMatrixArray()` builds a brand-new `std::vector<Matrix>` every call, matching FNA's own array-allocating semantics). Added `GetBoneTransformsReturnsIndependentCopy`, discriminating by construction (mutating the first call's result and confirming a second call is unaffected). |
 | `43dcf220` | 403/405 | **Documentation only, no new code**: both tasks already fully satisfied by Task 402's own `SetBoneTransformsAcceptsExactlyMaxBones`/`SetBoneTransformsThrowsWhenExceedingMaxBones` tests. Marked done in `plan_graphics.md`, no test/production changes. |
@@ -508,18 +514,19 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 46 (Task 408 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 46 (Task 409 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 408 — pixel test: two-bone blend**
-   - Goal: render a skinned vertex whose weight is split across 2 bones (e.g. `w0=0.5`, `w1=0.5`,
-     both nonzero) with 2 different non-identity bone transforms, and confirm the resulting vertex
-     position is the correctly weighted blend (`skinMat = w0×Bones[i0] + w1×Bones[i1]`, matching
-     FNA's real `Skin()` HLSL formula) — a genuine "midpoint deformation" test, the natural next
-     step after Task 407's single-bone translation. Needs `WeightsPerVertex=2` (or `4` with the
-     other 2 weights zeroed) and picking 2 bone transforms whose blended result is easily
-     hand-verified (e.g. 2 translations along the same axis, blended result = the arithmetic mean).
-   - Files: new `examples/{easygl,vulkan,bgfx}_skinnedeffect_twobone_blend_test.cpp`.
+1. **Task 409 — cross-backend SkinnedEffect comparison suite**
+   - Goal: a capstone test combining Tasks 406–408's individually-verified pieces (identity bone
+     no-op, single-bone translation, 2-bone weighted blend) into one scene, mirroring Task
+     370/389/399's established capstone precedent for `BasicEffect`/`DualTextureEffect`/
+     `EnvironmentMapEffect`. Should exercise a genuinely non-trivial combination — e.g. a mesh with
+     multiple vertices bound to different bone/weight combinations in the same draw call (not just
+     repeating one uniform binding across all vertices) — to prove the pieces compose correctly
+     together, not just in isolation.
+   - Files: new `examples/{easygl,vulkan,bgfx}_skinnedeffect_combined_test.cpp` (naming mirrors
+     Task 399/389's own `_combined_test.cpp` convention).
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -643,7 +650,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 408).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 409).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -739,13 +746,29 @@ examples/{easygl,vulkan,bgfx}_skinnedeffect_translation_bone_test.cpp; the pre-e
 test is left untouched as its own independent, earlier-established EasyGL coverage. No production
 code changed.
 
-Task 408 (NEXT) is the natural next step: pixel test with a vertex weight split across 2 bones
-(e.g. w0=0.5/w1=0.5, both nonzero) with 2 different non-identity bone transforms, confirming the
-resulting vertex position is the correctly weighted blend (skinMat = w0*Bones[i0] + w1*Bones[i1],
-matching FNA's real Skin() HLSL formula) -- a genuine "midpoint deformation" test. Needs
-WeightsPerVertex=2 (or 4 with the other 2 weights zeroed) and 2 bone transforms whose blended
-result is easily hand-verified (e.g. 2 translations along the same axis, blended result = the
-arithmetic mean).
+Task 408 verified genuine 2-bone weighted blending on all 3 backends -- verify-only, zero bugs
+found. Deliberately chose a discriminating, non-trivial bone pair: Bone 0 = Translate(-0.5,0,0),
+Bone 1 = Translate(+1.5,0,0), weights split 0.5/0.5 -> net blended shift = 0.5*(-0.5)+0.5*(+1.5) =
++0.5, a value distinct from either bone's own individual shift (-0.5 or +1.5) -- so a bug that
+picked one bone alone (ignoring the other's weight) would produce a clearly different, wrong
+result rather than accidentally matching. All 3 backends produced the exact predicted output on
+the first attempt, byte-identical to Task 407's own per-backend values (EasyGL centre=(174,0,0),
+Vulkan/Bgfx centre=(160,0,0)), strong evidence the blend is computed correctly end-to-end.
+Independently verified discriminating power: temporarily changed the EasyGL test's weights to
+(1,0) (bone 0 alone) and reran -- predicted shift becomes -0.5, moving the quad to NDC x:
+-1.5..-0.5; observed exactly the predicted swap (left=(174,0,0) now inside the shifted quad,
+centre=(0,255,0) now outside) -- confirmed the shader genuinely reads and applies both weights.
+Restored the real 0.5/0.5 test afterward and reconfirmed it passes. Bgfx reused Task 406's own
+renderAndRead() helper plus the established RasterizerState::CullNone/omitted-SetDepthTestEnabled
+workarounds. Added examples/{easygl,vulkan,bgfx}_skinnedeffect_twobone_blend_test.cpp. No
+production code changed.
+
+Task 409 (NEXT) is the natural next step: a capstone cross-backend comparison suite combining
+Tasks 406-408's individually-verified pieces (identity bone no-op, single-bone translation,
+2-bone weighted blend) into one scene, mirroring Task 370/389/399's established capstone
+precedent. Should exercise a genuinely non-trivial combination -- e.g. a mesh with multiple
+vertices bound to different bone/weight combinations in the same draw call -- to prove the pieces
+compose correctly together, not just in isolation.
 
 Phase 45 ("EnvironmentMapEffect exactness", Tasks 391-400) CLOSED with Task 400
 (docs/environmentmapeffect-support.md, full synthesis of Tasks 391-399). Summary of what it
@@ -801,14 +824,14 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 46's remaining tasks.
 
-Last full 3-backend regression (Task 407 — verify-only, 1 new test per backend, no production
+Last full 3-backend regression (Task 408 — verify-only, 1 new test per backend, no production
 code changed):
-EasyGL 3607/3610 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3527/3540 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3511/3511 pass (100%, no flakes this run).
+EasyGL 3608/3611 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3528/3541 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3512/3512 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46 found, read plan_graphics.md
-directly (Tasks 351-407) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-408) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

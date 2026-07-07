@@ -812,6 +812,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 408: SkinnedEffect two-bone weighted blend should produce midpoint deformation
+        cna_easygl_test(cna_test_easygl_skinnedeffect_twobone_blend
+                        examples/easygl_skinnedeffect_twobone_blend_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_TwoBoneBlend
+                 COMMAND cna_test_easygl_skinnedeffect_twobone_blend)
+        set_tests_properties(EasyGL_SkinnedEffect_TwoBoneBlend PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_easygl_test(cna_test_easygl_rendertargetcube_sample
                         examples/easygl_rendertargetcube_sample_test.cpp)
@@ -2069,6 +2078,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 408: SkinnedEffect two-bone weighted blend should produce midpoint deformation
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_twobone_blend
+                        examples/vulkan_skinnedeffect_twobone_blend_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_TwoBoneBlend
+                 COMMAND cna_test_vulkan_skinnedeffect_twobone_blend)
+        set_tests_properties(Vulkan_SkinnedEffect_TwoBoneBlend PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_sample
                         examples/vulkan_rendertargetcube_sample_test.cpp)
@@ -2454,6 +2472,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_SkinnedEffect_TranslationBone
              COMMAND cna_test_bgfx_skinnedeffect_translation_bone)
     set_tests_properties(Bgfx_SkinnedEffect_TranslationBone PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 408: SkinnedEffect two-bone weighted blend should produce midpoint deformation
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_twobone_blend
+                  examples/bgfx_skinnedeffect_twobone_blend_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_TwoBoneBlend
+             COMMAND cna_test_bgfx_skinnedeffect_twobone_blend)
+    set_tests_properties(Bgfx_SkinnedEffect_TwoBoneBlend PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
