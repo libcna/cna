@@ -79,4 +79,33 @@ namespace Microsoft::Devices::Sensors::Detail
         // Tilt right → rawY negative; negate Y to match WP7 convention.
         return {rawX, -rawY, rawZ};
     }
+
+    /**
+     * Task ACCEL-008: process-wide, NOXNA opt-out for the landscape remap above.
+     * Defaults to `true`, preserving this codebase's existing Accelerometer/Gyroscope
+     * behavior unchanged.
+     *
+     * An archived MSDN Magazine article ("Touch and Go - Getting Oriented with the
+     * Windows Phone Compass", Charles Petzold, June 2012) states the real WP7
+     * `Accelerometer`/`Gyroscope` **never** remap axes based on display orientation —
+     * they always report the same fixed, device-relative frame, and any orientation
+     * handling is the game's own responsibility. SDL3's own header
+     * (`SDL_sensor.h`) independently agrees: "the accelerometer/gyroscope axis data is
+     * not changed when the device is rotated." `ConvertAndroidPortraitToXnaLandscape()`
+     * above is therefore a deliberate **CNA convenience deviation** from real WP7
+     * behavior, not part of the XNA 4.0/WP7 contract — kept enabled by default because
+     * existing CNA games/demos may already depend on receiving landscape-corrected
+     * axes, but a game that wants strict WP7-compatible raw axes (e.g. to implement its
+     * own remap, or to match hardware-verified reference behavior) can disable it here.
+     *
+     * @param enabled false to make `Accelerometer`/`Gyroscope` report SDL's raw,
+     * unremapped, device-fixed portrait-frame axes instead.
+     */
+    void SetAndroidLandscapeRemapEnabled(bool enabled);
+
+    /**
+     * @brief NOXNA: see `SetAndroidLandscapeRemapEnabled()`. Defaults to `true`.
+     * @return Whether the landscape remap is currently applied.
+     */
+    bool IsAndroidLandscapeRemapEnabled();
 } // namespace Microsoft::Devices::Sensors::Detail

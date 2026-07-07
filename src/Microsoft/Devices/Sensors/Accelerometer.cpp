@@ -434,6 +434,14 @@ namespace Microsoft::Devices::Sensors
      *
      * To fix a reversed tilt direction, adjust only the signs here — NOT in game code.
      *
+     * Task ACCEL-008: this whole remap is a deliberate **CNA convenience
+     * deviation** from real WP7 behavior, not part of the XNA 4.0 contract — the
+     * real WP7 `Accelerometer` never remaps axes based on display orientation at
+     * all (archived MSDN Magazine article, "Touch and Go - Getting Oriented with
+     * the Windows Phone Compass"; SDL3's own docs agree raw axes are never
+     * display-orientation-relative). Kept enabled by default for existing CNA
+     * games/demos; see `Detail::SetAndroidLandscapeRemapEnabled()` for the opt-out.
+     *
      * @param rawX  SDL accelerometer X normalised to g.
      * @param rawY  SDL accelerometer Y normalised to g.
      * @param rawZ  SDL accelerometer Z normalised to g.
@@ -566,12 +574,20 @@ namespace Microsoft::Devices::Sensors
         {
 #ifdef __ANDROID__
             // On Android, remap raw SDL portrait-frame axes to the XNA landscape
-            // convention so that the game layer remains platform-agnostic.
+            // convention so that the game layer remains platform-agnostic -- unless
+            // Task ACCEL-008's opt-out has been used to request real WP7's raw,
+            // unremapped, device-fixed axes instead (see
+            // Detail::SetAndroidLandscapeRemapEnabled()'s own doc comment).
             const Microsoft::Xna::Framework::Vector3 acceleration =
-                ConvertAndroidAccelerometerToXnaLandscape(
-                    x / StandardGravity,
-                    y / StandardGravity,
-                    z / StandardGravity);
+                Detail::IsAndroidLandscapeRemapEnabled()
+                    ? ConvertAndroidAccelerometerToXnaLandscape(
+                          x / StandardGravity,
+                          y / StandardGravity,
+                          z / StandardGravity)
+                    : Microsoft::Xna::Framework::Vector3(
+                          x / StandardGravity,
+                          y / StandardGravity,
+                          z / StandardGravity);
 #else
             const Microsoft::Xna::Framework::Vector3 acceleration(
                 x / StandardGravity,

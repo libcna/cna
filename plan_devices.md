@@ -2447,7 +2447,7 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp` (edited)
   - `docs/devices-api-coverage.md` (edited)
 
-### ACCEL-008 — NEW (found 2026-07-06, while researching `COMPASS-001`): re-examine whether the Android landscape axis remap should exist at all — OPEN, needs a decision, not implemented
+### ACCEL-008 — NEW (found 2026-07-06, while researching `COMPASS-001`): re-examine whether the Android landscape axis remap should exist at all — CLOSED (2026-07-07, decision made and implemented)
 
 **Hardware verification:** `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) Section 1 has a dedicated field for recording whether the coordinate convention changes between portrait and landscape on real hardware — the direct evidence needed to resolve this question.
 
@@ -2566,6 +2566,45 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp`
   - `docs/devices-hardware-checklist.md`
   - `docs/devices-api-coverage.md`
+- **Resolution (2026-07-07):** the project maintainer decided **option (a)**: keep the
+  existing remap (existing CNA games/demos may already depend on it), but mark it
+  explicitly as a deliberate CNA convenience deviation from real WP7 behavior, and add
+  an opt-out. Implemented:
+  - `Detail::SetAndroidLandscapeRemapEnabled(bool)`/`Detail::IsAndroidLandscapeRemapEnabled()`
+    — a new, process-wide, `std::atomic<bool>` toggle (relaxed ordering — a coarse,
+    rarely-toggled flag, not a synchronization mechanism; same fix category as
+    `SDL-SENSOR-004`, applied proactively here rather than repeating that mistake) added
+    to `AndroidSensorOrientation.hpp`/`.cpp` (new `.cpp` file — the header was previously
+    fully inline). Defaults to `true`, preserving existing behavior exactly.
+  - `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__` remap call sites now check
+    this flag at runtime and fall through to raw, unremapped SDL axes when disabled.
+  - Both files' own doc comments (on `ConvertAndroidAccelerometerToXnaLandscape()`/
+    `ConvertAndroidGyroscopeToXnaLandscape()`) and `Detail::ConvertAndroidPortraitToXnaLandscape()`'s
+    own doc comment updated to explicitly state this is a CNA-only deviation, not XNA/WP7
+    behavior, citing this task.
+  - 3 new tests in `AndroidSensorOrientationTests.cpp` (default-enabled, disable, re-enable),
+    using a `ScopedAndroidLandscapeRemapSetting` RAII helper so the process-wide flag is
+    always restored to its default after each test — the same restore-on-scope-exit
+    discipline already established for `FileDialog`/`SystemTray`/`MessageBox`'s swappable
+    backends, applied here to a plain flag instead.
+  - `docs/devices-hardware-checklist.md` Sections 1, 2, and 8 updated with the decision,
+    the opt-out mechanism, and an explicit cross-reference to the new `Motion` follow-up
+    below.
+  - **New follow-up task opened, not silently skipped:** `MOTION-011` — `Motion`'s
+    `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` still receive no remap at all
+    (per `MOTION-002`'s own note, this is now inconsistent with the "keep it" decision
+    made here) but applying the same formula without first confirming Android's
+    `TYPE_GRAVITY`/`TYPE_LINEAR_ACCELERATION` sensors use the same raw portrait-frame
+    convention as the plain accelerometer/gyroscope would repeat the exact kind of
+    unverified-assumption mistake this project's own history warns against — deserves
+    its own careful derivation, not a rushed addition here. `Motion.Attitude` (the
+    quaternion) is explicitly out of scope for that follow-up too — remains
+    `MOTION-002`'s own open question.
+  - **Build/test:** `CNA` and `CnaTests` both build cleanly. Full suite: 3371/3371
+    (3369 pass + 2 expected skips, up from 3368 — the 3 new tests), **zero regressions**.
+    `AndroidSensorOrientationTests`/`AccelerometerTests`/`GyroscopeTests` (89 tests, 87
+    pass + 2 expected skips) re-run clean (exit code 0, zero reports) under both
+    `devices-asan` (`ASAN_OPTIONS=detect_leaks=1`) and `devices-ubsan`.
 
 ---
 
@@ -3631,6 +3670,72 @@ not an alternate spelling to preserve.
   rather than only checking sign conventions — but not enough confidence to justify a
   code change or a new tracked task on its own, distinct from `ACCEL-008`'s stronger,
   two-source finding.
+
+### MOTION-011 — NEW (found 2026-07-07, while implementing `ACCEL-008`): apply the landscape remap to `Motion`'s Gravity/DeviceAcceleration/DeviceRotationRate, or explicitly decide not to — OPEN, not implemented
+
+- **Priority:** Medium
+- **Area:** Motion Math / Android Backend
+- **Problem:** `ACCEL-008`'s decision was to keep the Android landscape-remap for
+  `Accelerometer`/`Gyroscope` (now `Detail::SetAndroidLandscapeRemapEnabled()`-gated,
+  defaulting to enabled) rather than remove it, per the project maintainer's explicit
+  choice. `MOTION-002`'s own resolution note already flagged that `Motion`'s
+  `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` fields currently receive **no**
+  landscape remap at all — a direct, unremapped passthrough of Android's raw
+  gravity/linear-acceleration/gyroscope sensor values — and explicitly said this would
+  need a matching remap added once `ACCEL-008` was resolved in the "keep it" direction.
+  That is now the case, so this task exists to actually do it (or explicitly decide
+  against it with a stated reason) rather than leave `Motion` silently inconsistent with
+  `Accelerometer`/`Gyroscope`.
+- **Why this was not implemented as part of `ACCEL-008` itself:** `Gravity`/
+  `DeviceAcceleration`/`DeviceRotationRate` are plausibly the same shape as
+  `Accelerometer`/`Gyroscope`'s raw vectors (gravity and linear-acceleration both derive
+  from the same underlying accelerometer hardware; rotation rate from the same gyroscope
+  hardware) — but this has **not been verified**, only assumed by analogy. Specifically
+  unconfirmed: whether Android's `TYPE_GRAVITY`/`TYPE_LINEAR_ACCELERATION` sensors (which
+  `Detail::AndroidMotionBackend` actually listens to — confirmed by reading the file, not
+  assumed) report in the same raw portrait-device-frame convention as the plain
+  `TYPE_ACCELEROMETER`/`TYPE_GYROSCOPE` sensors `Accelerometer`/`Gyroscope` use, or
+  whether Android's own sensor fusion already partially orientation-corrects them before
+  delivery (in which case reapplying `Detail::ConvertAndroidPortraitToXnaLandscape()`
+  would double-correct and be wrong). Reusing the exact same remap function without
+  confirming this assumption first would repeat the same category of mistake this
+  project's own history has hit before when reasoning about Android sensor math without
+  hardware to check against (see `COMPASS-009`'s own resolution note for the most recent
+  example) — so it is being raised as its own task instead of bundled into `ACCEL-008`
+  under time pressure.
+  - `Motion.Attitude` (the orientation quaternion) is explicitly **out of scope for this
+    task** — a quaternion is not a plain vector, so the same sign-flip remap does not
+    apply to it at all; any fix there needs a genuine change-of-basis derivation, which
+    is `MOTION-002`'s own already-tracked open question, not something this task expands
+    into.
+- **Required work:**
+  - Confirm (via SDL3/Android NDK sensor documentation, the same citation discipline
+    used throughout `plan_devices.md`) whether `TYPE_GRAVITY`/`TYPE_LINEAR_ACCELERATION`
+    report in the same raw portrait-device-frame convention as
+    `TYPE_ACCELEROMETER`/`TYPE_GYROSCOPE`, before writing any remap code.
+  - If confirmed: apply `Detail::ConvertAndroidPortraitToXnaLandscape()` (respecting
+    `Detail::IsAndroidLandscapeRemapEnabled()`, the same shared opt-out `ACCEL-008`
+    added) to `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` in
+    `Detail::AndroidMotionBackend.cpp`, mirroring `Accelerometer.cpp`/`Gyroscope.cpp`'s
+    own call sites exactly.
+  - If not confirmed, or found to already be orientation-corrected: document that finding
+    explicitly (in this task and in `docs/devices-hardware-checklist.md` Section 8) as
+    the reason `Motion` deliberately stays unremapped — a stated decision, not a silent
+    gap.
+  - Add self-consistency tests mirroring `AndroidSensorOrientationTests.cpp`'s existing
+    coverage, whichever direction is chosen.
+- **Acceptance criteria:**
+  - `Motion`'s vector fields' remap behavior (remapped, or explicitly not) is documented
+    with a stated reason, consistent with — or explicitly and intentionally different
+    from, with rationale — `Accelerometer`/`Gyroscope`'s `ACCEL-008` decision.
+  - `Motion.Attitude` remains explicitly out of scope, tracked only under `MOTION-002`.
+- **Suggested files to inspect or edit:**
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp` (reuse, not
+    duplicate, the existing remap function + opt-out flag)
+  - `tests/Microsoft/Devices/Sensors/Detail/AndroidMotionBackendTests.cpp` (or wherever
+    `Motion`'s Android backend tests currently live)
+  - `docs/devices-hardware-checklist.md` Section 8
 
 ### MOTION-003 — Verify gravity and device acceleration units — CLOSED (2026-07-06, confirmed correct via direct citations, no code change)
 

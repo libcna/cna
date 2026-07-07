@@ -310,6 +310,11 @@ namespace Microsoft::Devices::Sensors
      * accelerometer remap in Accelerometer.cpp; see that file for the full
      * coordinate-system rationale.
      *
+     * Task ACCEL-008: this whole remap is a deliberate **CNA convenience
+     * deviation** from real WP7 behavior, not part of the XNA 4.0 contract —
+     * kept enabled by default for existing CNA games/demos; see
+     * `Detail::SetAndroidLandscapeRemapEnabled()` for the opt-out.
+     *
      * @param rawX  SDL gyroscope X, in radians/second.
      * @param rawY  SDL gyroscope Y, in radians/second.
      * @param rawZ  SDL gyroscope Z, in radians/second.
@@ -415,9 +420,14 @@ namespace Microsoft::Devices::Sensors
         {
 #ifdef __ANDROID__
             // On Android, remap raw SDL portrait-frame axes to the XNA landscape
-            // convention so that the game layer remains platform-agnostic.
+            // convention so that the game layer remains platform-agnostic -- unless
+            // Task ACCEL-008's opt-out has been used to request real WP7's raw,
+            // unremapped, device-fixed axes instead (see
+            // Detail::SetAndroidLandscapeRemapEnabled()'s own doc comment).
             const Microsoft::Xna::Framework::Vector3 rotationRate =
-                ConvertAndroidGyroscopeToXnaLandscape(x, y, z);
+                Detail::IsAndroidLandscapeRemapEnabled()
+                    ? ConvertAndroidGyroscopeToXnaLandscape(x, y, z)
+                    : Microsoft::Xna::Framework::Vector3(x, y, z);
 #else
             const Microsoft::Xna::Framework::Vector3 rotationRate(x, y, z);
 #endif

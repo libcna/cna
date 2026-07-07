@@ -167,7 +167,27 @@ separate bug to investigate (a missing orientation lock), not a gap in this chec
    and remember to update/add a case in `AndroidSensorOrientationTests.cpp` for whatever
    convention turns out to be correct.
 
+**Decision recorded (2026-07-07, Task `ACCEL-008`):** an archived MSDN Magazine article
+plus SDL3's own documentation both state the real WP7 `Accelerometer` never performs this
+remap at all — it always reports the same fixed device-relative frame regardless of
+display orientation. The project maintainer decided to **keep** the existing remap
+(existing CNA games/demos may already depend on it) but mark it explicitly as a
+**deliberate CNA convenience deviation**, not required XNA/WP7 behavior, and add an
+opt-out: `Detail::SetAndroidLandscapeRemapEnabled(false)` makes `Accelerometer`/
+`Gyroscope` report SDL's raw, unremapped, device-fixed axes instead (defaults to `true`).
+If step 2 above is ever re-verified on real hardware and found to disagree with the
+documented convention, that is now a bug in the *opt-in* remap specifically, not evidence
+that the remap should be removed outright — removal was considered and explicitly
+declined. **Not yet applied to `Motion`'s Gravity/DeviceAcceleration/RotationRate**
+(see Section 8, `plan_devices.md` Task `MOTION-011`) — tracked separately since it needs
+its own careful math derivation, not a rushed addition alongside this decision.
+
 ## 2. Gyroscope axis correctness
+
+**Decision recorded (2026-07-07, Task `ACCEL-008`):** same decision as Section 1 above —
+kept enabled by default, now documented as a CNA-only deviation from real WP7 behavior,
+with the same `Detail::SetAndroidLandscapeRemapEnabled(false)` opt-out (shared with
+`Accelerometer`, since both remap through the same `Detail::` function and flag).
 
 **Code under test:** `Gyroscope.cpp`'s `ConvertAndroidGyroscopeToXnaLandscape()` — same
 caveat and same never-physically-verified status as the accelerometer remap above. As
@@ -374,6 +394,20 @@ mapping — is currently a direct, unremapped passthrough, not a rigorously-deri
 basis between Android's world frame and XNA's. Whether this needs the same kind of axis
 remap `Detail::ConvertAndroidPortraitToXnaLandscape()` applies to
 `Accelerometer`/`Gyroscope` is genuinely unknown until tested on a real device.
+
+**Cross-reference (2026-07-07, Task `ACCEL-008` → new Task `MOTION-011`):** `ACCEL-008`
+decided to keep (and now explicitly document + make opt-out-able) the landscape remap for
+`Accelerometer`/`Gyroscope`. `Motion.Gravity`/`DeviceAcceleration`/`DeviceRotationRate` are
+plain device-frame vectors of the same shape (gravity/linear-acceleration/angular-rate),
+so the same remap likely applies to them for consistency — but this was deliberately
+**not** implemented as part of `ACCEL-008` itself: it needs its own fresh verification that
+these particular Android sensor outputs are genuinely portrait-frame-fixed the same way
+the raw accelerometer/gyroscope are (not already partially orientation-corrected by
+Android's own sensor fusion), before blindly reusing the same formula. `Motion.Attitude`
+(the quaternion) is a separate, harder question — a quaternion isn't a plain vector, so
+the same sign-flip remap does not apply to it at all; any fix there needs a real change-
+of-basis derivation, tracked as part of the same open question above, not this checklist
+item. See `plan_devices.md` Task `MOTION-011` for the tracked follow-up.
 
 **Steps:**
 1. On a real Android device, run a game/demo using `Motion`, holding the device flat and
