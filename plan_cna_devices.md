@@ -542,7 +542,7 @@ independent task instead of guessing.
 
 ## Phase 5 — Round 2 additions (`noxna_devices.md` Section 8)
 
-### DEVICES-CNA-011 — `MessageBox` — OPEN
+### DEVICES-CNA-011 — `MessageBox` — CLOSED (2026-07-07)
 
 - **Priority:** Medium (approved by the user 2026-07-07, after `noxna_devices.md`
   Section 8's Round 2 survey; `Monitors`, `Process`, and the pen-device candidate from
@@ -578,6 +578,27 @@ independent task instead of guessing.
   (no real dialog ever shown); full existing suite has zero regressions; clean under
   `devices-asan`/`devices-ubsan`.
 - **Suggested files:** new files only.
+- **Resolution:** Implemented exactly as sketched — `Detail::IMessageBoxBackend`/
+  `Detail::SdlMessageBoxBackend`, `MessageBoxType` enum, and `MessageBox` as a
+  process-wide swappable-backend static dispatcher mirroring `FileDialog`'s shape
+  (not `SystemTray`'s constructor-injection shape — no persistent instance here).
+  `getIsSupportedProperty()` is unconditionally `true`, matching the platform survey
+  (real backend on every video backend this project vendors, no exclusions needed).
+  4 tests in `MessageBoxTests.cpp`, fake backend used exclusively — no real dialog was
+  ever shown during development or test runs.
+  - **Unrelated, pre-existing build break found and fixed while building `CnaTests`:**
+    `src/Microsoft/Xna/Framework/GamerServices/GamerProfile.cpp` failed to compile —
+    `System::Globalization::RegionInfo::CurrentRegion()` no longer exists in the
+    vendored `sharp-runtime` dependency (renamed to `getCurrentRegionProperty()` by
+    an unrelated, concurrent upstream commit, matching this project's own
+    `getXProperty()` SharpRuntime convention). Fixed with a one-line call-site update,
+    committed separately from this task since it has nothing to do with `MessageBox`.
+  - Build: `CNA` and `CnaTests` both build cleanly under `CNA_DEVICES=ON`. Full suite:
+    3368 tests, 3366 passed, 2 pre-existing expected skips, **zero regressions**.
+    `CNA::Devices` filter (all 9 suites, including the new `MessageBoxTests`): 40/40
+    pass in 0ms. Re-ran the same filter under `devices-asan`
+    (`ASAN_OPTIONS=detect_leaks=1`) and `devices-ubsan`: both exit code `0`, zero
+    reports.
 
 ---
 
@@ -592,6 +613,20 @@ next independent task, per the user's explicit instruction.)*
 ## Progress log
 
 *(Updated after each task closes — newest first.)*
+
+- **2026-07-07 — DEVICES-CNA-011 CLOSED.** `CNA::Devices::MessageBox` implemented
+  (`Detail::IMessageBoxBackend`/`SdlMessageBoxBackend`, `MessageBoxType`), 4 tests,
+  fake backend used exclusively (the real backend blocks on a modal OS dialog, same
+  incident class as `FileDialog`'s `zenity` issue — never triggered here).
+  `getIsSupportedProperty()` unconditionally `true` — best cross-platform reach of any
+  `CNA::Devices` capability so far. **Found and fixed an unrelated, pre-existing build
+  break** while building `CnaTests`: `GamerProfile.cpp` called
+  `RegionInfo::CurrentRegion()`, renamed to `getCurrentRegionProperty()` by a
+  concurrent, unrelated upstream `sharp-runtime` commit — fixed with a one-line
+  call-site update, committed separately from this task. Full suite 3368/3368 (3366
+  pass + 2 expected skips), zero regressions; `CNA::Devices` filter 40/40 in 0ms;
+  clean under both `devices-asan` and `devices-ubsan`. **This closes Phase 5 and
+  every currently-open task in `plan_cna_devices.md`.**
 
 - **2026-07-07 — User reviewed Round 2 (`noxna_devices.md` Section 8) and decided.**
   `MessageBox`: approved, opened as `DEVICES-CNA-011` (Phase 5) and now being
