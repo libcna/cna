@@ -188,6 +188,17 @@ TEST_F(TextureCubeTest, SetDataRectWithinBoundsDoesNotThrow)
     EXPECT_NO_THROW(tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1));
 }
 
+// Task 913: elementCount must cover the full requested region (w*h) — previously unvalidated,
+// so a too-small elementCount caused the backend to write/read past the caller-supplied buffer
+// (confirmed via a live heap-corruption crash while building Task 663's DDS test fixture).
+TEST_F(TextureCubeTest, SetDataRectElementCountLessThanRegionThrowsOutOfRange)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    Color buf[1] = { Color(1, 2, 3, 4) };
+    const Rectangle rect(0, 0, 2, 2); // 4 texels requested, only 1 element provided
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1), std::out_of_range);
+}
+
 // -----------------------------------------------------------------------
 // Mip-level dimension bug (Task 272): rect=nullptr at level>0 must use the
 // mip-reduced face size (Size>>level), not the full face Size.
@@ -257,6 +268,15 @@ TEST_F(TextureCubeTest, GetDataRectWithinBoundsDoesNotThrow)
     Color buf[1] = { Color(0, 0, 0, 0) };
     const Rectangle rect(0, 0, 1, 1);
     EXPECT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1));
+}
+
+// Task 913: see the identical SetData test above for the full rationale.
+TEST_F(TextureCubeTest, GetDataRectElementCountLessThanRegionThrowsOutOfRange)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    Color buf[1] = { Color(0, 0, 0, 0) };
+    const Rectangle rect(0, 0, 2, 2); // 4 texels requested, only 1 element provided
+    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1), std::out_of_range);
 }
 
 // -----------------------------------------------------------------------

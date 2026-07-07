@@ -94,6 +94,8 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture3D::SetData: level must be >= 0");
         if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
             throw std::out_of_range("Texture3D::SetData: box position/size is invalid");
+        if (elementCount < (right - left) * (bottom - top) * (back - front))
+            throw std::out_of_range("Texture3D::SetData: elementCount is less than the number of voxels in the requested region");
 
         const auto rgba = colorsToRgba(data, startIndex, elementCount);
         SetDataPointerEXT(level, left, top, right, bottom, front, back,
@@ -143,6 +145,8 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture3D::GetData: level must be >= 0");
         if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
             throw std::out_of_range("Texture3D::GetData: box position/size is invalid");
+        if (elementCount < (right - left) * (bottom - top) * (back - front))
+            throw std::out_of_range("Texture3D::GetData: elementCount is less than the number of voxels in the requested region");
         Texture::ValidateGetDataFormat(format_, 4);
 
         if (!backend_) return;

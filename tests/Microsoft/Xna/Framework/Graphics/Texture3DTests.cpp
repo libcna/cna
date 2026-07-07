@@ -195,6 +195,18 @@ TEST_F(Texture3DTest, SetDataBoxWithinBoundsDoesNotThrow)
     EXPECT_NO_THROW(tex.SetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4));
 }
 
+// Task 913: elementCount must cover the full requested region (right-left)*(bottom-top)*
+// (back-front) — previously unvalidated, so a too-small elementCount caused the backend to
+// write/read past the caller-supplied buffer (confirmed via a live heap-corruption crash while
+// building Task 663's DDS test fixture for the analogous TextureCube gap).
+TEST_F(Texture3DTest, SetDataBoxElementCountLessThanRegionThrowsOutOfRange)
+{
+    Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    Color buf[1] = { Color(1, 2, 3, 4) };
+    // Region is 2x2x1=4 voxels; only 1 element provided.
+    EXPECT_THROW(tex.SetData(0, 0, 0, 2, 2, 0, 1, buf, 0, 1), std::out_of_range);
+}
+
 // -----------------------------------------------------------------------
 // SetDataPointerEXT — null-data guard
 // -----------------------------------------------------------------------
@@ -254,6 +266,15 @@ TEST_F(Texture3DTest, GetDataBoxWithinBoundsDoesNotThrow)
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
     EXPECT_NO_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4));
+}
+
+// Task 913: see the identical SetData test above for the full rationale.
+TEST_F(Texture3DTest, GetDataBoxElementCountLessThanRegionThrowsOutOfRange)
+{
+    Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    Color buf[1] = { Color(0, 0, 0, 0) };
+    // Region is 2x2x1=4 voxels; only 1 element provided.
+    EXPECT_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 1, buf, 0, 1), std::out_of_range);
 }
 
 // -----------------------------------------------------------------------

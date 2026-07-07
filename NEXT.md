@@ -517,6 +517,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `TBD` | 913 | **Fixed a genuine memory-safety bug: `TextureCube`/`Texture3D`'s `SetData`/`GetData` region overloads never validated `elementCount` against the actual texel/voxel count being read/written.** Confirmed FNA's real contract by reading its `Texture2D.SetData<T>`/`GetData<T>` source (`elementCount` must be `>=` the region size; extra is allowed and ignored) — CNA's own `Texture2D.cpp` already implements this exact check; `TextureCube` and `Texture3D` were the only 2 sibling classes missing it. Added the identical `elementCount < (region size)` check to all 4 sites (`TextureCube::SetData`/`GetData`, `Texture3D::SetData`/`GetData`), matching `Texture2D.cpp`'s exact message style. 4 new gtest cases across all 3 backends. **Discriminating power independently verified**: reverted both production files and reran — all 4 silently proceeded instead of throwing (the same underlying condition that produced a live heap-corruption crash while building Task 663's DDS fixture, though this smaller repro didn't reliably reproduce the crash itself — undefined behavior, not guaranteed to crash every time); restored and reconfirmed 4/4 PASS. Full regression: `CnaTests` all 3 backends exact baseline match +4, 0 failed. |
 | `105a33aa` | 663 (+913) | **`TextureCube::DDSFromStreamEXT` implemented for real — DDS header parsing (mirrors FNA's `Texture.ParseDDS`) + DXT1/3/5 per-face/per-level decode via the existing `DxtUtil` (already used by `Texture2D::FromStream`), uploaded as `SurfaceFormat::Color`** (CNA's established, already-accepted deviation from FNA's real compressed-GPU-format upload, matching `Texture2D::FromStream`'s own identical precedent — CNA doesn't implement compressed GPU formats end-to-end on any backend). Throws `System::FormatException` for non-cube-map DDS input and `System::NotSupportedException` for malformed/unsupported input, matching FNA's exact exception types. **Found and fixed a real infrastructure gap**: `TextureCube` had no explicit move constructor (a user-declared destructor suppresses the implicit one) and an implicitly-deleted copy ctor (owns a `unique_ptr` backend) — meaning a factory function returning `TextureCube` by value couldn't compile at all without NRVO. Added explicit move ctor/assignment + explicit deleted copy. **Test fixture, per this row's own "build a real DDS cube-map test fixture first" guidance**: `BuildSolidColorCubeDds()` hand-builds a minimal, valid, 4x4 single-mip DXT1 cube-map DDS entirely in memory (no real .dds asset available in this environment) — 6 maximally-distinct, exactly-RGB565-representable solid colours, one per face, each encoded as a single solid DXT1 block. 6 new gtest cases in `TextureCubeTests.cpp`, all 3 backends; the strict per-face colour assertion is EasyGL-only (`#ifdef CNA_BACKEND_EASYGL`) since `TextureCube::GetData` is a known no-op on Vulkan/Bgfx (Task 865) — confirmed directly when an earlier draft of this exact test failed with all-zero readback there. **A second, real, separate memory-safety gap found and NOT fixed, split to new Task 913**: `TextureCube::SetData`/`GetData`'s 6-arg overload never validates `elementCount` against the actual region size (`w*h`) — confirmed via a genuine `free(): invalid pointer` heap-corruption crash from an early, incorrectly-written draft of the new test. **Discriminating power independently verified**: `git stash`-reverted the implementation back to the old 1x1-blank stub (keeping the header/test changes) — all 6 new tests failed exactly as predicted; restored and reconfirmed 6/6 PASS on all 3 backends. Full regression: `CnaTests` all 3 backends exact baseline match +6 new tests, 0 failed. |
 | `23e677fe` | 912 | **Root-caused to an already-documented Bgfx quirk, not a distinct bug — closed via a real fix to test infrastructure, no backend code changed.** Bisected using `rendertarget2d_depth_test.cpp` as the minimal repro (per this row's own suggestion): stripped the 2nd quad, `DepthStencilState::Default`, then replaced the whole `BasicEffect`+`DrawUserPrimitives` RT-fill with a plain `SpriteBatch` fill — still failed identically every time, ruling out every one of this row's own candidate hypotheses. Actual cause: sampling a render target via `SpriteBatch` immediately after filling+unbinding it, with no intervening `bgfx::frame()` boundary, can read back stale/black content on the very first `GetBackBufferData()` call — the exact same already-documented "Bgfx's `GetBackBufferData()` only reliably reflects the first read call per rendered frame" quirk (NEXT.md §5), just never previously triggered by `rendertarget2d_depth_test.cpp` since it was never registered for Bgfx. Confirmed the fix: adding the established retry-until-non-black loop (`bgfx_rendertarget2d_mip_test.cpp`'s own convention) to `rendertarget2d_depth_test.cpp`'s Pass 2 makes the exact original, unmodified test pass correctly and consistently. Applied directly to the shared file (EasyGL/Vulkan unaffected — both already pass on the first iteration) and registered it for Bgfx for the first time (`Bgfx_RenderTarget2D_DepthBuffer`). Full regression: `CnaTests` (Bgfx) 4266/4268 passed, 2 skipped, 0 failed; targeted `ctest -R "RenderTarget\|Mip\|Msaa\|MultiSample"` 57/59 (2 failures are the already-documented `Bgfx_RenderTarget2D_MsaaResolve` Xvfb limitation and `Bgfx_RenderTarget2D_MipChain`, reconfirmed genuinely flaky in this sandbox — 4/5 direct runs pass — pre-existing, unrelated). |
 | `5c37cd66` | 876 | **Verify-only, zero code changes — the bug no longer reproduces.** Rebuilt and reran `examples/vulkan_rendertargetcube_sample_test.cpp` (`Vulkan_RenderTargetCube_SampleAfterUnbind`) completely unmodified while investigating this task's 2 previously-open candidates: it now passes cleanly and consistently (`centre=(0,0,255)`, exact expected blue — 5 repeated direct runs plus a dedicated `ctest -R` invocation, no flakiness). Not independently bisected to an exact fixing commit (would need a from-scratch vendored-submodule build at an older checkout — not worth the cost once the bug is confirmed gone); most likely an incidental side effect of this session's substantial `VulkanRenderTargetCubeBackend` rework for Task 907, though that task's own new fix was gated on `levelCount_ > 1` and this test uses `mipMap=false`, so it isn't an obvious direct cause either. |
@@ -695,7 +696,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Fixed, all 3 backends (backbuffer); RT-pass sub-region still hardcoded on Vulkan/Bgfx | `GraphicsDevice.Viewport` now has real GPU effect on the backbuffer for all 3 backends. Vulkan/Bgfx's RT passes still hardcode each RT's own full size regardless of a custom sub-region `Viewport` (deferred multi-RT-per-frame recording limitation, same shape as their existing RT-pass-scissor gap below). 2D `SpriteBatch` unaffected by `Viewport` on all 3 backends. | Task 880 (done) |
 | Confirmed, real, not fixed, separately found | Vulkan's `RecordCommandBuffer` RT pass hardcodes `vkCmdSetScissor` to each RT's own full size (`VkRect2D rtSc{{0,0},{rtW,rtH}}`), ignoring `scissorEnabled_`/`scissorX_`/etc. entirely — only the backbuffer pass reads the real dynamic scissor state. A custom `ScissorRectangle` therefore has zero effect while rendering into a bound `RenderTarget2D` on Vulkan. Found while scoping Task 880's identical Viewport limitation. | — |
 | Fixed | `TextureCube::DDSFromStreamEXT` now really parses DDS headers and decodes DXT1/3/5 cube-map data (6 faces × mip levels) to `SurfaceFormat::Color`, matching FNA's exception behavior for non-cube/unsupported input. | Task 663 (done) |
-| Confirmed, real, not fixed, genuine memory-safety issue | `TextureCube::SetData`/`GetData`'s 6-arg overload never validates `elementCount` against the actual `w*h` region size — a mismatch causes heap corruption (confirmed via a live `free(): invalid pointer` crash), not a clean exception. Found while building Task 663's DDS test fixture. | Task 913 |
+| Fixed, `TextureCube` and `Texture3D` | `SetData`/`GetData`'s region-taking overloads now validate `elementCount` against the actual texel/voxel count, matching `Texture2D`'s already-correct pattern — a mismatch previously caused heap corruption (confirmed via a live `free(): invalid pointer` crash) instead of a clean exception. | Task 913 (done) |
 | Confirmed, severe, silent failure | `Texture3D`/`TextureCube::GetData` total no-op on Vulkan/Bgfx. | Task 865 |
 | Confirmed, silent failure | `Texture2D::SetData(level>0,...)` no-op on Vulkan/Bgfx; EasyGL renders solid black for mip filters on mip-incomplete textures. | Task 867 |
 | Confirmed, architectural, not fixed | `Texture3D`/`TextureCube` can't be sampled in any shader — don't inherit `Texture`. | Task 863 |
@@ -884,20 +885,16 @@ new findings (Tasks 825–828, 863–882, 889–895, 902–904, 911–912).
     render-pass *and* pipeline cache across 10+ `GetOrCreatePipelineXXX` functions — a real,
     large, systemic change, same class as Task 910 — needs its own scoping pass before starting.
 
-3. **Task 913 — validate `elementCount` against the actual region size in
-    `TextureCube::SetData`/`GetData`'s 6-arg overload** (currently causes heap corruption on
-    mismatch instead of a clean exception — found while building Task 663's DDS test fixture).
-
-4. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+3. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
     (`vkCmdCopyImageToBuffer` + staging buffer, mirroring the existing upload path in reverse).
 
-5. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
+4. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
     `Texture3D`/`TextureCube` (confirm with a failing test first, per Task 276's methodology).
 
-6. **Task 903 — implement `RenderTargetCube` MSAA on Vulkan and Bgfx** (split out of Task 879 —
+5. **Task 903 — implement `RenderTargetCube` MSAA on Vulkan and Bgfx** (split out of Task 879 —
     real XNA API surface, needs the same per-RT MSAA treatment applied per cube face).
 
-7. **Task 902 — implement a real `GraphicsDevice.Reset()`** so `GraphicsDeviceManager` preference
+6. **Task 902 — implement a real `GraphicsDevice.Reset()`** so `GraphicsDeviceManager` preference
     changes (e.g. `PreferMultiSampling`) actually reach backend construction, not just window
     size/fullscreen. Large, architecturally risky (touches `Game`/`GraphicsDeviceManager`/
     `GraphicsDevice`'s core lifecycle, needs `DeviceResetting`/`DeviceReset` events on every live
@@ -1024,14 +1021,14 @@ fidelity on EasyGL/Bgfx, including new `RenderTargetCube` depth support on Bgfx)
 and found to no longer reproduce at all, closed verify-only), Task 912 (Bgfx render-target
 sampling bug — bisected and root-caused to the already-documented Bgfx "first read per rendered
 frame" quirk, not a distinct bug; fixed via the established retry-until-non-black convention,
-`rendertarget2d_depth_test.cpp` now registered for Bgfx too), and Task 663
+`rendertarget2d_depth_test.cpp` now registered for Bgfx too), Task 663
 (`TextureCube::DDSFromStreamEXT` — real DDS header parsing + DXT1/3/5 decode, tested against a
-hand-built in-memory DDS fixture); and split off two new findings: Task 911 (Vulkan's own per-RT
-depth-format fidelity — real architectural constraint, same class as Task 910) and Task 913
-(`TextureCube::SetData`/`GetData`'s 6-arg overload doesn't validate `elementCount` against the
-region size, causing heap corruption on mismatch). Next up: Task 910/911 (both already scoped,
-need their own dedicated scoping pass before starting), Task 913 (a well-scoped, concrete
-validation fix), or continue down §8's backlog (Task 865, 864, 903).
+hand-built in-memory DDS fixture), and Task 913 (`TextureCube`/`Texture3D`'s `SetData`/`GetData`
+not validating `elementCount` against the region size, a genuine heap-corruption bug found while
+building Task 663's fixture — fixed by mirroring `Texture2D`'s already-correct pattern); and split
+off one new finding: Task 911 (Vulkan's own per-RT depth-format fidelity — real architectural
+constraint, same class as Task 910). Next up: Task 910/911 (both already scoped, need their own
+dedicated scoping pass before starting), or continue down §8's backlog (Task 865, 864, 903).
 
 **Standing instructions (still in force):**
 - Commit AND push after every finished task without waiting to be asked.
