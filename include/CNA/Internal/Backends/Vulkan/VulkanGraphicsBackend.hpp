@@ -655,6 +655,19 @@ namespace CNA::Internal::Backends::Vulkan
         VkImage               defaultWhiteCubeImage_  = VK_NULL_HANDLE;
         VkDeviceMemory        defaultWhiteCubeMem_    = VK_NULL_HANDLE;
         VkImageView           defaultWhiteCubeView_   = VK_NULL_HANDLE;
+        // BasicEffect lit-textured resources (Task 897: DirectionalLight1/2 + EmissiveColor)
+        VkDescriptorSetLayout descriptorSetLayoutLitTextured_ = VK_NULL_HANDLE;
+        VkDescriptorPool      descriptorPoolLitTextured_      = VK_NULL_HANDLE;
+        VkPipelineLayout      pipelineLayoutLitTextured3D_    = VK_NULL_HANDLE;
+        std::unordered_map<uint64_t, VkPipeline>             pipelinesLitTextured3D_;
+        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+                   MaxFramesInFlight>                        litTexturedDescSets_;
+        // Per-frame UBO ring buffer for light1/light2/emissive (5×vec4 = 80 bytes used, padded to 256)
+        static constexpr uint32_t kLitTexturedUBOStride   = 256;
+        static constexpr uint32_t kLitTexturedUBOMaxDraws = 512;
+        std::array<VkBuffer,       MaxFramesInFlight> litTexturedUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> litTexturedUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> litTexturedUBOPtr_ = {};
         // SkinnedEffect resources
         VkDescriptorSetLayout descriptorSetLayoutSkinned_  = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPoolSkinned_       = VK_NULL_HANDLE;
@@ -741,6 +754,9 @@ namespace CNA::Internal::Backends::Vulkan
             bool                    useSkinned        = false; // true = Skinned3D pipeline
             std::vector<float>      boneMatrices;              // up to 72 mat4s = 1152 floats
             VkDescriptorSet         skinnedDescSet    = VK_NULL_HANDLE;
+            bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
+            float                   litUboData[20]    = {};    // 5×vec4 = 80 bytes: light1/2 dir+diffuse, emissive
+            VkDescriptorSet         litTexturedDescSet = VK_NULL_HANDLE;
             int32_t                 baseVertex        = 0;     // vertexOffset for vkCmdDrawIndexed
             bool                    useInstanced      = false; // true = Instanced3D pipeline
             std::vector<uint8_t>    instVbData;                // per-instance bytes (instanceCount × stride)
@@ -878,6 +894,16 @@ namespace CNA::Internal::Backends::Vulkan
         void       EnsureDefaultWhiteTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
+        // BasicEffect lit-textured path (Task 897) — DirectionalLight1/2 + EmissiveColor,
+        // forwarded via a small UBO (set=0,binding=1) alongside the unchanged 128-byte PC
+        // (set=0,binding=0 stays the texture sampler; PC content unchanged from FillExtPushConst).
+        void       EnsureLitTexturedResources();
+        VkDescriptorSet GetOrCreateLitTexturedDescSet(uint32_t frameIdx, VkImageView view2D);
+        VkPipeline GetOrCreatePipelineLitTextured3D(VkPrimitiveTopology,
+                                                     bool depthTest, bool depthWrite,
+                                                     bool blend, int cullMode,
+                                                     uint32_t colorAttachmentCount = 1, bool wireframe = false,
+                                                     bool msaa = false);
         // --- Instanced 3D pipeline ---
         VkPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,

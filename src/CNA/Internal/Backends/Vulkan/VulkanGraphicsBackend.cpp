@@ -799,6 +799,14 @@ namespace CNA::Internal::Backends::Vulkan
             if (envMapUBO_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, envMapUBO_[i], nullptr);     envMapUBO_[i]    = VK_NULL_HANDLE; }
             if (envMapUBOMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, envMapUBOMem_[i], nullptr);    envMapUBOMem_[i] = VK_NULL_HANDLE; }
         }
+        for (auto& [k, pipe] : pipelinesLitTextured3D_)
+            if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
+        pipelinesLitTextured3D_.clear();
+        for (auto& cache : litTexturedDescSets_) cache.clear(); // freed with pool below
+        for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
+            if (litTexturedUBO_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, litTexturedUBO_[i], nullptr);    litTexturedUBO_[i]    = VK_NULL_HANDLE; }
+            if (litTexturedUBOMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, litTexturedUBOMem_[i], nullptr);   litTexturedUBOMem_[i] = VK_NULL_HANDLE; }
+        }
         for (auto& [k, pipe] : pipelinesSkinned3D_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelinesSkinned3D_.clear();
@@ -831,6 +839,9 @@ namespace CNA::Internal::Backends::Vulkan
         if (pipelineLayoutSkinned3D_    != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutSkinned3D_, nullptr);    pipelineLayoutSkinned3D_    = VK_NULL_HANDLE; }
         if (descriptorPoolSkinned_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPoolSkinned_, nullptr);      descriptorPoolSkinned_      = VK_NULL_HANDLE; }
         if (descriptorSetLayoutSkinned_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayoutSkinned_, nullptr); descriptorSetLayoutSkinned_ = VK_NULL_HANDLE; }
+        if (pipelineLayoutLitTextured3D_    != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutLitTextured3D_, nullptr);    pipelineLayoutLitTextured3D_    = VK_NULL_HANDLE; }
+        if (descriptorPoolLitTextured_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPoolLitTextured_, nullptr);      descriptorPoolLitTextured_      = VK_NULL_HANDLE; }
+        if (descriptorSetLayoutLitTextured_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayoutLitTextured_, nullptr); descriptorSetLayoutLitTextured_ = VK_NULL_HANDLE; }
         if (pipelineLayout2D_      != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout2D_, nullptr);       pipelineLayout2D_      = VK_NULL_HANDLE; }
         for (auto fb : swapchainFramebuffers_)
             if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, fb, nullptr);
@@ -3295,6 +3306,223 @@ namespace CNA::Internal::Backends::Vulkan
         world.ToColumnMajor(pc + 16); // [16..31]: World
     }
 
+    // ---- BasicEffect lit-textured resources (Task 897) ----
+    // DirectionalLight1/DirectionalLight2/EmissiveColor forwarding, added alongside the
+    // unchanged 128-byte PC (still filled by FillExtPushConst, same as strides 20/24) since
+    // that content is shared/verified — only a new UBO binding is added for the extra data.
+
+    void VulkanGraphicsBackend::EnsureLitTexturedResources()
+    {
+        if (descriptorSetLayoutLitTextured_ != VK_NULL_HANDLE) return;
+
+        // binding=0: sampler2D (fragment), binding=1: light1/2+emissive UBO dynamic (fragment).
+        VkDescriptorSetLayoutBinding bindings[2]{};
+        bindings[0].binding         = 0;
+        bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings[1].binding         = 1;
+        bindings[1].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutCreateInfo li{};
+        li.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        li.bindingCount = 2; li.pBindings = bindings;
+        if (vkCreateDescriptorSetLayout(device_, &li, nullptr, &descriptorSetLayoutLitTextured_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateDescriptorSetLayout (LitTextured) failed");
+
+        const uint32_t maxSets = 512u * MaxFramesInFlight;
+        VkDescriptorPoolSize ps[2]{};
+        ps[0] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets };
+        ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
+        VkDescriptorPoolCreateInfo pi{};
+        pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pi.maxSets       = maxSets;
+        pi.poolSizeCount = 2; pi.pPoolSizes = ps;
+        if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPoolLitTextured_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateDescriptorPool (LitTextured) failed");
+
+        // Pipeline layout: same 128-byte PC as pipelineLayoutExt3D_ (unchanged content/fill
+        // function) + the new lit-textured descriptor set.
+        VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
+        VkPipelineLayoutCreateInfo pli{};
+        pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
+        pli.setLayoutCount = 1; pli.pSetLayouts = &descriptorSetLayoutLitTextured_;
+        if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayoutLitTextured3D_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreatePipelineLayout (LitTextured3D) failed");
+
+        const VkDeviceSize uboSize = kLitTexturedUBOStride * kLitTexturedUBOMaxDraws;
+        for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
+            if (litTexturedUBO_[i] == VK_NULL_HANDLE) {
+                CreateBuffer(uboSize,
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    litTexturedUBO_[i], litTexturedUBOMem_[i], &litTexturedUBOPtr_[i]);
+            }
+        }
+    }
+
+    VkDescriptorSet VulkanGraphicsBackend::GetOrCreateLitTexturedDescSet(
+        uint32_t frameIdx, VkImageView view2D)
+    {
+        EnsureLitTexturedResources();
+        if (view2D == VK_NULL_HANDLE) view2D = defaultWhiteView_;
+
+        const uint64_t key = reinterpret_cast<uint64_t>(view2D);
+        auto& cache = litTexturedDescSets_[frameIdx];
+        auto it = cache.find(key);
+        if (it != cache.end()) return it->second;
+
+        VkDescriptorSetAllocateInfo ai{};
+        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        ai.descriptorPool     = descriptorPoolLitTextured_;
+        ai.descriptorSetCount = 1;
+        ai.pSetLayouts        = &descriptorSetLayoutLitTextured_;
+        VkDescriptorSet ds = VK_NULL_HANDLE;
+        if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
+            return VK_NULL_HANDLE;
+
+        VkDescriptorImageInfo imgInfo{ defaultSampler_, view2D, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+
+        VkDescriptorBufferInfo bufInfo{};
+        bufInfo.buffer = litTexturedUBO_[frameIdx];
+        bufInfo.offset = 0;
+        bufInfo.range  = 80;  // size of one LitLightParams block in the shader
+
+        VkWriteDescriptorSet writes[2]{};
+        writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[0].dstSet          = ds;
+        writes[0].dstBinding      = 0;
+        writes[0].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[0].descriptorCount = 1;
+        writes[0].pImageInfo      = &imgInfo;
+        writes[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[1].dstSet          = ds;
+        writes[1].dstBinding      = 1;
+        writes[1].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        writes[1].descriptorCount = 1;
+        writes[1].pBufferInfo     = &bufInfo;
+        vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+
+        cache[key] = ds;
+        return ds;
+    }
+
+    VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineLitTextured3D(
+        VkPrimitiveTopology topo,
+        bool depthTest, bool depthWrite, bool blend, int cullMode,
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+    {
+        EnsureLitTexturedResources();
+
+        constexpr std::size_t kLitStride = 32;
+        uint64_t key = MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        auto it = pipelinesLitTextured3D_.find(key);
+        if (it != pipelinesLitTextured3D_.end()) return it->second;
+
+        using namespace Shaders;
+        VkShaderModule vert = CreateShaderModule(kLitTextured3dVertSpv, kLitTextured3dVertSpv_size);
+        VkShaderModule frag = CreateShaderModule(kLitTextured3dFragSpv, kLitTextured3dFragSpv_size);
+
+        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(kLitStride), VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[3]{};
+        attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
+        attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
+        attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    24 };   // aUV
+
+        VkPipelineVertexInputStateCreateInfo vis{};
+        vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexAttributeDescriptionCount = 3; vis.pVertexAttributeDescriptions = attrs;
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                      VK_SHADER_STAGE_VERTEX_BIT,   vert, "main", nullptr };
+        stages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                      VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr };
+
+        VkPipelineInputAssemblyStateCreateInfo ias{};
+        ias.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ias.topology = topo;
+
+        VkPipelineViewportStateCreateInfo vpst{};
+        vpst.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vpst.viewportCount = 1; vpst.scissorCount = 1;
+
+        VkCullModeFlags vkCull = VK_CULL_MODE_NONE;
+        if (cullMode == 1) vkCull = VK_CULL_MODE_FRONT_BIT;
+        if (cullMode == 2) vkCull = VK_CULL_MODE_BACK_BIT;
+
+        VkPipelineRasterizationStateCreateInfo rs{};
+        rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.polygonMode = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+        rs.cullMode    = vkCull;
+        rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
+        rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;  // dynamic; values set via vkCmdSetDepthBias per draw
+
+        VkPipelineMultisampleStateCreateInfo ms{};
+        ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineDepthStencilStateCreateInfo ds{};
+        ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
+        ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
+        ds.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
+
+        const uint32_t nColor = std::max(colorAttachmentCount, 1u);
+        std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
+        for (auto& ba : blendAttachments) {
+            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
+            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            ba.colorBlendOp        = VK_BLEND_OP_ADD;
+            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+        }
+        VkPipelineColorBlendStateCreateInfo cbs{};
+        cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
+
+        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
+        VkPipelineDynamicStateCreateInfo dyn{};
+        dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+
+        VkRenderPass rp = (colorAttachmentCount > 1)
+                          ? GetOrCreateMRTRenderPass(colorAttachmentCount)
+                          : (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
+
+        VkGraphicsPipelineCreateInfo pci{};
+        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pci.stageCount          = 2; pci.pStages          = stages;
+        pci.pVertexInputState   = &vis;
+        pci.pInputAssemblyState = &ias;
+        pci.pViewportState      = &vpst;
+        pci.pRasterizationState = &rs;
+        pci.pMultisampleState   = &ms;
+        pci.pDepthStencilState  = &ds;
+        pci.pColorBlendState    = &cbs;
+        pci.pDynamicState       = &dyn;
+        pci.layout              = pipelineLayoutLitTextured3D_;
+        pci.renderPass          = rp;
+
+        VkPipeline pipe = VK_NULL_HANDLE;
+        vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &pipe);
+        pipelinesLitTextured3D_[key] = pipe;
+
+        vkDestroyShaderModule(device_, vert, nullptr);
+        vkDestroyShaderModule(device_, frag, nullptr);
+        return pipe;
+    }
+
     // ---- SkinnedEffect resources (Task 109) ----
 
     void VulkanGraphicsBackend::EnsureSkinnedResources()
@@ -4035,6 +4263,7 @@ namespace CNA::Internal::Backends::Vulkan
         // UBO slot counters (reset once per frame, shared across all RT passes).
         uint32_t envMapUBOSlot  = 0;
         uint32_t skinnedUBOSlot = 0;
+        uint32_t litTexturedUBOSlot = 0;
 
         // Helper: draw all pending 3D draws for a specific RT into the current render pass.
         auto draw3DFor = [&](VulkanRTSource* targetRT)
@@ -4095,6 +4324,10 @@ namespace CNA::Internal::Backends::Vulkan
                     pipe = GetOrCreatePipelineInstanced3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
                                                           draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
+                } else if (draw.useLitTextured) {
+                    pipe = GetOrCreatePipelineLitTextured3D(draw.topology,
+                                                            draw.depthTest, draw.depthWrite,
+                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
                 } else if (draw.useExtParams) {
                     pipe = GetOrCreatePipelineExt3D(draw.stride, draw.topology,
                                                     draw.depthTest, draw.depthWrite,
@@ -4165,6 +4398,25 @@ namespace CNA::Internal::Backends::Vulkan
                     vkCmdPushConstants(cb, pipelineLayoutExt3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                        0, 128, draw.pushConst);
+                } else if (draw.useLitTextured) {
+                    vkCmdPushConstants(cb, pipelineLayoutLitTextured3D_,
+                                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                       0, 128, draw.pushConst);
+                    // No defaultWhiteDescSet_ fallback here (unlike useExtParams/useAlphaTest/
+                    // useDualTexture) -- that set belongs to the simple 1-binding
+                    // descriptorSetLayout_, structurally incompatible with this pipeline's
+                    // 2-binding (sampler+UBO) layout. Mirrors useEnvMap/useSkinned's own pattern.
+                    if (draw.litTexturedDescSet != VK_NULL_HANDLE && litTexturedUBOPtr_[currentFrame_]) {
+                        const uint32_t slot   = litTexturedUBOSlot++;
+                        const uint32_t uboOff = slot * kLitTexturedUBOStride;
+                        if (uboOff + 80 <= kLitTexturedUBOStride * kLitTexturedUBOMaxDraws) {
+                            std::memcpy(static_cast<uint8_t*>(litTexturedUBOPtr_[currentFrame_]) + uboOff,
+                                        draw.litUboData, 80);
+                        }
+                        vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                pipelineLayoutLitTextured3D_, 0, 1,
+                                                &draw.litTexturedDescSet, 1, &uboOff);
+                    }
                 } else if (draw.useExtParams) {
                     vkCmdPushConstants(cb, pipelineLayoutExt3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -4699,6 +4951,11 @@ namespace CNA::Internal::Backends::Vulkan
         const bool needsDualTex    = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap     = params.envMapping  && !needsAlphaTest && !needsDualTex;
         const bool needsSkinned    = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
+        // stride==32 always uses the lit-textured shader (BasicEffect's VertexPositionNormalTexture
+        // path, lit or not — the shader itself branches on lightingEnabled), unless another
+        // effect (alpha test/dual tex/env map/skinned) takes priority for this stride.
+        const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
+                                     && !needsEnvMap && !needsSkinned;
 
         Pending3DDraw d{};
         const Matrix wvp = world * view * projection;
@@ -4709,7 +4966,7 @@ namespace CNA::Internal::Backends::Vulkan
             FillEnvMapPushConst(d.envMapPC, wvp, world);
             d.useEnvMap = true;
         } else {
-            FillExtPushConst(d.pushConst, wvp, params);  // covers ext and skinned (same PC)
+            FillExtPushConst(d.pushConst, wvp, params);  // covers ext, lit-textured, and skinned (same PC)
         }
 
         d.vbData.resize(drawCount * stride);
@@ -4731,9 +4988,11 @@ namespace CNA::Internal::Backends::Vulkan
         d.stride         = stride;
         // stride==16 (VertexPositionColor) uses the colored3d pipeline (GetOrCreatePipeline3D)
         // which expects only 64-byte MVP push constants; Ext pipeline doesn't handle stride=16.
-        d.useExtParams   = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned && stride != 16;
+        d.useExtParams   = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned
+                         && !needsLitTextured && stride != 16;
         d.useDualTexture = needsDualTex;
         d.useSkinned     = needsSkinned;
+        d.useLitTextured = needsLitTextured;
         if (needsSkinned) {
             EnsureSkinnedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -4770,6 +5029,23 @@ namespace CNA::Internal::Backends::Vulkan
             VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
             VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
             d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1, slotSamplers_[0], slotSamplers_[1]);
+        } else if (needsLitTextured) {
+            EnsureLitTexturedResources();
+            const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+            VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
+            d.litTexturedDescSet = GetOrCreateLitTexturedDescSet(currentFrame_, view);
+            // Pack UBO data: light1Dir+pad, light1Diffuse+pad, light2Dir+pad, light2Diffuse+pad,
+            // emissiveColor+pad.
+            d.litUboData[0]  = params.light1Dir[0];     d.litUboData[1]  = params.light1Dir[1];
+            d.litUboData[2]  = params.light1Dir[2];     d.litUboData[3]  = 0.f;
+            d.litUboData[4]  = params.light1Diffuse[0]; d.litUboData[5]  = params.light1Diffuse[1];
+            d.litUboData[6]  = params.light1Diffuse[2]; d.litUboData[7]  = 0.f;
+            d.litUboData[8]  = params.light2Dir[0];     d.litUboData[9]  = params.light2Dir[1];
+            d.litUboData[10] = params.light2Dir[2];     d.litUboData[11] = 0.f;
+            d.litUboData[12] = params.light2Diffuse[0]; d.litUboData[13] = params.light2Diffuse[1];
+            d.litUboData[14] = params.light2Diffuse[2]; d.litUboData[15] = 0.f;
+            d.litUboData[16] = params.emissiveColor[0]; d.litUboData[17] = params.emissiveColor[1];
+            d.litUboData[18] = params.emissiveColor[2]; d.litUboData[19] = 0.f;
         } else {
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
@@ -4794,6 +5070,8 @@ namespace CNA::Internal::Backends::Vulkan
         const bool needsDualTex   = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap    = params.envMapping  && !needsAlphaTest && !needsDualTex;
         const bool needsSkinned   = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
+        const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
+                                     && !needsEnvMap && !needsSkinned;
 
         Pending3DDraw d{};
         const Matrix wvp = world * view * projection;
@@ -4804,7 +5082,7 @@ namespace CNA::Internal::Backends::Vulkan
             FillEnvMapPushConst(d.envMapPC, wvp, world);
             d.useEnvMap = true;
         } else {
-            FillExtPushConst(d.pushConst, wvp, params);  // covers ext and skinned (same PC)
+            FillExtPushConst(d.pushConst, wvp, params);  // covers ext, lit-textured, and skinned (same PC)
         }
 
         d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
@@ -4829,9 +5107,11 @@ namespace CNA::Internal::Backends::Vulkan
         d.indexType     = ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
         d.rt            = currentRT_;
         d.stride        = stride;
-        d.useExtParams  = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned && stride != 16;
+        d.useExtParams  = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned
+                        && !needsLitTextured && stride != 16;
         d.useDualTexture = needsDualTex;
         d.useSkinned     = needsSkinned;
+        d.useLitTextured = needsLitTextured;
         if (needsSkinned) {
             EnsureSkinnedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -4867,6 +5147,21 @@ namespace CNA::Internal::Backends::Vulkan
             VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
             VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
             d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1, slotSamplers_[0], slotSamplers_[1]);
+        } else if (needsLitTextured) {
+            EnsureLitTexturedResources();
+            const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+            VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
+            d.litTexturedDescSet = GetOrCreateLitTexturedDescSet(currentFrame_, view);
+            d.litUboData[0]  = params.light1Dir[0];     d.litUboData[1]  = params.light1Dir[1];
+            d.litUboData[2]  = params.light1Dir[2];     d.litUboData[3]  = 0.f;
+            d.litUboData[4]  = params.light1Diffuse[0]; d.litUboData[5]  = params.light1Diffuse[1];
+            d.litUboData[6]  = params.light1Diffuse[2]; d.litUboData[7]  = 0.f;
+            d.litUboData[8]  = params.light2Dir[0];     d.litUboData[9]  = params.light2Dir[1];
+            d.litUboData[10] = params.light2Dir[2];     d.litUboData[11] = 0.f;
+            d.litUboData[12] = params.light2Diffuse[0]; d.litUboData[13] = params.light2Diffuse[1];
+            d.litUboData[14] = params.light2Diffuse[2]; d.litUboData[15] = 0.f;
+            d.litUboData[16] = params.emissiveColor[0]; d.litUboData[17] = params.emissiveColor[1];
+            d.litUboData[18] = params.emissiveColor[2]; d.litUboData[19] = 0.f;
         } else {
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;

@@ -2336,6 +2336,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 897: BasicEffect pixel test — DirectionalLight1/2 + EmissiveColor on the lit path
+        cna_vulkan_test(cna_test_vulkan_basiceffect_multilight_emissive
+                        examples/vulkan_basiceffect_multilight_emissive_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_MultiLightEmissive
+                 COMMAND cna_test_vulkan_basiceffect_multilight_emissive)
+        set_tests_properties(Vulkan_BasicEffect_MultiLightEmissive PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
         cna_vulkan_test(cna_test_vulkan_basiceffect_emissive
                         examples/vulkan_basiceffect_emissive_test.cpp)
