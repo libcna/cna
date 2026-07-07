@@ -34,7 +34,7 @@
 ## Phase P3 — powerful but platform-narrow / manual actuation
 - [ ] **N-013 `CNA::Input::Haptics`** — SDL_haptic force-feedback (constant/periodic/ramp/condition/custom + gain/autocenter).
 - [x] **N-014 `TextInputEXT::TextEditingCandidatesEXT`** — IME candidate lists (`SDL_EVENT_TEXT_EDITING_CANDIDATES`). Input-type hints -> N-014b.
-- [ ] **N-014b `TextInputEXT` input-type hints** — `StartTextInputWithTypeEXT(TextInputTypeEXT)` (text/URL/email/number/password) via `SDL_StartTextInputWithProperties` (split off from N-014).
+- [x] **N-014b `TextInputEXT` input-type hints** — `StartTextInputWithTypeEXT(TextInputTypeEXT)` (text/URL/email/number/password) via `SDL_StartTextInputWithProperties` (split off from N-014).
 - [x] **N-015 `CNA::Input::Sensors`** — device-level accelerometer/gyro + enumeration (`SDL_sensor`) via seam.
 - [x] **N-016 `Mouse` capture / global-position EXT** — `SetCaptureEXT`, `GetGlobalPositionEXT`, `WarpGlobalEXT` via seam.
 - [x] **N-017 `CNA::Input::InputDevices`** — enumeration (mice/keyboards/touch id+name) via seam. Hot-plug events -> N-017b.
@@ -51,6 +51,22 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-014b done (2026-07-07):** `TextInputEXT::StartTextInputWithTypeEXT(CNA::Input::TextInputTypeEXT)`
+  — input-type hint (text/name/email/username/password-hidden/password-visible/number/number-password-
+  hidden/number-password-visible) for the on-screen keyboard / IME, completing the N-014 split.  New
+  enum header `include/CNA/Input/TextInputType.hpp` (`TextInputTypeEXT`, mirrors `SDL_TextInputType`
+  1:1). No new seam: kept `TextInputEXT`'s existing direct-SDL style (matches `StartTextInput`) —
+  builds an `SDL_PropertiesID` via `SDL_CreateProperties`/`SDL_SetNumberProperty(...,
+  SDL_PROP_TEXTINPUT_TYPE_NUMBER, ...)`, calls `SDL_StartTextInputWithProperties`, then
+  `SDL_DestroyProperties`; same null-window guard as `StartTextInput` (no window handle -> no-op).
+  Enum-to-SDL mapping is a private switch in the .cpp anonymous namespace. Pinned the method in the
+  freeze test + documented in `docs/input-public-api-frozen.md` (TextInputEXT's whole-class-NOXNA
+  status still means member-level EXT tagging, matching N-014's precedent). Tests: no-window safe-
+  no-op across all 9 hint values, and a real-hidden-window round-trip (Xvfb-gated, `GTEST_SKIP`
+  fallback like the existing `StartStopAndIsActiveRoundTripThroughRealWindow`) exercising
+  `StartTextInputWithTypeEXT`/`IsTextInputActive`/`StopTextInput` for all 9 values. `ctest -L input`
+  green; ASan-clean. Files: TextInputType.hpp (new), TextInputEXT.hpp/.cpp,
+  PublicApiInputSignatureFreezeTests.cpp, input-public-api-frozen.md, TextInputEXTTests.cpp.
 - **N-014 done (2026-07-07):** `TextInputEXT::TextEditingCandidatesEXT` — a
   `MulticastAction<const vector<string>&, int, bool>` (candidates, selected index, horizontal) for
   SDL3's IME candidate list (CJK). The bridge decodes `SDL_EVENT_TEXT_EDITING_CANDIDATES`

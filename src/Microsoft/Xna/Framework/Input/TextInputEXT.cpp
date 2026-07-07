@@ -10,6 +10,23 @@ namespace
     {
         return reinterpret_cast<SDL_Window*>(handle);
     }
+
+    SDL_TextInputType ToSdlTextInputType(CNA::Input::TextInputTypeEXT type)
+    {
+        switch (type)
+        {
+            case CNA::Input::TextInputTypeEXT::Text:                 return SDL_TEXTINPUT_TYPE_TEXT;
+            case CNA::Input::TextInputTypeEXT::TextName:             return SDL_TEXTINPUT_TYPE_TEXT_NAME;
+            case CNA::Input::TextInputTypeEXT::TextEmail:            return SDL_TEXTINPUT_TYPE_TEXT_EMAIL;
+            case CNA::Input::TextInputTypeEXT::TextUsername:         return SDL_TEXTINPUT_TYPE_TEXT_USERNAME;
+            case CNA::Input::TextInputTypeEXT::TextPasswordHidden:   return SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_HIDDEN;
+            case CNA::Input::TextInputTypeEXT::TextPasswordVisible:  return SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_VISIBLE;
+            case CNA::Input::TextInputTypeEXT::Number:                return SDL_TEXTINPUT_TYPE_NUMBER;
+            case CNA::Input::TextInputTypeEXT::NumberPasswordHidden:  return SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_HIDDEN;
+            case CNA::Input::TextInputTypeEXT::NumberPasswordVisible: return SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_VISIBLE;
+        }
+        return SDL_TEXTINPUT_TYPE_TEXT;
+    }
 }
 
 namespace Microsoft::Xna::Framework::Input
@@ -67,6 +84,17 @@ namespace Microsoft::Xna::Framework::Input
         if (SDL_Window* window = ToSdlWindow(windowHandle_))
         {
             SDL_StopTextInput(window);
+        }
+    }
+
+    void TextInputEXT::StartTextInputWithTypeEXT(CNA::Input::TextInputTypeEXT type)
+    {
+        if (SDL_Window* window = ToSdlWindow(windowHandle_))
+        {
+            SDL_PropertiesID props = SDL_CreateProperties();
+            SDL_SetNumberProperty(props, SDL_PROP_TEXTINPUT_TYPE_NUMBER, ToSdlTextInputType(type));
+            SDL_StartTextInputWithProperties(window, props);
+            SDL_DestroyProperties(props);
         }
     }
 

@@ -361,6 +361,8 @@ namespace
     [[maybe_unused]] constexpr auto z_TextInputEXT_StartTextInput_6 = static_cast<void(*)()>(&TextInputEXT::StartTextInput);
     [[maybe_unused]] constexpr auto z_TextInputEXT_StopTextInput_7 = static_cast<void(*)()>(&TextInputEXT::StopTextInput);
     [[maybe_unused]] constexpr auto z_TextInputEXT_SetInputRectangle_8 = static_cast<void(*)(const Rectangle&)>(&TextInputEXT::SetInputRectangle);
+    // NOXNA/EXT (input_noxna.md N-014b): input-type hint for the on-screen keyboard / IME.
+    [[maybe_unused]] constexpr auto z_TextInputEXT_StartTextInputWithTypeEXT_9 = static_cast<void(*)(CNA::Input::TextInputTypeEXT)>(&TextInputEXT::StartTextInputWithTypeEXT);
 
     // ============================= TOUCH CLUSTER =============================
 

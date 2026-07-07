@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Input/TextInputType.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/MulticastAction.hpp"
@@ -108,6 +109,18 @@ namespace Microsoft::Xna::Framework::Input
          * @brief Deactivates text input mode.
          */
         NOXNA static void StopTextInput();
+
+        /**
+         * @brief NOXNA/EXT: activates text input mode with an input-type hint for the on-screen
+         *        keyboard / IME (e.g. a numeric pad or a hidden-password field).
+         *
+         * SDL3-new (`SDL_StartTextInputWithProperties` + `SDL_PROP_TEXTINPUT_TYPE_NUMBER`); XNA 4.0
+         * and older SDL had no input-type hint. Falls back to the plain `StartTextInput` no-op
+         * behavior when no window handle is set.
+         *
+         * @param type The kind of text being entered.
+         */
+        NOXNA static void StartTextInputWithTypeEXT(CNA::Input::TextInputTypeEXT type);
 
         /**
          * @brief Hints to the platform where text is being entered (for IME popup placement).

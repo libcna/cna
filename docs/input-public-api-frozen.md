@@ -274,6 +274,7 @@ override must be added.
 - `static void StartTextInput();` — EXT
 - `static void StopTextInput();` — EXT
 - `static void SetInputRectangle(const Rectangle&);` — EXT
+- `static void StartTextInputWithTypeEXT(CNA::Input::TextInputTypeEXT);` — NOXNA/EXT (input-type hint for on-screen keyboard / IME)
 
 ---
 
