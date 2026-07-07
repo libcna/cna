@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <algorithm>
+#include "System/ArgumentException.hpp"
 #include "System/NotImplementedException.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp"
@@ -98,6 +100,80 @@ TEST(PropertyDictionaryTest, MutableIndexerReadsAndOverwritesExistingKey) {
     EXPECT_EQ(42, std::any_cast<int>(dict["score"]));
     dict["score"] = 99;
     EXPECT_EQ(99, dict.GetValueInt32("score"));
+}
+
+// Task 8.1: matches Dictionary<TKey,TValue>.Add's real behavior - unlike SetValue/the indexer
+// setter, Add() throws for a key that already exists instead of silently overwriting it.
+TEST(PropertyDictionaryTest, AddInsertsNewKey) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.Add("score", 42);
+    EXPECT_EQ(42, dict.GetValueInt32("score"));
+    EXPECT_EQ(1, dict.getCountProperty());
+}
+
+TEST(PropertyDictionaryTest, AddThrowsOnDuplicateKey) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.Add("score", 42);
+    EXPECT_THROW(dict.Add("score", 99), System::ArgumentException);
+    EXPECT_EQ(42, dict.GetValueInt32("score")); // unchanged
+}
+
+TEST(PropertyDictionaryTest, RemoveReturnsTrueAndDeletesExistingKey) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("score", 42);
+    EXPECT_TRUE(dict.Remove("score"));
+    EXPECT_FALSE(dict.ContainsKey("score"));
+    EXPECT_EQ(0, dict.getCountProperty());
+}
+
+TEST(PropertyDictionaryTest, RemoveReturnsFalseForMissingKey) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    EXPECT_FALSE(dict.Remove("missing"));
+}
+
+TEST(PropertyDictionaryTest, ClearRemovesEverything) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("a", 1);
+    dict.SetValue("b", 2);
+    dict.Clear();
+    EXPECT_EQ(0, dict.getCountProperty());
+    EXPECT_FALSE(dict.ContainsKey("a"));
+}
+
+TEST(PropertyDictionaryTest, KeysReturnsEveryKey) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("a", 1);
+    dict.SetValue("b", 2);
+    auto keys = dict.Keys();
+    ASSERT_EQ(2u, keys.size());
+    EXPECT_NE(std::find(keys.begin(), keys.end(), "a"), keys.end());
+    EXPECT_NE(std::find(keys.begin(), keys.end(), "b"), keys.end());
+}
+
+TEST(PropertyDictionaryTest, ValuesReturnsEveryValue) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("a", 1);
+    dict.SetValue("b", 2);
+    auto values = dict.Values();
+    ASSERT_EQ(2u, values.size());
+    int sum = std::any_cast<int>(values[0]) + std::any_cast<int>(values[1]);
+    EXPECT_EQ(3, sum);
+}
+
+// Task 8.1: FNA's own ICollection<KeyValuePair<string,object>>.IsReadOnly getter is hardcoded
+// true, despite Add/Remove/Clear all being real, working mutators - a genuine upstream
+// inconsistency, preserved faithfully here rather than corrected.
+TEST(PropertyDictionaryTest, IsReadOnlyIsAlwaysTrue) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    EXPECT_TRUE(dict.getIsReadOnlyProperty());
+    dict.SetValue("a", 1);
+    EXPECT_TRUE(dict.getIsReadOnlyProperty());
+}
+
+TEST(PropertyDictionaryTest, CopyToAlwaysThrows) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    std::vector<std::pair<std::string, std::any>> array;
+    EXPECT_THROW(dict.CopyTo(array, 0), System::NotImplementedException);
 }
 
 // --- LeaderboardIdentity ---

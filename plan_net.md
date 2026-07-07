@@ -1695,7 +1695,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
 
 ## Phase 8 — GamerServices: API Gaps
 
-- [ ] **Task 8.1** — Add an `IDictionary<string, object>`-equivalent surface to `PropertyDictionary`.
+- [x] **Task 8.1** — Add an `IDictionary<string, object>`-equivalent surface to `PropertyDictionary`.
   Confirmed FNA's `PropertyDictionary` explicitly implements
   `IDictionary<string, object>`/`ICollection<KeyValuePair<string, object>>`: `Add(key, value)`
   (throws on duplicate key, unlike the indexer setter), `Remove(key)`, `Clear()`, `Keys`, `Values`,
@@ -1704,6 +1704,47 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `System::Collections::Generic::IDictionary<TKey,TValue>` shape — use it rather than inventing a
   new interface. Add these members (matching FNA's exact semantics, including `Add` throwing on
   duplicate keys) and tests for each.
+
+  Confirmed against FNA's real `PropertyDictionary.cs`: every one of these members is an
+  **explicit interface implementation** in C# (`void IDictionary<string,object>.Add(...)`,
+  `bool ICollection<KeyValuePair<string,object>>.Remove(...)`, etc.) — reachable only through an
+  interface cast, never directly on a `PropertyDictionary` variable. C++ has no equivalent of
+  explicit interface implementation, so deriving `PropertyDictionary` from `sharp-runtime`'s
+  `IDictionary<TKey,TValue>` template wouldn't reproduce that "hidden unless cast" behavior
+  anyway (C++ virtual overrides are directly callable on the derived type), and `sharp-runtime`'s
+  `IDictionary<TKey,TValue>` interface is itself missing the `ICollection<KeyValuePair<...>>`
+  half of FNA's real interface list (`Keys`/`Values`/`IsReadOnly`/`Contains`/`CopyTo`) — extending
+  it would be a `sharp-runtime` file modification requiring the user's approval first (Tasks
+  4.4/4.5/6.6's standing constraint). Per `CLAUDE.md`'s own guidance for interfaces without an
+  exact C++ mapping, added the *equivalent member surface* directly as ordinary public methods on
+  `PropertyDictionary` instead of deriving from any interface — a documented, intentional
+  deviation (directly callable in C++, unlike C#'s cast-gated explicit members), not a silent gap.
+
+  Added `Add` (throws `System::ArgumentException` on duplicate key, matching
+  `Dictionary<TKey,TValue>.Add`'s real message format, unlike `SetValue`/the indexer setter which
+  silently overwrite), `Remove` (bool return), `Clear`, `Keys`/`Values` (snapshot `std::vector`s —
+  `sharp-runtime` has no live-view collection equivalent to FNA's real `ICollection<string>`/
+  `ICollection<object>`, another documented deviation), `getIsReadOnlyProperty()` (hardcoded
+  `true`, faithfully preserving FNA's own upstream inconsistency — `Add`/`Remove`/`Clear` are all
+  real, working mutators despite this), and `CopyTo` (always throws
+  `System::NotImplementedException`, matching FNA's own unimplemented stub exactly).
+
+  Deliberately **not** added: the `ICollection<KeyValuePair<string,object>>.Contains(item)` and
+  `.Remove(item)` explicit-interface overloads (which compare by key+value, not just key). Both
+  are the lowest-practical-value members here (explicit-interface-cast-only in real XNA, and
+  `Contains` in FNA's own source has an upstream copy-paste bug — `dictionary.ContainsValue(item
+  .Key)` instead of `.ContainsValue(item.Value)` — that would be awkward and not worthwhile to
+  replicate exactly for `std::any`-valued entries, which have no general equality comparison in
+  C++ without knowing the concrete type). The already-existing `ContainsKey(key)` and the new
+  `Remove(key)` cover the meaningful, non-buggy, actually-useful behavior.
+
+  Added 10 new tests (`AddInsertsNewKey`, `AddThrowsOnDuplicateKey`,
+  `RemoveReturnsTrueAndDeletesExistingKey`, `RemoveReturnsFalseForMissingKey`,
+  `ClearRemovesEverything`, `KeysReturnsEveryKey`, `ValuesReturnsEveryValue`,
+  `IsReadOnlyIsAlwaysTrue`, `CopyToAlwaysThrows`), one per new member. Pure API-surface addition
+  (no prior behavior to regress against — the standard revert-verify cycle doesn't apply to
+  brand-new methods; running the new tests themselves is the meaningful verification here). Full
+  suite: **3321/3323 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 8.2** — Add `AchievementCollection`'s missing `IList<Achievement>`/`ICollection<Achievement>`
   surface: `IndexOf`, `Insert`, `RemoveAt`, `Add`, `Remove`, `Clear`, `Contains`, `CopyTo`, and

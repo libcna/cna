@@ -8,6 +8,8 @@
 #include <any>
 #include <map>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -194,6 +196,88 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param value The value to store.
          */
         void SetValue(const std::string& key, System::TimeSpan value);
+
+        /**
+         * @brief Adds a value for the specified key.
+         *
+         * Task 8.1: real XNA's `PropertyDictionary` implements this via explicit
+         * `IDictionary<string,object>.Add`/`ICollection<KeyValuePair<string,object>>.Add`
+         * (both of which just forward to `Dictionary<TKey,TValue>.Add`) — reachable in C# only
+         * through an interface cast, never directly on a `PropertyDictionary` variable. C++ has
+         * no equivalent of explicit interface implementation, so this is exposed as an ordinary
+         * public method instead (a documented, pragmatic mapping deviation — see CLAUDE.md's
+         * guidance on interfaces without an exact C++ equivalent); the actual throw-on-duplicate
+         * behavior matches `Dictionary<TKey,TValue>.Add` faithfully. Unlike `SetValue`/the
+         * indexer setter, which silently overwrite an existing key.
+         *
+         * @param key The key to add.
+         * @param value The value to associate with key.
+         * @throws System::ArgumentException if key already exists.
+         */
+        void Add(const std::string& key, std::any value);
+
+        /**
+         * @brief Removes the value for the specified key.
+         *
+         * Task 8.1: same explicit-interface-only-in-C#, ordinary-method-in-C++ deviation as
+         * Add() above (matches `IDictionary<string,object>.Remove(string)`).
+         *
+         * @param key The key to remove.
+         * @return true if the key was found and removed; otherwise false.
+         */
+        bool Remove(const std::string& key);
+
+        /**
+         * @brief Removes all key/value pairs.
+         *
+         * Task 8.1: same explicit-interface-only-in-C#, ordinary-method-in-C++ deviation as
+         * Add() above (matches `ICollection<KeyValuePair<string,object>>.Clear()`).
+         */
+        void Clear();
+
+        /**
+         * @brief Gets a snapshot of every key currently in the dictionary.
+         *
+         * Task 8.1: real XNA's explicit `IDictionary<string,object>.Keys` returns a live
+         * `ICollection<string>` view backed by the dictionary itself; `sharp-runtime` has no
+         * equivalent live-view collection type, so this returns a point-in-time snapshot vector
+         * instead (a documented, pragmatic mapping deviation).
+         *
+         * @return A vector containing every key, in unspecified order.
+         */
+        [[nodiscard]] std::vector<std::string> Keys() const;
+
+        /**
+         * @brief Gets a snapshot of every value currently in the dictionary.
+         *
+         * Task 8.1: same live-view-vs-snapshot deviation as Keys() above (matches explicit
+         * `IDictionary<string,object>.Values`).
+         *
+         * @return A vector containing every value, in unspecified order (same order as Keys()).
+         */
+        [[nodiscard]] std::vector<std::any> Values() const;
+
+        /**
+         * @brief Gets whether this collection is read-only.
+         *
+         * Always true, matching FNA's own hardcoded `ICollection<KeyValuePair<string,object>>
+         * .IsReadOnly` getter — a real upstream inconsistency (Add/Remove/Clear are all working
+         * mutators despite this), preserved faithfully rather than corrected, per this project's
+         * behavior-fidelity rule.
+         *
+         * @return Always true.
+         */
+        [[nodiscard]] bool getIsReadOnlyProperty() const;
+
+        /**
+         * @brief Always throws, matching FNA's own unimplemented
+         * `ICollection<KeyValuePair<string,object>>.CopyTo` stub.
+         *
+         * @param array Unused.
+         * @param arrayIndex Unused.
+         * @throws System::NotImplementedException always.
+         */
+        void CopyTo(std::vector<std::pair<std::string, std::any>>& array, int arrayIndex) const;
 
         /** @brief Returns an iterator to the beginning of the dictionary. */
         NOXNA [[nodiscard]] auto begin() { return dictionary_.begin(); }
