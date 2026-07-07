@@ -23,7 +23,7 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    // T-4C: DSP filter state (see SoundEffectInstance.hpp's filterState_ for the ownership/
+    // T-4C: per-track DSP state (see SoundEffectInstance.hpp's filterState_ for the ownership/
     // move-safety rationale). Kind/frequency/oneOverQ are written by INTERNAL_apply*Filter (main
     // thread) and read by FilterMixCallback (SDL3_mixer's mixing thread) -- guarded by
     // MIX_LockMixer/UnlockMixer in the writer, relying on SDL3_mixer's own documented guarantee
@@ -31,6 +31,10 @@ namespace Microsoft::Xna::Framework::Audio
     // progress" (so the callback itself must NOT also lock -- it would be redundant at best).
     // yl/yb are the filter's per-channel recursive state and are touched ONLY by the mixing
     // thread inside the callback, never by the setters, so they need no synchronization at all.
+    // P11-PAN-001 (RFC-1): also holds the crossfeed pan value, since SDL3_mixer only exposes one
+    // "cooked" callback slot per track (CHECKLIST.md CP-19) -- this struct is that slot's entire
+    // shared state, filter and pan alike, not just the filter anymore. `pan` is written under the
+    // same MIX_LockMixer/UnlockMixer discipline as frequency/oneOverQ above.
     struct FilterState
     {
         enum class Kind { None, LowPass, HighPass, BandPass };
@@ -48,6 +52,10 @@ namespace Microsoft::Xna::Framework::Audio
         float baseOneOverQ  = 1.0f;
         float yl[2]       = {0.0f, 0.0f};
         float yb[2]       = {0.0f, 0.0f};
+        // P11-PAN-001: current stereo pan, range [-1,1], matching Pan_/Apply3D's own pan. 0.0f
+        // (the FilterState default and the Pan property's own default) is the crossfeed matrix's
+        // identity, so a never-panned track costs nothing extra in the callback.
+        float pan         = 0.0f;
     };
 
 #ifdef SOUND_ENABLED
@@ -65,17 +73,30 @@ namespace Microsoft::Xna::Framework::Audio
         // P9-3D-005: `doppler` is a multiplier applied on top of the pitch-derived ratio, matching
         // FNA's UpdatePitch() (`(2^INTERNAL_pitch) * doppler`, SoundEffectInstance.cs) -- defaults
         // to 1.0f (no-op) for every caller except Apply3D.
-        void ApplyTrackProperties(MIX_Track* track, float volume, float pan, float pitch,
-                                   float doppler = 1.0f)
+        // P11-PAN-001 (RFC-1): `filterState` receives the pan value instead of MIX_SetTrackStereo
+        // computing per-channel gains directly -- SDL3_mixer's own stereo gain has no crossfeed
+        // term (CHECKLIST.md CP-19), so it's fixed to unity here and CNA owns 100% of the stereo
+        // image via the crossfeed matrix applied in the shared filter/pan cooked callback
+        // (ApplyPanCrossfeed below). `filterState` may be null (SOUND_ENABLED-less builds aside,
+        // this only happens if EnsureTrackDspState's allocation somehow failed) -- in that case
+        // the pan write is simply skipped, matching this function's existing null-`track` guard.
+        void ApplyTrackProperties(MIX_Track* track, FilterState* filterState,
+                                   float volume, float pan, float pitch, float doppler = 1.0f)
         {
             if (!track) return;
 
             MIX_SetTrackGain(track, volume);
 
-            MIX_StereoGains stereo{};
-            stereo.left  = (pan < 0.0f) ? 1.0f : (1.0f - pan);
-            stereo.right = (pan > 0.0f) ? 1.0f : (1.0f + pan);
-            MIX_SetTrackStereo(track, &stereo);
+            static const MIX_StereoGains kUnityStereo{1.0f, 1.0f};
+            MIX_SetTrackStereo(track, &kUnityStereo);
+
+            if (filterState)
+            {
+                MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+                MIX_LockMixer(mixer);
+                filterState->pan = pan;
+                MIX_UnlockMixer(mixer);
+            }
 
             const float ratio = ((pitch < 0.0f)
                 ? (1.0f + pitch * 0.5f)
@@ -144,10 +165,8 @@ namespace Microsoft::Xna::Framework::Audio
         // driven directly and synchronously by SoundEffectInstanceTestAccess -- MIX_Track's real
         // callback only fires asynchronously from the mixing thread, which would make a test
         // either flaky or need a real-time wait.
-        void ProcessFilterState(FilterState& state, float* pcm, int channels, int samples)
+        void ApplyFilter(FilterState& state, float* pcm, int channels, int samples)
         {
-            if (state.kind == FilterState::Kind::None) return;
-            if (channels <= 0) return;
             const float f  = state.frequency;
             const float q1 = state.oneOverQ;
 
@@ -168,10 +187,84 @@ namespace Microsoft::Xna::Framework::Audio
                         case FilterState::Kind::LowPass:  pcm[i + c] = yl; break;
                         case FilterState::Kind::HighPass: pcm[i + c] = yh; break;
                         case FilterState::Kind::BandPass: pcm[i + c] = yb; break;
-                        default: break; // Kind::None already returned above
+                        default: break; // Not reachable -- caller already checked kind != None.
                     }
                 }
             }
+        }
+
+        // P11-PAN-001 (RFC-1): the real implementation behind
+        // SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix (a thin forwarding shim,
+        // defined further down) -- lives here, not as a class member body, purely so
+        // ApplyPanCrossfeed below (an anonymous-namespace free function, called from the
+        // real-time mixing callback) can call it without needing class-member access. Matches
+        // FNA's SetPanMatrixCoefficients exactly (SoundEffectInstance.cs,
+        // dspSettings.SrcChannelCount == 2 && DstChannelCount == 2 branch): hard panning does NOT
+        // eliminate an entire channel -- the two source channels are blended together on
+        // whichever output speaker `pan` favors, and the OTHER speaker goes silent, rather than
+        // each speaker only ever hearing its own matching input channel (CHECKLIST.md CP-19, the
+        // deviation this method fixes).
+        void ComputePanCrossfeedMatrix(float pan, float& ll, float& rl, float& lr, float& rr)
+        {
+            if (pan <= 0.0f)
+            {
+                // Left speaker blends left/right channels; right speaker gets less of the right
+                // channel (and none of the left).
+                ll = 0.5f * pan + 1.0f;
+                rl = 0.5f * -pan;
+                lr = 0.0f;
+                rr = pan + 1.0f;
+            }
+            else
+            {
+                // Left speaker gets less of the left channel (and none of the right); right
+                // speaker blends right/left channels.
+                ll = -pan + 1.0f;
+                rl = 0.0f;
+                lr = 0.5f * pan;
+                rr = 0.5f * -pan + 1.0f;
+            }
+        }
+
+        // Applies the crossfeed matrix above directly to interleaved stereo PCM. Only meaningful
+        // for `channels == 2` -- SDL3_mixer forces every track to true stereo output before the
+        // cooked callback runs (ApplyTrackProperties's unity MIX_SetTrackStereo call), so this is
+        // always satisfied for a real callback invocation; guarded defensively anyway, matching
+        // this file's existing style. `pan == 0.0f` (the common, never-panned case) skips the
+        // transform entirely -- the matrix would reduce to the identity {1,0,0,1} anyway, so this
+        // is a pure optimization, not a behavior branch.
+        void ApplyPanCrossfeed(float pan, int channels, float* pcm, int samples)
+        {
+            if (channels != 2 || pan == 0.0f) return;
+
+            float ll, rl, lr, rr;
+            ComputePanCrossfeedMatrix(pan, ll, rl, lr, rr);
+
+            for (int i = 0; i + 2 <= samples; i += 2)
+            {
+                const float l = pcm[i];
+                const float r = pcm[i + 1];
+                pcm[i]     = l * ll + r * rl;
+                pcm[i + 1] = l * lr + r * rr;
+            }
+        }
+
+        // Runs this track's entire shared cooked-callback DSP chain: the filter first (if any),
+        // then the crossfeed pan matrix (P11-PAN-001, RFC-1) -- both are just float-PCM
+        // transforms on the same buffer, run in sequence, matching the RFC-1 design sketch
+        // (plan_audio.md P10-PAN-003). Unlike the old ProcessFilterState this replaces, this must
+        // NOT bail out early when there's no filter -- pan crossfeed still needs to run for every
+        // track, filtered or not.
+        void ProcessFilterState(FilterState& state, float* pcm, int channels, int samples)
+        {
+            if (channels <= 0) return;
+
+            if (state.kind != FilterState::Kind::None)
+            {
+                ApplyFilter(state, pcm, channels, samples);
+            }
+
+            ApplyPanCrossfeed(state.pan, channels, pcm, samples);
         }
 
         // SDL3_mixer trampoline: fires as a per-track "cooked" callback (after gain/pan/3D are
@@ -381,7 +474,8 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        ApplyTrackProperties(track, Volume_, Pan_, Pitch_);
+        EnsureTrackDspState(); // P11-PAN-001: must exist before ApplyTrackProperties writes pan
+        ApplyTrackProperties(track, filterState_.get(), Volume_, Pan_, Pitch_);
 
         SDL_PropertiesID props = SDL_CreateProperties();
         if (props == 0)
@@ -623,6 +717,15 @@ namespace Microsoft::Xna::Framework::Audio
         return (distance > 0.0f) ? std::clamp(rightDisplacement / distance, -1.0f, 1.0f) : 0.0f;
     }
 
+    void SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix(
+        float pan, float& ll, float& rl, float& lr, float& rr)
+    {
+        // Forwards to ComputePanCrossfeedMatrix (anonymous namespace, top of this file) -- the
+        // single canonical implementation, shared with the real-time mixing callback
+        // (ApplyPanCrossfeed) so there is exactly one copy of this math to keep in sync with FNA.
+        ComputePanCrossfeedMatrix(pan, ll, rl, lr, rr);
+    }
+
     void SoundEffectInstance::INTERNAL_applyXactTrackFilter(
         uint8_t filterType, float frequencyHz, uint8_t qfactorRaw)
     {
@@ -710,6 +813,15 @@ namespace Microsoft::Xna::Framework::Audio
 #endif
     }
 
+    void SoundEffectInstance::EnsureTrackDspState()
+    {
+#ifdef SOUND_ENABLED
+        if (!track_) return;
+        if (!filterState_) filterState_ = std::make_unique<FilterState>();
+        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+#endif
+    }
+
     void SoundEffectInstance::ProcessFilterSamplesForTest(float* pcm, int channels, int samples)
     {
 #ifdef SOUND_ENABLED
@@ -735,6 +847,25 @@ namespace Microsoft::Xna::Framework::Audio
         oneOverQ  = filterState_->oneOverQ;
 #else
         kind = 0; frequency = 0.0f; oneOverQ = 1.0f;
+#endif
+    }
+
+    void SoundEffectInstance::INTERNAL_setPanStateForTest(float pan)
+    {
+#ifdef SOUND_ENABLED
+        if (!filterState_) filterState_ = std::make_unique<FilterState>();
+        filterState_->pan = pan;
+#else
+        (void)pan;
+#endif
+    }
+
+    float SoundEffectInstance::INTERNAL_getPanStateForTest() const
+    {
+#ifdef SOUND_ENABLED
+        return filterState_ ? filterState_->pan : 0.0f;
+#else
+        return 0.0f;
 #endif
     }
 
@@ -815,7 +946,8 @@ namespace Microsoft::Xna::Framework::Audio
         // how those setters already overwrite the 3D-adjusted track gain/ratio outright (a real
         // game calls Apply3D() every frame to keep 3D properties fresh, the same assumption
         // atten/pan already rely on).
-        ApplyTrackProperties(AsTrack(track_), atten * Volume_, pan, Pitch_, doppler);
+        EnsureTrackDspState(); // P11-PAN-001: must exist before ApplyTrackProperties writes pan
+        ApplyTrackProperties(AsTrack(track_), filterState_.get(), atten * Volume_, pan, Pitch_, doppler);
 #endif
     }
 
@@ -889,13 +1021,17 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
 #ifdef SOUND_ENABLED
+        // P11-PAN-001 (RFC-1): unlike the old direct MIX_SetTrackStereo call this replaces, pan
+        // is written into the shared cooked-callback DSP state instead -- SDL3_mixer's own stereo
+        // gain was already fixed to unity by Play()/Apply3D's ApplyTrackProperties call, which
+        // also guarantees filterState_ is non-null for any track that's actually playing.
         MIX_Track* track = AsTrack(track_);
-        if (track)
+        if (track && filterState_)
         {
-            MIX_StereoGains stereo{};
-            stereo.left  = (Pan_ < 0.0f) ? 1.0f : (1.0f - Pan_);
-            stereo.right = (Pan_ > 0.0f) ? 1.0f : (1.0f + Pan_);
-            MIX_SetTrackStereo(track, &stereo);
+            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+            MIX_LockMixer(mixer);
+            filterState_->pan = Pan_;
+            MIX_UnlockMixer(mixer);
         }
 #endif
     }

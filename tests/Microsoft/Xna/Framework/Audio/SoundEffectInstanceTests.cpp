@@ -203,6 +203,43 @@ TEST_F(SoundEffectInstanceTest, PanSetAfterStopDoesNotThrow)
     EXPECT_FLOAT_EQ(inst.getPanProperty(), 0.6f);
 }
 
+// P11-PAN-001 (RFC-1): setPanProperty now writes into the shared cooked-callback DSP state
+// (filterState_->pan) instead of computing MIX_SetTrackStereo's per-channel gains directly --
+// verify that wiring directly via GetPanState, since SDL3_mixer itself still exposes no
+// stereo-pan getter of its own (the reason this couldn't be verified this way before RFC-1).
+TEST_F(SoundEffectInstanceTest, PanSetterWritesPanIntoDspState)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    inst.setPanProperty(0.5f);
+    EXPECT_FLOAT_EQ(SoundEffectInstanceTestAccess::GetPanState(inst), 0.5f);
+    inst.setPanProperty(-0.75f);
+    EXPECT_FLOAT_EQ(SoundEffectInstanceTestAccess::GetPanState(inst), -0.75f);
+}
+
+// P11-PAN-001: Play() must establish the DSP state (and register the shared cooked callback)
+// even at the default pan of 0.0f -- RFC-1 requires every playing track to own its stereo image
+// via the callback, not just tracks that happen to set a nonzero pan.
+TEST_F(SoundEffectInstanceTest, PlayEstablishesDspStateAtDefaultPan)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    EXPECT_FLOAT_EQ(SoundEffectInstanceTestAccess::GetPanState(inst), 0.0f);
+}
+
+// P11-PAN-001: setPanProperty() before Play() (no track yet) must not crash and must not
+// fabricate DSP state -- matches the existing null-track guards elsewhere in this file.
+TEST_F(SoundEffectInstanceTest, PanSetBeforePlayDoesNotCrashOrCreateDspState)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    EXPECT_NO_THROW(inst.setPanProperty(0.5f));
+    EXPECT_FLOAT_EQ(inst.getPanProperty(), 0.5f);
+    EXPECT_FLOAT_EQ(SoundEffectInstanceTestAccess::GetPanState(inst), 0.0f);
+}
+
 TEST_F(SoundEffectInstanceTest, PitchClampsToRange)
 {
     REQUIRE_DEVICE();
@@ -508,6 +545,26 @@ TEST_F(SoundEffectInstanceTest, Apply3DDoesNotModifyVolumeOrPanProperties)
     EXPECT_FLOAT_EQ(inst.getPanProperty(), -0.75f);
 }
 
+// P11-PAN-001 (RFC-1): Apply3D's own computed pan approximation (distinct from the Pan property,
+// per CP-20/the test above) must land in the shared DSP state the crossfeed matrix reads --
+// directly verifiable now via GetPanState, unlike before RFC-1 (see the now-updated note on
+// Apply3DAppliesFullVolumeWithinDistanceScale below).
+TEST_F(SoundEffectInstanceTest, Apply3DWritesComputedPanIntoDspState)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f}); // hard right at the default orientation
+    inst.Apply3D(listener, emitter);
+
+    // Matches CalculatePanIsFullyRightWhenEmitterDirectlyToTheRight's own (10,10)->1.0 result --
+    // rightDisplacement and distance are both 10 here (emitter purely along +X).
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), 1.0f, 1e-5f);
+}
+
 // P9-3D-010: Apply3D must not throw with a rotated (non-default) listener orientation, and
 // rotation must only affect the pan projection -- distance attenuation is purely a function of
 // Euclidean distance and must stay identical whether the listener faces the default -Z or is
@@ -538,8 +595,10 @@ TEST_F(SoundEffectInstanceTest, Apply3DWithRotatedListenerAppliesSameDistanceAtt
 
 // P9-3D-003: matches FAudio's F3DAudio.c ComputeDistanceAttenuation's no-custom-curve branch --
 // full volume (no attenuation at all) for any distance strictly within DistanceScale
-// (CurveDistanceScaler). Verified via the real MIX_Track gain (MIX_GetTrackGain has a getter,
-// unlike stereo pan -- see CP-19/P9-3D-001's note on why that one can't be verified this way).
+// (CurveDistanceScaler). Verified via the real MIX_Track gain (MIX_GetTrackGain has a getter);
+// stereo pan is now also directly verifiable the same way, via GetPanState (P11-PAN-001, see
+// Apply3DWritesComputedPanIntoDspState above) -- SDL3_mixer itself still has no pan getter of its
+// own, but CNA's own DSP state does since RFC-1 landed.
 TEST_F(SoundEffectInstanceTest, Apply3DAppliesFullVolumeWithinDistanceScale)
 {
     REQUIRE_DEVICE();
@@ -836,6 +895,94 @@ TEST_F(SoundEffectInstanceTest, BandPassFilterFirstSampleMatchesStateVariableFil
     EXPECT_NEAR(pcm[1], 1.0f, 1e-6f);
 }
 
+// P11-PAN-001 (RFC-1): the crossfeed pan matrix runs in the same shared cooked callback as the
+// filter above (ProcessFilterState calls ApplyPanCrossfeed after any filter). SetPanState/
+// ProcessFilterSamples drive it directly, same synchronous-hook pattern as the filter tests
+// above, for the same "avoid racing the real mixing thread" reason (Stop() before touching pcm).
+TEST_F(SoundEffectInstanceTest, PanCrossfeedAtCenterPanIsIdentity)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play(); // default pan 0.0f -- no SetPanState call needed
+    inst.Stop(true);
+
+    float pcm[2] = {1.0f, 3.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    EXPECT_FLOAT_EQ(pcm[0], 1.0f);
+    EXPECT_FLOAT_EQ(pcm[1], 3.0f);
+}
+
+// CHECKLIST.md CP-19, the deviation RFC-1 fixes: at hard-left pan, the left speaker blends both
+// input channels (0.5*L + 0.5*R) and the right speaker goes silent -- the right channel's content
+// is preserved (crossfed), not discarded outright the way the old per-channel-only gain did.
+TEST_F(SoundEffectInstanceTest, PanCrossfeedAtHardLeftBlendsBothChannelsIntoLeftSpeakerOnly)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::SetPanState(inst, -1.0f);
+    inst.Stop(true);
+
+    float pcm[2] = {1.0f, 3.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    EXPECT_NEAR(pcm[0], 2.0f, 1e-6f); // 0.5*1 + 0.5*3
+    EXPECT_NEAR(pcm[1], 0.0f, 1e-6f);
+}
+
+TEST_F(SoundEffectInstanceTest, PanCrossfeedAtHardRightBlendsBothChannelsIntoRightSpeakerOnly)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::SetPanState(inst, 1.0f);
+    inst.Stop(true);
+
+    float pcm[2] = {1.0f, 3.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    EXPECT_NEAR(pcm[0], 0.0f, 1e-6f);
+    EXPECT_NEAR(pcm[1], 2.0f, 1e-6f); // 0.5*1 + 0.5*3
+}
+
+// Defensive guard (ApplyPanCrossfeed's `channels != 2` early-out) -- in practice SDL3_mixer's
+// forced-stereo mode (ApplyTrackProperties's unity MIX_SetTrackStereo) guarantees channels == 2
+// for every real callback invocation, but this pins down the fallback behavior anyway.
+TEST_F(SoundEffectInstanceTest, PanCrossfeedIgnoresNonStereoChannelCounts)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::SetPanState(inst, -1.0f);
+    inst.Stop(true);
+
+    float pcm[1] = {5.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 1, 1);
+    EXPECT_FLOAT_EQ(pcm[0], 5.0f);
+}
+
+// Proves the RFC-1 design claim that motivated this whole feature (plan_audio.md P10-PAN-003):
+// filter and pan crossfeed can share the single SDL3_mixer cooked-callback slot without one
+// clobbering the other, since both are independent, sequential float-PCM transforms on the same
+// buffer (filter first, then crossfeed -- ProcessFilterState's ordering).
+TEST_F(SoundEffectInstanceTest, PanCrossfeedComposesWithFilterInTheSharedCallback)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    SoundEffectInstanceTestAccess::ApplyHighPassFilter(inst, 0.5f);
+    SoundEffectInstanceTestAccess::SetPanState(inst, -1.0f);
+    inst.Stop(true);
+
+    // High-pass's first sample from a fresh (zero) filter state passes the input through
+    // unchanged (Yh(1) = x - Yl(1) - Q1*Yb(0) = x, matching
+    // HighPassFilterFirstSampleMatchesStateVariableFilterMath above), so the crossfeed matrix
+    // that runs afterward sees the original {1,3} input and blends it exactly like
+    // PanCrossfeedAtHardLeftBlendsBothChannelsIntoLeftSpeakerOnly above.
+    float pcm[2] = {1.0f, 3.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    EXPECT_NEAR(pcm[0], 2.0f, 1e-6f); // 0.5*1 + 0.5*3
+    EXPECT_NEAR(pcm[1], 0.0f, 1e-6f);
+}
+
 // "Needs verification" (CHECKLIST.md/plan_audio.md T-4C): filter coefficient locking follows
 // SDL3_mixer's documented practice (MIX_LockMixer/UnlockMixer around FilterState's kind/
 // frequency/oneOverQ, matching "the SDL audio device thread holds this same lock while actual
@@ -967,6 +1114,104 @@ TEST(SoundEffectInstanceFilterMathTest, CalculatePanClampsToValidRange)
 {
     EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(20.0f, 10.0f), 1.0f, 1e-6f);
     EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePan(-20.0f, 10.0f), -1.0f, 1e-6f);
+}
+
+// P11-PAN-001 (RFC-1): pure-math coverage for the 4-coefficient stereo crossfeed pan matrix
+// (FNA's SetPanMatrixCoefficients, SrcChannelCount==2/DstChannelCount==2 branch).
+TEST(SoundEffectInstanceFilterMathTest, PanCrossfeedMatrixIsIdentityAtCenterPan)
+{
+    float ll, rl, lr, rr;
+    SoundEffectInstanceTestAccess::CalculatePanCrossfeedMatrix(0.0f, ll, rl, lr, rr);
+    EXPECT_NEAR(ll, 1.0f, 1e-6f);
+    EXPECT_NEAR(rl, 0.0f, 1e-6f);
+    EXPECT_NEAR(lr, 0.0f, 1e-6f);
+    EXPECT_NEAR(rr, 1.0f, 1e-6f);
+}
+
+// CHECKLIST.md CP-19, the deviation RFC-1 fixes: hard panning must NOT eliminate an entire
+// channel -- both source channels blend into whichever speaker `pan` favors, and only the OTHER
+// speaker goes silent.
+TEST(SoundEffectInstanceFilterMathTest, PanCrossfeedMatrixAtHardLeftBlendsIntoLeftSpeakerOnly)
+{
+    float ll, rl, lr, rr;
+    SoundEffectInstanceTestAccess::CalculatePanCrossfeedMatrix(-1.0f, ll, rl, lr, rr);
+    EXPECT_NEAR(ll, 0.5f, 1e-6f);
+    EXPECT_NEAR(rl, 0.5f, 1e-6f);
+    EXPECT_NEAR(lr, 0.0f, 1e-6f);
+    EXPECT_NEAR(rr, 0.0f, 1e-6f);
+}
+
+TEST(SoundEffectInstanceFilterMathTest, PanCrossfeedMatrixAtHardRightBlendsIntoRightSpeakerOnly)
+{
+    float ll, rl, lr, rr;
+    SoundEffectInstanceTestAccess::CalculatePanCrossfeedMatrix(1.0f, ll, rl, lr, rr);
+    EXPECT_NEAR(ll, 0.0f, 1e-6f);
+    EXPECT_NEAR(rl, 0.0f, 1e-6f);
+    EXPECT_NEAR(lr, 0.5f, 1e-6f);
+    EXPECT_NEAR(rr, 0.5f, 1e-6f);
+}
+
+TEST(SoundEffectInstanceFilterMathTest, PanCrossfeedMatrixAtPartialLeftPan)
+{
+    float ll, rl, lr, rr;
+    SoundEffectInstanceTestAccess::CalculatePanCrossfeedMatrix(-0.5f, ll, rl, lr, rr);
+    EXPECT_NEAR(ll, 0.75f, 1e-6f);
+    EXPECT_NEAR(rl, 0.25f, 1e-6f);
+    EXPECT_NEAR(lr, 0.0f, 1e-6f);
+    EXPECT_NEAR(rr, 0.5f, 1e-6f);
+}
+
+TEST(SoundEffectInstanceFilterMathTest, PanCrossfeedMatrixAtPartialRightPan)
+{
+    float ll, rl, lr, rr;
+    SoundEffectInstanceTestAccess::CalculatePanCrossfeedMatrix(0.5f, ll, rl, lr, rr);
+    EXPECT_NEAR(ll, 0.5f, 1e-6f);
+    EXPECT_NEAR(rl, 0.0f, 1e-6f);
+    EXPECT_NEAR(lr, 0.25f, 1e-6f);
+    EXPECT_NEAR(rr, 0.75f, 1e-6f);
+}
+
+// The FAVORED destination speaker's own two coefficients always sum to exactly 1.0 -- e.g. at
+// pan<=0 the left speaker blends 100% of the combined signal ((0.5*pan+1) + 0.5*-pan == 1),
+// while the right (non-favored) speaker's row instead shrinks toward 0 as pan moves further from
+// center (lr+rr == pan+1 for pan<=0). This asymmetry is exactly what makes the matrix reproduce
+// FNA's separate mono-source formula automatically when fed a duplicated-mono signal (L == R),
+// verified directly by the next test.
+TEST(SoundEffectInstanceFilterMathTest, PanCrossfeedMatrixFavoredSpeakerRowSumsToOne)
+{
+    for (float pan : {-1.0f, -0.5f, -0.1f, 0.0f, 0.1f, 0.5f, 1.0f})
+    {
+        float ll, rl, lr, rr;
+        SoundEffectInstanceTestAccess::CalculatePanCrossfeedMatrix(pan, ll, rl, lr, rr);
+        if (pan <= 0.0f)
+            EXPECT_NEAR(ll + rl, 1.0f, 1e-6f) << "pan=" << pan;
+        else
+            EXPECT_NEAR(lr + rr, 1.0f, 1e-6f) << "pan=" << pan;
+    }
+}
+
+// Direct proof that the crossfeed matrix alone covers every source channel count SDL3_mixer's
+// forced-stereo mode can produce: feeding a duplicated-mono signal (L==R) through it must match
+// FNA's separate mono-source formula exactly (SoundEffectInstance.cs's SrcChannelCount==1 branch:
+// outputMatrix[0] = (pan>0)?(1-pan):1.0, outputMatrix[1] = (pan<0)?(1+pan):1.0) -- so no separate
+// mono branch is needed anywhere in the production code (ApplyPanCrossfeed, SoundEffectInstance.cpp).
+TEST(SoundEffectInstanceFilterMathTest, PanCrossfeedMatrixOnDuplicatedMonoMatchesMonoFormula)
+{
+    for (float pan : {-1.0f, -0.5f, -0.25f, 0.0f, 0.25f, 0.5f, 1.0f})
+    {
+        float ll, rl, lr, rr;
+        SoundEffectInstanceTestAccess::CalculatePanCrossfeedMatrix(pan, ll, rl, lr, rr);
+
+        const float x = 3.0f;
+        const float outL = x * ll + x * rl;
+        const float outR = x * lr + x * rr;
+
+        const float monoLeftGain  = (pan > 0.0f) ? (1.0f - pan) : 1.0f;
+        const float monoRightGain = (pan < 0.0f) ? (1.0f + pan) : 1.0f;
+
+        EXPECT_NEAR(outL, x * monoLeftGain, 1e-6f) << "pan=" << pan;
+        EXPECT_NEAR(outR, x * monoRightGain, 1e-6f) << "pan=" << pan;
+    }
 }
 
 // P9-3D-010: for the default listener orientation (Forward=(0,0,-1), Up=(0,1,0)), the listener's

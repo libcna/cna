@@ -141,6 +141,16 @@ namespace Microsoft::Xna::Framework::Audio
         // registration or recursive state changes, only the coefficients it reads).
         NOXNA void INTERNAL_applyRpcFilterOverride(float rpcFrequencyHz, float rpcQFactor);
 
+        // P11-PAN-001 (RFC-1): lazily allocates filterState_ if this is the first DSP-affecting
+        // call for this instance (matching the existing INTERNAL_apply*Filter lazy-allocation
+        // pattern) and (re)registers the shared cooked callback on `track_`. Unlike the filter
+        // setters, this must run for EVERY playing track, not just filtered ones, since the
+        // crossfeed pan matrix below now lives in the same callback and needs to run
+        // unconditionally. Idempotent -- safe to call on every Play()/Apply3D(), matching
+        // MIX_SetTrackCookedCallback's own documented "may be called... at any time" contract.
+        // No-op if track_ hasn't been created yet.
+        void EnsureTrackDspState();
+
         // Pure conversion helpers (P9-XACT-011), split out of INTERNAL_applyXactTrackFilter so
         // they're independently unit-testable without a real SDL3_mixer device driving the
         // sample rate. Both match FAudio's exact formulas (FACT_internal.c,
@@ -168,16 +178,40 @@ namespace Microsoft::Xna::Framework::Audio
         // raw world-space X.
         NOXNA static float INTERNAL_calculatePan(float rightDisplacement, float distance);
 
+        // P11-PAN-001 (RFC-1): computes FNA's exact 4-coefficient stereo crossfeed pan matrix
+        // for a 2-source-channel/2-destination-channel track (SoundEffectInstance.cs's
+        // SetPanMatrixCoefficients, the `dspSettings.SrcChannelCount == 2` branch) -- split out
+        // as a pure function so it's independently unit-testable, matching
+        // INTERNAL_calculatePan/INTERNAL_calculateFilterCutoff above. `ll`/`rl`/`lr`/`rr` name
+        // each coefficient as "destination-channel-from-source-channel" (e.g. `rl` = the left
+        // output's contribution from the right input channel); FNA's own `outputMatrix[0..3]`
+        // uses the same left-speaker-first, source-major layout. This same matrix also produces
+        // FNA's separate mono-source formula exactly when fed a duplicated-mono signal
+        // (L == R), so no separate mono branch is needed by the caller.
+        NOXNA static void INTERNAL_calculatePanCrossfeedMatrix(
+            float pan, float& ll, float& rl, float& lr, float& rr);
+
         // Test-only hook (SoundEffectInstanceTestAccess): runs this instance's filter state
         // through the exact same math the real SDL3_mixer callback uses, but synchronously and
         // directly -- the real callback only fires asynchronously from the mixing thread, which
-        // would make a test either flaky or need a real-time wait. No-op if no filter is active.
+        // would make a test either flaky or need a real-time wait. No-op if no filter/pan state
+        // is active at all (P11-PAN-001: now also applies the crossfeed pan matrix, a no-op at
+        // the default pan of 0.0f).
         void ProcessFilterSamplesForTest(float* pcm, int channels, int samples);
 
         // Test-only hook (SoundEffectInstanceTestAccess, P9-XACT-011): reads back the active
         // filter's kind (FilterState::Kind cast to int; 0 = none)/frequency/oneOverQ without
         // exposing FilterState's definition outside SoundEffectInstance.cpp.
         void INTERNAL_getFilterStateForTest(int& kind, float& frequency, float& oneOverQ) const;
+
+        // Test-only hooks (SoundEffectInstanceTestAccess, P11-PAN-001): read/write the DSP
+        // state's pan value directly, without a live track -- lets ProcessFilterSamplesForTest's
+        // crossfeed math be exercised in isolation from Play()/setPanProperty()'s SDL3_mixer
+        // side effects. The setter lazily allocates filterState_ (matching
+        // INTERNAL_applyLowPassFilter's own lazy-allocation pattern) so it works even before any
+        // filter has ever been applied.
+        void INTERNAL_setPanStateForTest(float pan);
+        [[nodiscard]] float INTERNAL_getPanStateForTest() const;
 
         /**
          * @brief Constructs a SoundEffectInstance bound to the given sound effect.

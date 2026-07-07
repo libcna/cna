@@ -46,16 +46,18 @@ framework/runtime, not a game.
   "no fix was needed" conclusion about that exact same comparison), and the second XACT
   implementation follow-up (`P11-XACT-003`, per-play pitch/volume/filter effect-variation
   randomization -- which itself found and fixed a real double-reciprocal filter-Q bug, caught by
-  its own end-to-end test) are all done. **Phase 11 is now fully closed except one deliberate
-  skip**: the RFC-1 crossfeed attempt (`P11-PAN-001`, left open on purpose, not attempted -- see
-  §3/§8). **See §4 for an important process note about how this phase started.**
+  its own end-to-end test), and the RFC-1 crossfeed pan matrix (`P11-PAN-001`, user-greenlit after
+  three prior deferrals -- see §3) are all done. **Phase 11 is now fully closed**, having spawned
+  one small follow-up (`P11-PAN-002`, §8). **See §4 for an important process note about how this
+  phase started.**
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
-  (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT. XACT (`.xgs`/`.xsb`/`.xwb`) is parsed
-  by a hand-written `CNA::Internal::Audio::XactParser` and mixed through SDL_mixer. This backend
-  choice is the root cause of every documented deviation from FNA (see `CHECKLIST.md` and
-  `docs/xna-4-api-coverage.md`'s Audio section) — no per-source 3D audio graph, no aux-send/reverb
-  bus, only a 2-value stereo gain pair instead of a 4-coefficient crossfeed matrix, a single
-  per-track "cooked callback" slot, etc.
+  (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT (the user explicitly reconfirmed this
+  2026-07-07, rejecting `P10-HRTF-002`'s RFC-2 optional-FAudio-backend proposal). XACT
+  (`.xgs`/`.xsb`/`.xwb`) is parsed by a hand-written `CNA::Internal::Audio::XactParser` and mixed
+  through SDL_mixer. This backend choice is the root cause of every documented deviation from FNA
+  (see `CHECKLIST.md` and `docs/xna-4-api-coverage.md`'s Audio section) — no per-source 3D audio
+  graph, no aux-send/reverb bus, a single per-track "cooked callback" slot (now shared between the
+  `T-4C` filter and the `P11-PAN-001` crossfeed matrix), etc.
 - `sharp-runtime` (sibling repo `../sharp-runtime`) supplies all `System.*` types and primitive
   aliases used on the XNA API surface. It is under **separate, active, concurrent development** by
   another session — if a build ever fails inside `SHARP_RUNTIME/CMakeFiles/...`, check
@@ -65,24 +67,24 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P11-XACT-003`, on top of `P11-XACT-004`,
-  `P11-XACT-002`, `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`, and
-  everything in Phase 10). EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked.
-  `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt this pass (no Audio *public XNA* API
-  surface touched -- `P11-XACT-002/003/004`'s changes are all internal to `Cue.{hpp,cpp}`/
-  `XactParser.cpp`/`XactTypes.hpp`/`SoundEffectInstance.{hpp,cpp}`'s `NOXNA`/private surface).
-- **Tests:** `CnaTests` whole-suite count is **3356 / 3358 pass** (2 skipped:
+- **Build:** clean, rebuilt and reverified this pass (`P11-PAN-001`, on top of `P11-XACT-003/004/002`,
+  `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`, and everything in
+  Phase 10). EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked. Required a
+  one-line unrelated unblock first (`GamerProfile.cpp`'s `RegionInfo::CurrentRegion()` call, renamed
+  upstream in sharp-runtime -- see §3). `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt
+  this pass (no Audio *public XNA* API surface touched -- `P11-PAN-001`'s changes are all internal
+  to `SoundEffectInstance.{hpp,cpp}`'s `NOXNA`/private surface).
+- **Tests:** `CnaTests` whole-suite count is **3372 / 3374 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected — not Audio; the 8-test increase since the last sync is
-  `P11-XACT-003`'s new `CueTest.ApplyEffectVariation*` (5 algorithm-level) and
-  `CueTest.PlayWiresEffectVariation*IntoSpawnedInstance` (3 end-to-end, one per axis)). Prior
-  sync's 1-test increase was `P11-XACT-004`'s new
-  `CueTest.PlayWeightedVariationWithTwoEqualWeightEntriesSelectsBoth`. The audio-scoped subset
-  (§7's `--gtest_filter` list) was last reverified under a **fresh dedicated ASan+UBSan build**
-  (466/466 pass, zero leaks/errors) and a fresh dedicated **ThreadSanitizer** build (both
-  concurrency-sensitive precedent tests clean) during the post-Phase-10 sweep -- not re-run this
-  pass (`P11-XACT-002/003/004`'s new code has no new threading/raw-pointer surface beyond the
-  existing `Cue`/`SoundEffectInstance` patterns already covered there).
+  hardware-dependent, expected — not Audio; the 16-test increase since the last sync is
+  `P11-PAN-001`'s new pan-crossfeed coverage, see §3). Prior sync's 8-test increase was
+  `P11-XACT-003`'s new `CueTest.ApplyEffectVariation*`/`PlayWiresEffectVariation*IntoSpawnedInstance`
+  tests. The audio-scoped subset (§7's `--gtest_filter` list) was reverified this pass under a
+  **fresh one-off ThreadSanitizer build** (497/497 pass, zero `WARNING: ThreadSanitizer` reports --
+  see §3's `P11-PAN-001` entry for why this was necessary, not just precedent); a fresh dedicated
+  ASan+UBSan build (466/466 pass at the time) was last run during the post-Phase-10 sweep, not
+  re-run this pass (`P11-PAN-001`'s new code has no new heap-ownership surface beyond the existing
+  `unique_ptr<FilterState>` pattern already covered there).
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
@@ -120,6 +122,40 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11" sections.
 
+- **`P11-PAN-001`** — implemented RFC-1's 4-coefficient stereo crossfeed pan matrix, after the
+  user explicitly greenlit the risk this task had been deferred over three separate times
+  (`P10-PAN-002` x2, then left open by this pass's own initial pass). `SoundEffectInstance`'s
+  `MIX_SetTrackStereo` call is now fixed to unity gain always -- CNA owns 100% of the stereo image
+  itself, via a real crossfeed matrix (`SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix`,
+  matches FNA's `SetPanMatrixCoefficients` exactly) run inside the SAME shared per-track cooked
+  callback the `T-4C` filter already used (filter first, then crossfeed, both being independent
+  sequential float-PCM transforms on one buffer -- exactly RFC-1's own design sketch,
+  `P10-PAN-003`). New `EnsureTrackDspState()` lazily allocates the shared DSP state and registers
+  the callback for EVERY playing track now, not just filtered ones; `Play()`/`Apply3D()`/
+  `setPanProperty()` all write `pan` into it instead of computing per-channel gains directly.
+  Proved mathematically that no separate mono-source branch was needed: a duplicated-mono signal
+  run through the same 2-channel matrix reduces exactly to FNA's separate mono formula (unit-
+  tested). 17 new tests (8 pure-math, 5 buffer-level via new `SetPanState`/`GetPanState` test
+  hooks, 4 end-to-end wiring, one of which -- `Apply3DWritesComputedPanIntoDspState` -- is only
+  possible now because `GetPanState` gives CNA's first-ever direct way to verify stereo pan,
+  something SDL3_mixer itself has never exposed a getter for). `git stash`-verified (stashing
+  `SoundEffectInstance.{hpp,cpp}` alone breaks the new tests' compile). **Concurrency re-verified**
+  under a fresh one-off ThreadSanitizer build: the existing `T-4C`
+  `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread` stress test re-run 10x plus the full
+  Audio-scoped subset (497 tests) once, zero `WARNING: ThreadSanitizer` reports -- directly
+  answering this task's own repeatedly-flagged risk, since the shared-callback surface is now
+  larger than what `T-4C`'s original TSan run covered. Full suite 3372/3374 pass (was 3356/3358),
+  no regressions. Scope boundary: the static fire-and-forget `SoundEffect::Play(volume,pitch,pan)`
+  helper has its own separate stereo-gain call with no DSP-state machinery at all and still has
+  the old bug -- spawned `P11-PAN-002` (open, not attempted this pass, separate file/commit).
+  `CHECKLIST.md` CP-19 updated. **This closes Phase 11 except the newly-spawned `P11-PAN-002`.**
+  See `plan_audio.md`.
+- **GamerServices build unblock** — `GamerProfile.cpp`'s constructor called
+  `RegionInfo::CurrentRegion()`, a static method sharp-runtime (built separately, under concurrent
+  development) had renamed to `RegionInfo::getCurrentRegionProperty()` (the project's own C#-
+  property-getter convention) since this branch's last full build. One-line call-site fix, unblocks
+  `CnaTests` linking entirely (`GamerServicesDispatcher`/`Guide` etc. are unconditional
+  `CnaTests` dependencies) -- unrelated to Audio, not part of the `P11-PAN-001` commit.
 - **`P11-XACT-003`** — implemented real per-play pitch/volume/filter-frequency/Q randomization for
   `PlayWaveEffectVariation`/`PlayWaveTrackEffectVariation` events, replacing the "parsed and
   discarded" gap `P11-XACT-001` found. New `Cue::ApplyEffectVariation` reproduces FAudio's
@@ -423,7 +459,7 @@ fresh clone/pull of `sharp-runtime` ever lacks this commit, that one CNA test wi
 | **Accepted deviation** | A cue-level `instanceLimit` eviction's victim search has no category or same-cue filter at all — can evict an unrelated cue | `CHECKLIST.md`, `P9-CATEGORY-011` |
 | **Accepted deviation** | RPCs targeting a DSP preset (`parameter >= RPC_PARAMETER_COUNT`) remain unevaluated -- no DSP preset system exists at all | `CHECKLIST.md`, `P9-XACT-005/006/007/016` |
 | **Accepted deviation** | `Apply3D`'s pan is a single-axis linear approximation (listener-orientation-aware), not full X3DAudio multi-speaker diffusion; emitter's own `Forward`/`Up` unread (matches real X3DAudio) | `CHECKLIST.md`, `P9-3D-010` |
-| **Accepted deviation** | Stereo hard-pan eliminates the opposite channel instead of crossfeed-blending it | `CHECKLIST.md`, `CP-19` |
+| **Fixed (P11-PAN-001)** | ~~Stereo hard-pan eliminated the opposite channel instead of crossfeed-blending it~~ -- fixed for `SoundEffectInstance` (`Play`/`Apply3D`/`Pan` setter); the static fire-and-forget `SoundEffect::Play(volume,pitch,pan)` helper still has the old bug, tracked separately | `CHECKLIST.md` CP-19, `plan_audio.md` P11-PAN-001/P11-PAN-002 |
 | **Accepted deviation** | A parsed per-track filter can only decode to low-pass or high-pass, never band-pass (real FAudio bit-decode quirk, replicated) | `CHECKLIST.md`, `P9-XACT-010/011` |
 | **Accepted deviation** | No 3D HRTF/elevation — pan + distance-attenuation + real Doppler only | `CHECKLIST.md` |
 | **Accepted deviation** | Reverb is a documented no-op — SDL3_mixer has no aux-send/return bus | `CHECKLIST.md` |
@@ -554,28 +590,31 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**Phase 11 is essentially closed** (`plan_audio.md`, started 2026-07-07 at the user's explicit
+**Phase 11 is now fully closed** (`plan_audio.md`, started 2026-07-07 at the user's explicit
 request: a fresh structural + signature audit of CNA's Audio API vs FNA, plus real follow-up
 fixes/improvements). Every task group is **closed** (`P11-CHECKLIST-001`, `P11-TEST-001`,
-`P11-XACT-001`, `P11-DISPATCH-001`, `P11-TODO-001`, `P11-XACT-002`, `P11-XACT-004`, `P11-XACT-003`
--- see §3 for each) **except one deliberate skip**:
+`P11-XACT-001`, `P11-DISPATCH-001`, `P11-TODO-001`, `P11-XACT-002`, `P11-XACT-004`, `P11-XACT-003`,
+`P11-PAN-001` -- see §3 for each). `P11-PAN-001` (RFC-1 stereo crossfeed) was explicitly
+user-greenlit 2026-07-07 after being deferred three times, then implemented and verified this pass.
 
-1. **`P11-PAN-001`** -- attempt RFC-1's stereo crossfeed pan matrix. Real feature work with real
-   regression risk to the shipped `T-4C` DSP filter (both would share the single SDL3_mixer
-   cooked-callback slot, now also carrying live RPC-driven coefficient writes). Deliberately left
-   open (not attempted) three separate times this session -- the risk is fully known up-front, not
-   something that would only surface mid-implementation, so this needs the user's explicit
-   greenlight rather than autonomous self-selection.
-   *Files:* `SoundEffectInstance.{hpp,cpp}` (the `FilterMixCallback`/cooked-callback machinery).
+One small follow-up it spawned, not yet started:
+- **`P11-PAN-002`** -- apply the same crossfeed fix to the static fire-and-forget
+  `SoundEffect::Play(volume, pitch, pan)` helper (`SoundEffect.cpp`), which has its own separate,
+  unfixed copy of the old hard-pan bug (no `SoundEffectInstance`/DSP-state machinery exists for
+  that path at all). Lower risk than `P11-PAN-001` was (no existing filter/callback to share or
+  regress) but still new scope beyond what was greenlit -- confirm with the user before starting.
+  *Files:* `SoundEffect.cpp` (`OnFireAndForgetStopped`, the `Play(volume,pitch,pan)` overload).
 
-With `P11-PAN-001` needing the user's explicit greenlight and no other self-selectable Phase 11
-work left, there is no further self-contained Audio task to pick up autonomously without new
-scope from the user.
+`P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly **rejected** by the user
+2026-07-07 -- staying on SDL3_mixer, not a live option going forward barring a future explicit
+reversal (see §9).
 
-Other items still open, unrelated to Phase 11's scope itself:
-- `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) -- a design-only proposal, never approved
-  as work, explicitly out of scope for autonomous self-direction (a full second backend
-  implementation, not something to start without the user picking it).
+**Phase 12 is starting now, per explicit user direction (2026-07-07):** a new audit of every
+`Microsoft::Xna::Framework::Audio` class/method/logic against the real XNA 4.0 API and FNA source,
+checking correctness of class/method placement and logic -- and, per the user's own instruction,
+any real gaps the audit finds should be worked on autonomously afterward, one at a time, following
+this branch's established process (implement, `git stash`-verify, rebuild, full suite, update
+`plan_audio.md`/`CHECKLIST.md`/`NEXT.md`, commit, no push without fresh confirmation).
 
 ---
 

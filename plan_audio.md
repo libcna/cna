@@ -4086,7 +4086,7 @@ restoration can be reverted.
   |---|---|---|---|---|---|---|
   | Reverb/aux-send | `SoundEffectInstance::INTERNAL_applyReverb` | Documented no-op | FACT routes to a real aux-send/reverb submix bus | SDL3_mixer has no aux-send/return bus; FNA itself has no caller for the equivalent method either (dead code in the reference) | `ApplyReverbDoesNotThrow` | Permanent unless backend changes (RFC-2) |
   | HRTF/elevation | `SoundEffectInstance::Apply3D` | Pan is a single-axis (listener-right) linear projection; no vertical/elevation channel | Full multi-speaker HRTF with elevation | SDL3_mixer has no positional-audio DSP graph | Direct, `ComposedPanIsCenteredWhenEmitterDirectlyAbove`/`...Below` (P10-3D-003) | Permanent unless backend changes (RFC-2) |
-  | Stereo crossfeed | `SoundEffectInstance::Pan`/`Apply3D` | Hard-pan (eliminates the opposite channel at the extremes) | 4-coefficient crossfeed matrix | `MIX_SetTrackStereo` is a 2-value gain pair; sharing the single cooked-callback slot with the shipped filter is a real regression risk (P10-PAN-002) | Indirect, via pan unit tests | Design task recorded (RFC-1); not started |
+  | Stereo crossfeed | `SoundEffectInstance::Pan`/`Apply3D` | ~~Hard-pan (eliminated the opposite channel at the extremes)~~ **Fixed by Phase 11's P11-PAN-001** -- see that entry; this row is a Phase 10-era snapshot, kept unchanged for history | 4-coefficient crossfeed matrix | `MIX_SetTrackStereo` is a 2-value gain pair; sharing the single cooked-callback slot with the shipped filter is a real regression risk (P10-PAN-002) | Indirect, via pan unit tests | Design task recorded (RFC-1); implemented Phase 11 (P11-PAN-001) |
   | Loop region approximation | `SoundEffect`/`SoundEffectInstance` loop playback | A bounded loop region truncates the ENTIRE track (including the first playthrough), not just later iterations | `LoopBegin` plays once, then only the loop segment repeats | `MIX_PROP_PLAY_MAX_FRAME_NUMBER` has no per-iteration distinction | Full, for the propagation/no-crash surface (P10-LOOP-005); the underlying truncation behavior itself remains unfixed | Open (P10-LOOP-003/004 investigate a fix) |
   | XACT RPC unsupported targets | `Cue::EvaluateRpc` | DSP-preset RPC targets (`parameter >= RPC_PARAMETER_COUNT`) parsed but discarded -- no DSP preset system exists. (`AttackTime`/`ReleaseTime` and filter-frequency/Q RPC targets are now live/continuous as of P10-RPC-002/003/004 and P10-FILTER-002/003 -- this row is narrower than when first written; full per-member re-audit is P10-AUDIT-002/003) | Live DSP parameter modulation | No DSP preset system exists at all | n/a | Open (recorded as a concrete future task, not permanent) |
   | `Distance`/`OrientationAngle`/`DopplerPitchScalar` RPC variables | `Cue::GetVariable`/`Apply3D` | Recognized as valid variable names but never auto-updated from `Apply3D`'s real computed values | Live values reflecting the last `Apply3D` call | `Apply3D()` never writes back into `variables_` (P10-RPC-002, newly documented this pass) | None | Open |
@@ -4416,23 +4416,95 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
 
 ## Phase 11.6 — RFC-1: stereo crossfeed pan matrix
 
-* [ ] P11-PAN-001: Attempt RFC-1 (internal post-SDL3_mixer float-PCM mixing layer for real
+* [x] P11-PAN-001: Attempt RFC-1 (internal post-SDL3_mixer float-PCM mixing layer for real
   4-coefficient stereo crossfeed), the design already sketched in Phase 10's `P10-PAN-003`.
-  *Status:* **Skipped, not attempted, this pass -- deliberately, not forgotten.** This is the
-  third time this same session has looked at this exact work: `P10-PAN-002` assessed it as "too
-  risky relative to its payoff" and deferred; the standalone `P10-PAN-002` reaffirm pass (after
-  `P10-FILTER-002/003/004/006` landed) confirmed the risk is if anything *higher* now, since the
-  single SDL3_mixer cooked-callback slot a crossfeed implementation would need to share is now
-  carrying real continuous per-tick RPC-driven filter-coefficient writes on top of the existing
-  filter, not just the original one-shot filter. Attempting a real rewrite of that same
-  already-shipped, ThreadSanitizer-verified real-time-audio-callback code for a cosmetic panning
-  improvement, with no fresh signal that the user's risk tolerance has changed since the second
-  assessment, is exactly the kind of decision this autonomous pass's own standing instruction says
-  to skip rather than force through -- not "stop partway through if it gets risky" (the risk here
-  is already fully known up front, not something that would only reveal itself mid-implementation).
-  Not attempted; `CHECKLIST.md` CP-19/RFC-1's existing note stands unchanged. Left open (not
-  closed as "won't fix") in case the user wants to explicitly greenlight it with full awareness of
-  the now-twice-reaffirmed risk.
+  *Status:* **Implemented, user-greenlit (2026-07-07) after three prior deferrals.** `P10-PAN-002`
+  twice assessed this as "too risky relative to its payoff" and deferred it; this pass asked the
+  user directly with the risk fully spelled out (sharing the single SDL3_mixer cooked-callback
+  slot with the already-shipped, ThreadSanitizer-verified `T-4C` filter, now also carrying
+  continuous per-tick RPC-driven coefficient writes) and got an explicit go-ahead, so it was
+  implemented rather than deferred a fourth time.
+  *Design (matches RFC-1's own sketch, `P10-PAN-003`):* `SoundEffectInstance`'s per-track
+  `MIX_SetTrackStereo` call is now fixed to unity gain (1,1) always -- SDL3_mixer's own stereo
+  gain has no crossfeed term at all (`MIX_StereoGains` is a plain per-channel multiplier), so
+  CNA now owns 100% of the stereo image itself. The crossfeed matrix runs inside the SAME shared
+  cooked callback the `T-4C` filter already used (`FilterState`, renamed in intent though not in
+  name to "the per-track cooked-callback DSP state, filter and pan alike" -- `SoundEffectInstance.cpp`),
+  filter first, then crossfeed, both being independent sequential float-PCM transforms on the same
+  buffer -- exactly RFC-1's own sketch. `EnsureTrackDspState()` (new private method) lazily
+  allocates this shared state and (re)registers the cooked callback for EVERY playing track, not
+  just filtered ones, since crossfeed pan must now run unconditionally; called from `Play()` and
+  `Apply3D()` right before `ApplyTrackProperties` (also extended to take the DSP state pointer and
+  write `pan` into it, instead of computing per-channel gains itself). `setPanProperty()` was
+  changed the same way (writes `filterState_->pan` directly under `MIX_LockMixer`/`UnlockMixer`,
+  same locking discipline the filter's `frequency`/`oneOverQ` fields already used) instead of
+  calling `MIX_SetTrackStereo` itself.
+  *Matrix math:* `SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix` (new pure static
+  method, forwards to an anonymous-namespace `ComputePanCrossfeedMatrix` shared with the real-time
+  callback's `ApplyPanCrossfeed`) matches FNA's `SetPanMatrixCoefficients` exactly
+  (`SoundEffectInstance.cs`, the `SrcChannelCount==2 && DstChannelCount==2` branch): at
+  `pan <= 0`, `ll = 0.5*pan+1, rl = 0.5*-pan, lr = 0, rr = pan+1`; at `pan > 0`,
+  `ll = -pan+1, lr = 0.5*pan, rl = 0, rr = 0.5*-pan+1` -- hard panning blends both source channels
+  into the favored speaker instead of eliminating the other input channel outright, matching FNA's
+  own comment ("hard panning does NOT eliminate an entire channel; the two channels are blended on
+  each side"). No separate mono-source branch was needed: since SDL3_mixer's forced-stereo mode
+  (`MIX_SetTrackStereo`) always duplicates a mono source into two identical channels before the
+  cooked callback runs, feeding `L == R` through the same 2-channel matrix was proven (by hand and
+  by `PanCrossfeedMatrixOnDuplicatedMonoMatchesMonoFormula`) to reduce to FNA's separate
+  `SrcChannelCount==1` formula (`outputMatrix[0] = (pan>0)?(1-pan):1.0`,
+  `outputMatrix[1] = (pan<0)?(1+pan):1.0`) exactly, so `ApplyPanCrossfeed` needs no channel-count
+  branch beyond a defensive `channels != 2` early-out.
+  *Scope boundary (not part of this task):* the static, fire-and-forget
+  `SoundEffect::Play(volume, pitch, pan)` helper has its own separate, standalone
+  `MIX_SetTrackStereo` call with no `SoundEffectInstance`/DSP-state/cooked-callback machinery at
+  all (no filter ever existed for that path either) -- it still hard-eliminates the opposite
+  channel on a stereo source. Left as a known, separately-tracked gap (not bundled into this
+  commit, which only touches `SoundEffectInstance`) since fixing it needs its own small
+  heap-allocated per-track pan-state object with a lifetime tied to
+  `OnFireAndForgetStopped` (`SoundEffect.cpp`) -- a real but independent, low-risk follow-up (this
+  path never had a filter competing for the callback slot, so none of RFC-1's original shared-slot
+  risk applies there).
+  *Tests:* 8 new pure-math tests on `INTERNAL_calculatePanCrossfeedMatrix`
+  (`SoundEffectInstanceFilterMathTest`: identity at center, hard-left/-right, partial left/right,
+  favored-speaker-row-sums-to-one, and the duplicated-mono-matches-mono-formula proof above), 5 new
+  buffer-level tests via the existing synchronous `ProcessFilterSamples` hook plus new
+  `SetPanState`/`GetPanState` test hooks (center-is-identity, hard-left, hard-right, non-stereo
+  channel-count guard, and composition with an actual filter in the same callback -- the concrete
+  regression test for RFC-1's core risk), and 4 new end-to-end wiring tests
+  (`PanSetterWritesPanIntoDspState`, `PlayEstablishesDspStateAtDefaultPan`,
+  `PanSetBeforePlayDoesNotCrashOrCreateDspState`, `Apply3DWritesComputedPanIntoDspState`) -- the
+  last of these is only possible now because `GetPanState` gives a real, direct verification path
+  SDL3_mixer itself never exposed (two stale test comments claiming pan was unverifiable were
+  corrected in the same pass, `SoundEffectInstanceTests.cpp`/`SoundEffectInstanceTestAccess.hpp`).
+  git-stash-verified: stashing `SoundEffectInstance.{hpp,cpp}` alone (keeping the new tests)
+  produces real compile errors (`INTERNAL_calculatePanCrossfeedMatrix`/
+  `INTERNAL_{set,get}PanStateForTest` don't exist on the pre-fix class), proving genuine
+  dependency; popping the stash and rebuilding is green again, full suite included.
+  *Concurrency verification:* re-ran the existing `T-4C` stress test
+  (`ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`) under a fresh one-off ThreadSanitizer
+  build (`NEXT.md` §7's documented recipe), 10x back-to-back plus the entire Audio-scoped test
+  subset (497 tests) once -- **zero `WARNING: ThreadSanitizer` reports**, directly addressing this
+  task's own repeatedly-flagged risk (every playing track now registers the shared cooked callback,
+  not just filtered ones, so this surface is genuinely larger post-RFC-1 than what `T-4C`'s
+  original TSan run covered).
+  `CHECKLIST.md` CP-19 updated to reflect the fix and the one remaining (separately-tracked,
+  fire-and-forget-only) gap.
+
+* [ ] P11-PAN-002: apply RFC-1's same stereo crossfeed fix to the static, fire-and-forget
+  `SoundEffect::Play(volume, pitch, pan)` helper (`SoundEffect.cpp`), discovered as a scope
+  boundary while implementing P11-PAN-001 above.
+  *Status:* Not started -- deliberately scoped out of P11-PAN-001, which only touched
+  `SoundEffectInstance`. This path has its own separate `MIX_StereoGains`/`MIX_SetTrackStereo`
+  call with no `SoundEffectInstance`/`FilterState`/cooked-callback machinery at all (this helper
+  never had a filter either), so it still hard-eliminates the opposite channel on a stereo source
+  at hard pan. Unlike P11-PAN-001's original risk (sharing a slot with an already-shipped,
+  load-bearing filter), this path has NO existing cooked callback to share/regress -- adding one
+  here is lower-risk, just needs its own small heap-allocated per-track pan-only state object
+  (a single `float pan`, not a full `FilterState`) with a lifetime tied to
+  `OnFireAndForgetStopped`'s existing track-teardown callback (currently ignores `userdata`,
+  `SoundEffect.cpp`) so it's freed exactly when the track is destroyed. Left open, not attempted
+  this pass, since it's a distinct file/code path from P11-PAN-001's own commit and this project's
+  "one task = one commit" convention.
 
 ## Phase 11.7 — XactParser deep re-audit for uncommon/unhandled XACT features
 
