@@ -323,22 +323,34 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 665
-  (Vulkan; EasyGL last verified Task 420, Bgfx untouched/unverified since Task 416).
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 896
+  (2026-07-07), including every example executable — no build errors anywhere.
 
-### Test status (last verified: Task 665 for Vulkan; Task 420 for EasyGL; Task 416 for Bgfx)
-- **EasyGL, full `ctest -j1`:** 3625/3628 pass (as of Task 420). 3 pre-existing/documented
-  failures (see §5): `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`,
-  `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3544/3556 pass. Same 12 of the 13 documented pre-existing
-  failures as Task 664's run, exact-name-match, zero new regressions.
-  `Vulkan_RenderTargetCube_SampleAfterUnbind` (Task 876's own already-documented flaky failure)
-  again passed this run, consistent with its known non-deterministic nature.
-- **Bgfx, full `ctest -j1`:** 3525/3525 pass (as of Task 416) — 100%, no flakes.
+### Test status (last verified: Task 896, 2026-07-07)
+- **`CnaTests` (gtest unit-test binary, `tests/*.cpp` only — does NOT cover the `examples/*.cpp`
+  pixel tests below), all 3 backends:** EasyGL 3501/3503 passed (2 known skips, 0 failed), Vulkan
+  3501/3503 passed (2 known skips, 0 failed), Bgfx 3505/3507 passed (2 known skips, 0 failed).
+  Exact baseline match on all 3, verified freshly after Task 896's `RasterizerState` default
+  change landed.
+- **`examples/*.cpp` pixel tests (registered individually via `ctest`, one executable per test —
+  NOT part of `CnaTests`): NOT fully re-run as a complete suite after Task 896.** Task 896 touched
+  114 of these files (adding `RasterizerState::CullNone` where the real default would now cull
+  the test's geometry). Verification for that task was: (a) 100% clean compile across all 3
+  backends for every touched file (strong syntactic/semantic check, not a runtime pixel check),
+  (b) each fix backed by either mirroring an already-proven-correct Bgfx sibling or an
+  independently-computed triangle-winding formula, (c) only ~12 of the 114 touched files were
+  spot-run directly (bypassing `ctest`, see the environment note below) and all passed. **The
+  full `ctest` suite for all 3 backends' `examples/*.cpp` pixel tests has not been run end-to-end
+  since before Task 878/879 started** (last known good full-suite numbers, now stale: EasyGL
+  ~3625/3628, Vulkan ~3544/3556 with 12 documented pre-existing failures, Bgfx ~3525/3525 —
+  these predate Tasks 878/879/883/896 entirely and should not be trusted as current). **Running
+  the full `ctest` suite for all 3 backends is the single highest-value next step before starting
+  any new feature task** — see §8 item 0.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
-  as a regression.
+  as a regression. **Also see the environment note below `ctest` cannot currently reach a virtual
+  display — see §4.**
 
 ### What currently works
 - Full `Texture2D`/`Texture3D`/`TextureCube` construction, `SetData`/`GetData` (arbitrary
@@ -479,8 +491,9 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - `SpriteBatch`'s `SamplerState` is a no-op on Bgfx (fixed on Vulkan by Task 665; EasyGL already
   correct).
 - `Texture3D` sampling cannot be wired into any shader without an architecture change (Task 863).
-- Bgfx: `SpriteBatch::Draw`ing a `RenderTarget2D`/`RenderTargetCube` reads the wrong handle type via
-  an invalid `static_cast` — samples wrong/garbage data, doesn't crash (Tasks 873/874).
+- Bgfx: `SpriteBatch::Draw`ing a `RenderTargetCube` (via `EnvironmentMapEffect`) reads the wrong
+  handle type via an invalid `static_cast` — samples wrong/garbage data, doesn't crash (Task 874;
+  the identical `RenderTarget2D` bug is fixed, Task 873).
 - Vulkan: `SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);` with no draw call never
   gets a render pass recorded (Task 875). Sampling a `RenderTargetCube` via `EnvironmentMapEffect`
   after unbinding renders black instead of actual content, root cause not isolated (Task 876).
@@ -629,6 +642,21 @@ whole file, needs its own task/decision on the right default). Vulkan's `CnaTest
 low-single-digit-count test flakiness unrelated to any specific change (different tests fail each
 run) — a known limitation of this fallback environment, not a regression signal. EasyGL and Bgfx
 both ran fully clean (0 failures) under the same `Xvfb` setup.
+
+**Follow-up (2026-07-07, end of Task 896 session):** the full `ctest` suite (all `examples/*.cpp`
+pixel tests, ~200+ across 3 backends) has **not** been re-run end-to-end since before Task
+878/879 started — see §2's test-status section and §8 item 0. Whoever picks this up next should
+either (a) start a fresh `Xvfb :99` (`Xvfb :99 -screen 0 1280x1024x24 &`, then
+`SDL_VIDEODRIVER=x11 DISPLAY=:99 ctest ...` — this does NOT work as-is due to the hardcoded
+`DISPLAY=:0` above, so this only works for direct binary invocation, not `ctest` itself), or
+(b) properly fix the `ctest` `DISPLAY=:0` hardcoding (e.g. make it configurable via a CMake cache
+variable defaulting to `:0` for backward compatibility) so the full suite can run against a
+virtual display. **Never run any GPU/window-creating binary against the real `DISPLAY=:0`** —
+confirmed disruptive to the human developer's desktop twice in one session. Separately: this is a
+shared machine — a `cat /proc/loadavg` check before trusting any flaky-looking test result is
+worthwhile, since unrelated concurrent builds from other sessions/projects (observed: a sibling
+`cna_devices` project building with high parallelism) can push load average to 4x the core count
+and cause transient, non-representative test failures unrelated to any code change.
 
 ---
 
@@ -800,6 +828,14 @@ across 8 parallel forks before landing the 1-line ctor fix) are all done. In pri
 rest are the accumulated backlog from earlier phases plus this task's new findings (Tasks 825–828,
 863–882, 889–895, 902–904).
 
+0. **Not a plan_graphics.md task — run the full `ctest` suite for all 3 backends' `examples/*.cpp`
+   pixel tests before starting anything else.** Task 896 touched 114 of these files; only ~12 were
+   spot-run directly (bypassing `ctest`'s hardcoded `DISPLAY=:0`, see §4). This is the single
+   highest-value next step — confirms Task 896's fix didn't silently break any of the ~100
+   un-spot-checked files. Either fix `ctest`'s `DISPLAY=:0` hardcoding to respect a virtual display
+   first, or find another way to run the full suite without touching the real display (never
+   `DISPLAY=:0` — see §4's environment note, confirmed disruptive twice this session).
+
 1. **Task 878 — implement real mip-chain support for `RenderTarget2D`/`RenderTargetCube` on
    Vulkan and Bgfx** (MSAA half already done under Task 879 — this is mip only now). Vulkan needs
    real `mipLevels`/mip-aware views + a `vkCmdBlitImage` cascade at resolve time; Bgfx needs
@@ -889,736 +925,87 @@ rest are the accumulated backlog from earlier phases plus this task's new findin
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first non-decision task in §8
-(Task 883 and Task 896 are both now FULLY DONE -- Task 896 closed via an upfront 119-file
-winding audit across 8 parallel forks before landing GraphicsDevice's 1-line ctor fix, Task 883
-made Effect::Clone() a real polymorphic contract; Task 899 is now FULLY DONE, every fog gap it
-ever touched closed; Task 878/879 is now MOSTLY DONE -- RenderTarget2D MSAA is fully
-implemented+verified on all 3 backends, only the mip half (Task 878) remains open, see §8 item 1
--- also done along the way: Task 873, 901, 905 (3 more real pre-existing bugs found and fixed as
-hard prerequisites/during review)).
-Do not refactor unrelated code. Make one small, verified improvement.
-Run the relevant build/test command before declaring the task done.
-Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
-instruction — do not wait to be asked; one task = one commit = one push).
+Read NEXT.md first, in full — this section is intentionally the only thing you need before
+touching any code.
 
-Current status: Phases 1-47 are FULLY COMPLETE (Tasks 664/665 closed Phase 47's own 2 real bugs).
-Task 884 (EffectParameterCollection/EffectPassCollection dangling-pointer hazard) is also DONE.
-Task 885 + Task 897 together fully fixed BasicEffect's lit-path DirectionalLight1/2 +
-EmissiveColor forwarding gap on ALL 3 backends (885 = EasyGL/Bgfx, 897 = Vulkan's new dedicated
-descriptor-set/UBO infrastructure for the lit-textured pipeline). Task 886 (real specular
-highlights for BasicEffect) is now ALSO DONE on all 3 backends, together with 2 real,
-pre-existing normal-transform bugs found and fixed as hard prerequisites while building its
-real-camera test: Task 892 (Bgfx) and Task 898 (Vulkan) -- both backends transformed the
-lit-textured vertex normal by the full World*View*Projection matrix instead of World's
-inverse-transpose, invisible until a non-identity camera was used on this path for the first
-time. This closes out BasicEffect's entire lit-path formula gap vs FNA (Tasks 885/897/886/892/898
-together). Task 887 (AlphaTestEffect.VertexColorEnabled ignored on Vulkan/Bgfx) is now ALSO DONE
-on both backends -- fixed with a smaller-footprint stride-24-only sibling shader rather than the
-originally-scoped full dispatch unification; Bgfx's new test initially failed for an unrelated,
-already-known reason (the Task 364/896 RasterizerState::CullNone culling gap, missing from the new
-test) before being fixed. Task 896 (RasterizerState-default GPU-sync gap, split out of Task 884's
-old bundled title) is OPEN but deliberately not started -- needs a scoping decision first (see
-NEXT.md Task 896 note in section 8). Task 883 is next in the backlog but also needs a decision --
-skip it too if still autonomous. Task 888 (real fog on Bgfx + Vulkan's alpha_test3d/
-lit_textured3d) is now ALSO DONE -- chose EasyGL's raw-object-space-Z formula over FNA's
-view-space FogVector approach (equivalent only under identity World/View, which every test uses).
-Bgfx got full coverage (7 pipelines, no push-constant budget constraint there); Vulkan only got
-the 3 pipelines with existing spare UBO/push-constant capacity, with the remaining 5 split into
-Task 899 (needs new dedicated UBO infrastructure, comparable to Task 897). Also opened Task 900,
-which is now ALSO DONE on EasyGL: SkinnedEffect/EnvironmentMapEffect's FillGpuDrawParams() never
-forwarded fog fields at all (a pure C++ gap, unrelated to Task 888's GPU-side work), found during
-Task 888's research. Fixed by mirroring BasicEffect's pattern in both effects plus adding fog
-uniforms/blend to EasyGL's env_map3d/skinned3d shaders (the only 2 of EasyGL's 7 shader variants
-with zero fog code before this task) -- BindDrawParams() needed no changes since its fog-uniform
-block is already fully generic. 2 new tests passed first try; git stash revert-and-rebuild
-reproduced the exact predicted pre-fix failure. Full EasyGL regression 3631/3634, same 3
-pre-existing failures. Vulkan/Bgfx's env_map3d/skinned3d GPU shader pipelines still don't
-implement fog -- left for Task 899 (noting Vulkan's env_map3d specifically already has ~160 spare
-UBO bytes and could be picked up cheaply there, and Bgfx's env_map3d/skinned3d need no new infra
-at all, same 2-uniform pattern as Task 888's other 7 pipelines -- neither was in Task 888/900's own
-scope though, since their C++ side wasn't even forwarding fog until this task). Task 881 (cap
-SetRenderTargets at FNA's real MAX_RENDERTARGET_BINDINGS=4, Task 339 finding) is now ALSO DONE on
-all 3 backends -- a single shared C++ check in GraphicsDevice::SetRenderTargets throws
-std::invalid_argument before any backend delegation, superseding each backend's own previously-
-wrong ad-hoc cap. Found a real, separate, previously-unreported segfault while writing the test:
-CNA's RenderTargetBinding (unlike FNA's, whose constructors throw ArgumentNullException on a null
-target) has a default constructor wrapping a null Texture*, and SetRenderTargets crashes deeper in
-the function if several are passed -- not fixed, unreachable in practice given FNA's own API shape
-(a real game can never construct a null-target RenderTargetBinding this way). Task 880 (wire
-GraphicsDevice.Viewport to a real GPU viewport on all 3 backends, Task 338 finding) is now ALSO
-DONE -- mirrored ScissorRectangle's already-wired pattern exactly (IGraphicsBackend::SetViewport,
-setViewportProperty() forwards to it, plus a second fix in the separate UpdateViewportFromWindow()
-resize path). Writing the sub-region-viewport pixel test FIRST (per this task's own prior
-caution) immediately paid off: it caught a real regression on EasyGL the moment SetViewport was
-implemented -- the naive Y-flip using the window's own physical height (not the bound
-RenderTarget2D's height) put the GL viewport's y-offset entirely outside the RT's real pixel
-range whenever an RT smaller than the window was bound, discarding every fragment. Root cause was
-an identical latent bug already present in SetScissorRect (never manifesting since scissor is
-opt-in); fixed both using currentRtHeight_, mirroring ReadBackbuffer's own already-established
-pattern. Vulkan and Bgfx were both wired backbuffer-only -- RT passes on both deliberately stay
-hardcoded to each RT's own full size, since the deferred, potentially-multi-RT-per-frame
-command-buffer/view recording architecture can't correctly attribute one frame-global stored
-viewport value to a specific RT's draws (the exact same limitation Vulkan's RT-pass scissor
-handling already has, now documented as its own NEXT.md row). 2D SpriteBatch rendering is
-deliberately unaffected by Viewport on all 3 backends. The Bgfx test needed a rewrite mid-task:
-the first version read 2 sample points per render pass and intermittently failed, traced to
-ReadBackbuffer's own bgfx::requestScreenShot()+bgfx::frame() sequence advancing the frame on every
-single GetBackBufferData call, so a second read in the same logical Clear+Draw cycle observes an
-extra empty frame with nothing newly submitted -- rewrote to one Clear+Draw+single-read pass per
-sample point, matching every other multi-point Bgfx test's already-established convention.
-git stash revert-and-rebuild confirmed all 3 new tests fail exactly as predicted pre-fix. Full
-regression: EasyGL 3636/3639 (3 pre-existing failures, unchanged), Vulkan 61/73 filtered +
-CnaTests 3493/3495 (12 pre-existing failures, unchanged), Bgfx 3540/3540 (100%, zero failures).
-Remaining backlog (Task 899/896/883) all need either new large infrastructure work or a scoping
-decision -- check NEXT.md's own backlog list (section 8) for the current best candidate when
-resuming. Task 411 (opener) built the mock/recording
-ISpriteBatchBackend infrastructure Tasks 412-416 depend on -- audited SpriteBatch's architecture
-first (it already has a dedicated ISpriteBatchBackend interface; flushBatch()'s stable_sort by
-layerDepth/texture-pointer followed by flushSingle()'s backend_->Draw(s.texture->GetBackend(),...)
-is the single dispatch point every sort-mode test needs to observe). FOUND 2 real gaps blocking
-any mock-based test, both FIXED as infrastructure prerequisites: (1) SpriteBatch had NO injection
-seam -- SpriteBatch(GraphicsDevice&) always requires a real GPU backend, and the existing
-SpriteBatch() default ctor leaves backend_ permanently null with no setter. FIXED by adding a new
-NOXNA constructor SpriteBatch(unique_ptr<ISpriteBatchBackend>) bypassing GraphicsDevice entirely
-(GraphicsResource(nullptr), matching the default ctor's own precedent). (2) flushSingle()
-dereferences Texture2D::GetBackend() (*backend_), but the existing
-Texture2D::CreateCpuOnlyForTests() leaves backend_ null by design -- a crash the moment any
-queued sprite is flushed. FIXED by adding a new NOXNA factory
-Texture2D::CreateWithBackendForTests(w, h, shared_ptr<ITextureBackend>), mirroring
-CreateCpuOnlyForTests's exact established pattern. Built the actual mock:
-tests/Microsoft/Xna/Framework/Graphics/RecordingSpriteBatchBackend.hpp (new shared test-utility
-header, mirrors the project's existing *TestAccess.hpp convention) with DummyTextureBackend
-(minimal ITextureBackend) and RecordingSpriteBatchBackend (records every Begin/End/Draw call, in
-order). Added 5 new tests proving the injection point + mock work end-to-end: construction
-doesn't throw, Begin()/End() dispatch correctly, a Draw() call is recorded with byte-exact
-deliberately-non-default parameters (rotation/origin/color/layerDepth, so the assertion is
-genuinely discriminating), and 2 distinct Texture2D instances produce 2 distinct recorded backend
-pointers (the precondition Task 414's SpriteSortMode::Texture grouping assertion depends on).
-Deliberately left Tasks 412-416's own per-SpriteSortMode assertions (Immediate flush timing,
-Deferred order preservation, Texture grouping, FrontToBack/BackToFront ordering) out of scope --
-this task's job was only proving the shared infrastructure itself works. No existing production
-behavior changed; only new NOXNA test-only injection points added.
+## Repo state as of 2026-07-07 (end of Task 896 session) — READ THIS FIRST
 
-Task 412 fulfilled Task 161's exact ask -- verify-only, zero bugs found. FNA/XNA's contract for
-SpriteSortMode::Immediate is that each sprite is submitted the instant Draw() is called, not
-queued and flushed at End() like every other mode -- this must be observable BEFORE End() is ever
-called. Added ImmediateFlushesInsideDrawBeforeEnd (asserts rec->drawCalls.size()==1 immediately
-after Draw(), strictly before End(), then stays at 1 after End() -- no double-flush),
-ImmediateFlushesEachDrawSeparatelyInCallOrder (2 distinct textures, count increments by exactly 1
-per Draw() call), and DeferredDoesNotFlushBeforeEnd (negative control: proves the assertion
-methodology is genuinely discriminating, not spuriously passing regardless of sort mode).
-Independently verified discriminating power: temporarily replaced pushSprite()'s
-`if (sortMode_ == SpriteSortMode::Immediate)` with `if (false)` and rebuilt -- both Immediate
-tests failed exactly as predicted (count read 0 instead of 1 before End()), while the Deferred
-negative control correctly kept passing; reverted and reconfirmed all 8 SpriteBatch mock-backend
-tests green. No production code changed.
+A large external merge landed on this branch AFTER Task 896's own commits (cd4bcc4e), outside
+this session: feature/devices, feature/audio, and feature/input were merged into `develop`, and
+`feature/graphics` was then fast-forwarded to match (596 files changed, ~95K lines, per
+`git diff cd4bcc4e..HEAD --stat`). This was the project owner's own intended workflow (merge
+sibling feature branches into develop, keep feature/graphics in sync) — not a mistake, and
+nothing was lost: `git log --oneline -1` should show a merge commit mentioning feature/input (or
+later); all of this session's commits (`d1018384` through `cd4bcc4e`, Tasks 878/879/883/896) are
+still in the branch's history, just no longer at the tip.
 
-Task 413 fulfilled Task 162's exact ask -- verify-only, zero bugs found. FNA/XNA's contract for
-the default SpriteSortMode::Deferred is: no sort at all, sprites delivered in exactly their
-original Draw() submission order. Read flushBatch() directly: it stable_sorts for
-BackToFront/FrontToBack/Texture only, Deferred deliberately falls through to plain insertion-order
-iteration with no else branch at all. Added DeferredPreservesSubmissionOrder: 3 distinct textures
-drawn in an order (C, A, B) deliberately chosen not to coincide with any plausible accidental sort
-key, asserting the recorded calls arrive in that exact order after End(). Independently verified
-discriminating power: temporarily added an unconditional std::reverse(spriteQueue_.begin(),
-spriteQueue_.end()) right before the flush loop and rebuilt -- the test failed exactly as
-predicted (recorded order came back reversed, B,A,C instead of C,A,B); reverted and reconfirmed
-all 9 SpriteBatch mock-backend tests green. No production code changed.
+**Consequences you must account for before doing anything else:**
+1. **All `cmake-build-*` directories are gone** (confirmed absent at session end) — a fresh
+   `cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL` (and `=VULKAN` / `=BGFX` for the
+   other two configs) is needed before any build.
+2. **Every build/test status number in this file (§2, §5, this section) predates the merge and
+   is UNVERIFIED against the merged-in code.** Do not trust "last known good" numbers below as
+   current — re-run them fresh. The merge pulled in substantial new subsystems (Input, Devices,
+   Audio work) that graphics code doesn't depend on, so a clean rebuild is *likely* but not
+   guaranteed to still succeed — verify, don't assume.
+3. Graphics work no longer happens in isolation on this branch — Input/Devices/Audio subsystem
+   code now coexists here. Stay scoped to graphics-relevant files per CLAUDE.md's existing
+   discipline; don't get pulled into auditing unrelated subsystems.
 
-Task 414 fulfilled Task 163's exact ask -- verify-only, zero bugs found. FNA/XNA's contract for
-SpriteSortMode::Texture is: sprites grouped by texture (minimize GPU texture-bind changes), sorted
-by raw texture reference. flushBatch() implements this as a POINTER comparison
-(a.texture < b.texture), so which texture sorts first depends on runtime addresses, not something
-a test can predict -- designed the test around only the 2 properties that ARE part of the
-contract regardless of address ordering: (1) draws sharing a texture end up adjacent, and (2) they
-keep their original relative submission order (stable_sort's stability). Added
-TextureGroupsDrawsByTextureAndPreservesGroupOrder: 2 distinct textures A/B drawn interleaved
-(A, B, A), asserting the 2 A-entries end up adjacent (regardless of which group sorts first) and
-in original order (X=1 before X=3, marker fields unrelated to sorting). Independently verified
-discriminating power: temporarily disabled the Texture sort branch and rebuilt -- the test failed
-exactly as predicted (the interleaved B-draw stayed between the 2 un-grouped A-draws); reverted
-and reconfirmed all 10 SpriteBatch mock-backend tests green. No production code changed. This
-run's full Vulkan regression also hit 3 unrelated flakes (CueTest audio-timing,
-2 NetworkSessionTest cases) -- all reran individually and passed, confirming pre-existing
-flakiness, not a regression from this change.
+**First action on resume, before any feature work** (run these in order):
+  1. `git log --oneline -5` — confirm the merge landed as expected, note the new HEAD hash.
+  2. `git status --short` — confirm clean working tree.
+  3. `cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL && cmake --build cmake-build-debug --target CNA CnaTests -j4`
+  4. `cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN && cmake --build cmake-build-vulkan --target CNA CnaTests -j4`
+  5. `cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX && cmake --build cmake-build-bgfx --target CNA CnaTests -j4`
 
-Task 415 fulfilled Task 164's exact ask -- verify-only, zero bugs found. FNA/XNA's contract for
-SpriteSortMode::FrontToBack is: sprites sorted by ASCENDING layerDepth (smaller depth = closer to
-camera = drawn first). Added FrontToBackSortsByAscendingLayerDepth: 3 draws at depths 0.5, 0.1,
-0.9 (plan_graphics.md's own Task 164 example, deliberately out of order), each with a dest-rect X
-marker mirroring its depth*100 (50/10/90); asserts the recorded calls arrive in ascending order
-0.1 (X=10), 0.5 (X=50), 0.9 (X=90). Independently verified discriminating power: temporarily
-disabled the FrontToBack sort branch and rebuilt -- the test failed exactly as predicted (order
-reverted to raw submission order 0.5, 0.1, 0.9); reverted and reconfirmed all 11 SpriteBatch
-mock-backend tests green. No production code changed. Vulkan's own 3 extra flakes from Task 414's
-run (CueTest audio-timing, 2 NetworkSessionTest cases) did not reproduce this run.
+If any of these fail, that IS the current top-priority task (fix the post-merge build break) —
+do not proceed to §8's backlog until all 3 configs build clean. If they all succeed, run
+`CnaTests` on all 3 (see the environment note just below) to get a fresh baseline, update §2 with
+the real numbers, then proceed to §8 item 0 (full `ctest` suite — still applies, likely even more
+important now given the merge scope).
 
-Task 416 fulfilled Task 165's exact ask, CLOSING the per-SpriteSortMode mock-backend test arc
-(Tasks 412-416) -- verify-only, zero bugs found. The mirror image of Task 415: FNA/XNA's contract
-for SpriteSortMode::BackToFront is sprites sorted by DESCENDING layerDepth (larger depth = farther
-from camera = drawn first). Added BackToFrontSortsByDescendingLayerDepth, directly reusing Task
-415's exact 3 draws (same depths 0.5, 0.1, 0.9, same dest-rect X markers) with only the sort mode
-and expected order reversed, asserting descending order 0.9 (X=90), 0.5 (X=50), 0.1 (X=10).
-Independently verified discriminating power: temporarily disabled the BackToFront sort branch and
-rebuilt -- the test failed exactly as predicted (order reverted to raw submission order); reverted
-and reconfirmed all 12 SpriteBatch mock-backend tests green. No production code changed.
+**Environment, non-negotiable:** never run any GPU/window-creating binary against the real
+`DISPLAY=:0` — confirmed disruptive to the human developer's desktop twice in the prior session
+(window/keyboard-focus stealing). Start a virtual display first: `Xvfb :99 -screen 0 1280x1024x24
+&`, then always `SDL_VIDEODRIVER=x11 DISPLAY=:99 <binary>`. `ctest` itself cannot reach this virtual
+display as-is (`CMakeLists.txt` hardcodes `DISPLAY=:0` on every GPU test's `ENVIRONMENT` property,
+~265 occurrences) — either fix that hardcoding (make it a CMake cache variable) or keep using
+direct binary invocation instead of `ctest` for GPU tests. Full details in §4.
 
-Task 417 (first real GPU pixel test in Phase 47) verified rotation around origin -- verify-only,
-zero bugs found. Read FNA's real SpriteBatch.cs GenerateVertexInfo formula directly: origin is
-subtracted from each source-space corner BEFORE rotation, so the origin point itself always maps
-to exactly (destinationX, destinationY), invariant under rotation -- the defining property of a
-true pivot. Read CNA's EasyGL Draw() implementation directly: algebraically identical to FNA's
-formula, term-for-term. Designed a discriminating test: 100x100 texture (top-left 20x20=Red
-marker, rest=Blue) at destinationRectangle=(200,150,100,100), origin=(100,100) (source's own
-bottom-right corner, diagonally opposite the marker), rotated 90 degrees. Hand-derived expected
-marker position from FNA's formula: (290,60) -- distinct from both the unrotated position
-(110,60) and the origin's own fixed point (200,150). All 3 checks (marker at (290,60)=Red, sprite
-interior (250,100)=Blue, outside entirely (50,50)=clear) passed with exact predicted values on
-the first attempt. Independently verified discriminating power: temporarily hardcoded
-ox=oy=0 in EasyGLGraphicsBackend.cpp (simulating origin-ignored-during-pivot bug) and rebuilt --
-2 of 3 checks failed exactly as predicted; reverted and reconfirmed. No production code changed.
-Added examples/easygl_spritebatch_rotation_test.cpp. EasyGL-only task, no shared code touched,
-Vulkan/Bgfx unaffected/unverified.
+## What to do after the build is confirmed working
 
-Task 418 verified SpriteBatch::Draw's scalar and Vector2 scale overloads -- verify-only, zero
-bugs found. Both compute destRect=(position.X, position.Y, sourceRect.Width*scale.X,
-sourceRect.Height*scale.Y) (scalar overload forwards Vector2(scale,scale)). Designed a
-discriminating test: 20x20 solid-Red texture drawn twice against Green -- scalar overload
-(pos=(50,50), scale=3.0 -> expected 60x60, x:[50,110) y:[50,110)) and Vector2 overload with
-NON-UNIFORM scale (pos=(200,50), scale=(2,4) -> expected 40x80, x:[200,240) y:[50,130)). Check
-points chosen to discriminate 2 axis-mixing bugs: (220,110) is inside the correct 40x80 box but
-would read background under a "scale.X for both axes" bug (40x40, edge y=90); (245,70) is
-outside the correct box's right edge (240) but would read Red under a "scale.Y for both axes"
-bug (80x80, edge x=280). All 5 checks passed with exact predicted values on the first attempt.
-Independently verified discriminating power TWICE: temporarily forced dh=dh*scale.X (X-for-both
-bug) -- (220,110) failed exactly as predicted; separately forced both dims to scale.Y
-(Y-for-both bug) -- (245,70) failed exactly as predicted; reverted both times, net production
-diff zero. No production code changed. Added examples/easygl_spritebatch_scale_test.cpp.
-EasyGL-only, Vulkan/Bgfx unaffected/unverified.
+Work through `plan_graphics.md` autonomously, one task at a time, following the established
+per-task methodology (see CLAUDE.md and this file's own conventions, reinforced all last
+session): research → implement → write a discriminating test FIRST → verify via
+`git stash`-revert-and-rebuild that the new test actually fails without the fix → full regression
+per affected backend(s) → update `plan_graphics.md` (verbose writeup) and `NEXT.md` (concise) →
+commit → push → a small follow-up commit filling in the just-created commit hash into NEXT.md's
+`TBD` placeholder. One task = one commit; never bundle unrelated tasks.
 
-Task 419 verified SpriteBatch::Draw's sourceRectangle cropping -- verify-only, zero bugs found.
-Read EasyGL's UV computation directly: u1=sourceRectangle.X/texW etc -- genuinely used to compute
-normalized UV bounds, not discarded. Designed a discriminating test: 20x20 texture, 2x2 grid of
-10x10 solid-color cells (Red/Blue/Magenta/Yellow), drawn with sourceRectangle=(10,0,10,10) (Blue
-cell only) stretched into a 50x50 destRect. Chose 2 independent check points near destRect's
-top-left and bottom-right corners that would each show a DIFFERENT wrong color (Red, Yellow) if
-sourceRectangle were ignored and the whole texture stretched instead. All 3 checks passed with
-exact predicted values on the first attempt. Independently verified discriminating power:
-temporarily hardcoded u1=v1=0,u2=v2=1 (whole-texture UVs) and rebuilt -- both cropping checks
-failed exactly as predicted (Red and Yellow instead of Blue); reverted, net production diff zero.
-No production code changed. Added examples/easygl_spritebatch_sourcerect_test.cpp. EasyGL-only,
-Vulkan/Bgfx unaffected/unverified.
+**Skip without asking**, exactly like last session: any WebGPU task (`plan_webgpu.md`, hard
+project-wide prohibition, see CLAUDE.md) and any task genuinely blocked on a scoping decision only
+the project owner can make (there are currently none outstanding — Task 883 and Task 896, the
+last two decision-blocked tasks, were both resolved and closed last session).
 
-Task 420 closed Phase 47's core SpriteBatch test arc (Tasks 411-420) -- verify-only, zero bugs
-found. Proved layerDepth genuinely affects on-screen draw ORDER (which sprite composites on top
-when 2 sprites overlap), not just backend dispatch order (already proved by Tasks 415/416's
-mock-backend tests). Read EasyGLSpriteBatchBackend::Draw() directly: sprite vertices carry no Z
-component at all -- layerDepth is used purely as a CPU-side sort key in flushBatch(), never
-written into vertex data -- so with no depth test the sprite drawn LAST in the sorted sequence
-wins the overlap via simple painter's algorithm, matching FNA's own default
-(DepthStencilState.None) behaviour. Designed a discriminating test: 2 overlapping 60x60 opaque
-sprites (Red layerDepth=0.1, Blue layerDepth=0.9) DELIBERATELY SUBMITTED IN THE OPPOSITE ORDER in
-code (Draw(Blue) first, Draw(Red) second) from the correct FrontToBack draw order, so the test
-genuinely discriminates depth-based sorting from raw submission order. All 3 checks (Red-only,
-overlap=Blue, Blue-only) passed with exact predicted values on the first attempt. Independently
-verified discriminating power: temporarily disabled the FrontToBack sort branch and rebuilt --
-the overlap check failed exactly as predicted (Red instead of Blue); reverted, net production
-diff zero. No production code changed. Added examples/easygl_spritebatch_layerdepth_test.cpp.
-EasyGL-only, Vulkan/Bgfx unaffected/unverified.
+**Backlog, in priority order:** see §8. Item 0 (full `ctest` regression) should be done first
+regardless of build-check results above, since it's the last remaining unverified piece of last
+session's Task 896 work. After that, Task 878 (Vulkan/Bgfx `RenderTarget2D`/`RenderTargetCube` mip
+support) is the next well-defined, non-decision-blocked task.
 
-Task 664 FIXED the confirmed Vulkan SpriteBatch multi-Begin/End-per-frame bug -- real, confirmed
-bug found and fixed. Root cause isolated via instrumentation/tracing first (per plan_graphics.md's
-own instruction, not guess-fixed): 2 compounding mechanisms. (1) VulkanSpriteBatchBackend::Begin()
-unconditionally cleared its own vertices_/indices_/draws_ member vectors -- the SAME mutable
-storage a prior End() had just finished populating. activeBatches_ tracked entries by RAW POINTER
-to that single object, pushed at Begin() time. Since the once-per-frame harvest
-(RecordCommandBuffer, driven by Present()) runs strictly after all of a frame's Begin/Draw/End
-calls, a 2nd Begin() call destroyed the 1st cycle's already-completed geometry before the harvest
-ever got a chance to read it. (2) A second, latent, previously-masked bug: drawSpritesFor's
-harvest loop memcpy'd every activeBatches_ entry to a HARDCODED OFFSET 0 in the shared per-frame
-spriteVB_/spriteIB_ buffers (unlike the already-correct 3D immediate-draw path, draw3DFor, which
-uses a genuine accumulating vbOff/ibOff cursor) -- so even after fixing (1), 2 genuinely distinct
-batches targeting the same RT in one frame would still stomp on each other's GPU-visible memory.
+**Standing instructions carried over from the prior session (still in force):**
+- Commit AND push after every finished task without waiting to be asked.
+- Chain to the next non-decision task automatically once one finishes — don't stop to ask
+  "should I continue?" for ordinary backlog progression.
+- Update both `plan_graphics.md` (verbose, full FNA-comparison detail) and `NEXT.md` (concise,
+  one-line-per-task in §3) after every task.
+- If genuinely blocked on a decision only the project owner can make, stop and ask — don't guess
+  and don't skip silently without noting it in NEXT.md §8/§9.
 
-FIXED: added VulkanSpriteBatchBackend::BatchSnapshot (owns vertices/indices/draws/
-customEffectBackend by value); End() now moves the completed cycle's geometry into a freshly
-heap-allocated snapshot and pushes it onto activeBatches_ (changed to
-vector<pair<unique_ptr<BatchSnapshot>, VulkanRTSource*>>) -- not Begin() -- so a 2nd Begin() call
-only ever resets its own not-yet-used working vectors. Gave drawSpritesFor a genuine accumulating
-vbOff/ibOff cursor mirroring draw3DFor's exact pattern (bounds-checked, memcpy'd/bound at the
-running offset, advanced by each snapshot's byte size). Removed the now-unnecessary
-ConsumeDraws()/GetVertices()/GetIndices()/GetDrawCalls()/GetCustomEffectBackend() accessors.
-
-New regression test examples/vulkan_spritebatch_multi_begin_end_test.cpp: 2 independent
-Begin()/Draw()/End() cycles in one Draw(GameTime) (Red left half, Blue right half, matching the
-confirmed repro) -- both regions PASS with exact predicted colors on the first attempt.
-Independently verified discriminating power: git stash-reverted both changed files and rebuilt --
-the pre-fix code reproduced the exact reported symptom (left region = black/clear instead of Red,
-right region correctly Blue); git stash pop-restored and reconfirmed both regions pass.
-
-Full Vulkan rebuild + regression: ctest 3543/3555 (12 of the 13 previously-documented pre-existing
-failures reproduced exact-name-match; Vulkan_RenderTargetCube_SampleAfterUnbind -- Task 876's own
-already-documented flaky failure -- passed this run, reran 5x in isolation and passed every time,
-confirming it's unrelated to this fix, not a regression; +1 new test).
-
-Task 665 FIXED the confirmed Vulkan SpriteBatch.Begin() SamplerState no-op -- real, confirmed bug
-found and fixed, BOTH predicted root causes confirmed present (not just one). (1)
-VulkanSpriteBatchBackend never overrode SetSamplerFilter/SetSamplerAddressMode at all (silent
-no-op via ISpriteBatchBackend's default empty bodies); FlushTexture() always used the texture's
-own pre-baked, fixed-at-load-time descriptor set (currentTexture_->GetVkDescriptorSet()),
-completely bypassing the per-slot VkSampler system (Task 118) entirely. (2) Draw() separately
-std::clamp'd the CPU-computed UVs to [0,1] regardless of the actual sourceRectangle extent --
-exactly the second bug this task predicted by analogy to Task 269's EasyGL fix -- silently
-defeating Wrap/Mirror addressing even if bug (1) alone were fixed, since a clamped UV can never
-leave [0,1] for any sampler to wrap/mirror.
-
-FIXED both: added SetSamplerFilter/SetSamplerAddressMode overrides storing pendingFilter_/
-pendingAddressU_/pendingAddressV_ (mirroring EasyGLSpriteBatchBackend's exact field
-names/defaults); FlushTexture() now calls backend_->ApplySamplerState(0, pendingFilter_,
-pendingAddressU_, pendingAddressV_, 1) (Task 118's existing per-slot cache) then builds a fresh
-descriptor set via backend_->GetOrCreateTexSamplerDescSet(currentTexture_->GetVkImageView(),
-backend_->slotSamplers_[0]) combining the texture's own image view with the CURRENT slot-0
-sampler, instead of the texture's fixed one. Removed the erroneous std::clamp(...,0.f,1.f) calls
-in Draw()'s UV computation, matching FNA's real unclamped SpriteBatch.cs behavior.
-
-New test examples/vulkan_texture_address_mode_test.cpp -- a direct 1:1 port of Task 269's own
-easygl_texture_address_mode_test.cpp (identical 2x1 Red/Blue texture, identical sourceRectangle
-2x texture width, identical U~1.25 read-back point, identical PointWrap-vs-PointClamp
-comparison): both checks pass with exact predicted colors on the first attempt (PointWrap->Red,
-PointClamp->Blue). Independently verified discriminating power: git stash-reverted both changed
-files and rebuilt -- the pre-fix code produced the exact predicted symptom, both PointWrap and
-PointClamp reading the IDENTICAL blended color (64,0,191) (a bilinear-filtered boundary blend
-from the fixed default sampler, proving Wrap addressing genuinely never took effect either way);
-git stash pop-restored and reconfirmed both checks pass.
-
-Full Vulkan rebuild + regression: ctest 3544/3556 (same 12 of 13 previously-documented
-pre-existing failures as Task 664's run, exact-name match, zero new regressions; +1 new test).
-
-This closes BOTH of Phase 47's originally-scoped "two SpriteBatch bugs found this session"
-(Tasks 664/665). Phase 47 is now fully closed. The next NEXT task is Task 883 (implement
-Effect::Clone()), the top of the accumulated backlog from earlier phases -- see §8.
-
-Phase 46 ("SkinnedEffect exactness", Tasks 401-410) CLOSED with Task 410
-(docs/skinnedeffect-support.md, full synthesis of Tasks 401-409). Summary of what it found/fixed:
-Task 401 (opener) audited SkinnedEffect against FNA line-by-line -- all property defaults,
-MaxBones=72, bounds-checking, and OnApply()'s shader-index formula matched exactly. FOUND AND
-FIXED a real bug: Clone() never preserved SpecularColor/SpecularPower -- the identical
-architectural shape Task 392 already fixed for FogColor across 4 stock effects. Opened Tasks 893
-(DirectionalLight1/2 unforwarded), 894 (zero specular GPU implementation), and 895
-(WeightsPerVertex complete GPU no-op on all 3 backends). Task 402 wrote 52 new
-SkinnedEffectTests.cpp unit tests (zero prior coverage existed) plus fixed an unrelated
-MaxBones linker gap. Tasks 403/405 were already fully satisfied by Task 402's own coverage --
-marked done without new code. Task 404 verified GetBoneTransforms returns a genuinely
-independent copy -- zero bugs. Task 406 (phase's first real pixel test) confirmed an identity
-bone palette produces zero deformation on all 3 backends -- zero bugs, but surfaced a genuinely
-new Bgfx-specific test-harness pitfall (GetBackBufferData() only reliably reflects the first read
-per rendered frame), fixed with a renderAndRead() per-checkpoint helper reused by every
-subsequent test in the phase. Task 407 formalized the pre-existing (Task 123) EasyGL-only
-translation-bone test into all 3 backends -- zero bugs. Task 408 verified genuine 2-bone
-weighted blending using a deliberately discriminating bone pair, independently confirmed via a
-temporary (1,0)-weight swap -- zero bugs. Task 409 (capstone) combined Tasks 406-408's pieces
-into one scene, one bone-palette upload, one draw call covering 3 quads -- zero new bugs, all 3
-backends byte-identical across all 3 quads within itself.
-
-Phase 45 ("EnvironmentMapEffect exactness", Tasks 391-400) CLOSED with Task 400
-(docs/environmentmapeffect-support.md, full synthesis of Tasks 391-399). Summary of what it
-found/fixed: Task 391 (opener) audited EnvironmentMapEffect against FNA -- zero bugs, opened
-Task 890 (DirectionalLight1/2 unforwarded). Task 392 found and FIXED a real bug affecting 4
-stock effects: Clone() never preserved FogColor (AlphaTestEffect/DualTextureEffect/
-EnvironmentMapEffect/SkinnedEffect). Task 393 verified EnvironmentMapAmount=0 -- zero bugs, but
-flagged a real formula discrepancy for Task 394 to investigate. Task 394 confirmed and FIXED a
-real cube-map blend bug on all 3 backends: additive instead of FNA's real lerp (pre-fix
-(228,178,153) vs correct (128,128,128)). Task 395 confirmed and FIXED a second real bug:
-EnvironmentMapSpecular was flat-additive instead of alpha-scaled by the cube map's own alpha
-channel (pre-fix (202,152,127) vs correct (151,101,76) at alpha=128); opened Task 891 for the
-still-unscaled base-lerp envColor term. Task 396 confirmed and FIXED a real missing-feature gap:
-no Fresnel edge-weighting existed at all on any backend (pre-fix (128,128,128) vs correct
-Fresnel-suppressed (100,50,25) at a head-on camera angle). Task 397 verified EyePosition
-correctly drives the reflection vector -- zero bugs, proof by construction using the phase's
-first distinct-per-face cube map. Task 398 confirmed and FIXED a real formula bug on 2 of 3
-backends: normals transformed by the raw World matrix instead of transpose(inverse(World3x3)),
-wrong under non-uniform scale (Vulkan was already correct); opened Task 892 for a worse sibling
-bug in BasicEffect's Bgfx lit shader (transforms normals by the full World*View*Projection
-matrix). Task 399 (capstone) combined everything Tasks 394-398 fixed into one scene -- all 3
-backends produced the exact predicted (151,101,76) on the first attempt, zero new bugs, genuine
-cross-backend consistency.
-
-Phase 44 ("DualTextureEffect exactness", Tasks 381-390) CLOSED with Task 390
-(docs/dualtextureeffect-support.md, full synthesis of Tasks 381-389). Task 383 found and FIXED A
-REAL BUG ON ALL 3 BACKENDS: DualTextureEffect's dual-texture shaders were all missing FNA's
-`color.rgb *= 2` doubling factor. Task 387 found and FIXED a real bug on Bgfx: the second texture
-slot (Texture2) had no null-fallback at all. Task 388 found and FIXED a real bug on EasyGL: fog
-was never forwarded and the dedicated shader had zero fog infra. Task 389 (capstone) found/opened
-Task 889 (DualTextureEffect.VertexColorEnabled is a total no-op on all 3 backends).
-
-Phase 43 ("AlphaTestEffect exactness", Tasks 371-380) CLOSED with Task 380
-(docs/alphatesteffect-support.md, full synthesis of Tasks 371-379). Task 377 found
-AlphaTestEffect.VertexColorEnabled has zero effect on Vulkan/Bgfx by default (opened Task 887).
-Task 378 fixed AlphaTestEffect fog forwarding on EasyGL, and discovered fog is a total no-op on
-Vulkan/Bgfx for every 3D effect, project-wide (opened Task 888). Task 379 found and FIXED a real,
-general Bgfx bug: null-texture draws left the previous draw's texture bound instead of falling
-back to white (affected 7 dispatch branches, not just AlphaTestEffect).
-
-Phase 42 closed with docs/basiceffect-support.md (full synthesis) and opened 2 new follow-up
-tasks: Task 885 (lit-path EmissiveColor + DirectionalLight1/2 forwarding — Vulkan half needs a
-shared push-constant budget expansion, also used by SkinnedEffect) and Task 886 (real specular
-highlights — a new feature, zero existing infrastructure). Phase 43 closed and opened 2 more:
-Task 887 (Vulkan/Bgfx alpha-test vertex-color unification) and Task 888 (Vulkan/Bgfx project-wide
-fog). Phase 44 closed and opened Task 889 (DualTextureEffect.VertexColorEnabled is a no-op on all
-3 backends). Phase 45 closed and opened 3 more: Task 890 (EnvironmentMapEffect.
-DirectionalLight1/2 unforwarded), Task 891 (EnvironmentMapEffect's base cube-map lerp target
-still unscaled by combined texture x diffuse alpha), and Task 892 (BasicEffect's Bgfx
-lit-textured shader transforms normals by the full World*View*Projection matrix, a worse sibling
-bug found while fixing Task 398). Task 401 opened 3 more: Task 893 (SkinnedEffect.
-DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/SpecularPower have zero
-GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
-GPU no-op on all 3 backends). None of these 11 block the current backlog's tasks.
-
-Task 884 fixed a real, confirmed dangling-pointer hazard: EffectParameterCollection and
-EffectPassCollection both stored their elements BY VALUE in a std::vector -- the identical bug
-shape Task 355 already found and fixed for EffectTechniqueCollection. Switched both to
-vector<unique_ptr<T>> with matching custom iterator/const_iterator pairs copied verbatim from
-EffectTechniqueCollection.hpp/.cpp; Add() now does elements_.push_back(make_unique<T>(move(x))).
-No call-site changes needed anywhere in the codebase -- grepped first and confirmed every existing
-usage goes through operator[]/GetParameterBySemantic/range-for, never names the iterator type
-directly. Added PointerStableAcrossReallocatingAdd to both collections in EffectCollectionTests.cpp
-(take &col[0] after one Add(), force 64 more Add() calls to guarantee reallocation, assert the
-original pointer/address is unchanged). Independently verified discriminating power via git stash
-revert-and-rebuild on just the 4 production files: pre-fix, EffectParameterCollectionTest failed
-cleanly on a pointer-address mismatch, but EffectPassCollectionTest actually SEGFAULTED (a genuine
-use-after-free dereferencing the stale pointer) -- strong proof the hazard was real, not
-theoretical. Restored the fix, rebuilt, reconfirmed both pass.
-
-While investigating Task 884's original (bundled) scope, discovered the row's own title had
-accidentally bundled two unrelated issues together: the Effect-collection fix above, plus a
-separate RasterizerState-default GPU-sync gap that Task 364 had originally opened and asked to be
-"tracked as new Task 884" -- but by the time a plan_graphics.md row for 884 actually got written,
-it only covered the Effect-collection half. Investigated the RasterizerState issue via a research
-agent before deciding what to do with it (per the standing "investigate before implementing"
-practice): confirmed GraphicsDevice's ctor sets rasterizerState_ to the correct FNA-matching
-default (CullCounterClockwiseFace) but never pushes it to any backend's actual GPU state --
-EasyGL/Vulkan both start from an effectively-CullNone hardware default, Bgfx is the only one of
-the 3 whose hardcoded default happens to match FNA's. The architecturally correct fix is one line
-(call setRasterizerStateProperty(rasterizerState_) once in the ctor after backend creation), but
-grepping examples/*.cpp found 174 of 208 files never mention RasterizerState at all (128 of those
-issue real draw calls) -- since each test's geometry/winding is shared verbatim across its
-EasyGL/Vulkan/Bgfx variants, and those variants currently only pass because EasyGL/Vulkan's
-INCORRECT no-culling default happens to let the same winding through that Bgfx's CORRECT default
-culls, landing the one-line fix would very likely flip many of those 128 EasyGL/Vulkan tests to
-black-frame failures. This is a scoping decision (audit-then-fix vs. some other sequencing), not
-an implementation task -- split it out into its own Task 896, left unstarted, and updated every
-historical plan_graphics.md row that pointed at "Task 884" for this specific bug (Tasks 364, 365,
-366, 367, 368, 370, 375, 384, 399) to point at Task 896 instead, so the tracking numbers stay
-accurate.
-
-Task 885 fixed BasicEffect's lit-path gap on EasyGL and Bgfx: DirectionalLight1/DirectionalLight2
-were completely unforwarded to the GPU (only DirectionalLight0 ever was), and EmissiveColor was
-silently dropped whenever LightingEnabled=true (only the disabled-lighting path, Task 369, had
-it). Derived the exact FNA formula from Lighting.fxh via a research agent first: EmissiveColor is
-added AFTER the ambient+light-sum is multiplied by DiffuseColor, not scaled by it -- CNA folds
-AmbientLightColor into the same light-sum multiply rather than FNA's pre-baked "ambient+emissive"
-shader uniform (confirmed mathematically equivalent net result by direct expansion of both
-formulas). Added GpuDrawParams fields for light1/light2 direction+diffuse (mirroring light0's
-existing shape) and reused the pre-existing emissiveColor field (previously EnvironmentMapEffect-
-only). Fixed both backends' lit shaders to sum all 3 lights (each light's Enabled state gated the
-same way Task 368 gated light0) and add EmissiveColor after the diffuse multiply -- Bgfx's
-pre-existing formula needed restructuring (not just extension) since it multiplied the *entire*
-lit result by DiffuseColor via a single vec4 multiply, which would have incorrectly scaled
-EmissiveColor by DiffuseColor too if added naively. New PointerStable-style discriminating tests,
-one per backend (examples/{easygl,bgfx}_basiceffect_multilight_emissive_test.cpp, 3 checks each:
-all-3-lights-plus-emissive summed correctly, per-light Enabled gating, per-light independent
-Direction field to catch a copy-paste-aliasing hazard). Independently verified discriminating
-power on both backends via git stash revert-and-rebuild: pre-fix, both backends produced the
-identical (89,13,13) ambient+light0-only result on all 3 checks, exactly as predicted; restored
-and reconfirmed all 6 checks (3 per backend) pass with the exact hand-derived expected values.
-Vulkan's lit-textured pipeline was investigated too (its own pipelineLayoutExt3D_ push-constant
-struct, confirmed via direct code reading to be fully packed at 32/32 floats, shared with strides
-20/24 and Instanced3D but NOT literally shared with SkinnedEffect's own separate
-pipelineLayoutSkinned3D_/descriptorSetLayoutSkinned_) -- landing the same fix there needs a new,
-dedicated descriptor-set/pipeline-layout/UBO-ring-buffer for the lit-textured pipeline specifically
-(mirroring EnvironmentMapEffect's own descriptorSetLayoutEnvMap_/pipelineLayoutEnvMap3D_/
-envMapUBO_ pattern, not a simple push-constant-widening tweak), so it was split out into its own
-Task 897 rather than rushed into the same commit.
-
-Task 897 then implemented exactly that Vulkan infrastructure: descriptorSetLayoutLitTextured_
-(set=0: binding0=sampler2D, binding1=UNIFORM_BUFFER_DYNAMIC "LitLightParams" -- 5 padded vec4s
-for light1/light2 dir+diffuse and emissiveColor, fragment-stage only), pipelineLayoutLitTextured3D_
-(keeping the SAME unchanged 128-byte push constant/FillExtPushConst content -- no change needed
-there), pipelinesLitTextured3D_ cache, and a 512-slot per-frame dynamic-offset UBO ring buffer,
-all mirroring EnvironmentMapEffect's own EnsureEnvMapResources()/GetOrCreateEnvMapDescSet()/
-GetOrCreatePipelineEnvMap3D() line-for-line. DrawPrimitivesEx/DrawIndexedPrimitivesEx gained a
-needsLitTextured=(stride==32 && no other special effect) condition -- exactly the pre-existing
-condition that already implied "lit-textured shader" via GetOrCreatePipelineExt3D's internal
-switch, just given its own explicit flag now -- and useExtParams was updated to exclude it, so
-strides 20/24/Instanced3D are completely untouched. lit_textured3d.frag.glsl extended with the
-UBO block and the identical 3-light-sum+emissive formula already verified on EasyGL/Bgfx
-(emissive added before the texture multiply but after the DiffuseColor multiply, matching FNA).
-New Vulkan_BasicEffect_MultiLightEmissive test (port of Task 885's EasyGL test) PASSED ON THE
-FIRST ATTEMPT with the exact same expected values -- strong evidence the new pipeline/UBO
-plumbing was correct on the first try. Independently verified discriminating power via git stash
-revert-and-rebuild of all 4 changed Vulkan files: pre-fix, identical (89,13,13) result to
-EasyGL/Bgfx's own pre-fix runs; restored and reconfirmed. Ran a FULL SERIAL (-j1) Vulkan
-regression specifically to rule out parallel-execution GPU-context flakiness: 3546/3559 pass, and
-further confirmed the 13 failures (5x BlendState, 5x DepthStencilState, GraphicsDevice_
-ReferenceStencil, DepthBias, 1 flaky CueTest) are genuinely pre-existing and NOT caused by this
-task -- reran the same failing tests with all of Task 897's Vulkan changes git-stash-reverted and
-they failed identically without any of this task's code present. This closes the DirectionalLight1/
-DirectionalLight2/EmissiveColor lit-path gap on all 3 backends (Tasks 885+897 together).
-
-Task 886 implemented real specular highlights for BasicEffect on all 3 backends, closing the
-last piece of BasicEffect's lit-path gap vs FNA. Derived the exact formula from Lighting.fxh's
-ComputeLights via a research agent first: half-vector Blinn-Phong, halfVector=normalize(eyeVector
-- Direction) (Direction points FROM the light, matching diffuse's own sign convention), dotH=
-dot(halfVector,N), specular_i=pow(max(dotH,0)*zeroL_i, SpecularPower) (zeroL_i is the identical
-"does this light face the surface" gate diffuse already uses), each light's own SpecularColor
-applied per-light then summed, and the material's SpecularColor applied ONCE to that sum --
-combined via FNA's AddSpecular macro (color.rgb += specular*color.a), added AFTER the
-texture*diffuse multiply, never multiplied by the texture directly. EyePosition is
-Matrix.Invert(View).Translation, reusing the exact technique EnvironmentMapEffect/SkinnedEffect
-already use. Added GpuDrawParams fields (light0/1/2Specular, specularColor, specularPower) and
-extended FillGpuDrawParams() to populate them plus compute eyePositionWorld from the real View
-matrix (previously only used by EnvironmentMapEffect). Extended all 3 backends' lit-textured
-shaders with the half-vector math. Discovered immediately that every existing BasicEffect test
-used an IDENTITY View/Projection, which places the derived EyePosition exactly ON the quad's own
-z=0 plane -- geometrically degenerate for specular (the half-vector collapses). Built a real,
-non-degenerate camera via Matrix::CreateLookAt/CreatePerspectiveFieldOfView (the same technique
-Task 397's EnvironmentMapEffect eye-position test already established) for the new
-{EasyGL,Bgfx,Vulkan}_BasicEffect_Specular tests (4 checks each: straight-on specular highlight,
-off-axis eye sees a dimmer highlight, SpecularColor=(0,0,0) produces zero specular contribution,
-DirectionalLight0.Enabled=false produces zero specular from that light), with exact expected RGB
-values computed via a Python/numpy script rather than hand-derived (the real camera's trig made
-hand-derivation impractical).
-
-Building the Bgfx test surfaced a real, pre-existing, previously invisible bug (Task 892, a row
-already opened by Task 398's own audit with a detailed prediction of exactly this shape):
-vs_lit_textured3d.sc transformed the vertex normal by the FULL World*View*Projection matrix
-instead of World's inverse-transpose -- meaningless for a direction vector, and totally masked by
-every prior test's identity View/Projection. Symptom: the diffuse-only check expected (48,48,48)
-but read (2,2,2) (pure ambient, NdotL collapsing to ~0). Fixed with a CPU-computed u_normalMatrix
-(mat3) via the pre-existing ComputeNormalMatrix3x3 helper already used for EnvironmentMapEffect
-(Task 398), mirroring that fix's shape almost exactly. Independently verified discriminating
-power: temporarily reverted just the v_normal computation line, rebuilt, reproduced the exact
-(2,2,2) failure; restored and reconfirmed.
-
-Building the Vulkan test independently surfaced the IDENTICAL bug shape on Vulkan (Task 898, a
-new task number -- not previously tracked anywhere): lit_textured3d.vert.glsl had
-fragNormal=normalize(mat3(pc.mvp)*inNormal), the same MVP-based bug. Fixed using GLSL's built-in
-inverse() computed directly in-shader (mat3 normalMatrix=transpose(inverse(mat3(lp.world)))),
-mirroring env_map3d.vert.glsl's own already-correct in-shader pattern (Vulkan's GLSL 450 has
-inverse() built in, so unlike EasyGL/Bgfx there was no need for a CPU-side helper). This required
-extending the LitLightParams UBO (Task 897's, previously fragment-stage-only) with a `world` mat4
-field and promoting its stageFlags to VERTEX_BIT|FRAGMENT_BIT, plus a new fragWorldPos varying so
-the fragment shader's specular half-vector has a correct world-space position. Independently
-verified discriminating power via a full git stash revert-and-rebuild of all Vulkan-specific
-files (header/cpp/both shaders/generated spirv header): reproduced the exact predicted
-(2,2,2)/(18,18,18)/(2,2,2)/(2,2,2) failure pattern across all 4 checks; restored and reconfirmed
-all 4 pass.
-
-Deliberately bundled Tasks 886/892/898 into one commit rather than 3 (documented explicitly in
-both the commit message and plan_graphics.md) since 892/898 are hard blockers discovered directly
-while building 886's own tests and are intertwined in the same functions/files (e.g. Bgfx's
-world3DUnif_/eyePos3DUnif_ bindings serve both the eye-vector-for-specular need AND the normal-
-matrix fix's own World dependency) -- mirrors the established Task 411 precedent of bundling
-prerequisite infrastructure fixes discovered mid-task rather than deferring them.
-
-Task 887 fixed AlphaTestEffect.VertexColorEnabled being completely ignored on Vulkan/Bgfx (opened
-by Task 377), with a smaller-footprint approach than the row's own original prediction. Rather
-than unifying Vulkan/Bgfx's alpha-test dispatch into the per-stride colored_textured3d/textured3d/
-lit_textured3d pipelines (a 6-shader-file, both-backends rewrite), added a single new stride-24-
-only sibling vertex shader to each backend's EXISTING alpha_test3d pipeline: Vulkan's
-alpha_test_colored3d.vert.glsl (shares alpha_test3d.frag.glsl unchanged) and Bgfx's
-vs_alpha_test_colored3d.sc (shares fs_alpha_test3d.sc unchanged), both reading the vertex color
-attribute and gating fragTint = VertexColorEnabled ? inColor*diffuseColor : diffuseColor before
-the alpha-test fragment shader's existing discard logic runs on the resulting alpha -- mirroring
-colored_textured3d's own already-correct formula. Vulkan's GetOrCreatePipelineAlphaTest3D
-switches vertex shader + attribute layout when stride==24 (still keyed by the pre-existing
-MakeExt3DKey cache, strides 20/32 untouched); vertexColorEnabled forwarded through the existing
-128-byte push constant's spare padding (pc[24], no size change). Bgfx gained a new
-alphaTestColoredTextured3DProgram_, dispatched via a new "alphaTestActive && vertexColorEnabled"
-branch inserted BEFORE the existing unconditional alphaTestActive branch, reusing the
-pre-existing shared u_vertexColorEnabled3D uniform (already created for BasicEffect's
-coloredTextured3DProgram_). New Vulkan_AlphaTest_VertexColor/Bgfx_AlphaTest_VertexColor tests
-(direct ports of Task 377's EasyGL test, same 2 checks: reference=100 passes with the exact
-vertex-color-multiplied RGB, reference=180 correctly discards on the COMBINED alpha rather than
-diffuse-alone alpha) PASSED on Vulkan on the first attempt. Bgfx's test initially FAILED both
-checks identically -- root-caused via temporary instrumentation to confirm the fix was correctly
-wired and dispatching, then traced to the already-known, already-documented Task 364/896 Bgfx
-RasterizerState-default culling gap (Bgfx is the only one of the 3 backends whose hardware cull
-default matches FNA's real default, silently culling this test's standard-winding quad) -- adding
-RasterizerState::CullNone (the same one-line workaround every other Bgfx pixel test in this
-project already uses) fixed it immediately; not a Task 887 regression, a test-authoring omission
-caught before the test was committed. Discriminating power independently verified on both
-backends: git stash-reverted all 5 production files, rebuilt, reran -- both backends failed
-identically with the exact predicted pre-fix value (122,82,163) (diffuse-alone) on BOTH checks,
-including reference=180 incorrectly PASSING pre-fix (using the diffuse-alone alpha 204/255
-instead of correctly discarding on the real combined alpha 160/255); restored and reconfirmed.
-Full regression: EasyGL untouched (sanity-rebuilt only, unaffected -- no EasyGL files touched);
-Vulkan serial -j1 3549/3561 pass (same 12 pre-existing, already-documented failures); Bgfx serial
--j1 3531/3531 pass, 100%, ZERO failures. Closes the AlphaTestEffect.VertexColorEnabled gap on all
-3 backends -- EasyGL's own alpha-test shader path (already reusing BasicEffect's stride-24 shader)
-was correct from the start and untouched by this task.
-
-Task 888 implemented real fog rendering on Bgfx (full) and Vulkan (partial). Derived the exact
-FNA formula via a research agent first (EffectHelpers.SetFogVector/Common.fxh's ApplyFog): FNA
-computes a CPU-side FogVector = f(World*View, FogStart, FogEnd) such that dot(objectPos,
-FogVector) equals (viewSpaceZ+FogStart)*scale -- a trick folding the WorldView transform into one
-dot product. Under IDENTITY World/View (every test in this project), this reduces to a formula
-using raw object-space Z -- but CNA/EasyGL's OWN already-shipped fog implementation (Tasks
-195/378/388) uses a SIMPLER, already-tested formula also based on raw object-space Z:
-fogFactor=clamp((FogEnd-Z)/(FogEnd-FogStart),0,1), mix(FogColor,color,fogFactor). Deliberately
-chose to match EasyGL's formula exactly rather than implement FNA's more general view-space
-approach, since (a) they're only equivalent under identity World/View anyway, matching every
-existing test, and (b) this task's own stated verification plan (porting Task 195/378's exact
-EasyGL tests) only produces matching pixels if the formulas match bit-for-bit.
-
-Researched the full blast radius via a dedicated research agent before implementing: found a
-CRITICAL asymmetry between backends. Bgfx has NO push-constant byte-budget constraint (uniforms
-are declared by name per-shader, unlimited) so it could get full fog coverage cheaply. Vulkan's
-128-byte push constant is shared byte-for-byte across 6 of 9 pipelines (colored3d/textured3d/
-colored_textured3d/dual_texture3d/skinned3d all reuse the identical FillExtPushConst layout, 32/32
-floats already used, zero spare) -- only alpha_test3d/alpha_test_colored3d (28 spare push-constant
-bytes after Task 887's vertexColorEnabled field) and lit_textured3d (32 spare bytes already
-reserved in its LitLightParams UBO's 256-byte stride, 224 used post-Task-886/898) had room without
-new infrastructure.
-
-Implemented Bgfx fully: added 2 shared uniforms (u_fogColor/u_fogParams) created once at init,
-set UNCONDITIONALLY in DrawPrimitivesEx right after the existing wvpUniform_ set (not per-dispatch
--branch -- bgfx ignores uniforms a given program doesn't declare, so one set-call covers every
-pipeline), a new v_fogFactor varying (TEXCOORD2, first free slot), and the fog factor compute
-(vertex shader, from raw a_position.z)/blend (fragment shader, mix toward u_fogColor) pair added
-to all 7 applicable shader pairs: vs/fs_colored3d, vs/fs_textured3d, vs/fs_colored_textured3d,
-vs/fs_lit_textured3d, vs_alpha_test3d+vs_alpha_test_colored3d (both share fs_alpha_test3d.sc,
-edited once), vs/fs_dual_texture3d.
-
-Implemented Vulkan for alpha_test3d/alpha_test_colored3d: extended FillAlphaTestPushConst to pack
-fogEnabled/fogStart/fogEnd/fogColor.xyz into pc[25..30] (6 of the 7 previously-zeroed padding
-floats), extended both vertex shaders' PC struct declarations to read them and compute
-fragFogFactor, extended the shared fragment shader to apply mix() after the existing discard test.
-For lit_textured3d: extended the LitLightParams UBO with 2 new vec4s (fogColorEnabled,
-fogStartEnd) filling its 256-byte stride exactly (was 224/256 used); bumped litUboData from 56 to
-64 floats (both DrawPrimitivesEx/DrawIndexedPrimitivesEx call sites, via a single replace_all
-Edit) and the descriptor range/memcpy size from 224 to 256.
-
-New tests: {Vulkan,Bgfx}_BasicEffect_Fog (stride-32 lit_textured3d path, exact 3-case
-formula/values ported from easygl_basiceffect_fog_test.cpp), {Vulkan,Bgfx}_AlphaTest_Fog
-(stride-20 alpha_test3d path, adapted from easygl_alphatest_fog_test.cpp since that test's own
-stride-16-no-texture scenario doesn't route through either backend's dedicated alpha-test pipeline
-at all -- confirmed via research that alpha_test3d's shader hard-requires a texcoord attribute),
-Bgfx_BasicEffect_LitFog (extra stride-32 coverage since Bgfx got that pipeline too),
-Bgfx_DualTextureEffect_Fog (direct unmodified port of easygl_dualtextureeffect_fog_test.cpp).
-
-Hit 2 real pre-existing gotchas while building these tests, both fixed in the tests themselves
-(not backend bugs): (1) Vulkan's clip-space Z range is [0,1], NOT OpenGL's [-1,1] -- the first
-Vulkan_AlphaTest_Fog attempt reused EasyGL's z=-0.9 value verbatim and got near-plane-clipped
-(read back pure black, meaning nothing rendered); fixed by shifting the whole Z-sweep to
-FogStart=0.05/FogEnd=0.95/z in {0.05,0.5,0.95} -- same relative proportions, same expected pixel
-values, since the formula only depends on relative position within [FogStart,FogEnd]. (2) 2 ported
-Bgfx tests (Bgfx_BasicEffect_Fog, Bgfx_DualTextureEffect_Fog) initially failed with pure black
-despite the fog fix being correctly wired and dispatching (confirmed via temporary cerr
-instrumentation in the dispatch code, then removed) -- root-caused to the already-known,
-already-documented Task 364/896 RasterizerState::CullNone culling gap, simply missing from these
-2 particular ported tests; added the one-line workaround (every other Bgfx pixel test in this
-project already has it) and both passed immediately.
-
-Discriminating power independently verified on both backends: git stash-reverted all production
-files (Vulkan: header/cpp/4 shaders/spirv header; Bgfx: header/cpp/varying.def.sc/13 shader
-files/embedded-shaders header), rebuilt, reran all 6 new tests -- every one reproduced the exact
-predicted pre-fix symptom (fog completely inert: the FogStart/no-fog case coincidentally passes
-since fogFactor=1 there regardless, but every fog-ACTIVE case shows the unblended material color
-instead of any blend, e.g. Vulkan_BasicEffect_Fog's (b)/(c) checks both read pure (0,0,255) blue
-instead of the expected purple-mix/full-red); restored and reconfirmed all 6 tests pass (15/15
-checks total across both backends).
-
-Deliberately split 2 pieces of related-but-out-of-scope work into new tasks rather than rushing
-them into this commit, mirroring the Task 885/897 precedent: Task 899 (Vulkan's remaining 5
-pipelines, needs new dedicated UBO infrastructure -- a comparable-sized follow-on to Task 897, not
-a quick tweak) and Task 900 (SkinnedEffect/EnvironmentMapEffect's FillGpuDrawParams() never
-forwards fog fields at all, on ANY backend including EasyGL -- a pure C++ gap found while auditing
-FillGpuDrawParams() across all 5 stock effects during this task's research phase, unrelated to the
-Vulkan/Bgfx GPU-side work this task actually did).
-
-Task 900 then fixed that C++ gap on EasyGL: mirrored BasicEffect::FillGpuDrawParams()'s existing
-6-line pattern in both SkinnedEffect.cpp/EnvironmentMapEffect.cpp, reading FogColor via each
-effect's own getFogColorProperty() accessor (both store it through an EffectParameter,
-fogColorParam_, unlike BasicEffect's plain fogColor_ member -- getFogColorProperty() already
-handles this correctly, no new logic needed). Added the same fog uniforms/varying/blend logic
-EasyGL's other 5 shader variants already have to EnsureEnvMapped3DProgram()/EnsureSkinnedProgram()
--- both had zero fog code at all before this task. BindDrawParams() needed NO changes -- its
-loc_fog_* uniform-setting block (already used by 5 other programs) is fully generic, auto-binding
-for any program whose uniform_location() lookup for uFogEnabled/etc. succeeds. New
-easygl_{environmentmapeffect,skinnedeffect}_fog_test.cpp (3 checks each, same fog-off/50%/full-fog
-structure and exact expected values as easygl_basiceffect_fog_test.cpp/Task 195, isolating fog
-from each effect's reflection/skinning math via EnvironmentMapAmount=0+EnvironmentMapSpecular=0
-and an identity bone palette respectively, both using EmissiveColor as the controlled material
-color) -- both PASSED on the first attempt with the exact hand-derived expected values.
-Discriminating power independently verified: git stash-reverted all 3 production files, rebuilt,
-reran -- both new tests failed identically (1/3 PASS each, fog-disabled case coincidentally
-passing since fogFactor=1 regardless, both fog-active cases showing the unblended blue material
-color instead of any blend); restored and reconfirmed both pass 3/3. Full EasyGL regression:
-3631/3634 pass, same 3 pre-existing failures (EasyGL_MRT_TwoAttachments,
-EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests), zero new regressions.
-Vulkan/Bgfx remain unaffected by Task 900 -- their env_map3d/skinned3d GPU shader pipelines still
-don't implement fog at all (that work was never in Task 888's scope either, since these 2 effects'
-C++ side wasn't forwarding fog until Task 900 fixed it) -- left as a natural extension of Task
-899's scope when that's picked up (noting Vulkan's env_map3d specifically already has ~160 spare
-bytes in its existing EnvMapParams UBO and could be done cheaply, and Bgfx's env_map3d/skinned3d
-need zero new infrastructure at all, same 2-uniform pattern as Task 888's other 7 pipelines).
-
-Task 881 then capped GraphicsDevice.SetRenderTargets at FNA's real MAX_RENDERTARGET_BINDINGS=4
-(Task 339's original finding). Read FNA's real SetRenderTargets source directly: it doesn't
-explicitly validate the count with a named exception -- the cap comes implicitly from
-Array.Copy(renderTargets, renderTargetBindings, renderTargets.Length) throwing when the source
-exceeds the fixed-size (4-element) destination array. Added a single explicit check at the very
-top of GraphicsDevice::SetRenderTargets (a new file-local constexpr MAX_RENDERTARGET_BINDINGS=4,
-before ResetViewportAndScissorForRenderTarget/any backend access) throwing std::invalid_argument
-when renderTargets.size()>4 -- matching this project's own closer precedent (SkinnedEffect::
-SetBoneTransforms already throws the identical std::invalid_argument shape for "exceeds MaxBones",
-Task 402) rather than the row's own tentative System::ArgumentOutOfRangeException guess. Each
-backend's own pre-existing ad-hoc cap (EasyGL/Bgfx hardcoded 8, Vulkan none at all) is now
-unreachable in practice since the shared layer rejects anything over 4 first -- left in place as
-defense-in-depth, not removed, since removing them wasn't part of the fix shape.
-
-New GraphicsDeviceValidationTest.SetRenderTargets_{FiveTargets_Throws,FourTargets_DoesNotThrow,
-OneTarget_DoesNotThrow,Empty_DoesNotThrow} unit tests using REAL RenderTarget2D instances, not
-default-constructed RenderTargetBinding -- discovered while writing the first draft of this test
-(using default-constructed bindings) that CNA's RenderTargetBinding, unlike FNA's (whose only
-constructors throw ArgumentNullException on a null target), has a default constructor wrapping a
-null Texture*, and passing several through SetRenderTargets SEGFAULTS deeper in the function (once
-backend_ is non-null and it forwards the null-pointer array to the backend's own SetRenderTargets).
-This is a real, separate, previously-unreported robustness gap -- NOT fixed here, since a real game
-can never actually construct a null-target RenderTargetBinding the way FNA's API is shaped (every
-constructor requires a non-null target), so exercising that path would test an unreachable state
-rather than this task's actual cap-check behavior. Rewrote the test to construct real 4x4
-RenderTarget2D instances against a real (non-headless -- GraphicsDevice's own default constructor
-turns out to create a real window/backend, not a headless stub) GraphicsDevice instead.
-
-Discriminating power independently verified: git stash-reverted the one production file, rebuilt,
-reran -- SetRenderTargets_FiveTargets_Throws failed exactly as predicted ("throws nothing"), the
-other 3 (all <=4 targets) correctly kept passing; restored and reconfirmed all 4 pass. Full
-regression: EasyGL serial -j1 3635/3638 pass (same 3 pre-existing failures: EasyGL_MRT_
-TwoAttachments, EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests); Vulkan/Bgfx
-sanity-rebuilt clean (GraphicsDevice.cpp is shared, backend-agnostic code with zero backend-
-specific branches, so a compile-only sanity check was sufficient rather than a full ctest run).
-
-Task 899 is now FULLY DONE across every scope it ever touched: the Vulkan core 5-pipeline scope
-(colored3d/textured3d/colored_textured3d/dual_texture3d/skinned3d, a "Bundle A" unified
-descriptor-set-layout/UBO bundle plus 2 extended existing layouts, comparable in size to Task
-897, with a real Instanced3D shared-shader regression found and fixed along the way), the Bgfx
-bonus scope (env_map3d/skinned3d, plus a real SkinnedEffect.EmissiveColor GPU no-op bug found
-and fixed on Bgfx), and finally Vulkan's own noted env_map3d leftover (fog packed into
-EnvMapParams' spare UBO tail bytes, mirroring lit_textured3d's pattern) -- fog now works on every
-applicable pipeline on all 3 backends with zero remaining gaps.
-
-Last full regression (all 3 backends, serial -j1, after the env_map3d leftover fix): EasyGL
-3636/3639 pass (3 pre-existing failures, unchanged), Vulkan 67/79 filtered + CnaTests 3493/3495
-(12 pre-existing failures, unchanged), Bgfx 3540/3540 (100%, zero failures at all) -- all failures
-independently reconfirmed pre-existing/documented (same exact-name-match lists as every prior
-task this session), zero new regressions on any backend.
-Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
-
-For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-420, 664-665, 880-881, 884-900) rather than this file — this file
-intentionally keeps only a one-line summary per task (see §3) to stay a genuinely quick-to-read
-handoff document.
+For the full history of what every task through Task 896 found and fixed, read `plan_graphics.md`
+directly (or `git log`) rather than this file — NEXT.md intentionally keeps only a one-line
+summary per task (§3) to stay a genuinely quick-to-read handoff document. (A much longer version
+of this resume-prompt section existed before 2026-07-07 and had drifted into a 700-line historical
+dump that violated this file's own stated purpose; it was replaced with this concise version —
+if you need that old narrative detail, it's preserved in this file's git history.)
 ```
