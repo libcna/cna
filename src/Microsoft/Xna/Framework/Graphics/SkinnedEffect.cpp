@@ -67,6 +67,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         specularColor_ = src.specularColor_;
         specularPower_ = src.specularPower_;
+        if (specularColorParam_) specularColorParam_->SetValue(src.getSpecularColorProperty());
+        if (specularPowerParam_) specularPowerParam_->SetValue(src.getSpecularPowerProperty());
 
         fogStart_ = src.fogStart_;
         fogEnd_   = src.fogEnd_;

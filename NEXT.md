@@ -17,7 +17,17 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `plan_graphics.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–45 are complete. **Phase 46 ("SkinnedEffect exactness",
-  Tasks 401–410) is open.** Phase 45 ("EnvironmentMapEffect exactness", Tasks 391–400) is
+  Tasks 401–410) is open** — Task 401 (opener) audited `SkinnedEffect` against FNA: all property
+  defaults, `MaxBones`=72, `SetBoneTransforms`/`GetBoneTransforms` bounds-checking, and `OnApply()`'s
+  shader-index formula match exactly. **Found and FIXED a real bug**: `Clone()` never preserved
+  `SpecularColor`/`SpecularPower` — the identical architectural bug shape Task 392 already fixed
+  for `FogColor` across 4 stock effects, undetected here since `SkinnedEffect` had zero prior test
+  coverage. Opened 3 new backlog tasks: **Task 893** (`DirectionalLight1`/`2` unforwarded, same
+  shape as Tasks 885/890), **Task 894** (zero specular GPU implementation on any backend, same
+  shape as Task 886), and **Task 895** (`WeightsPerVertex` is a complete GPU no-op on all 3
+  backends — FNA's real shader only sums the first N weight/index pairs per vertex, CNA always
+  sums all 4 regardless of the property). Phase 45 ("EnvironmentMapEffect exactness", Tasks
+  391–400) is
   **CLOSED** — Task 400 wrote `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399:
   property/default audit (zero bugs, Task 391), a real `Clone()`-drops-`FogColor` bug found and
   fixed across 4 stock effects (Task 392), a real cross-backend cube-map lerp-vs-additive blend
@@ -80,14 +90,12 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 399
-  (Task 400 was a documentation-only task, no rebuild needed).
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 401.
 
-### Test status (last verified: Task 399)
-- **EasyGL, full `ctest -j1`:** 3551/3555 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 401)
+- **EasyGL, full `ctest -j1`:** 3552/3555 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`
-  — plus 1 reconfirmed-flaky `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`
-  (audio-timing test, unrelated to graphics; reran in isolation 3× and passed 3/3).
+  (the earlier `CueTest` flake from Task 399's run did not recur).
 - **Vulkan, full `ctest -j1`:** 3472/3485 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
 - **Bgfx, full `ctest -j1`:** 3456/3456 pass — 100%, no flakes this run.
@@ -188,6 +196,9 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   `World` transforms. Non-uniform scale now correctly skews reflections/lighting instead of
   producing a wrong, un-inverse-transposed normal direction. (EasyGL's fix is shared
   infrastructure that also correctly improves `BasicEffect`'s lit-textured pipeline.)
+- **`SkinnedEffect`'s `Clone()` now correctly preserves `SpecularColor`/`SpecularPower`** (Task
+  401 fix) — previously silently reset to `(0,0,0)`/`0` on every clone, the identical bug shape
+  Task 392 already fixed for `FogColor` across 4 other stock effects.
 
 ### What does NOT work yet
 - **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
@@ -247,7 +258,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 400 | **Documentation only, closes Phase 45.** Wrote `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399: per-task summaries, full 3-backend support matrix, and an "Open, tracked follow-up work" section listing Tasks 890/891/892. No production code or tests changed. |
+| — | 401 | **Opens Phase 46. Real, confirmed bug found and fixed**: `SkinnedEffect`'s `Clone()` never preserved `SpecularColor`/`SpecularPower` — the identical bug shape Task 392 fixed for `FogColor` across 4 stock effects, undetected here since `SkinnedEffect` had zero prior test coverage. All property defaults, `MaxBones`/bone bounds-checking, and `OnApply()`'s shader-index formula confirmed matching FNA exactly. Opened Tasks 893 (`DirectionalLight1`/`2` unforwarded), 894 (zero specular GPU implementation), and 895 (`WeightsPerVertex` complete GPU no-op on all 3 backends). |
+| `eaf5c852` | 400 | **Documentation only, closes Phase 45.** Wrote `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399: per-task summaries, full 3-backend support matrix, and an "Open, tracked follow-up work" section listing Tasks 890/891/892. No production code or tests changed. |
 | `9d1d7a56` | 399 | **Capstone, verify-only, zero bugs found**: combined Tasks 394–398's fixes (lerp blend, alpha-scaled specular, Fresnel suppression, `EyePosition`, non-uniform `World` scale) into one scene. All 3 backends produced the exact predicted `(151,101,76)` on the first attempt — genuine cross-backend consistency, closing Phase 45's per-task verification arc. |
 | `44aac0ca` | 398 | **Real, confirmed formula bug found and fixed on 2 of 3 backends**: `EnvironmentMapEffect`'s normal was transformed by the raw `World` matrix instead of `transpose(inverse(World3x3))`, wrong under non-uniform scale. EasyGL and Bgfx both had this bug (Vulkan was already correct); fixed both via a CPU-side cofactor/det shortcut. Empirically confirmed pre-fix output `(1,12,242)` (buggy blue) on both vs FNA's correct yellow. Opened Task 892 for a worse sibling bug in `BasicEffect`'s Bgfx lit shader (transforms normals by the full WVP matrix). `git stash`-confirmed both fixes independently. |
 | `5d845961` | 397 | **Verify-only, zero bugs found, no code changed**: confirmed `EyePosition` correctly drives `EnvironmentMapEffect`'s reflection vector on all 3 backends. Built the phase's first distinct-per-face cube map (every prior test used solid colors, unable to detect a wrong reflection vector) and 2 camera positions that hit 2 clearly different, exactly-predicted faces — proof by construction that the wiring works end-to-end. |
@@ -370,6 +382,10 @@ direct code reading.
 | Confirmed, real, not fixed | `EnvironmentMapEffect`'s base cube-map lerp target (`envColor`) is not scaled by combined texture×diffuse alpha on any backend; FNA's real formula (`envmap = SAMPLE_CUBEMAP(...) * color.a`) scales both `envmap.rgb` (base lerp, still unscaled) and `envmap.a` (specular term, fixed by Task 395). Only visible when texture/diffuse alpha is strictly less than 1 — every existing test used opaque textures/diffuse colors. | Task 891 |
 | Confirmed, real, worse, not fixed | `BasicEffect`'s lit-textured Bgfx shader (`vs_lit_textured3d.sc`) transforms the vertex normal by the full `World×View×Projection` matrix, not even `World` alone — geometrically meaningless for a direction vector. Invisible in every existing test since all leave `View`/`Projection` at `Identity`. | Task 892 |
 | Confirmed, minor, acceptable deviation | `EnvironmentMapEffect`'s Fresnel edge-weighting (Task 396 fix) is computed per-pixel in CNA vs. FNA's real per-vertex (then rasterizer-interpolated) computation — identical on flat/coarse-normal test geometry, but could look subtly different from FNA on sparsely-tessellated curved surfaces at silhouette edges (CNA's per-pixel version is strictly more accurate, not less). | — |
+| Confirmed, real, not fixed | `SkinnedEffect`'s `DirectionalLight1`/`DirectionalLight2` are silently ignored by every backend's GPU dispatch, same shape as `BasicEffect`/`EnvironmentMapEffect`'s already-tracked gaps. | Task 893 |
+| Confirmed, real, not fixed | `SkinnedEffect`'s `SpecularColor`/`SpecularPower` have zero GPU implementation on any backend — `GpuDrawParams` has no generic specular fields at all, same shape as `BasicEffect`'s already-tracked gap. | Task 894 |
+| Confirmed, real, not fixed | `SkinnedEffect.WeightsPerVertex` is a complete GPU no-op on all 3 backends — the skinning shader always sums all 4 bone weights regardless of the property's value (1/2/4), unlike FNA's real shader which only sums the first N. Only visible when unused weight slots hold nonzero data. | Task 895 |
+| Confirmed, minor, acceptable deviation | `SkinnedEffect`'s `PreferPerPixelLighting=false` default is effectively a no-op — lighting (`NdotL`) is always computed in the fragment shader on every backend, so CNA always renders at per-pixel quality regardless of this flag (strictly more accurate than FNA's real per-vertex default, never worse). | — |
 | Suspected, not reproduced | Vulkan/Bgfx likely have the same mip-allocation bug already fixed on EasyGL's `TextureCube` (Task 276), for `Texture3D`/`TextureCube` on both backends. | Task 864 |
 | Needs verification | Whether Bgfx's window actually has a physical stencil buffer has not been checked. | — |
 | Incomplete, by design | Stride-keyed vertex layout only supports strides 16/20/24/32/52. Vulkan has no `Tangent`/`Binormal` mapping. `SurfaceFormat` support is Color-only for real GPU formats. `SDL_Renderer` has no 3D at all. | — |
@@ -466,21 +482,25 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first opens Phase 46 (Task 401 fully scoped in `plan_graphics.md`);
-the rest are the accumulated backlog from earlier phases (Tasks 863–892).
+In priority order — the first continues Phase 46 (Task 402 fully scoped in `plan_graphics.md`);
+the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 401 — audit `SkinnedEffect` properties, bone limit, and defaults against FNA**
-   - Goal: opens Phase 46 ("SkinnedEffect exactness", Tasks 401–410). Read FNA's
-     `Graphics/Effect/StockEffects/SkinnedEffect.cs` line-by-line against CNA's
-     `SkinnedEffect.hpp`/`.cpp`, mirroring Task 361/371/381/391's opener precedent: verify every
-     property default, `MaxBones`/bone-weight limits, `OnApply()`'s material-color/lighting-matrix/
-     shader-index logic, and `Clone()`'s field-copy list (note: Task 392 already fixed
-     `SkinnedEffect`'s `Clone()`-drops-`FogColor` bug preemptively, even with zero prior test
-     coverage — confirm that fix is still correct once real tests land). `SkinnedEffect` shares
-     `BasicEffect`'s `Lighting.fxh` mechanism too — check whether the same
-     `DirectionalLight1`/`DirectionalLight2`-unforwarded gap (Tasks 885/890) also applies here.
-   - Files: read-only audit, no production code expected to change (matching every prior phase's
-     opener task) unless a real bug is found.
+1. **Task 402 — unit test default values for all `SkinnedEffect` properties**
+   - Goal: write `tests/Microsoft/Xna/Framework/Graphics/SkinnedEffectTests.cpp` from scratch
+     (zero prior coverage exists), mirroring Task 372/382/392's precedent exactly: every property
+     default (`World`/`View`/`Projection`=Identity, `DiffuseColor`=One, `EmissiveColor`/
+     `AmbientLightColor`=Zero, `Alpha`=1, `PreferPerPixelLighting`=false, `FogEnabled`=false,
+     `FogStart`=0, `FogEnd`=1, `FogColor`=Zero, `Texture`=null, `WeightsPerVertex`=4,
+     `SpecularColor`=One, `SpecularPower`=16, `MaxBones`=72), `DirectionalLight0.Enabled`=true/
+     `Light1`/`Light2`=false, `LightingEnabled`'s throw-on-`false`/no-throw-on-`true`,
+     `SetBoneTransforms`/`GetBoneTransforms`'s bounds-checking (empty, `>MaxBones`, `count<=0`),
+     `WeightsPerVertex`'s throw-on-invalid-value (not 1/2/4), setter round-trips, and a
+     `Clone()` test. **Important**: the `Clone()` test should specifically set `SpecularColor`
+     and `SpecularPower` to non-default values before cloning — Task 401 already found and fixed
+     a real bug here (identical shape to Task 392's `FogColor` fix) but this test is what proves
+     the fix is correct and guards against regression, mirroring exactly how Task 392's own
+     `Clone()` test caught the original `FogColor` bug for 4 other effects.
+   - Files: new `tests/Microsoft/Xna/Framework/Graphics/SkinnedEffectTests.cpp`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -604,16 +624,39 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–892).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 401).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 402).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
 instruction — do not wait to be asked; one task = one commit = one push).
 
 Current status: Phases 1-45 are FULLY COMPLETE. Phase 46 ("SkinnedEffect exactness",
-plan_graphics.md Tasks 401-410) is OPEN, starting fresh with Task 401 (audit SkinnedEffect
-properties/bone-limit/defaults against FNA, the standard opener pattern used by every prior
-phase in this arc).
+plan_graphics.md Tasks 401-410) is OPEN: Task 401 (opener) audited SkinnedEffect against FNA
+line-by-line -- all property defaults, MaxBones=72, SetBoneTransforms/GetBoneTransforms
+bounds-checking, and OnApply()'s shader-index formula match exactly (byte-for-byte identical
+constants to FNA's own if/else chain: +1 no-fog, +2/+4 for 2/4 weights, +12 per-pixel-preferred,
++6 one-light). FOUND AND FIXED A REAL BUG: Clone()'s copy constructor set the private
+specularColor_/specularPower_ cache fields directly but never updated the freshly-recreated
+specularColorParam_/specularPowerParam_ EffectParameters -- since the getters always read from
+the parameter when non-null (always true post-CacheEffectParameters()), every clone's
+SpecularColor/SpecularPower silently reset to (0,0,0)/0 regardless of the source's actual
+values -- the IDENTICAL architectural bug shape Task 392 already fixed for FogColor across 4
+stock effects, undetected here since SkinnedEffect has zero existing test coverage. FIXED with
+the same one-line-per-field pattern used for FogColor:
+`if (specularColorParam_) specularColorParam_->SetValue(src.getSpecularColorProperty());` and
+the SpecularPower equivalent. Verification deferred to Task 402's Clone() test (mirrors Task
+392's exact precedent). Opened 3 new backlog tasks: Task 893 (DirectionalLight1/2 unforwarded,
+same shape as Tasks 885/890), Task 894 (SpecularColor/SpecularPower have zero GPU
+implementation on any backend, same shape as Task 886), and Task 895 (WeightsPerVertex is a
+complete GPU no-op on all 3 backends -- FNA's real Skin(vin,boneCount) HLSL function only sums
+the first boneCount weight/index pairs per vertex, but CNA's skinning shader on all 3 backends
+unconditionally sums all 4 regardless of the property's value; only visible when unused weight
+slots hold nonzero data, since well-formed content typically zeros them). Also noted, NOT
+opened as a bug (acceptable, strictly-more-accurate deviation, same class as Task 396's
+per-pixel-Fresnel note): PreferPerPixelLighting=false is effectively a no-op since NdotL is
+always computed in the fragment shader on every backend. Task 402 (NEXT) is the standard
+unit-test-default-values task, mirroring Task 372/382/392's precedent -- its own Clone() test
+is what will prove Task 401's SpecularColor/SpecularPower fix is correct.
 
 Phase 45 ("EnvironmentMapEffect exactness", Tasks 391-400) CLOSED with Task 400
 (docs/environmentmapeffect-support.md, full synthesis of Tasks 391-399). Summary of what it
@@ -664,17 +707,19 @@ fog). Phase 44 closed and opened Task 889 (DualTextureEffect.VertexColorEnabled 
 DirectionalLight1/2 unforwarded), Task 891 (EnvironmentMapEffect's base cube-map lerp target
 still unscaled by combined texture x diffuse alpha), and Task 892 (BasicEffect's Bgfx
 lit-textured shader transforms normals by the full World*View*Projection matrix, a worse sibling
-bug found while fixing Task 398). None of these 8 block Phase 46's opening task.
+bug found while fixing Task 398). Task 401 opened 3 more: Task 893 (SkinnedEffect.
+DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/SpecularPower have zero
+GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
+GPU no-op on all 3 backends). None of these 11 block Phase 46's remaining tasks.
 
-Last full 3-backend regression (Task 399 — pure verification/capstone, new tests only, no
-production code changed; Task 400 was documentation-only, no rebuild needed):
-EasyGL 3551/3555 pass (3 documented pre-existing failures + 1 reconfirmed-flaky CueTest,
-audio-timing, unrelated to graphics, 3/3 isolated reruns passed).
+Last full 3-backend regression (Task 401 — Clone() fix touches shared SkinnedEffect.cpp,
+compiled into all 3 backends, no new tests added yet):
+EasyGL 3552/3555 pass (3 documented pre-existing failures, no flakes this run).
 Vulkan 3472/3485 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
 Bgfx 3456/3456 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
-For the full history of what each task in Phase 41/42/43/44/45 found, read plan_graphics.md
-directly (Tasks 351-400) rather than this file — this file intentionally keeps only a one-line
+For the full history of what each task in Phase 41/42/43/44/45/46 found, read plan_graphics.md
+directly (Tasks 351-401) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
