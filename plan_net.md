@@ -1746,12 +1746,37 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   brand-new methods; running the new tests themselves is the meaningful verification here). Full
   suite: **3321/3323 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 8.2** — Add `AchievementCollection`'s missing `IList<Achievement>`/`ICollection<Achievement>`
+- [x] **Task 8.2** — Add `AchievementCollection`'s missing `IList<Achievement>`/`ICollection<Achievement>`
   surface: `IndexOf`, `Insert`, `RemoveAt`, `Add`, `Remove`, `Clear`, `Contains`, `CopyTo`, and
   `IsReadOnly` (hardcoded `true`), matching FNA's `IList<Achievement>, ICollection<Achievement>,
   IEnumerable<Achievement>, IEnumerable, IDisposable` interface list. Lower priority than Task 8.1
   since these are C# explicit-interface members only reachable via an `IList<Achievement>` cast in
   real XNA, but still a real surface gap for full fidelity. Add tests for each new member.
+
+  Confirmed against FNA's real `AchievementCollection.cs`: same explicit-interface-only pattern as
+  Task 8.1, exposed here as ordinary public methods for the same documented reason (no C++
+  equivalent of explicit interface implementation). Unlike Task 8.1's `PropertyDictionary` case,
+  `CopyTo` here is a **real, working** implementation in FNA (`collection.CopyTo(array,
+  arrayIndex)`), not an unimplemented stub — implemented faithfully (validates `arrayIndex`/
+  destination size, throws `ArgumentOutOfRangeException`/`ArgumentException` respectively).
+
+  `IndexOf`/`Contains`/`Remove` need value equality on `Achievement`, which FNA's own real
+  `Achievement` doesn't have (a reference type relying on default reference-identity equality) —
+  added `Achievement::operator==`/`operator!=` (structural, all-fields comparison), following the
+  exact same precedent already established for `LeaderboardEntry::operator==` (by-value storage
+  has no reference-identity equivalent).
+
+  Added all 8 members (`IndexOf`, `Insert`, `RemoveAt`, `Add`, `Remove`, `Clear`, `Contains`,
+  `CopyTo`) plus `getIsReadOnlyProperty()` (hardcoded `true`, matching FNA — noted this is the
+  conventional .NET explicit-interface-only-mutable pattern here, not an inconsistency like Task
+  8.1's `PropertyDictionary.IsReadOnly`, since there's no upstream bug in this case). Added 15 new
+  tests (one covering the happy path and, where applicable, a second covering the out-of-range/
+  not-found case for each member) plus `AchievementTest.EqualityIsStructural` for the new
+  `operator==`/`operator!=`.
+
+  Pure API-surface addition, no prior behavior to regress against (same reasoning as Task 8.1 —
+  no revert-verify cycle applies to brand-new methods). Full suite: **3336/3338 passing** (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 8.3** — Extend `GamerCollection<T>` to expose the full `ReadOnlyCollection<T>` surface
   FNA's equivalent provides (`Contains`, `IndexOf`, `CopyTo`), since FNA's `GamerCollection<T>`

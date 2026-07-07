@@ -66,6 +66,104 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         void Dispose() override;
 
+        /**
+         * @brief Returns the index of the first achievement equal to item, or -1 if not found.
+         *
+         * Task 8.2: matches FNA's explicit `IList<Achievement>.IndexOf`, reachable in C# only
+         * through an `IList<Achievement>` cast — exposed as an ordinary public method here
+         * instead, since C++ has no equivalent of explicit interface implementation (a
+         * documented, pragmatic mapping deviation, same as Task 8.1's `PropertyDictionary`
+         * additions). Uses `Achievement::operator==` (structural equality), since FNA's own
+         * reference-identity equality has no direct equivalent for by-value storage.
+         *
+         * @param item The achievement to locate.
+         * @return The zero-based index, or -1 if not found.
+         */
+        [[nodiscard]] int IndexOf(const Achievement& item) const;
+
+        /**
+         * @brief Inserts item at the specified index.
+         *
+         * Task 8.2: matches FNA's explicit `IList<Achievement>.Insert`.
+         *
+         * @param index The zero-based index to insert at.
+         * @param item The achievement to insert.
+         */
+        void Insert(int index, const Achievement& item);
+
+        /**
+         * @brief Removes the achievement at the specified index.
+         *
+         * Task 8.2: matches FNA's explicit `IList<Achievement>.RemoveAt`.
+         *
+         * @param index The zero-based index to remove.
+         */
+        void RemoveAt(int index);
+
+        /**
+         * @brief Appends item to the collection.
+         *
+         * Task 8.2: matches FNA's explicit `ICollection<Achievement>.Add`.
+         *
+         * @param item The achievement to append.
+         */
+        void Add(const Achievement& item);
+
+        /**
+         * @brief Removes the first achievement equal to item.
+         *
+         * Task 8.2: matches FNA's explicit `ICollection<Achievement>.Remove`.
+         *
+         * @param item The achievement to remove.
+         * @return true if a matching achievement was found and removed; otherwise false.
+         */
+        bool Remove(const Achievement& item);
+
+        /**
+         * @brief Removes every achievement from the collection.
+         *
+         * Task 8.2: matches FNA's explicit `ICollection<Achievement>.Clear`.
+         */
+        void Clear();
+
+        /**
+         * @brief Determines whether the collection contains an achievement equal to item.
+         *
+         * Task 8.2: matches FNA's explicit `ICollection<Achievement>.Contains`.
+         *
+         * @param item The achievement to search for.
+         * @return true if found; otherwise false.
+         */
+        [[nodiscard]] bool Contains(const Achievement& item) const;
+
+        /**
+         * @brief Copies every achievement into array, starting at arrayIndex.
+         *
+         * Task 8.2: matches FNA's explicit `ICollection<Achievement>.CopyTo`, which — unlike
+         * `PropertyDictionary`'s own `CopyTo` stub (Task 8.1) — is a real, working
+         * implementation in FNA (`collection.CopyTo(array, arrayIndex);`), not an
+         * unimplemented one.
+         *
+         * @param array The destination vector; must already be large enough to hold
+         * `arrayIndex + getCountProperty()` elements.
+         * @param arrayIndex The zero-based index in array to begin writing at.
+         * @throws System::ArgumentOutOfRangeException if arrayIndex is negative or array is too
+         * small.
+         */
+        void CopyTo(std::vector<Achievement>& array, int arrayIndex) const;
+
+        /**
+         * @brief Gets whether this collection is read-only.
+         *
+         * Always true, matching FNA's own hardcoded `ICollection<Achievement>.IsReadOnly`
+         * getter (the conventional .NET pattern for a collection whose explicit-interface
+         * mutators exist only to satisfy the interface contract, not for ordinary callers to
+         * rely on).
+         *
+         * @return Always true.
+         */
+        [[nodiscard]] bool getIsReadOnlyProperty() const;
+
         /** @brief Creates an AchievementCollection for CNA internal use. */
         NOXNA static AchievementCollection CreateInternal(std::vector<Achievement> achievements);
 
