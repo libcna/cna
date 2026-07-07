@@ -10,8 +10,11 @@
 // strides 20/24/Instanced3D was already fully packed with the existing MVP/diffuse/ambient/
 // light0/flags data.
 //
-// No RasterizerState::CullNone workaround needed here (unlike Bgfx) — Vulkan's default cull
-// state is effectively CullNone, matching EasyGL (Task 896 finding).
+// Task 908: this comment previously claimed no RasterizerState::CullNone workaround was needed
+// here because "Vulkan's default cull state is effectively CullNone" — true when this test was
+// written (before Task 896), but Task 896 later pushed the real default RasterizerState
+// (CullCounterClockwiseFace) to Vulkan's actual GPU state too, silently culling this test's quad
+// ever since; missed by Task 896's own audit and only caught by re-running the full ctest suite.
 //
 // Uses the same 3 checks as the EasyGL/Bgfx tests.
 //
@@ -27,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
@@ -134,6 +138,7 @@ class VulkanBasicEffectMultiLightEmissiveTest : public Game
         {
             dev.Clear(Color(0, 0, 0, 255));
             dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             fx.Apply();
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
             got = readCenter(dev);

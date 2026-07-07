@@ -328,30 +328,35 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   resume-prompt note below) — no build errors anywhere. Verified again after Task 878's Vulkan
   changes landed.
 
-### Test status (last verified: Task 878, 2026-07-07, post-merge)
+### Test status (last verified: Task 909, 2026-07-07, post-merge)
 - **`CnaTests` (gtest unit-test binary, `tests/*.cpp` only — does NOT cover the `examples/*.cpp`
   pixel tests below), all 3 backends:** EasyGL 4271/4273 passed (2 known skips, 0 failed), Bgfx
-  4275/4277 passed (2 known skips, 0 failed). **Vulkan 4262/4264 passed (2 known skips, 0 failed)
-  when filtering out `ContentManagerSkinnedModelTest.*`** — running the full suite unfiltered
-  segfaults non-deterministically somewhere in or after that test class under this sandbox's
-  `Xvfb`+`llvmpipe` combination (confirmed via `git stash` to be pre-existing, unrelated to Task
-  878's changes — reproduces identically either way, and the specific test passes cleanly run in
-  isolation). Higher totals than the pre-merge baseline (~3501-3505) are expected — the
-  feature/devices+audio+input merge added substantial new test coverage.
-- **`examples/*.cpp` pixel tests (registered individually via `ctest`, one executable per test —
-  NOT part of `CnaTests`): still NOT fully re-run as a complete suite.** Task 896 touched 114 of
-  these files; only ~12 were spot-run directly before this session. **This session fixed the
-  blocker**: `ctest`'s hardcoded `DISPLAY=:0` is now a configurable `CNA_TEST_DISPLAY` cache
-  variable (see the new row in §3) — reconfigure with `-DCNA_TEST_DISPLAY=:99` (after starting
-  `Xvfb :99`) and `ctest` reaches the virtual display correctly (verified on one test). **Actually
-  running the full 3-backend suite this way is still the single highest-value next step** — see
-  §8 item 0. 16 Vulkan RT/sampler/texture/viewport examples were spot-run directly (not via
-  `ctest`) as part of Task 878's own regression pass and all pass unchanged.
+  4275/4277 passed (2 known skips, 0 failed), Vulkan 4262/4264 passed (2 known skips, 0 failed)
+  when filtering out `ContentManagerSkinnedModelTest.*` (see below). Higher totals than the
+  pre-merge baseline (~3501-3505) are expected — the feature/devices+audio+input merge added
+  substantial new test coverage.
+- **`examples/*.cpp` pixel tests, full `ctest` suite (all tests, both `CnaTests`-discovered gtest
+  cases AND the `examples/*.cpp` pixel tests, run one-per-process): DONE for EasyGL and Vulkan
+  this session (Bgfx still pending).** This session fixed the blocker (`CNA_TEST_DISPLAY` cache
+  variable, see §3) and then actually ran it:
+  - **EasyGL**: 4421 total, 4418 passed, 2 skipped, 3 failed — all 3 already-documented
+    pre-existing (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`,
+    `easy-gl-resource-smoke-tests`). One additional flaky, unrelated audio-subsystem failure
+    (`CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`) seen on one
+    of two runs — out of scope (audio, not graphics), not investigated further.
+  - **Vulkan**: 4359 total, 4341 passed, 2 skipped, 17 failed on the first run — **4 previously-
+    undetected regressions found and fixed this session** (Tasks 908/909, see §3), confirmed via
+    a clean rerun down to exactly the expected 12 already-documented pre-existing failures (5×
+    `BlendState`/Task 868, 5× `DepthStencilState`/Task 870, `ReferenceStencil`/Task 872, one
+    `DepthBias` sub-case) plus 3 `ContentManagerSkinnedModelTest.*` segfaults. That segfault
+    triple reproduced identically (same 3 tests) across 2 full runs in this session, and via
+    `git stash` was confirmed unrelated to any of this session's changes — a pre-existing
+    Vulkan/`Xvfb`/`llvmpipe` environment issue (each test passes cleanly run in isolation).
+  - **Bgfx**: not yet run as a full `ctest` suite this session — do this next.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
-  as a regression. **Also see the environment note below `ctest` cannot currently reach a virtual
-  display — see §4.**
+  as a regression (this is exactly how Tasks 908/909 were found and confirmed this session).
 
 ### What currently works
 - Full `Texture2D`/`Texture3D`/`TextureCube` construction, `SetData`/`GetData` (arbitrary
@@ -514,6 +519,7 @@ index, not a duplicate.
 | Commit | Task | Summary |
 |---|---|---|
 | `85a77dc7` | 908 | **Real regression found and fixed — 4 example files Task 896's own audit missed.** Running the full EasyGL `ctest` suite end-to-end for the first time since Task 896 (unblocked by the `CNA_TEST_DISPLAY` fix above) surfaced 4 previously-undetected failures: `EasyGL_AvatarRenderer_{RealRender,AttachPart,TintRouting}` and `EasyGL_ModelDraw_RedQuad` — all reading background-only (no geometry drawn at all). All 4 source files predate Task 896 by a wide margin, so they should have been caught by that task's 119-file audit but weren't. Same root cause/fix as every other Task 896 row: CCW-wound NDC quads silently culled under the real default `RasterizerState.CullMode`; fixed with the identical `RasterizerState::CullNone` pattern. 3 of the 4 files are shared source also used by Vulkan's `ctest` registrations — rebuilt and confirmed all 3 pass there too (previously also silently broken on Vulkan). `git stash` revert-and-refail confirmed on one file, reproducing the exact original failure. |
+| TBD | 909 | **Real regression — Task 896 itself broke these, not merely missed them (unlike Task 908).** Full Vulkan `ctest` run surfaced `Vulkan_BasicEffect_Specular` and `Vulkan_BasicEffect_MultiLightEmissive` both reading pure black, beyond the 12 already-documented pre-existing Vulkan failures. Both test files carried a comment (written before Task 896 existed) claiming "Vulkan's default cull state is effectively CullNone" — true then, false after Task 896 pushed the real default `RasterizerState` to Vulkan's GPU state. Fixed with `RasterizerState::CullNone`, same pattern as every other Task 896 row. `git stash` revert-and-refail confirmed on one file (1/5→5/5 PASS). |
 | `75359fba` | — (§8 item 0 infra) | Made `ctest`'s hardcoded `DISPLAY=:0` configurable via a new `CNA_TEST_DISPLAY` cache variable (default `:0`) — all ~270 occurrences now read `DISPLAY=${CNA_TEST_DISPLAY}`. Not a `plan_graphics.md` task; unblocks §8 item 0 (full `ctest` suite run against a virtual display). |
 | `21d10a91` | — (not a `plan_graphics.md` task) | **Landed between the 2026-07-07 merge and this session, not previously reflected here.** Fixed `SdlGraphicsBackend::CreateRenderTarget2D` still having the old 4-param override after the base `IGraphicsBackend` interface gained `mipMap`/`multiSampleCount` params (adopted by Bgfx/EasyGL/Vulkan) — the stale override made the `SDL_Renderer` backend fail to compile, breaking downstream consumers (e.g. `mobile-eggbert`). |
 | `87325a6b` | 878 (Vulkan half) | **Real feature implemented and pixel-verified: `RenderTarget2D` mip chains on Vulkan** (Bgfx split to new Task 906 — needs new downsample-shader infra, bigger than originally predicted; `RenderTargetCube` both backends split to new Task 907). `VulkanRenderTargetBackend` gained a real `vkCmdBlitImage`-cascade mip chain (mirrors EasyGL's Task 336 `glGenerateMipmap`-on-unbind), a full-mip-range sampling view separate from the mip-0-only framebuffer attachment view, and a full-range initial layout transition. **Found and fixed a real, independently-necessary prerequisite**: every Vulkan `VkSampler` had `maxLod=0` (zero-init), silently clamping all sampling to mip level 0 regardless of `mipmapMode` — fixed to `VK_LOD_CLAMP_NONE` on both `CreateSampler()`'s default and `ApplySamplerState()`'s per-slot samplers (safe for every existing single-level resource, whose own `VkImageView` levelCount still bounds the visible range). New `Vulkan_RenderTarget2D_MipChain` test uses a deliberately asymmetric 7:1 red/blue split (not 50/50) plus a forced 1x1-destination minification draw to read back the coarsest mip level's true weighted average — an **earlier 50/50-split version of this test was caught as a false positive by this project's own discriminating-power discipline** (its colour boundary sat exactly at the forced centre-sample point, so an ordinary level-0 bilinear blend passed identically with or without the fix; `git stash` revert-and-rebuild still "passed"). Re-verified correctly after the redesign: reverting fails with pure red `(255,0,0)` instead of the predicted `(223,0,32)` weighted average. Full regression: `CnaTests` (Vulkan) 4262/4264 passed, 2 skips, 0 failed (excludes one pre-existing `ContentManagerSkinnedModelTest`-area Xvfb/llvmpipe full-suite segfault, confirmed unrelated — reproduces identically with this task's changes fully reverted); 16 spot-run existing RT/sampler/texture/viewport Vulkan examples all pass unchanged. |
