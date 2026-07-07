@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include <algorithm>
 
 namespace Microsoft::Xna::Framework::Net
@@ -71,6 +73,20 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSessionProperties::Clear()
     {
         properties_.clear();
+    }
+
+    void NetworkSessionProperties::CopyTo(std::vector<std::optional<int>>& destination, int index) const
+    {
+        System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
+        if (index + getCountProperty() > static_cast<int>(destination.size()))
+        {
+            throw System::ArgumentException(
+                "Destination array is not long enough to copy all the items in the collection.");
+        }
+        for (int i = 0; i < getCountProperty(); ++i)
+        {
+            destination[static_cast<std::size_t>(index + i)] = properties_[static_cast<std::size_t>(i)];
+        }
     }
 
     System::Collections::Generic::IEnumerator<std::optional<int>>* NetworkSessionProperties::GetEnumerator()

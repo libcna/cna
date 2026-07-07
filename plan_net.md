@@ -779,9 +779,8 @@ verified via revert-verify-restore. Continuing to Phase 4 (Net API gaps).
 
 ---
 
-**Phase 4 complete** — all 3 Net API-gap tasks (Tasks 4.1-4.3) fixed, tested, and verified via
-revert-verify-restore (or documented where a fix wasn't the right call). Continuing to Phase 5
-(Net test coverage).
+**Tasks 4.1-4.3 done** — fixed, tested, and verified via revert-verify-restore (or documented
+where a fix wasn't the right call). Tasks 4.4-4.6 (below) were added to this phase afterward.
 
 - [x] **Task 4.4** — Add `ReadBytes(int count)` (array-returning) and `Write(char)`/`ReadChar()` to
   `sharp-runtime`'s `System::IO::BinaryReader`/`BinaryWriter`. Confirmed gap vs. FNA's `PacketReader`
@@ -824,12 +823,37 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `BinaryReader` test suite. Full suite: 3400/3400 passing (2 expected accelerometer/gyroscope
   skips), no regressions.
 
-- [ ] **Task 4.5** — Add a `CopyTo` equivalent to `NetworkSessionProperties` (FNA's
+- [x] **Task 4.5** — Add a `CopyTo` equivalent to `NetworkSessionProperties` (FNA's
   `ICollection<int?>.CopyTo(array, index)`). Confirmed root cause one level down: `sharp-runtime`'s
   generic `ICollection<T>` interface never declares `CopyTo` at all (unlike the non-generic
-  `ICollection`, which does). Decide whether to add `CopyTo` to `sharp-runtime`'s generic
-  `ICollection<T>` (coordinate per the same rule as Task 4.4) or implement it directly on
-  `NetworkSessionProperties` without going through the generic interface. Add a test.
+  `ICollection`, which does) — read `include/System/Collections/Generic/ICollection.hpp` directly
+  to confirm.
+
+  **Decision: implement directly on `NetworkSessionProperties`, zero `sharp-runtime` changes.**
+  Found established precedent already in `sharp-runtime` itself: `ReadOnlyCollection<T>::CopyTo`,
+  `Collection<T>::CopyTo`, and `LinkedList<T>::CopyTo` all implement `CopyTo` directly on the
+  concrete class rather than through the shared generic interface — the same pattern this fix
+  follows. Adding `CopyTo` to the shared `ICollection<T>` interface instead would have added a new
+  pure-virtual member that rippled through every other `ICollection<T>` implementer in
+  `sharp-runtime`, for no benefit this task actually needs.
+
+  **Fixed:** added `void CopyTo(std::vector<std::optional<int>>& destination, int index) const` to
+  `NetworkSessionProperties` (`NetworkSessionProperties.hpp`/`.cpp`), matching real .NET
+  `ICollection<int?>.CopyTo(int?[], int)` semantics: throws `System::ArgumentOutOfRangeException`
+  for a negative index (via `ArgumentOutOfRangeException::ThrowIfNegative`), throws
+  `System::ArgumentException` if `index + Count` exceeds the destination's size, otherwise copies
+  every element in order starting at `index`.
+
+  **Added 3 tests** to `NetworkSessionPropertiesTests.cpp`:
+  `CopyToCopiesAllElementsStartingAtIndex` (3 real values copied into a pre-filled 5-slot
+  destination at offset 1, confirms the untouched slots stay `nullopt` and the copied slots land
+  exactly in order), `CopyToNegativeIndexThrows`, `CopyToDestinationTooSmallThrows`.
+
+  **Verified the bug is real, not theoretical:** stashed the 2 source-fix files (`.hpp`/`.cpp`,
+  keeping the 3 new tests), rebuilt — genuine **compile-time** failure across all 3 new tests
+  (`'class ... NetworkSessionProperties' has no member named 'CopyTo'`), confirming the tests only
+  pass because of the real fix. Restored and rebuilt clean — full suite **3403/3403 passing** (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [x] **Task 4.6** — Extend `NetworkGamer::IsHost` to be correct for remote gamers representing the
   actual host machine, as seen from a non-host client. Confirmed self-documented gap
@@ -883,6 +907,11 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `Host:Y` for that row throughout the run. Both processes exited `0`.
 
 ---
+
+**Phase 4 complete — 6/6** (Tasks 4.1-4.6, including the 3 API-gap tasks and the 3 tasks added to
+this phase afterward — Task 4.4's `sharp-runtime` half arrived via the user's own large merge and
+was verified rather than re-implemented, Task 4.5 avoided any `sharp-runtime` change by following
+existing per-class `CopyTo` precedent, Task 4.6 fixed the live `IsHost` roster gap).
 
 ## Phase 5 — Net: Test Coverage
 

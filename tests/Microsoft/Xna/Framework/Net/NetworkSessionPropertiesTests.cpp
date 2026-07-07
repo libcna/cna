@@ -3,6 +3,8 @@
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using namespace Microsoft::Xna::Framework::Net;
 
@@ -145,6 +147,40 @@ TEST(NetworkSessionPropertiesTest, ClearEmptiesList) {
     props.Add(2);
     props.Clear();
     EXPECT_EQ(0, props.getCountProperty());
+}
+
+// Task 4.5: NetworkSessionProperties implements CopyTo directly (sharp-runtime's generic
+// ICollection<T> has no CopyTo member of its own), matching real .NET's
+// ICollection<int?>.CopyTo(int?[], int) semantics exactly.
+TEST(NetworkSessionPropertiesTest, CopyToCopiesAllElementsStartingAtIndex) {
+    NetworkSessionProperties props;
+    props.Add(10);
+    props.Add(20);
+    props.Add(30);
+
+    std::vector<std::optional<int>> destination(5, std::nullopt);
+    props.CopyTo(destination, 1);
+
+    EXPECT_EQ(destination[0], std::nullopt);
+    EXPECT_EQ(destination[1], std::optional<int>(10));
+    EXPECT_EQ(destination[2], std::optional<int>(20));
+    EXPECT_EQ(destination[3], std::optional<int>(30));
+    EXPECT_EQ(destination[4], std::nullopt);
+}
+
+TEST(NetworkSessionPropertiesTest, CopyToNegativeIndexThrows) {
+    NetworkSessionProperties props;
+    props.Add(1);
+    std::vector<std::optional<int>> destination(5);
+    EXPECT_THROW(props.CopyTo(destination, -1), System::ArgumentOutOfRangeException);
+}
+
+TEST(NetworkSessionPropertiesTest, CopyToDestinationTooSmallThrows) {
+    NetworkSessionProperties props;
+    props.Add(1);
+    props.Add(2);
+    std::vector<std::optional<int>> destination(2);
+    EXPECT_THROW(props.CopyTo(destination, 1), System::ArgumentException);
 }
 
 TEST(NetworkSessionPropertiesTest, GetEnumeratorIteratesAllValues) {

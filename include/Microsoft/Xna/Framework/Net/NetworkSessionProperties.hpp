@@ -127,6 +127,25 @@ namespace Microsoft::Xna::Framework::Net
         void Clear() override;
 
         /**
+         * @brief Copies all elements to @p destination starting at @p index.
+         *
+         * C++ counterpart of .NET `ICollection<int?>.CopyTo(int?[], int)`. `sharp-runtime`'s
+         * generic `ICollection<T>` interface has no `CopyTo` member of its own (unlike its
+         * non-generic `ICollection`, which does) — implemented directly on this concrete type
+         * instead, matching the same per-class pattern `sharp-runtime`'s own `ReadOnlyCollection
+         * <T>`/`Collection<T>`/`LinkedList<T>` already use for their own `CopyTo`, rather than
+         * widening the shared interface (which would ripple through every `ICollection<T>`
+         * implementer in `sharp-runtime`).
+         *
+         * @param destination The target vector to copy elements into; must already have room
+         *                     for `index + getCountProperty()` elements.
+         * @param index Zero-based starting index in @p destination.
+         * @throws System::ArgumentOutOfRangeException if index is negative.
+         * @throws System::ArgumentException if destination is too small.
+         */
+        void CopyTo(std::vector<std::optional<int>>& destination, int index) const;
+
+        /**
          * @brief Returns a new enumerator that iterates through the list.
          *
          * @return A heap-allocated enumerator; caller takes ownership.
