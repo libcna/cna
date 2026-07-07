@@ -425,6 +425,14 @@ namespace Microsoft::Xna::Framework::Graphics
         p.eyePositionWorld[2] = eyePos.Z;
 
         world_.ToColumnMajor(p.worldColMajor);
+
+        p.fogEnabled = fogEnabled_;
+        const Vector3 fogColor = getFogColorProperty();
+        p.fogColor[0] = fogColor.X;
+        p.fogColor[1] = fogColor.Y;
+        p.fogColor[2] = fogColor.Z;
+        p.fogStart    = fogStart_;
+        p.fogEnd      = fogEnd_;
     }
 
     const std::string& EnvironmentMapEffect::GetTypeName() const

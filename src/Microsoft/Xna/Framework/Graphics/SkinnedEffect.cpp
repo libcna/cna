@@ -348,6 +348,14 @@ namespace Microsoft::Xna::Framework::Graphics
         p.boneCount = static_cast<int>(bones.size());
         for (int i = 0; i < p.boneCount; ++i)
             bones[i].ToColumnMajor(p.boneTransforms + i * 16);
+
+        p.fogEnabled = fogEnabled_;
+        const Vector3 fogColor = getFogColorProperty();
+        p.fogColor[0] = fogColor.X;
+        p.fogColor[1] = fogColor.Y;
+        p.fogColor[2] = fogColor.Z;
+        p.fogStart    = fogStart_;
+        p.fogEnd      = fogEnd_;
     }
 
     void SkinnedEffect::OnApply()

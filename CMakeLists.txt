@@ -740,6 +740,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 900: EnvironmentMapEffect fog fix verification
+        cna_easygl_test(cna_test_easygl_environmentmapeffect_fog
+                        examples/easygl_environmentmapeffect_fog_test.cpp)
+        add_test(NAME EasyGL_EnvironmentMapEffect_Fog
+                 COMMAND cna_test_easygl_environmentmapeffect_fog)
+        set_tests_properties(EasyGL_EnvironmentMapEffect_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 394: EnvironmentMapEffect EnvironmentMapAmount=1 should fully replace lit color
         cna_easygl_test(cna_test_easygl_environmentmapeffect_amount_one
                         examples/easygl_environmentmapeffect_amount_one_test.cpp)
@@ -791,6 +800,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME EasyGL_EnvironmentMapEffect_Combined
                  COMMAND cna_test_easygl_environmentmapeffect_combined)
         set_tests_properties(EasyGL_EnvironmentMapEffect_Combined PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        # Task 900: SkinnedEffect fog fix verification
+        cna_easygl_test(cna_test_easygl_skinnedeffect_fog
+                        examples/easygl_skinnedeffect_fog_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_Fog
+                 COMMAND cna_test_easygl_skinnedeffect_fog)
+        set_tests_properties(EasyGL_SkinnedEffect_Fog PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

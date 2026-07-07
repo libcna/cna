@@ -136,6 +136,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   revert-and-rebuild; hit 2 real pre-existing gotchas along the way (Vulkan's clip-space Z range is
   `[0,1]` not OpenGL's `[-1,1]`, and 2 ported Bgfx tests needed the already-known
   `RasterizerState::CullNone` workaround) — both fixed in the tests themselves, not backend bugs.
+  **Task 900 fixed `SkinnedEffect`/`EnvironmentMapEffect`'s fog gap on EasyGL** (found during Task
+  888's research) — both effects' `FillGpuDrawParams()` never forwarded fog fields at all, on any
+  backend, despite both having complete `IEffectFog`/`FogVector` machinery in `OnApply()`. Fixed by
+  mirroring `BasicEffect`'s existing pattern, plus adding fog uniforms/blend to EasyGL's
+  `env_map3d`/`skinned3d` shaders (the only 2 of EasyGL's 7 shader variants with zero fog code
+  before this task). 2 new tests passed on the first attempt; `git stash` revert-and-rebuild
+  reproduced the exact predicted pre-fix failure. Vulkan/Bgfx's `env_map3d`/`skinned3d` GPU shader
+  pipelines still don't implement fog — deliberately left for Task 899's scope, not this task's.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -393,6 +401,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| _pending_ | 900 | **Real, confirmed gap found and FIXED on EasyGL** (opened by Task 888's research): `SkinnedEffect`/`EnvironmentMapEffect`'s `FillGpuDrawParams()` never forwarded fog fields at all, despite both having complete `IEffectFog`/`FogVector` machinery in `OnApply()` — the same gap Task 378/388 already fixed for `AlphaTestEffect`/`DualTextureEffect`. Fixed by mirroring `BasicEffect`'s pattern in both effects, plus adding fog uniforms/blend to EasyGL's `env_map3d`/`skinned3d` shaders (the only 2 of 7 EasyGL shader variants with zero fog code before this task) — `BindDrawParams()` needed no changes, its fog-uniform-setting block is already fully generic. New `easygl_{environmentmapeffect,skinnedeffect}_fog_test.cpp` (3 checks each) passed on the first attempt; `git stash` revert-and-rebuild reproduced the exact predicted pre-fix failure (1/3 PASS each). Full EasyGL regression: 3631/3634 pass, same 3 pre-existing failures. Vulkan/Bgfx's `env_map3d`/`skinned3d` pipelines still lack fog GPU-side, left for Task 899. |
 | `a42ae950` | 888 | **Real feature implemented on Bgfx (full) and Vulkan (partial, remainder split to Task 899).** Chose EasyGL's already-shipped raw-object-space-Z fog formula over FNA's view-space `FogVector` (equivalent only under identity World/View, which every test uses; matching EasyGL is what makes the verification-by-porting-existing-tests plan work). Bgfx: 2 shared uniforms set unconditionally per draw, new varying, fog logic added to all 7 applicable shader pairs — no push-constant budget constraint there. Vulkan: fixed only `alpha_test3d`/`alpha_test_colored3d` (28 spare push-constant bytes) and `lit_textured3d` (32 spare `LitLightParams` UBO bytes); the other 5 pipelines share a fully-packed push constant with zero spare bytes, split to Task 899. 6 new tests (2 Vulkan, 4 Bgfx) confirmed via `git stash` revert-and-rebuild. Found and fixed 2 real pre-existing test-authoring gotchas along the way: Vulkan's clip-space Z is `[0,1]` not `[-1,1]` (a ported test using `z=-0.9` got near-plane-clipped); 2 ported Bgfx tests needed the already-known `RasterizerState::CullNone` workaround. Full regression: Vulkan 3551/3563 (12 pre-existing failures only), Bgfx 3535/3535 (100%, zero failures). Opened Task 899 (Vulkan's remaining 5 pipelines) and Task 900 (`SkinnedEffect`/`EnvironmentMapEffect` fog forwarding gap, found during research). |
 | `60ffbdbd` | 887 | **Real, confirmed gap found and FIXED on Vulkan/Bgfx** (opened by Task 377): `AlphaTestEffect.VertexColorEnabled` had zero effect since neither backend's alpha-test shader ever declared a color vertex attribute. Fixed with a smaller-footprint approach than originally scoped — added a stride-24-only sibling vertex shader to each backend's existing `alpha_test3d` pipeline (`alpha_test_colored3d.vert.glsl` on Vulkan, `vs_alpha_test_colored3d.sc` on Bgfx) rather than unifying all dispatch into the per-stride pipelines. New `{Vulkan,Bgfx}_AlphaTest_VertexColor` tests (ports of Task 377's EasyGL test) confirmed via `git stash` revert-and-rebuild on both backends — pre-fix, identical diffuse-alone `(122,82,163)` result on both checks. Full regression: Vulkan 3549/3561 (12 pre-existing failures only), Bgfx 3531/3531 (100%, zero failures). |
 | `a6198bf0` | 886/892/898 | **Real feature implemented + 2 real, pre-existing bugs found and FIXED as hard prerequisites, all 3 backends.** Task 886: real specular highlights for `BasicEffect` — half-vector Blinn-Phong (FNA's `Lighting.fxh` `ComputeLights`), per-light gated by the same "faces the light" term as diffuse, summed with each light's own `SpecularColor` then scaled once by the material `SpecularColor`, added after the texture×diffuse multiply (FNA's `AddSpecular` macro). Required a real `Matrix::CreateLookAt`/`CreatePerspectiveFieldOfView` camera to test (identity View/Projection places `EyePosition` on the quad's own plane, degenerate for specular) — building that real camera surfaced Task 892 (Bgfx `vs_lit_textured3d.sc` transformed the normal by the full WVP matrix instead of World's inverse-transpose, a row already opened by Task 398's audit) and Task 898 (identical bug independently found on Vulkan's `lit_textured3d.vert.glsl`, fixed in-shader via GLSL's built-in `inverse()`). Both were totally masked by every prior test's identity View/Projection. New `{EasyGL,Bgfx,Vulkan}_BasicEffect_Specular` tests (4 checks each, Python-derived expected values) plus `Bgfx_BasicEffect_NormalTransform` (isolates the diffuse-only symptom). Discriminating power independently verified via `git stash` revert-and-rebuild on both Bgfx and Vulkan, reproducing the exact predicted `(2,2,2)`-instead-of-`(48,48,48)` failure. Full regression: EasyGL 3629/3632, Bgfx 3529/3530, Vulkan 3548/3560 — all pre-existing/documented failures only. |
@@ -537,7 +546,7 @@ direct code reading.
 | Fixed, all 3 backends | `BasicEffect::FillGpuDrawParams()` now forwards `SpecularColor`/`SpecularPower` and renders real half-vector Blinn-Phong specular highlights on all 3 backends. | Task 886 (done) |
 | Fixed, all 3 backends | `AlphaTestEffect.VertexColorEnabled` now works on Vulkan/Bgfx — a new stride-24-only sibling vertex shader reads the vertex color attribute and gates it, dispatched alongside the existing alpha-test pipeline. Was correct on EasyGL from the start (reuses `BasicEffect`'s already-fixed stride-24 shader). | Task 887 (done) |
 | Fixed on Bgfx (full), partial on Vulkan | Fog now works on Bgfx for all 7 applicable pipelines and on Vulkan's `alpha_test3d`/`alpha_test_colored3d`/`lit_textured3d` pipelines (spare UBO/push-constant capacity already existed there). Vulkan's `colored3d`/`textured3d`/`colored_textured3d`/`dual_texture3d`/`skinned3d` share a fully-packed push constant with zero spare bytes — needs new dedicated UBO infrastructure, not fixed. | Task 888 (done)/899 |
-| Confirmed, real, not fixed | `SkinnedEffect`/`EnvironmentMapEffect`'s `FillGpuDrawParams()` never forwards fog fields at all, on any backend including EasyGL, despite both effects having full `IEffectFog`/`FogVector` machinery in `OnApply()` — fog is a total no-op for these two effects everywhere. Found during Task 888's research. | Task 900 |
+| Fixed on EasyGL, not fixed on Vulkan/Bgfx | `SkinnedEffect`/`EnvironmentMapEffect`'s `FillGpuDrawParams()` now forwards fog fields correctly on EasyGL (both effects' shaders now implement fog too). Vulkan/Bgfx's `env_map3d`/`skinned3d` GPU shader pipelines still don't implement fog at all — deferred to Task 899's scope. | Task 900 (EasyGL done)/899 |
 | Confirmed, real, not fixed | `DualTextureEffect.VertexColorEnabled` has **zero effect on all 3 backends** — every backend's dual-texture dispatch is a dedicated shader/pipeline declaring only `position`+`texcoord` inputs (Vulkan explicitly reuses the generic textured-only vertex shader; Bgfx hardcodes `v_color0` to the diffuse uniform, not a real per-vertex attribute). Found while writing Task 389's capstone test — Phase 44 never had a dedicated audit task for this property, unlike `AlphaTestEffect`'s Task 377. | Task 889 |
 | Confirmed, real, not fixed | `EnvironmentMapEffect::FillGpuDrawParams()` only forwards `DirectionalLight0` — `DirectionalLight1`/`DirectionalLight2` silently ignored on all 3 backends. Confirmed this effect shares `BasicEffect`'s identical `Lighting.fxh`/`ComputeLights` mechanism in real FNA (same `oneLight` shader-variant optimization), so the same gap and likely the same fix plumbing as Task 885 applies here too. | Task 890 |
 | Confirmed, real, not fixed | `EnvironmentMapEffect`'s base cube-map lerp target (`envColor`) is not scaled by combined texture×diffuse alpha on any backend; FNA's real formula (`envmap = SAMPLE_CUBEMAP(...) * color.a`) scales both `envmap.rgb` (base lerp, still unscaled) and `envmap.a` (specular term, fixed by Task 395). Only visible when texture/diffuse alpha is strictly less than 1 — every existing test used opaque textures/diffuse colors. | Task 891 |
@@ -651,10 +660,11 @@ scoped real bugs (Tasks 664/665) are done. Task 884 (`EffectParameterCollection`
 `EffectPassCollection` dangling-pointer hazard), Task 885/897 (`BasicEffect` lit-path
 `DirectionalLight1`/`2`/`EmissiveColor`), Task 886/892/898 (real specular highlights + 2
 normal-transform prerequisite fixes on Bgfx/Vulkan), Task 887 (`AlphaTestEffect.
-VertexColorEnabled` ignored on Vulkan/Bgfx), and Task 888 (real fog on Bgfx + Vulkan's
-`alpha_test3d`/`lit_textured3d` pipelines) are all done — `BasicEffect` now fully matches FNA's
-lit-path formula on all 3 backends. In priority order, the rest are the accumulated backlog from
-earlier phases (Tasks 825–828, 863–882, 889–896, 899–900).
+VertexColorEnabled` ignored on Vulkan/Bgfx), Task 888 (real fog on Bgfx + Vulkan's
+`alpha_test3d`/`lit_textured3d` pipelines), and Task 900 (`SkinnedEffect`/`EnvironmentMapEffect`
+fog forwarding on EasyGL) are all done — `BasicEffect` now fully matches FNA's lit-path formula on
+all 3 backends. In priority order, the rest are the accumulated backlog from earlier phases (Tasks
+825–828, 863–882, 889–896, 899).
 
 1. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -668,46 +678,43 @@ earlier phases (Tasks 825–828, 863–882, 889–896, 899–900).
    `GraphicsDevice.cpp` (ctor), potentially many `examples/*.cpp` files.
 
 3. **Task 899 — add fog support to Vulkan's `colored3d`/`textured3d`/`colored_textured3d`/
-   `dual_texture3d`/`skinned3d` pipelines** (split out of Task 888; these 5 pipelines share a
-   fully-packed 128-byte push constant with zero spare bytes, unlike the 3 pipelines Task 888
-   already fixed — needs new dedicated UBO infrastructure mirroring the `EnvMapParams`/
-   `LitLightParams`/`BoneBlock` pattern, comparable in size to Task 897). Files: Vulkan shader
-   files for these 5 pipelines + `VulkanGraphicsBackend.hpp`/`.cpp`.
+   `dual_texture3d`/`skinned3d` pipelines (and, opportunistically, Bgfx's/Vulkan's `env_map3d`)**
+   (split out of Task 888; these 5 pipelines share a fully-packed 128-byte push constant with zero
+   spare bytes, unlike the 3 pipelines Task 888 already fixed — needs new dedicated UBO
+   infrastructure mirroring the `EnvMapParams`/`LitLightParams`/`BoneBlock` pattern, comparable in
+   size to Task 897; Vulkan's `env_map3d` specifically already has ~160 spare bytes in its existing
+   `EnvMapParams` UBO, so it could be picked up cheaply alongside this task even though it wasn't
+   part of Task 888/900's own scope). Files: Vulkan shader files for these pipelines +
+   `VulkanGraphicsBackend.hpp`/`.cpp`; Bgfx's `vs/fs_env_map3d.sc`/`vs/fs_skinned3d.sc` for the
+   Bgfx side (no infra needed there, same 2-uniform pattern as Task 888's other 7 pipelines).
 
-4. **Task 900 — forward fog fields in `SkinnedEffect`/`EnvironmentMapEffect`'s
-   `FillGpuDrawParams()`** (found during Task 888's research; a pure C++-forwarding gap, fog is a
-   total no-op for these 2 effects on every backend including EasyGL). Also needs new EasyGL
-   shader fog code for `env_map3d`/`skinned3d` (currently zero fog code there, unlike EasyGL's
-   other 5 shader variants). Files: `SkinnedEffect.cpp`/`EnvironmentMapEffect.cpp` +
-   `EasyGLGraphicsBackend.cpp`'s `EnsureEnvMapped3DProgram`/`EnsureSkinnedProgram`.
-
-5. **Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`.**
+4. **Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`.**
    Files: `GraphicsDevice.cpp` (`SetRenderTargets`). Verification: 5-target call throws, 1–4 work.
 
-6. **Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends.**
+5. **Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends.**
    Files: `IGraphicsBackend.hpp`, `GraphicsDevice.cpp`, all 3 backends' graphics-backend `.cpp`.
    Verification: sub-region-viewport pixel test (should fail on all 3 backends today).
 
-7. **Task 878/879 — implement real mip/MSAA render-target support on Vulkan and Bgfx**, mirroring
+6. **Task 878/879 — implement real mip/MSAA render-target support on Vulkan and Bgfx**, mirroring
     Task 336/337's exact EasyGL fix shape. Files: each backend's render-target backend classes.
 
-8. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
+7. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
     attachments** on all 3 backends (currently hardcoded/coarse choices).
 
-9. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
+8. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
     (875); `RenderTargetCube` via `EnvironmentMapEffect` renders black after unbind, root cause not
     isolated (876, needs isolation before a fix is attempted — see §9).
 
-10. **Task 873/874 — fix Bgfx's wrong-handle-type `static_cast`s** for `RenderTarget2D`/
+9. **Task 873/874 — fix Bgfx's wrong-handle-type `static_cast`s** for `RenderTarget2D`/
     `RenderTargetCube` sampling. Files: `BgfxGraphicsBackend.hpp`/`.cpp`.
 
-11. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
+10. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
     test fixture *first*, then implement against it).
 
-12. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+11. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
     (`vkCmdCopyImageToBuffer` + staging buffer, mirroring the existing upload path in reverse).
 
-13. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
+12. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
     `Texture3D`/`TextureCube` (confirm with a failing test first, per Task 276's methodology).
 
 ---
@@ -792,12 +799,21 @@ lit_textured3d) is now ALSO DONE -- chose EasyGL's raw-object-space-Z formula ov
 view-space FogVector approach (equivalent only under identity World/View, which every test uses).
 Bgfx got full coverage (7 pipelines, no push-constant budget constraint there); Vulkan only got
 the 3 pipelines with existing spare UBO/push-constant capacity, with the remaining 5 split into
-Task 899 (needs new dedicated UBO infrastructure, comparable to Task 897). Also opened Task 900
-(SkinnedEffect/EnvironmentMapEffect fog forwarding gap, a pure C++ issue found during research,
-affects every backend including EasyGL). Task 899/900/896/883 all need either new large
-infrastructure work or a scoping decision; Task 887 (AlphaTestEffect.VertexColorEnabled ignored
-on Vulkan/Bgfx, done earlier this session) leaves no smaller non-decision task obviously next --
-check NEXT.md's own backlog list (section 8) for the current best candidate when resuming. Task
+Task 899 (needs new dedicated UBO infrastructure, comparable to Task 897). Also opened Task 900,
+which is now ALSO DONE on EasyGL: SkinnedEffect/EnvironmentMapEffect's FillGpuDrawParams() never
+forwarded fog fields at all (a pure C++ gap, unrelated to Task 888's GPU-side work), found during
+Task 888's research. Fixed by mirroring BasicEffect's pattern in both effects plus adding fog
+uniforms/blend to EasyGL's env_map3d/skinned3d shaders (the only 2 of EasyGL's 7 shader variants
+with zero fog code before this task) -- BindDrawParams() needed no changes since its fog-uniform
+block is already fully generic. 2 new tests passed first try; git stash revert-and-rebuild
+reproduced the exact predicted pre-fix failure. Full EasyGL regression 3631/3634, same 3
+pre-existing failures. Vulkan/Bgfx's env_map3d/skinned3d GPU shader pipelines still don't
+implement fog -- left for Task 899 (noting Vulkan's env_map3d specifically already has ~160 spare
+UBO bytes and could be picked up cheaply there, and Bgfx's env_map3d/skinned3d need no new infra
+at all, same 2-uniform pattern as Task 888's other 7 pipelines -- neither was in Task 888/900's own
+scope though, since their C++ side wasn't even forwarding fog until this task). Remaining backlog
+(Task 899/896/883) all need either new large infrastructure work or a scoping decision -- check
+NEXT.md's own backlog list (section 8) for the current best candidate when resuming. Task
 411 (opener) built the mock/recording
 ISpriteBatchBackend infrastructure Tasks 412-416 depend on -- audited SpriteBatch's architecture
 first (it already has a dedicated ISpriteBatchBackend interface; flushBatch()'s stable_sort by
@@ -1364,14 +1380,42 @@ forwards fog fields at all, on ANY backend including EasyGL -- a pure C++ gap fo
 FillGpuDrawParams() across all 5 stock effects during this task's research phase, unrelated to the
 Vulkan/Bgfx GPU-side work this task actually did).
 
-Last full regression (all 3 backends, serial -j1, after Task 888's fix): EasyGL untouched
-(sanity-rebuilt, no EasyGL files touched), Bgfx 3535/3535 pass (100%, zero failures), Vulkan
-3551/3563 pass -- all failures independently reconfirmed pre-existing/documented (same
-exact-name-match lists as every prior task this session), zero new regressions on any backend.
+Task 900 then fixed that C++ gap on EasyGL: mirrored BasicEffect::FillGpuDrawParams()'s existing
+6-line pattern in both SkinnedEffect.cpp/EnvironmentMapEffect.cpp, reading FogColor via each
+effect's own getFogColorProperty() accessor (both store it through an EffectParameter,
+fogColorParam_, unlike BasicEffect's plain fogColor_ member -- getFogColorProperty() already
+handles this correctly, no new logic needed). Added the same fog uniforms/varying/blend logic
+EasyGL's other 5 shader variants already have to EnsureEnvMapped3DProgram()/EnsureSkinnedProgram()
+-- both had zero fog code at all before this task. BindDrawParams() needed NO changes -- its
+loc_fog_* uniform-setting block (already used by 5 other programs) is fully generic, auto-binding
+for any program whose uniform_location() lookup for uFogEnabled/etc. succeeds. New
+easygl_{environmentmapeffect,skinnedeffect}_fog_test.cpp (3 checks each, same fog-off/50%/full-fog
+structure and exact expected values as easygl_basiceffect_fog_test.cpp/Task 195, isolating fog
+from each effect's reflection/skinning math via EnvironmentMapAmount=0+EnvironmentMapSpecular=0
+and an identity bone palette respectively, both using EmissiveColor as the controlled material
+color) -- both PASSED on the first attempt with the exact hand-derived expected values.
+Discriminating power independently verified: git stash-reverted all 3 production files, rebuilt,
+reran -- both new tests failed identically (1/3 PASS each, fog-disabled case coincidentally
+passing since fogFactor=1 regardless, both fog-active cases showing the unblended blue material
+color instead of any blend); restored and reconfirmed both pass 3/3. Full EasyGL regression:
+3631/3634 pass, same 3 pre-existing failures (EasyGL_MRT_TwoAttachments,
+EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests), zero new regressions.
+Vulkan/Bgfx remain unaffected by Task 900 -- their env_map3d/skinned3d GPU shader pipelines still
+don't implement fog at all (that work was never in Task 888's scope either, since these 2 effects'
+C++ side wasn't forwarding fog until Task 900 fixed it) -- left as a natural extension of Task
+899's scope when that's picked up (noting Vulkan's env_map3d specifically already has ~160 spare
+bytes in its existing EnvMapParams UBO and could be done cheaply, and Bgfx's env_map3d/skinned3d
+need zero new infrastructure at all, same 2-uniform pattern as Task 888's other 7 pipelines).
+
+Last full regression (all 3 backends, serial -j1, after Task 900's fix): EasyGL 3631/3634 pass
+(3 pre-existing failures), Bgfx 3535/3535 pass (100%, zero failures, unchanged from Task 888),
+Vulkan 3551/3563 pass (unchanged from Task 888) -- all failures independently reconfirmed
+pre-existing/documented (same exact-name-match lists as every prior task this session), zero new
+regressions on any backend.
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-420, 664-665, 884-888, 892, 897-900) rather than this file — this file
+directly (Tasks 351-420, 664-665, 884-900) rather than this file — this file
 intentionally keeps only a one-line summary per task (see §3) to stay a genuinely quick-to-read
 handoff document.
 ```

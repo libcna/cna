@@ -2555,15 +2555,20 @@ void main()
 "uniform mat3 uNormalMatrix;\n"
 "uniform mat4 uWorld;\n"
 "uniform vec3 uEyePosition;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
 "out vec3 vWorldNormal;\n"
 "out vec3 vEyeDir;\n"
 "out vec2 vUV;\n"
+"out float vFogFactor;\n"
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vec3 worldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
 "    vWorldNormal=uNormalMatrix*aNormal;\n"
 "    vEyeDir=uEyePosition-worldPos;\n"
 "    vUV=aUV;\n"
+"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2571,6 +2576,7 @@ void main()
 "in vec3 vWorldNormal;\n"
 "in vec3 vEyeDir;\n"
 "in vec2 vUV;\n"
+"in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform samplerCube uEnvMap;\n"
 "uniform vec4 uDiffuseColor;\n"
@@ -2582,6 +2588,7 @@ void main()
 "uniform float uFresnelEnabled;\n"
 "uniform float uFresnelFactor;\n"
 "uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vWorldNormal);\n"
@@ -2601,6 +2608,7 @@ void main()
 "    FragColor=vec4(rgb,combinedAlpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_env_mapped_.prog, vsrc, fsrc, "env+mapped");
@@ -2620,6 +2628,10 @@ void main()
         p.loc_fresnel_enabled = p.prog.uniform_location("uFresnelEnabled");
         p.loc_fresnel_factor  = p.prog.uniform_location("uFresnelFactor");
         p.loc_alphatest       = p.prog.uniform_location("uAlphaTest");
+        p.loc_fog_enabled     = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_color       = p.prog.uniform_location("uFogColor");
+        p.loc_fog_start       = p.prog.uniform_location("uFogStart");
+        p.loc_fog_end         = p.prog.uniform_location("uFogEnd");
         p.ready               = true;
         CNA_RENDER_LOG("env+mapped3D ready loc_wvp=" << p.loc_wvp);
     }
@@ -2638,8 +2650,12 @@ void main()
 "layout(location=4) in uvec4 aBoneIndices;\n"
 "uniform mat4 uWVP;\n"
 "uniform mat4 uBones[72];\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
 "out vec3 vNormal;\n"
 "out vec2 vUV;\n"
+"out float vFogFactor;\n"
 "void main(){\n"
 "    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x\n"
 "               +uBones[aBoneIndices.y]*aBoneWeights.y\n"
@@ -2648,6 +2664,7 @@ void main()
 "    gl_Position=uWVP*skinMat*vec4(aPos,1.0);\n"
 "    vNormal=normalize(mat3(skinMat)*aNormal);\n"
 "    vUV=aUV;\n"
+"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
 "}\n";
 
         static const char* fsrc =
@@ -2655,12 +2672,14 @@ void main()
 "precision mediump float;\n"
 "in vec3 vNormal;\n"
 "in vec2 vUV;\n"
+"in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uEmissiveColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
@@ -2670,6 +2689,7 @@ void main()
 "    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_skinned_.prog, vsrc, fsrc, "skinned");
@@ -2682,6 +2702,10 @@ void main()
         p.loc_l0dir     = p.prog.uniform_location("uLight0Dir");
         p.loc_l0diff    = p.prog.uniform_location("uLight0Diffuse");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
+        p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_color   = p.prog.uniform_location("uFogColor");
+        p.loc_fog_start   = p.prog.uniform_location("uFogStart");
+        p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
         p.ready         = true;
         CNA_RENDER_LOG("skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
