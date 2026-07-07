@@ -552,6 +552,17 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — Round 2 analysis pass (no new tasks opened).** Per explicit user
+  request ("analyze, not implement yet"), surveyed `third_party/SDL/include/SDL3/` a
+  second time for `CNA::Devices` candidates beyond this plan's 11 (now-closed) tasks.
+  Findings written to `noxna_devices.md` Section 8, not this plan — this was analysis
+  only, no implementation, so no `DEVICES-CNA-0xx` tasks were created. Strongest new
+  candidates found: `MessageBox` (best cross-platform reach of anything surveyed
+  across both rounds, and simpler than `FileDialog` since `SDL_ShowMessageBox` is
+  synchronous, not callback-based) and `Monitors`/multi-display enumeration (genuinely
+  new territory beyond `DisplayInfo`'s existing single-window scope). If/when
+  implementation of any Section 8 candidate is requested, it should get its own task
+  IDs here following this plan's existing one-task-at-a-time pattern.
 - **2026-07-07 — DEVICES-CNA-010 CLOSED. All 11 tasks in this plan are now closed.**
   `docs/cna-devices-camera-design.md` written (design only, no `Camera` implementation,
   matching this task's own explicit scope). Found the texture-upload bridge originally
