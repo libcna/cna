@@ -3468,11 +3468,30 @@ done — "it compiles" is not sufficient.
   full 20-frame steps. Exit code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/
   gyroscope skips), no regressions (new demo-only files, no library changes).
 
-- [ ] **Task 15.18** — `cna_demo_avatar_dual_compare`: two independent `AvatarRenderer`/
+- [x] **Task 15.18** — `cna_demo_avatar_dual_compare`: two independent `AvatarRenderer`/
   `SkinnedModelEXT` instances alive and drawing simultaneously (not yet exercised anywhere — all
   existing avatar code uses exactly one). Male and female avatars stand side-by-side, each
   independently steppable through animation presets (1/2 select which avatar, Space cycles its
   clip), proving multi-instance rendering and per-instance appearance isolation. Single process.
+
+  New files: `examples/demo_avatar_dual_compare/src/{DualCompareDemo.hpp,DualCompareDemo.cpp,
+  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
+  gate as `cna_demo_avatar`, reusing its `Content/` directory. Two independent `AvatarSlot`
+  structs (male at `worldX=-1`, female at `worldX=+1`), each with its own `SkinnedModelEXT`/
+  `AvatarRenderer`/clip-name-list/clip-position state, both loaded and drawn every frame in the
+  same `Draw()` call — genuinely new coverage, since every other avatar demo/test in this
+  codebase only ever has one `AvatarRenderer` alive at a time. Deliberately distinct
+  `AvatarAppearanceEXT` tints per slot (different skin/hair/shirt colors) prove
+  `SetAppearanceEXT` is real per-instance state, not shared/global — if it were global, both
+  avatars would show the same tint despite the different values set. 1/2 selects the active
+  avatar; Space cycles that avatar's own clip independently of the other's.
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 200`, alternating
+  active avatar every 25 frames): both avatars loaded and rendered simultaneously with no crash
+  (the actual proof this task exists for), console log showed 8 alternating
+  Female/Male/Female/Male/... clip advances, both independently reaching `Stand4` after 4 of
+  their own advances each. Exit code `0`. Full suite: 3398/3398 passing (2 expected
+  accelerometer/gyroscope skips), no regressions (new demo-only files, no library changes).
 
 - [ ] **Task 15.19** — `cna_demo_avatar_multi_attach_stress`: an interactive, human-drivable version
   of `avatar_attach_part_integration_test.cpp`'s idea. Each keypress attaches one more standalone
