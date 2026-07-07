@@ -1459,7 +1459,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   <01-00 00-00>` — the wrong, ordinal-1 value, for both fields). Restored the fix; full suite:
   **3302/3304 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 7.4** — Fix `PropertyDictionary`'s mutable `operator[]` auto-vivifying missing keys
+- [x] **Task 7.4** — Fix `PropertyDictionary`'s mutable `operator[]` auto-vivifying missing keys
   instead of throwing, matching the const overload's already-correct behavior. Confirmed: FNA's
   indexer getter is `return dictionary[key];`, which throws `KeyNotFoundException` for a missing
   key via `Dictionary<TKey,TValue>`. The const overload correctly mirrors this via `.at(key)`
@@ -1471,6 +1471,21 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   a proxy-object return type, or by providing a distinct read accessor and having assignment go
   through a different path. Add a test: reading a missing key through a non-const reference should
   throw, not silently insert and inflate `Count`.
+
+  Confirmed all 8 `SetValue` overloads already write directly through `dictionary_[key] = value;`
+  on the underlying `std::map` — never through `PropertyDictionary::operator[]` itself — so no
+  proxy-object redesign was needed: switched the non-const `operator[]` to `dictionary_.at(key)`
+  (identical to the const overload), which only ever affects reads. Grepped the whole codebase and
+  the (previously non-existent) test file's own history for any external caller writing a *new*
+  key via `dict[key] = value` — none exist; every real write path already goes through `SetValue`.
+  Updated the header's doc comment to state the corrected contract. Added
+  `MutableIndexerThrowsOnMissingKeyInsteadOfAutoVivifying` and
+  `MutableIndexerReadsAndOverwritesExistingKey` (proving reading/overwriting an *existing* key
+  through the mutable indexer still works correctly, not just that missing-key access throws).
+
+  Revert-verify-restore: reverting just the `.cpp` fix (keeping the new tests) reproduced both
+  predicted symptoms exactly — no throw, and `Count` inflated from 0 to 1. Restored the fix; full
+  suite: **3304/3306 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 7.5** — Fix `GamerServicesDispatcher::Initialize()` leaking the previous 4
   `SignedInGamer` objects when called a second time. Confirmed: `Initialize()` heap-allocates 4 new

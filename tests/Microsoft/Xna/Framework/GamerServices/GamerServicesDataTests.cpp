@@ -82,6 +82,24 @@ TEST(PropertyDictionaryTest, CountIncrementsOnSet) {
     EXPECT_EQ(2, dict.getCountProperty());
 }
 
+// Task 7.4: reading a missing key through the non-const operator[] (the common case - most
+// callers hold a non-const PropertyDictionary&) used to silently auto-vivify an empty std::any
+// entry and inflate Count, instead of throwing like FNA's real Dictionary<TKey,TValue> indexer
+// does. Confirmed fixed: throws instead, and leaves Count unchanged.
+TEST(PropertyDictionaryTest, MutableIndexerThrowsOnMissingKeyInsteadOfAutoVivifying) {
+    PropertyDictionary dict = PropertyDictionary::CreateInternal({});
+    EXPECT_THROW((void) dict["missing"], std::out_of_range);
+    EXPECT_EQ(0, dict.getCountProperty());
+}
+
+TEST(PropertyDictionaryTest, MutableIndexerReadsAndOverwritesExistingKey) {
+    PropertyDictionary dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("score", 42);
+    EXPECT_EQ(42, std::any_cast<int>(dict["score"]));
+    dict["score"] = 99;
+    EXPECT_EQ(99, dict.GetValueInt32("score"));
+}
+
 // --- LeaderboardIdentity ---
 
 TEST(LeaderboardIdentityTest, CreateWithKey) {

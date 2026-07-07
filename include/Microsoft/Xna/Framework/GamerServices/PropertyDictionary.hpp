@@ -25,7 +25,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] int getCountProperty() const;
 
         /**
-         * @brief Gets or sets the value associated with the specified key.
+         * @brief Gets the value associated with the specified key, or overwrites it through the
+         * returned reference. Throws if key is not already present - use SetValue to insert a
+         * new key.
          *
          * @param key The key to look up.
          * @return Reference to the stored std::any value.

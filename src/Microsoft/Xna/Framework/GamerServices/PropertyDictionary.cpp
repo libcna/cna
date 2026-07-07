@@ -21,7 +21,13 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     std::any& PropertyDictionary::operator[](const std::string& key)
     {
-        return dictionary_[key];
+        // Task 7.4: FNA's real indexer getter is `return dictionary[key];`, which throws
+        // KeyNotFoundException for a missing key via Dictionary<TKey,TValue> - dictionary_[key]
+        // (std::map::operator[]) instead silently default-constructed and inserted an empty
+        // std::any, inflating Count as a side effect of a read. Every SetValue overload already
+        // writes through dictionary_[key] directly (not through this operator), so switching this
+        // to .at() - matching the const overload just below - only affects reads, never writes.
+        return dictionary_.at(key);
     }
 
     const std::any& PropertyDictionary::operator[](const std::string& key) const
