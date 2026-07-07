@@ -3493,11 +3493,42 @@ done — "it compiles" is not sufficient.
   their own advances each. Exit code `0`. Full suite: 3398/3398 passing (2 expected
   accelerometer/gyroscope skips), no regressions (new demo-only files, no library changes).
 
-- [ ] **Task 15.19** — `cna_demo_avatar_multi_attach_stress`: an interactive, human-drivable version
+- [x] **Task 15.19** — `cna_demo_avatar_multi_attach_stress`: an interactive, human-drivable version
   of `avatar_attach_part_integration_test.cpp`'s idea. Each keypress attaches one more standalone
   wardrobe piece via `AttachPartEXT` (hair variants plus a synthetic quad "accessory"), with an
   on-screen `Parts.size()` counter and all attached parts visibly rendering together, proving
   accumulation doesn't break skinning/tinting as part count grows. Single process.
+
+  New files: `examples/demo_avatar_multi_attach_stress/src/{StressDemo.hpp,StressDemo.cpp,
+  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
+  gate as `cna_demo_avatar`, reusing its `Content/` directory. Space attaches the next piece in a
+  fixed sequence: attach 1 = `wardrobe/hair_Cap` (replaces the baked-in hair by name, `Parts.size()`
+  unchanged), attach 2 = `wardrobe/hair_Ponytail` (replaces Cap by name, still unchanged — proving
+  the *replace* half of Task 11.4's semantics holds up mid-stress-sequence), every attach after
+  that builds and attaches a brand-new, uniquely-named (`"CNAAccessoryN"`) synthetic one-bone quad
+  (`Parts.size()` growing by exactly 1 each time — the actual stress/accumulation proof).
+
+  **Worked out the accessory's bone-compatibility requirement before writing any rendering
+  code**: `AttachPartEXT` requires the incoming model to "share this model's exact bone count and
+  index order"; `avatar_attach_part_integration_test.cpp`'s own synthetic quads use `BoneCount=1`,
+  which cannot attach onto a real, many-boned avatar. Instead, each accessory quad copies
+  `BoneCount`/`ParentBoneIndices`/`BindPoseLocal`/`InverseBindPoseGlobal` straight off the
+  already-loaded host model at construction time (so this demo is robust to whatever the real
+  skeleton's bone count actually is, never hardcoded) and rigidly skins all its vertices to bone 0
+  (weight 1.0, no blending) — the accessory's own `Clips` are irrelevant post-attach, since
+  `DrawRealEXT` always computes bone transforms from the *host* model's own clip for every part,
+  including newly-attached ones. Also confirmed `AvatarRenderer::PartTintEXT`'s real fallback
+  behavior first (any part name not containing "Hair"/"Shirt"/"Pants"/"Shoes" falls back to the
+  shared skin tint, not a crash or an unmatched-name exception) before choosing to distinguish
+  successive accessories by their own distinct base texture color instead.
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 500`, one
+  deterministic attach every 20 frames): console log showed `Parts.size()=5` after both hair
+  swaps (correctly unchanged, proving replace-by-name held up), then 23 consecutive synthetic
+  accessories each incrementing `Parts.size()` by exactly 1 (`5→6→7→…→28`) with zero crashes and
+  continued correct rendering throughout. Final summary: `attachCount=25 finalPartsSize=28`. Exit
+  code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
+  regressions (new demo-only files, no library changes).
 
 - [ ] **Task 15.20** — `cna_demo_avatar_bone_state_boundary`: documents the surprising,
   verified-intentional `AvatarRenderer` behavior — `getStateProperty()` always returns
