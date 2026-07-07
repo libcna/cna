@@ -603,6 +603,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         endif()
     endif()
 
+    # Task 15.2: cna_demo_packet_roundtrip - every XNA-type PacketWriter::Write/PacketReader::Read
+    # overload (Vector2/3/4, Matrix, Quaternion, Color, float, double), single process, console-only,
+    # no networking or windowing at all - needs only CNA_Net.
+    if(CNA_ENABLE_NET)
+        add_executable(cna_demo_packet_roundtrip
+            examples/demo_packet_roundtrip/src/Main.cpp
+        )
+        target_link_libraries(cna_demo_packet_roundtrip PRIVATE CNA_Net SHARP_RUNTIME)
+    endif()
+
     # EasyGL integration tests (Task 85, 86, 87)
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")

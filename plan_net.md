@@ -2780,10 +2780,50 @@ done — "it compiles" is not sufficient.
   accelerometer/gyroscope skips); this task added no unit tests (a runnable demo, not a library
   API) so the full suite is a pure no-regression check.
 
-- [ ] **Task 15.2** — `cna_demo_packet_roundtrip`: every XNA-type `PacketWriter::Write`/`PacketReader::Read`
+- [x] **Task 15.2** — `cna_demo_packet_roundtrip`: every XNA-type `PacketWriter::Write`/`PacketReader::Read`
   overload (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `float`, `double`). Console-only: writes
   a table of random values of each type into one `PacketWriter`, reads them back via a `PacketReader`
   over the same bytes, prints a PASS/FAIL row per type. Single process, no networking.
+
+  New file: `examples/demo_packet_roundtrip/src/Main.cpp`, registered in `CMakeLists.txt` under
+  `CNA_ENABLE_NET` linking only `CNA_Net`/`SHARP_RUNTIME` (no windowing/graphics dependency at
+  all, unlike every other Phase 15 demo so far). Moves bytes from writer to reader the same way
+  `LocalNetworkGamer::SendData`/`ReceiveData` do for a real network hop:
+  `dynamic_cast<MemoryStream*>(writer.getBaseStreamProperty())->ToArray()`, then
+  `reader.getBaseStreamProperty()->Write(bytes.data(), 0, size)` with `setPositionProperty(0)`
+  before and after.
+
+  Building it surfaced two real issues, both used as the "would fail without the fix" proof (the
+  demo aborts or misreports without either fix):
+
+  1. **Own bug, fixed: relying on unspecified C++ argument-evaluation order.** The first draft of
+     the `Color` roundtrip constructed `Color(reader.ReadByte(), reader.ReadByte(),
+     reader.ReadByte(), reader.ReadByte())` inline, assuming left-to-right evaluation. C++ does not
+     guarantee this — observed under GCC, the four `ReadByte()` calls evaluated right-to-left,
+     silently reading the bytes into reversed constructor slots (verified: read back
+     `{R:51 G:100 B:2 A:108}` for a written `{R:108 G:2 B:100 A:51}` — the exact byte-reversed
+     value). Fixed by reading each byte into a named local in stream order first, then
+     constructing the `Color` from the locals — not a CNA bug, a bug in this new demo code.
+
+  2. **Confirmed real, faithful FNA quirk (not fixed): `Write(Color)`/`ReadColor()` are not a
+     matched pair, and mismatching them doesn't just misread — it throws.** `PacketWriter::Write
+     (Color)` emits 4 raw bytes (R,G,B,A) while `PacketReader::ReadColor()` always reads 4 32-bit
+     floats (16 bytes); each header already documented the asymmetry, and FNA's own source
+     (`FNA.NetStub/src/Net/PacketReader.cs`) carries the maintainer's own `// FIXME: Only using
+     floats because of the overloads...? -flibit` comment confirming it's a known upstream wart,
+     not a CNA porting bug. Pairing `Write(Color)` with `ReadColor()` on the same 4-byte buffer
+     doesn't produce garbage silently — `ReadColor()` tries to read 16 bytes from a 4-byte buffer
+     and throws `std::runtime_error("Unexpected end of stream.")`. The demo's final row
+     deliberately exercises this mismatched pairing inside a `try`/`catch`, printing the caught
+     exception as a `QUIRK` row (not a crash) with an inline explanation, and reports the correct
+     matched pairing (`Write(Color)` + 4x `ReadByte()`) as the preceding `PASS` row — an honest,
+     non-crashing demonstration of both the correct usage and the documented gotcha.
+
+  Ran the built demo directly: all 7 real round-trip pairs (`float`, `double`, `Vector2/3/4`,
+  `Quaternion`, `Matrix`) plus the matched `Color`/`ReadByte()` pairing print `PASS`, the
+  mismatched `Color`/`ReadColor()` pairing prints `QUIRK` with the caught exception text, summary
+  line reads `9/9 rows behaved as expected`, exit code `0`. Full suite: 3397/3397 passing (2
+  expected accelerometer/gyroscope skips), no regressions (new demo-only file, no library changes).
 
 - [ ] **Task 15.3** — `cna_demo_qos_probe`: `QualityOfService` (`AverageRoundtripTime`,
   `MinimumRoundtripTime`, `BytesPerSecondUpstream/Downstream`, `IsAvailable`) measured between two
