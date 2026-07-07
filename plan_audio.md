@@ -4787,3 +4787,189 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
   already fully resolved and documented (`P9-CATEGORY-010`, `CHECKLIST.md`), not a leftover CNA
   TODO. Zero genuine unresolved markers found anywhere in Audio scope, source or tests -- a clean
   result, not a skipped check. No code changed; no build/test needed.
+
+# Phase 12 — Fresh XNA 4.0/FNA-vs-CNA correctness audit (user-requested, 2026-07-07)
+
+User-requested, explicit and direct (not a self-selected continuation of Phase 11): re-audit
+every class/method/logic path in `Microsoft::Xna::Framework::Audio` against the real XNA 4.0 API
+and the FNA reference source, checking that CNA's classes/methods/logic are correct -- not a
+structural/signature-only pass like Phase 11.1/11.2, but a fresh look specifically for *logic*
+correctness this time. Per the user's own instruction: any real gap the audit finds becomes a
+follow-up task, worked on autonomously afterward, one at a time, following this branch's
+established process (implement, `git stash`-verify, rebuild, full suite, update
+`plan_audio.md`/`CHECKLIST.md`/`NEXT.md`, commit, no push without fresh confirmation).
+
+Note up front: Phase 7, Phase 8, Phase 9's `P9-AUDIT-*`, Phase 10's `P10-AUDIT-002/003`, and
+Phase 11.1-11.2 have already covered this ground multiple times (`NEXT.md` §9 previously warned
+against yet another full line-by-line audit for exactly this reason) -- so this pass is expected
+to mostly *reconfirm* prior findings rather than discover many new ones, and every finding here is
+being cross-checked against `CHECKLIST.md`'s existing accepted-deviation table before being
+counted as a genuine new gap (a re-discovery of an already-documented, already-accepted deviation
+is not a new task, just a confirmation).
+
+All 18 public `Microsoft::Xna::Framework::Audio` classes/enums/exceptions have a 1:1 FNA source
+file (`include/Microsoft/Xna/Framework/Audio/*.hpp` vs `/rv/data/library/github.com/FNA-XNA/FNA/
+src/Audio/*.cs`, exact filename match both sides) -- full list: `AudioCategory`, `AudioChannels`,
+`AudioEmitter`, `AudioEngine`, `AudioListener`, `AudioStopOptions`, `Cue`,
+`DynamicSoundEffectInstance`, `InstancePlayLimitException`, `Microphone`, `MicrophoneState`,
+`NoAudioHardwareException`, `NoMicrophoneConnectedException`, `RendererDetail`, `SoundBank`,
+`SoundEffect`, `SoundEffectInstance`, `SoundState`. Audited in 5 read-only batches (fresh,
+context-free agents, explicitly instructed not to modify any files):
+
+* [x] P12-AUDIT-001: `SoundEffect`/`SoundEffectInstance`/`DynamicSoundEffectInstance`.
+  *Status:* Closed. Confirmed correct: constructor validation, static property clamping, `Play`/
+  `Stop`/`Pause`/`Resume` state machine, `Apply3D`'s distance/pan, `DynamicSoundEffectInstance`'s
+  buffer-queue/`Update()` pump, all previously-documented `CHECKLIST.md` rows (CP-1 through CP-22,
+  T-2A/2B, T-3G) re-confirmed correct on a fresh read.
+  **Real new finding (high severity, wide-reaching): the Pitch→playback-rate-ratio conversion is
+  linear, not FNA's real exponential octave curve.** FNA
+  (`SoundEffectInstance.cs:589-591`, independently re-verified against the actual file):
+  `FAudioSourceVoice_SetFrequencyRatio(handle, (float)Math.Pow(2.0, INTERNAL_pitch) * doppler, 0)`
+  -- `Pitch`'s whole `[-1,1]` range is explicitly octave-based ("-1 octave to +1 octave"). CNA uses
+  `ratio = (pitch<0) ? (1.0f+pitch*0.5f) : (1.0f+pitch)` in **three duplicated call sites**:
+  `SoundEffect::Play(volume,pitch,pan)`'s fire-and-forget path (`SoundEffect.cpp:372-375`), the
+  shared `ApplyTrackProperties()` helper used by both `SoundEffectInstance::Play()` and `Apply3D()`
+  (`SoundEffectInstance.cpp:101-104`), and `SoundEffectInstance::setPitchProperty()`
+  (`SoundEffectInstance.cpp:1049-1060`). The two formulas agree only at `pitch = -1, 0, 1`; at
+  `pitch = 0.5` CNA gives ratio `1.5` vs. the correct `2^0.5 ≈ 1.4142` -- roughly **1 semitone**
+  off, clearly audible. Since `Cue.cpp` routes every XACT pitch application (base pitch, RPC pitch,
+  effect-variation pitch) through `setPitchProperty()` (6 call sites: `Cue.cpp:539,582,619,638,
+  662,1025-1026`), this affects **all** pitched XACT playback too, not just direct
+  `SoundEffectInstance.Pitch` usage. Never caught before because every existing doppler/pitch test
+  only exercises `Pitch == 0` (where both formulas coincidentally agree exactly). See
+  `P12-PITCH-001` below for the fix.
+  *Minor/uncertain, not separately tracked:* real FNA's Pitch setter always re-multiplies by the
+  latched `is3D`/persisted Doppler factor even on a pitch-only call after `Apply3D()`; CNA's
+  `setPitchProperty()` never applies Doppler at all post-`Apply3D()`. Judged as subsumed under the
+  already-accepted "`Apply3D` is one-shot, not re-applied by later setters" narrowing
+  (`P9-3D-005`), not a fresh gap worth its own task.
+
+* [x] P12-AUDIT-002: `AudioListener`, `AudioEmitter`, `RendererDetail`, `AudioChannels`,
+  `AudioStopOptions`, `SoundState`.
+  *Status:* Closed, zero new findings. Every field/property/enum value (including exact numeric
+  enum values, e.g. `AudioChannels.Mono=1/Stereo=2`) matches FNA exactly. The Z-axis-negation
+  FNA applies internally to `AudioListener`/`AudioEmitter`'s FAudio-interop getters/setters
+  (CNA stores raw, unnegated values) was re-confirmed round-trip-transparent, not a behavior gap
+  (`P9-AUDIT-002`). One documentation-only nuance, not worth a task: `RendererDetail` has no public
+  default constructor (CNA's only ctor is a private 2-arg one), unlike FNA's C# struct which always
+  has an implicit parameterless ctor -- calling `GetHashCode()` on that FNA default would itself
+  throw `NullReferenceException` in real C#, so CNA's compile-time prevention is arguably safer,
+  not a regression; no code path anywhere attempts default construction.
+
+* [x] P12-AUDIT-003: `AudioEngine`, `AudioCategory`.
+  *Status:* Closed. Confirmed correct: constructor/exception plumbing, `GetCategory` lookup,
+  `Update()`'s cue-sweep pump, category/cue instance-limit FAIL/REPLACE_LOWEST_PRIORITY/
+  QUEUE-collapse core logic (re-verified line-by-line against `FACT_internal.c:527-599`),
+  `AudioCategory`'s four methods' `IsDisposed` guards and thin pass-through to `AudioEngine`.
+  **Three real new findings:**
+  1. **XACT category hierarchy (`parentIndex`) is parsed but never applied at runtime.** FACT
+     (`FACT.c:868-892` `FACTAudioEngine_SetVolume`) treats the passed volume as a *multiplier* on
+     each category's own authored base volume and **recursively** cascades to every category whose
+     `parentCategory == nCategory`; `FACTAudioEngine_Pause`/`Stop` use
+     `FACT_INTERNAL_IsInCategory()`, which walks a cue's category up its parent chain, so
+     pausing/stopping a parent category affects all descendant categories' cues too. CNA's
+     `AudioEngine::SetCategoryVolumeInternal`/`PauseCategoryInternal`/`ResumeCategoryInternal`/
+     `StopCategoryInternal` (`AudioEngine.cpp:312-362`) all operate on the exact-match category
+     index only, no recursion; `XgsCategory::parentIndex` (parsed at `XactParser.cpp:400`) has zero
+     consumers anywhere outside the parser (`grep`-confirmed). Real-world impact: any `.xgs` with a
+     master category and child categories (a common authoring pattern) would have parent-category
+     volume/pause/stop operations silently fail to reach the children in CNA.
+  2. **`GetGlobalVariable`/`SetGlobalVariable` ignore the PUBLIC/CUE/READONLY accessibility bits
+     and min/max clamping FACT enforces.** FACT (`FACT.c:926-963`) only resolves a name for the
+     *engine-level* get/set API when `!(accessibility & ACCESSIBILITY_CUE) && (accessibility &
+     ACCESSIBILITY_PUBLIC)` (else `InvalidOperationException` in FNA's C#), rejects
+     `ACCESSIBILITY_READONLY` writes, and clamps the stored value to `[minValue, maxValue]`. CNA's
+     `AudioEngine::Init()` populates one flat, unfiltered `globalVariables` map from every parsed
+     `XgsVariable` (`AudioEngine.cpp:109-111`), and `GetGlobalVariable`/`SetGlobalVariable`
+     (`:152-182`) never reference `accessibility`/`minValue`/`maxValue` at all (zero hits,
+     whole-tree grep) -- so a cue-scoped variable like `AttackTime`/`ReleaseTime` is silently
+     readable/writable through the engine-level API in CNA when real FNA would throw, and a
+     read-only or range-clamped variable is freely overwritable out of range. Bonus finding:
+     `XgsVariable`'s own doxygen (`XactTypes.hpp:50`) mislabels the accessibility bits ("bit0=
+     public, bit1=global, bit2=read-only") -- real FAudio is `PUBLIC=0x1, READONLY=0x2, CUE=0x4`
+     (`FACT_internal.h:33-35`); the mislabeling is consistent with the flags never having been
+     wired up at all.
+  3. **Instance-limit live-count/victim-search exclude Paused cues, unlike real FACT** (a specific,
+     previously-unflagged manifestation of the already-documented `P9-LIFECYCLE-014` gap: FACT's
+     `FACT_STATE_PAUSED` never clears `FACT_STATE_PLAYING`, but CNA's `Cue::State` enum is
+     mutually-exclusive). `CheckCategoryInstanceLimit`/`CheckCueInstanceLimit`
+     (`AudioEngine.cpp:379-383,405,445-449,471`) all gate on `state_ == Playing` exactly, so a
+     Paused same-category cue is invisible to both the live count and victim eligibility -- a
+     category can silently exceed its authored `instanceLimit` whenever one of its cues happens to
+     be paused when a new one plays. Lower severity/narrower than findings 1-2.
+  See `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001` below for follow-up tasks.
+
+* [x] P12-AUDIT-004: `SoundBank`, `WaveBank`, `Cue`.
+  *Status:* Closed. `Cue.cpp`/`Cue.hpp` (all 1259 lines read in full): **zero new findings** --
+  expected, given this exact session's own extremely recent, extensive Phase 9-11 work on this
+  file; every subtlety the audit noticed was already a named, decided `plan_audio.md`/
+  `CHECKLIST.md` entry. `SoundBank`/`WaveBank` constructor validation, `GetCue`/`PlayCue` lookup,
+  and the streaming-vs-in-memory split all confirmed correct.
+  **One real new finding, shared between both bank classes:** `Dispose()` doesn't force-stop cues
+  still using the bank, unlike real FACT. FAudio's `FACTSoundBank_Destroy`/`FACTWaveBank_Destroy`
+  (`FACT.c:1311-1327`, `:1457-1483`) synchronously destroy **every** cue associated with the bank
+  when it's disposed -- including cues the caller obtained via `GetCue()` and is still holding.
+  CNA's `SoundBank::Dispose()` (`SoundBank.cpp:188-198`) only clears `fireAndForget_` (bank-owned
+  cues from `PlayCue()`); a `GetCue()`-obtained cue the caller played independently is never
+  tracked by `SoundBank` at all and survives `Dispose()` untouched -- if `sb` is later fully
+  destructed while that cue survives, the cue's raw `bank_` pointer (used throughout
+  `Cue::EvaluateRpc()`/`Play()`/`StopInternal()`) dangles. `WaveBank::Dispose()`
+  (`WaveBank.cpp:382-392`) does track every cue using it (`activeCues_`, correctly populated
+  regardless of `GetCue()`-vs-fire-and-forget origin, unlike `SoundBank`'s narrower registry) but
+  merely clears the list (`:388`) instead of stopping them -- memory-safe (each
+  `SoundEffectInstance` keeps its own `shared_ptr` keep-alive into the underlying audio buffer,
+  `D5`) but behaviorally wrong: the sound keeps audibly playing after
+  `WaveBank::getIsInUseProperty()` already (misleadingly) reports `false`. The existing test
+  `WaveBankTests.cpp:699` (`IsInUseFalseAfterDisposeWhilePlaying`) sets up exactly this scenario
+  but only asserts the `IsInUse` property, never checking whether the still-playing cue was
+  actually stopped -- walks right up to the gap without catching it. Real design tension flagged by
+  the audit itself: `SoundBank.hpp`/`WaveBank.hpp` both currently document a `GetCue()`-obtained
+  `Cue*` as caller-owned, so a fix needs to either force-`Dispose()` cues the bank doesn't nominally
+  own, or revise that ownership documentation -- not a one-line change. See `P12-BANK-001` below.
+
+* [x] P12-AUDIT-005: `Microphone`, `MicrophoneState`, `NoAudioHardwareException`,
+  `NoMicrophoneConnectedException`, `InstancePlayLimitException`.
+  *Status:* Closed, zero new source-code findings. `Microphone`'s enumeration, `Start`/`Stop`,
+  `BufferDuration` validation (including faithfully replicating FNA's own dead-code quirk of only
+  checking the sub-second `Milliseconds` component), `GetData` bounds-checking, and
+  `CheckBuffer()`/`BufferReady` firing all match FNA line-by-line; every exception class's
+  constructor overloads and real throw sites (cross-checked against every OTHER Audio class that's
+  supposed to raise them) are correct, including confirming FNA itself never throws
+  `NoMicrophoneConnectedException`/`InstancePlayLimitException` anywhere in its own source (CNA
+  correctly matches that "declared but never raised by the reference implementation" status).
+  Interesting but explicitly NOT a CNA finding: real FNA's own `SDL3_FNAPlatform.cs` appears to
+  have a genuine upstream bug where `Microphone.Default`'s `GetData()` would throw
+  `KeyNotFoundException` in real FNA (a `micStreams` dictionary entry is never populated for the
+  synthetic default-device index) -- CNA's different, one-`captureStream_`-per-instance
+  architecture sidesteps this entirely, making CNA *more* correct than the reference here, not
+  less; not something to "fix" since there's nothing to match.
+  **One documentation-staleness item, not a source bug:** `AUDIT.md` line 88 currently claims
+  `NoAudioHardwareException` is "never actually thrown by the audio backend" -- stale since
+  `P9-HARDWARE-002` (`SoundEffect.cpp:83`, `DynamicSoundEffectInstance.cpp:40` both throw it
+  today); `CHECKLIST.md`'s own corresponding row is already accurate. See `P12-DOC-001` below.
+
+## Phase 12 follow-up tasks (from the findings above)
+
+* [ ] P12-PITCH-001: fix the linear-vs-exponential Pitch curve bug (`P12-AUDIT-001`'s finding).
+  *Priority: highest* -- widest-reaching, most audible, most independently-confirmed finding of
+  this whole audit pass. Not started yet in this entry; see the next task worked in this session
+  for the actual fix and its own full write-up.
+
+* [ ] P12-CATEGORY-001: implement XACT category parent/child hierarchy cascading for
+  `SetVolume`/`Pause`/`Resume`/`Stop` (`P12-AUDIT-003` finding 1). Not started.
+
+* [ ] P12-VAR-001: enforce global-variable PUBLIC/CUE/READONLY accessibility and min/max clamping
+  in `AudioEngine::GetGlobalVariable`/`SetGlobalVariable`, and fix `XactTypes.hpp`'s mislabeled
+  accessibility-bit doxygen comment (`P12-AUDIT-003` finding 2). Not started.
+
+* [ ] P12-PAUSE-001: include Paused cues in category/cue instance-limit live-count and victim
+  eligibility, matching FACT's non-mutually-exclusive Playing/Paused state (`P12-AUDIT-003`
+  finding 3, narrower manifestation of `P9-LIFECYCLE-014`). Not started.
+
+* [ ] P12-BANK-001: decide and implement `SoundBank`/`WaveBank::Dispose()`'s cue force-stop
+  cascade, or explicitly re-scope/document the caller-owns-`GetCue()`-cues design as an accepted
+  deviation instead (`P12-AUDIT-004` finding). Needs a design decision, not just an implementation
+  -- candidate for user input rather than autonomous self-selection. Not started.
+
+* [ ] P12-DOC-001: fix `AUDIT.md` line 88's stale claim that `NoAudioHardwareException` is never
+  thrown (`P12-AUDIT-005` finding). Trivial one-line docs fix. Not started.
