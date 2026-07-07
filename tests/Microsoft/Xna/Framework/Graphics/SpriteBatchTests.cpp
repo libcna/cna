@@ -629,3 +629,45 @@ TEST(SpriteBatchSortModeTest, FrontToBackSortsByAscendingLayerDepth)
     EXPECT_FLOAT_EQ(rec->drawCalls[2].layerDepth, 0.9f);
     EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 90);
 }
+
+// -----------------------------------------------------------------------
+// Task 416: complete tests for SpriteSortMode::BackToFront (Task 165 dependency)
+//
+// FNA/XNA's contract for SpriteSortMode::BackToFront is: sprites are sorted by DESCENDING
+// layerDepth (larger depth == farther from the camera == drawn first, so nearer sprites composite
+// on top). flushBatch() implements this as
+// std::stable_sort(..., [](a,b){ return a.layerDepth > b.layerDepth; }) -- the mirror image of
+// Task 415's FrontToBack. Reuses Task 415's exact same 3 draws (same plan_graphics.md Task 164/165
+// example depths) with only the sort mode and expected order reversed, per plan_graphics.md's own
+// Task 165 note ("same 3 draws -- assert reverse delivery order").
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchSortModeTest, BackToFrontSortsByDescendingLayerDepth)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackend(4, 4);
+    Texture2D tex = Texture2D::CreateWithBackendForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+
+    batch.Begin(SpriteSortMode::BackToFront, BlendState::AlphaBlend);
+    batch.Draw(tex, Rectangle(50, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White,
+               0.0f, Vector2::Zero, SpriteEffects::None, 0.5f);
+    batch.Draw(tex, Rectangle(10, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White,
+               0.0f, Vector2::Zero, SpriteEffects::None, 0.1f);
+    batch.Draw(tex, Rectangle(90, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White,
+               0.0f, Vector2::Zero, SpriteEffects::None, 0.9f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 3u);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].layerDepth, 0.9f);
+    EXPECT_EQ(rec->drawCalls[0].destinationRectangle.X, 90);
+    EXPECT_FLOAT_EQ(rec->drawCalls[1].layerDepth, 0.5f);
+    EXPECT_EQ(rec->drawCalls[1].destinationRectangle.X, 50);
+    EXPECT_FLOAT_EQ(rec->drawCalls[2].layerDepth, 0.1f);
+    EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 10);
+}
