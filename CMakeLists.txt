@@ -785,6 +785,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 399: cross-backend EnvironmentMapEffect capstone (Tasks 393-398 combined)
+        cna_easygl_test(cna_test_easygl_environmentmapeffect_combined
+                        examples/easygl_environmentmapeffect_combined_test.cpp)
+        add_test(NAME EasyGL_EnvironmentMapEffect_Combined
+                 COMMAND cna_test_easygl_environmentmapeffect_combined)
+        set_tests_properties(EasyGL_EnvironmentMapEffect_Combined PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_easygl_test(cna_test_easygl_rendertargetcube_sample
                         examples/easygl_rendertargetcube_sample_test.cpp)
@@ -2015,6 +2024,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 399: cross-backend EnvironmentMapEffect capstone (Tasks 393-398 combined)
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_combined
+                        examples/vulkan_environmentmapeffect_combined_test.cpp)
+        add_test(NAME Vulkan_EnvironmentMapEffect_Combined
+                 COMMAND cna_test_vulkan_environmentmapeffect_combined)
+        set_tests_properties(Vulkan_EnvironmentMapEffect_Combined PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_sample
                         examples/vulkan_rendertargetcube_sample_test.cpp)
@@ -2373,6 +2391,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_EnvironmentMapEffect_WorldTransform
              COMMAND cna_test_bgfx_environmentmapeffect_worldtransform)
     set_tests_properties(Bgfx_EnvironmentMapEffect_WorldTransform PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 399: cross-backend EnvironmentMapEffect capstone (Tasks 393-398 combined)
+    cna_bgfx_test(cna_test_bgfx_environmentmapeffect_combined
+                  examples/bgfx_environmentmapeffect_combined_test.cpp)
+    add_test(NAME Bgfx_EnvironmentMapEffect_Combined
+             COMMAND cna_test_bgfx_environmentmapeffect_combined)
+    set_tests_properties(Bgfx_EnvironmentMapEffect_Combined PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

@@ -75,7 +75,12 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   — no fix needed there. Fixed both via a CPU-side cofactor/det shortcut. Opened Task 892 for a
   **worse**, separately-scoped sibling bug found while auditing: Bgfx's `BasicEffect` lit-textured
   shader transforms normals by the full `World×View×Projection` matrix, invisible in every
-  existing test since they all use `Identity` `View`/`Projection`. Phase 44 ("DualTextureEffect
+  existing test since they all use `Identity` `View`/`Projection`. **Task 399 (capstone) combined
+  everything Tasks 393–398 verified into one scene** (lerp blend, alpha-scaled specular, Fresnel
+  suppression, a real non-`Identity` camera, and a non-uniform-scale `World`) — **all 3 backends
+  produced the exact predicted `(151,101,76)` on the first attempt**, closing Phase 45's
+  per-task verification arc with a genuine cross-backend consistency check, not just isolated
+  per-backend formula matches. Phase 44 ("DualTextureEffect
   exactness", Tasks 381–390) is **CLOSED** — Task 390 wrote `docs/dualtextureeffect-support.md`
   synthesizing Tasks 381–389: property/default audit (zero bugs), a real cross-backend `color.rgb
   *= 2` doubling-factor bug found and fixed (Task 383), a real Bgfx-only `Texture2` null-fallback
@@ -127,14 +132,16 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 398.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 399.
 
-### Test status (last verified: Task 398)
-- **EasyGL, full `ctest -j1`:** 3551/3554 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3471/3484 pass. 13 documented pre-existing failures (see §5),
+### Test status (last verified: Task 399)
+- **EasyGL, full `ctest -j1`:** 3551/3555 pass. 3 pre-existing/documented failures (see §5):
+  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`
+  — plus 1 reconfirmed-flaky `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`
+  (audio-timing test, unrelated to graphics; reran in isolation 3× and passed 3/3).
+- **Vulkan, full `ctest -j1`:** 3472/3485 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3455/3455 pass — 100%, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3456/3456 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -291,7 +298,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 398 | **Real, confirmed formula bug found and fixed on 2 of 3 backends**: `EnvironmentMapEffect`'s normal was transformed by the raw `World` matrix instead of `transpose(inverse(World3x3))`, wrong under non-uniform scale. EasyGL and Bgfx both had this bug (Vulkan was already correct); fixed both via a CPU-side cofactor/det shortcut. Empirically confirmed pre-fix output `(1,12,242)` (buggy blue) on both vs FNA's correct yellow. Opened Task 892 for a worse sibling bug in `BasicEffect`'s Bgfx lit shader (transforms normals by the full WVP matrix). `git stash`-confirmed both fixes independently. |
+| — | 399 | **Capstone, verify-only, zero bugs found**: combined Tasks 394–398's fixes (lerp blend, alpha-scaled specular, Fresnel suppression, `EyePosition`, non-uniform `World` scale) into one scene. All 3 backends produced the exact predicted `(151,101,76)` on the first attempt — genuine cross-backend consistency, closing Phase 45's per-task verification arc. |
+| `44aac0ca` | 398 | **Real, confirmed formula bug found and fixed on 2 of 3 backends**: `EnvironmentMapEffect`'s normal was transformed by the raw `World` matrix instead of `transpose(inverse(World3x3))`, wrong under non-uniform scale. EasyGL and Bgfx both had this bug (Vulkan was already correct); fixed both via a CPU-side cofactor/det shortcut. Empirically confirmed pre-fix output `(1,12,242)` (buggy blue) on both vs FNA's correct yellow. Opened Task 892 for a worse sibling bug in `BasicEffect`'s Bgfx lit shader (transforms normals by the full WVP matrix). `git stash`-confirmed both fixes independently. |
 | `5d845961` | 397 | **Verify-only, zero bugs found, no code changed**: confirmed `EyePosition` correctly drives `EnvironmentMapEffect`'s reflection vector on all 3 backends. Built the phase's first distinct-per-face cube map (every prior test used solid colors, unable to detect a wrong reflection vector) and 2 camera positions that hit 2 clearly different, exactly-predicted faces — proof by construction that the wiring works end-to-end. |
 | `fe469465` | 396 | **Real, confirmed missing-feature gap found and fixed on all 3 backends**: `EnvironmentMapEffect` implemented no Fresnel edge-weighting at all — the env-map blend factor was always the flat `EnvironmentMapAmount` regardless of view angle, instead of FNA's real per-vertex `pow(max(1-abs(dot(eyeVector,normal)),0),FresnelFactor)*EnvironmentMapAmount` term (the default). Empirically confirmed pre-fix output `(128,128,128)` (cube map fully applied) at a head-on camera angle vs FNA's correct Fresnel-suppressed `(100,50,25)`. Added `fresnelEnabled`/`fresnelFactor` to `GpuDrawParams`, threaded per-pixel into all 3 shaders (repurposing unused padding floats on Vulkan/Bgfx). `git stash`-confirmed EasyGL fails pre-fix with the exact predicted value. |
 | `32e97e5e` | 395 | **Real, confirmed formula bug found and fixed on all 3 backends**: `EnvironmentMapEffect`'s `EnvironmentMapSpecular` was a flat additive constant instead of FNA's real `+= EnvironmentMapSpecular * envmap.a` (scaled by the cube map's own alpha, further scaled by combined texture×diffuse alpha). Empirically confirmed pre-fix output `(202,152,127)` regardless of cubemap alpha vs FNA's correct alpha-scaled `(151,101,76)` at `alpha=128`. Fixed all 3 shaders by sampling the cube map's full `vec4`. Opened Task 891 for the still-unscaled base-lerp `envColor` nuance. `git stash`-confirmed EasyGL fails pre-fix with the exact predicted value. |
@@ -508,18 +516,22 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 45 (Task 399 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 45 (Task 400 fully scoped in `plan_graphics.md`,
+the final task of the phase);
 the rest are the accumulated backlog from earlier phases (Tasks 863–892).
 
-1. **Task 399 — cross-backend `EnvironmentMapEffect` comparison suite**
-   - Goal: a capstone test (mirroring Task 370/389's precedent for `BasicEffect`/
-     `DualTextureEffect`) combining everything Tasks 393-398 verified individually into one
-     non-trivial scene (textured + lit + cube-mapped, ideally exercising a non-degenerate
-     camera, a non-uniform `World` scale, a non-solid cube map, and `EnvironmentMapSpecular`
-     together) to prove the fixes compose correctly, not just in isolation. One test file per
-     backend (matching Task 370/389's exact convention), each independently checked against its
-     own hand-derived expected value(s) — not a single cross-file image-diff binary.
-   - Files: new `examples/{easygl,vulkan,bgfx}_environmentmapeffect_combined_test.cpp`.
+1. **Task 400 — document `EnvironmentMapEffect` backend parity, closes Phase 45**
+   - Goal: write `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399 (mirrors
+     `docs/basiceffect-support.md`/`docs/alphatesteffect-support.md`/`docs/dualtextureeffect-support.md`'s
+     established style): per-task summary sections, a full 3-backend support matrix (property
+     defaults, cube-map lerp-vs-additive blend formula, `EnvironmentMapSpecular`'s alpha scaling,
+     Fresnel edge-weighting, `EyePosition`/reflection-vector correctness, `World`-transform/
+     normal-matrix correctness, cross-backend consistency), and an "Open, tracked follow-up
+     work" section listing Tasks 890 (`DirectionalLight1`/`2` unforwarded), 891 (base-lerp
+     `envColor` not alpha-scaled), and 892 (`BasicEffect`'s worse Bgfx normal-matrix bug, found
+     while fixing Task 398).
+   - Files: new `docs/environmentmapeffect-support.md`. No production code or tests changed —
+     pure documentation task, matching Task 380/390's precedent.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -643,7 +655,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–892).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 399).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 400).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -764,6 +776,25 @@ direction vector; invisible in every existing BasicEffect Bgfx test since all le
 View/Projection at Identity. 1/1 PASS on all 3 backends, exact match. Full 3-backend regression,
 zero new failures.
 
+Task 399 (capstone) combined everything Tasks 393-398 verified individually into one scene:
+Task 394's lerp blend, Task 395's alpha-scaled specular (translucent alpha=128 cube map), Task
+396's Fresnel suppression (FresnelFactor=1 default + head-on camera collapses blendFactor to
+~0.00004, negligible, isolating the env-map contribution to almost exactly the specular term --
+a different code path than Task 395's own Amount=0 isolation, landing on the same numeric
+target), Task 397's EyePosition-driven reflection math (real CreateLookAt/PerspectiveFieldOfView
+camera, not Identity), and Task 398's now-fixed normal transform (non-identity, non-uniform-scale
+World=CreateScale(2,1,1), deliberately scaling only X so the quad's Z-aligned normal isn't
+perturbed either way -- Task 398's own dedicated test already covers that specific
+discrimination). Expected value re-derived independently: baseColor=(100,50,25),
+combinedAlpha=1, blendFactor~=0, rgb~=baseColor+EnvironmentMapSpecular*(128/255)~=(151,101,76)
+-- reusing Task 395's own exact numeric target via a different code path. ALL 3 BACKENDS
+PRODUCED THE EXACT PREDICTED (151,101,76) ON THE FIRST ATTEMPT -- genuine cross-backend
+consistency, zero new bugs found, closing Phase 45's per-task verification arc. One test file
+per backend (examples/{easygl,vulkan,bgfx}_environmentmapeffect_combined_test.cpp), matching
+Task 370/389's exact convention. Full 3-backend regression: EasyGL 3551/3555 (3 pre-existing +
+1 reconfirmed-flaky CueTest, audio-timing, unrelated, 3/3 isolated reruns passed), Vulkan
+3472/3485 (13 pre-existing, exact-name match, no flakes), Bgfx 3456/3456 (100%).
+
 Phase 44 ("DualTextureEffect exactness", Tasks 381-390) CLOSED with Task 390
 (docs/dualtextureeffect-support.md, full synthesis of Tasks 381-389). Task 383 found and FIXED A
 REAL BUG ON ALL 3 BACKENDS: DualTextureEffect's dual-texture shaders were all missing FNA's
@@ -791,16 +822,17 @@ completely unforwarded, same shape as Task 885, likely shares its fix). Task 395
 (EnvironmentMapEffect's base cube-map lerp target still unscaled by combined texture x diffuse
 alpha). Task 398 opened Task 892 (BasicEffect's Bgfx lit-textured shader transforms normals by
 the full World*View*Projection matrix, a worse sibling bug found while fixing Task 398's own
-EnvironmentMapEffect-specific normal-matrix bug). None of these 8 block Phase 45's remaining tasks.
+EnvironmentMapEffect-specific normal-matrix bug). None of these 8 block Phase 45's final task.
 
-Last full 3-backend regression (Task 398 — real production shader fix on 2 of 3 backends, plus 3
-new test files):
-EasyGL 3551/3554 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3471/3484 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3455/3455 pass (100%, no flakes this run).
+Last full 3-backend regression (Task 399 — pure verification/capstone, new tests only, no
+production code changed):
+EasyGL 3551/3555 pass (3 documented pre-existing failures + 1 reconfirmed-flaky CueTest,
+audio-timing, unrelated to graphics, 3/3 isolated reruns passed).
+Vulkan 3472/3485 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3456/3456 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45 found, read plan_graphics.md
-directly (Tasks 351-398) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-399) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
