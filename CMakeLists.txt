@@ -1818,6 +1818,40 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 13.6: the same 3 avatar-rendering GPU integration tests already registered for
+        # EasyGL above, reusing the exact same backend-agnostic source files (public
+        # GraphicsDevice/SkinnedModelEXT/AvatarRenderer API only) - Vulkan's own dedicated
+        # GetOrCreatePipelineSkinned3D pipeline (Task 11.10) had never been run against real (or
+        # even synthetic) avatar content before now.
+        if(CNA_ENABLE_NET)
+            cna_vulkan_test(cna_test_vulkan_avatar_real_render
+                            examples/avatar_real_render_integration_test.cpp)
+            target_link_libraries(cna_test_vulkan_avatar_real_render PRIVATE CNA_GamerServices)
+            add_test(NAME Vulkan_AvatarRenderer_RealRender
+                     COMMAND cna_test_vulkan_avatar_real_render)
+            set_tests_properties(Vulkan_AvatarRenderer_RealRender PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+            cna_vulkan_test(cna_test_vulkan_avatar_attach_part
+                            examples/avatar_attach_part_integration_test.cpp)
+            target_link_libraries(cna_test_vulkan_avatar_attach_part PRIVATE CNA_GamerServices)
+            add_test(NAME Vulkan_AvatarRenderer_AttachPart
+                     COMMAND cna_test_vulkan_avatar_attach_part)
+            set_tests_properties(Vulkan_AvatarRenderer_AttachPart PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+            cna_vulkan_test(cna_test_vulkan_avatar_tint_routing
+                            examples/avatar_tint_routing_integration_test.cpp)
+            target_link_libraries(cna_test_vulkan_avatar_tint_routing PRIVATE CNA_GamerServices)
+            add_test(NAME Vulkan_AvatarRenderer_TintRouting
+                     COMMAND cna_test_vulkan_avatar_tint_routing)
+            set_tests_properties(Vulkan_AvatarRenderer_TintRouting PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        endif()
+
     endif()
 
 endif()
@@ -1840,6 +1874,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
         endif()
     endmacro()
+
+    # Task 13.6: investigated adding avatar-rendering smoke tests here too (mirroring the Vulkan
+    # registration below). Confirmed a real, concrete blocker independent of readback reliability:
+    # BgfxGraphicsBackend::SetDepthTestEnabled/SetBlendEnabled/SetDepthWriteEnabled are all
+    # unconditionally unimplemented stubs (ThrowNo3DState()) - since the avatar test harnesses
+    # call SetDepthTestEnabled/setBlendStateProperty to set up their scene before drawing (not
+    # AvatarRenderer's own code, which never touches these), all 3 avatar tests throw immediately
+    # on Bgfx today, before ever reaching DrawRealEXT. This is a pre-existing, deep gap in the
+    # Bgfx backend's 3D device-state wiring, not a tooling/build limitation - genuinely fixing it
+    # (implementing depth-test/blend state via bgfx::setState flags) is a full backend feature,
+    # well beyond this test-coverage task's scope. Deferred; not attempted here.
 
     # Task 89: 3-frame smoke test for the Bgfx backend
     add_test(NAME Bgfx_Demo2D_SmokeTest
