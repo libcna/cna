@@ -62,12 +62,13 @@ namespace CNA::Internal::Net
             // simultaneous gamers), silently reassigning an id already owned by a still-connected
             // gamer and corrupting HandleAppData's wire-id-based routing.
             std::vector<uint8_t> FreeWireIds;
-            // Task 3.1: every remote NetworkGamer this SessionState's own HandleClientHello/
-            // HandleServerWelcome/HandleGamerJoinBroadcast ever `new`s, previously permanently
-            // leaked (NetworkSession::AddRemoteGamer deliberately never takes ownership - see its
-            // own doc comment - since its established contract also accepts non-heap gamers, e.g.
-            // in tests). Freed automatically when this SessionState is destroyed (TeardownSession
-            // erasing it from Sessions()), which already happens at the same time
+            // Task 3.1/10.2: every remote NetworkGamer this SessionState's own HandleClientHello/
+            // HandleServerWelcome/HandleGamerJoinBroadcast ever `new`s (NetworkSession::
+            // AddRemoteGamer deliberately never takes ownership - see its own doc comment - since
+            // its established contract also accepts non-heap gamers, e.g. in tests). This is this
+            // SessionState's own ownership registry per GamerCollection<T>'s canonical contract
+            // (see its doc comment); freed automatically when this SessionState is destroyed
+            // (TeardownSession erasing it from Sessions()), which already happens at the same time
             // NetworkSession::Dispose() frees everything *it* owns.
             std::vector<std::unique_ptr<NetworkGamer>> OwnedRemoteGamers;
         };

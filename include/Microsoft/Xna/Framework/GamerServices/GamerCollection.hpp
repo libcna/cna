@@ -12,6 +12,25 @@ namespace Microsoft::Xna::Framework::GamerServices
     /**
      * @brief A read-only collection of Gamer-derived objects.
      *
+     * Task 10.2: ownership contract, stated once here and applied consistently by every
+     * `GamerCollection<T>`-derived and `GamerCollection<T>`-adjacent type in both `GamerServices`
+     * and `Net` (`SignedInGamerCollection`, `FriendCollection`, `AchievementCollection`-sibling
+     * collections, `NetworkSession`'s `GamerCollection<NetworkGamer>` views, etc.):
+     *
+     * `GamerCollection<T>` and every type built on it is always a **non-owning view**. It stores
+     * `T*` pointers, but never allocates one, and neither `Dispose()`/`Clear()` nor destruction
+     * ever deletes one — matching FNA's own real `ReadOnlyCollection<T>`-based collections, which
+     * rely entirely on .NET's GC for the pointed-to objects once nothing else references them.
+     * The *creator* of a `Gamer`-derived object is exclusively responsible for freeing it, tracked
+     * in its own separate registry, never through this view. Established precedent:
+     * `NetworkSession::ownedGamers_` (owns locally-created `NetworkGamer`s),
+     * `ENetBackend::SessionState::OwnedRemoteGamers` (owns remotely-created `NetworkGamer`s),
+     * and `GamerServicesDispatcher::Initialize()`'s explicit free-before-replace loop (owns the 4
+     * stub `SignedInGamer`s it creates). Any future real (non-stub) population of a
+     * `GamerCollection<T>`-derived view (e.g. a real `FriendCollection` population from a live
+     * friends-list service) must establish its own analogous ownership registry at the point of
+     * creation — never make this view itself free anything.
+     *
      * @tparam T A type derived from Gamer.
      */
     template<typename T>

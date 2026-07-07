@@ -873,10 +873,10 @@ namespace Microsoft::Xna::Framework::Net
         NOXNA SharpRuntime::bytecs nextLocalGamerId_{0};
         std::queue<NetworkEvent> networkEvents_;
 
-        // Task 3.1: owns every gamer this session ever created, independent of GamerCollection<T>
-        // (which only ever holds non-owning raw pointers, matching real XNA's read-only-collection
-        // API shape). Freed in bulk on Dispose() - see Dispose()'s own doc comment for why not
-        // incrementally.
+        // Task 3.1/10.2: owns every gamer this session ever created - GamerCollection<T>'s own
+        // views only ever hold non-owning raw pointers (see its doc comment for the full,
+        // canonical ownership contract this follows). Freed in bulk on Dispose() - see Dispose()'s
+        // own doc comment for why not incrementally.
         NOXNA std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;
 
         static NetworkSessionAction* activeAction_;

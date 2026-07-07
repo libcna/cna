@@ -2037,13 +2037,34 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `""`). Restored via `git stash pop`, rebuilt, confirmed green again. Full suite: 3368/3368
   passing (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 10.2** — Design and document the ownership contract for `T*` items inside
+- [x] **Task 10.2** — Design and document the ownership contract for `T*` items inside
   `GamerCollection<T>`-derived collections (broader framing of Tasks 3.1/7.5/7.12). No documented
   contract currently exists for who allocates/frees `FriendGamer*`/`SignedInGamer*`/`NetworkGamer*`
   once real (non-stub) population is implemented anywhere. This should be a single design decision
   applied consistently across both `Net` and `GamerServices` — do this task first, before Tasks
   3.1/7.5/7.12's individual fixes, so they all follow one consistent model rather than three
   independent ad hoc fixes.
+
+  Tasks 3.1/7.5/7.12 (all already completed earlier in this plan) had, in practice, already
+  independently converged on the identical model each time: the *creator* of a `Gamer`-derived
+  object owns it in its own separate registry; `GamerCollection<T>` (and everything built on it)
+  is always a non-owning view that never allocates or frees a `T*`. Since they were already
+  consistent, this task's real work was consolidating three separately-worded restatements of the
+  same rule into one canonical, authoritative statement rather than writing a fourth independent
+  one. Added a substantial "ownership contract" paragraph to `GamerCollection<T>`'s own class doc
+  comment in `GamerCollection.hpp` (the shared base every one of these types derives from — the
+  single natural home for this), explicitly naming all 3 established registries as precedent
+  (`NetworkSession::ownedGamers_`, `ENetBackend::SessionState::OwnedRemoteGamers`,
+  `GamerServicesDispatcher::Initialize()`'s free-before-replace loop) and stating the rule any
+  future real (non-stub) population code must follow. Trimmed the 3 existing per-site comments
+  (`NetworkSession.hpp`'s `ownedGamers_`, `ENetBackend.cpp`'s `OwnedRemoteGamers`,
+  `GamerServicesDispatcher.cpp`'s `Initialize()`, and `FriendCollection.hpp`'s class doc) to
+  cross-reference this canonical statement instead of independently restating it. Pure
+  documentation consolidation, no behavior change — no test/revert-verify applies. Full suite:
+  3368/3368 passing (2 expected accelerometer/gyroscope skips; one unrelated pre-existing
+  statistical flake in `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically` seen
+  once, confirmed to pass in isolation and on a clean rerun — not caused by this change), no
+  regressions.
 
 - [ ] **Task 10.3** — Investigate whether a lightweight fake-`Game`/mock-`IServiceProvider` test
   double could allow direct unit testing of `GamerServicesComponent::Initialize()`/`Update()`

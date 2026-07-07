@@ -24,13 +24,14 @@ namespace Microsoft::Xna::Framework::GamerServices
         // FNA also hooks AppDomain.CurrentDomain.ProcessExit to reset IsInitialized to false
         // on process exit. There is no equivalent hook in C++; intentionally omitted.
 
-        // Task 7.5: GamerCollection<T> holds non-owning raw pointers (matching real XNA's
-        // read-only-collection API shape), and Gamer::setSignedInGamersProperty() below only
-        // deletes the previous SignedInGamerCollection wrapper itself, not its contents - a
-        // second Initialize() call previously leaked the first call's 4 SignedInGamer objects
-        // permanently. Free them explicitly first (a harmless no-op the first time this runs,
-        // since getSignedInGamersProperty() lazily returns an empty collection until Initialize()
-        // has run at least once).
+        // Task 7.5/10.2: GamerCollection<T> holds non-owning raw pointers (see its doc comment for
+        // the canonical ownership contract), and Gamer::setSignedInGamersProperty() below only
+        // deletes the previous SignedInGamerCollection wrapper itself, not its contents - this
+        // loop is this Initialize() call's own ownership registry for the SignedInGamer objects
+        // it creates, per that contract. A second Initialize() call previously leaked the first
+        // call's 4 SignedInGamer objects permanently before this existed. Free them explicitly
+        // first (a harmless no-op the first time this runs, since getSignedInGamersProperty()
+        // lazily returns an empty collection until Initialize() has run at least once).
         for (SignedInGamer* previous : *Gamer::getSignedInGamersProperty())
         {
             delete previous;
