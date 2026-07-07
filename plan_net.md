@@ -2515,11 +2515,22 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   much-cheaper unit-level layer for the branches it didn't reach. Full suite: 3390/3390 passing (2
   expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 13.2** — Add a test for `ComputeBoneTransformsEXT`'s defensive bone-index bounds check
+- [x] **Task 13.2** — Add a test for `ComputeBoneTransformsEXT`'s defensive bone-index bounds check
   (`if (!track.Keys.empty() && track.BoneIndex >= 0 && track.BoneIndex <
   static_cast<int>(localTransforms.size()))`, ~lines 133-134) — confirmed no existing test exercises
   a track with an out-of-range or negative `BoneIndex` to confirm it's safely skipped rather than
   silently mis-happening.
+
+  Added `OutOfRangeOrNegativeBoneIndexTrackIsSkippedSafely`: extends `MakeTwoBoneModel()`'s clip
+  with 2 extra tracks (`BoneIndex = 99`, way past `BoneCount == 2`, and `BoneIndex = -5`), and
+  confirms `ComputeBoneTransformsEXT` neither throws nor corrupts anything — bone 0's own valid
+  track still drives it normally, and bone 1 (with no valid track) stays at its bind pose.
+  **Revert-verify:** temporarily removed the bounds check (kept only the `!track.Keys.empty()`
+  guard), rebuilt, reran — a genuine crash: `free(): invalid pointer` / SIGABRT (glibc heap
+  corruption detection), from `localTransforms[static_cast<std::size_t>(-5)]` writing far out of
+  bounds — the strongest possible proof this defensive check is real and load-bearing, not
+  theoretical. Restored the fix, rebuilt, confirmed green. Full suite: 3391/3391 passing (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 13.3** — Add a plain (non-GPU-dependent) unit test for `SkinnedModelEXT::AddPartEXT`'s
   own bookkeeping. Confirmed currently only exercised inside 3 GPU-dependent integration tests

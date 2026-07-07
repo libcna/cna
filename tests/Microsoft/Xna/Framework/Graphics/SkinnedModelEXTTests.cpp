@@ -116,6 +116,36 @@ TEST(SkinnedModelEXTTest, WrapsHugePositionInBoundedTime)
     EXPECT_NEAR(bones[0].getTranslationProperty().X, 1.0f, 1e-4f);
 }
 
+// Task 13.2: confirms the defensive bone-index bounds check
+// (`!track.Keys.empty() && track.BoneIndex >= 0 && track.BoneIndex < localTransforms.size()`)
+// actually gets exercised - a track with an out-of-range or negative BoneIndex must be safely
+// skipped (leaving that bone at its bind pose), not silently mis-happen or crash.
+TEST(SkinnedModelEXTTest, OutOfRangeOrNegativeBoneIndexTrackIsSkippedSafely)
+{
+    auto model = MakeTwoBoneModel();
+
+    BoneTrackEXT outOfRange;
+    outOfRange.BoneIndex = 99; // way past BoneCount == 2
+    outOfRange.Keys.push_back(KeyframeEXT{System::TimeSpan::FromSeconds(0.0), Vector3(100, 100, 100)});
+    model.Clips["Move"].Tracks.push_back(outOfRange);
+
+    BoneTrackEXT negative;
+    negative.BoneIndex = -5;
+    negative.Keys.push_back(KeyframeEXT{System::TimeSpan::FromSeconds(0.0), Vector3(200, 200, 200)});
+    model.Clips["Move"].Tracks.push_back(negative);
+
+    std::vector<Matrix> bones;
+    EXPECT_NO_THROW(
+        model.ComputeBoneTransformsEXT("Move", System::TimeSpan::FromSeconds(0.0), false, bones));
+
+    ASSERT_EQ(bones.size(), 2u);
+    // Bone 0's own valid track still drives it normally, unaffected by the invalid tracks.
+    EXPECT_NEAR(bones[0].getTranslationProperty().X, 0.0f, 1e-4f);
+    // Bone 1 has no valid track of its own - stays at its bind-pose offset (0,1,0), composed with
+    // bone 0's (identity at t=0) world transform.
+    EXPECT_NEAR(bones[1].getTranslationProperty().Y, 1.0f, 1e-4f);
+}
+
 TEST(SkinnedModelEXTTest, ParentHierarchyComposition)
 {
     auto model = MakeTwoBoneModel();
