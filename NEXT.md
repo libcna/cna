@@ -323,29 +323,30 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 896
-  (2026-07-07), including every example executable — no build errors anywhere.
+  (`cmake-build-bgfx`): all 3 reconfigured and rebuilt from scratch this session (2026-07-07,
+  post-merge — the merge landed after Task 896 and wiped all `cmake-build-*` dirs, see the §10
+  resume-prompt note below) — no build errors anywhere. Verified again after Task 878's Vulkan
+  changes landed.
 
-### Test status (last verified: Task 896, 2026-07-07)
+### Test status (last verified: Task 878, 2026-07-07, post-merge)
 - **`CnaTests` (gtest unit-test binary, `tests/*.cpp` only — does NOT cover the `examples/*.cpp`
-  pixel tests below), all 3 backends:** EasyGL 3501/3503 passed (2 known skips, 0 failed), Vulkan
-  3501/3503 passed (2 known skips, 0 failed), Bgfx 3505/3507 passed (2 known skips, 0 failed).
-  Exact baseline match on all 3, verified freshly after Task 896's `RasterizerState` default
-  change landed.
+  pixel tests below), all 3 backends:** EasyGL 4271/4273 passed (2 known skips, 0 failed), Bgfx
+  4275/4277 passed (2 known skips, 0 failed). **Vulkan 4262/4264 passed (2 known skips, 0 failed)
+  when filtering out `ContentManagerSkinnedModelTest.*`** — running the full suite unfiltered
+  segfaults non-deterministically somewhere in or after that test class under this sandbox's
+  `Xvfb`+`llvmpipe` combination (confirmed via `git stash` to be pre-existing, unrelated to Task
+  878's changes — reproduces identically either way, and the specific test passes cleanly run in
+  isolation). Higher totals than the pre-merge baseline (~3501-3505) are expected — the
+  feature/devices+audio+input merge added substantial new test coverage.
 - **`examples/*.cpp` pixel tests (registered individually via `ctest`, one executable per test —
-  NOT part of `CnaTests`): NOT fully re-run as a complete suite after Task 896.** Task 896 touched
-  114 of these files (adding `RasterizerState::CullNone` where the real default would now cull
-  the test's geometry). Verification for that task was: (a) 100% clean compile across all 3
-  backends for every touched file (strong syntactic/semantic check, not a runtime pixel check),
-  (b) each fix backed by either mirroring an already-proven-correct Bgfx sibling or an
-  independently-computed triangle-winding formula, (c) only ~12 of the 114 touched files were
-  spot-run directly (bypassing `ctest`, see the environment note below) and all passed. **The
-  full `ctest` suite for all 3 backends' `examples/*.cpp` pixel tests has not been run end-to-end
-  since before Task 878/879 started** (last known good full-suite numbers, now stale: EasyGL
-  ~3625/3628, Vulkan ~3544/3556 with 12 documented pre-existing failures, Bgfx ~3525/3525 —
-  these predate Tasks 878/879/883/896 entirely and should not be trusted as current). **Running
-  the full `ctest` suite for all 3 backends is the single highest-value next step before starting
-  any new feature task** — see §8 item 0.
+  NOT part of `CnaTests`): still NOT fully re-run as a complete suite.** Task 896 touched 114 of
+  these files; only ~12 were spot-run directly before this session. **This session fixed the
+  blocker**: `ctest`'s hardcoded `DISPLAY=:0` is now a configurable `CNA_TEST_DISPLAY` cache
+  variable (see the new row in §3) — reconfigure with `-DCNA_TEST_DISPLAY=:99` (after starting
+  `Xvfb :99`) and `ctest` reaches the virtual display correctly (verified on one test). **Actually
+  running the full 3-backend suite this way is still the single highest-value next step** — see
+  §8 item 0. 16 Vulkan RT/sampler/texture/viewport examples were spot-run directly (not via
+  `ctest`) as part of Task 878's own regression pass and all pass unchanged.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -512,6 +513,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `75359fba` | — (§8 item 0 infra) | Made `ctest`'s hardcoded `DISPLAY=:0` configurable via a new `CNA_TEST_DISPLAY` cache variable (default `:0`) — all ~270 occurrences now read `DISPLAY=${CNA_TEST_DISPLAY}`. Not a `plan_graphics.md` task; unblocks §8 item 0 (full `ctest` suite run against a virtual display). |
+| `21d10a91` | — (not a `plan_graphics.md` task) | **Landed between the 2026-07-07 merge and this session, not previously reflected here.** Fixed `SdlGraphicsBackend::CreateRenderTarget2D` still having the old 4-param override after the base `IGraphicsBackend` interface gained `mipMap`/`multiSampleCount` params (adopted by Bgfx/EasyGL/Vulkan) — the stale override made the `SDL_Renderer` backend fail to compile, breaking downstream consumers (e.g. `mobile-eggbert`). |
 | `87325a6b` | 878 (Vulkan half) | **Real feature implemented and pixel-verified: `RenderTarget2D` mip chains on Vulkan** (Bgfx split to new Task 906 — needs new downsample-shader infra, bigger than originally predicted; `RenderTargetCube` both backends split to new Task 907). `VulkanRenderTargetBackend` gained a real `vkCmdBlitImage`-cascade mip chain (mirrors EasyGL's Task 336 `glGenerateMipmap`-on-unbind), a full-mip-range sampling view separate from the mip-0-only framebuffer attachment view, and a full-range initial layout transition. **Found and fixed a real, independently-necessary prerequisite**: every Vulkan `VkSampler` had `maxLod=0` (zero-init), silently clamping all sampling to mip level 0 regardless of `mipmapMode` — fixed to `VK_LOD_CLAMP_NONE` on both `CreateSampler()`'s default and `ApplySamplerState()`'s per-slot samplers (safe for every existing single-level resource, whose own `VkImageView` levelCount still bounds the visible range). New `Vulkan_RenderTarget2D_MipChain` test uses a deliberately asymmetric 7:1 red/blue split (not 50/50) plus a forced 1x1-destination minification draw to read back the coarsest mip level's true weighted average — an **earlier 50/50-split version of this test was caught as a false positive by this project's own discriminating-power discipline** (its colour boundary sat exactly at the forced centre-sample point, so an ordinary level-0 bilinear blend passed identically with or without the fix; `git stash` revert-and-rebuild still "passed"). Re-verified correctly after the redesign: reverting fails with pure red `(255,0,0)` instead of the predicted `(223,0,32)` weighted average. Full regression: `CnaTests` (Vulkan) 4262/4264 passed, 2 skips, 0 failed (excludes one pre-existing `ContentManagerSkinnedModelTest`-area Xvfb/llvmpipe full-suite segfault, confirmed unrelated — reproduces identically with this task's changes fully reverted); 16 spot-run existing RT/sampler/texture/viewport Vulkan examples all pass unchanged. |
 | `bdb69b03` | 896 | **Closed — `GraphicsDevice` now pushes its real default `RasterizerState` (`CullCounterClockwiseFace`) to all 3 backends' GPU state at construction, per the user's own "full upfront audit first" scoping decision.** Audited/fixed 119 `examples/*.cpp` files via 8 parallel agent forks before landing the 1-line ctor fix: 64 mechanically mirrored from their already-fixed Bgfx sibling, 55 independently audited via a pre-calibrated 2D cross-product winding formula (115 total needed+got `RasterizerState::CullNone`, 4 confirmed genuinely safe). `house3d_demo.cpp` was only spot-checked by its fork (3/6 box faces) — independently re-verified by hand afterward via the general 3D inward-normal rule, confirming all 6 faces and the single global fix. One fork used the wrong device-variable name in 1 file, caught by the very next full build (100% clean otherwise, all 3 backends). Full `CnaTests` regression clean on all 3 backends (exact baseline match, 0 new failures); ~12 spot-run example binaries all pass except the already-known, independently-reconfirmed-pre-existing `EasyGL_MRT_TwoAttachments` (Task 145, unrelated to culling). |
 | `a7a84047` | 883 | **Closed — `Effect::Clone()` made a real polymorphic base contract; found 5 of 8 concrete subclasses already had a working `Clone()` from an earlier, undocumented pass (this row was stale).** Made `Clone()` a pure-virtual base method (previously not even declared on `Effect`, so the 5 existing `Clone()`s were silently non-polymorphic despite the hierarchy), added `override` to those 5, and implemented the 3 that were genuinely missing: `BasicEffect` (the real gap this row's title meant), `EffectMaterial` (hit a real C++ overload-resolution gotcha — needed an explicit `static_cast<Effect&>` since the compiler prefers the deleted implicit copy ctor over the real `Effect&`-taking one), and `ShaderEffect` (a NOXNA extension outside the "7 stock effects" count — its `Clone()` deliberately recompiles from cached GLSL source rather than sharing the compiled program, since it uniquely owns a per-instance backend handle unlike the other 7). The aliasing hazard this row originally worried about (clone's `EffectPass::owner_`/`techniqueId_` pointing at the original) turns out not to happen with the established pattern — every `Clone()` builds a **fresh** Default technique/pass via the normal base constructor, never copies the original's. New tests: 3 in `EffectTests.cpp` (base-contract polymorphic dispatch, technique independence, clone-after-dispose), `BasicEffectDefaultsTest.CloneCopiesAllProperties` (all 22 properties + bidirectional independence), plus first-ever test files for `SpriteEffect`, `EffectMaterial`, `ShaderEffect` (none had any test coverage before). Verified: clean full build on all 3 backends including every example executable; `CnaTests` EasyGL 3501/2 skipped and Bgfx 3505/2 skipped both 0-failed; Vulkan under `Xvfb`+`llvmpipe` (see §4's new environment note) showed non-reproducible unrelated flakiness across 3 runs, zero Clone-related failures in any run. |
