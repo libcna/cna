@@ -36,6 +36,10 @@ namespace CNA::Internal::Backends::Vulkan
         /// actually engaged MSAA (Task 878/879 — see the "piggyback on the backend's own
         /// sampleCount_" scope decision in plan_graphics.md).
         virtual bool          WantsMsaa()                   const { return false; }
+        /// Task 878: regenerate this RT's mip chain (no-op unless the concrete RT actually owns
+        /// mip levels beyond 0). Called by RecordCommandBuffer right after this RT's render pass
+        /// ends, once per frame it was actually rendered into.
+        virtual void          MaybeGenerateMips(VkCommandBuffer /*cb*/) {}
         virtual ~VulkanRTSource() = default;
     };
 
@@ -104,7 +108,8 @@ namespace CNA::Internal::Backends::Vulkan
     {
     public:
         VulkanRenderTargetBackend(int w, int h, bool hasDepth, bool preserveContents,
-                                   VulkanGraphicsBackend* owner, int requestedMultiSampleCount = 0);
+                                   VulkanGraphicsBackend* owner, int requestedMultiSampleCount = 0,
+                                   bool mipMap = false);
         ~VulkanRenderTargetBackend() override;
 
         int GetWidth()  const override { return width_; }
@@ -126,7 +131,17 @@ namespace CNA::Internal::Backends::Vulkan
         VkImageView     GetColorView()             const { return colorView_; }
         VkImageView     GetDepthView()             const { return depthView_; }
         VkDescriptorSet GetVkDescriptorSet()       const override { return descriptorSet_; }
-        VkImageView     GetVkImageView()           const override { return colorView_; }
+        // Task 878: the full-mip-range view, so mip filtering works when this RT is sampled as
+        // an ordinary texture (on-the-fly descriptor sets built by RecordCommandBuffer's texture
+        // dispatch), not just via GetDescriptorSet()'s own precreated one.
+        VkImageView     GetVkImageView()           const override { return colorSampleView_; }
+
+        // Task 878: regenerates the full mip chain (levels 1..levelCount_-1) from level 0's
+        // just-rendered content via a vkCmdBlitImage cascade, mirroring EasyGL's
+        // glGenerateMipmap-on-unbind behavior (Task 336) / FNA3D's OPENGL_ResolveTarget. Called
+        // once per frame this RT was actually rendered into, right after its render pass ends
+        // (see VulkanGraphicsBackend::RecordCommandBuffer). No-op when mipMap was false.
+        void MaybeGenerateMips(VkCommandBuffer cb) override;
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
@@ -136,9 +151,12 @@ namespace CNA::Internal::Backends::Vulkan
         int                     height_           = 0;
         bool                    hasDepth_         = false;
         bool                    preserveContents_ = false;
+        // Task 878: number of mip levels colorImage_ actually owns (1 when mipMap was false).
+        int                     levelCount_   = 1;
         VkImage                 colorImage_   = VK_NULL_HANDLE;
         VkDeviceMemory          colorMemory_  = VK_NULL_HANDLE;
-        VkImageView             colorView_    = VK_NULL_HANDLE;
+        VkImageView             colorView_    = VK_NULL_HANDLE; ///< mip 0 only — framebuffer color attachment.
+        VkImageView             colorSampleView_ = VK_NULL_HANDLE; ///< all levelCount_ levels — descriptor/sampling view.
         VkImage                 depthImage_   = VK_NULL_HANDLE;
         VkDeviceMemory          depthMemory_  = VK_NULL_HANDLE;
         VkImageView             depthView_    = VK_NULL_HANDLE;

@@ -244,15 +244,26 @@ namespace CNA::Internal::Backends::Vulkan
     // VulkanRenderTargetBackend
     // =========================================================================
 
+    // Mirrors EasyGLGraphicsBackend.cpp's CalculateRenderTargetMipLevels / Texture2D.cpp's
+    // CalculateMipLevels (Task 878).
+    static int CalculateVulkanRTMipLevels(int w, int h)
+    {
+        int levels = 1;
+        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        return levels;
+    }
+
     VulkanRenderTargetBackend::VulkanRenderTargetBackend(int w, int h, bool /*hasDepth*/,
                                                           bool preserveContents,
                                                           VulkanGraphicsBackend* owner,
-                                                          int requestedMultiSampleCount)
+                                                          int requestedMultiSampleCount,
+                                                          bool mipMap)
         : width_(w), height_(h), hasDepth_(true), preserveContents_(preserveContents), owner_(owner)
     {
         VkDevice dev = owner_->device_;
         const uint32_t uw = static_cast<uint32_t>(w);
         const uint32_t uh = static_cast<uint32_t>(h);
+        levelCount_ = mipMap ? CalculateVulkanRTMipLevels(w, h) : 1;
 
         // Task 878/879: this RT engages real MSAA only if it was asked for AND the backend
         // itself was constructed with backbuffer MSAA enabled (sampleCount_ > 1) -- see the
@@ -271,11 +282,14 @@ namespace CNA::Internal::Backends::Vulkan
         colorInfo.imageType     = VK_IMAGE_TYPE_2D;
         colorInfo.format        = owner_->swapchainFormat_;
         colorInfo.extent        = { uw, uh, 1 };
-        colorInfo.mipLevels     = 1;
+        colorInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
         colorInfo.arrayLayers   = 1;
         colorInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         colorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-        colorInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        // TRANSFER_SRC/DST (Task 878): needed by MaybeGenerateMips' vkCmdBlitImage cascade when
+        // levelCount_ > 1; harmless to always request even for non-mipmapped RTs.
+        colorInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         colorInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
         colorInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         if (vkCreateImage(dev, &colorInfo, nullptr, &colorImage_) != VK_SUCCESS)
@@ -300,6 +314,15 @@ namespace CNA::Internal::Backends::Vulkan
         colorView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
         if (vkCreateImageView(dev, &colorView, nullptr, &colorView_) != VK_SUCCESS)
             throw std::runtime_error("VulkanRenderTargetBackend: vkCreateImageView (color) failed");
+
+        // Task 878: a second view over the *full* mip range, used only for sampling (the
+        // framebuffer attachment above must stay mip-0-only). Identical range to colorView_
+        // when levelCount_ == 1, so this is a no-op change for every pre-existing non-mipmapped
+        // RT — sampling still only ever sees level 0.
+        VkImageViewCreateInfo sampleView = colorView;
+        sampleView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<uint32_t>(levelCount_), 0, 1 };
+        if (vkCreateImageView(dev, &sampleView, nullptr, &colorSampleView_) != VK_SUCCESS)
+            throw std::runtime_error("VulkanRenderTargetBackend: vkCreateImageView (color sample) failed");
 
         // --- Depth image (always created to match the 2-attachment rtRenderPass_; promoted
         // in-place to MSAA samples when this RT engages MSAA -- depthView_ is never sampled
@@ -425,9 +448,31 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("VulkanRenderTargetBackend: vkCreateFramebuffer failed");
         }
 
-        // Transition color image to SHADER_READ_ONLY_OPTIMAL (initial state before first RT use)
-        owner_->TransitionImageLayout(colorImage_,
-            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        // Transition color image to SHADER_READ_ONLY_OPTIMAL (initial state before first RT use).
+        // Task 878: covers *all* levelCount_ levels (not just level 0, unlike the shared
+        // single-level TransitionImageLayout helper) since colorSampleView_ above already
+        // exposes the full range to the descriptor below, which declares that whole range to be
+        // in SHADER_READ_ONLY_OPTIMAL — levels 1..levelCount_-1 get real content the first time
+        // this RT is rendered into and unbound (MaybeGenerateMips), same as EasyGL's own
+        // eager-allocate-then-regenerate-on-unbind pattern (Task 336).
+        {
+            VkCommandBuffer initCb = owner_->BeginOneTimeCommands();
+            VkImageMemoryBarrier initBarrier{};
+            initBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            initBarrier.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+            initBarrier.newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            initBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            initBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            initBarrier.image               = colorImage_;
+            initBarrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
+                                                 static_cast<uint32_t>(levelCount_), 0, 1 };
+            initBarrier.srcAccessMask       = 0;
+            initBarrier.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(initCb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                                 0, nullptr, 0, nullptr, 1, &initBarrier);
+            owner_->EndOneTimeCommands(initCb);
+        }
 
         // --- Descriptor set so the RT can be sampled as a texture ---
         VkDescriptorSetAllocateInfo dsInfo{};
@@ -440,7 +485,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkDescriptorImageInfo imgDesc{};
         imgDesc.sampler     = owner_->defaultSampler_;
-        imgDesc.imageView   = colorView_;
+        imgDesc.imageView   = colorSampleView_;
         imgDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkWriteDescriptorSet write{};
@@ -467,6 +512,7 @@ namespace CNA::Internal::Backends::Vulkan
         if (framebuffer_     != VK_NULL_HANDLE) { vkDestroyFramebuffer(dev, framebuffer_, nullptr);     framebuffer_     = VK_NULL_HANDLE; }
         if (msaaFramebuffer_ != VK_NULL_HANDLE) { vkDestroyFramebuffer(dev, msaaFramebuffer_, nullptr); msaaFramebuffer_ = VK_NULL_HANDLE; }
         if (colorView_   != VK_NULL_HANDLE)  { vkDestroyImageView(dev, colorView_, nullptr);       colorView_   = VK_NULL_HANDLE; }
+        if (colorSampleView_ != VK_NULL_HANDLE) { vkDestroyImageView(dev, colorSampleView_, nullptr); colorSampleView_ = VK_NULL_HANDLE; }
         if (colorImage_  != VK_NULL_HANDLE)  { vkDestroyImage(dev, colorImage_, nullptr);          colorImage_  = VK_NULL_HANDLE; }
         if (colorMemory_ != VK_NULL_HANDLE)  { vkFreeMemory(dev, colorMemory_, nullptr);           colorMemory_ = VK_NULL_HANDLE; }
         if (msaaColorView_   != VK_NULL_HANDLE) { vkDestroyImageView(dev, msaaColorView_, nullptr); msaaColorView_   = VK_NULL_HANDLE; }
@@ -508,6 +554,79 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanRenderTargetBackend::UnbindAsRenderTarget()
     {
         if (owner_ && owner_->currentRT_ == this) owner_->currentRT_ = nullptr;
+    }
+
+    // Task 878: regenerate the mip chain from level 0's just-rendered (and, if this RT engaged
+    // MSAA, just-resolved) content via a vkCmdBlitImage cascade -- the Vulkan equivalent of
+    // EasyGL's glGenerateMipmap-on-unbind (Task 336) / FNA3D's OPENGL_ResolveTarget. Called from
+    // RecordCommandBuffer right after this RT's render pass ends, so level 0 is already in
+    // SHADER_READ_ONLY_OPTIMAL (the RT render pass's finalLayout) when this runs.
+    void VulkanRenderTargetBackend::MaybeGenerateMips(VkCommandBuffer cb)
+    {
+        if (levelCount_ <= 1) return;
+
+        auto barrier = [&](uint32_t level, VkImageLayout oldL, VkImageLayout newL,
+                            VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                            VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
+        {
+            VkImageMemoryBarrier b{};
+            b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            b.oldLayout           = oldL;
+            b.newLayout           = newL;
+            b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.image               = colorImage_;
+            b.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, level, 1, 0, 1 };
+            b.srcAccessMask       = srcAccess;
+            b.dstAccessMask       = dstAccess;
+            vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
+        };
+
+        barrier(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+        int srcW = width_, srcH = height_;
+        for (int level = 1; level < levelCount_; ++level) {
+            const int dstW = std::max(1, srcW / 2);
+            const int dstH = std::max(1, srcH / 2);
+
+            barrier(static_cast<uint32_t>(level),
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+            VkImageBlit blit{};
+            blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level - 1), 0, 1 };
+            blit.srcOffsets[1]  = { srcW, srcH, 1 };
+            blit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
+            blit.dstOffsets[1]  = { dstW, dstH, 1 };
+            vkCmdBlitImage(cb, colorImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                              colorImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                              1, &blit, VK_FILTER_LINEAR);
+
+            // level-1 is done being read from -- restore it to its steady-state layout.
+            barrier(static_cast<uint32_t>(level - 1),
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+            if (level < levelCount_ - 1) {
+                // Becomes the source for the next iteration.
+                barrier(static_cast<uint32_t>(level),
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+            } else {
+                // Last level -- done, restore to steady-state layout directly.
+                barrier(static_cast<uint32_t>(level),
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+            }
+
+            srcW = dstW; srcH = dstH;
+        }
     }
 
     // =========================================================================
@@ -1753,6 +1872,13 @@ namespace CNA::Internal::Backends::Vulkan
         ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         ci.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         ci.borderColor  = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
+        // Task 878: VkSamplerCreateInfo{} zero-inits maxLod to 0, which clamps every sample to
+        // mip level 0 regardless of mipmapMode -- harmless for the single-level images this
+        // sampler was exclusively used with until now, but would silently defeat real mip
+        // chains (RenderTarget2D mipMap=true) once they exist. The actual visible range is
+        // still bounded by each resource's own VkImageView levelCount, so this is a no-op for
+        // every pre-existing single-level texture/RT.
+        ci.maxLod       = VK_LOD_CLAMP_NONE;
         if (vkCreateSampler(device_, &ci, nullptr, &defaultSampler_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateSampler failed");
         for (auto& s : slotSamplers_) s = defaultSampler_;
@@ -1840,6 +1966,9 @@ namespace CNA::Internal::Backends::Vulkan
         ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         ci.mipmapMode   = mipMode;
         ci.borderColor  = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
+        // Task 878: see CreateSampler()'s identical comment -- without this, every per-slot
+        // sampler variant would silently clamp to mip level 0 too.
+        ci.maxLod       = VK_LOD_CLAMP_NONE;
         if (enableAniso && anisotropySupported_) {
             ci.anisotropyEnable = VK_TRUE;
             ci.maxAnisotropy    = std::min(static_cast<float>(std::max(1, maxAnisotropy)),
@@ -5105,6 +5234,9 @@ namespace CNA::Internal::Backends::Vulkan
             draw3DFor(rt);
 
             vkCmdEndRenderPass(cb);
+
+            // Task 878: regenerate this RT's mip chain (no-op unless it actually owns mips).
+            rt->MaybeGenerateMips(cb);
         }
 
         // ---- Phase 2: backbuffer pass ----
@@ -5420,15 +5552,15 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     std::unique_ptr<IRenderTargetBackend> VulkanGraphicsBackend::CreateRenderTarget2D(
-        int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/, int multiSampleCount)
+        int w, int h, bool hasDepth, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        // mipMap not yet implemented on Vulkan (Task 336/878) — accepted and ignored, matching
-        // this backend's existing hasDepth-ignored gap for the same reason.
         // multiSampleCount is honored on a "piggyback on the backend's own sampleCount_" basis
         // (Task 878/879) — see VulkanRenderTargetBackend's constructor comment and
-        // plan_graphics.md for the exact scope decision.
+        // plan_graphics.md for the exact scope decision. mipMap (Task 878) is a real
+        // vkCmdBlitImage cascade regenerated every frame this RT is rendered into — see
+        // VulkanRenderTargetBackend::MaybeGenerateMips.
         return std::make_unique<VulkanRenderTargetBackend>(w, h, hasDepth, preserveContents, this,
-                                                            multiSampleCount);
+                                                            multiSampleCount, mipMap);
     }
 
     void VulkanGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)

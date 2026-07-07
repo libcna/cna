@@ -3290,6 +3290,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 878: RenderTarget2D mip chains are genuinely generated (vkCmdBlitImage cascade),
+        # not just present-but-undefined storage.
+        cna_vulkan_test(cna_test_vulkan_rendertarget2d_mip
+                        examples/vulkan_rendertarget2d_mip_test.cpp)
+        add_test(NAME Vulkan_RenderTarget2D_MipChain
+                 COMMAND cna_test_vulkan_rendertarget2d_mip)
+        set_tests_properties(Vulkan_RenderTarget2D_MipChain PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 13.6: the same 3 avatar-rendering GPU integration tests already registered for
         # EasyGL above, reusing the exact same backend-agnostic source files (public
         # GraphicsDevice/SkinnedModelEXT/AvatarRenderer API only) - Vulkan's own dedicated

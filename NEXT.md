@@ -367,9 +367,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   `RenderTargetUsage`/`IsContentLost`/`ContentLost` all match FNA at the property level. Basic
   render-to-texture round trip pixel-verified on EasyGL and Vulkan; depth testing while rendering
   INTO a render target works on EasyGL/Vulkan (Task 335), though exact `DepthStencilFormat` isn't
-  respected on any backend (Task 877). Mip chains (Task 336) and MSAA (Task 337) are genuinely
-  functional on **EasyGL only** — Vulkan/Bgfx report the correct properties but don't back them
-  with real GPU resources yet (Tasks 878/879).
+  respected on any backend (Task 877). `RenderTarget2D` mip chains (Task 336) are genuinely
+  functional on **EasyGL and Vulkan** (Task 878 — real `vkCmdBlitImage` cascade); Bgfx `RenderTarget2D`
+  mip and `RenderTargetCube` mip on both backends remain unimplemented (Tasks 906/907). MSAA
+  (Task 337) is functional on **EasyGL, Vulkan, and Bgfx** for `RenderTarget2D` (Task 879);
+  `RenderTargetCube` MSAA remains unimplemented on Vulkan/Bgfx (Task 903).
 - `SetRenderTarget`/`SetRenderTargets` correctly reset `Viewport`/`ScissorRectangle` to the newly
   bound target's size on all 3 backends (Task 338) — `ScissorRectangle`'s reset has a real,
   pixel-verified GPU effect; `Viewport`'s GPU effect is still a no-op everywhere (Task 880).
@@ -510,6 +512,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| TBD | 878 (Vulkan half) | **Real feature implemented and pixel-verified: `RenderTarget2D` mip chains on Vulkan** (Bgfx split to new Task 906 — needs new downsample-shader infra, bigger than originally predicted; `RenderTargetCube` both backends split to new Task 907). `VulkanRenderTargetBackend` gained a real `vkCmdBlitImage`-cascade mip chain (mirrors EasyGL's Task 336 `glGenerateMipmap`-on-unbind), a full-mip-range sampling view separate from the mip-0-only framebuffer attachment view, and a full-range initial layout transition. **Found and fixed a real, independently-necessary prerequisite**: every Vulkan `VkSampler` had `maxLod=0` (zero-init), silently clamping all sampling to mip level 0 regardless of `mipmapMode` — fixed to `VK_LOD_CLAMP_NONE` on both `CreateSampler()`'s default and `ApplySamplerState()`'s per-slot samplers (safe for every existing single-level resource, whose own `VkImageView` levelCount still bounds the visible range). New `Vulkan_RenderTarget2D_MipChain` test uses a deliberately asymmetric 7:1 red/blue split (not 50/50) plus a forced 1x1-destination minification draw to read back the coarsest mip level's true weighted average — an **earlier 50/50-split version of this test was caught as a false positive by this project's own discriminating-power discipline** (its colour boundary sat exactly at the forced centre-sample point, so an ordinary level-0 bilinear blend passed identically with or without the fix; `git stash` revert-and-rebuild still "passed"). Re-verified correctly after the redesign: reverting fails with pure red `(255,0,0)` instead of the predicted `(223,0,32)` weighted average. Full regression: `CnaTests` (Vulkan) 4262/4264 passed, 2 skips, 0 failed (excludes one pre-existing `ContentManagerSkinnedModelTest`-area Xvfb/llvmpipe full-suite segfault, confirmed unrelated — reproduces identically with this task's changes fully reverted); 16 spot-run existing RT/sampler/texture/viewport Vulkan examples all pass unchanged. |
 | `bdb69b03` | 896 | **Closed — `GraphicsDevice` now pushes its real default `RasterizerState` (`CullCounterClockwiseFace`) to all 3 backends' GPU state at construction, per the user's own "full upfront audit first" scoping decision.** Audited/fixed 119 `examples/*.cpp` files via 8 parallel agent forks before landing the 1-line ctor fix: 64 mechanically mirrored from their already-fixed Bgfx sibling, 55 independently audited via a pre-calibrated 2D cross-product winding formula (115 total needed+got `RasterizerState::CullNone`, 4 confirmed genuinely safe). `house3d_demo.cpp` was only spot-checked by its fork (3/6 box faces) — independently re-verified by hand afterward via the general 3D inward-normal rule, confirming all 6 faces and the single global fix. One fork used the wrong device-variable name in 1 file, caught by the very next full build (100% clean otherwise, all 3 backends). Full `CnaTests` regression clean on all 3 backends (exact baseline match, 0 new failures); ~12 spot-run example binaries all pass except the already-known, independently-reconfirmed-pre-existing `EasyGL_MRT_TwoAttachments` (Task 145, unrelated to culling). |
 | `a7a84047` | 883 | **Closed — `Effect::Clone()` made a real polymorphic base contract; found 5 of 8 concrete subclasses already had a working `Clone()` from an earlier, undocumented pass (this row was stale).** Made `Clone()` a pure-virtual base method (previously not even declared on `Effect`, so the 5 existing `Clone()`s were silently non-polymorphic despite the hierarchy), added `override` to those 5, and implemented the 3 that were genuinely missing: `BasicEffect` (the real gap this row's title meant), `EffectMaterial` (hit a real C++ overload-resolution gotcha — needed an explicit `static_cast<Effect&>` since the compiler prefers the deleted implicit copy ctor over the real `Effect&`-taking one), and `ShaderEffect` (a NOXNA extension outside the "7 stock effects" count — its `Clone()` deliberately recompiles from cached GLSL source rather than sharing the compiled program, since it uniquely owns a per-instance backend handle unlike the other 7). The aliasing hazard this row originally worried about (clone's `EffectPass::owner_`/`techniqueId_` pointing at the original) turns out not to happen with the established pattern — every `Clone()` builds a **fresh** Default technique/pass via the normal base constructor, never copies the original's. New tests: 3 in `EffectTests.cpp` (base-contract polymorphic dispatch, technique independence, clone-after-dispose), `BasicEffectDefaultsTest.CloneCopiesAllProperties` (all 22 properties + bidirectional independence), plus first-ever test files for `SpriteEffect`, `EffectMaterial`, `ShaderEffect` (none had any test coverage before). Verified: clean full build on all 3 backends including every example executable; `CnaTests` EasyGL 3501/2 skipped and Bgfx 3505/2 skipped both 0-failed; Vulkan under `Xvfb`+`llvmpipe` (see §4's new environment note) showed non-reproducible unrelated flakiness across 3 runs, zero Clone-related failures in any run. |
 | `d1018384`/`6d077140` | 878/879 (MSAA), 873, 901–905 | **`RenderTarget2D` MSAA now genuinely implemented and pixel-verified on Vulkan and Bgfx** (`RenderTargetCube` split to new Task 903; mip half of 878 remains untouched, still open). Vulkan piggybacks per-RT MSAA on the backend's own already-picked `sampleCount_` (documented scope decision — real independent-per-RT sample counts would need threading a new dimension through ~10 pipeline cache keys); a new shared `rtRenderPassMsaa_` 3-attachment render pass reuses the exact same lazily-created MSAA pipeline variants the backbuffer path already builds. A real Vulkan validation-layer subtlety was found empirically: render-pass "compatibility" here requires matching subpass *dependency* masks, not just attachment descriptions. Bgfx just needed `BGFX_TEXTURE_RT_MSAA_X{2,4,8,16}` instead of plain `BGFX_TEXTURE_RT` (bgfx resolves internally). **Verifying the Bgfx test found and fixed 2 more real, previously-invisible, pre-existing bugs as hard prerequisites**: Task 873 (`BgfxSpriteBatchBackend::Draw`'s wrong-handle-type cast sampling `RenderTarget2D`s) and a new one, Task 901 (`EnsureViewState()` clobbering a bound RT's own viewport back to full window size on every `Clear()`, silently corrupting all rendering into any RT smaller than the window). **A genuinely deep, separate architectural gap was found (not fixed) while wiring up the Vulkan test**: `GraphicsDeviceManager.PreferMultiSampling` has never actually reached the Vulkan backend at all (`Game`'s `GraphicsDevice` member is unconditionally default-constructed before any derived-class code can set preferences) — meaning `vulkan_msaa_test.cpp` (Task 147) has been a false positive its entire existence; tracked as new Task 902, worked around here with a narrow `NOXNA` test-only `GraphicsDevice::RecreateBackendForMultiSampleCount()` hook. Also found (not fixed, Task 904) a sibling Vulkan pipeline (`GetOrCreatePipelineFogTex3D`, `textured3d`/`colored_textured3d`) missing the same msaa-aware render-pass check this task had to add elsewhere — dormant, not exercised by any current test. `git stash` revert-and-rebuild confirmed both new tests fail exactly as predicted (Vulkan: compile error; Bgfx: purely-binary `MultiSampleCount=8` row). **Independent review of this diff (separately, before merging) found and fixed one more real bug, Task 905**: `CreateRTRenderPass()`'s subpass dependencies didn't actually match `CreateRenderPass()`'s despite a comment claiming they did, producing live `VUID-vkCmdDraw-renderPass-02684` validation errors (correct pixel output regardless, but a genuine spec violation) the moment a depth-tested 3D primitive was drawn into a plain non-MSAA `RenderTarget2D` — pre-existing, outside every hunk of the original diff, invisible until this task's own new `MultiSampleCount=0` comparison call was the first to exercise it. Fixed by widening `CreateRTRenderPass()`'s `deps[]` to match `CreateRenderPass()`'s exactly. Full regression: Vulkan `ctest -R Vulkan` 68/80 (same 12 pre-existing failures), `CnaTests` 3493/2 skipped (exact baseline match, re-confirmed after the Task 905 fix); Bgfx `ctest -R Bgfx` 48/48 (100%), `CnaTests` 3497 passed/2 skipped, 0 failed (independently re-confirmed). EasyGL `CNA` target sanity-rebuilt clean. |
@@ -622,9 +625,10 @@ command or test is tied to this — it manifests as a compile-time impossibility
 The most significant *silent-failure* gaps (compile and run without error, wrong or no data):
 Vulkan's `BlendState`/`DepthStencilState` support (Tasks 868/870), `TextureCube::DDSFromStreamEXT`
 (Task 663), `Texture3D`/`TextureCube::GetData` on Vulkan/Bgfx (Task 865), `RenderTarget2D`'s
-mip param accepted but not wired on Vulkan/Bgfx (Task 878 — MSAA closed by Task 879), and
-`BasicEffect`'s lit-path missing `+EmissiveColor`/unforwarded specular+extra-lights terms (found
-Task 366, fixed for the no-lighting path in Task 369, lit path tracked as Tasks 885/886).
+mip param accepted but not wired on Bgfx (Task 906 — Vulkan closed by Task 878, MSAA closed by
+Task 879), and `BasicEffect`'s lit-path missing `+EmissiveColor`/unforwarded specular+extra-lights
+terms (found Task 366, fixed for the no-lighting path in Task 369, lit path tracked as Tasks
+885/886).
 None have a test that currently fails loudly — they're only visible via dedicated pixel tests or
 direct code reading.
 
@@ -668,7 +672,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Confirmed, MASSIVE, not fixed | Vulkan's `DepthStencilState` support is almost entirely fake — `DepthBufferFunction` hardcoded, entire stencil-test parameter set unused. Confirmed 5× via pixel tests. EasyGL fully correct. | Task 870 |
 | Confirmed, universal, not fixed | `GraphicsDevice.ReferenceStencil`'s independent-override has zero backend connection on all 3 backends. | Task 872 |
 | Confirmed, universal, not fixed | `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` on every backend. | Task 871 |
-| Fixed on EasyGL, not fixed on Vulkan/Bgfx | `RenderTarget2D`/`RenderTargetCube`'s `mipMap` produces a real, pixel-verified mip chain on EasyGL (Task 336); Vulkan/Bgfx don't yet allocate/generate real GPU mips. | Task 878 |
+| Fixed, EasyGL + Vulkan (`RenderTarget2D` only) | `RenderTarget2D`'s `mipMap` produces a real, pixel-verified mip chain on EasyGL (Task 336) and now Vulkan (Task 878, `vkCmdBlitImage` cascade). Bgfx `RenderTarget2D` mip split to Task 906 (needs new downsample-shader infra — bgfx has no `glGenerateMipmap`/filtered-blit equivalent). `RenderTargetCube` mip on both Vulkan/Bgfx split to Task 907. | Task 878 (`RenderTarget2D`/Vulkan done)/906 (Bgfx, open)/907 (`RenderTargetCube`, open) |
 | Fixed, all 3 backends (`RenderTarget2D` only) | `RenderTarget2D`'s MSAA produces a real, pixel-verified anti-aliased resolve on EasyGL (Task 337), Vulkan and Bgfx (Task 878/879 — Vulkan piggybacks on the backend's own backbuffer `sampleCount_`, Bgfx uses `BGFX_TEXTURE_RT_MSAA_Xn`). `RenderTargetCube` MSAA remains unimplemented on Vulkan/Bgfx (honestly reports `MultiSampleCount=0`), split to Task 903. | Task 879 (`RenderTarget2D` done)/903 (`RenderTargetCube`, open) |
 | Fixed, all 3 backends (backbuffer); RT-pass sub-region still hardcoded on Vulkan/Bgfx | `GraphicsDevice.Viewport` now has real GPU effect on the backbuffer for all 3 backends. Vulkan/Bgfx's RT passes still hardcode each RT's own full size regardless of a custom sub-region `Viewport` (deferred multi-RT-per-frame recording limitation, same shape as their existing RT-pass-scissor gap below). 2D `SpriteBatch` unaffected by `Viewport` on all 3 backends. | Task 880 (done) |
 | Confirmed, real, not fixed, separately found | Vulkan's `RecordCommandBuffer` RT pass hardcodes `vkCmdSetScissor` to each RT's own full size (`VkRect2D rtSc{{0,0},{rtW,rtH}}`), ignoring `scissorEnabled_`/`scissorX_`/etc. entirely — only the backbuffer pass reads the real dynamic scissor state. A custom `ScissorRectangle` therefore has zero effect while rendering into a bound `RenderTarget2D` on Vulkan. Found while scoping Task 880's identical Viewport limitation. | — |
@@ -716,6 +720,9 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Confirmed, real, not fixed | `RenderTargetCube` MSAA is unimplemented on Vulkan/Bgfx (real XNA API surface, confirmed against FNA's actual constructor — not moot), split out of Task 878/879 which only covered `RenderTarget2D`. | Task 903 |
 | Confirmed, real, latent, not fixed | Vulkan's `GetOrCreatePipelineFogTex3D` (`textured3d`/`colored_textured3d`, stride 20/24) is missing the same `msaa`-aware render-pass-selection check every sibling 3D pipeline-creation function has — dormant today (no test combines backbuffer MSAA with a textured `BasicEffect`/`DualTextureEffect` draw), found while implementing Task 878/879's Vulkan RT MSAA. | Task 904 |
 | Fixed, Vulkan | `CreateRTRenderPass()`'s subpass dependencies didn't actually match `CreateRenderPass()`'s despite a comment claiming they did — pipelines created against `renderPass_` weren't truly render-pass-compatible with `rtRenderPass_`/`rtRenderPassLoad_`, producing live `VUID-vkCmdDraw-renderPass-02684` validation errors (correct pixel output regardless) the moment a depth-tested 3D primitive drew into a plain non-MSAA `RenderTarget2D`. Pre-existing, outside Task 878/879's own diff; found during independent review of that diff, fixed by widening `CreateRTRenderPass()`'s `deps[]` to match `CreateRenderPass()`'s exactly. | Task 905 (done) |
+| Confirmed, real, not fixed | Bgfx `RenderTarget2D` mip chains need genuine new render-to-mip-level downsample-shader infrastructure — bgfx has no `glGenerateMipmap` equivalent and `bgfx::blit()` is a same-size copy only (no resize/filter), unlike Vulkan's `vkCmdBlitImage`. Split out of Task 878 once this asymmetry was discovered. | Task 906 |
+| Confirmed, real, not fixed | `RenderTargetCube` mip chains are unimplemented on Vulkan and Bgfx (both need the same per-backend technique as `RenderTarget2D`'s Task 878/906, applied per cube face). Split out of Task 878's original combined scope. | Task 907 |
+| Confirmed, pre-existing, environment-only | A `ContentManagerSkinnedModelTest`-area segfault occurs when running the full `CnaTests` suite on Vulkan under `Xvfb`+`llvmpipe`, non-deterministic in exactly where it lands — reproduces identically with/without Task 878's changes (confirmed via `git stash`), and the same test passes cleanly in isolation. Matches this file's already-documented general Vulkan/Xvfb/llvmpipe full-suite flakiness; not a regression, not investigated further. | — |
 
 ---
 
@@ -832,14 +839,23 @@ rest are the accumulated backlog from earlier phases plus this task's new findin
    pixel tests before starting anything else.** Task 896 touched 114 of these files; only ~12 were
    spot-run directly (bypassing `ctest`'s hardcoded `DISPLAY=:0`, see §4). This is the single
    highest-value next step — confirms Task 896's fix didn't silently break any of the ~100
-   un-spot-checked files. Either fix `ctest`'s `DISPLAY=:0` hardcoding to respect a virtual display
-   first, or find another way to run the full suite without touching the real display (never
-   `DISPLAY=:0` — see §4's environment note, confirmed disruptive twice this session).
+   un-spot-checked files. **The `ctest`-can't-reach-a-virtual-display half of this item is now
+   fixed** (this session): `CMakeLists.txt` gained a `CNA_TEST_DISPLAY` cache variable (default
+   `:0`, backward compatible) and all ~270 hardcoded `DISPLAY=:0` `ENVIRONMENT` strings now read
+   `DISPLAY=${CNA_TEST_DISPLAY}` — reconfigure with `-DCNA_TEST_DISPLAY=:99` (after starting
+   `Xvfb :99 -screen 0 1280x1024x24 &`) and `ctest` reaches the virtual display correctly, verified
+   directly (`ctest -R Vulkan_RenderTarget2D_MsaaResolve` passes against `:99`). **Still not done:
+   actually running the full 3-backend suite this way** — do that next.
 
-1. **Task 878 — implement real mip-chain support for `RenderTarget2D`/`RenderTargetCube` on
-   Vulkan and Bgfx** (MSAA half already done under Task 879 — this is mip only now). Vulkan needs
-   real `mipLevels`/mip-aware views + a `vkCmdBlitImage` cascade at resolve time; Bgfx needs
-   `hasMips=true` on the RT texture creation call. Mirrors Task 336's EasyGL fix shape exactly.
+1. **Task 906 — implement `RenderTarget2D` mip support on Bgfx** (split out of Task 878, whose
+   Vulkan half is now done). Needs genuinely new infrastructure, not just a texture-creation flag:
+   bgfx has no `glGenerateMipmap` equivalent and `bgfx::blit()` is a same-size copy only, so this
+   needs a real render-to-mip-level downsample shader pass (new shader program using explicit-LOD
+   sampling, fullscreen-quad geometry, per-level `bgfx::Attachment(mip=N)` framebuffers).
+
+1b. **Task 907 — implement `RenderTargetCube` mip support on Vulkan and Bgfx** (split out of Task
+    878's original combined scope). Same per-backend technique as Task 878/906, applied per cube
+    face (6×) against each backend's own dedicated cube-map image/view machinery.
 
 2. **Task 904 — fix `GetOrCreatePipelineFogTex3D`'s missing `msaa`-aware render-pass check**
    (Vulkan, `textured3d`/`colored_textured3d`). Small, mechanical, same one-line fix shape as the
@@ -901,9 +917,12 @@ rest are the accumulated backlog from earlier phases plus this task's new findin
   unrelated task — both are large, multi-pipeline-site changes; each needs its own dedicated task.
 - **No opportunistic fix for Task 871/872 (stencil `Clear`/`ReferenceStencil` backend gaps)** —
   verify with a real test first.
-- **No rushed fix for Task 878 (Vulkan/Bgfx render-target mip)** — Task 879's MSAA half is done;
-  mirror Task 336's exact EasyGL fix shape and verify with the same pixel-differential methodology
-  (ported to Vulkan/Bgfx) before declaring the mip half fixed too.
+- **No rushed fix for Task 906 (Bgfx render-target mip)** — Task 878's Vulkan half is done; bgfx
+  needs genuinely new downsample-shader infrastructure (no `glGenerateMipmap` equivalent, `blit()`
+  can't resize/filter), not just a texture-creation flag. Design the shader/attachment approach
+  properly before implementing, and verify with the same asymmetric-split/forced-centre-sample
+  differential methodology Task 878's Vulkan test established (a naive 50/50 split does NOT
+  discriminate — confirmed the hard way, see that test's own header comment).
 - **No rushed fix for Task 874 (Bgfx `RenderTargetCube` handle-cast bug)** — Task 873's
   `RenderTarget2D`/`SpriteBatch` sibling is already fixed and *was* pixel-verified (via Task
   878/879's MSAA test's RT-then-backbuffer-sample methodology, once its own prerequisite bugs were
@@ -990,8 +1009,10 @@ last two decision-blocked tasks, were both resolved and closed last session).
 
 **Backlog, in priority order:** see §8. Item 0 (full `ctest` regression) should be done first
 regardless of build-check results above, since it's the last remaining unverified piece of last
-session's Task 896 work. After that, Task 878 (Vulkan/Bgfx `RenderTarget2D`/`RenderTargetCube` mip
-support) is the next well-defined, non-decision-blocked task.
+session's Task 896 work. **Update (this session, post-2026-07-07 merge): Task 878's Vulkan
+`RenderTarget2D` half is now done** (real mip chains, `vkCmdBlitImage` cascade) — see §3's recent
+row. Next up: Task 906 (Bgfx `RenderTarget2D` mip — needs new downsample-shader infra) or Task 907
+(`RenderTargetCube` mip, both backends), or §8 item 0 if not yet done.
 
 **Standing instructions carried over from the prior session (still in force):**
 - Commit AND push after every finished task without waiting to be asked.
