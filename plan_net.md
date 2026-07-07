@@ -3077,11 +3077,50 @@ done — "it compiles" is not sufficient.
   suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no regressions (new
   demo-only file, no library changes).
 
-- [ ] **Task 15.8** — `cna_demo_gamerservices_signin_presence`: `GamerServicesComponent`
+- [x] **Task 15.8** — `cna_demo_gamerservices_signin_presence`: `GamerServicesComponent`
   registration, the resulting population of `Gamer::SignedInGamers` (4 stub gamers), `SignedInGamer::SignedIn`/
   `SignedOut` static events, and `GamerPresence` (`PresenceMode`, `PresenceValue`,
   `SetPresenceModeStringEXT`). Number keys cycle each signed-in gamer's `GamerPresenceMode`, HUD
   text shows the resulting presence string live. Single process.
+
+  Building this demo's presence-cycling surfaced Task 9.11 (see Phase 9 above, committed
+  separately as its own dedicated fix): `SignedInGamer::getPresenceProperty()` was const-only,
+  making it permanently impossible to ever mutate a gamer's presence through any public API —
+  fixed there first, then used here.
+
+  New files: `examples/demo_gamerservices_signin_presence/src/{PresenceGame.hpp,PresenceGame.cpp,
+  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
+  gate as `cna_demo_avatar` (needs `CNA_GamerServices` + windowing for the `SpriteBatch`/
+  `SpriteFont` HUD, no networking). Unlike every earlier Phase 15 Net demo (which all called
+  `GamerServicesDispatcher::Initialize()` directly with a null service provider), this is the
+  first to exercise the actual idiomatic XNA registration path: `Components.Add(new
+  GamerServicesComponent(this))` in the constructor, relying on `Game::Initialize()`'s own
+  per-component loop to call `GamerServicesComponent::Initialize()` automatically (confirmed by
+  reading `Game.cpp` directly first) — matching `cna-samples`' own documented real-world usage
+  precedent. `SignedInGamer::SignedIn`/`SignedOut` are subscribed in the constructor, before
+  `Initialize()` runs, matching Task 9.8's already-proven pattern for observing every firing during
+  startup. Number keys 1-4 cycle that signed-in gamer's `GamerPresenceMode` forward (wrapping
+  through all 60 values) via the newly-fixed non-const `getPresenceProperty()`.
+
+  **Honest scope note**: neither FNA's real `GamerPresence` nor CNA's port expose a public getter
+  for the internal formatted presence string that `PresenceMode`'s setter computes — it is only
+  ever passed one-way into the always-no-op `SetPresenceModeStringEXT` (confirmed against FNA's
+  own `GamerPresence.cs` directly: `presence` is a private field with no public accessor). So the
+  HUD shows each gamer's `PresenceMode` enum name (via a `#x`-stringizing macro switch, the same
+  pattern already used for `AvatarAnimationPresetNamesEXTTests` in Task 13.5) and `PresenceValue`
+  directly, rather than reconstructing a private implementation detail that was never part of
+  either engine's public contract.
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 180`): console
+  showed all 4 real `SignedIn` firings during `GamerServicesComponent::Initialize()`
+  (`"Stub Gamer"`, `"Stub Gamer (1)"`, `"Stub Gamer (2)"`, `"Stub Gamer (3)"`,
+  `signInFireCount=4`), and the deterministic smoke-mode presence cycle (every 30 frames × 6
+  cycles over 180 frames) correctly landed gamer 0 on `OnlineVersus` — exactly the enum's 6th
+  step forward from `None` (`None→SinglePlayer→Multiplayer→LocalCoOp→LocalVersus→OnlineCoOp→
+  OnlineVersus`), confirming both the wraparound-cycling math and the newly-fixed mutation path
+  work correctly end-to-end. Exit code `0`. Full suite: 3398/3398 passing (2 expected
+  accelerometer/gyroscope skips), no regressions (demo-only files; the one library change,
+  Task 9.11, is already covered by its own dedicated commit/test above).
 
 - [ ] **Task 15.9** — `cna_demo_achievement_showcase`: `Achievement`, `AchievementCollection`,
   `SignedInGamer::AwardAchievement`/`GetAchievements`. A grid of achievement tiles (built via

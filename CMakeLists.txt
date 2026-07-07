@@ -724,6 +724,36 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         target_link_libraries(cna_demo_session_lifecycle_events PRIVATE CNA_GamerServices CNA_Net SHARP_RUNTIME)
     endif()
 
+    # Task 15.8: cna_demo_gamerservices_signin_presence - real GamerServicesComponent
+    # registration, Gamer::SignedInGamers population, SignedInGamer::SignedIn/SignedOut, and
+    # GamerPresence. Needs CNA_GamerServices (SignedInGamer/GamerServicesComponent) and windowing
+    # (SpriteBatch/SpriteFont HUD) - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_gamerservices_signin_presence
+            examples/demo_gamerservices_signin_presence/src/Main.cpp
+            examples/demo_gamerservices_signin_presence/src/PresenceGame.cpp
+        )
+        target_include_directories(cna_demo_gamerservices_signin_presence PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_gamerservices_signin_presence/src
+        )
+        target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_gamerservices_signin_presence PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_gamerservices_signin_presence)
+        endif()
+    endif()
+
     # EasyGL integration tests (Task 85, 86, 87)
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
