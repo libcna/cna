@@ -4506,6 +4506,21 @@ covered). All confirmed by direct side-by-side reading, cited by file:line.
   this pass, since it's a distinct file/code path from P11-PAN-001's own commit and this project's
   "one task = one commit" convention.
 
+* [x] P11-RFC2-001: formally close `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) as
+  rejected, per the user's explicit decision (2026-07-07), asked alongside the `P11-PAN-001`
+  greenlight above.
+  *Status:* **Rejected -- staying on SDL3_mixer.** `P10-HRTF-002`'s own note already correctly
+  described RFC-2 as "explicitly NOT started or scoped further... recorded here only so the option
+  is visible and not silently assumed impossible" -- that framing stands, but the option itself is
+  now formally declined rather than merely unconsidered: asked directly ("start it, or stay on
+  SDL3_mixer"), the user chose to stay on SDL3_mixer. No code change (there was never any RFC-2
+  code to remove -- it was a design-only proposal). `NEXT.md` §1/§8 updated to record the rejection
+  so it isn't silently re-raised as "still open" by a future pass; `CHECKLIST.md`'s two rows citing
+  RFC-2 as a *conditional* out (`Reverb/aux-send`, `HRTF/elevation`: "Permanent unless backend
+  changes (RFC-2)") are left unchanged, since "permanent unless backend changes" already correctly
+  describes the current state -- the backend hasn't changed, and this decision doesn't foreclose a
+  *future* reversal, only autonomous self-selection of it going forward.
+
 ## Phase 11.7 — XactParser deep re-audit for uncommon/unhandled XACT features
 
 * [x] P11-XACT-001: Re-read FAudio's real `FACT_internal.c` sound-bank/track parsing once more,
