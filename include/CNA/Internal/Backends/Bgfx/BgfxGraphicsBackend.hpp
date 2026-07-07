@@ -103,6 +103,22 @@ namespace CNA::Internal::Backends::Bgfx
         virtual bgfx::TextureHandle GetBgfxTextureHandle() const = 0;
     };
 
+    // -------------------------------------------------------------------------
+    // IBgfxCubeSamplable — the cube-map sibling of IBgfxSamplable (Task 907, closes Task 874):
+    // BgfxGraphicsBackend::DrawPrimitivesEx's EnvironmentMapEffect dispatch previously did an
+    // unsafe static_cast<const BgfxTextureCubeBackend&> on whatever ITextureCubeBackend it was
+    // handed, reading BgfxRenderTargetCubeBackend::fbo (a framebuffer-pool handle) where
+    // BgfxTextureCubeBackend::handle (a texture-pool handle) was expected whenever the argument
+    // was actually a RenderTargetCube -- the identical bug shape Task 873 already fixed for
+    // RenderTarget2D via IBgfxSamplable.
+    // -------------------------------------------------------------------------
+
+    struct IBgfxCubeSamplable
+    {
+        virtual ~IBgfxCubeSamplable() = default;
+        virtual bgfx::TextureHandle GetBgfxCubeTextureHandle() const = 0;
+    };
+
     class BgfxTextureBackend : public ITextureBackend, public IBgfxSamplable
     {
     public:
@@ -119,13 +135,14 @@ namespace CNA::Internal::Backends::Bgfx
     };
 
     /// bgfx-backed cube map texture.
-    class BgfxTextureCubeBackend : public ITextureCubeBackend
+    class BgfxTextureCubeBackend : public ITextureCubeBackend, public IBgfxCubeSamplable
     {
     public:
         bgfx::TextureHandle handle = BGFX_INVALID_HANDLE;
         int size_ = 0;
 
         BgfxTextureCubeBackend(int size, bool mipMap, int surfaceFormat);
+        bgfx::TextureHandle GetBgfxCubeTextureHandle() const override { return handle; }
         ~BgfxTextureCubeBackend() override;
 
         void SetData(int face, int level, int x, int y, int w, int h,
@@ -177,20 +194,21 @@ namespace CNA::Internal::Backends::Bgfx
     };
 
     /// bgfx-backed cube map render target.
-    class BgfxRenderTargetCubeBackend : public IRenderTargetCubeBackend
+    class BgfxRenderTargetCubeBackend : public IRenderTargetCubeBackend, public IBgfxCubeSamplable
     {
     public:
         bgfx::FrameBufferHandle fbo = BGFX_INVALID_HANDLE;
         bgfx::TextureHandle cubeTex = BGFX_INVALID_HANDLE;
         int size_ = 0;
 
-        BgfxRenderTargetCubeBackend(int size);
+        BgfxRenderTargetCubeBackend(int size, bool mipMap = false);
         ~BgfxRenderTargetCubeBackend() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] unsigned int GetGLHandle() const override { return 0; }
+        bgfx::TextureHandle GetBgfxCubeTextureHandle() const override { return cubeTex; }
     };
 
     /// bgfx dynamic vertex buffer.
@@ -376,6 +394,12 @@ namespace CNA::Internal::Backends::Bgfx
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, bool mipMap = false, int multiSampleCount = 0) override;
+        // Task 907 finding: the shared IGraphicsBackend::SetRenderTargetCubeFace default only
+        // calls BindAsRenderTargetFace -- it never updates currentRtWidth_/currentRtHeight_ (the
+        // Task 901 fix for 2D RTs), so any SpriteBatch draw into a cube face was rasterizing into
+        // a viewport sized to the full window instead of the face's own size. Overridden here to
+        // also set those, mirroring SetRenderTarget2D's own pattern.
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
 
         // Graphics state (stored; applied per-draw in SubmitSprite and future 3D draws)
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,

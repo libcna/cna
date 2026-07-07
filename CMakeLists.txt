@@ -2917,6 +2917,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 907: RenderTargetCube mip chains are genuinely generated per-face
+        # (vkCmdBlitImage cascade), split out of Task 878's original combined scope.
+        cna_vulkan_test(cna_test_vulkan_rendertargetcube_mip
+                        examples/vulkan_rendertargetcube_mip_test.cpp)
+        add_test(NAME Vulkan_RenderTargetCube_MipChain
+                 COMMAND cna_test_vulkan_rendertargetcube_mip)
+        set_tests_properties(Vulkan_RenderTargetCube_MipChain PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 148: RenderTarget2D full cycle — red quad into RT, blit to backbuffer
         cna_vulkan_test(cna_test_vulkan_rt2d
                         examples/vulkan_rt2d_test.cpp)
@@ -3780,6 +3790,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_RenderTarget2D_MipChain
              COMMAND cna_test_bgfx_rendertarget2d_mip)
     set_tests_properties(Bgfx_RenderTarget2D_MipChain PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 907: RenderTargetCube mip chains (closes Task 874 as a hard prerequisite --
+    # this is Bgfx's first-ever RenderTargetCube-via-EnvironmentMapEffect test).
+    cna_bgfx_test(cna_test_bgfx_rendertargetcube_mip
+                  examples/bgfx_rendertargetcube_mip_test.cpp)
+    add_test(NAME Bgfx_RenderTargetCube_MipChain
+             COMMAND cna_test_bgfx_rendertargetcube_mip)
+    set_tests_properties(Bgfx_RenderTargetCube_MipChain PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

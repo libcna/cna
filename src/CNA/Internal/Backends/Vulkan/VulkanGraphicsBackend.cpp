@@ -6171,9 +6171,10 @@ namespace CNA::Internal::Backends::Vulkan
         return std::make_unique<VulkanTextureCubeBackend>(this, size);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, bool /*mipMap*/, int /*multiSampleCount*/)
+    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, bool mipMap, int /*multiSampleCount*/)
     {
-        // mipMap not yet implemented on Vulkan (Task 336/878) — accepted and ignored.
+        // mipMap (Task 907): real per-face vkCmdBlitImage cascade, mirroring Task 878's
+        // RenderTarget2D fix -- see VulkanRenderTargetCubeBackend::FaceProxy::MaybeGenerateMips.
         // multiSampleCount: FNA's real RenderTargetCube(GraphicsDevice, size, mipMap,
         // preferredFormat, preferredDepthFormat, preferredMultiSampleCount, usage) constructor
         // DOES have a multiSampleCount parameter (confirmed against FNA source), so this is not
@@ -6183,7 +6184,7 @@ namespace CNA::Internal::Backends::Vulkan
         // VulkanRenderTargetCubeBackend's per-face framebuffers. Deliberately out of scope for
         // this pass (RenderTarget2D MSAA only, per the task's own test-file list) — accepted and
         // ignored here, tracked as a follow-up in plan_graphics.md.
-        return std::make_unique<VulkanRenderTargetCubeBackend>(this, size);
+        return std::make_unique<VulkanRenderTargetCubeBackend>(this, size, mipMap);
     }
 
     void VulkanGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
@@ -6533,12 +6534,13 @@ namespace CNA::Internal::Backends::Vulkan
 
     // --- VulkanRenderTargetCubeBackend ---
 
-    VulkanRenderTargetCubeBackend::VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size)
+    VulkanRenderTargetCubeBackend::VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size, bool mipMap)
         : owner_(owner), size_(size)
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice    dev  = owner_->device_;
         const auto  us   = static_cast<uint32_t>(size);
+        levelCount_ = mipMap ? CalculateVulkanRTMipLevels(size, size) : 1;
 
         // Ensure RT render pass exists.
         if (owner_->rtRenderPass_ == VK_NULL_HANDLE)
@@ -6551,11 +6553,14 @@ namespace CNA::Internal::Backends::Vulkan
         colorInfo.imageType     = VK_IMAGE_TYPE_2D;
         colorInfo.format        = owner_->swapchainFormat_;
         colorInfo.extent        = { us, us, 1 };
-        colorInfo.mipLevels     = 1;
+        colorInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
         colorInfo.arrayLayers   = 6;
         colorInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         colorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-        colorInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        // TRANSFER_SRC/DST (Task 907): needed by FaceProxy::MaybeGenerateMips' vkCmdBlitImage
+        // cascade when levelCount_ > 1; harmless when levelCount_==1.
+        colorInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         colorInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
         colorInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         if (vkCreateImage(dev, &colorInfo, nullptr, &image_) != VK_SUCCESS)
@@ -6572,14 +6577,16 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("VulkanRenderTargetCubeBackend: vkAllocateMemory failed");
         vkBindImageMemory(dev, image_, memory_, 0);
 
-        // --- Full-cube image view for sampling (VK_IMAGE_VIEW_TYPE_CUBE, all 6 layers) ---
+        // --- Full-cube image view for sampling (VK_IMAGE_VIEW_TYPE_CUBE, all 6 layers, full mip
+        // range -- Task 907: levelCount_ levels instead of hardcoded 1, mirroring
+        // VulkanRenderTargetBackend::colorSampleView_'s identical Task 878 fix) ---
         {
             VkImageViewCreateInfo cv{};
             cv.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             cv.image    = image_;
             cv.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
             cv.format   = owner_->swapchainFormat_;
-            cv.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6 };
+            cv.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<uint32_t>(levelCount_), 0, 6 };
             if (vkCreateImageView(dev, &cv, nullptr, &cubeView_) != VK_SUCCESS)
                 throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateImageView (cube) failed");
         }
@@ -6595,6 +6602,35 @@ namespace CNA::Internal::Backends::Vulkan
                                     static_cast<uint32_t>(face), 1 };
             if (vkCreateImageView(dev, &fv, nullptr, &faceViews_[face]) != VK_SUCCESS)
                 throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateImageView failed");
+        }
+
+        // Task 907: transition every level of every face to SHADER_READ_ONLY_OPTIMAL up front.
+        // Level 0 of an actually-rendered face gets this from its own render pass's finalLayout
+        // regardless (matching this class's pre-existing, unchanged behavior for the non-mip
+        // case), but levels 1..levelCount_-1 are NEVER touched by any render pass -- only by
+        // FaceProxy::MaybeGenerateMips' blit cascade, whose own first barrier for each
+        // destination level assumes it starts in SHADER_READ_ONLY_OPTIMAL. Without this upfront
+        // transition that assumption is false the first time any face is ever rendered,
+        // producing live VUID-vkCmdDraw-None-09600 validation errors (mirrors
+        // VulkanRenderTargetBackend's identical Task 878 fix).
+        if (levelCount_ > 1)
+        {
+            VkCommandBuffer initCb = owner_->BeginOneTimeCommands();
+            VkImageMemoryBarrier initBarrier{};
+            initBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            initBarrier.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+            initBarrier.newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            initBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            initBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            initBarrier.image               = image_;
+            initBarrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
+                                                 static_cast<uint32_t>(levelCount_), 0, 6 };
+            initBarrier.srcAccessMask       = 0;
+            initBarrier.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(initCb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                                 0, nullptr, 0, nullptr, 1, &initBarrier);
+            owner_->EndOneTimeCommands(initCb);
         }
 
         // --- Shared depth image (one 2D image reused across all faces) ---
@@ -6650,6 +6686,9 @@ namespace CNA::Internal::Backends::Vulkan
             faceProxies_[face].framebuffer = framebuffers_[face];
             faceProxies_[face].renderPass  = owner_->rtRenderPass_;
             faceProxies_[face].size        = size;
+            faceProxies_[face].image       = image_;
+            faceProxies_[face].levelCount  = levelCount_;
+            faceProxies_[face].faceIndex   = face;
         }
     }
 
@@ -6689,6 +6728,76 @@ namespace CNA::Internal::Backends::Vulkan
         if (owner_) {
             for (auto& fp : faceProxies_)
                 if (owner_->currentRT_ == &fp) { owner_->currentRT_ = nullptr; return; }
+        }
+    }
+
+    // Task 907: regenerate this face's mip chain (levels 0..levelCount-1 of the shared 6-layer
+    // `image`, this face's own `faceIndex` layer) via a vkCmdBlitImage cascade -- identical
+    // mechanism to VulkanRenderTargetBackend::MaybeGenerateMips (Task 878), just scoped to one
+    // array layer instead of the whole (non-array) 2D image.
+    void VulkanRenderTargetCubeBackend::FaceProxy::MaybeGenerateMips(VkCommandBuffer cb)
+    {
+        if (levelCount <= 1) return;
+        const uint32_t layer = static_cast<uint32_t>(faceIndex);
+
+        auto barrier = [&](uint32_t level, VkImageLayout oldL, VkImageLayout newL,
+                            VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                            VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
+        {
+            VkImageMemoryBarrier b{};
+            b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            b.oldLayout           = oldL;
+            b.newLayout           = newL;
+            b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.image               = image;
+            b.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, level, 1, layer, 1 };
+            b.srcAccessMask       = srcAccess;
+            b.dstAccessMask       = dstAccess;
+            vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
+        };
+
+        barrier(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+        int srcW = size, srcH = size;
+        for (int level = 1; level < levelCount; ++level) {
+            const int dstW = std::max(1, srcW / 2);
+            const int dstH = std::max(1, srcH / 2);
+
+            barrier(static_cast<uint32_t>(level),
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+            VkImageBlit blit{};
+            blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level - 1), layer, 1 };
+            blit.srcOffsets[1]  = { srcW, srcH, 1 };
+            blit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), layer, 1 };
+            blit.dstOffsets[1]  = { dstW, dstH, 1 };
+            vkCmdBlitImage(cb, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                              image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                              1, &blit, VK_FILTER_LINEAR);
+
+            barrier(static_cast<uint32_t>(level - 1),
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+            if (level < levelCount - 1) {
+                barrier(static_cast<uint32_t>(level),
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+            } else {
+                barrier(static_cast<uint32_t>(level),
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+            }
+
+            srcW = dstW; srcH = dstH;
         }
     }
 

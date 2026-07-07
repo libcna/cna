@@ -437,7 +437,7 @@ namespace CNA::Internal::Backends::Vulkan
                                           public IVulkanCubeSamplable
     {
     public:
-        VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size);
+        VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size, bool mipMap = false);
         ~VulkanRenderTargetCubeBackend() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
@@ -448,15 +448,22 @@ namespace CNA::Internal::Backends::Vulkan
         [[nodiscard]] VkImageView GetVkCubeImageView() const override { return cubeView_; }
 
     private:
+        // Task 907: per-face proxy also knows how to regenerate its OWN layer's mip chain
+        // (levels 0..levelCount-1 of the shared 6-layer `image_`, layer = faceIndex) via a
+        // vkCmdBlitImage cascade, mirroring VulkanRenderTargetBackend::MaybeGenerateMips (Task 878).
         struct FaceProxy : public VulkanRTSource {
             VkFramebuffer framebuffer  = VK_NULL_HANDLE;
             VkRenderPass  renderPass   = VK_NULL_HANDLE;
             int           size         = 0;
+            VkImage       image        = VK_NULL_HANDLE;
+            int           levelCount   = 1;
+            int           faceIndex    = 0;
             VkFramebuffer GetFramebuffer()          const override { return framebuffer; }
             VkRenderPass  GetRenderPass()            const override { return renderPass; }
             int GetWidth()                          const override { return size; }
             int GetHeight()                         const override { return size; }
             uint32_t GetColorAttachmentCount()      const override { return 1; }
+            void MaybeGenerateMips(VkCommandBuffer cb) override;
         };
 
         VulkanGraphicsBackend*     owner_     = nullptr;
@@ -470,6 +477,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::array<VkFramebuffer, 6> framebuffers_ = {};
         std::array<FaceProxy, 6>     faceProxies_;
         int                        size_      = 0;
+        int                        levelCount_ = 1;
     };
 
     // -------------------------------------------------------------------------
