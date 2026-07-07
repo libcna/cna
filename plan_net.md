@@ -1526,12 +1526,19 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   got 0". Restored the fix; full suite: **3305/3307 passing** (2 expected accelerometer/gyroscope
   skips), no regressions.
 
-- [ ] **Task 7.6** — Move `SignedInGamer::SignedIn`/`SignedOut` static events off the incorrect
+- [x] **Task 7.6** — Move `SignedInGamer::SignedIn`/`SignedOut` static events off the incorrect
   `NOXNA` tag — they are genuine, fully public XNA 4.0 API (confirmed against FNA's
   `SignedInGamer.cs`, `public static event EventHandler<SignedInEventArgs> SignedIn;`), not CNA
   extensions. Remove the `NOXNA` marker from these two declarations specifically (the
   `OnSignIn`/`OnSignOut` raiser methods are a separate, correctly-flagged-as-different issue — see
   Task 7.7).
+
+  Removed `NOXNA` from both declarations and expanded their doc comments to state why (genuine
+  public FNA API, unlike `OnSignIn`/`OnSignOut` just below). `NOXNA` is a pure marker macro with no
+  compiled effect, so this is a documentation/tagging-only change.
+
+  No revert-verify applies (marker-only, no behavior change). Full suite: **3305/3307 passing**
+  (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 7.7** — Change `SignedInGamer::OnSignIn`/`OnSignOut` from `public static ... NOXNA` to
   `private static` + `friend class GamerServicesDispatcher`, matching this project's own documented

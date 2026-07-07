@@ -163,11 +163,22 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         [[nodiscard]] AchievementCollection EndGetAchievements(System::IAsyncResult* result);
 
-        /** @brief Raised when a gamer signs in. */
-        NOXNA static System::EventHandler<SignedInEventArgs> SignedIn;
+        /**
+         * @brief Raised when a gamer signs in.
+         *
+         * Task 7.6: genuine public XNA 4.0 API (FNA: `public static event
+         * EventHandler<SignedInEventArgs> SignedIn;`) - not a CNA extension, so this is not
+         * NOXNA (unlike OnSignIn/OnSignOut just below, which really are internal-only).
+         */
+        static System::EventHandler<SignedInEventArgs> SignedIn;
 
-        /** @brief Raised when a gamer signs out. */
-        NOXNA static System::EventHandler<SignedOutEventArgs> SignedOut;
+        /**
+         * @brief Raised when a gamer signs out.
+         *
+         * Task 7.6: genuine public XNA 4.0 API (FNA: `public static event
+         * EventHandler<SignedOutEventArgs> SignedOut;`) - not a CNA extension.
+         */
+        static System::EventHandler<SignedOutEventArgs> SignedOut;
 
         /**
          * @brief Raises the SignedIn event for the given gamer.
