@@ -290,6 +290,44 @@ TEST(PacketReaderWriterTest, StringRoundtripMultiByteUnicodeContent) {
     EXPECT_EQ(r.ReadString(), unicode);
 }
 
+// Task 4.4: PacketReader inherits System::IO::BinaryReader::ReadBytes(int) (array-returning)
+// with no overriding declaration of its own, so this exercises the real inherited method through
+// the concrete PacketReader type actual game code uses - not just sharp-runtime's own
+// BinaryReader test suite, so a future regression in how PacketReader wires up to that base
+// would be caught here too.
+TEST(PacketReaderWriterTest, ReadBytesReturnsExactCountRequested) {
+    PacketWriter w;
+    w.Write(static_cast<int32_t>(0x11223344));
+    w.Write(static_cast<uint8_t>(0xAB));
+    PacketReader r = MakeReaderFromWriter(w);
+
+    std::vector<uint8_t> chunk = r.ReadBytes(4);
+    ASSERT_EQ(chunk.size(), 4u);
+    // Written little-endian by Write(int32_t).
+    EXPECT_EQ(chunk[0], 0x44);
+    EXPECT_EQ(chunk[1], 0x33);
+    EXPECT_EQ(chunk[2], 0x22);
+    EXPECT_EQ(chunk[3], 0x11);
+    // Confirms the read position genuinely advanced, not just that the bytes were correct.
+    EXPECT_EQ(r.ReadByte(), 0xAB);
+}
+
+// Task 4.4: real .NET's BinaryReader.ReadBytes(int) does not throw at end-of-stream (unlike
+// ReadByte/ReadInt32/etc, which all throw EndOfStreamException) - it returns a shorter array
+// trimmed to however many bytes were actually available. Confirmed against sharp-runtime's own
+// BinaryReader::ReadBytes implementation before writing this test.
+TEST(PacketReaderWriterTest, ReadBytesTrimsResultAtEndOfStreamWithoutThrowing) {
+    PacketWriter w;
+    w.Write(static_cast<uint8_t>(1));
+    w.Write(static_cast<uint8_t>(2));
+    PacketReader r = MakeReaderFromWriter(w);
+
+    std::vector<uint8_t> chunk = r.ReadBytes(10);
+    ASSERT_EQ(chunk.size(), 2u);
+    EXPECT_EQ(chunk[0], 1);
+    EXPECT_EQ(chunk[1], 2);
+}
+
 TEST(PacketReaderTest, ReadingPastEndOfBufferThrows) {
     PacketWriter w;
     w.Write(static_cast<int32_t>(1));

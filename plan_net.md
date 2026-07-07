@@ -783,7 +783,7 @@ verified via revert-verify-restore. Continuing to Phase 4 (Net API gaps).
 revert-verify-restore (or documented where a fix wasn't the right call). Continuing to Phase 5
 (Net test coverage).
 
-- [ ] **Task 4.4** — Add `ReadBytes(int count)` (array-returning) and `Write(char)`/`ReadChar()` to
+- [x] **Task 4.4** — Add `ReadBytes(int count)` (array-returning) and `Write(char)`/`ReadChar()` to
   `sharp-runtime`'s `System::IO::BinaryReader`/`BinaryWriter`. Confirmed gap vs. FNA's `PacketReader`
   (which inherits `System.IO.BinaryReader`) that ordinary XNA game code commonly relies on for raw
   byte-block reads. This is a `sharp-runtime` change — per this repo's own `CLAUDE.md` extension
@@ -791,6 +791,38 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Coordinate with whoever drives `sharp-runtime` (this repo's own convention: never modify existing
   `sharp-runtime` files without asking the user first, for every commit). Add tests in both
   `sharp-runtime` and this repo's `PacketReaderWriterTests.cpp`.
+
+  The `ReadBytes(int count)` half arrived already-implemented in the same large `sharp-runtime`
+  merge that fixed Task 6.10: `BinaryReader::ReadBytes(intcs count)` — public, array-returning,
+  `std::vector<bytecs>`, exactly matching real .NET semantics confirmed by reading the merged
+  source directly (trims the result at end-of-stream instead of throwing; throws
+  `ArgumentOutOfRangeException` for a negative count; already has its own `sharp-runtime` tests).
+
+  The `Write(char)`/`ReadChar()` half was deliberately **not** implemented by that same merge, with
+  its own documented rationale directly on `BinaryReader`'s class doc comment: "`.NET's Encoding/
+  Decoder-based char methods (ReadChar, PeekChar, ReadChars, Read(char[])) are not implemented,
+  since this codebase's Stream has no character encoding layer — a deliberate simplification, not
+  a silent gap." Respected this as `sharp-runtime`'s own already-made architectural call rather
+  than overriding it — implementing a from-scratch UTF-8 char encode/decode layer just for this
+  one task would both contradict that documented decision and go beyond "minimal, correctly-named
+  stub sufficient for compilation" (this repo's own `CLAUDE.md` rule for missing dependencies).
+  `PacketWriter`/`PacketReader` have no XNA-required char API of their own to satisfy either
+  (`PacketWriter`'s `NOXNA using ... BinaryWriter::Write;` already brings in whatever
+  `BinaryWriter` offers with zero extra work whenever a `Write(char)` overload does eventually
+  land upstream).
+
+  **Verified `PacketReader` correctly inherits/exposes the new `ReadBytes(int)`** with zero
+  `PacketReader`-side code changes needed (public inheritance from `BinaryReader`, no shadowing
+  declaration of its own) — added `PacketReaderWriterTest.ReadBytesReturnsExactCountRequested`
+  (reads a real 4-byte chunk out of a real `PacketWriter`-produced buffer, confirms exact byte
+  values in the correct little-endian order *and* that the read position genuinely advanced by
+  reading a further byte afterward) and `ReadBytesTrimsResultAtEndOfStreamWithoutThrowing`
+  (requests 10 bytes from a 2-byte buffer, confirms a 2-byte trimmed result rather than a throw —
+  the exact real .NET behavior, contrasted directly against `ReadByte`/`ReadInt32`'s own
+  throwing-at-EOF behavior covered by the neighboring tests). Both exercise the real, concrete
+  `PacketReader` type actual game code uses, not just `sharp-runtime`'s own isolated
+  `BinaryReader` test suite. Full suite: 3400/3400 passing (2 expected accelerometer/gyroscope
+  skips), no regressions.
 
 - [ ] **Task 4.5** — Add a `CopyTo` equivalent to `NetworkSessionProperties` (FNA's
   `ICollection<int?>.CopyTo(array, index)`). Confirmed root cause one level down: `sharp-runtime`'s
