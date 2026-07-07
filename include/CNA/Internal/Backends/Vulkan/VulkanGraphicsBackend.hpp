@@ -630,14 +630,22 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineLayout      pipelineLayout3D_      = VK_NULL_HANDLE;
         std::unordered_map<uint32_t, VkPipeline>             pipelines3D_;
         VkPipelineLayout      pipelineLayoutExt3D_      = VK_NULL_HANDLE;
-        std::unordered_map<uint64_t, VkPipeline>             pipelinesExt3D_;
         VkPipelineLayout      pipelineLayoutAlphaTest3D_ = VK_NULL_HANDLE;
         std::unordered_map<uint64_t, VkPipeline>             pipelinesAlphaTest3D_;
         VkDescriptorSetLayout descriptorSetLayout2Tex_     = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPool2Tex_          = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutDualTex3D_     = VK_NULL_HANDLE;
         std::unordered_map<uint64_t, VkPipeline>             pipelinesDualTex3D_;
-        std::unordered_map<uint64_t, VkDescriptorSet>        dualTexDescSets_;
+        // Task 899: per-frame cache (was a single flat map) -- binding=2's fog UBO now makes the
+        // descriptor set's buffer binding frame-specific, mirroring litTexturedDescSets_/skinnedDescSets_.
+        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+                   MaxFramesInFlight>                        dualTexDescSets_;
+        // Task 899: per-frame UBO ring buffer for DualTextureEffect fog (binding=2, dynamic).
+        static constexpr uint32_t kDualTexFogUBOStride   = 256;
+        static constexpr uint32_t kDualTexFogUBOMaxDraws = 512;
+        std::array<VkBuffer,       MaxFramesInFlight> dualTexFogUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> dualTexFogUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> dualTexFogUBOPtr_ = {};
         // EnvironmentMapEffect resources
         VkDescriptorSetLayout descriptorSetLayoutEnvMap_   = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPoolEnvMap_        = VK_NULL_HANDLE;
@@ -669,6 +677,26 @@ namespace CNA::Internal::Backends::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> litTexturedUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> litTexturedUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> litTexturedUBOPtr_ = {};
+        // Task 899: BasicEffect fog bundle shared by colored3d (stride 16) / textured3d
+        // (stride 20) / colored_textured3d (stride 24) -- all three read the same fully-packed
+        // 128-byte FillExtPushConst() layout (zero spare bytes for fog), so fog is forwarded via
+        // one small dedicated dynamic UBO instead, mirroring descriptorSetLayoutLitTextured_'s
+        // shape (sampler@0 + dynamic UBO@1). colored3d's own shaders never read binding=0 (no
+        // texture sampling), but the layout still declares it so all three pipelines can share
+        // one descriptor-set-layout/pool/UBO/cache bundle (a default white texture is bound at
+        // binding=0 for colored3d draws, same fallback every other pipeline already uses).
+        VkDescriptorSetLayout descriptorSetLayoutFogTex3D_ = VK_NULL_HANDLE;
+        VkDescriptorPool      descriptorPoolFogTex3D_      = VK_NULL_HANDLE;
+        VkPipelineLayout      pipelineLayoutFogTex3D_      = VK_NULL_HANDLE;
+        std::unordered_map<uint64_t, VkPipeline>             pipelinesFogColored3D_;
+        std::unordered_map<uint64_t, VkPipeline>             pipelinesFogTex3D_; // textured+coloredTextured, keyed by stride
+        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+                   MaxFramesInFlight>                        fogTex3DDescSets_;
+        static constexpr uint32_t kFogTex3DUBOStride   = 256;
+        static constexpr uint32_t kFogTex3DUBOMaxDraws = 512;
+        std::array<VkBuffer,       MaxFramesInFlight> fogTex3DUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> fogTex3DUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> fogTex3DUBOPtr_ = {};
         // SkinnedEffect resources
         VkDescriptorSetLayout descriptorSetLayoutSkinned_  = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPoolSkinned_       = VK_NULL_HANDLE;
@@ -682,6 +710,13 @@ namespace CNA::Internal::Backends::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> skinnedUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> skinnedUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> skinnedUBOPtr_ = {};
+        // Task 899: SkinnedEffect fog -- separate small dynamic UBO at binding=2 (BoneBlock@1
+        // has zero spare capacity, so fog cannot be packed into it).
+        static constexpr uint32_t kSkinnedFogUBOStride   = 256;
+        static constexpr uint32_t kSkinnedFogUBOMaxDraws = 32;
+        std::array<VkBuffer,       MaxFramesInFlight> skinnedFogUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> skinnedFogUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> skinnedFogUBOPtr_ = {};
         // --- Instanced 3D pipeline (Task 111) ---
         // Uses pipelineLayoutExt3D_ (128-byte PC: [0..15]=VP, [16..31]=ext params).
         // Vertex binding=0: per-vertex VERTEX rate; binding=1: per-instance INSTANCE rate (stride=64).
@@ -744,10 +779,18 @@ namespace CNA::Internal::Backends::Vulkan
             VulkanRTSource*         rt = nullptr; // nullptr = backbuffer
             std::size_t             stride = 16;  // vertex stride in bytes
             VkDescriptorSet         descSet = VK_NULL_HANDLE; // texture (or null)
-            bool                    useExtParams      = false; // true = Ext3D pipeline (128-byte PC)
+            // Task 899: true for BasicEffect draws with no alpha-test/dual-tex/env-map/skinned/
+            // lit-textured override (stride 16/20/24) -- routes to the new fog-capable
+            // colored3d/textured3d/colored_textured3d bundle. Left false (default) by the legacy
+            // no-GpuDrawParams DrawColoredPrimitives()/DrawIndexedColoredPrimitives() path, which
+            // still falls through to the original zero-descriptor-set colored3d pipeline.
+            bool                    useFogTex3D       = false;
+            float                   fogTex3DUboData[8] = {}; // vec4 fogColorEnabled + vec4 fogStartEnd
+            VkDescriptorSet         fogTex3DDescSet   = VK_NULL_HANDLE;
             bool                    useAlphaTest      = false; // true = AlphaTest3D pipeline
             bool                    useDualTexture    = false; // true = DualTex3D pipeline
             VkDescriptorSet         dualTexDescSet    = VK_NULL_HANDLE; // 2-sampler set
+            float                   dualTexFogUboData[8] = {}; // vec4 fogColorEnabled + vec4 fogStartEnd (Task 899)
             bool                    useEnvMap         = false; // true = EnvMap3D pipeline
             float                   envMapPC[32]      = {};    // push consts: [0..15]=mvp, [16..31]=world
             float                   envMapUboData[24] = {};    // 6×vec4 = 96 bytes for env map UBO
@@ -755,6 +798,7 @@ namespace CNA::Internal::Backends::Vulkan
             bool                    useSkinned        = false; // true = Skinned3D pipeline
             std::vector<float>      boneMatrices;              // up to 72 mat4s = 1152 floats
             VkDescriptorSet         skinnedDescSet    = VK_NULL_HANDLE;
+            float                   skinnedFogUboData[8] = {}; // vec4 fogColorEnabled + vec4 fogStartEnd (Task 899)
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
             // Layout (floats): [0..19]=light1/2 dir+diffuse+emissive (5 vec4, Task 897),
             // [20..35]=world mat4, [36..39]=eyePos, [40..51]=light0/1/2 specular (3 vec4),
@@ -867,18 +911,13 @@ namespace CNA::Internal::Backends::Vulkan
                                          bool blend, int cullMode,
                                          uint32_t colorAttachmentCount = 1, bool wireframe = false,
                                          bool msaa = false);
-        VkPipeline GetOrCreatePipelineExt3D(std::size_t stride, VkPrimitiveTopology,
-                                            bool depthTest, bool depthWrite,
-                                            bool blend, int cullMode,
-                                            uint32_t colorAttachmentCount = 1, bool wireframe = false,
-                                            bool msaa = false);
         VkPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
                                                    bool blend, int cullMode,
                                                    uint32_t colorAttachmentCount = 1, bool wireframe = false,
                                                    bool msaa = false);
         void       EnsureDualTexResources();
-        VkDescriptorSet GetOrCreateDualTexDescSet(VkImageView view0, VkImageView view1,
+        VkDescriptorSet GetOrCreateDualTexDescSet(uint32_t frameIdx, VkImageView view0, VkImageView view1,
                                                     VkSampler sampler0, VkSampler sampler1);
         VkPipeline GetOrCreatePipelineDualTex3D(VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
@@ -916,6 +955,19 @@ namespace CNA::Internal::Backends::Vulkan
                                                      bool blend, int cullMode,
                                                      uint32_t colorAttachmentCount = 1, bool wireframe = false,
                                                      bool msaa = false);
+        // BasicEffect fog bundle (Task 899) — shared by colored3d/textured3d/colored_textured3d.
+        void       EnsureFogTex3DResources();
+        VkDescriptorSet GetOrCreateFogTex3DDescSet(uint32_t frameIdx, VkImageView view2D);
+        VkPipeline GetOrCreatePipelineFogColored3D(VkPrimitiveTopology,
+                                                    bool depthTest, bool depthWrite,
+                                                    bool blend, int cullMode,
+                                                    uint32_t colorAttachmentCount = 1, bool wireframe = false,
+                                                    bool msaa = false);
+        VkPipeline GetOrCreatePipelineFogTex3D(std::size_t stride, VkPrimitiveTopology,
+                                                bool depthTest, bool depthWrite,
+                                                bool blend, int cullMode,
+                                                uint32_t colorAttachmentCount = 1, bool wireframe = false,
+                                                bool msaa = false);
         // --- Instanced 3D pipeline ---
         VkPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,

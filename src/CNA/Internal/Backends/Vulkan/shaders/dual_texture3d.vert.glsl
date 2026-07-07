@@ -1,6 +1,13 @@
 #version 450
 
 // Stride 20: VertexPositionTexture — float3 pos + float2 uv
+//
+// Task 899: dedicated vertex shader (previously DualTextureEffect reused textured3d.vert.glsl's
+// compiled SPIR-V directly). textured3d.vert.glsl now declares its own fog UBO at binding=1
+// (the shared colored3d/textured3d/colored_textured3d bundle's layout), which conflicts with
+// dual_texture3d's own 2-sampler descriptor set layout (extended here with its own fog UBO at
+// binding=2, since bindings 0/1 are already the two texture samplers) -- so this pipeline needs
+// its own vertex shader file, split off with identical MVP/diffuseColor logic.
 layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec2 inUV;
 
@@ -19,9 +26,7 @@ layout(push_constant) uniform PC {
     float vertexColorEnabled;
 } pc;
 
-// Task 899: fog forwarded via the shared colored3d/textured3d/colored_textured3d bundle's
-// dynamic UBO (set=0, binding=1) -- the 128-byte push constant above has zero spare bytes.
-layout(set = 0, binding = 1) uniform FogParams {
+layout(set = 0, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
 } fog;

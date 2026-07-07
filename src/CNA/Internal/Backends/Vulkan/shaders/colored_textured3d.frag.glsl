@@ -2,6 +2,7 @@
 
 layout(location = 0) in vec2 fragUV;
 layout(location = 1) in vec4 fragTint;
+layout(location = 2) in float fragFogFactor;
 
 layout(location = 0) out vec4 outColor;
 
@@ -18,7 +19,16 @@ layout(push_constant) uniform PC {
     float vertexColorEnabled;
 } pc;
 
+// Task 899: fog forwarded via the shared colored3d/textured3d/colored_textured3d bundle's
+// dynamic UBO (set=0, binding=1) -- the 128-byte push constant above has zero spare bytes.
+layout(set = 0, binding = 1) uniform FogParams {
+    vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
+    vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+} fog;
+
 void main() {
     vec4 tex = (pc.textureEnabled > 0.5) ? texture(uTexture, fragUV) : vec4(1.0);
     outColor = tex * fragTint;
+    // Task 899: mix toward FogColor as fragFogFactor -> 0 (matches the established Task 888 formula).
+    outColor.rgb = mix(fog.fogColorEnabled.xyz, outColor.rgb, fragFogFactor);
 }

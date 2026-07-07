@@ -2508,6 +2508,47 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 899: fog on colored3d/textured3d/colored_textured3d/dual_texture3d/skinned3d
+        cna_vulkan_test(cna_test_vulkan_basiceffect_colored3d_fog
+                        examples/vulkan_basiceffect_colored3d_fog_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_Colored3D_Fog
+                 COMMAND cna_test_vulkan_basiceffect_colored3d_fog)
+        set_tests_properties(Vulkan_BasicEffect_Colored3D_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        cna_vulkan_test(cna_test_vulkan_basiceffect_textured3d_fog
+                        examples/vulkan_basiceffect_textured3d_fog_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_Textured3D_Fog
+                 COMMAND cna_test_vulkan_basiceffect_textured3d_fog)
+        set_tests_properties(Vulkan_BasicEffect_Textured3D_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        cna_vulkan_test(cna_test_vulkan_basiceffect_coloredtextured3d_fog
+                        examples/vulkan_basiceffect_coloredtextured3d_fog_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_ColoredTextured3D_Fog
+                 COMMAND cna_test_vulkan_basiceffect_coloredtextured3d_fog)
+        set_tests_properties(Vulkan_BasicEffect_ColoredTextured3D_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_fog
+                        examples/vulkan_dualtextureeffect_fog_test.cpp)
+        add_test(NAME Vulkan_DualTextureEffect_Fog
+                 COMMAND cna_test_vulkan_dualtextureeffect_fog)
+        set_tests_properties(Vulkan_DualTextureEffect_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_fog
+                        examples/vulkan_skinnedeffect_fog_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_Fog
+                 COMMAND cna_test_vulkan_skinnedeffect_fog)
+        set_tests_properties(Vulkan_SkinnedEffect_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()

@@ -138,6 +138,10 @@ def main():
         ("sprite2d.frag.glsl",          FRAGMENT_SHADER, "kSprite2dFragSpv"),
         ("colored3d.vert.glsl",         VERTEX_SHADER,   "kColored3dVertSpv"),
         ("colored3d.frag.glsl",         FRAGMENT_SHADER, "kColored3dFragSpv"),
+        # Legacy no-GpuDrawParams DrawColoredPrimitives()/DrawIndexedColoredPrimitives() path
+        # (Task 899: colored3d.vert.glsl above now needs a fog UBO binding that
+        # pipelineLayout3D_'s zero-descriptor-set layout doesn't provide).
+        ("colored3d_legacy.vert.glsl",  VERTEX_SHADER,   "kColored3dLegacyVertSpv"),
         # Textured 3D pipeline — stride 20 (VertexPositionTexture)
         ("textured3d.vert.glsl",         VERTEX_SHADER,   "kTextured3dVertSpv"),
         ("textured3d.frag.glsl",         FRAGMENT_SHADER, "kTextured3dFragSpv"),
@@ -153,7 +157,10 @@ def main():
         # AlphaTestEffect stride-24 (VertexPositionColorTexture) variant with VertexColorEnabled
         # support (Task 887); shares alpha_test3d's FS.
         ("alpha_test_colored3d.vert.glsl", VERTEX_SHADER, "kAlphaTestColored3dVertSpv"),
-        # DualTextureEffect pipeline — VS reuses textured3d; FS samples two texture units
+        # DualTextureEffect pipeline — dedicated VS (Task 899: previously reused textured3d's,
+        # but that now has its own fog UBO binding conflicting with dual_texture3d's 2-sampler
+        # descriptor set layout); FS samples two texture units
+        ("dual_texture3d.vert.glsl",     VERTEX_SHADER,   "kDualTexture3dVertSpv"),
         ("dual_texture3d.frag.glsl",     FRAGMENT_SHADER, "kDualTexture3dFragSpv"),
         # EnvironmentMapEffect pipeline — stride 32, world matrix in PC, UBO for FS params
         ("env_map3d.vert.glsl",          VERTEX_SHADER,   "kEnvMap3dVertSpv"),
@@ -161,8 +168,11 @@ def main():
         # SkinnedEffect pipeline — stride 52, bone palette in dynamic UBO (binding=1)
         ("skinned3d.vert.glsl",          VERTEX_SHADER,   "kSkinned3dVertSpv"),
         ("skinned3d.frag.glsl",          FRAGMENT_SHADER, "kSkinned3dFragSpv"),
-        # Instanced 3D pipeline — binding=0 per-vertex (pos only), binding=1 per-instance mat4
+        # Instanced 3D pipeline — binding=0 per-vertex (pos only), binding=1 per-instance mat4.
+        # Dedicated FS (Task 899: previously reused colored3d's, but that now has a 2nd
+        # descriptor binding for fog, incompatible with Instanced3D's unmodified 1-binding layout).
         ("instanced3d.vert.glsl",        VERTEX_SHADER,   "kInstanced3dVertSpv"),
+        ("instanced3d.frag.glsl",        FRAGMENT_SHADER, "kInstanced3dFragSpv"),
     ]
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \

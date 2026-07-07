@@ -781,16 +781,17 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& [key, pipe] : pipelines3D_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelines3D_.clear();
-        for (auto& [key, pipe] : pipelinesExt3D_)
-            if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
-        pipelinesExt3D_.clear();
         for (auto& [k, pipe] : pipelinesAlphaTest3D_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelinesAlphaTest3D_.clear();
         for (auto& [k, pipe] : pipelinesDualTex3D_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelinesDualTex3D_.clear();
-        dualTexDescSets_.clear(); // freed with pool below
+        for (auto& cache : dualTexDescSets_) cache.clear(); // freed with pool below
+        for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
+            if (dualTexFogUBO_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, dualTexFogUBO_[i], nullptr);    dualTexFogUBO_[i]    = VK_NULL_HANDLE; }
+            if (dualTexFogUBOMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, dualTexFogUBOMem_[i], nullptr);   dualTexFogUBOMem_[i] = VK_NULL_HANDLE; }
+        }
         for (auto& [k, pipe] : pipelinesEnvMap3D_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelinesEnvMap3D_.clear();
@@ -807,6 +808,17 @@ namespace CNA::Internal::Backends::Vulkan
             if (litTexturedUBO_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, litTexturedUBO_[i], nullptr);    litTexturedUBO_[i]    = VK_NULL_HANDLE; }
             if (litTexturedUBOMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, litTexturedUBOMem_[i], nullptr);   litTexturedUBOMem_[i] = VK_NULL_HANDLE; }
         }
+        for (auto& [k, pipe] : pipelinesFogColored3D_)
+            if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
+        pipelinesFogColored3D_.clear();
+        for (auto& [k, pipe] : pipelinesFogTex3D_)
+            if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
+        pipelinesFogTex3D_.clear();
+        for (auto& cache : fogTex3DDescSets_) cache.clear(); // freed with pool below
+        for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
+            if (fogTex3DUBO_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, fogTex3DUBO_[i], nullptr);    fogTex3DUBO_[i]    = VK_NULL_HANDLE; }
+            if (fogTex3DUBOMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, fogTex3DUBOMem_[i], nullptr);   fogTex3DUBOMem_[i] = VK_NULL_HANDLE; }
+        }
         for (auto& [k, pipe] : pipelinesSkinned3D_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelinesSkinned3D_.clear();
@@ -817,6 +829,8 @@ namespace CNA::Internal::Backends::Vulkan
         for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
             if (skinnedUBO_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, skinnedUBO_[i], nullptr);    skinnedUBO_[i]    = VK_NULL_HANDLE; }
             if (skinnedUBOMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, skinnedUBOMem_[i], nullptr);   skinnedUBOMem_[i] = VK_NULL_HANDLE; }
+            if (skinnedFogUBO_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, skinnedFogUBO_[i], nullptr);    skinnedFogUBO_[i]    = VK_NULL_HANDLE; }
+            if (skinnedFogUBOMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, skinnedFogUBOMem_[i], nullptr);   skinnedFogUBOMem_[i] = VK_NULL_HANDLE; }
         }
         if (defaultWhiteCubeView_ != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteCubeView_, nullptr); defaultWhiteCubeView_ = VK_NULL_HANDLE; }
         if (defaultWhiteCubeImage_ != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultWhiteCubeImage_, nullptr);   defaultWhiteCubeImage_ = VK_NULL_HANDLE; }
@@ -842,6 +856,9 @@ namespace CNA::Internal::Backends::Vulkan
         if (pipelineLayoutLitTextured3D_    != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutLitTextured3D_, nullptr);    pipelineLayoutLitTextured3D_    = VK_NULL_HANDLE; }
         if (descriptorPoolLitTextured_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPoolLitTextured_, nullptr);      descriptorPoolLitTextured_      = VK_NULL_HANDLE; }
         if (descriptorSetLayoutLitTextured_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayoutLitTextured_, nullptr); descriptorSetLayoutLitTextured_ = VK_NULL_HANDLE; }
+        if (pipelineLayoutFogTex3D_    != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutFogTex3D_, nullptr);    pipelineLayoutFogTex3D_    = VK_NULL_HANDLE; }
+        if (descriptorPoolFogTex3D_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPoolFogTex3D_, nullptr);      descriptorPoolFogTex3D_      = VK_NULL_HANDLE; }
+        if (descriptorSetLayoutFogTex3D_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayoutFogTex3D_, nullptr); descriptorSetLayoutFogTex3D_ = VK_NULL_HANDLE; }
         if (pipelineLayout2D_      != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout2D_, nullptr);       pipelineLayout2D_      = VK_NULL_HANDLE; }
         for (auto fb : swapchainFramebuffers_)
             if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, fb, nullptr);
@@ -2347,8 +2364,14 @@ namespace CNA::Internal::Backends::Vulkan
         if (it != pipelines3D_.end()) return it->second;
 
         using namespace Shaders;
-        VkShaderModule vert = CreateShaderModule(kColored3dVertSpv, kColored3dVertSpv_size);
-        VkShaderModule frag = CreateShaderModule(kColored3dFragSpv, kColored3dFragSpv_size);
+        // Task 899: dedicated shaders (was: reuse kColored3dVertSpv/kColored3dFragSpv) --
+        // colored3d.vert.glsl/.frag.glsl now declare a fog UBO binding as part of the shared
+        // colored3d/textured3d/colored_textured3d bundle, incompatible with this pipeline's
+        // unmodified zero-descriptor-set pipelineLayout3D_ (used only by the legacy,
+        // no-GpuDrawParams DrawColoredPrimitives()/DrawIndexedColoredPrimitives() path, which
+        // has no fog data to forward anyway).
+        VkShaderModule vert = CreateShaderModule(kColored3dLegacyVertSpv, kColored3dLegacyVertSpv_size);
+        VkShaderModule frag = CreateShaderModule(kInstanced3dFragSpv, kInstanced3dFragSpv_size);
 
         VkVertexInputBindingDescription bind{ 0, 16, VK_VERTEX_INPUT_RATE_VERTEX };
         VkVertexInputAttributeDescription attrs[2]{};
@@ -2824,30 +2847,40 @@ namespace CNA::Internal::Backends::Vulkan
     {
         if (descriptorSetLayout2Tex_ != VK_NULL_HANDLE) return;
 
-        // Two combined image samplers at bindings 0 and 1.
-        VkDescriptorSetLayoutBinding bindings[2]{};
+        // Two combined image samplers at bindings 0/1, plus (Task 899) a dynamic fog UBO at
+        // binding=2 -- DualTextureEffect's 128-byte push constant has no spare bytes for fog.
+        VkDescriptorSetLayoutBinding bindings[3]{};
         for (uint32_t i = 0; i < 2; ++i) {
             bindings[i].binding            = i;
             bindings[i].descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             bindings[i].descriptorCount    = 1;
             bindings[i].stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
         }
+        bindings[2].binding         = 2;
+        bindings[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
         VkDescriptorSetLayoutCreateInfo li{};
         li.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        li.bindingCount = 2; li.pBindings = bindings;
+        li.bindingCount = 3; li.pBindings = bindings;
         if (vkCreateDescriptorSetLayout(device_, &li, nullptr, &descriptorSetLayout2Tex_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateDescriptorSetLayout (2-tex) failed");
 
-        // Pool for up to 512 dual-texture descriptor sets.
-        VkDescriptorPoolSize ps{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 512 * 2 };
+        // Pool for up to 512 dual-texture descriptor sets × MaxFramesInFlight (per-frame cache,
+        // Task 899 -- the fog UBO buffer differs per frame in flight).
+        const uint32_t maxSets = 512u * MaxFramesInFlight;
+        VkDescriptorPoolSize ps[2]{};
+        ps[0] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets * 2 };
+        ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        pi.maxSets       = 512;
-        pi.poolSizeCount = 1; pi.pPoolSizes = &ps;
+        pi.maxSets       = maxSets;
+        pi.poolSizeCount = 2; pi.pPoolSizes = ps;
         if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPool2Tex_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateDescriptorPool (2-tex) failed");
 
-        // Pipeline layout: same 128-byte PC range + 2-sampler descriptor set layout.
+        // Pipeline layout: same 128-byte PC range + 2-sampler+fog descriptor set layout.
         VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
         VkPipelineLayoutCreateInfo pli{};
         pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -2855,10 +2888,22 @@ namespace CNA::Internal::Backends::Vulkan
         pli.setLayoutCount = 1; pli.pSetLayouts = &descriptorSetLayout2Tex_;
         if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayoutDualTex3D_) != VK_SUCCESS)
             throw std::runtime_error("vkCreatePipelineLayout (DualTex3D) failed");
+
+        // Per-frame UBO ring buffer for the fog block (Task 899).
+        const VkDeviceSize uboSize = kDualTexFogUBOStride * kDualTexFogUBOMaxDraws;
+        for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
+            if (dualTexFogUBO_[i] == VK_NULL_HANDLE) {
+                CreateBuffer(uboSize,
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    dualTexFogUBO_[i], dualTexFogUBOMem_[i], &dualTexFogUBOPtr_[i]);
+            }
+        }
     }
 
-    VkDescriptorSet VulkanGraphicsBackend::GetOrCreateDualTexDescSet(VkImageView view0, VkImageView view1,
-                                                                       VkSampler sampler0, VkSampler sampler1)
+    VkDescriptorSet VulkanGraphicsBackend::GetOrCreateDualTexDescSet(
+        uint32_t frameIdx, VkImageView view0, VkImageView view1,
+        VkSampler sampler0, VkSampler sampler1)
     {
         EnsureDualTexResources();
 
@@ -2866,8 +2911,9 @@ namespace CNA::Internal::Backends::Vulkan
                            ^ reinterpret_cast<uint64_t>(view1)    * 40503ULL
                            ^ reinterpret_cast<uint64_t>(sampler0) * 2246822519ULL
                            ^ reinterpret_cast<uint64_t>(sampler1) * 3266489917ULL;
-        auto it = dualTexDescSets_.find(key);
-        if (it != dualTexDescSets_.end()) return it->second;
+        auto& cache = dualTexDescSets_[frameIdx];
+        auto it = cache.find(key);
+        if (it != cache.end()) return it->second;
 
         VkDescriptorSetAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -2886,7 +2932,12 @@ namespace CNA::Internal::Backends::Vulkan
         imgInfo[1].imageView   = view1;
         imgInfo[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        VkWriteDescriptorSet writes[2]{};
+        VkDescriptorBufferInfo bufInfo{};
+        bufInfo.buffer = dualTexFogUBO_[frameIdx];
+        bufInfo.offset = 0;
+        bufInfo.range  = 32; // vec4 fogColorEnabled + vec4 fogStartEnd
+
+        VkWriteDescriptorSet writes[3]{};
         for (uint32_t i = 0; i < 2; ++i) {
             writes[i].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writes[i].dstSet          = ds;
@@ -2895,8 +2946,14 @@ namespace CNA::Internal::Backends::Vulkan
             writes[i].descriptorCount = 1;
             writes[i].pImageInfo      = &imgInfo[i];
         }
-        vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
-        dualTexDescSets_[key] = ds;
+        writes[2].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[2].dstSet          = ds;
+        writes[2].dstBinding      = 2;
+        writes[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        writes[2].descriptorCount = 1;
+        writes[2].pBufferInfo     = &bufInfo;
+        vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
+        cache[key] = ds;
         return ds;
     }
 
@@ -2914,8 +2971,10 @@ namespace CNA::Internal::Backends::Vulkan
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
         using namespace Shaders;
-        // Vertex shader: reuse kTextured3dVertSpv (reads MVP + diffuseColor from same PC layout).
-        VkShaderModule vert = CreateShaderModule(kTextured3dVertSpv,     kTextured3dVertSpv_size);
+        // Task 899: dedicated vertex shader (was: reuse kTextured3dVertSpv) -- textured3d.vert.glsl
+        // now declares its own fog UBO at binding=1 (Bundle A's shared layout), which conflicts
+        // with dual_texture3d's 2-sampler descriptor set layout (fog UBO here is at binding=2).
+        VkShaderModule vert = CreateShaderModule(kDualTexture3dVertSpv,  kDualTexture3dVertSpv_size);
         VkShaderModule frag = CreateShaderModule(kDualTexture3dFragSpv,  kDualTexture3dFragSpv_size);
 
         VkVertexInputBindingDescription bind{ 0, kDualStride, VK_VERTEX_INPUT_RATE_VERTEX };
@@ -3544,13 +3603,20 @@ namespace CNA::Internal::Backends::Vulkan
         return pipe;
     }
 
-    // ---- SkinnedEffect resources (Task 109) ----
+    // ---- BasicEffect fog bundle (Task 899): colored3d / textured3d / colored_textured3d ----
+    //
+    // These 3 pipelines share the exact same fully-packed 128-byte FillExtPushConst() push
+    // constant (zero spare bytes for fog), so fog is forwarded via one small shared dynamic UBO
+    // instead -- mirroring descriptorSetLayoutLitTextured_'s exact shape (sampler@0 + dynamic
+    // UBO@1). colored3d's own shaders never sample a texture, but the layout still declares
+    // binding=0 so all three pipelines can share one descriptor-set-layout/pool/UBO/cache bundle;
+    // a fallback white texture is bound there for colored3d draws (same fallback pattern every
+    // other pipeline already uses when a slot has no real texture).
 
-    void VulkanGraphicsBackend::EnsureSkinnedResources()
+    void VulkanGraphicsBackend::EnsureFogTex3DResources()
     {
-        if (descriptorSetLayoutSkinned_ != VK_NULL_HANDLE) return;
+        if (descriptorSetLayoutFogTex3D_ != VK_NULL_HANDLE) return;
 
-        // binding=0: sampler2D (fragment), binding=1: bone UBO dynamic (vertex)
         VkDescriptorSetLayoutBinding bindings[2]{};
         bindings[0].binding         = 0;
         bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -3559,18 +3625,384 @@ namespace CNA::Internal::Backends::Vulkan
         bindings[1].binding         = 1;
         bindings[1].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT;
+        bindings[1].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
         VkDescriptorSetLayoutCreateInfo li{};
         li.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         li.bindingCount = 2; li.pBindings = bindings;
+        if (vkCreateDescriptorSetLayout(device_, &li, nullptr, &descriptorSetLayoutFogTex3D_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateDescriptorSetLayout (FogTex3D) failed");
+
+        const uint32_t maxSets = 512u * MaxFramesInFlight;
+        VkDescriptorPoolSize ps[2]{};
+        ps[0] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets };
+        ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
+        VkDescriptorPoolCreateInfo pi{};
+        pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pi.maxSets       = maxSets;
+        pi.poolSizeCount = 2; pi.pPoolSizes = ps;
+        if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPoolFogTex3D_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateDescriptorPool (FogTex3D) failed");
+
+        // Pipeline layout: same 128-byte PC as FillExtPushConst() (unchanged content/fill
+        // function) + the new fog descriptor set. Declared with both stages even though
+        // colored3d's own fragment shader never reads it -- Vulkan permits a pipeline layout to
+        // declare a stage-accessible range wider than what any specific attached shader reads.
+        VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
+        VkPipelineLayoutCreateInfo pli{};
+        pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
+        pli.setLayoutCount = 1; pli.pSetLayouts = &descriptorSetLayoutFogTex3D_;
+        if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayoutFogTex3D_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreatePipelineLayout (FogTex3D) failed");
+
+        const VkDeviceSize uboSize = kFogTex3DUBOStride * kFogTex3DUBOMaxDraws;
+        for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
+            if (fogTex3DUBO_[i] == VK_NULL_HANDLE) {
+                CreateBuffer(uboSize,
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    fogTex3DUBO_[i], fogTex3DUBOMem_[i], &fogTex3DUBOPtr_[i]);
+            }
+        }
+    }
+
+    VkDescriptorSet VulkanGraphicsBackend::GetOrCreateFogTex3DDescSet(
+        uint32_t frameIdx, VkImageView view2D)
+    {
+        EnsureFogTex3DResources();
+        if (view2D == VK_NULL_HANDLE) view2D = defaultWhiteView_;
+
+        const uint64_t key = reinterpret_cast<uint64_t>(view2D);
+        auto& cache = fogTex3DDescSets_[frameIdx];
+        auto it = cache.find(key);
+        if (it != cache.end()) return it->second;
+
+        VkDescriptorSetAllocateInfo ai{};
+        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        ai.descriptorPool     = descriptorPoolFogTex3D_;
+        ai.descriptorSetCount = 1;
+        ai.pSetLayouts        = &descriptorSetLayoutFogTex3D_;
+        VkDescriptorSet ds = VK_NULL_HANDLE;
+        if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
+            return VK_NULL_HANDLE;
+
+        VkDescriptorImageInfo imgInfo{ defaultSampler_, view2D, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+
+        VkDescriptorBufferInfo bufInfo{};
+        bufInfo.buffer = fogTex3DUBO_[frameIdx];
+        bufInfo.offset = 0;
+        bufInfo.range  = 32; // vec4 fogColorEnabled + vec4 fogStartEnd
+
+        VkWriteDescriptorSet writes[2]{};
+        writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[0].dstSet          = ds;
+        writes[0].dstBinding      = 0;
+        writes[0].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[0].descriptorCount = 1;
+        writes[0].pImageInfo      = &imgInfo;
+        writes[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[1].dstSet          = ds;
+        writes[1].dstBinding      = 1;
+        writes[1].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        writes[1].descriptorCount = 1;
+        writes[1].pBufferInfo     = &bufInfo;
+        vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+
+        cache[key] = ds;
+        return ds;
+    }
+
+    VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineFogColored3D(
+        VkPrimitiveTopology topo,
+        bool depthTest, bool depthWrite, bool blend, int cullMode,
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+    {
+        EnsureFogTex3DResources();
+
+        uint32_t key = Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        auto it = pipelinesFogColored3D_.find(key);
+        if (it != pipelinesFogColored3D_.end()) return it->second;
+
+        using namespace Shaders;
+        VkShaderModule vert = CreateShaderModule(kColored3dVertSpv, kColored3dVertSpv_size);
+        VkShaderModule frag = CreateShaderModule(kColored3dFragSpv, kColored3dFragSpv_size);
+
+        VkVertexInputBindingDescription bind{ 0, 16, VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[2]{};
+        attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };
+        attrs[1] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12 };
+
+        VkPipelineVertexInputStateCreateInfo vis{};
+        vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexAttributeDescriptionCount = 2; vis.pVertexAttributeDescriptions = attrs;
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                      VK_SHADER_STAGE_VERTEX_BIT,   vert, "main", nullptr };
+        stages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                      VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr };
+
+        VkPipelineInputAssemblyStateCreateInfo ias{};
+        ias.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ias.topology = topo;
+
+        VkPipelineViewportStateCreateInfo vpst{};
+        vpst.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vpst.viewportCount = 1; vpst.scissorCount = 1;
+
+        VkCullModeFlags vkCull = VK_CULL_MODE_NONE;
+        if (cullMode == 1) vkCull = VK_CULL_MODE_FRONT_BIT;
+        if (cullMode == 2) vkCull = VK_CULL_MODE_BACK_BIT;
+
+        VkPipelineRasterizationStateCreateInfo rs{};
+        rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.polygonMode = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+        rs.cullMode    = vkCull;
+        rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
+        rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;
+
+        VkPipelineMultisampleStateCreateInfo ms{};
+        ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineDepthStencilStateCreateInfo ds{};
+        ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
+        ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
+        ds.depthCompareOp   = VK_COMPARE_OP_LESS;
+
+        VkPipelineColorBlendAttachmentState cba{};
+        if (blend) {
+            cba.blendEnable         = VK_TRUE;
+            cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            cba.colorBlendOp        = VK_BLEND_OP_ADD;
+            cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            cba.alphaBlendOp        = VK_BLEND_OP_ADD;
+        }
+        cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
+            std::max(colorAttachmentCount, 1u), cba);
+
+        VkPipelineColorBlendStateCreateInfo cbs{};
+        cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cbs.attachmentCount = static_cast<uint32_t>(cbaVec.size());
+        cbs.pAttachments    = cbaVec.data();
+
+        VkDynamicState dynStates[] = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+            VK_DYNAMIC_STATE_DEPTH_BIAS,
+        };
+        VkPipelineDynamicStateCreateInfo dyn{};
+        dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dyn.dynamicStateCount = 4; dyn.pDynamicStates = dynStates;
+
+        VkGraphicsPipelineCreateInfo pci{};
+        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pci.stageCount          = 2; pci.pStages = stages;
+        pci.pVertexInputState   = &vis;
+        pci.pInputAssemblyState = &ias;
+        pci.pViewportState      = &vpst;
+        pci.pRasterizationState = &rs;
+        pci.pMultisampleState   = &ms;
+        pci.pDepthStencilState  = &ds;
+        pci.pColorBlendState    = &cbs;
+        pci.pDynamicState       = &dyn;
+        pci.layout              = pipelineLayoutFogTex3D_;
+        if (colorAttachmentCount <= 1)
+            pci.renderPass = (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
+        else
+            pci.renderPass = GetOrCreateMRTRenderPass(colorAttachmentCount);
+        pci.subpass             = 0;
+
+        VkPipeline p = VK_NULL_HANDLE;
+        if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &p) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateGraphicsPipelines (FogColored3D variant) failed");
+
+        vkDestroyShaderModule(device_, vert, nullptr);
+        vkDestroyShaderModule(device_, frag, nullptr);
+
+        pipelinesFogColored3D_[key] = p;
+        return p;
+    }
+
+    VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineFogTex3D(
+        std::size_t stride, VkPrimitiveTopology topo,
+        bool depthTest, bool depthWrite, bool blend, int cullMode,
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+    {
+        EnsureFogTex3DResources();
+
+        uint64_t key = MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        auto it = pipelinesFogTex3D_.find(key);
+        if (it != pipelinesFogTex3D_.end()) return it->second;
+
+        using namespace Shaders;
+        const uint32_t* vertSpv = nullptr; size_t vertSpvSize = 0;
+        const uint32_t* fragSpv = nullptr; size_t fragSpvSize = 0;
+        if (stride == 24) {
+            vertSpv = kColoredTextured3dVertSpv;  vertSpvSize = kColoredTextured3dVertSpv_size;
+            fragSpv = kColoredTextured3dFragSpv;  fragSpvSize = kColoredTextured3dFragSpv_size;
+        } else {
+            vertSpv = kTextured3dVertSpv;         vertSpvSize = kTextured3dVertSpv_size;
+            fragSpv = kTextured3dFragSpv;         fragSpvSize = kTextured3dFragSpv_size;
+        }
+        VkShaderModule vert = CreateShaderModule(vertSpv, vertSpvSize);
+        VkShaderModule frag = CreateShaderModule(fragSpv, fragSpvSize);
+
+        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[3]{};
+        uint32_t attrCount = 0;
+        if (stride == 24) {
+            // float3 pos + ubyte4 color + float2 uv
+            attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
+            attrs[1] = {1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12};
+            attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT,    16};
+            attrCount = 3;
+        } else {
+            // float3 pos + float2 uv (stride 20)
+            attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
+            attrs[1] = {1, 0, VK_FORMAT_R32G32_SFLOAT,    12};
+            attrCount = 2;
+        }
+
+        VkPipelineVertexInputStateCreateInfo vis{};
+        vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                     VK_SHADER_STAGE_VERTEX_BIT,   vert, "main", nullptr};
+        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                     VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr};
+
+        VkPipelineInputAssemblyStateCreateInfo ias{};
+        ias.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ias.topology = topo;
+
+        VkPipelineViewportStateCreateInfo vpst{};
+        vpst.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vpst.viewportCount = 1; vpst.scissorCount = 1;
+
+        VkCullModeFlags vkCull = VK_CULL_MODE_NONE;
+        if (cullMode == 1) vkCull = VK_CULL_MODE_FRONT_BIT;
+        if (cullMode == 2) vkCull = VK_CULL_MODE_BACK_BIT;
+
+        VkPipelineRasterizationStateCreateInfo rs{};
+        rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.polygonMode = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+        rs.cullMode    = vkCull;
+        rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
+        rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;
+
+        VkPipelineMultisampleStateCreateInfo ms{};
+        ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineDepthStencilStateCreateInfo ds{};
+        ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
+        ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
+        ds.depthCompareOp   = VK_COMPARE_OP_LESS;
+
+        VkPipelineColorBlendAttachmentState cba{};
+        if (blend) {
+            cba.blendEnable         = VK_TRUE;
+            cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            cba.colorBlendOp        = VK_BLEND_OP_ADD;
+            cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            cba.alphaBlendOp        = VK_BLEND_OP_ADD;
+        }
+        cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
+            std::max(colorAttachmentCount, 1u), cba);
+
+        VkPipelineColorBlendStateCreateInfo cbs{};
+        cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cbs.attachmentCount = static_cast<uint32_t>(cbaVec.size());
+        cbs.pAttachments    = cbaVec.data();
+
+        VkDynamicState dynStates[] = {
+            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+            VK_DYNAMIC_STATE_DEPTH_BIAS,
+        };
+        VkPipelineDynamicStateCreateInfo dyn{};
+        dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dyn.dynamicStateCount = 4; dyn.pDynamicStates = dynStates;
+
+        VkGraphicsPipelineCreateInfo pci{};
+        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pci.stageCount          = 2; pci.pStages = stages;
+        pci.pVertexInputState   = &vis;
+        pci.pInputAssemblyState = &ias;
+        pci.pViewportState      = &vpst;
+        pci.pRasterizationState = &rs;
+        pci.pMultisampleState   = &ms;
+        pci.pDepthStencilState  = &ds;
+        pci.pColorBlendState    = &cbs;
+        pci.pDynamicState       = &dyn;
+        pci.layout              = pipelineLayoutFogTex3D_;
+        pci.renderPass = (colorAttachmentCount <= 1)
+                         ? renderPass_
+                         : GetOrCreateMRTRenderPass(colorAttachmentCount);
+        pci.subpass = 0;
+
+        VkPipeline p = VK_NULL_HANDLE;
+        if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &p) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateGraphicsPipelines (FogTex3D variant) failed");
+
+        vkDestroyShaderModule(device_, vert, nullptr);
+        vkDestroyShaderModule(device_, frag, nullptr);
+
+        pipelinesFogTex3D_[key] = p;
+        return p;
+    }
+
+    // ---- SkinnedEffect resources (Task 109) ----
+
+    void VulkanGraphicsBackend::EnsureSkinnedResources()
+    {
+        if (descriptorSetLayoutSkinned_ != VK_NULL_HANDLE) return;
+
+        // binding=0: sampler2D (fragment), binding=1: bone UBO dynamic (vertex),
+        // binding=2: fog UBO dynamic (Task 899 -- BoneBlock has zero spare capacity, so fog gets
+        // its own small dedicated dynamic UBO instead of being packed alongside the bones).
+        VkDescriptorSetLayoutBinding bindings[3]{};
+        bindings[0].binding         = 0;
+        bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings[1].binding         = 1;
+        bindings[1].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT;
+        bindings[2].binding         = 2;
+        bindings[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutCreateInfo li{};
+        li.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        li.bindingCount = 3; li.pBindings = bindings;
         if (vkCreateDescriptorSetLayout(device_, &li, nullptr, &descriptorSetLayoutSkinned_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateDescriptorSetLayout (Skinned) failed");
 
         const uint32_t maxSets = 128u * MaxFramesInFlight;
         VkDescriptorPoolSize ps[2]{};
         ps[0] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets };
-        ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
+        ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets * 2 }; // BoneBlock + fog
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         pi.maxSets       = maxSets;
@@ -3595,6 +4027,16 @@ namespace CNA::Internal::Backends::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     skinnedUBO_[i], skinnedUBOMem_[i], &skinnedUBOPtr_[i]);
+            }
+        }
+        // Per-frame fog UBO ring buffers (Task 899).
+        const VkDeviceSize fogUboSize = kSkinnedFogUBOStride * kSkinnedFogUBOMaxDraws;
+        for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
+            if (skinnedFogUBO_[i] == VK_NULL_HANDLE) {
+                CreateBuffer(fogUboSize,
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    skinnedFogUBO_[i], skinnedFogUBOMem_[i], &skinnedFogUBOPtr_[i]);
             }
         }
     }
@@ -3630,7 +4072,13 @@ namespace CNA::Internal::Backends::Vulkan
         bufInfo.offset = 0;
         bufInfo.range  = kSkinnedUBOStride;  // one bone palette block
 
-        VkWriteDescriptorSet writes[2]{};
+        // binding=2: dynamic fog UBO (Task 899).
+        VkDescriptorBufferInfo fogBufInfo{};
+        fogBufInfo.buffer = skinnedFogUBO_[frameIdx];
+        fogBufInfo.offset = 0;
+        fogBufInfo.range  = 32; // vec4 fogColorEnabled + vec4 fogStartEnd
+
+        VkWriteDescriptorSet writes[3]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[0].dstSet          = ds;
         writes[0].dstBinding      = 0;
@@ -3643,7 +4091,13 @@ namespace CNA::Internal::Backends::Vulkan
         writes[1].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         writes[1].descriptorCount = 1;
         writes[1].pBufferInfo     = &bufInfo;
-        vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+        writes[2].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[2].dstSet          = ds;
+        writes[2].dstBinding      = 2;
+        writes[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        writes[2].descriptorCount = 1;
+        writes[2].pBufferInfo     = &fogBufInfo;
+        vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
 
         cache[key] = ds;
         return ds;
@@ -3786,7 +4240,10 @@ namespace CNA::Internal::Backends::Vulkan
 
         using namespace Shaders;
         VkShaderModule vert = CreateShaderModule(kInstanced3dVertSpv, kInstanced3dVertSpv_size);
-        VkShaderModule frag = CreateShaderModule(kColored3dFragSpv,   kColored3dFragSpv_size);
+        // Task 899: dedicated FS (was: reuse kColored3dFragSpv) -- colored3d.frag.glsl now
+        // declares a 2nd descriptor binding (fog UBO) as part of the shared colored3d/textured3d/
+        // colored_textured3d bundle, incompatible with Instanced3D's unmodified 1-binding layout.
+        VkShaderModule frag = CreateShaderModule(kInstanced3dFragSpv, kInstanced3dFragSpv_size);
 
         // Two vertex bindings: binding=0 per-vertex (VERTEX rate), binding=1 per-instance (INSTANCE rate).
         constexpr uint32_t kInstStride = 64; // sizeof(mat4)
@@ -3892,166 +4349,15 @@ namespace CNA::Internal::Backends::Vulkan
         return pipe;
     }
 
-    VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineExt3D(
-        std::size_t stride, VkPrimitiveTopology topo,
-        bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
-    {
-        // Create layout once — 128-byte push constants + descriptor set for texture.
-        if (pipelineLayoutExt3D_ == VK_NULL_HANDLE) {
-            VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
-            VkPipelineLayoutCreateInfo pli{};
-            pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-            pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
-            pli.setLayoutCount = 1; pli.pSetLayouts = &descriptorSetLayout_;
-            if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayoutExt3D_) != VK_SUCCESS)
-                throw std::runtime_error("vkCreatePipelineLayout (Ext3D) failed");
-        }
-
-        uint64_t key = MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
-        auto it = pipelinesExt3D_.find(key);
-        if (it != pipelinesExt3D_.end()) return it->second;
-
-        using namespace Shaders;
-        const uint32_t* vertSpv = nullptr; size_t vertSpvSize = 0;
-        const uint32_t* fragSpv = nullptr; size_t fragSpvSize = 0;
-        switch (stride) {
-        case 20:
-            vertSpv = kTextured3dVertSpv;         vertSpvSize = kTextured3dVertSpv_size;
-            fragSpv = kTextured3dFragSpv;         fragSpvSize = kTextured3dFragSpv_size;
-            break;
-        case 24:
-            vertSpv = kColoredTextured3dVertSpv;  vertSpvSize = kColoredTextured3dVertSpv_size;
-            fragSpv = kColoredTextured3dFragSpv;  fragSpvSize = kColoredTextured3dFragSpv_size;
-            break;
-        case 32:
-        default:
-            vertSpv = kLitTextured3dVertSpv;      vertSpvSize = kLitTextured3dVertSpv_size;
-            fragSpv = kLitTextured3dFragSpv;      fragSpvSize = kLitTextured3dFragSpv_size;
-            break;
-        }
-        VkShaderModule vert = CreateShaderModule(vertSpv, vertSpvSize);
-        VkShaderModule frag = CreateShaderModule(fragSpv, fragSpvSize);
-
-        // Vertex input per stride.
-        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[3]{};
-        uint32_t attrCount = 0;
-        if (stride == 20) {
-            // float3 pos + float2 uv
-            attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
-            attrs[1] = {1, 0, VK_FORMAT_R32G32_SFLOAT,    12};
-            attrCount = 2;
-        } else if (stride == 24) {
-            // float3 pos + ubyte4 color + float2 uv
-            attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
-            attrs[1] = {1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12};
-            attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT,    16};
-            attrCount = 3;
-        } else {
-            // float3 pos + float3 normal + float2 uv (stride 32)
-            attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
-            attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12};
-            attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT,    24};
-            attrCount = 3;
-        }
-
-        VkPipelineVertexInputStateCreateInfo vis{};
-        vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
-
-        VkPipelineShaderStageCreateInfo stages[2]{};
-        stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-                     VK_SHADER_STAGE_VERTEX_BIT,   vert, "main", nullptr};
-        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-                     VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr};
-
-        VkPipelineInputAssemblyStateCreateInfo ias{};
-        ias.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        ias.topology = topo;
-
-        VkPipelineViewportStateCreateInfo vpst{};
-        vpst.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        vpst.viewportCount = 1; vpst.scissorCount = 1;
-
-        VkCullModeFlags vkCull = VK_CULL_MODE_NONE;
-        if (cullMode == 1) vkCull = VK_CULL_MODE_FRONT_BIT;
-        if (cullMode == 2) vkCull = VK_CULL_MODE_BACK_BIT;
-
-        VkPipelineRasterizationStateCreateInfo rs{};
-        rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rs.polygonMode = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
-        rs.cullMode    = vkCull;
-        rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
-        rs.lineWidth   = 1.f;
-        rs.depthBiasEnable = VK_TRUE;  // dynamic; values set via vkCmdSetDepthBias per draw
-
-        VkPipelineMultisampleStateCreateInfo ms{};
-        ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
-
-        VkPipelineDepthStencilStateCreateInfo ds{};
-        ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
-        ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        ds.depthCompareOp   = VK_COMPARE_OP_LESS;
-
-        VkPipelineColorBlendAttachmentState cba{};
-        if (blend) {
-            cba.blendEnable         = VK_TRUE;
-            cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            cba.colorBlendOp        = VK_BLEND_OP_ADD;
-            cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            cba.alphaBlendOp        = VK_BLEND_OP_ADD;
-        }
-        cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
-            std::max(colorAttachmentCount, 1u), cba);
-
-        VkPipelineColorBlendStateCreateInfo cbs{};
-        cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        cbs.attachmentCount = static_cast<uint32_t>(cbaVec.size());
-        cbs.pAttachments    = cbaVec.data();
-
-        VkDynamicState dynStates[] = {
-            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_BLEND_CONSTANTS,
-            VK_DYNAMIC_STATE_DEPTH_BIAS,
-        };
-        VkPipelineDynamicStateCreateInfo dyn{};
-        dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 4; dyn.pDynamicStates = dynStates;
-
-        VkGraphicsPipelineCreateInfo pci{};
-        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pci.stageCount          = 2; pci.pStages = stages;
-        pci.pVertexInputState   = &vis;
-        pci.pInputAssemblyState = &ias;
-        pci.pViewportState      = &vpst;
-        pci.pRasterizationState = &rs;
-        pci.pMultisampleState   = &ms;
-        pci.pDepthStencilState  = &ds;
-        pci.pColorBlendState    = &cbs;
-        pci.pDynamicState       = &dyn;
-        pci.layout              = pipelineLayoutExt3D_;
-        pci.renderPass = (colorAttachmentCount <= 1)
-                         ? renderPass_
-                         : GetOrCreateMRTRenderPass(colorAttachmentCount);
-        pci.subpass = 0;
-
-        VkPipeline p = VK_NULL_HANDLE;
-        if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &p) != VK_SUCCESS)
-            throw std::runtime_error("vkCreateGraphicsPipelines (Ext3D variant) failed");
-
-        vkDestroyShaderModule(device_, vert, nullptr);
-        vkDestroyShaderModule(device_, frag, nullptr);
-
-        pipelinesExt3D_[key] = p;
-        return p;
-    }
+    // Task 899: GetOrCreatePipelineExt3D (textured3d/colored_textured3d via the OLD, plain
+    // pipelineLayoutExt3D_/descriptorSetLayout_) was removed here -- BasicEffect draws for
+    // stride 20/24 now exclusively use GetOrCreatePipelineFogTex3D (the new fog-capable bundle)
+    // instead, so this function had become unreachable dead code, AND would have failed
+    // vkCreateGraphicsPipelines validation if ever called (its shaders -- kTextured3dVertSpv/
+    // kColoredTextured3dVertSpv -- now declare a 2nd descriptor binding for fog that
+    // pipelineLayoutExt3D_'s original 1-binding descriptorSetLayout_ does not provide).
+    // pipelineLayoutExt3D_/descriptorSetLayout_ themselves are unchanged and still used by
+    // Instanced3D and 2D SpriteBatch, per this task's explicit requirement.
 
     // =========================================================================
     // Memory / resource helpers
@@ -4285,6 +4591,9 @@ namespace CNA::Internal::Backends::Vulkan
         uint32_t envMapUBOSlot  = 0;
         uint32_t skinnedUBOSlot = 0;
         uint32_t litTexturedUBOSlot = 0;
+        uint32_t fogTex3DUBOSlot    = 0; // Task 899: colored3d/textured3d/colored_textured3d
+        uint32_t dualTexFogUBOSlot  = 0; // Task 899: DualTextureEffect
+        uint32_t skinnedFogUBOSlot  = 0; // Task 899: SkinnedEffect
 
         // Helper: draw all pending 3D draws for a specific RT into the current render pass.
         auto draw3DFor = [&](VulkanRTSource* targetRT)
@@ -4349,10 +4658,18 @@ namespace CNA::Internal::Backends::Vulkan
                     pipe = GetOrCreatePipelineLitTextured3D(draw.topology,
                                                             draw.depthTest, draw.depthWrite,
                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
-                } else if (draw.useExtParams) {
-                    pipe = GetOrCreatePipelineExt3D(draw.stride, draw.topology,
-                                                    draw.depthTest, draw.depthWrite,
-                                                    draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
+                } else if (draw.useFogTex3D) {
+                    // Task 899: colored3d (stride 16) / textured3d (20) / colored_textured3d (24)
+                    // fog-capable bundle. The legacy no-GpuDrawParams DrawColoredPrimitives()
+                    // path never sets useFogTex3D, so it still falls to the plain colored3d
+                    // pipeline below.
+                    pipe = (draw.stride == 16)
+                           ? GetOrCreatePipelineFogColored3D(draw.topology,
+                                                             draw.depthTest, draw.depthWrite,
+                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa)
+                           : GetOrCreatePipelineFogTex3D(draw.stride, draw.topology,
+                                                         draw.depthTest, draw.depthWrite,
+                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
                 } else {
                     pipe = GetOrCreatePipeline3D(draw.topology,
                                                  draw.depthTest, draw.depthWrite,
@@ -4378,11 +4695,20 @@ namespace CNA::Internal::Backends::Vulkan
                     vkCmdPushConstants(cb, pipelineLayoutDualTex3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                        0, 128, draw.pushConst);
-                    VkDescriptorSet ds = (draw.dualTexDescSet != VK_NULL_HANDLE)
-                                         ? draw.dualTexDescSet : defaultWhiteDescSet_;
-                    if (ds != VK_NULL_HANDLE)
+                    // Task 899: dualTexDescSet's layout now has a 3rd binding (dynamic fog UBO),
+                    // so no defaultWhiteDescSet_ fallback here anymore (that set belongs to the
+                    // structurally-incompatible 1-binding descriptorSetLayout_).
+                    if (draw.dualTexDescSet != VK_NULL_HANDLE && dualTexFogUBOPtr_[currentFrame_]) {
+                        const uint32_t slot   = dualTexFogUBOSlot++;
+                        const uint32_t uboOff = slot * kDualTexFogUBOStride;
+                        if (uboOff + 32 <= kDualTexFogUBOStride * kDualTexFogUBOMaxDraws) {
+                            std::memcpy(static_cast<uint8_t*>(dualTexFogUBOPtr_[currentFrame_]) + uboOff,
+                                        draw.dualTexFogUboData, 32);
+                        }
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                                pipelineLayoutDualTex3D_, 0, 1, &ds, 0, nullptr);
+                                                pipelineLayoutDualTex3D_, 0, 1,
+                                                &draw.dualTexDescSet, 1, &uboOff);
+                    }
                 } else if (draw.useEnvMap) {
                     vkCmdPushConstants(cb, pipelineLayoutEnvMap3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -4404,16 +4730,29 @@ namespace CNA::Internal::Backends::Vulkan
                                        0, 128, draw.pushConst);
                     if (draw.skinnedDescSet != VK_NULL_HANDLE && skinnedUBOPtr_[currentFrame_]
                         && !draw.boneMatrices.empty()) {
-                        const uint32_t slot   = skinnedUBOSlot++;
-                        const uint32_t uboOff = slot * kSkinnedUBOStride;
-                        if (uboOff + kSkinnedUBOStride <= kSkinnedUBOStride * kSkinnedUBOMaxDraws) {
-                            std::memcpy(static_cast<uint8_t*>(skinnedUBOPtr_[currentFrame_]) + uboOff,
+                        const uint32_t boneSlot = skinnedUBOSlot++;
+                        const uint32_t boneOff  = boneSlot * kSkinnedUBOStride;
+                        if (boneOff + kSkinnedUBOStride <= kSkinnedUBOStride * kSkinnedUBOMaxDraws) {
+                            std::memcpy(static_cast<uint8_t*>(skinnedUBOPtr_[currentFrame_]) + boneOff,
                                         draw.boneMatrices.data(),
                                         draw.boneMatrices.size() * sizeof(float));
                         }
+                        // Task 899: 2nd dynamic UBO (fog, binding=2). vkCmdBindDescriptorSets'
+                        // pDynamicOffsets are consumed in ascending-binding-number order of the
+                        // set's dynamic bindings, i.e. [BoneBlock@1, FogParams@2].
+                        uint32_t fogOff = 0;
+                        if (skinnedFogUBOPtr_[currentFrame_]) {
+                            const uint32_t fogSlot = skinnedFogUBOSlot++;
+                            fogOff = fogSlot * kSkinnedFogUBOStride;
+                            if (fogOff + 32 <= kSkinnedFogUBOStride * kSkinnedFogUBOMaxDraws) {
+                                std::memcpy(static_cast<uint8_t*>(skinnedFogUBOPtr_[currentFrame_]) + fogOff,
+                                            draw.skinnedFogUboData, 32);
+                            }
+                        }
+                        const uint32_t dynOffsets[2] = { boneOff, fogOff };
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 pipelineLayoutSkinned3D_, 0, 1,
-                                                &draw.skinnedDescSet, 1, &uboOff);
+                                                &draw.skinnedDescSet, 2, dynOffsets);
                     }
                 } else if (draw.useInstanced) {
                     vkCmdPushConstants(cb, pipelineLayoutExt3D_,
@@ -4423,10 +4762,10 @@ namespace CNA::Internal::Backends::Vulkan
                     vkCmdPushConstants(cb, pipelineLayoutLitTextured3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                        0, 128, draw.pushConst);
-                    // No defaultWhiteDescSet_ fallback here (unlike useExtParams/useAlphaTest/
-                    // useDualTexture) -- that set belongs to the simple 1-binding
-                    // descriptorSetLayout_, structurally incompatible with this pipeline's
-                    // 2-binding (sampler+UBO) layout. Mirrors useEnvMap/useSkinned's own pattern.
+                    // No defaultWhiteDescSet_ fallback here (unlike useAlphaTest) -- that set
+                    // belongs to the simple 1-binding descriptorSetLayout_, structurally
+                    // incompatible with this pipeline's 2-binding (sampler+UBO) layout. Mirrors
+                    // useEnvMap/useSkinned/useDualTexture/useFogTex3D's own pattern.
                     if (draw.litTexturedDescSet != VK_NULL_HANDLE && litTexturedUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = litTexturedUBOSlot++;
                         const uint32_t uboOff = slot * kLitTexturedUBOStride;
@@ -4438,15 +4777,25 @@ namespace CNA::Internal::Backends::Vulkan
                                                 pipelineLayoutLitTextured3D_, 0, 1,
                                                 &draw.litTexturedDescSet, 1, &uboOff);
                     }
-                } else if (draw.useExtParams) {
-                    vkCmdPushConstants(cb, pipelineLayoutExt3D_,
+                } else if (draw.useFogTex3D) {
+                    vkCmdPushConstants(cb, pipelineLayoutFogTex3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                        0, 128, draw.pushConst);
-                    VkDescriptorSet ds = (draw.descSet != VK_NULL_HANDLE)
-                                         ? draw.descSet : defaultWhiteDescSet_;
-                    if (ds != VK_NULL_HANDLE)
+                    // No defaultWhiteDescSet_ fallback here -- that set belongs to the
+                    // structurally-incompatible 1-binding descriptorSetLayout_ (mirrors
+                    // useLitTextured/useSkinned/useDualTexture's own pattern); the fallback
+                    // white texture is already substituted inside GetOrCreateFogTex3DDescSet.
+                    if (draw.fogTex3DDescSet != VK_NULL_HANDLE && fogTex3DUBOPtr_[currentFrame_]) {
+                        const uint32_t slot   = fogTex3DUBOSlot++;
+                        const uint32_t uboOff = slot * kFogTex3DUBOStride;
+                        if (uboOff + 32 <= kFogTex3DUBOStride * kFogTex3DUBOMaxDraws) {
+                            std::memcpy(static_cast<uint8_t*>(fogTex3DUBOPtr_[currentFrame_]) + uboOff,
+                                        draw.fogTex3DUboData, 32);
+                        }
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                                pipelineLayoutExt3D_, 0, 1, &ds, 0, nullptr);
+                                                pipelineLayoutFogTex3D_, 0, 1,
+                                                &draw.fogTex3DDescSet, 1, &uboOff);
+                    }
                 } else {
                     // 128 bytes: see pipelineLayout3D_ creation comment (Task 364) — draw.pushConst
                     // already holds diffuseColor/vertexColorEnabled at the same float offsets
@@ -5017,10 +5366,11 @@ namespace CNA::Internal::Backends::Vulkan
         d.indexType      = VK_INDEX_TYPE_UINT16;
         d.rt             = currentRT_;
         d.stride         = stride;
-        // stride==16 (VertexPositionColor) uses the colored3d pipeline (GetOrCreatePipeline3D)
-        // which expects only 64-byte MVP push constants; Ext pipeline doesn't handle stride=16.
-        d.useExtParams   = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned
-                         && !needsLitTextured && stride != 16;
+        // Task 899: all BasicEffect draws that reach neither alpha-test/dual-tex/env-map/skinned
+        // nor lit-textured (stride 16/20/24) now route through the fog-capable colored3d/
+        // textured3d/colored_textured3d bundle instead of the old zero-fog pipelines.
+        d.useFogTex3D    = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned
+                         && !needsLitTextured;
         d.useDualTexture = needsDualTex;
         d.useSkinned     = needsSkinned;
         d.useLitTextured = needsLitTextured;
@@ -5031,6 +5381,10 @@ namespace CNA::Internal::Backends::Vulkan
             d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d);
             const int count = std::min(params.boneCount, 72);
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
+            d.skinnedFogUboData[0] = params.fogColor[0]; d.skinnedFogUboData[1] = params.fogColor[1];
+            d.skinnedFogUboData[2] = params.fogColor[2]; d.skinnedFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
+            d.skinnedFogUboData[4] = params.fogStart; d.skinnedFogUboData[5] = params.fogEnd;
+            d.skinnedFogUboData[6] = 0.f; d.skinnedFogUboData[7] = 0.f;
         } else if (needsEnvMap) {
             EnsureEnvMapResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -5059,7 +5413,11 @@ namespace CNA::Internal::Backends::Vulkan
             const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
             VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
             VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
-            d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1, slotSamplers_[0], slotSamplers_[1]);
+            d.dualTexDescSet = GetOrCreateDualTexDescSet(currentFrame_, v0, v1, slotSamplers_[0], slotSamplers_[1]);
+            d.dualTexFogUboData[0] = params.fogColor[0]; d.dualTexFogUboData[1] = params.fogColor[1];
+            d.dualTexFogUboData[2] = params.fogColor[2]; d.dualTexFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
+            d.dualTexFogUboData[4] = params.fogStart; d.dualTexFogUboData[5] = params.fogEnd;
+            d.dualTexFogUboData[6] = 0.f; d.dualTexFogUboData[7] = 0.f;
         } else if (needsLitTextured) {
             EnsureLitTexturedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -5095,9 +5453,20 @@ namespace CNA::Internal::Backends::Vulkan
             d.litUboData[60] = params.fogStart; d.litUboData[61] = params.fogEnd;
             d.litUboData[62] = 0.f; d.litUboData[63] = 0.f;
         } else {
+            // Shared fallback fill: reached both by alpha-test draws (whose pipeline also uses
+            // the plain single-sampler descriptorSetLayout_/d.descSet) and, when !needsAlphaTest,
+            // by the colored3d/textured3d/colored_textured3d fog-capable bundle (Task 899).
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
             d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
+            if (d.useFogTex3D) {
+                EnsureFogTex3DResources();
+                d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view);
+                d.fogTex3DUboData[0] = params.fogColor[0]; d.fogTex3DUboData[1] = params.fogColor[1];
+                d.fogTex3DUboData[2] = params.fogColor[2]; d.fogTex3DUboData[3] = params.fogEnabled ? 1.f : 0.f;
+                d.fogTex3DUboData[4] = params.fogStart; d.fogTex3DUboData[5] = params.fogEnd;
+                d.fogTex3DUboData[6] = 0.f; d.fogTex3DUboData[7] = 0.f;
+            }
         }
         pending3D_.push_back(std::move(d));
     }
@@ -5155,8 +5524,9 @@ namespace CNA::Internal::Backends::Vulkan
         d.indexType     = ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
         d.rt            = currentRT_;
         d.stride        = stride;
-        d.useExtParams  = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned
-                        && !needsLitTextured && stride != 16;
+        // Task 899: see DrawPrimitivesEx's identical comment above.
+        d.useFogTex3D   = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned
+                        && !needsLitTextured;
         d.useDualTexture = needsDualTex;
         d.useSkinned     = needsSkinned;
         d.useLitTextured = needsLitTextured;
@@ -5167,6 +5537,10 @@ namespace CNA::Internal::Backends::Vulkan
             d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d);
             const int count = std::min(params.boneCount, 72);
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
+            d.skinnedFogUboData[0] = params.fogColor[0]; d.skinnedFogUboData[1] = params.fogColor[1];
+            d.skinnedFogUboData[2] = params.fogColor[2]; d.skinnedFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
+            d.skinnedFogUboData[4] = params.fogStart; d.skinnedFogUboData[5] = params.fogEnd;
+            d.skinnedFogUboData[6] = 0.f; d.skinnedFogUboData[7] = 0.f;
         } else if (needsEnvMap) {
             EnsureEnvMapResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -5194,7 +5568,11 @@ namespace CNA::Internal::Backends::Vulkan
             const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
             VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
             VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
-            d.dualTexDescSet = GetOrCreateDualTexDescSet(v0, v1, slotSamplers_[0], slotSamplers_[1]);
+            d.dualTexDescSet = GetOrCreateDualTexDescSet(currentFrame_, v0, v1, slotSamplers_[0], slotSamplers_[1]);
+            d.dualTexFogUboData[0] = params.fogColor[0]; d.dualTexFogUboData[1] = params.fogColor[1];
+            d.dualTexFogUboData[2] = params.fogColor[2]; d.dualTexFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
+            d.dualTexFogUboData[4] = params.fogStart; d.dualTexFogUboData[5] = params.fogEnd;
+            d.dualTexFogUboData[6] = 0.f; d.dualTexFogUboData[7] = 0.f;
         } else if (needsLitTextured) {
             EnsureLitTexturedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -5228,9 +5606,20 @@ namespace CNA::Internal::Backends::Vulkan
             d.litUboData[60] = params.fogStart; d.litUboData[61] = params.fogEnd;
             d.litUboData[62] = 0.f; d.litUboData[63] = 0.f;
         } else {
+            // Shared fallback fill: reached both by alpha-test draws (whose pipeline also uses
+            // the plain single-sampler descriptorSetLayout_/d.descSet) and, when !needsAlphaTest,
+            // by the colored3d/textured3d/colored_textured3d fog-capable bundle (Task 899).
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
             d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
+            if (d.useFogTex3D) {
+                EnsureFogTex3DResources();
+                d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view);
+                d.fogTex3DUboData[0] = params.fogColor[0]; d.fogTex3DUboData[1] = params.fogColor[1];
+                d.fogTex3DUboData[2] = params.fogColor[2]; d.fogTex3DUboData[3] = params.fogEnabled ? 1.f : 0.f;
+                d.fogTex3DUboData[4] = params.fogStart; d.fogTex3DUboData[5] = params.fogEnd;
+                d.fogTex3DUboData[6] = 0.f; d.fogTex3DUboData[7] = 0.f;
+            }
         }
         pending3D_.push_back(std::move(d));
     }
