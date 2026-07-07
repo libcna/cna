@@ -178,6 +178,47 @@ new observations, not already-covered ground.
   **No code change needed** — already correct and already tested under the Xbox-360-reference
   decision.
 
+- [x] **Task 1.4** — `PropertyDictionary::CopyTo` (`PropertyDictionary.cpp:188`) always throws
+  `System::NotImplementedException`. Initially misdiagnosed (from a grep hit alone) as a silent
+  no-op bug and nearly "fixed" to implement real copy semantics from scratch. **Caught before
+  landing**: the fix was implemented, then reverted after checking the actual FNA reference
+  source directly — `FNA.NetStub/src/GamerServices/PropertyDictionary.cs:236-239` confirms real
+  FNA genuinely throws `NotImplementedException` for this exact member. The prior pass's own
+  `plan_net_20260707.md` Task 8.1 had already verified this same fact when it first added this
+  method (quote: "`CopyTo` (always throws `System::NotImplementedException`, matching FNA's own
+  unimplemented stub exactly)"). **Conclusion: no code change needed** — already correct,
+  deliberate FNA fidelity, same class of finding as Tasks 1.2/1.3. `PropertyDictionary.hpp`/`.cpp`
+  confirmed reverted to their exact original committed state (`git diff` empty) before moving on.
+  **Process lesson applied for the rest of this plan**: before treating any grep hit
+  (`NotImplementedException`/`NotSupportedException`/stub/etc.) as a bug, check the real FNA
+  reference source first (`/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/...` for
+  GamerServices, `/rv/data/library/github.com/FNA-XNA/FNA/...` for Net) — a throw can be
+  deliberate, verified fidelity rather than an unfinished stub, and the archived
+  `plan_net_20260707.md` already contains extensive prior verification worth searching first.
+
+- [ ] **Task 1.5** — `AvatarRenderer::Draw(IAvatarAnimation* animation)`
+  (`src/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.cpp:101-105`) dereferences
+  `animation->getExpressionProperty()` with **no null check** — a null `animation` is undefined
+  behavior (crash), not a clean exception. Every sibling method on this same class
+  (`EnableRealRenderingEXT`, `DrawRealEXT`, `getStateProperty`, `getBindPoseProperty`, `Dispose`)
+  already throws `ObjectDisposedException` consistently — this is the one gap in an otherwise
+  consistent validation pattern. Found by a separate read-only Avatar-area inventory pass, not
+  reflected in this plan until now.
+  - [ ] Add a null check: throw `System::ArgumentNullException("animation")` if null, matching
+    the null-argument convention used elsewhere in this codebase.
+  - [ ] Add a test: `Draw(nullptr)` throws `ArgumentNullException` instead of crashing.
+  - [ ] Verify via revert-verify-restore.
+
+- [ ] **Task 1.6** — `AvatarRenderer::EnableRealRenderingEXT(GraphicsDevice&,
+  shared_ptr<SkinnedModelEXT> model)` (`AvatarRenderer.cpp:121-134`) does not validate `model` is
+  non-null before storing it — a null model surfaces as a crash later, inside `DrawRealEXT`, not
+  at the actual call site that passed the bad argument. Same source as Task 1.5's finding.
+  - [ ] Add a null check: throw `System::ArgumentNullException("model")` if `model` is null/empty,
+    at the point of assignment.
+  - [ ] Add a test: `EnableRealRenderingEXT(device, nullptr)` throws `ArgumentNullException`
+    immediately instead of deferring the crash to a later `DrawRealEXT` call.
+  - [ ] Verify via revert-verify-restore.
+
 ---
 
 ## Phase 2 — NetworkSession lifecycle safety (confirmed real bug)
@@ -559,11 +600,25 @@ Per decision 5c, rolled out to **all** avatar-related demos (Phase 0 found 8:
 `demo_avatar_wardrobe_hotswap`, `demo_net_avatar_sync` — re-confirm this list at execution time in
 case more exist).
 
-- [ ] **Task 8.1** — Design a small **demo-only** shared helper (per `CLAUDE.md`/meta-prompt
-  guidance: "keep demo-only helpers in examples, not public API" — do not add this to CNA's
-  public API surface). Likely home: a shared header/source under `examples/common/` or similar if
-  that convention already exists (check first), otherwise a new small shared location scoped to
-  avatar demos only.
+- [ ] **Task 8.1** — Reuse the already-established pattern instead of designing a new one. A
+  `MakeSimpleFont(GraphicsDevice&)` helper (builds a `SpriteFont` from a runtime-generated
+  1×1-pixel-atlas `Texture2D`, no font asset files needed) plus a white-pixel `Texture2D` and
+  `spriteBatch_->Draw(*whitePixel_, Rectangle(...), color)` for translucent rectangles is
+  **already duplicated verbatim across 11 existing demos** (`demo_achievement_showcase`,
+  `demo_gamerservices_dispatcher_watchdog`, `demo_gamerservices_signin_presence`,
+  `demo_leaderboard_viewer`, `demo_gamer_roster_hud`, `demo_avatar_multi_attach_stress`,
+  `demo_simulated_network_conditions`, `demo_net_client_server_arena`, `demo_session_browser`,
+  `demo_gamer_profile_privileges`, `demo_friends_and_gamercard`) — confirmed by a separate
+  read-only Avatar-area inventory pass. **No shared `examples/common/` header exists**; the
+  established convention in this codebase is per-demo copy-paste, not a shared library.
+  **Default: follow the established convention** — copy the pattern from the cleanest reference
+  copy (`demo_gamer_roster_hud/src/RosterGame.cpp:28-45`) into each avatar demo that doesn't
+  already have it, rather than introducing a new shared `examples/common/` header this pass (a
+  real refactor opportunity, but out of scope here — it would touch 11 demos unrelated to this
+  plan's remit; note it as a possible future cleanup in Phase 9's docs instead of doing it now).
+  `demo_avatar_appearance_tint_studio` and `demo_avatar_multi_attach_stress` already have this
+  plumbing — they only need the F1 toggle + overlay draw logic added on top, not the base
+  SpriteBatch/font/texture setup.
 - [ ] **Task 8.2** — Implement: F1 (`Keys::F1`, confirm it exists in the existing `Keys` enum)
   toggles overlay visibility; draws the 3D scene first, then the 2D overlay on top via
   `SpriteBatch`; translucent white rectangle behind black text (decision 5d); uses the default
