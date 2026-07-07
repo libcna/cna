@@ -3547,6 +3547,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 335/912: RenderTarget2D depth buffer is real and functional (Bgfx) -- shared with
+    # EasyGL/Vulkan's registrations of the same file; needed the retry-until-non-black convention
+    # added to the shared test first (see that file's header comment).
+    cna_bgfx_test(cna_test_bgfx_rendertarget2d_depth
+                  examples/rendertarget2d_depth_test.cpp)
+    add_test(NAME Bgfx_RenderTarget2D_DepthBuffer
+             COMMAND cna_test_bgfx_rendertarget2d_depth)
+    set_tests_properties(Bgfx_RenderTarget2D_DepthBuffer PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding (Bgfx)
     cna_bgfx_test(cna_test_bgfx_render_target_cube_sample
                   examples/bgfx_render_target_cube_sample_test.cpp)

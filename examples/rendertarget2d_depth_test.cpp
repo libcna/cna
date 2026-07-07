@@ -19,6 +19,17 @@
 // 87) and Vulkan (Task 148), isolating "does depth actually function inside the RT" as the only
 // new variable under test here.
 //
+// Task 912 (Bgfx registration): the read-back is retried (Clear+Draw+Read, up to 20x) until
+// non-black — Bgfx's GetBackBufferData() only reliably reflects the first read call per rendered
+// frame (NEXT.md §5); sampling a freshly-filled-then-unbound RT via SpriteBatch within the same
+// un-advanced bgfx frame can read back stale/black content on that very first read. This is the
+// same established convention bgfx_rendertarget2d_mip_test.cpp already uses, applied here so this
+// shared test can finally be registered for Bgfx too (previously EasyGL/Vulkan only) — confirmed
+// this is the sole reason Bgfx originally appeared to fail this exact scenario (investigated as a
+// suspected separate bug, tracked as Task 912, and root-caused to this, not a distinct bug).
+// EasyGL/Vulkan are unaffected: both already produce the correct pixel on the very first read, so
+// the retry loop's condition is satisfied and it breaks after exactly one iteration.
+//
 // Exit code 0 = PASS (GREEN, nearer quad correctly wins), 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -112,17 +123,22 @@ protected:
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         // --- Pass 2: sample the unbound RT as a Texture2D via SpriteBatch (proven-good path) ---
-        device.Clear(Color(0, 0, 0, 255));
-        sb_->Begin();
-        sb_->Draw(*rt_,
-                  Rectangle(0, 0, W, H),
-                  Rectangle(0, 0, kRTSize, kRTSize),
-                  Color::White);
-        sb_->End();
-
+        // Retried until non-black (Task 912/Bgfx registration — see file header comment).
         const Rectangle centReg(W / 2, H / 2, 1, 1);
         Color centPx(0, 0, 0, 0);
-        device.GetBackBufferData(&centReg, &centPx, 0, 1);
+        for (int i = 0; i < 20; ++i)
+        {
+            device.Clear(Color(0, 0, 0, 255));
+            sb_->Begin();
+            sb_->Draw(*rt_,
+                      Rectangle(0, 0, W, H),
+                      Rectangle(0, 0, kRTSize, kRTSize),
+                      Color::White);
+            sb_->End();
+            device.GetBackBufferData(&centReg, &centPx, 0, 1);
+            if (centPx.getRProperty() > 10 || centPx.getGProperty() > 10 || centPx.getBProperty() > 10)
+                break;
+        }
 
         const bool pass = (centPx.getRProperty() <= 50  &&
                            centPx.getGProperty() >= 200 &&

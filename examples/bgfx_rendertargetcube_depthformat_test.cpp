@@ -9,12 +9,15 @@
 // quad (z=0.2) then a far RED quad (z=0.8) at the same screen position into the PositiveZ face,
 // with DepthStencilState::Default (depth test+write, LessEqual) enabled, and read the face back
 // DIRECTLY while it is still bound (GetBackBufferData reads whatever framebuffer is currently
-// active). Deliberately does NOT sample the RenderTargetCube back out via EnvironmentMapEffect
-// after unbinding -- that path was found to be independently broken for ANY 3D depth-tested draw
-// into ANY Bgfx render target (2D or cube), confirmed by running the existing, unmodified
-// rendertarget2d_depth_test.cpp against this backend; tracked separately as Task 912, out of
-// scope for this task (which is specifically about depth *format* selection, not this deeper
-// sample-after-unbind gap).
+// active), rather than unbinding and sampling it back out via EnvironmentMapEffect. Investigated
+// as a suspected separate bug (originally tracked as Task 912) and root-caused: sampling a
+// freshly-filled-then-unbound render target via SpriteBatch in the same un-advanced bgfx frame can
+// read back stale/black content on its first GetBackBufferData call -- the SAME already-documented
+// "Bgfx's GetBackBufferData() only reliably reflects the first read call per rendered frame" quirk
+// (NEXT.md §5), not a distinct bug. The established retry-until-non-black convention (see
+// rendertarget2d_depth_test.cpp, now Bgfx-registered too) fixes it completely; this test predates
+// that fix and keeps the simpler direct-while-bound read since it's sufficient for what Task 877
+// needs to prove.
 // Confirmed via debug instrumentation that the fix itself is structurally correct: DepthFormat::
 // None yields numAttachments=1 with an invalid depthTex handle (no attachment created at all),
 // while Depth24Stencil8 yields numAttachments=2 with a real depthTex handle attached. However,
