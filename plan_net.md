@@ -1401,12 +1401,35 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   pass promptly (~50ms each). Full suite: **3302/3304 passing** (2 expected accelerometer/
   gyroscope skips), no regressions.
 
-- [ ] **Task 7.2** — Audit every other `SignedInGamer` `Begin*` method (`BeginGetFriends`,
+- [x] **Task 7.2** — Audit every other `SignedInGamer` `Begin*` method (`BeginGetFriends`,
   `BeginGetProfile`, and any others in the same file) for the identical "never marks itself
   completed" pattern found in Task 7.1 — Task 7.1's fix was scoped to `GetAchievements` specifically,
   but the same root cause (an async action never calling `setIsCompletedProperty(true)`) may recur
   in sibling methods in the same file. Fix any found, and add the same out-of-process regression
   test pattern for each.
+
+  Audited every `Begin*` async method across the whole `GamerServices` namespace (not just
+  `SignedInGamer.cpp` — `Gamer.cpp`, `AvatarDescription.cpp`, `LeaderboardReader.cpp`, and
+  `Guide.cpp` too, everywhere an `IAsyncResult*`-returning `Begin*` exists): `Gamer::BeginGetProfile`
+  already calls `setIsCompletedProperty(true)`; `Guide::BeginShowKeyboardInput` already does the
+  same; `AvatarDescription::BeginGetFromGamer`'s own `AvatarDescriptionAsyncResult::
+  getIsCompletedProperty()` is hardcoded `return true;` unconditionally; and every remaining
+  `Begin*` (`Gamer::BeginGetFromGamertag`/`BeginGetPartnerToken`, `LeaderboardReader::
+  BeginPageUp`/`BeginPageDown`/`BeginRead` ×3) unconditionally `throw System::
+  NotSupportedException()` — never creating a pending action that a polling loop could ever wait
+  on in the first place, so the `while (!result->getIsCompletedProperty())` loops in
+  `LeaderboardReader::PageUp()`/`Read()` are unreachable dead code (the preceding `Begin*` call
+  always throws first). `BeginGetFriends` doesn't exist anywhere in this codebase at all
+  (`GetFriends()` returns synchronously with no `Begin*`/`End*` pair) — the plan's own text
+  referencing it pre-dated this audit and was inaccurate.
+
+  Confirmed: `SignedInGamer::BeginGetAchievements` (fixed in Task 7.1) was the **only** instance
+  of this bug anywhere in `GamerServices`. No further fix needed; a pure investigation task with a
+  negative (no-further-bugs-found) result, not requiring new source changes or new regression
+  tests (there is no other hang to regress-test against).
+
+  No revert-verify applies (no code change). Full suite unaffected (no source change made) —
+  **3302/3304 passing** (2 expected accelerometer/gyroscope skips), same baseline as Task 7.1.
 
 - [ ] **Task 7.3** — Fix `GameDefaults`'s constructor initializing `GameDifficulty`/`ControllerSensitivity`
   to the wrong stub default values. Confirmed: FNA's `internal GameDefaults()` constructor is
