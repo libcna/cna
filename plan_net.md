@@ -2595,12 +2595,22 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `SetAppearanceThrowsAfterDispose` were added and revert-verified as part of that task's own
   commit. No further work needed here.
 
-- [ ] **Task 13.5** — Extend `AvatarAnimationPresetNamesEXTTest::NameMatchesEnumeratorSpelling` to
+- [x] **Task 13.5** — Extend `AvatarAnimationPresetNamesEXTTest::NameMatchesEnumeratorSpelling` to
   check all 31 presets for exact string spelling, not just 4 of them. Confirmed the other 27
   mappings are only checked for non-emptiness (`AllThirtyPresetsMapToNonEmptyName`) — a spelling
   typo in any untested mapping (e.g. `MaleSurprised` vs. a hypothetical `MaleSurprized`) would pass
   all existing tests today. Cheap fix: loop all 31 against a parallel string table instead of
   hand-picking 4.
+
+  **Bookkeeping catch-up**: the actual fix already landed in commit `cf405dcf` ("test(Task
+  13.4/13.5): mark 13.4 done via Task 11.6 cross-reference; extend preset spelling test") — the
+  checkbox here was simply never flipped at the time. Confirmed the real code is in place:
+  `AvatarAnimationPresetNamesEXTTests.cpp`'s `NameMatchesEnumeratorSpelling` now uses an
+  `AVATAR_PRESET_CASE(x)` stringizing macro (`{AvatarAnimationPreset::x, #x}`) over all 31 presets
+  in enum declaration order, so a spelling typo in any mapping would now fail this test directly
+  rather than only being caught by the weaker non-emptiness check. No further code change needed;
+  this entry closes the checkbox to match already-completed, already-tested work (verified passing
+  as part of the full 3398/3398 suite throughout this session's Phase 15 work).
 
 - [x] **Task 13.6** — Add Vulkan and Bgfx smoke tests for the avatar-rendering path. Confirmed all
   three avatar GPU integration tests (`cna_test_avatar_real_render`, `cna_test_avatar_attach_part`,
