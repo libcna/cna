@@ -46,11 +46,37 @@ namespace Microsoft::Xna::Framework::Net
          */
         [[nodiscard]] System::TimeSpan getMinimumRoundtripTimeProperty() const;
 
-        /** @brief Creates a QualityOfService for CNA internal use. */
+        /**
+         * @brief Creates a QualityOfService for CNA internal use, with all-zero/unmeasured fields.
+         *
+         * `IsAvailable` is still `true` even though nothing is actually measured - this matches
+         * FNA's own reference `internal QualityOfService()` constructor byte-for-byte (an
+         * acknowledged upstream stub, its own source carries a "TODO: Everything below" comment),
+         * not a CNA gap. Task 4.2: kept for callers with no real measurement to offer at all (e.g.
+         * a session listing not built from a real discovery reply); real production discovery
+         * replies use the measured overload below instead.
+         */
         NOXNA static QualityOfService CreateInternal();
+
+        /**
+         * @brief Task 4.2: creates a QualityOfService reflecting a real measurement, with
+         * `IsAvailable = true`.
+         *
+         * `ENetDiscoveryService`'s only production call site measures the wall-clock round-trip
+         * between sending a discovery `Query` and receiving each host's `Announce` reply -a real,
+         * if connectionless-UDP-only, RTT sample (there's no established `ENetPeer` connection yet
+         * at discovery time to measure real bandwidth from, so throughput stays unmeasured/zero;
+         * see `ENetDiscoveryService.cpp`'s own comment for why).
+         *
+         * @param roundtripTime The measured round-trip time. Used for both the average and minimum
+         * fields, since a single query/reply exchange yields exactly one sample, not a running
+         * series to average or take a minimum over.
+         */
+        NOXNA static QualityOfService CreateInternal(System::TimeSpan roundtripTime);
 
     private:
         QualityOfService();
+        explicit QualityOfService(System::TimeSpan roundtripTime);
 
         System::TimeSpan averageRoundtripTime_;
         int bytesPerSecondDownstream_{0};

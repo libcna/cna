@@ -79,6 +79,19 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] const GamerPresence& getPresenceProperty() const;
 
         /**
+         * @brief Gets the gamer's rich presence information for in-place mutation.
+         *
+         * FNA's real `Presence` property is get-only but returns a `GamerPresence` *class*
+         * (reference type), so real game code writes `gamer.Presence.PresenceMode = ...` and
+         * mutates the same live object the get-only property returned - this overload preserves
+         * that usage pattern in C++, where a const-only accessor would otherwise make it
+         * impossible to ever change a SignedInGamer's presence after construction.
+         *
+         * @return Reference to the mutable GamerPresence.
+         */
+        NOXNA [[nodiscard]] GamerPresence& getPresenceProperty();
+
+        /**
          * @brief Gets the gamer's privilege settings.
          *
          * @return Reference to the GamerPrivileges.
@@ -163,25 +176,22 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         [[nodiscard]] AchievementCollection EndGetAchievements(System::IAsyncResult* result);
 
-        /** @brief Raised when a gamer signs in. */
-        NOXNA static System::EventHandler<SignedInEventArgs> SignedIn;
-
-        /** @brief Raised when a gamer signs out. */
-        NOXNA static System::EventHandler<SignedOutEventArgs> SignedOut;
+        /**
+         * @brief Raised when a gamer signs in.
+         *
+         * Task 7.6: genuine public XNA 4.0 API (FNA: `public static event
+         * EventHandler<SignedInEventArgs> SignedIn;`) - not a CNA extension, so this is not
+         * NOXNA (unlike OnSignIn/OnSignOut just below, which really are internal-only).
+         */
+        static System::EventHandler<SignedInEventArgs> SignedIn;
 
         /**
-         * @brief Raises the SignedIn event for the given gamer.
+         * @brief Raised when a gamer signs out.
          *
-         * @param gamer The gamer that signed in.
+         * Task 7.6: genuine public XNA 4.0 API (FNA: `public static event
+         * EventHandler<SignedOutEventArgs> SignedOut;`) - not a CNA extension.
          */
-        NOXNA static void OnSignIn(SignedInGamer* gamer);
-
-        /**
-         * @brief Raises the SignedOut event for the given gamer.
-         *
-         * @param gamer The gamer that signed out.
-         */
-        NOXNA static void OnSignOut(SignedInGamer* gamer);
+        static System::EventHandler<SignedOutEventArgs> SignedOut;
 
         /** @brief Creates a SignedInGamer for CNA internal use. */
         NOXNA static SignedInGamer CreateInternal(
@@ -192,6 +202,27 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
     private:
+        // Task 7.7: FNA declares these `internal static void OnSignIn/OnSignOut(...)` - the only
+        // real caller anywhere in this codebase is GamerServicesDispatcher (OnSignIn); OnSignOut
+        // currently has zero callers at all. Tightened from `public ... NOXNA` to match this
+        // project's own documented convention for C# `internal` members (see CHECKLIST.md).
+        friend class GamerServicesDispatcher;
+        NOXNA friend struct SignedInGamerTestAccess;
+
+        /**
+         * @brief Raises the SignedIn event for the given gamer.
+         *
+         * @param gamer The gamer that signed in.
+         */
+        static void OnSignIn(SignedInGamer* gamer);
+
+        /**
+         * @brief Raises the SignedOut event for the given gamer.
+         *
+         * @param gamer The gamer that signed out.
+         */
+        static void OnSignOut(SignedInGamer* gamer);
+
         SignedInGamer(
             const std::string& gamertag,
             bool isSignedInToLive,

@@ -27,8 +27,12 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Marks whether this gamer has left the session.
          *
-         * FNA's setter for this is `internal`; restored here for NetworkSession's
-         * RemoveGamer() (a sibling class, not a subclass) to update it.
+         * FNA's setter for this is `private` (`{ get; private set; }`), not `internal` -
+         * FNA's own NetworkSession never actually calls it after construction, so real XNA's
+         * HasLeftSession is permanently false in practice (an unimplemented FNA stub, like several
+         * other NetworkSession-adjacent members). Restored here, as a NOXNA extension, so this
+         * port's NetworkSession::RemoveGamer() (a sibling class, not a subclass, so it couldn't
+         * reach a real `private` setter either way) can make this property actually functional.
          *
          * @param value The new value.
          */
@@ -44,11 +48,22 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the gamer's session-local identifier.
          *
-         * Always 0, matching FNA's stub.
-         *
          * @return The gamer identifier.
          */
         [[nodiscard]] SharpRuntime::bytecs getIdProperty() const;
+
+        /**
+         * @brief Sets the gamer's session-local identifier.
+         *
+         * FNA hardcodes this property's getter to 0 for every gamer (a real, confirmed upstream
+         * limitation - see DEFERRED.md item #20 in the sibling cna-samples repo). Restored here,
+         * NOXNA, so NetworkSession and the ENet backend can assign a real, cross-machine-consistent
+         * id: NetworkSession assigns a local placeholder at construction, and ENetBackend overwrites
+         * it with the wire-negotiated id once a SystemLink session actually joins/hosts.
+         *
+         * @param value The new identifier.
+         */
+        NOXNA void SetId(SharpRuntime::bytecs value);
 
         /**
          * @brief Gets whether this gamer is a guest.
@@ -60,11 +75,26 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets whether this gamer is the session host.
          *
-         * Always true, matching FNA's stub.
-         *
          * @return true if the gamer is the session host.
          */
         [[nodiscard]] bool getIsHostProperty() const;
+
+        /**
+         * @brief Sets whether this gamer is the session host.
+         *
+         * FNA hardcodes this property's getter to true for every gamer (see DEFERRED.md item #20
+         * in the sibling cna-samples repo - this made NetworkSession.IsHost always true on every
+         * machine). Restored here, NOXNA, so NetworkSession can set a local gamer's real host
+         * status at construction (true after Create(), false after Join()/JoinInvited()).
+         *
+         * Task 4.6: a *remote* gamer representing the actual host machine also reports this
+         * correctly now - RosterEntry carries a real host flag (set from the host's own accurate
+         * view of each gamer in ENetBackend.cpp's SnapshotRoster), propagated by
+         * HandleServerWelcome/HandleGamerJoinBroadcast when a client learns about that gamer.
+         *
+         * @param value The new host state.
+         */
+        NOXNA void SetIsHost(bool value);
 
         /**
          * @brief Gets whether this gamer is a local gamer.
@@ -135,6 +165,16 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] System::TimeSpan getRoundtripTimeProperty() const;
 
         /**
+         * @brief Task 4.1: sets the measured round-trip time, wired up from the underlying
+         * `ENetPeer`'s own native RTT tracking for gamers with a direct connection. Not part of
+         * real XNA's public API (`RoundtripTime` has no setter there); mirrors `SetId`/`SetIsHost`'s
+         * existing internal-wiring pattern.
+         *
+         * @param value The newly-measured round-trip time.
+         */
+        NOXNA void SetRoundtripTime(System::TimeSpan value);
+
+        /**
          * @brief Gets the network session this gamer belongs to.
          *
          * @return Pointer to the NetworkSession.
@@ -163,7 +203,9 @@ namespace Microsoft::Xna::Framework::Net
     private:
         bool hasLeftSession_{false};
         bool hasVoice_{false};
+        SharpRuntime::bytecs id_{0};
         bool isGuest_{false};
+        bool isHost_{false};
         bool isMutedByLocalUser_{false};
         bool isPrivateSlot_{false};
         bool isReady_{false};

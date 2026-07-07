@@ -224,7 +224,30 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         [[nodiscard]] static LeaderboardReader EndRead(System::IAsyncResult* result);
 
-        /** @brief Creates a LeaderboardReader for CNA internal use. */
+        /**
+         * @brief Creates a LeaderboardReader for CNA internal use.
+         *
+         * Task 10.6: `entries` is sliced into the reader's own page (`entries_`) using a loop
+         * bounded by `i < size` (not `i < start + size`) — this matches FNA's own real internal
+         * constructor exactly (`for (int i = PageStart; i < pageSize && i < entryCache.Count;
+         * ...)`), a genuine, non-obvious upstream quirk, not a CNA bug. This means `entries` must
+         * already be pre-sliced/ordered by the caller consistently with that exact bound before
+         * calling this: passing a full, un-sliced leaderboard here (rather than the specific page
+         * `[start, start + size)`) will silently produce a wrong (too-short-or-shifted) page,
+         * since this constructor trusts its input completely and never re-derives the intended
+         * slice itself. Currently the only caller of this factory is test code — every real
+         * `BeginRead`/`EndRead` overload unconditionally throws `NotSupportedException` (a stub
+         * API surface, matching FNA), so this precondition has no production caller to violate
+         * today. Any future real (non-stub) leaderboard-reading implementation that populates
+         * `entries` itself must uphold it.
+         *
+         * @param identity The leaderboard identity being read.
+         * @param start    The zero-based starting index of the page within the leaderboard.
+         * @param size     The requested page size.
+         * @param entries  The pre-sliced entries for exactly this `[start, start + size)` page.
+         * @param friends  Whether this reader represents a friends-only leaderboard.
+         * @return A new LeaderboardReader wrapping the given page.
+         */
         NOXNA static LeaderboardReader CreateInternal(
             const LeaderboardIdentity& identity,
             int start,

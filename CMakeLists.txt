@@ -535,6 +535,626 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         endif()
     endif()
 
+    # Task 11.11 (Phase 11b): real windowed proof that AvatarRenderer's real-rendering
+    # extension (Phase 10) draws Phase 11a's procedurally-generated, non-synthetic avatar
+    # content (tools/avatar_builder/ + tools/avatar_asset_pipeline/convert_avatar.py,
+    # Task 11.10). Needs CNA_GamerServices (AvatarRenderer lives there, same gating as
+    # cna_test_avatar_real_render below), already inside this EASYGL/VULKAN-only scope.
+    # Emscripten isn't wired up for this demo yet (deferred, no immediate need).
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_avatar
+            examples/demo_avatar/src/Main.cpp
+            examples/demo_avatar/src/AvatarDemo.cpp
+        )
+        target_include_directories(cna_demo_avatar PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/src
+        )
+        target_link_libraries(cna_demo_avatar PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_avatar PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_avatar PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_avatar PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_avatar POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/Content"
+                "$<TARGET_FILE_DIR:cna_demo_avatar>/Content"
+            COMMENT "Copying Content next to cna_demo_avatar executable")
+        if(WIN32)
+            set_target_properties(cna_demo_avatar PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_avatar)
+        endif()
+    endif()
+
+    # Task 15.1: cna_demo_net_client_server_arena - real two-process NetworkSession::Create/
+    # Find/Join, LocalNetworkGamer::SendData/ReceiveData via PacketWriter/PacketReader, and
+    # GamerJoined/SessionEnded events over real ENet, rendered as a small 2D arena. Needs
+    # CNA_GamerServices (SignedInGamer) and CNA_Net (NetworkSession) - same gating as
+    # cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_net_client_server_arena
+            examples/demo_net_client_server_arena/src/Main.cpp
+            examples/demo_net_client_server_arena/src/ArenaGame.cpp
+        )
+        target_include_directories(cna_demo_net_client_server_arena PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_net_client_server_arena/src
+        )
+        target_link_libraries(cna_demo_net_client_server_arena PRIVATE CNA_GamerServices CNA_Net)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_net_client_server_arena PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_net_client_server_arena PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_net_client_server_arena PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_net_client_server_arena PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_net_client_server_arena)
+        endif()
+    endif()
+
+    # Task 15.2: cna_demo_packet_roundtrip - every XNA-type PacketWriter::Write/PacketReader::Read
+    # overload (Vector2/3/4, Matrix, Quaternion, Color, float, double), single process, console-only,
+    # no networking or windowing at all - needs only CNA_Net.
+    if(CNA_ENABLE_NET)
+        add_executable(cna_demo_packet_roundtrip
+            examples/demo_packet_roundtrip/src/Main.cpp
+        )
+        target_link_libraries(cna_demo_packet_roundtrip PRIVATE CNA_Net SHARP_RUNTIME)
+    endif()
+
+    # Task 15.3: cna_demo_qos_probe - QualityOfService/NetworkGamer::RoundtripTime measured
+    # between two real gamers over real ENet. Console-only, no windowing - needs
+    # CNA_GamerServices (SignedInGamer) and CNA_Net (NetworkSession/QualityOfService).
+    if(CNA_ENABLE_NET)
+        add_executable(cna_demo_qos_probe
+            examples/demo_qos_probe/src/Main.cpp
+        )
+        target_link_libraries(cna_demo_qos_probe PRIVATE CNA_GamerServices CNA_Net SHARP_RUNTIME)
+    endif()
+
+    # Task 15.4: cna_demo_simulated_network_conditions - NetworkSession::SimulatedLatencyProperty/
+    # SimulatedPacketLossProperty over a real two-process ENet session, rendered as a small
+    # Pong-style match. Needs CNA_GamerServices (SignedInGamer) and CNA_Net (NetworkSession) - same
+    # gating as cna_demo_net_client_server_arena above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_simulated_network_conditions
+            examples/demo_simulated_network_conditions/src/Main.cpp
+            examples/demo_simulated_network_conditions/src/SimGame.cpp
+        )
+        target_include_directories(cna_demo_simulated_network_conditions PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_simulated_network_conditions/src
+        )
+        target_link_libraries(cna_demo_simulated_network_conditions PRIVATE CNA_GamerServices CNA_Net)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_simulated_network_conditions PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_simulated_network_conditions PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_simulated_network_conditions PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_simulated_network_conditions PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_simulated_network_conditions)
+        endif()
+    endif()
+
+    # Task 15.5: cna_demo_session_browser - NetworkSession::Find(...)/AvailableNetworkSessionCollection
+    # rendered as a scrollable session-lobby list, Up/Down to select, Enter to Join. Needs
+    # CNA_GamerServices (SignedInGamer) and CNA_Net (NetworkSession) - same gating as
+    # cna_demo_net_client_server_arena above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_session_browser
+            examples/demo_session_browser/src/Main.cpp
+            examples/demo_session_browser/src/BrowserGame.cpp
+        )
+        target_include_directories(cna_demo_session_browser PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_session_browser/src
+        )
+        target_link_libraries(cna_demo_session_browser PRIVATE CNA_GamerServices CNA_Net)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_session_browser PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_session_browser PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_session_browser PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_session_browser PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_session_browser)
+        endif()
+    endif()
+
+    # Task 15.6: cna_demo_gamer_roster_hud - the full gamer-roster event surface (GamerJoined/
+    # GamerLeft/HostChanged/SessionEnded) plus per-gamer IsHost/IsLocal/IsReady/IsTalking flags,
+    # rendered as a live roster panel. Needs CNA_GamerServices (SignedInGamer) and CNA_Net
+    # (NetworkSession) - same gating as cna_demo_net_client_server_arena above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_gamer_roster_hud
+            examples/demo_gamer_roster_hud/src/Main.cpp
+            examples/demo_gamer_roster_hud/src/RosterGame.cpp
+        )
+        target_include_directories(cna_demo_gamer_roster_hud PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_gamer_roster_hud/src
+        )
+        target_link_libraries(cna_demo_gamer_roster_hud PRIVATE CNA_GamerServices CNA_Net)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_gamer_roster_hud PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_gamer_roster_hud PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_gamer_roster_hud PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_gamer_roster_hud PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_gamer_roster_hud)
+        endif()
+    endif()
+
+    # Task 15.7: cna_demo_session_lifecycle_events - NetworkSession::StartGame()/EndGame(),
+    # NetworkSessionState transitions, GameStarted/GameEnded, and a manual Raise() of the 3
+    # leaderboard delegates. Console-only, single process, NetworkSessionType::Local (no real
+    # networking) - needs CNA_GamerServices (SignedInGamer) and CNA_Net (NetworkSession).
+    if(CNA_ENABLE_NET)
+        add_executable(cna_demo_session_lifecycle_events
+            examples/demo_session_lifecycle_events/src/Main.cpp
+        )
+        target_link_libraries(cna_demo_session_lifecycle_events PRIVATE CNA_GamerServices CNA_Net SHARP_RUNTIME)
+    endif()
+
+    # Task 15.8: cna_demo_gamerservices_signin_presence - real GamerServicesComponent
+    # registration, Gamer::SignedInGamers population, SignedInGamer::SignedIn/SignedOut, and
+    # GamerPresence. Needs CNA_GamerServices (SignedInGamer/GamerServicesComponent) and windowing
+    # (SpriteBatch/SpriteFont HUD) - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_gamerservices_signin_presence
+            examples/demo_gamerservices_signin_presence/src/Main.cpp
+            examples/demo_gamerservices_signin_presence/src/PresenceGame.cpp
+        )
+        target_include_directories(cna_demo_gamerservices_signin_presence PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_gamerservices_signin_presence/src
+        )
+        target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_gamerservices_signin_presence PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_gamerservices_signin_presence)
+        endif()
+    endif()
+
+    # Task 15.9: cna_demo_achievement_showcase - Achievement/AchievementCollection,
+    # SignedInGamer::AwardAchievement/GetAchievements. Needs CNA_GamerServices and windowing
+    # (SpriteBatch/SpriteFont HUD) - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_achievement_showcase
+            examples/demo_achievement_showcase/src/Main.cpp
+            examples/demo_achievement_showcase/src/AchievementGame.cpp
+        )
+        target_include_directories(cna_demo_achievement_showcase PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_achievement_showcase/src
+        )
+        target_link_libraries(cna_demo_achievement_showcase PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_achievement_showcase PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_achievement_showcase PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_achievement_showcase PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_achievement_showcase PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_achievement_showcase)
+        endif()
+    endif()
+
+    # Task 15.10: cna_demo_leaderboard_viewer - LeaderboardReader (CanPageUp/Down, Entries,
+    # PageStart) plus LeaderboardWriter::GetLeaderboard's always-throws boundary. Needs
+    # CNA_GamerServices and windowing (SpriteBatch/SpriteFont HUD) - same gating as
+    # cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_leaderboard_viewer
+            examples/demo_leaderboard_viewer/src/Main.cpp
+            examples/demo_leaderboard_viewer/src/LeaderboardGame.cpp
+        )
+        target_include_directories(cna_demo_leaderboard_viewer PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_leaderboard_viewer/src
+        )
+        target_link_libraries(cna_demo_leaderboard_viewer PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_leaderboard_viewer PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_leaderboard_viewer PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_leaderboard_viewer PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_leaderboard_viewer PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_leaderboard_viewer)
+        endif()
+    endif()
+
+    # Task 15.11: cna_demo_guide_overlay_console - the full Guide static API surface via a
+    # numbered console menu. Console-only, single process, no graphics/window needed - needs only
+    # CNA_GamerServices.
+    if(CNA_ENABLE_NET)
+        add_executable(cna_demo_guide_overlay_console
+            examples/demo_guide_overlay_console/src/Main.cpp
+        )
+        target_link_libraries(cna_demo_guide_overlay_console PRIVATE CNA_GamerServices SHARP_RUNTIME)
+    endif()
+
+    # Task 15.12: cna_demo_gamerservices_dispatcher_watchdog - visual proof that Task 12.1's/Task
+    # 7.1's historical GamerServicesDispatcher/NetworkSession/GetAchievements hangs are fixed.
+    # Needs CNA_GamerServices and CNA_Net, plus windowing for the "waiting.../SUCCESS" HUD - same
+    # gating as cna_demo_net_client_server_arena above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_gamerservices_dispatcher_watchdog
+            examples/demo_gamerservices_dispatcher_watchdog/src/Main.cpp
+            examples/demo_gamerservices_dispatcher_watchdog/src/WatchdogGame.cpp
+        )
+        target_include_directories(cna_demo_gamerservices_dispatcher_watchdog PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_gamerservices_dispatcher_watchdog/src
+        )
+        target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE CNA_GamerServices CNA_Net)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_gamerservices_dispatcher_watchdog PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_gamerservices_dispatcher_watchdog)
+        endif()
+    endif()
+
+    # Task 15.13: cna_demo_gamer_profile_privileges - GamerProfile/GamerPrivileges via
+    # Gamer::GetProfile()/SignedInGamer::getPrivilegesProperty(). Needs CNA_GamerServices and
+    # windowing - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_gamer_profile_privileges
+            examples/demo_gamer_profile_privileges/src/Main.cpp
+            examples/demo_gamer_profile_privileges/src/ProfileGame.cpp
+        )
+        target_include_directories(cna_demo_gamer_profile_privileges PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_gamer_profile_privileges/src
+        )
+        target_link_libraries(cna_demo_gamer_profile_privileges PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_gamer_profile_privileges PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_gamer_profile_privileges PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_gamer_profile_privileges PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_gamer_profile_privileges PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_gamer_profile_privileges)
+        endif()
+    endif()
+
+    # Task 15.14: cna_demo_friends_and_gamercard - FriendCollection (via CreateInternal) and the
+    # no-op Guide::ShowGamerCard/ShowFriendRequest/ShowFriends/ShowComposeMessage calls. Needs
+    # CNA_GamerServices and windowing - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_friends_and_gamercard
+            examples/demo_friends_and_gamercard/src/Main.cpp
+            examples/demo_friends_and_gamercard/src/FriendsGame.cpp
+        )
+        target_include_directories(cna_demo_friends_and_gamercard PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_friends_and_gamercard/src
+        )
+        target_link_libraries(cna_demo_friends_and_gamercard PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_friends_and_gamercard PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_friends_and_gamercard PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_friends_and_gamercard PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_friends_and_gamercard PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_friends_and_gamercard)
+        endif()
+    endif()
+
+    # Task 15.15: cna_demo_avatar_animation_gallery - a completionist version of demo_avatar's
+    # Space-cycling, iterating all 31 AvatarAnimationPreset values across both genders. Reuses
+    # demo_avatar's Content/ directory (copied by CMake, not duplicated) - same gating as
+    # cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_avatar_animation_gallery
+            examples/demo_avatar_animation_gallery/src/Main.cpp
+            examples/demo_avatar_animation_gallery/src/GalleryDemo.cpp
+        )
+        target_include_directories(cna_demo_avatar_animation_gallery PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar_animation_gallery/src
+        )
+        target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_avatar_animation_gallery POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/Content"
+                "$<TARGET_FILE_DIR:cna_demo_avatar_animation_gallery>/Content"
+            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_animation_gallery executable")
+        if(WIN32)
+            set_target_properties(cna_demo_avatar_animation_gallery PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_avatar_animation_gallery)
+        endif()
+    endif()
+
+    # Task 15.16: cna_demo_avatar_wardrobe_hotswap - SkinnedModelEXT::AttachPartEXT/RemovePartEXT
+    # used repeatedly at runtime (Tab cycles baked-in hair / hair_Cap / hair_Ponytail). Reuses
+    # demo_avatar's Content/ directory (copied by CMake, not duplicated) - same gating as
+    # cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_avatar_wardrobe_hotswap
+            examples/demo_avatar_wardrobe_hotswap/src/Main.cpp
+            examples/demo_avatar_wardrobe_hotswap/src/HotswapDemo.cpp
+        )
+        target_include_directories(cna_demo_avatar_wardrobe_hotswap PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar_wardrobe_hotswap/src
+        )
+        target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_avatar_wardrobe_hotswap POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/Content"
+                "$<TARGET_FILE_DIR:cna_demo_avatar_wardrobe_hotswap>/Content"
+            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_wardrobe_hotswap executable")
+        if(WIN32)
+            set_target_properties(cna_demo_avatar_wardrobe_hotswap PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_avatar_wardrobe_hotswap)
+        endif()
+    endif()
+
+    # Task 15.17: cna_demo_avatar_appearance_tint_studio - AvatarAppearanceEXT's 5 tint slots and
+    # AvatarRenderer::SetAppearanceEXT as a live color customization screen. Reuses demo_avatar's
+    # Content/ directory (copied by CMake, not duplicated) - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_avatar_appearance_tint_studio
+            examples/demo_avatar_appearance_tint_studio/src/Main.cpp
+            examples/demo_avatar_appearance_tint_studio/src/TintStudioDemo.cpp
+        )
+        target_include_directories(cna_demo_avatar_appearance_tint_studio PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar_appearance_tint_studio/src
+        )
+        target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_avatar_appearance_tint_studio POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/Content"
+                "$<TARGET_FILE_DIR:cna_demo_avatar_appearance_tint_studio>/Content"
+            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_appearance_tint_studio executable")
+        if(WIN32)
+            set_target_properties(cna_demo_avatar_appearance_tint_studio PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_avatar_appearance_tint_studio)
+        endif()
+    endif()
+
+    # Task 15.18: cna_demo_avatar_dual_compare - two independent AvatarRenderer/SkinnedModelEXT
+    # instances alive and drawing simultaneously. Reuses demo_avatar's Content/ directory (copied
+    # by CMake, not duplicated) - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_avatar_dual_compare
+            examples/demo_avatar_dual_compare/src/Main.cpp
+            examples/demo_avatar_dual_compare/src/DualCompareDemo.cpp
+        )
+        target_include_directories(cna_demo_avatar_dual_compare PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar_dual_compare/src
+        )
+        target_link_libraries(cna_demo_avatar_dual_compare PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_avatar_dual_compare PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_avatar_dual_compare PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_avatar_dual_compare PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_avatar_dual_compare POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/Content"
+                "$<TARGET_FILE_DIR:cna_demo_avatar_dual_compare>/Content"
+            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_dual_compare executable")
+        if(WIN32)
+            set_target_properties(cna_demo_avatar_dual_compare PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_avatar_dual_compare)
+        endif()
+    endif()
+
+    # Task 15.19: cna_demo_avatar_multi_attach_stress - SkinnedModelEXT::AttachPartEXT called
+    # repeatedly (hair variants, then a growing series of synthetic quad accessories), proving
+    # accumulation doesn't break skinning/tinting as Parts.size() grows. Reuses demo_avatar's
+    # Content/ directory (copied by CMake, not duplicated) - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_avatar_multi_attach_stress
+            examples/demo_avatar_multi_attach_stress/src/Main.cpp
+            examples/demo_avatar_multi_attach_stress/src/StressDemo.cpp
+        )
+        target_include_directories(cna_demo_avatar_multi_attach_stress PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar_multi_attach_stress/src
+        )
+        target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_avatar_multi_attach_stress POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/Content"
+                "$<TARGET_FILE_DIR:cna_demo_avatar_multi_attach_stress>/Content"
+            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_multi_attach_stress executable")
+        if(WIN32)
+            set_target_properties(cna_demo_avatar_multi_attach_stress PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_avatar_multi_attach_stress)
+        endif()
+    endif()
+
+    # Task 15.20: cna_demo_avatar_bone_state_boundary - documents the real, verified
+    # AvatarRenderer skeleton-API boundary (State/ParentBones/BindPose) vs the working
+    # SkinnedModelEXT EXT path. Reuses demo_avatar's Content/ directory (copied by CMake, not
+    # duplicated) - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_avatar_bone_state_boundary
+            examples/demo_avatar_bone_state_boundary/src/Main.cpp
+            examples/demo_avatar_bone_state_boundary/src/BoundaryDemo.cpp
+        )
+        target_include_directories(cna_demo_avatar_bone_state_boundary PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar_bone_state_boundary/src
+        )
+        target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_avatar_bone_state_boundary POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/Content"
+                "$<TARGET_FILE_DIR:cna_demo_avatar_bone_state_boundary>/Content"
+            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_bone_state_boundary executable")
+        if(WIN32)
+            set_target_properties(cna_demo_avatar_bone_state_boundary PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_avatar_bone_state_boundary)
+        endif()
+    endif()
+
+    # Task 15.21 (bonus, cross-cutting): cna_demo_net_avatar_sync - combines Net + Avatar over a
+    # real two-process ENet session, each side rendering both its own and the remote peer's real
+    # avatar. Needs CNA_GamerServices/CNA_Net (real networking) plus demo_avatar's Content/
+    # directory (copied by CMake, not duplicated) - same gating as cna_demo_net_client_server_arena
+    # above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_net_avatar_sync
+            examples/demo_net_avatar_sync/src/Main.cpp
+            examples/demo_net_avatar_sync/src/SyncGame.cpp
+        )
+        target_include_directories(cna_demo_net_avatar_sync PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_net_avatar_sync/src
+        )
+        target_link_libraries(cna_demo_net_avatar_sync PRIVATE CNA_GamerServices CNA_Net)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_net_avatar_sync PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_net_avatar_sync PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_net_avatar_sync PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_net_avatar_sync POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/Content"
+                "$<TARGET_FILE_DIR:cna_demo_net_avatar_sync>/Content"
+            COMMENT "Copying demo_avatar's Content next to cna_demo_net_avatar_sync executable")
+        if(WIN32)
+            set_target_properties(cna_demo_net_avatar_sync PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_net_avatar_sync)
+        endif()
+    endif()
+
     # EasyGL integration tests (Task 85, 86, 87)
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
@@ -691,6 +1311,26 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             add_test(NAME EasyGL_AvatarRenderer_RealRender
                      COMMAND cna_test_avatar_real_render)
             set_tests_properties(EasyGL_AvatarRenderer_RealRender PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+            # Task 11.21: SkinnedModelEXT::AttachPartEXT runtime wardrobe-attach real render.
+            cna_easygl_test(cna_test_avatar_attach_part
+                            examples/avatar_attach_part_integration_test.cpp)
+            target_link_libraries(cna_test_avatar_attach_part PRIVATE CNA_GamerServices)
+            add_test(NAME EasyGL_AvatarRenderer_AttachPart
+                     COMMAND cna_test_avatar_attach_part)
+            set_tests_properties(EasyGL_AvatarRenderer_AttachPart PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+            # Task 11.24: AvatarRenderer::PartTintEXT per-part tint routing regression test.
+            cna_easygl_test(cna_test_avatar_tint_routing
+                            examples/avatar_tint_routing_integration_test.cpp)
+            target_link_libraries(cna_test_avatar_tint_routing PRIVATE CNA_GamerServices)
+            add_test(NAME EasyGL_AvatarRenderer_TintRouting
+                     COMMAND cna_test_avatar_tint_routing)
+            set_tests_properties(EasyGL_AvatarRenderer_TintRouting PROPERTIES
                 TIMEOUT 30
                 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
         endif()
@@ -2568,6 +3208,40 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 13.6: the same 3 avatar-rendering GPU integration tests already registered for
+        # EasyGL above, reusing the exact same backend-agnostic source files (public
+        # GraphicsDevice/SkinnedModelEXT/AvatarRenderer API only) - Vulkan's own dedicated
+        # GetOrCreatePipelineSkinned3D pipeline (Task 11.10) had never been run against real (or
+        # even synthetic) avatar content before now.
+        if(CNA_ENABLE_NET)
+            cna_vulkan_test(cna_test_vulkan_avatar_real_render
+                            examples/avatar_real_render_integration_test.cpp)
+            target_link_libraries(cna_test_vulkan_avatar_real_render PRIVATE CNA_GamerServices)
+            add_test(NAME Vulkan_AvatarRenderer_RealRender
+                     COMMAND cna_test_vulkan_avatar_real_render)
+            set_tests_properties(Vulkan_AvatarRenderer_RealRender PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+            cna_vulkan_test(cna_test_vulkan_avatar_attach_part
+                            examples/avatar_attach_part_integration_test.cpp)
+            target_link_libraries(cna_test_vulkan_avatar_attach_part PRIVATE CNA_GamerServices)
+            add_test(NAME Vulkan_AvatarRenderer_AttachPart
+                     COMMAND cna_test_vulkan_avatar_attach_part)
+            set_tests_properties(Vulkan_AvatarRenderer_AttachPart PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+            cna_vulkan_test(cna_test_vulkan_avatar_tint_routing
+                            examples/avatar_tint_routing_integration_test.cpp)
+            target_link_libraries(cna_test_vulkan_avatar_tint_routing PRIVATE CNA_GamerServices)
+            add_test(NAME Vulkan_AvatarRenderer_TintRouting
+                     COMMAND cna_test_vulkan_avatar_tint_routing)
+            set_tests_properties(Vulkan_AvatarRenderer_TintRouting PROPERTIES
+                TIMEOUT 30
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        endif()
+
     endif()
 
 endif()
@@ -2590,6 +3264,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
         endif()
     endmacro()
+
+    # Task 13.6: investigated adding avatar-rendering smoke tests here too (mirroring the Vulkan
+    # registration below). Confirmed a real, concrete blocker independent of readback reliability:
+    # BgfxGraphicsBackend::SetDepthTestEnabled/SetBlendEnabled/SetDepthWriteEnabled are all
+    # unconditionally unimplemented stubs (ThrowNo3DState()) - since the avatar test harnesses
+    # call SetDepthTestEnabled/setBlendStateProperty to set up their scene before drawing (not
+    # AvatarRenderer's own code, which never touches these), all 3 avatar tests throw immediately
+    # on Bgfx today, before ever reaching DrawRealEXT. This is a pre-existing, deep gap in the
+    # Bgfx backend's 3D device-state wiring, not a tooling/build limitation - genuinely fixing it
+    # (implementing depth-test/blend state via bgfx::setState flags) is a full backend feature,
+    # well beyond this test-coverage task's scope. Deferred; not attempted here.
 
     # Task 89: 3-frame smoke test for the Bgfx backend
     add_test(NAME Bgfx_Demo2D_SmokeTest
@@ -3014,6 +3699,23 @@ if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
     )
 endif()
 
+# --- Task 12.1: GamerServicesDispatcher hang regression harness ---
+# A tiny standalone (non-GTest) executable that calls GamerServicesDispatcher::Initialize() then
+# NetworkSession::Create(), reproducing DEFERRED.md item #19 (../cna-samples) if it regresses.
+# Must be a separate process, same reasoning as cna_net_two_process_harness above but for a
+# different process-global-state hazard — see the harness file's own top-of-file comment.
+if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
+    add_executable(cna_net_gamerservices_dispatcher_harness
+        tools/net/gamerservices_dispatcher_harness.cpp
+    )
+    target_link_libraries(cna_net_gamerservices_dispatcher_harness
+        PRIVATE
+        CNA_GamerServices
+        CNA_Net
+        SHARP_RUNTIME
+    )
+endif()
+
 if(CNA_BUILD_TESTS)
     add_subdirectory(vendor/googletest)
 
@@ -3033,6 +3735,10 @@ if(CNA_BUILD_TESTS)
     # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
     if(WIN32 OR EMSCRIPTEN OR ANDROID)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/TwoProcessLoopbackTest\\.cpp$")
+        # GamerServicesDispatcherHangRegressionTest.cpp (Task 12.1) uses the same POSIX-only
+        # posix_spawn/sys-wait process APIs, for the same reasons — see TwoProcessLoopbackTest's
+        # own exclusion comment just above.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest\\.cpp$")
     endif()
 
     add_executable(CnaTests
@@ -3085,6 +3791,14 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_net_two_process_harness)
         target_compile_definitions(CnaTests PRIVATE
             CNA_NET_HARNESS_PATH="$<TARGET_FILE:cna_net_two_process_harness>"
+        )
+    endif()
+
+    if(TARGET cna_net_gamerservices_dispatcher_harness)
+        # Same reasoning as cna_net_two_process_harness just above.
+        add_dependencies(CnaTests cna_net_gamerservices_dispatcher_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH="$<TARGET_FILE:cna_net_gamerservices_dispatcher_harness>"
         )
     endif()
 

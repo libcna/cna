@@ -6,14 +6,24 @@
 #include "Microsoft/Xna/Framework/Net/GamerJoinedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/GamerLeftEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionEndedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/WriteLeaderboardsEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionEndReason.hpp"
 
 using namespace Microsoft::Xna::Framework::Net;
 
-// NetworkGamer is not yet ported (Task 4.4+); nullptr stands in for the pointer, matching the
-// earlier precedent set for SignedInGamer* in GamerServicesEventArgsTests.cpp before that type existed.
+// Task 5.6: every gamer-carrying EventArgs test below used to pass nullptr for every gamer
+// parameter (dating back to before NetworkGamer was ported) - which can't catch a constructor
+// argument-order bug (e.g. HostChangedEventArgs accidentally swapping oldHost/newHost - both
+// would silently still read back as nullptr either way). Two distinct, non-null sentinel
+// NetworkGamer instances (a nullptr NetworkSession* is fine - the constructor never dereferences
+// it) let each test assert the *correct*, distinguishable one comes back from each property.
+namespace {
+    NetworkGamer MakeSentinelGamer(const std::string& gamertag) {
+        return NetworkGamer::CreateInternal(nullptr, gamertag);
+    }
+}
 
 TEST(GameEndedEventArgsTest, InheritsEventArgs) {
     GameEndedEventArgs args;
@@ -26,33 +36,44 @@ TEST(GameStartedEventArgsTest, InheritsEventArgs) {
 }
 
 TEST(GamerJoinedEventArgsTest, StoresGamer) {
-    GamerJoinedEventArgs args(nullptr);
-    EXPECT_EQ(nullptr, args.getGamerProperty());
+    auto gamer = MakeSentinelGamer("Gamer");
+    GamerJoinedEventArgs args(&gamer);
+    EXPECT_EQ(&gamer, args.getGamerProperty());
 }
 
 TEST(GamerJoinedEventArgsTest, InheritsEventArgs) {
-    GamerJoinedEventArgs args(nullptr);
+    auto gamer = MakeSentinelGamer("Gamer");
+    GamerJoinedEventArgs args(&gamer);
     EXPECT_NE(nullptr, dynamic_cast<System::EventArgs*>(&args));
 }
 
 TEST(GamerLeftEventArgsTest, StoresGamer) {
-    GamerLeftEventArgs args(nullptr);
-    EXPECT_EQ(nullptr, args.getGamerProperty());
+    auto gamer = MakeSentinelGamer("Gamer");
+    GamerLeftEventArgs args(&gamer);
+    EXPECT_EQ(&gamer, args.getGamerProperty());
 }
 
 TEST(GamerLeftEventArgsTest, InheritsEventArgs) {
-    GamerLeftEventArgs args(nullptr);
+    auto gamer = MakeSentinelGamer("Gamer");
+    GamerLeftEventArgs args(&gamer);
     EXPECT_NE(nullptr, dynamic_cast<System::EventArgs*>(&args));
 }
 
 TEST(HostChangedEventArgsTest, StoresOldAndNewHost) {
-    HostChangedEventArgs args(nullptr, nullptr);
-    EXPECT_EQ(nullptr, args.getOldHostProperty());
-    EXPECT_EQ(nullptr, args.getNewHostProperty());
+    auto oldHost = MakeSentinelGamer("OldHost");
+    auto newHost = MakeSentinelGamer("NewHost");
+    HostChangedEventArgs args(&oldHost, &newHost);
+    // Two distinct sentinels catch a constructor argument-order bug that nullptr/nullptr never
+    // could - if oldHost/newHost were accidentally swapped, these assertions would fail.
+    EXPECT_EQ(&oldHost, args.getOldHostProperty());
+    EXPECT_EQ(&newHost, args.getNewHostProperty());
+    EXPECT_NE(args.getOldHostProperty(), args.getNewHostProperty());
 }
 
 TEST(HostChangedEventArgsTest, InheritsEventArgs) {
-    HostChangedEventArgs args(nullptr, nullptr);
+    auto oldHost = MakeSentinelGamer("OldHost");
+    auto newHost = MakeSentinelGamer("NewHost");
+    HostChangedEventArgs args(&oldHost, &newHost);
     EXPECT_NE(nullptr, dynamic_cast<System::EventArgs*>(&args));
 }
 
@@ -67,17 +88,20 @@ TEST(NetworkSessionEndedEventArgsTest, InheritsEventArgs) {
 }
 
 TEST(WriteLeaderboardsEventArgsTest, StoresGamerAndFlag) {
-    auto args = WriteLeaderboardsEventArgs::CreateInternal(nullptr, true);
-    EXPECT_EQ(nullptr, args.getGamerProperty());
+    auto gamer = MakeSentinelGamer("Gamer");
+    auto args = WriteLeaderboardsEventArgs::CreateInternal(&gamer, true);
+    EXPECT_EQ(&gamer, args.getGamerProperty());
     EXPECT_TRUE(args.getIsLeavingProperty());
 }
 
 TEST(WriteLeaderboardsEventArgsTest, FlagFalse) {
-    auto args = WriteLeaderboardsEventArgs::CreateInternal(nullptr, false);
+    auto gamer = MakeSentinelGamer("Gamer");
+    auto args = WriteLeaderboardsEventArgs::CreateInternal(&gamer, false);
     EXPECT_FALSE(args.getIsLeavingProperty());
 }
 
 TEST(WriteLeaderboardsEventArgsTest, InheritsEventArgs) {
-    auto args = WriteLeaderboardsEventArgs::CreateInternal(nullptr, false);
+    auto gamer = MakeSentinelGamer("Gamer");
+    auto args = WriteLeaderboardsEventArgs::CreateInternal(&gamer, false);
     EXPECT_NE(nullptr, dynamic_cast<System::EventArgs*>(&args));
 }

@@ -177,6 +177,9 @@ TEST(ENetBackendTest, HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGam
 
     int joinCount = 0;
     host.session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
+    // Task 12.3: subscribing just above already replayed once for the host's own pre-existing
+    // local gamer ("HostPlayer") - reset so this test isolates the real, queued join below.
+    joinCount = 0;
 
     ENetPacket* received = nullptr;
     for (int i = 0; i < 200 && !received; ++i, PollYield()) {
@@ -201,11 +204,21 @@ TEST(ENetBackendTest, HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGam
 
     EXPECT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
     EXPECT_EQ(joinCount, 1);
-    bool foundRemote = false;
+    NetworkGamer* remoteGamer = nullptr;
     for (NetworkGamer* g : host.session->getAllGamersProperty()) {
-        if (g->getGamertagProperty() == "RemotePlayer") foundRemote = true;
+        // Local gamers always report "Stub Gamer" (see WireGamertagFor's own comment); a real
+        // gamertag search only ever finds the remote gamer, so the host's own local gamer is
+        // looked up directly below instead.
+        if (g->getGamertagProperty() == "RemotePlayer") remoteGamer = g;
     }
-    EXPECT_TRUE(foundRemote);
+    ASSERT_NE(remoteGamer, nullptr);
+    NetworkGamer* localGamer = host.session->getLocalGamersProperty()[0];
+    // Task 12.2 (DEFERRED.md item #20): NetworkGamer::Id is now the real, wire-negotiated id
+    // (not FNA's hardcoded 0), and only the host's own local gamer reports IsHost == true.
+    EXPECT_EQ(remoteGamer->getIdProperty(), welcome.AssignedWireIds[0]);
+    EXPECT_EQ(localGamer->getIdProperty(), 0);
+    EXPECT_FALSE(remoteGamer->getIsHostProperty());
+    EXPECT_TRUE(localGamer->getIsHostProperty());
 }
 
 TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
@@ -243,24 +256,75 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
 
     ServerWelcomeMessage welcome;
     welcome.AssignedWireIds = {5};
-    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer"}};
+    // Task 4.6: marking this entry IsHost=true - the fake host's own roster entry represents
+    // the actual host, so the real client's resulting NetworkGamer should report IsHost==true.
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer", true}};
     auto welcomeBytes = NetPacketCodec::Encode(welcome);
     fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
     fakeHost.Flush();
 
     int joinCount = 0;
     client.session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
+    // Task 12.3: subscribing just above already replayed once for the client's own pre-existing
+    // local gamer ("ClientPlayer") - reset so this test isolates the real, queued join below.
+    joinCount = 0;
     for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
         client.session->Update();
     }
 
     ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
     EXPECT_EQ(joinCount, 1);
-    bool foundHostPlayer = false;
+    NetworkGamer* hostPlayer = nullptr;
     for (NetworkGamer* g : client.session->getAllGamersProperty()) {
-        if (g->getGamertagProperty() == "HostPlayer") foundHostPlayer = true;
+        if (g->getGamertagProperty() == "HostPlayer") hostPlayer = g;
     }
-    EXPECT_TRUE(foundHostPlayer);
+    ASSERT_NE(hostPlayer, nullptr);
+    // Task 12.2 (DEFERRED.md item #20): the client's own local gamer gets the host-assigned wire
+    // id (5, per welcome.AssignedWireIds above); the remote "HostPlayer" gamer gets its roster
+    // wire id (0).
+    EXPECT_EQ(client.session->getLocalGamersProperty()[0]->getIdProperty(), 5);
+    EXPECT_EQ(hostPlayer->getIdProperty(), 0);
+    // Task 4.6: RosterEntry now carries a real host flag, so the remote "HostPlayer" gamer
+    // correctly reports IsHost == true here (previously a documented, scoped limitation - see
+    // cna-samples/DEFERRED.md item #20's own "still-open" note, now resolved). Not asserting
+    // anything about this fixture's own local gamer's IsHost here - it's constructed via
+    // NetworkSession::Create() (see SystemLinkSessionFixture above), so it legitimately reports
+    // IsHost == true regardless, reflecting this test's Create()-based fixture setup rather than
+    // the real Join()-based client path exercised by NetworkSessionTests.cpp's
+    // JoinInvitedMakesLocalGamersReportIsHostFalse.
+    EXPECT_TRUE(hostPlayer->getIsHostProperty());
+}
+
+// Task 2.13: SendAppData silently dropped (bare `return;`, no error/log/queue) whenever sender
+// and/or target weren't yet known to ENetBackend's wire-id map - reachable whenever SendData is
+// called immediately after ConnectToHost(), before any Update() call has pumped the connect/
+// ClientHello/ServerWelcome round-trip. Rather than a bigger queue-and-flush-once-ready redesign,
+// this drop is now at least observable via GetDroppedAppDataCount() instead of vanishing with no
+// trace; the actual drop behavior itself is unchanged (still a no-op, just now a counted one).
+TEST(ENetBackendTest, SendAppDataBeforeHandshakeDropsButIsNowObservable) {
+    std::size_t before = ENetBackend::GetDroppedAppDataCount();
+
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    // Immediately, before any Update() has pumped the connect/ClientHello/ServerWelcome round
+    // trip - client.session's own ENetBackend-side wire-id map is still completely empty, even
+    // though the local gamer already has a NetworkSession-level placeholder Id. Targeting a
+    // NetworkGamer the session doesn't officially know about yet (rather than "all gamers",
+    // which at this early point resolves to just the sender itself and takes NetworkSession::
+    // Update()'s purely-local, ENetBackend-bypassing delivery path instead) forces the dispatch
+    // through the real, remote-target SendAppData path this task is about.
+    LocalNetworkGamer* localGamer = client.session->getLocalGamersProperty()[0];
+    NetworkGamer notYetKnownRemote = NetworkGamer::CreateInternal(client.session, "SomeRemotePlayer");
+    localGamer->SendData(std::vector<SharpRuntime::bytecs>{1, 2, 3}, SendDataOptions::None, &notYetKnownRemote);
+
+    client.session->Update(); // drains the just-queued PacketSend event -> SendAppData -> drop
+
+    EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + 1);
 }
 
 // --- Task 5.5: AppData relay (real SendData/ReceiveData) ---
@@ -331,6 +395,194 @@ TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
     EXPECT_EQ(received, (std::vector<SharpRuntime::bytecs>{10, 20, 30}));
     ASSERT_NE(sender, nullptr);
     EXPECT_EQ(sender->getGamertagProperty(), "RemotePlayer");
+}
+
+// Task 5.13: every scenario above is a single host + at most one client. HandleAppData's
+// host-relay-between-two-other-peers branch (~ENetBackend.cpp lines 301-310, guarded by
+// `state.HostPeer == nullptr` and `target->getIsLocalProperty() == false`) is the single most
+// complex routing logic in the file, and was never exercised with a genuine third connected
+// party - every prior AppData test always targeted the host's own local gamer. This test adds
+// two independent fake clients (PeerA, PeerB) so PeerA can target PeerB directly, forcing the
+// real host-relay path instead of the local-delivery or drop paths.
+TEST(ENetBackendTest, HostRelaysAppDataBetweenTwoNonLocalPeers) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    struct HandshakeResult {
+        ENetPeer* peerFromClientSide;
+        uint8_t wireId;
+    };
+
+    auto connectAndHandshake = [&](ENetHostHandle& fakeClient, const std::string& gamertag) {
+        ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+        EXPECT_NE(peerFromClientSide, nullptr);
+
+        bool connected = false;
+        for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+            host.session->Update();
+            ENetEvent evt{};
+            if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+                connected = true;
+            }
+        }
+        EXPECT_TRUE(connected);
+
+        ClientHelloMessage hello;
+        hello.LocalGamertags = {gamertag};
+        auto helloBytes = NetPacketCodec::Encode(hello);
+        fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+        fakeClient.Flush();
+
+        ServerWelcomeMessage welcome;
+        bool gotWelcome = false;
+        for (int i = 0; i < 200 && !gotWelcome; ++i, PollYield()) {
+            host.session->Update();
+            ENetEvent evt{};
+            if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                if (NetPacketCodec::PeekTag(data) == MessageTag::ServerWelcome) {
+                    welcome = NetPacketCodec::DecodeServerWelcome(data);
+                    gotWelcome = true;
+                }
+                enet_packet_destroy(evt.packet);
+            }
+        }
+        EXPECT_TRUE(gotWelcome);
+        EXPECT_EQ(welcome.AssignedWireIds.size(), 1u);
+        uint8_t assigned = welcome.AssignedWireIds.empty() ? uint8_t{0xFF} : welcome.AssignedWireIds[0];
+        return HandshakeResult{peerFromClientSide, assigned};
+    };
+
+    ENetHostHandle fakeClientA = ENetHostHandle::CreateClient(2);
+    HandshakeResult a = connectAndHandshake(fakeClientA, "PeerA");
+    ASSERT_NE(a.wireId, 0xFF);
+
+    ENetHostHandle fakeClientB = ENetHostHandle::CreateClient(2);
+    HandshakeResult b = connectAndHandshake(fakeClientB, "PeerB");
+    ASSERT_NE(b.wireId, 0xFF);
+    ASSERT_NE(a.wireId, b.wireId);
+
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 3);
+
+    AppDataMessage appData;
+    appData.SenderWireId = a.wireId;
+    appData.TargetWireId = b.wireId;
+    appData.Options = SendDataOptions::Reliable;
+    appData.Payload = {7, 8, 9};
+    auto appDataBytes = NetPacketCodec::Encode(appData);
+    fakeClientA.Send(a.peerFromClientSide, 0, appDataBytes.data(), appDataBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClientA.Flush();
+
+    AppDataMessage relayed;
+    bool gotRelayed = false;
+    for (int i = 0; i < 200 && !gotRelayed; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClientB.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::AppData) {
+                relayed = NetPacketCodec::DecodeAppData(data);
+                gotRelayed = true;
+            }
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_TRUE(gotRelayed);
+    EXPECT_EQ(relayed.SenderWireId, a.wireId);
+    EXPECT_EQ(relayed.TargetWireId, b.wireId);
+    EXPECT_EQ(relayed.Payload, (std::vector<SharpRuntime::bytecs>{7, 8, 9}));
+
+    // PeerA must not receive an echo of its own relayed packet back - the host only ever
+    // forwards to the actual target peer (HandleAppData's `peerIt->second != fromPeer` guard).
+    bool sawAppDataAtA = false;
+    for (int i = 0; i < 10; ++i) {
+        ENetEvent strayEvt{};
+        if (fakeClientA.Service(0, strayEvt) > 0 && strayEvt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(strayEvt.packet->data, strayEvt.packet->data + strayEvt.packet->dataLength);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::AppData) {
+                sawAppDataAtA = true;
+            }
+            enet_packet_destroy(strayEvt.packet);
+        }
+    }
+    EXPECT_FALSE(sawAppDataAtA);
+}
+
+// Task 4.3: SimulatedLatency/SimulatedPacketLoss are stored but have no effect on actual traffic
+// timing or delivery, matching FNA's own reference (a plain get/set auto-property there too, with
+// no delay queue or synthetic-drop logic anywhere in FNA's source) - confirmed no such logic
+// exists anywhere in ENetBackend/ENetHostHandle either. Locks in the documented (inert) behavior:
+// even with extreme simulated values set, a real handshake and AppData delivery complete just as
+// promptly and reliably as SendDataOptionsToRecipientTransmitsAppDataToHost/
+// HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue do without them.
+TEST(ENetBackendTest, SimulatedLatencyAndPacketLossHaveNoEffectOnRealTraffic) {
+    SystemLinkSessionFixture host("HostPlayer");
+    host.session->setSimulatedLatencyProperty(System::TimeSpan::FromSeconds(5.0));
+    host.session->setSimulatedPacketLossProperty(1.0f); // "100% simulated loss"
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+
+    ServerWelcomeMessage welcome;
+    bool gotWelcome = false;
+    for (int i = 0; i < 200 && !gotWelcome; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::ServerWelcome) {
+                welcome = NetPacketCodec::DecodeServerWelcome(data);
+                gotWelcome = true;
+            }
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_TRUE(gotWelcome);
+    ASSERT_EQ(welcome.AssignedWireIds.size(), 1u);
+    uint8_t remoteWireId = welcome.AssignedWireIds[0];
+    uint8_t hostLocalWireId = 0;
+
+    AppDataMessage appData;
+    appData.SenderWireId = remoteWireId;
+    appData.TargetWireId = hostLocalWireId;
+    appData.Options = SendDataOptions::Reliable;
+    appData.Payload = {10, 20, 30};
+    auto appDataBytes = NetPacketCodec::Encode(appData);
+    fakeClient.Send(peerFromClientSide, 0, appDataBytes.data(), appDataBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+
+    LocalNetworkGamer* hostLocalGamer = host.session->getLocalGamersProperty()[0];
+    for (int i = 0; i < 200 && !hostLocalGamer->getIsDataAvailableProperty(); ++i, PollYield()) {
+        host.session->Update();
+    }
+    ASSERT_TRUE(hostLocalGamer->getIsDataAvailableProperty())
+        << "AppData delivery should complete normally regardless of the simulated settings";
+
+    std::vector<SharpRuntime::bytecs> received(3);
+    NetworkGamer* sender = nullptr;
+    int len = hostLocalGamer->ReceiveData(received, sender);
+    EXPECT_EQ(len, 3);
+    EXPECT_EQ(received, (std::vector<SharpRuntime::bytecs>{10, 20, 30}));
 }
 
 TEST(ENetBackendTest, ClientSendDataTransmitsAppDataToHost) {
@@ -475,6 +727,13 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
     }
     ASSERT_NE(clientPeerFromHostSide, nullptr);
 
+    // Task 2.6: AllowHostMigration is stored but has no effect on actual behavior (matching FNA's
+    // own reference implementation, itself a plain auto-property with no real migration logic
+    // anywhere in FNA's stubbed-out networking layer) - HandleDisconnect below unconditionally
+    // ends the session regardless of this flag; this test proves that documented behavior rather
+    // than letting a future reader assume setting it to true silently, secretly works.
+    client.session->setAllowHostMigrationProperty(true);
+
     int endedCount = 0;
     NetworkSessionEndReason observedReason = NetworkSessionEndReason::ClientSignedOut;
     client.session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs& e) {
@@ -492,6 +751,54 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
     EXPECT_EQ(endedCount, 1);
     EXPECT_EQ(observedReason, NetworkSessionEndReason::HostEndedSession);
     EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Ended);
+}
+
+// Task 2.7: incoming ClientHello was previously accepted unconditionally regardless of
+// sessionState_/AllowJoinInProgress - a host already Playing with AllowJoinInProgress == false
+// (the default) still silently accepted a new player's join mid-game.
+TEST(ENetBackendTest, HostRejectsClientHelloWhenPlayingAndJoinInProgressDisallowed) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+    ASSERT_FALSE(host.session->getAllowJoinInProgressProperty());
+
+    host.session->StartGame();
+    for (int i = 0; i < 5; ++i, PollYield()) {
+        host.session->Update();
+    }
+    ASSERT_EQ(host.session->getSessionStateProperty(), NetworkSessionState::Playing);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"LateJoiner"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+
+    bool disconnected = false;
+    for (int i = 0; i < 200 && !disconnected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_DISCONNECT) {
+            disconnected = true;
+        }
+    }
+    EXPECT_TRUE(disconnected) << "host should have disconnected the peer instead of accepting its join";
+    // The host's own local gamer only - no new gamer was ever added.
+    EXPECT_EQ(host.session->getAllGamersProperty().getCountProperty(), 1);
 }
 
 TEST(ENetBackendTest, ClientProcessesGamerLeaveBroadcast) {
@@ -663,4 +970,288 @@ TEST(ENetBackendTest, ClientProcessesStateChangeBroadcast) {
 
     EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Playing);
     EXPECT_EQ(startedCount, 1);
+}
+
+// --- Task 1.4: HandleReceive must not let a decode exception escape Update() ---
+
+// Task 1.4: any Decode* call in HandleReceive throws std::runtime_error on a truncated/malformed
+// payload (BinaryReader::ReadBytes/ReadString throw on underflow) - and this arrives over an
+// already-open ENet channel from a connected peer, with no further payload validation. Confirms
+// the host survives a truncated ClientHello (tag byte with no further data at all) without
+// crashing or throwing out of Update(), and keeps functioning normally afterward for a real,
+// well-formed ClientHello from a second connection.
+TEST(ENetBackendTest, HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    ENetHostHandle badClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* badPeerFromClientSide = badClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(badPeerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (badClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    // A well-formed Encode(ClientHelloMessage) always has at least a tag byte plus a gamertag-count
+    // byte; sending just the tag byte simulates a corrupted/truncated packet - DecodeClientHello's
+    // very first read after the tag (the count byte) hits end-of-stream and throws.
+    Microsoft::Xna::Framework::Net::PacketWriter writer;
+    writer.Write(static_cast<SharpRuntime::bytecs>(MessageTag::ClientHello));
+    auto truncatedBytes = NetPacketCodec::ExtractBytes(writer);
+    ASSERT_EQ(truncatedBytes.size(), 1u);
+    badClient.Send(badPeerFromClientSide, 0, truncatedBytes.data(), truncatedBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    badClient.Flush();
+
+    // Pump enough Update() calls for the truncated packet to actually be received and processed;
+    // none of them may throw or crash the process.
+    for (int i = 0; i < 50; ++i, PollYield()) {
+        EXPECT_NO_THROW(host.session->Update());
+    }
+
+    // The host must still be fully functional afterward: a second, real client connecting and
+    // sending a well-formed ClientHello must still be processed normally.
+    ENetHostHandle goodClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* goodPeerFromClientSide = goodClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(goodPeerFromClientSide, nullptr);
+
+    connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (goodClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    goodClient.Send(goodPeerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    goodClient.Flush();
+
+    int joinCount = 0;
+    host.session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
+    joinCount = 0; // reset past the replay for the host's own pre-existing local gamer
+
+    for (int i = 0; i < 200 && joinCount == 0; ++i, PollYield()) {
+        host.session->Update();
+    }
+
+    EXPECT_EQ(joinCount, 1);
+    NetworkGamer* remoteGamer = nullptr;
+    for (NetworkGamer* g : host.session->getAllGamersProperty()) {
+        if (g->getGamertagProperty() == "RemotePlayer") remoteGamer = g;
+    }
+    EXPECT_NE(remoteGamer, nullptr);
+}
+
+// Task 2.11: NextWireId (a uint8_t) was only ever incremented, never reclaimed on a gamer leaving
+// - not 256 *simultaneous* gamers, just 256 *cumulative* joins over the session's life, would
+// silently wrap around and reassign an id still owned by another gamer, corrupting HandleAppData's
+// wire-id-based routing. Rather than spinning literally 256+ real ENet connect/disconnect cycles
+// (slow, and it only demonstrates the wraparound at the very end), this directly proves the actual
+// fix mechanism: a disconnected peer's wire id is reclaimed and handed back out to the *next*
+// connecting peer, rather than the counter marching forever upward - the property that prevents
+// wraparound regardless of how many cumulative join/leave cycles occur.
+TEST(ENetBackendTest, DisconnectedPeerWireIdIsReclaimedAndReusedByTheNextJoiner) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    std::vector<uint8_t> assignedIds;
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+        ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+        ASSERT_NE(peerFromClientSide, nullptr);
+
+        bool connected = false;
+        for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+            host.session->Update();
+            ENetEvent evt{};
+            if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+                connected = true;
+            }
+        }
+        ASSERT_TRUE(connected);
+
+        ClientHelloMessage hello;
+        hello.LocalGamertags = {"Churner"};
+        auto helloBytes = NetPacketCodec::Encode(hello);
+        fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+        fakeClient.Flush();
+
+        ENetPacket* received = nullptr;
+        for (int i = 0; i < 200 && !received; ++i, PollYield()) {
+            host.session->Update();
+            ENetEvent evt{};
+            if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                received = evt.packet;
+            }
+        }
+        ASSERT_NE(received, nullptr);
+        std::vector<SharpRuntime::bytecs> data(received->data, received->data + received->dataLength);
+        ServerWelcomeMessage welcome = NetPacketCodec::DecodeServerWelcome(data);
+        enet_packet_destroy(received);
+        ASSERT_EQ(welcome.AssignedWireIds.size(), 1u);
+        assignedIds.push_back(welcome.AssignedWireIds[0]);
+
+        fakeClient.Disconnect(peerFromClientSide, 0);
+        fakeClient.Flush();
+        for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() > 1; ++i, PollYield()) {
+            host.session->Update();
+        }
+        ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 1)
+            << "cycle " << cycle << " did not clean up on disconnect";
+    }
+
+    // Every cycle reused the same reclaimed id instead of a fresh, ever-incrementing one.
+    ASSERT_EQ(assignedIds.size(), 3u);
+    EXPECT_EQ(assignedIds[0], assignedIds[1]);
+    EXPECT_EQ(assignedIds[1], assignedIds[2]);
+}
+
+// Task 2.14: TeardownSession used to just erase from Sessions(), destroying the ENetHostHandle
+// (-> enet_host_destroy()) with no prior enet_peer_disconnect for still-connected peers - they'd
+// only learn the connection is gone once ENet's own internal timeout eventually elapses, instead
+// of receiving an immediate, clean DISCONNECT event. Confirms a connected peer sees a prompt
+// DISCONNECT (within a normal, short polling window - not by waiting out a real timeout) when the
+// local session is disposed.
+TEST(ENetBackendTest, DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
+
+    host.session->Dispose();
+
+    bool disconnected = false;
+    for (int i = 0; i < 200 && !disconnected; ++i, PollYield()) {
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_DISCONNECT) {
+            disconnected = true;
+        }
+    }
+    EXPECT_TRUE(disconnected) << "peer should have seen a prompt DISCONNECT, not a timeout";
+}
+
+// Task 3.1: every remote NetworkGamer created by HandleClientHello/HandleServerWelcome/
+// HandleGamerJoinBroadcast used to be permanently leaked - NetworkSession::AddRemoteGamer
+// deliberately never takes ownership (see its own doc comment), so ownership belongs to
+// ENetBackend's own per-session SessionState instead. Confirms a remote gamer created via a real
+// ClientHello handshake is tracked, and freed once the host's session is disposed
+// (TeardownSession erasing its SessionState).
+TEST(ENetBackendTest, HostFreesOwnedRemoteGamerOnDispose) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+    EXPECT_EQ(ENetBackend::GetOwnedRemoteGamerCountForTesting(host.session), 0u);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
+        host.session->Update();
+    }
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
+    EXPECT_EQ(ENetBackend::GetOwnedRemoteGamerCountForTesting(host.session), 1u);
+
+    host.session->Dispose();
+    EXPECT_EQ(ENetBackend::GetOwnedRemoteGamerCountForTesting(host.session), 0u);
+}
+
+// Task 4.1: NetworkGamer::RoundtripTime was permanently dead - roundtripTime_ default-constructs
+// to System::TimeSpan::Zero and nothing anywhere ever assigned it. Confirms the host's view of a
+// real, directly-connected remote gamer's RTT becomes non-zero (ENet's own native per-peer RTT
+// tracking, now actually surfaced) over a real two-peer ENet connection.
+TEST(ENetBackendTest, HostMeasuresRealRoundtripTimeForRemoteGamer) {
+    SystemLinkSessionFixture host("HostPlayer");
+    uint16_t hostPort = ENetBackend::GetBoundPort(host.session);
+    ASSERT_GT(hostPort, 0);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RemotePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    fakeClient.Send(peerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
+
+    NetworkGamer* remoteGamer = nullptr;
+    for (NetworkGamer* g : host.session->getAllGamersProperty()) {
+        if (g->getGamertagProperty() == "RemotePlayer") remoteGamer = g;
+    }
+    ASSERT_NE(remoteGamer, nullptr);
+
+    EXPECT_GT(remoteGamer->getRoundtripTimeProperty(), System::TimeSpan::Zero);
 }

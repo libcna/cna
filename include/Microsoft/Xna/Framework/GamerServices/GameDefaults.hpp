@@ -105,8 +105,12 @@ namespace Microsoft::Xna::Framework::GamerServices
     private:
         GameDefaults();
 
-        GameDifficulty gameDifficulty_{GameDifficulty::Normal};
-        ControllerSensitivity controllerSensitivity_{ControllerSensitivity::Medium};
+        // Task 7.3: FNA's own internal GameDefaults() constructor body is empty ("FIXME: This is
+        // one huge joke."), leaving every property at C#'s implicit default(T) - the ordinal-0
+        // enum value. That's GameDifficulty::Easy and ControllerSensitivity::Low, not Normal/
+        // Medium (RacingCameraAngle::Back below is already correct, since Back is ordinal-0 there).
+        GameDifficulty gameDifficulty_{GameDifficulty::Easy};
+        ControllerSensitivity controllerSensitivity_{ControllerSensitivity::Low};
         std::optional<Color> primaryColor_;
         std::optional<Color> secondaryColor_;
         bool autoAim_{false};

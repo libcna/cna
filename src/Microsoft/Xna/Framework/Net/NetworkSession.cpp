@@ -21,6 +21,9 @@ namespace Microsoft::Xna::Framework::Net
     NetworkSession::NetworkSessionAction* NetworkSession::activeAction_ = nullptr;
     NetworkSession* NetworkSession::activeSession_ = nullptr;
     System::EventHandler<GamerServices::InviteAcceptedEventArgs> NetworkSession::InviteAccepted;
+    std::string NetworkSession::pendingJoinAddress_;
+    uint16_t NetworkSession::pendingJoinPort_ = 0;
+    int NetworkSession::instanceCount_ = 0;
 
     // --- NetworkSessionAction ---
 
@@ -40,8 +43,34 @@ namespace Microsoft::Xna::Framework::Net
         , SessionProperties(std::move(properties))
         , SessionType(type)
         , asyncState_(std::move(state))
+        // Deviation from FNA: FNA's NetworkSessionAction sets IsCompleted = false here and relies
+        // on GamerServicesDispatcher.Update() to eventually complete it. GamerServicesDispatcher's
+        // Update() is a permanently empty no-op in both FNA and CNA, so once a
+        // GamerServicesComponent exists (isInitialized == true, i.e. every real sample's own
+        // constructor), UpdateAsync() unconditionally returns true forever and nothing ever
+        // completes the pending action - Create()/Find()/Join()'s synchronous polling loop spins
+        // forever (confirmed to reproduce identically against the real FNA reference source, not
+        // just CNA's port). CNA's Create/Find/Join/JoinInvited already perform all of their real
+        // work synchronously inside EndCreate/EndFind/EndJoin/EndJoinInvited (constructing the
+        // NetworkSession or calling into ENetBackend/ENetDiscoveryService directly, no multi-frame
+        // deferred I/O), so there is no real pending operation for the loop to ever be waiting on;
+        // marking every action completed immediately is a correctness fix, not a design change.
+        , isCompleted_(true)
         , asyncWaitHandle_(true, System::Threading::EventResetMode::ManualReset)
     {
+        ++instanceCount_;
+    }
+
+    int NetworkSession::NetworkSessionAction::instanceCount_ = 0;
+
+    NetworkSession::NetworkSessionAction::~NetworkSessionAction()
+    {
+        --instanceCount_;
+    }
+
+    int NetworkSession::NetworkSessionAction::GetInstanceCountForTesting()
+    {
+        return instanceCount_;
     }
 
     const std::any& NetworkSession::NetworkSessionAction::getAsyncStateProperty() const { return asyncState_; }
@@ -62,12 +91,14 @@ namespace Microsoft::Xna::Framework::Net
         int maxGamers,
         int privateGamerSlots,
         int maxLocal,
-        std::optional<std::vector<SignedInGamer*>> localGamers
+        std::optional<std::vector<SignedInGamer*>> localGamers,
+        bool isHost
     )
         : allGamers_(GamerServices::GamerCollection<NetworkGamer>::CreateInternal({}))
         , localGamers_(GamerServices::GamerCollection<LocalNetworkGamer>::CreateInternal({}))
         , remoteGamers_(GamerServices::GamerCollection<NetworkGamer>::CreateInternal({}))
         , previousGamers_(GamerServices::GamerCollection<NetworkGamer>::CreateInternal({}))
+        , isHost_(isHost)
         , maxGamers_(maxGamers)
         , privateGamerSlots_(privateGamerSlots)
         , sessionProperties_(std::move(properties))
@@ -101,6 +132,23 @@ namespace Microsoft::Xna::Framework::Net
         // RemoteGamers stays empty: FNA's constructor never populates it (matches upstream, not a gap here).
         for (LocalNetworkGamer* l : locals) allGamers_.Add(l);
 
+        // Task 3.1: GamerCollection<T> only ever holds non-owning raw pointers (matching real
+        // XNA's read-only-collection API shape) - ownedGamers_ is this session's own separate
+        // ownership registry, freed in bulk by Dispose()/~NetworkSession().
+        for (LocalNetworkGamer* l : locals) ownedGamers_.emplace_back(l);
+
+        // Not part of FNA's original design (see DEFERRED.md item #20 in the sibling cna-samples
+        // repo): give every local gamer a real host flag and a real, locally-unique id instead of
+        // FNA's hardcoded true/0 stubs. The id assigned here is only a local placeholder for
+        // non-SystemLink sessions - ENetBackend overwrites it with the wire-negotiated id once a
+        // real SystemLink session actually joins/hosts (see ENetBackend.cpp's AssignWireId/
+        // HandleServerWelcome/HandleGamerJoinBroadcast).
+        for (LocalNetworkGamer* l : locals)
+        {
+            l->SetIsHost(isHost_);
+            l->SetId(nextLocalGamerId_++);
+        }
+
         host_ = localGamers_[0];
 
         if (getIsHostProperty())
@@ -110,13 +158,27 @@ namespace Microsoft::Xna::Framework::Net
             sessionState_ = NetworkSessionState::Lobby;
         }
 
-        for (NetworkGamer* gamer : allGamers_)
+        // Deviation from FNA (see DEFERRED.md item #21 in the sibling cna-samples repo, and
+        // plan_net.md's Task 12.3 for the full investigation): FNA's constructor queues a
+        // GamerJoin NetworkEvent per initial gamer here instead, only drained by the *next*
+        // Update() call. Real XNA's GamerJoined replays itself immediately for every gamer
+        // already in the session the instant a handler subscribes via += - impossible for any
+        // caller to observe before this point anyway, since the session pointer doesn't exist
+        // until this constructor returns. sharp-runtime's EventHandler<T>::SetReplayHook()
+        // (added specifically for this) reproduces that: the closure below fires once,
+        // synchronously, for every gamer in allGamers_ at the moment each new handler subscribes -
+        // covering these initial local gamers here, and any later ones too, without a separate
+        // queued event (which would otherwise double-fire this same join once the queue drained).
+        // Mid-session joins discovered while handlers already exist (AddRemoteGamer) are
+        // unaffected: those still queue a real NetworkEvent, delivered through the normal
+        // Update() pump, exactly as before.
+        GamerJoined.SetReplayHook([this](const System::EventHandler<GamerJoinedEventArgs>::HandlerType& handler)
         {
-            NetworkEvent evt;
-            evt.Type = NetworkEventType::GamerJoin;
-            evt.Gamer = gamer;
-            SendNetworkEvent(std::move(evt));
-        }
+            for (NetworkGamer* gamer : allGamers_)
+            {
+                handler(this, GamerJoinedEventArgs(gamer));
+            }
+        });
 
         simulatedLatency_ = System::TimeSpan::Zero;
         simulatedPacketLoss_ = 0.0f;
@@ -129,6 +191,32 @@ namespace Microsoft::Xna::Framework::Net
         {
             CNA::Internal::Net::ENetBackend::StartHosting(this);
         }
+
+        ++instanceCount_; // Task 3.3
+    }
+
+    // Task 3.1: out-of-line so NetworkGamer (only forward-declared in the header) is a complete
+    // type here, where ownedGamers_'s std::vector<std::unique_ptr<NetworkGamer>> is destroyed.
+    NetworkSession::~NetworkSession()
+    {
+        // Task 2.1: a caller that `delete`s a NetworkSession* without calling Dispose() first
+        // (a real risk - Create()/Find()/Join() all hand back a caller-owned raw pointer, per
+        // this class's own ownership-contract doc comment above) used to leave activeSession_
+        // dangling at the just-freed `this`, and ENetBackend::TeardownSession never ran. Every
+        // subsequent BeginCreate/BeginFind/BeginJoin checks `activeSession_ != nullptr` and
+        // throws, so one mismanaged delete permanently bricked session creation for the rest of
+        // the process and leaked the transport (ENet host socket, discovery advertisement).
+        // Standard IDisposable safety net: fall back to Dispose() here if it was never called.
+        if (!isDisposed_)
+        {
+            Dispose();
+        }
+        --instanceCount_; // Task 3.3
+    }
+
+    int NetworkSession::GetInstanceCountForTesting()
+    {
+        return instanceCount_;
     }
 
     // --- Properties ---
@@ -197,8 +285,28 @@ namespace Microsoft::Xna::Framework::Net
         {
             CNA::Internal::Net::ENetBackend::TeardownSession(this);
         }
+        // Task 3.1: frees every gamer this session ever owned - after TeardownSession above, so
+        // ENetBackend's own per-session wire-id maps (which can hold these same raw pointers) are
+        // already torn down first, never left holding a reference to now-freed memory.
+        ownedGamers_.clear();
         activeSession_ = nullptr;
         isDisposed_ = true;
+    }
+
+    std::size_t NetworkSession::GetOwnedGamerCountForTesting() const
+    {
+        return ownedGamers_.size();
+    }
+
+    int NetworkSession::GetActiveActionInstanceCountForTesting()
+    {
+        return NetworkSessionAction::GetInstanceCountForTesting();
+    }
+
+    const std::string& NetworkSession::GetTypeName() const
+    {
+        static const std::string typeName = "Microsoft.Xna.Framework.Net.NetworkSession";
+        return typeName;
     }
 
     void NetworkSession::Update()
@@ -249,30 +357,30 @@ namespace Microsoft::Xna::Framework::Net
             }
             else if (evt.Type == NetworkEventType::GamerJoin)
             {
-                GamerJoined.Raise(nullptr, GamerJoinedEventArgs(evt.Gamer));
+                GamerJoined.Raise(this, GamerJoinedEventArgs(evt.Gamer));
             }
             else if (evt.Type == NetworkEventType::GamerLeave)
             {
-                GamerLeft.Raise(nullptr, GamerLeftEventArgs(evt.Gamer));
+                GamerLeft.Raise(this, GamerLeftEventArgs(evt.Gamer));
             }
             else if (evt.Type == NetworkEventType::HostChange)
             {
-                HostChanged.Raise(nullptr, HostChangedEventArgs(host_, evt.Gamer));
+                HostChanged.Raise(this, HostChangedEventArgs(host_, evt.Gamer));
                 host_ = evt.Gamer;
             }
             else // NetworkEventType::StateChange
             {
                 if (evt.State == NetworkSessionState::Playing)
                 {
-                    GameStarted.Raise(nullptr, GameStartedEventArgs());
+                    GameStarted.Raise(this, GameStartedEventArgs());
                 }
                 else if (evt.State == NetworkSessionState::Lobby)
                 {
-                    GameEnded.Raise(nullptr, GameEndedEventArgs());
+                    GameEnded.Raise(this, GameEndedEventArgs());
                 }
                 else
                 {
-                    SessionEnded.Raise(nullptr, NetworkSessionEndedEventArgs(evt.Reason));
+                    SessionEnded.Raise(this, NetworkSessionEndedEventArgs(evt.Reason));
                 }
                 sessionState_ = evt.State;
             }
@@ -286,8 +394,25 @@ namespace Microsoft::Xna::Framework::Net
             throw System::InvalidOperationException("LocalGamer max limit!");
         }
         auto* adding = new LocalNetworkGamer(LocalNetworkGamer::CreateInternal(gamer, this));
+        adding->SetIsHost(isHost_);
+        // Task 2.4: nextLocalGamerId_ is a real monotonic counter, never derived from any live
+        // collection's size (allGamers_.getCountProperty() shrinks on RemoveGamer, so a
+        // remove-then-add sequence used to hand out a colliding id already owned by a
+        // still-present gamer, corrupting FindGamerById).
+        adding->SetId(nextLocalGamerId_++);
         localGamers_.Add(adding);
         allGamers_.Add(adding);
+        ownedGamers_.emplace_back(adding); // Task 3.1
+
+        // Task 2.3: AddRemoteGamer (below) already enqueues a GamerJoin event so a handler
+        // already subscribed before it runs still learns about the new gamer; AddLocalGamer never
+        // did, so a handler subscribed before this call had no way to learn about the newly-added
+        // local gamer at all (no replay hook covers this path - SetReplayHook only fires on
+        // subscription, not on a later Add()).
+        NetworkEvent evt;
+        evt.Type = NetworkEventType::GamerJoin;
+        evt.Gamer = adding;
+        SendNetworkEvent(std::move(evt));
     }
 
     NetworkGamer* NetworkSession::FindGamerById(SharpRuntime::bytecs gameId) const
@@ -351,6 +476,23 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::AddRemoteGamer(NetworkGamer* gamer)
     {
+        // Task 3.1: AddRemoteGamer deliberately does NOT take ownership of gamer, unlike the
+        // constructor/AddLocalGamer above - its existing, established contract (see
+        // NetworkSessionTests.cpp's AddRemoteGamer* tests, which pass stack-allocated NetworkGamer
+        // instances) never assumed ownership transfer, and changing that here would crash those
+        // tests (deleting non-heap memory) the moment this session is disposed or this call
+        // throws. Ownership of the gamers ENetBackend actually `new`s belongs to ENetBackend's own
+        // per-session SessionState instead - see ENetBackend.cpp's OwnedRemoteGamers.
+
+        // Task 2.5: AddRemoteGamer used to add any remote gamer unconditionally, silently
+        // violating the documented "maximum players allowed" contract - no FNA equivalent exists
+        // to match (AddRemoteGamer is a CNA-internal, NOXNA extension; real FNA's networking is
+        // entirely stubbed out), so InvalidOperationException is used for symmetry with
+        // AddLocalGamer's own existing max-limit guard just above.
+        if (allGamers_.getCountProperty() >= maxGamers_)
+        {
+            throw System::InvalidOperationException("Session is full!");
+        }
         remoteGamers_.Add(gamer);
         allGamers_.Add(gamer);
 
@@ -373,6 +515,14 @@ namespace Microsoft::Xna::Framework::Net
         }
 
         gamer->SetHasLeftSession(true);
+        // Task 2.2: localGamers_ was never pruned here, unlike remoteGamers_/allGamers_ just
+        // below - a removed local gamer kept appearing in getLocalGamersProperty() forever,
+        // breaking the AllGamers == LocalGamers UNION RemoteGamers invariant. Reachable in
+        // production via ENetBackend.cpp's RemoveGamer(locals[0], HostEndedSession) call.
+        if (isLocal)
+        {
+            localGamers_.Remove(static_cast<LocalNetworkGamer*>(gamer));
+        }
         remoteGamers_.Remove(gamer);
         allGamers_.Remove(gamer);
 
@@ -547,17 +697,40 @@ namespace Microsoft::Xna::Framework::Net
             throw System::ArgumentException("result");
         }
 
-        // FNA hardcodes 69 here instead of forwarding the caller's original maxGamers argument
-        // (which BeginCreate never even stored) — preserved as-is.
-        activeSession_ = new NetworkSession(
-            activeAction_->SessionProperties,
-            activeAction_->SessionType,
-            69,
-            activeAction_->MaxPrivateSlots,
-            activeAction_->MaxLocalGamers,
-            activeAction_->LocalGamers
-        );
+        // Task 6.1: the constructor call below can throw (e.g. the maxLocalGamers-only overload
+        // falls back to an empty global Gamer::SignedInGamers list, making `host_ =
+        // localGamers_[0]` throw) - previously activeAction_ was only cleared *after* this call
+        // succeeded, so a throw here left it permanently non-null, bricking every subsequent
+        // Begin* call for the rest of the process with InvalidOperationException. Clear it in a
+        // catch before rethrowing, same as the already-safe success path below.
+        NetworkSession* created;
+        try
+        {
+            // FNA hardcodes 69 here instead of forwarding the caller's original maxGamers argument
+            // (which BeginCreate never even stored) — preserved as-is.
+            created = new NetworkSession(
+                activeAction_->SessionProperties,
+                activeAction_->SessionType,
+                69,
+                activeAction_->MaxPrivateSlots,
+                activeAction_->MaxLocalGamers,
+                activeAction_->LocalGamers,
+                true // EndCreate: this machine is hosting (see DEFERRED.md item #20)
+            );
+        }
+        catch (...)
+        {
+            delete activeAction_;
+            activeAction_ = nullptr;
+            throw;
+        }
 
+        activeSession_ = created;
+
+        // Task 3.2: every End* used to just drop activeAction_ (a bare `= nullptr;`) with no prior
+        // delete - `new NetworkSessionAction(...)` in every Begin* permanently leaked one object
+        // per Begin*/End* cycle.
+        delete activeAction_;
         activeAction_ = nullptr;
         return activeSession_;
     }
@@ -664,6 +837,7 @@ namespace Microsoft::Xna::Framework::Net
         }
 
         NetworkSessionType type = activeAction_->SessionType;
+        delete activeAction_; // Task 3.2
         activeAction_ = nullptr;
 
         if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(type))
@@ -708,12 +882,20 @@ namespace Microsoft::Xna::Framework::Net
             throw System::InvalidOperationException();
         }
 
+        // Task 2.15: FNA hardcodes NetworkSessionType.PlayerMatch here (marked FIXME upstream) -
+        // harmless in FNA itself (networking is entirely stubbed out there regardless of session
+        // type), but a real functional gap in CNA, whose ENet transport is gated specifically on
+        // SystemLink: every session produced via the real public Join() entry point would
+        // otherwise permanently have real networking disabled. Derive the real type (and stash
+        // the connect address/port for EndJoin below) from availableSession instead.
+        pendingJoinAddress_ = availableSession->GetConnectAddress();
+        pendingJoinPort_ = availableSession->GetConnectPort();
         activeAction_ = new NetworkSessionAction(
             std::move(asyncState), std::move(callback), 4, std::nullopt, 0,
             // FNA passes null for SessionProperties here (marked FIXME upstream); substituted
             // with a default instance since this port's SessionProperties isn't nullable.
             NetworkSessionProperties{},
-            NetworkSessionType::PlayerMatch // FIXME upstream: hardcoded rather than derived from availableSession.
+            availableSession->GetSessionType()
         );
         return activeAction_;
     }
@@ -727,18 +909,34 @@ namespace Microsoft::Xna::Framework::Net
 
         int actionMaxLocalGamers = activeAction_->MaxLocalGamers;
         auto actionLocalGamers = activeAction_->LocalGamers;
+        NetworkSessionType actionSessionType = activeAction_->SessionType;
+        delete activeAction_; // Task 3.2
         activeAction_ = nullptr;
 
         activeSession_ = new NetworkSession(
             // FNA passes null for properties here (marked FIXME upstream); substituted with a
             // default instance since this port's SessionProperties isn't nullable.
             NetworkSessionProperties{},
-            NetworkSessionType::PlayerMatch, // FIXME upstream
-            MaxSupportedGamers,              // FIXME upstream
-            4,                                // FIXME upstream
+            actionSessionType,   // Task 2.15: the real type derived in BeginJoin, not a hardcoded one
+            MaxSupportedGamers,  // FIXME upstream
+            4,                    // FIXME upstream
             actionMaxLocalGamers,
-            actionLocalGamers
+            actionLocalGamers,
+            false // EndJoin: this machine is joining someone else's session (see DEFERRED.md item #20)
         );
+
+        // Task 2.15: the constructor above only starts activeSession_'s own ENet host (see its
+        // own RealNetworkingEnabled-gated StartHosting call) - actually connecting out to the
+        // session being joined is this call's own responsibility, same as ConnectToHost's other
+        // production caller. Skipped for a manually-constructed AvailableNetworkSession with no
+        // real discovery-sourced connect info (GetConnectAddress() empty).
+        if (!pendingJoinAddress_.empty())
+        {
+            CNA::Internal::Net::ENetBackend::ConnectToHost(activeSession_, pendingJoinAddress_, pendingJoinPort_);
+        }
+        pendingJoinAddress_.clear();
+        pendingJoinPort_ = 0;
+
         return activeSession_;
     }
 
@@ -821,6 +1019,7 @@ namespace Microsoft::Xna::Framework::Net
 
         int actionMaxLocalGamers = activeAction_->MaxLocalGamers;
         auto actionLocalGamers = activeAction_->LocalGamers;
+        delete activeAction_; // Task 3.2
         activeAction_ = nullptr;
 
         activeSession_ = new NetworkSession(
@@ -829,7 +1028,8 @@ namespace Microsoft::Xna::Framework::Net
             MaxSupportedGamers,              // FIXME upstream
             4,                                // FIXME upstream
             actionMaxLocalGamers,
-            actionLocalGamers
+            actionLocalGamers,
+            false // EndJoinInvited: this machine is joining someone else's session (see DEFERRED.md item #20)
         );
         return activeSession_;
     }

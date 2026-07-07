@@ -121,6 +121,13 @@ namespace Microsoft::Xna::Framework::GamerServices
     void AvatarRenderer::EnableRealRenderingEXT(Graphics::GraphicsDevice& device,
                                                  std::shared_ptr<Graphics::SkinnedModelEXT> model)
     {
+        // Task 11.6: unlike DrawRealEXT/Draw/getStateProperty/getBindPoseProperty (which all
+        // throw ObjectDisposedException), this used to silently succeed after Dispose() - even
+        // re-populating realDevice_/realModel_/realEffect_, effectively "undisposing" the object.
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("AvatarRenderer");
+        }
         realDevice_ = &device;
         realModel_ = std::move(model);
         realEffect_ = std::make_unique<Graphics::SkinnedEffect>(device);
@@ -133,7 +140,21 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void AvatarRenderer::SetAppearanceEXT(const AvatarAppearanceEXT& appearance)
     {
+        // Task 11.6: same consistency fix as EnableRealRenderingEXT above.
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("AvatarRenderer");
+        }
         appearance_ = appearance;
+    }
+
+    Microsoft::Xna::Framework::Color AvatarRenderer::PartTintEXT(const std::string& partName) const
+    {
+        if (partName.find("Hair") != std::string::npos) { return appearance_.getHairColorProperty(); }
+        if (partName.find("Shirt") != std::string::npos) { return appearance_.getShirtColorProperty(); }
+        if (partName.find("Pants") != std::string::npos) { return appearance_.getPantsColorProperty(); }
+        if (partName.find("Shoes") != std::string::npos) { return appearance_.getShoesColorProperty(); }
+        return appearance_.getSkinColorProperty();
     }
 
     void AvatarRenderer::DrawRealEXT(const std::string& animationClipName,
@@ -164,9 +185,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         for (const auto& part : realModel_->Parts)
         {
-            const bool isHair = part.Name == "hair";
-            realEffect_->setDiffuseColorProperty(
-                (isHair ? appearance_.getHairColorProperty() : appearance_.getSkinColorProperty()).ToVector3());
+            realEffect_->setDiffuseColorProperty(PartTintEXT(part.Name).ToVector3());
             realEffect_->setTextureProperty(part.Texture);
             realEffect_->Apply();
 

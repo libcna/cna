@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 #include "CNA/CNAHelper.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -27,11 +28,16 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Constructs an empty backing buffer.
          *
-         * @param capacity Ignored: System::IO::MemoryStream has no capacity-preallocation
-         * constructor. Capacity is purely a preallocation hint in .NET with no effect on
-         * observable behavior, so discarding it here is not a behavioral deviation.
+         * @param capacity Preallocation hint, otherwise ignored: System::IO::MemoryStream has no
+         * capacity-preallocation constructor, and a non-negative capacity is purely a hint in .NET
+         * with no effect on observable behavior. A negative value is not ignorable, though - real
+         * .NET's MemoryStream(int capacity) throws ArgumentOutOfRangeException for it, so that part
+         * of the contract is preserved even though preallocation itself is not.
          */
-        explicit PacketReaderStream(int capacity) { (void) capacity; }
+        explicit PacketReaderStream(int capacity)
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegative(capacity, "capacity");
+        }
 
         /** @brief The backing buffer passed to the BinaryReader base class. */
         System::IO::MemoryStream stream_;

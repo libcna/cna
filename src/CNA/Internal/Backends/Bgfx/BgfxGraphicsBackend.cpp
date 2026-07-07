@@ -1393,6 +1393,12 @@ namespace CNA::Internal::Backends::Bgfx
         layout.begin();
         if (stride == 52)
         {
+            // Task 11.10: this layout is independently duplicated (magic stride 52) in
+            // EasyGLGraphicsBackend.cpp's ApplyLayout and VulkanGraphicsBackend.cpp's
+            // GetOrCreatePipelineSkinned3D - see EasyGLGraphicsBackend.cpp's own comment at its
+            // "case 52" for the full cross-reference to the canonical
+            // VertexPositionNormalTextureSkinned::getVertexDeclarationStatic() layout and why a
+            // shared-derivation refactor was investigated but deferred.
             // SkinnedEffect: pos(3f=12) + normal(3f=12) + uv(2f=8) + weights(4f=16) + indices(4*u8=4)
             layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);

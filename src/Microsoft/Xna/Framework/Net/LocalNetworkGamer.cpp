@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include <algorithm>
 
@@ -44,11 +45,31 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSession::NetworkEvent packet = std::move(packetQueue_.front());
         packetQueue_.pop();
         int len = std::min(static_cast<int>(packet.Packet.size()), static_cast<int>(data.size()));
+        // Task 2.8: FNA's own Array.Copy(packet.Packet, 0, data, offset, len) validates offset+len
+        // against data.Length and throws ArgumentException on overflow (len itself is computed
+        // the same offset-oblivious way in FNA, so it can legitimately exceed data.size() - offset
+        // for a non-zero offset) - preserved here instead of std::copy's undefined behavior for an
+        // out-of-bounds destination range. The packet is still consumed from the queue either way,
+        // matching FNA's Dequeue()-before-Array.Copy ordering.
+        if (offset < 0 || offset + len > static_cast<int>(data.size()))
+        {
+            throw System::ArgumentException("offset");
+        }
         std::copy(packet.Packet.begin(), packet.Packet.begin() + len, data.begin() + offset);
 
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
         {
-            // FIXME upstream: pointer identity is a weak equality check for "same gamer".
+            // Task 6.2: FIXME upstream ("This is a bad equality check!" in FNA's own source) -
+            // pointer identity is a weak equality check for "same gamer", preserved as-is rather
+            // than "fixed" to a value-based comparison FNA itself doesn't have. Re-evaluated after
+            // Task 3.1 gave NetworkSession/ENetBackend real ownership of every gamer they create
+            // (previously nothing was ever freed, so no address could be coincidentally reused):
+            // still safe, because neither ever frees a gamer individually - only in bulk, at
+            // whole-session Dispose()/TeardownSession - and every NetworkEvent that could carry a
+            // stale Gamer* lives inside a per-gamer packetQueue_ (or NetworkSession's own event
+            // queue), which is destroyed together with that same session's gamers at that same
+            // Dispose() call. No stale pointer from a torn-down session can outlive the objects
+            // it would need to be compared against.
             if (gamer == packet.Gamer)
             {
                 sender = gamer;
@@ -78,6 +99,8 @@ namespace Microsoft::Xna::Framework::Net
 
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
         {
+            // Task 6.2: same pointer-identity FIXME and same re-evaluated-safe reasoning as the
+            // other ReceiveData overload above.
             if (gamer == packet.Gamer)
             {
                 sender = gamer;
@@ -95,6 +118,13 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options)
     {
+        // Task 2.9: FNA's own Array.Copy(data, offset, mem, 0, mem.Length) validates
+        // offset/count against data.Length and throws on overflow - preserved here instead of
+        // constructing a vector from an out-of-bounds iterator range (undefined behavior).
+        if (offset < 0 || count < 0 || offset + count > static_cast<int>(data.size()))
+        {
+            throw System::ArgumentException("offset");
+        }
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
         {
@@ -115,6 +145,11 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options, NetworkGamer* recipient)
     {
+        // Task 2.9: see the non-recipient overload above for why this check exists.
+        if (offset < 0 || count < 0 || offset + count > static_cast<int>(data.size()))
+        {
+            throw System::ArgumentException("offset");
+        }
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
         NetworkSession::NetworkEvent evt;
         evt.Type = NetworkSession::NetworkEventType::PacketSend;

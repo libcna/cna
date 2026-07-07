@@ -22,9 +22,11 @@
 #include "System/EventHandler.hpp"
 #include "System/IAsyncResult.hpp"
 #include "System/IDisposable.hpp"
+#include "System/Object.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include "System/TimeSpan.hpp"
 #include <any>
+#include <memory>
 #include <optional>
 #include <queue>
 #include <vector>
@@ -41,8 +43,21 @@ namespace Microsoft::Xna::Framework::Net
 
     /**
      * @brief Manages the properties and gamers of a network gaming session.
+     *
+     * Ownership contract (Task 3.1/3.3; not applicable in real XNA, where the GC frees this
+     * object once unreachable): `Create()`/`Find()`/`Join()`/`JoinInvited()` and their `End*`
+     * counterparts all return a **caller-owned** `NetworkSession*` obtained via `new`. `Dispose()`
+     * releases the session's owned resources (its ENet transport, every gamer it created) and
+     * marks it disposed, matching `System::IDisposable`'s usual "release unmanaged resources, the
+     * object may still be inspected afterward" contract — it deliberately does **not** `delete
+     * this`, since a huge number of existing call sites (throughout this codebase's own test
+     * suite, and any real caller written the same way) legitimately read state after `Dispose()`
+     * (e.g. `getIsDisposedProperty()`), which a self-deleting `Dispose()` would turn into
+     * use-after-free. The caller must `delete` the pointer separately once truly done with it
+     * (typically right after `Dispose()`), the same way any other `new`-returned, non-reference-
+     * counted C++ object would be freed.
      */
-    class NetworkSession final : public System::IDisposable
+    class NetworkSession final : public System::Object, public System::IDisposable
     {
     public:
         /** @brief The maximum number of gamers supported by any session. */
@@ -138,12 +153,22 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets whether host migration is allowed.
          *
+         * Implementation note: this flag is stored but has no effect on actual behavior, matching
+         * FNA's own reference implementation (a plain auto-property with no real migration logic
+         * anywhere in FNA's stubbed-out networking layer). Setting this to true does not enable
+         * host election: `ENetBackend::HandleDisconnect` unconditionally ends the session the
+         * instant its host peer disconnects, with no election logic, regardless of this flag.
+         *
          * @return true if host migration is allowed.
          */
         [[nodiscard]] bool getAllowHostMigrationProperty() const;
 
         /**
          * @brief Sets whether host migration is allowed.
+         *
+         * Implementation note: see getAllowHostMigrationProperty()'s doc comment - this value is
+         * stored, but real host migration is not implemented (matching FNA's own reference
+         * behavior).
          *
          * @param value The new value.
          */
@@ -250,12 +275,20 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the artificially simulated network latency.
          *
+         * Implementation note (Task 4.3): this value is stored but has no effect on actual
+         * traffic timing, matching FNA's own reference implementation - FNA's `SimulatedLatency`
+         * is itself a plain auto-property with no delay queue or throttling logic anywhere in its
+         * source. No custom delay queue exists anywhere in `ENetBackend`/`ENetHostHandle` either.
+         *
          * @return The simulated latency.
          */
         [[nodiscard]] System::TimeSpan getSimulatedLatencyProperty() const;
 
         /**
          * @brief Sets the artificially simulated network latency.
+         *
+         * Implementation note: see getSimulatedLatencyProperty()'s doc comment - stored, not
+         * applied to real traffic.
          *
          * @param value The new simulated latency.
          */
@@ -264,12 +297,20 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the artificially simulated packet loss fraction.
          *
+         * Implementation note (Task 4.3): this value is stored but has no effect on actual packet
+         * delivery, matching FNA's own reference implementation - FNA's `SimulatedPacketLoss` is
+         * itself a plain auto-property with no synthetic-drop logic anywhere in its source. No
+         * such logic exists anywhere in `ENetBackend`/`ENetHostHandle` either.
+         *
          * @return The simulated packet loss, from 0.0 to 1.0.
          */
         [[nodiscard]] float getSimulatedPacketLossProperty() const;
 
         /**
          * @brief Sets the artificially simulated packet loss fraction.
+         *
+         * Implementation note: see getSimulatedPacketLossProperty()'s doc comment - stored, not
+         * applied to real traffic.
          *
          * @param value The new simulated packet loss, from 0.0 to 1.0.
          */
@@ -279,7 +320,22 @@ namespace Microsoft::Xna::Framework::Net
         System::EventHandler<GameStartedEventArgs> GameStarted;
         /** @brief Raised when a hosted game ends. */
         System::EventHandler<GameEndedEventArgs> GameEnded;
-        /** @brief Raised when a gamer joins the session. */
+        /**
+         * @brief Raised when a gamer joins the session.
+         *
+         * The initial local gamer(s) established by `Create()`/`Join()`/`JoinInvited()` are
+         * queued internally at construction time, not raised into this event directly (a caller
+         * cannot possibly have subscribed yet at that point - the session pointer doesn't exist
+         * until the static factory method returns). Real XNA's `GamerJoined` is documented to
+         * replay itself immediately upon `+=` subscription for every gamer already in the session
+         * - `System::EventHandler<T>` (sharp-runtime) has no such "replay on subscribe" hook, so
+         * this port cannot reproduce that automatically (see `plan_net.md`'s Task 12.3 for the
+         * full investigation). **Call `Update()` once, immediately after subscribing, to receive
+         * the initial join event(s) for this session's own local gamers** - this is the
+         * intentional, permanent, correct pattern (not a temporary workaround) given the above
+         * constraint; see `../cna-samples/samples/ClientServerSample`'s `HookSessionEvents()`
+         * call site for a real, working example.
+         */
         System::EventHandler<GamerJoinedEventArgs> GamerJoined;
         /** @brief Raised when a gamer leaves the session. */
         System::EventHandler<GamerLeftEventArgs> GamerLeft;
@@ -299,8 +355,62 @@ namespace Microsoft::Xna::Framework::Net
 
         /**
          * @brief Disposes the session, flushing queued packets on all local gamers.
+         *
+         * Task 3.1: also frees every `NetworkGamer`/`LocalNetworkGamer` this session ever created
+         * (constructor-time locals, `AddLocalGamer`, `AddRemoteGamer`) - previously permanently
+         * leaked (nothing anywhere in this codebase ever `delete`d a gamer). Freeing happens here,
+         * at session teardown, rather than incrementally as gamers cycle out of
+         * `PreviousGamers` — `ENetBackend`'s own per-session wire-id maps can hold the same raw
+         * pointers, and those are only guaranteed torn down together with this session (via
+         * `ENetBackend::TeardownSession`, called from here), not at an arbitrary earlier point in
+         * the session's life.
          */
         void Dispose() override;
+
+        /**
+         * @brief Task 3.3: public so the caller (which owns every `NetworkSession*` this class's
+         * static factory methods return - see the class's own doc comment for the full ownership
+         * contract) can actually free it. Declared here but defined out-of-line in the .cpp, where
+         * `NetworkGamer.hpp` makes `NetworkGamer` a complete type - `ownedGamers_` is a
+         * `std::vector<std::unique_ptr<NetworkGamer>>`, and `NetworkGamer` is only
+         * forward-declared in this header.
+         */
+        ~NetworkSession() override;
+
+        /**
+         * @brief NOXNA: the number of gamer objects this session currently owns and has not yet
+         * freed (see Dispose()'s doc comment). Exists purely to make Task 3.1's ownership fix
+         * testable; not part of real XNA.
+         *
+         * @return The number of currently-owned, not-yet-freed gamer objects.
+         */
+        NOXNA [[nodiscard]] std::size_t GetOwnedGamerCountForTesting() const;
+
+        /**
+         * @brief NOXNA: how many `NetworkSessionAction` instances are currently live (`new`'d by
+         * some `Begin*` call, not yet `delete`d by its `End*` counterpart). `NetworkSessionAction`
+         * itself is private, so this forwards to its own `GetInstanceCountForTesting()`. Exists
+         * purely to make Task 3.2's leak fix testable; not part of real XNA.
+         *
+         * @return The number of currently-live instances.
+         */
+        NOXNA [[nodiscard]] static int GetActiveActionInstanceCountForTesting();
+
+        /**
+         * @brief NOXNA: how many `NetworkSession` instances are currently live (`new`'d by
+         * `EndCreate`/`EndFind`.../..., not yet `delete`d by their owning caller - see the class's
+         * own doc comment for the ownership contract). Exists purely to make Task 3.3's documented
+         * contract testable; not part of real XNA.
+         *
+         * @return The number of currently-live instances.
+         */
+        NOXNA [[nodiscard]] static int GetInstanceCountForTesting();
+
+        /**
+         * @brief Returns the fully-qualified .NET type name of this class.
+         * @return A const reference to the type name string.
+         */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Processes queued network events, raising the corresponding public events.
@@ -672,6 +782,22 @@ namespace Microsoft::Xna::Framework::Net
                 NetworkSessionType type
             );
 
+            /**
+             * @brief Task 3.2: decrements the live-instance counter `GetInstanceCountForTesting()`
+             * reports, so a leaked `NetworkSessionAction` (one `new`'d by a `Begin*` call but never
+             * `delete`d by its `End*` counterpart) is observable.
+             */
+            ~NetworkSessionAction() override;
+
+            /**
+             * @brief NOXNA: how many `NetworkSessionAction` instances are currently live (`new`'d
+             * by some `Begin*` call, not yet `delete`d by its `End*` counterpart). Exists purely to
+             * make Task 3.2's leak fix testable; not part of real XNA.
+             *
+             * @return The number of currently-live instances.
+             */
+            NOXNA static int GetInstanceCountForTesting();
+
             /** @brief Gets the user-defined state supplied to the Begin* call. */
             [[nodiscard]] const std::any& getAsyncStateProperty() const override;
             /** @brief Always false; this stub never completes synchronously. */
@@ -701,6 +827,8 @@ namespace Microsoft::Xna::Framework::Net
             // Mutable: IAsyncResult::getAsyncWaitHandleProperty() is const but returns a
             // non-const WaitHandle&, so the handle exposed through it must be mutable.
             mutable System::Threading::EventWaitHandle asyncWaitHandle_;
+
+            NOXNA static int instanceCount_;
         };
 
         explicit NetworkSession(
@@ -709,7 +837,12 @@ namespace Microsoft::Xna::Framework::Net
             int maxGamers,
             int privateGamerSlots,
             int maxLocal,
-            std::optional<std::vector<GamerServices::SignedInGamer*>> localGamers
+            std::optional<std::vector<GamerServices::SignedInGamer*>> localGamers,
+            // Not part of FNA's original constructor signature (see DEFERRED.md item #20 in the
+            // sibling cna-samples repo): true from EndCreate (this machine is hosting), false from
+            // EndJoin/EndJoinInvited (this machine is joining someone else's session). Drives every
+            // local gamer's real NetworkGamer::SetIsHost() instead of FNA's hardcoded-true stub.
+            bool isHost
         );
 
         bool isDisposed_{false};
@@ -722,6 +855,7 @@ namespace Microsoft::Xna::Framework::Net
         int bytesPerSecondReceived_{0};
         int bytesPerSecondSent_{0};
         NetworkGamer* host_{nullptr};
+        bool isHost_{true};
         int maxGamers_{0};
         int privateGamerSlots_{0};
         NetworkSessionProperties sessionProperties_;
@@ -731,9 +865,34 @@ namespace Microsoft::Xna::Framework::Net
         float simulatedPacketLoss_{0.0f};
 
         int maxLocalGamers_{0};
+        // Task 2.4: a real monotonic counter for locally-assigned placeholder ids, separate from
+        // any live collection's size. AddLocalGamer used to derive its new gamer's id from
+        // allGamers_.getCountProperty() at call time - since RemoveGamer shrinks that count with
+        // no separate counter, a remove-then-add sequence could hand out a colliding id already
+        // owned by a still-present gamer, corrupting FindGamerById.
+        NOXNA SharpRuntime::bytecs nextLocalGamerId_{0};
         std::queue<NetworkEvent> networkEvents_;
+
+        // Task 3.1/10.2: owns every gamer this session ever created - GamerCollection<T>'s own
+        // views only ever hold non-owning raw pointers (see its doc comment for the full,
+        // canonical ownership contract this follows). Freed in bulk on Dispose() - see Dispose()'s
+        // own doc comment for why not incrementally.
+        NOXNA std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;
 
         static NetworkSessionAction* activeAction_;
         static NetworkSession* activeSession_;
+
+        // Task 2.15: the connect address/port BeginJoin captured from its AvailableNetworkSession
+        // argument, consumed by EndJoin to actually call ENetBackend::ConnectToHost once the
+        // joined session exists - NetworkSessionAction (shared by every Begin*/End* pair) has no
+        // room for these without also touching Create/Find/JoinInvited's own call sites, so they
+        // get the same single-pending-action static treatment as activeAction_/activeSession_
+        // above rather than growing that shared class for just one caller.
+        NOXNA static std::string pendingJoinAddress_;
+        NOXNA static uint16_t pendingJoinPort_;
+
+        // Task 3.3: incremented by the constructor, decremented by ~NetworkSession() - see
+        // GetInstanceCountForTesting()'s own doc comment.
+        NOXNA static int instanceCount_;
     };
 }

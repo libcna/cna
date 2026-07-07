@@ -13,7 +13,9 @@
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include "SignedInGamerTestAccess.hpp"
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 
@@ -21,6 +23,16 @@ namespace {
     FriendGamer MakeGamer() {
         return FriendGamer::CreateInternal("tag1", "Display1", false, false, false, false, false, false);
     }
+
+    // Task 10.1: no current production subclass (FriendGamer/SignedInGamer/NetworkGamer) ever
+    // omits Gamer's own displayName argument - they all forward an explicit (possibly empty)
+    // string. This minimal test-only subclass exercises the true "argument omitted entirely"
+    // path (Gamer's own std::nullopt default), which is otherwise unreachable from outside the
+    // GamerServices/Net namespaces.
+    class TestOnlyGamer : public Gamer {
+    public:
+        explicit TestOnlyGamer(const std::string& gamertag) : Gamer(gamertag) {}
+    };
 }
 
 // --- Gamer (via FriendGamer, since Gamer itself is abstract) ---
@@ -32,8 +44,20 @@ TEST(GamerTest, DisplayNameGetSet) {
     EXPECT_EQ("NewName", g.getDisplayNameProperty());
 }
 
-TEST(GamerTest, DisplayNameFallsBackToGamertagWhenEmpty) {
+// Task 10.1: matches FNA's own `DisplayName = displayName ?? gamertag`, which substitutes only
+// for a true C# null, never for an explicitly-passed empty string. FriendGamer's displayName
+// parameter is required (not optional/defaulted) in both FNA and this port, so a caller passing
+// an explicit "" must have that "" preserved, not silently coerced to the gamertag.
+TEST(GamerTest, DisplayNameStaysEmptyWhenExplicitlyEmpty) {
     auto g = FriendGamer::CreateInternal("tagonly", "", false, false, false, false, false, false);
+    EXPECT_EQ("", g.getDisplayNameProperty());
+}
+
+// The gamertag fallback only applies when displayName is omitted entirely (Gamer's own
+// std::nullopt default) - unreachable through any current production subclass, so exercised
+// directly via TestOnlyGamer instead.
+TEST(GamerTest, DisplayNameFallsBackToGamertagWhenOmitted) {
+    TestOnlyGamer g("tagonly");
     EXPECT_EQ("tagonly", g.getDisplayNameProperty());
 }
 
@@ -66,6 +90,37 @@ TEST(GamerTest, ToStringReturnsDisplayName) {
 
 TEST(GamerTest, SignedInGamersStaticNotNull) {
     EXPECT_NE(nullptr, Gamer::getSignedInGamersProperty());
+}
+
+// Task 9.1: setSignedInGamersProperty's delete-old-then-replace logic had zero direct coverage -
+// only the getter (returning a non-null default) was ever tested. Covers setting once, setting
+// twice (the old SignedInGamerCollection wrapper must be replaced cleanly, not merely leaked or
+// left dangling - see Task 7.5's write-up for the adjacent SignedInGamer* leak this same setter
+// exposed inside GamerServicesDispatcher::Initialize()), and setting to the same pointer (a
+// documented no-op via the setter's own `if (signedInGamers_ != value)` guard).
+//
+// Installs a fresh, empty SignedInGamerCollection on teardown rather than restoring a captured
+// "previous" pointer - setSignedInGamersProperty unconditionally deletes whatever it replaces, so
+// reusing a captured previous pointer would double-free (see NetworkSessionTests.cpp's own
+// RestoreGlobalGuard precedent, first established while fixing Task 2.15's double-free).
+TEST(GamerTest, SetSignedInGamersPropertyReplacesThePreviousCollection) {
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    auto* first = new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}));
+    Gamer::setSignedInGamersProperty(first);
+    EXPECT_EQ(first, Gamer::getSignedInGamersProperty());
+
+    auto* second = new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}));
+    Gamer::setSignedInGamersProperty(second); // must replace (and free) `first`, not leak it
+    EXPECT_EQ(second, Gamer::getSignedInGamersProperty());
+
+    // Setting to the same pointer again must be a safe no-op, not a self-delete.
+    Gamer::setSignedInGamersProperty(second);
+    EXPECT_EQ(second, Gamer::getSignedInGamersProperty());
 }
 
 TEST(GamerTest, GetProfileReturnsUsableProfile) {
@@ -380,9 +435,28 @@ TEST(SignedInGamerTest, PartySizeSet) {
     EXPECT_EQ(4, gamer.getPartySizeProperty());
 }
 
+// Task 9.11: FNA's real SignedInGamer.Presence is get-only but returns a GamerPresence *class*
+// (reference type), so real game code writes `gamer.Presence.PresenceMode = ...` and mutates the
+// same live object - a const-only getPresenceProperty() would make this permanently impossible in
+// C++. Proves the non-const overload mutates the gamer's own live GamerPresence, not a copy: the
+// change is visible through a completely separate later call to the property, including the
+// const overload used by a const-qualified reference to the same gamer.
+TEST(SignedInGamerTest, PresencePropertyNonConstOverloadMutatesLiveObject) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    ASSERT_EQ(GamerPresenceMode::None, gamer.getPresenceProperty().getPresenceModeProperty());
+
+    gamer.getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::SinglePlayer);
+
+    EXPECT_EQ(GamerPresenceMode::SinglePlayer, gamer.getPresenceProperty().getPresenceModeProperty());
+    const SignedInGamer& constGamer = gamer;
+    EXPECT_EQ(GamerPresenceMode::SinglePlayer, constGamer.getPresenceProperty().getPresenceModeProperty());
+}
+
+// Task 7.3: FNA's own internal GameDefaults() constructor is empty, leaving GameDifficulty at
+// C#'s implicit default(T) - the ordinal-0 value, GameDifficulty::Easy, not Normal.
 TEST(SignedInGamerTest, GameDefaultsPresencePrivilegesDefaults) {
     auto gamer = SignedInGamer::CreateInternal("tag1");
-    EXPECT_EQ(GameDifficulty::Normal, gamer.getGameDefaultsProperty().getGameDifficultyProperty());
+    EXPECT_EQ(GameDifficulty::Easy, gamer.getGameDefaultsProperty().getGameDifficultyProperty());
     EXPECT_EQ(GamerPresenceMode::None, gamer.getPresenceProperty().getPresenceModeProperty());
     EXPECT_EQ(GamerPrivilegeSetting::Everyone, gamer.getPrivilegesProperty().getAllowCommunicationProperty());
 }
@@ -451,7 +525,7 @@ TEST(SignedInGamerTest, SignedInEventFires) {
             seen = e.getGamerProperty();
         }
     );
-    SignedInGamer::OnSignIn(&gamer);
+    SignedInGamerTestAccess::OnSignIn(&gamer);
     EXPECT_EQ(&gamer, seen);
     SignedInGamer::SignedIn.Remove(token);
 }
@@ -464,7 +538,7 @@ TEST(SignedInGamerTest, SignedOutEventFires) {
             seen = e.getGamerProperty();
         }
     );
-    SignedInGamer::OnSignOut(&gamer);
+    SignedInGamerTestAccess::OnSignOut(&gamer);
     EXPECT_EQ(&gamer, seen);
     SignedInGamer::SignedOut.Remove(token);
 }

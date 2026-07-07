@@ -172,3 +172,26 @@ TEST(TwoProcessLoopbackTest, HostAndClientJoinAndExchangeAppDataAcrossRealProces
     EXPECT_EQ(hostExitCode, 0) << "host exited with code " << hostExitCode << "; output: " << hostOutput;
     EXPECT_EQ(clientExitCode, 0) << "client exited with code " << clientExitCode << "; output: " << clientOutput;
 }
+
+// Task 6.3: ENetBackend::StartHosting used to commit a new session into its Sessions() map
+// *before* ENetDiscoveryService::RegisterHost() (which can throw a bind/socket-create failure) -
+// leaving a stale, undiscoverable entry with no rollback. This can only be forced deterministically
+// in a process where the discovery socket has never yet been bound (see the harness's own comment
+// on RunStartHostingPartialFailure for why an isolated process is required, same reasoning as the
+// host/client roles above).
+TEST(TwoProcessLoopbackTest, StartHostingRollsBackCleanlyOnDiscoveryRegistrationFailure) {
+    auto outerDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(kOuterWatchdogSeconds);
+
+    SpawnedProcess proc = SpawnHarness({"--role=start-hosting-partial-failure"});
+    ASSERT_NE(proc.pid, -1);
+
+    int exitCode = -1;
+    bool finished = WaitWithWatchdog(proc.pid, outerDeadline, &exitCode);
+
+    std::string output;
+    DrainRemaining(proc.readFd, &output);
+    close(proc.readFd);
+
+    EXPECT_TRUE(finished) << "process did not exit before the watchdog deadline and was killed; output: " << output;
+    EXPECT_EQ(exitCode, 0) << "process exited with code " << exitCode << "; output: " << output;
+}

@@ -19,6 +19,22 @@ TEST(QualityOfServiceTest, DefaultValues) {
     EXPECT_EQ(System::TimeSpan::Zero, qos.getMinimumRoundtripTimeProperty());
 }
 
+// Task 4.2: the parameterless CreateInternal() always yielded the same hardcoded stub (all-zero
+// rates, no matter what) - the only production call site (ENetDiscoveryService.cpp) now uses this
+// measured overload instead, with a real wall-clock round-trip time from an actual discovery
+// query/reply exchange.
+TEST(QualityOfServiceTest, MeasuredOverloadReflectsRealRoundtripTime) {
+    auto measured = System::TimeSpan::FromMilliseconds(42.5);
+    auto qos = QualityOfService::CreateInternal(measured);
+    EXPECT_EQ(measured, qos.getAverageRoundtripTimeProperty());
+    EXPECT_EQ(measured, qos.getMinimumRoundtripTimeProperty());
+    EXPECT_TRUE(qos.getIsAvailableProperty());
+    // Bandwidth isn't measurable from a connectionless discovery query/reply alone - stays 0,
+    // same as the parameterless overload.
+    EXPECT_EQ(0, qos.getBytesPerSecondDownstreamProperty());
+    EXPECT_EQ(0, qos.getBytesPerSecondUpstreamProperty());
+}
+
 // --- AvailableNetworkSession ---
 
 namespace {
@@ -75,12 +91,53 @@ TEST(AvailableNetworkSessionTest, EqualityConsidersConnectAddressAndPort) {
     EXPECT_NE(a, c);
 }
 
+// Task 5.9: the header's own doc comment on operator== explicitly states QualityOfService and
+// NetworkSessionProperties are excluded ("not themselves equatable, so they're excluded") - but
+// every existing equality test only ever varied CurrentGamerCount, never actually proving these
+// two fields don't affect the comparison either way.
+TEST(AvailableNetworkSessionTest, EqualityExcludesQualityOfServiceAndSessionProperties) {
+    NetworkSessionProperties propsA;
+    propsA.Add(1);
+    NetworkSessionProperties propsB;
+    propsB.Add(2);
+    propsB.Add(3);
+
+    auto qosA = QualityOfService::CreateInternal();
+    auto qosB = QualityOfService::CreateInternal(System::TimeSpan::FromMilliseconds(500.0));
+
+    auto a = AvailableNetworkSession::CreateInternal(2, "host1", 1, 3, propsA, qosA, "10.0.0.1", 1000);
+    auto b = AvailableNetworkSession::CreateInternal(2, "host1", 1, 3, propsB, qosB, "10.0.0.1", 1000);
+
+    // Different QualityOfService/SessionProperties, but every other field matches - still equal.
+    EXPECT_EQ(a, b);
+}
+
 // --- AvailableNetworkSessionCollection ---
 
 TEST(AvailableNetworkSessionCollectionTest, EmptyCollection) {
     auto col = AvailableNetworkSessionCollection::CreateInternal({});
     EXPECT_EQ(0, col.getCountProperty());
     EXPECT_FALSE(col.getIsDisposedProperty());
+}
+
+// Task 5.8: operator== was added specifically so ReadOnlyCollection<T>'s IndexOf/Contains (which
+// compare by value, not reference) actually work for this type - per the operator's own doc
+// comment ("required by ReadOnlyCollection<T>::IndexOf/Contains"). No existing test actually
+// exercised IndexOf/Contains at all, only ever calling operator== directly and standalone.
+TEST(AvailableNetworkSessionCollectionTest, IndexOfAndContainsUseValueEquality) {
+    std::vector<AvailableNetworkSession> sessions;
+    sessions.push_back(MakeSession(1, "hostA"));
+    sessions.push_back(MakeSession(2, "hostB"));
+    const auto col = AvailableNetworkSessionCollection::CreateInternal(std::move(sessions));
+
+    // A separately-constructed value, never stored in col, but equal by value to entry [1].
+    auto probeEqualToHostB = MakeSession(2, "hostB");
+    EXPECT_EQ(col.IndexOf(probeEqualToHostB), 1);
+    EXPECT_TRUE(col.Contains(probeEqualToHostB));
+
+    auto probeNotPresent = MakeSession(99, "hostZ");
+    EXPECT_EQ(col.IndexOf(probeNotPresent), -1);
+    EXPECT_FALSE(col.Contains(probeNotPresent));
 }
 
 TEST(AvailableNetworkSessionCollectionTest, IndexingAndCount) {
@@ -99,6 +156,32 @@ TEST(AvailableNetworkSessionCollectionTest, Dispose) {
     EXPECT_TRUE(col.getIsDisposedProperty());
     col.Dispose(); // idempotent
     EXPECT_TRUE(col.getIsDisposedProperty());
+}
+
+// Task 5.7: the test above disposes an *empty* collection, so it can never actually distinguish
+// "Dispose() cleared the contents" from "Dispose() left them alone" (0 either way) - missing the
+// entire point of this class's own documented FNA deviation (FNA's Dispose() clears the
+// underlying shared List<T>; this port's ReadOnlyCollection<T> copies into private storage with no
+// mutator exposed, so Dispose() here only flips IsDisposed and the contents remain readable
+// afterward). A genuinely non-empty collection is required to prove that.
+TEST(AvailableNetworkSessionCollectionTest, DisposeDoesNotClearContentsUnlikeFNA) {
+    std::vector<AvailableNetworkSession> sessions;
+    sessions.push_back(MakeSession(1, "hostA"));
+    sessions.push_back(MakeSession(2, "hostB"));
+    auto col = AvailableNetworkSessionCollection::CreateInternal(sessions);
+    ASSERT_EQ(2, col.getCountProperty());
+
+    col.Dispose();
+
+    // operator[] on a non-const ReadOnlyCollection<T> resolves to the non-const overload, which
+    // always throws NotSupportedException ("Collection is read-only.") - matching real .NET's
+    // explicit IList<T>.this[int] setter. A const reference is needed to reach the real getter,
+    // same as IndexingAndCount's own `const auto col` above.
+    const AvailableNetworkSessionCollection& constCol = col;
+    EXPECT_TRUE(col.getIsDisposedProperty());
+    EXPECT_EQ(2, constCol.getCountProperty());
+    EXPECT_EQ("hostA", constCol[0].getHostGamertagProperty());
+    EXPECT_EQ("hostB", constCol[1].getHostGamertagProperty());
 }
 
 TEST(AvailableNetworkSessionCollectionTest, RangeFor) {

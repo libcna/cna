@@ -1,0 +1,13 @@
+{
+  "skeleton": "skeleton.bin",
+  "parts": [
+    {
+      "name": "CNAAvatarHair",
+      "vertices": "CNAAvatarHair.verts.bin",
+      "indices": "CNAAvatarHair.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarHair.png"
+    }
+  ],
+  "animations": []
+}

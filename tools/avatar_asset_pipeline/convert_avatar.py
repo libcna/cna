@@ -17,9 +17,10 @@ Pipeline (see README.md for the manual steps this depends on):
        python3 convert_avatar.py --body body.glb --out content/avatar/male \\
            --clip Wave.glb Wave --clip Clap.glb Clap ...
 
-Requires: pygltflib (pip install pygltflib). Does NOT require assimp's Python bindings —
-glTF2 parsing is done directly via pygltflib, which has better animation/skin support than
-assimp's own Python wrapper.
+Requires: pygltflib (pip install pygltflib) and Pillow (pip install Pillow, Task 11.19's
+placeholder texture output). Does NOT require assimp's Python bindings — glTF2 parsing is
+done directly via pygltflib, which has better animation/skin support than assimp's own
+Python wrapper.
 """
 
 import argparse
@@ -31,6 +32,11 @@ try:
     import pygltflib
 except ImportError:
     sys.exit("This script requires pygltflib: pip install pygltflib")
+
+try:
+    from PIL import Image
+except ImportError:
+    sys.exit("This script requires Pillow: pip install Pillow")
 
 # glTF accessor componentType -> (struct format char, byte size)
 _COMPONENT_TYPES = {
@@ -136,6 +142,23 @@ def write_clip_bin(path, duration_seconds, tracks):
                 f.write(struct.pack("<d10f", *key))
 
 
+def _write_placeholder_texture(out_dir, part_name, size=4):
+    """Writes a tiny neutral-white RGBA PNG for `part_name` and returns its Path.
+
+    Task 11.19: before this, ContentManager could already load a per-part texture (see
+    ContentManager.cpp's "texture" JSON field handling) but nothing ever emitted one, so
+    AvatarRenderer.PartTintEXT's per-part tint (Task 11.17) was the only color signal
+    that ever reached the GPU. This texture is intentionally neutral (white), not a
+    painted per-material color: AvatarAppearanceEXT remains the sole color-customization
+    authority (texture * tint == tint, no double-application of color). Painted surface
+    detail is future work (see plan_net.md Task 11.25), not this task — this task makes
+    the texture *pipeline* itself real, end-to-end.
+    """
+    tex_path = out_dir / f"{part_name}.png"
+    Image.new("RGBA", (size, size), (255, 255, 255, 255)).save(tex_path)
+    return tex_path
+
+
 def convert_body(body_path, out_dir):
     """Converts the base MakeHuman body glTF into a .skinnedmodel.json + .skeleton.bin +
     per-part vertex/index binary blobs. Returns bone_names (list, index = bone index) for
@@ -150,16 +173,52 @@ def convert_body(body_path, out_dir):
     names, parent_indices, node_to_bone = build_node_hierarchy(gltf, skin)
     bone_count = len(names)
 
+    # build_node_hierarchy reorders bones into topological (BFS) order, which generally
+    # differs from skin.joints' own declared order. inverseBindMatrices and every vertex's
+    # JOINTS_0 indices are given in that *original* skin.joints order, though — remap both
+    # to the new order, or bones end up skinned by the wrong bind pose/vertex entirely.
+    # A second real bug found the same way as the bind_pose_local transpose above: caught
+    # by actually rendering real content (Task 11.11), not by static review.
+    joint_index_remap = [node_to_bone[node_idx] for node_idx in skin.joints]
+
     inverse_bind = read_accessor(gltf, blob, skin.inverseBindMatrices)
-    # glTF stores matrices column-major; CNA's Matrix(m11..m44) constructor is row-major —
-    # transpose on write.
-    inverse_bind_global = [_transpose4x4(m) for m in inverse_bind]
+    # glTF's column-major storage for a column-vector transform (v'=Av) and XNA/CNA's
+    # row-major storage for the *same* transform expressed in row-vector form
+    # (v'=v*(A^T)) are byte-for-byte IDENTICAL — transposing the matrix and swapping
+    # major order are inverse operations that cancel out. So this is a straight copy,
+    # NOT a transpose.
+    # Confirmed empirically (Task 11.11): an earlier version of this code DID transpose
+    # here, which corrupted every bind-pose-local matrix, moving translation from row 4
+    # (M41/M42/M43, where CNA's Matrix/BinReaderEXT::ReadMatrix expects it) into
+    # column 4 — rendering a real avatar as a huge, nonsensical close-up instead of a
+    # recognizable standing figure. A forced-identity-bones diagnostic render (bypassing
+    # this code path entirely) proved the camera/mesh/shader path was already correct,
+    # isolating the bug to exactly this matrix convention question.
+    # Reordered via joint_index_remap for the same reason as above (topological reorder).
+    inverse_bind_global = [None] * bone_count
+    for original_idx, m in enumerate(inverse_bind):
+        inverse_bind_global[joint_index_remap[original_idx]] = m
     # Bind-pose *local* transform isn't directly given by glTF's skin data (glTF only gives
-    # the inverse bind *global* matrix); derive it from each joint node's own local TRS, which
-    # is what MakeHuman/Mixamo actually author into the node hierarchy. bone_to_node inverts
-    # node_to_bone so bind_pose_local[i] lines up with bone index i, not node index.
-    bone_to_node = {bone_idx: node_idx for node_idx, bone_idx in node_to_bone.items()}
-    bind_pose_local = [_node_local_matrix(gltf.nodes[bone_to_node[i]]) for i in range(bone_count)]
+    # the inverse bind *global* matrix) — derive it purely from inverse_bind_global (already
+    # remapped/verified-correct above) via matrix inversion, rather than hand-deriving it a
+    # second, independent way from each joint node's own TRS. An earlier version did the
+    # latter (see _node_local_matrix, now removed) via hand-rolled quaternion-to-matrix math;
+    # it produced a non-identity result even at the exact rest pose (confirmed by dumping
+    # ComputeBoneTransformsEXT's own output — every bone should reduce to identity there,
+    # by definition, since bind pose composed with its own inverse must cancel out), meaning
+    # that independent derivation didn't actually agree with inverse_bind_global's convention
+    # somewhere. Deriving bind_pose_local FROM inverse_bind_global instead sidesteps needing
+    # to find that exact bug: it's correct by construction, since
+    # bind_pose_global[i] * inverse(bind_pose_global[i]) is trivially identity, matching
+    # ComputeBoneTransformsEXT's own worldTransforms[i] * InverseBindPoseGlobal[i] formula.
+    bind_pose_global = [_invert4x4(m) for m in inverse_bind_global]
+    bind_pose_local = []
+    for i in range(bone_count):
+        parent = parent_indices[i]
+        if parent < 0:
+            bind_pose_local.append(bind_pose_global[i])
+        else:
+            bind_pose_local.append(_mat_mul_rowmajor(bind_pose_global[i], _invert4x4(bind_pose_global[parent])))
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -171,13 +230,15 @@ def convert_body(body_path, out_dir):
             part_name = mesh.name or f"part{mesh_i}_{prim_i}"
             verts_path = out_dir / f"{part_name}.verts.bin"
             idx_path = out_dir / f"{part_name}.idx.bin"
-            _write_skinned_vertex_buffer(gltf, blob, prim, verts_path)
+            _write_skinned_vertex_buffer(gltf, blob, prim, verts_path, joint_index_remap)
             _write_index_buffer(gltf, blob, prim, idx_path)
+            tex_path = _write_placeholder_texture(out_dir, part_name)
             parts.append({
                 "name": part_name,
                 "vertices": verts_path.name,
                 "indices": idx_path.name,
                 "vertexStride": 52,
+                "texture": tex_path.name,
             })
 
     manifest = {
@@ -190,17 +251,15 @@ def convert_body(body_path, out_dir):
     return names
 
 
-def convert_clip(clip_path, clip_name, bone_names, out_dir):
-    """Converts one Mixamo animation glTF into a .clip.bin, retargeted by joint *name* onto
+def _tracks_from_animation(gltf, blob, anim, bone_names, clip_label):
+    """Builds (duration, tracks) for one glTF animation, retargeted by joint *name* onto
     the base skeleton's bone indices (bone_names, produced by convert_body) — matching by
-    name rather than index, since the clip file's own node indices have no relationship to
-    the base skeleton file's node indices; only the joint *names* are expected to match
-    (guaranteed by using MakeHuman's "Mixamo" rig preset for the base body, per README.md).
+    name rather than index, since an animation's own node indices have no relationship to
+    the base skeleton's node indices; only the joint *names* are expected to match
+    (guaranteed either by MakeHuman's "Mixamo" rig preset per README.md, or by
+    tools/avatar_builder/generate_skeleton.py's own bone names for CNA's own procedural
+    pipeline, whose clips are embedded in the body file itself — see convert_embedded_clip).
     """
-    gltf, blob = load_gltf(clip_path)
-    if not gltf.animations:
-        sys.exit(f"{clip_path}: no animation found")
-    anim = gltf.animations[0]
     name_to_bone_idx = {name: i for i, name in enumerate(bone_names)}
 
     duration = 0.0
@@ -239,9 +298,13 @@ def convert_clip(clip_path, clip_name, bone_names, out_dir):
         tracks.append((base_bone_idx, keys))
 
     if skipped:
-        print(f"  ({clip_name}: {len(skipped)} joint(s) in the clip had no matching base bone "
+        print(f"  ({clip_label}: {len(skipped)} joint(s) in the clip had no matching base bone "
               f"by name, skipped: {', '.join(skipped[:5])}{'...' if len(skipped) > 5 else ''})")
 
+    return duration, tracks
+
+
+def _write_clip(out_dir, clip_name, duration, tracks):
     out_path = Path(out_dir) / "clips" / f"{clip_name}.clip.bin"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     write_clip_bin(out_path, duration, tracks)
@@ -249,43 +312,65 @@ def convert_clip(clip_path, clip_name, bone_names, out_dir):
     return out_path.name
 
 
-def _node_local_matrix(node):
-    if node.matrix:
-        return tuple(node.matrix)
-    # glTF TRS -> 4x4 column-major, matching inverseBindMatrices' own convention.
-    tx, ty, tz = node.translation or (0, 0, 0)
-    qx, qy, qz, qw = node.rotation or (0, 0, 0, 1)
-    sx, sy, sz = node.scale or (1, 1, 1)
-    # Standard quaternion-to-matrix (column-major, matches glTF).
-    xx, yy, zz = qx * qx, qy * qy, qz * qz
-    xy, xz, yz = qx * qy, qx * qz, qy * qz
-    wx, wy, wz = qw * qx, qw * qy, qw * qz
-    r = (
-        1 - 2 * (yy + zz), 2 * (xy + wz), 2 * (xz - wy), 0,
-        2 * (xy - wz), 1 - 2 * (xx + zz), 2 * (yz + wx), 0,
-        2 * (xz + wy), 2 * (yz - wx), 1 - 2 * (xx + yy), 0,
-        0, 0, 0, 1,
-    )
-    scale = (sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, 0, 0, 0, 1)
-    m = _mat_mul(scale, r)
-    m = list(m)
-    m[12], m[13], m[14] = tx, ty, tz
-    return tuple(m)
+def convert_clip(clip_path, clip_name, bone_names, out_dir):
+    """Converts one standalone Mixamo animation glTF (its own file, one animation) into a
+    .clip.bin. See _tracks_from_animation for the retargeting-by-name approach."""
+    gltf, blob = load_gltf(clip_path)
+    if not gltf.animations:
+        sys.exit(f"{clip_path}: no animation found")
+    anim = gltf.animations[0]
+    duration, tracks = _tracks_from_animation(gltf, blob, anim, bone_names, clip_name)
+    return _write_clip(out_dir, clip_name, duration, tracks)
 
 
-def _mat_mul(a, b):
+def convert_embedded_clip(gltf, blob, anim, bone_names, out_dir):
+    """Converts one animation that's already embedded in an already-loaded glTF (as
+    opposed to convert_clip's standalone-file case) into a .clip.bin, using the
+    animation's own `name` as the clip name. This is CNA's own
+    tools/avatar_builder/generate_avatar.py output's shape: body + skeleton + every clip
+    bundled in one .glb, unlike the MakeHuman/Mixamo workflow's separate body-file-plus-
+    per-clip-file layout convert_clip was originally written for."""
+    duration, tracks = _tracks_from_animation(gltf, blob, anim, bone_names, anim.name)
+    return _write_clip(out_dir, anim.name, duration, tracks)
+
+
+def _mat_mul_rowmajor(a, b):
+    """4x4 matrix multiply; a, b, and the result are all flat 16-tuples with the same
+    indexing convention (m[i*4+j] = row i, col j) — result = a @ b in the usual sense.
+    Convention-agnostic: works correctly whether that indexing is "really" row-major or
+    column-major, as long as every matrix passed through this file uses the same one
+    (see the note in convert_body about glTF/CNA's byte layout being interchangeable)."""
     result = [0.0] * 16
-    for row in range(4):
-        for col in range(4):
-            result[col * 4 + row] = sum(a[k * 4 + row] * b[col * 4 + k] for k in range(4))
+    for i in range(4):
+        for j in range(4):
+            result[i * 4 + j] = sum(a[i * 4 + k] * b[k * 4 + j] for k in range(4))
     return tuple(result)
 
 
-def _transpose4x4(m):
-    return tuple(m[r + c * 4] for r in range(4) for c in range(4))
+def _invert4x4(m):
+    """General 4x4 matrix inverse via Gauss-Jordan elimination (no numpy dependency —
+    pygltflib is this script's only requirement). m is a flat 16-tuple, m[i*4+j] = row i
+    col j; the result uses the same convention. Raises ValueError if m is singular."""
+    aug = [list(m[r * 4:r * 4 + 4]) + [1.0 if c == r else 0.0 for c in range(4)] for r in range(4)]
+    for col in range(4):
+        pivot_row = max(range(col, 4), key=lambda r: abs(aug[r][col]))
+        if abs(aug[pivot_row][col]) < 1e-9:
+            raise ValueError("matrix is singular, cannot invert")
+        aug[col], aug[pivot_row] = aug[pivot_row], aug[col]
+        pivot = aug[col][col]
+        aug[col] = [x / pivot for x in aug[col]]
+        for r in range(4):
+            if r != col:
+                factor = aug[r][col]
+                aug[r] = [x - factor * y for x, y in zip(aug[r], aug[col])]
+    return tuple(aug[r][4 + c] for r in range(4) for c in range(4))
 
 
-def _write_skinned_vertex_buffer(gltf, blob, prim, out_path):
+def _write_skinned_vertex_buffer(gltf, blob, prim, out_path, joint_index_remap):
+    """joint_index_remap[original skin.joints index] -> bone index in skeleton.bin's
+    topological order (see build_node_hierarchy) — every vertex's raw JOINTS_0 value is
+    an index into skin.joints, not already a skeleton.bin bone index, so it must be
+    remapped the same way inverse_bind_global is in convert_body."""
     positions = read_accessor(gltf, blob, prim.attributes.POSITION)
     normals = (read_accessor(gltf, blob, prim.attributes.NORMAL)
                if prim.attributes.NORMAL is not None else [(0, 0, 1)] * len(positions))
@@ -298,7 +383,8 @@ def _write_skinned_vertex_buffer(gltf, blob, prim, out_path):
 
     with open(out_path, "wb") as f:
         for pos, nrm, uv, w, j in zip(positions, normals, uvs, weights, joints):
-            f.write(struct.pack("<3f3f2f4f4B", *pos, *nrm, *uv, *w, *[int(x) for x in j]))
+            remapped_j = [joint_index_remap[int(x)] for x in j]
+            f.write(struct.pack("<3f3f2f4f4B", *pos, *nrm, *uv, *w, *remapped_j))
 
 
 def _write_index_buffer(gltf, blob, prim, out_path):
@@ -316,11 +402,19 @@ def _write_json(path, data):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--body", required=True, help="Base MakeHuman body .glb")
+    parser.add_argument("--body", required=True,
+                         help="Base body .glb — a MakeHuman export, or CNA's own "
+                              "tools/avatar_builder/generate_avatar.py output")
     parser.add_argument("--out", required=True, help="Output content directory")
     parser.add_argument("--clip", nargs=2, action="append", default=[],
                          metavar=("GLB", "PRESET_NAME"),
                          help="Mixamo animation .glb + AvatarAnimationPreset name, repeatable")
+    parser.add_argument("--embedded-clips", action="store_true",
+                         help="Also convert every animation already embedded in --body "
+                              "itself, named to match its own AvatarAnimationPreset name "
+                              "(e.g. CNA's own generate_avatar.py output, which bundles "
+                              "body+skeleton+clips in one .glb instead of the MakeHuman/"
+                              "Mixamo workflow's separate per-clip files --clip expects)")
     args = parser.parse_args()
 
     bone_names = convert_body(args.body, args.out)
@@ -329,6 +423,15 @@ def main():
     for clip_glb, preset_name in args.clip:
         clip_file = convert_clip(clip_glb, preset_name, bone_names, args.out)
         clip_entries.append({"name": preset_name, "clip": f"clips/{clip_file}"})
+
+    if args.embedded_clips:
+        gltf, blob = load_gltf(args.body)
+        for anim in gltf.animations:
+            if not anim.name:
+                sys.exit(f"{args.body}: an embedded animation has no name — "
+                         f"can't derive an AvatarAnimationPreset name for it")
+            clip_file = convert_embedded_clip(gltf, blob, anim, bone_names, args.out)
+            clip_entries.append({"name": anim.name, "clip": f"clips/{clip_file}"})
 
     if clip_entries:
         import json

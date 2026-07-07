@@ -28,11 +28,25 @@ TEST(ControllerSensitivityTest, ValuesExist) {
     EXPECT_NE(ControllerSensitivity::Low,    ControllerSensitivity::High);
 }
 
+TEST(ControllerSensitivityTest, OrdinalValuesMatchXna) {
+    // Task 9.4: GameDefaults::ControllerSensitivity (Task 7.3) and any future serialization
+    // depend on these exact ordinals matching the real XNA/FNA enum, not just self-equality.
+    EXPECT_EQ(static_cast<int>(ControllerSensitivity::Low),    0);
+    EXPECT_EQ(static_cast<int>(ControllerSensitivity::Medium), 1);
+    EXPECT_EQ(static_cast<int>(ControllerSensitivity::High),   2);
+}
+
 TEST(GameDifficultyTest, ValuesExist) {
     EXPECT_EQ(GameDifficulty::Easy,   GameDifficulty::Easy);
     EXPECT_EQ(GameDifficulty::Normal, GameDifficulty::Normal);
     EXPECT_EQ(GameDifficulty::Hard,   GameDifficulty::Hard);
     EXPECT_NE(GameDifficulty::Easy,   GameDifficulty::Hard);
+}
+
+TEST(GameDifficultyTest, OrdinalValuesMatchXna) {
+    EXPECT_EQ(static_cast<int>(GameDifficulty::Easy),   0);
+    EXPECT_EQ(static_cast<int>(GameDifficulty::Normal), 1);
+    EXPECT_EQ(static_cast<int>(GameDifficulty::Hard),   2);
 }
 
 TEST(GamerPresenceModeTest, FirstAndLastValue) {
@@ -48,11 +62,33 @@ TEST(GamerPresenceModeTest, RepresentativeValues) {
     EXPECT_NE(GamerPresenceMode::Winning,        GamerPresenceMode::Losing);
 }
 
+TEST(GamerPresenceModeTest, OrdinalValuesMatchXna) {
+    // Task 9.4: GamerPresence::setPresenceModeProperty indexes a 60-entry string table
+    // directly by this enum's ordinal - a future accidental reordering would silently break
+    // presence strings with nothing else to catch it. Spot-check first, last, and a handful
+    // of interior values against the real XNA/FNA ordinals.
+    EXPECT_EQ(static_cast<int>(GamerPresenceMode::None),               0);
+    EXPECT_EQ(static_cast<int>(GamerPresenceMode::SinglePlayer),       1);
+    EXPECT_EQ(static_cast<int>(GamerPresenceMode::OnlineCoOp),         5);
+    EXPECT_EQ(static_cast<int>(GamerPresenceMode::DifficultyEasy),    22);
+    EXPECT_EQ(static_cast<int>(GamerPresenceMode::Winning),           28);
+    EXPECT_EQ(static_cast<int>(GamerPresenceMode::Losing),            29);
+    EXPECT_EQ(static_cast<int>(GamerPresenceMode::WaitingInLobby),    43);
+    EXPECT_EQ(static_cast<int>(GamerPresenceMode::FoundSecret),       58);
+    EXPECT_EQ(static_cast<int>(GamerPresenceMode::CornflowerBlue),    59);
+}
+
 TEST(GamerPrivilegeSettingTest, ValuesExist) {
     EXPECT_EQ(GamerPrivilegeSetting::Blocked,     GamerPrivilegeSetting::Blocked);
     EXPECT_EQ(GamerPrivilegeSetting::FriendsOnly, GamerPrivilegeSetting::FriendsOnly);
     EXPECT_EQ(GamerPrivilegeSetting::Everyone,    GamerPrivilegeSetting::Everyone);
     EXPECT_NE(GamerPrivilegeSetting::Blocked,     GamerPrivilegeSetting::Everyone);
+}
+
+TEST(GamerPrivilegeSettingTest, OrdinalValuesMatchXna) {
+    EXPECT_EQ(static_cast<int>(GamerPrivilegeSetting::Blocked),     0);
+    EXPECT_EQ(static_cast<int>(GamerPrivilegeSetting::FriendsOnly), 1);
+    EXPECT_EQ(static_cast<int>(GamerPrivilegeSetting::Everyone),    2);
 }
 
 TEST(GamerZoneTest, ValuesExist) {
@@ -64,6 +100,14 @@ TEST(GamerZoneTest, ValuesExist) {
     EXPECT_NE(GamerZone::Pro,        GamerZone::Family);
 }
 
+TEST(GamerZoneTest, OrdinalValuesMatchXna) {
+    EXPECT_EQ(static_cast<int>(GamerZone::Unknown),     0);
+    EXPECT_EQ(static_cast<int>(GamerZone::Recreation),  1);
+    EXPECT_EQ(static_cast<int>(GamerZone::Pro),         2);
+    EXPECT_EQ(static_cast<int>(GamerZone::Family),      3);
+    EXPECT_EQ(static_cast<int>(GamerZone::Underground), 4);
+}
+
 TEST(LeaderboardKeyTest, ValuesExist) {
     EXPECT_EQ(LeaderboardKey::BestScoreLifeTime, LeaderboardKey::BestScoreLifeTime);
     EXPECT_EQ(LeaderboardKey::BestScoreRecent,   LeaderboardKey::BestScoreRecent);
@@ -72,12 +116,26 @@ TEST(LeaderboardKeyTest, ValuesExist) {
     EXPECT_NE(LeaderboardKey::BestScoreLifeTime, LeaderboardKey::BestTimeLifeTime);
 }
 
+TEST(LeaderboardKeyTest, OrdinalValuesMatchXna) {
+    EXPECT_EQ(static_cast<int>(LeaderboardKey::BestScoreLifeTime), 0);
+    EXPECT_EQ(static_cast<int>(LeaderboardKey::BestScoreRecent),   1);
+    EXPECT_EQ(static_cast<int>(LeaderboardKey::BestTimeLifeTime),  2);
+    EXPECT_EQ(static_cast<int>(LeaderboardKey::BestTimeRecent),    3);
+}
+
 TEST(LeaderboardOutcomeTest, ValuesExist) {
     EXPECT_EQ(LeaderboardOutcome::None, LeaderboardOutcome::None);
     EXPECT_EQ(LeaderboardOutcome::Win,  LeaderboardOutcome::Win);
     EXPECT_EQ(LeaderboardOutcome::Loss, LeaderboardOutcome::Loss);
     EXPECT_EQ(LeaderboardOutcome::Tie,  LeaderboardOutcome::Tie);
     EXPECT_NE(LeaderboardOutcome::Win,  LeaderboardOutcome::Loss);
+}
+
+TEST(LeaderboardOutcomeTest, OrdinalValuesMatchXna) {
+    EXPECT_EQ(static_cast<int>(LeaderboardOutcome::None), 0);
+    EXPECT_EQ(static_cast<int>(LeaderboardOutcome::Win),  1);
+    EXPECT_EQ(static_cast<int>(LeaderboardOutcome::Loss), 2);
+    EXPECT_EQ(static_cast<int>(LeaderboardOutcome::Tie),  3);
 }
 
 TEST(MessageBoxIconTest, ValuesExist) {

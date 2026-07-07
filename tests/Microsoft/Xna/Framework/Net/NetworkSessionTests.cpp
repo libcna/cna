@@ -2,7 +2,11 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Net/ENetBackend.hpp"
+#include "CNA/Internal/Net/ENetHostHandle.hpp"
+#include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "System/ArgumentException.hpp"
@@ -12,7 +16,9 @@
 #include "System/ObjectDisposedException.hpp"
 
 using namespace Microsoft::Xna::Framework::Net;
+using Microsoft::Xna::Framework::GamerServices::Gamer;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
+using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
 
 namespace {
     SignedInGamer MakeSignedInGamer(const std::string& tag = "tag1") {
@@ -47,6 +53,101 @@ TEST(NetworkSessionTest, CreateWithExplicitLocalGamers) {
 
     session->Dispose();
     EXPECT_TRUE(session->getIsDisposedProperty());
+}
+
+// Task 3.2: every End* (EndCreate/EndFind/EndJoin/EndJoinInvited) used to just drop activeAction_
+// (a bare `= nullptr;`) with no prior delete - `new NetworkSessionAction(...)` in every Begin*
+// permanently leaked one object per Begin*/End* cycle. Confirms a full Create() (BeginCreate ->
+// EndCreate) cycle leaves the live-instance count unchanged, proving the action was actually
+// freed, not just forgotten.
+TEST(NetworkSessionTest, CreateDoesNotLeakNetworkSessionAction) {
+    int before = NetworkSession::GetActiveActionInstanceCountForTesting();
+
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+
+    EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before);
+
+    session->Dispose();
+}
+
+// Task 3.3: no code path anywhere in this codebase ever deleted a NetworkSession* - Dispose() only
+// ever flipped isDisposed_ to true. Confirmed and documented the ownership contract instead of
+// changing Dispose() to self-delete (see the class's own doc comment for why: an enormous number
+// of existing call sites, throughout this very test suite, legitimately read state - e.g.
+// getIsDisposedProperty() - right after calling Dispose(), which a self-deleting Dispose() would
+// turn into use-after-free). This test demonstrates the documented contract actually working: the
+// caller Dispose()s, then deletes, and the live-instance count returns to baseline either way.
+TEST(NetworkSessionTest, DeletingAfterDisposeLeavesNoLeak) {
+    int before = NetworkSession::GetInstanceCountForTesting();
+
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    EXPECT_EQ(NetworkSession::GetInstanceCountForTesting(), before + 1);
+
+    session->Dispose();
+    delete session; // the documented contract: caller owns the pointer, frees it once done
+
+    EXPECT_EQ(NetworkSession::GetInstanceCountForTesting(), before);
+}
+
+// Task 2.1: NetworkSession's destructor previously did not call Dispose(), so deleting a session
+// without disposing it first left the activeSession_ singleton dangling at freed memory. Every
+// subsequent BeginCreate/BeginFind/BeginJoin checks `activeSession_ != nullptr` and throws
+// InvalidOperationException, so one mismanaged delete permanently bricked session creation for
+// the rest of the process. This proves the destructor's Dispose() fallback fixes that: a session
+// deleted without an explicit Dispose() call must still allow a brand-new session to be created
+// afterward.
+TEST(NetworkSessionTest, DeletingWithoutDisposeStillAllowsCreatingANewSession) {
+    int before = NetworkSession::GetInstanceCountForTesting();
+
+    auto gamer1 = MakeSignedInGamer();
+    NetworkSession* first = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer1}, 8, 0, NetworkSessionProperties{}
+    );
+    delete first; // deliberately skips Dispose() - the exact bug scenario
+
+    // Before the fix, activeSession_ still pointed at the just-freed `first`, so this would throw
+    // InvalidOperationException ("activeAction_ != nullptr || activeSession_ != nullptr").
+    auto gamer2 = MakeSignedInGamer("tag2");
+    NetworkSession* second = nullptr;
+    EXPECT_NO_THROW(
+        second = NetworkSession::Create(
+            NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer2}, 8, 0, NetworkSessionProperties{}
+        )
+    );
+    ASSERT_NE(second, nullptr);
+
+    second->Dispose();
+    delete second;
+
+    EXPECT_EQ(NetworkSession::GetInstanceCountForTesting(), before);
+}
+
+// Confirms the destructor's Dispose() fallback also tears down real ENet transport state (not
+// just the activeSession_ singleton) - a fresh SystemLink session created after a
+// delete-without-Dispose gets its own real bound port, proving ENetBackend::TeardownSession
+// actually ran for the leaked one.
+TEST(NetworkSessionTest, DeletingWithoutDisposeTearsDownRealTransport) {
+    auto gamer1 = MakeSignedInGamer();
+    NetworkSession* first = NetworkSession::Create(
+        NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer1}, 8, 0, NetworkSessionProperties{}
+    );
+    EXPECT_GT(CNA::Internal::Net::ENetBackend::GetBoundPort(first), 0);
+    delete first; // deliberately skips Dispose()
+
+    auto gamer2 = MakeSignedInGamer("tag2");
+    NetworkSession* second = NetworkSession::Create(
+        NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer2}, 8, 0, NetworkSessionProperties{}
+    );
+    EXPECT_GT(CNA::Internal::Net::ENetBackend::GetBoundPort(second), 0);
+
+    second->Dispose();
+    delete second;
 }
 
 TEST(NetworkSessionTest, AllowHostMigrationAndJoinInProgressGetSet) {
@@ -134,6 +235,38 @@ TEST(NetworkSessionTest, StartGameThenEndGameTransitionsState) {
     session->Dispose();
 }
 
+// Task 5.19: WriteArbitratedLeaderboard/WriteUnarbitratedLeaderboard/WriteTrueSkill had zero test
+// coverage, not even a subscribe-smoke-test - even though they're correctly never raised (matching
+// FNA, where leaderboards/TrueSkill are unimplemented upstream). Subscribing to all three and
+// exercising a full Create -> StartGame -> EndGame -> Dispose lifecycle both proves each event
+// exists under its exact FNA name/spelling (a rename/typo here would fail to compile) and locks in
+// that none of them ever actually fires.
+TEST(NetworkSessionTest, WriteLeaderboardAndTrueSkillEventsAreNeverRaised) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+
+    int arbitratedCount = 0;
+    int unarbitratedCount = 0;
+    int trueSkillCount = 0;
+    session->WriteArbitratedLeaderboard += [&](System::Object*, const WriteLeaderboardsEventArgs&) { ++arbitratedCount; };
+    session->WriteUnarbitratedLeaderboard += [&](System::Object*, const WriteLeaderboardsEventArgs&) { ++unarbitratedCount; };
+    session->WriteTrueSkill += [&](System::Object*, const WriteLeaderboardsEventArgs&) { ++trueSkillCount; };
+
+    session->Update();
+    session->StartGame();
+    session->Update();
+    session->EndGame();
+    session->Update();
+
+    EXPECT_EQ(arbitratedCount, 0);
+    EXPECT_EQ(unarbitratedCount, 0);
+    EXPECT_EQ(trueSkillCount, 0);
+
+    session->Dispose();
+}
+
 TEST(NetworkSessionTest, StartGameWhileNotInLobbyThrows) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(
@@ -174,7 +307,7 @@ TEST(NetworkSessionTest, AddLocalGamerThrowsAtMaxLimit) {
     session->Dispose();
 }
 
-TEST(NetworkSessionTest, FindGamerByIdMatchesFirstGamerSinceIdIsAlwaysZero) {
+TEST(NetworkSessionTest, FindGamerByIdMatchesSoleLocalGamer) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
@@ -182,6 +315,198 @@ TEST(NetworkSessionTest, FindGamerByIdMatchesFirstGamerSinceIdIsAlwaysZero) {
 
     EXPECT_EQ(session->FindGamerById(0), session->getAllGamersProperty()[0]);
     EXPECT_EQ(session->FindGamerById(1), nullptr);
+
+    session->Dispose();
+}
+
+// Real, distinct per-gamer ids (see DEFERRED.md item #20 in the sibling cna-samples repo) — a
+// multi-gamer session used to have every gamer report Id == 0, so FindGamerById always resolved
+// to the first gamer regardless of which id was requested.
+TEST(NetworkSessionTest, MultipleLocalGamersGetDistinctIdsAndFindGamerByIdRoutesCorrectly) {
+    auto gamer1 = MakeSignedInGamer("tag1");
+    auto gamer2 = MakeSignedInGamer("tag2");
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer1, &gamer2}, 8, 0, NetworkSessionProperties{}
+    );
+
+    LocalNetworkGamer* first = session->getLocalGamersProperty()[0];
+    LocalNetworkGamer* second = session->getLocalGamersProperty()[1];
+    EXPECT_EQ(first->getIdProperty(), 0);
+    EXPECT_EQ(second->getIdProperty(), 1);
+    EXPECT_EQ(session->FindGamerById(0), first);
+    EXPECT_EQ(session->FindGamerById(1), second);
+    EXPECT_EQ(session->FindGamerById(2), nullptr);
+
+    session->Dispose();
+}
+
+// NetworkGamer::IsHost (see DEFERRED.md item #20): real per-instance state derived from whether
+// the owning NetworkSession was created via Create() (host) vs. Join()/JoinInvited() (client),
+// instead of FNA's hardcoded-true stub that made every gamer, on every machine, report host.
+TEST(NetworkSessionTest, CreateMakesLocalGamersReportIsHostTrue) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+
+    EXPECT_TRUE(session->getLocalGamersProperty()[0]->getIsHostProperty());
+    EXPECT_TRUE(session->getIsHostProperty());
+
+    session->Dispose();
+}
+
+TEST(NetworkSessionTest, JoinInvitedMakesLocalGamersReportIsHostFalse) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::JoinInvited(std::vector<SignedInGamer*>{&gamer});
+
+    EXPECT_FALSE(session->getLocalGamersProperty()[0]->getIsHostProperty());
+    EXPECT_FALSE(session->getIsHostProperty());
+
+    session->Dispose();
+}
+
+// NOTE: the explicit-local-gamers Create()/JoinInvited() overloads always set maxLocalGamers_ to
+// the passed list's size (zero spare capacity — see AddLocalGamerThrowsAtMaxLimit's own comment
+// above), and the maxLocalGamers-only overload falls back to the global Gamer::SignedInGamers,
+// which defaults to empty in this test binary. An empty list makes the constructor's
+// `host_ = localGamers_[0]` throw - Task 6.1 fixed EndCreate so that no longer permanently
+// corrupts activeAction_ (see FailedCreateDoesNotPermanentlyStrandActiveAction just below, which
+// now exercises this throw directly instead of avoiding it). Every other test in this file still
+// gets spare local-gamer capacity safely by temporarily installing its own one-gamer global list
+// (restored via RAII) before using the maxLocalGamers-only overload, simply because that's the
+// realistic, working way to use this overload - not because the empty-list path is unsafe to
+// exercise anymore.
+
+// Task 6.1: EndCreate used to construct the new NetworkSession *before* clearing activeAction_ -
+// a throwing constructor (confirmed reachable via the empty-global-SignedInGamers path documented
+// above) left activeAction_ permanently non-null, bricking every subsequent Begin* call for the
+// rest of the process with InvalidOperationException. Fixed: EndCreate now clears activeAction_ in
+// a catch block before rethrowing, exactly like the pre-existing success path already did.
+TEST(NetworkSessionTest, FailedCreateDoesNotPermanentlyStrandActiveAction) {
+    System::IAsyncResult* result = NetworkSession::BeginCreate(
+        NetworkSessionType::Local, 1, 8, System::AsyncCallback{}, std::any{}
+    );
+
+    EXPECT_THROW(NetworkSession::EndCreate(result), std::exception);
+
+    // The real proof: activeAction_ must not still be stuck - a fresh Begin*/End* cycle (using a
+    // real, non-empty local-gamer list via the same RAII global-swap technique used throughout
+    // this file) must succeed, rather than throwing InvalidOperationException("session already
+    // being created").
+    SignedInGamer gamer = MakeSignedInGamer();
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&gamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    System::IAsyncResult* recovery = NetworkSession::BeginCreate(
+        NetworkSessionType::Local, 1, 8, System::AsyncCallback{}, std::any{}
+    );
+    NetworkSession* session = NetworkSession::EndCreate(recovery);
+    ASSERT_NE(session, nullptr);
+    session->Dispose();
+}
+
+// Task 2.3: AddLocalGamer only did localGamers_.Add(adding); allGamers_.Add(adding); with no event
+// enqueue at all — unlike AddRemoteGamer just below, which explicitly enqueues a GamerJoin event.
+// A handler already subscribed before AddLocalGamer ran never learned about the newly-added local
+// gamer (no replay, no queued event).
+TEST(NetworkSessionTest, AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler) {
+    // Task 2.15 fixed a latent double-free here (and in the two other tests using this same
+    // pattern): Gamer::setSignedInGamersProperty(value) unconditionally deletes whatever
+    // signedInGamers_ previously pointed to - capturing that pointer via getSignedInGamersProperty()
+    // and later trying to setSignedInGamersProperty() back to it re-deletes an already-freed
+    // object. Installing a brand-new empty collection on teardown avoids ever reusing a pointer
+    // the setter has already freed - restoring the observable "no one signed in" default state
+    // other tests rely on without resurrecting a dangling pointer.
+    SignedInGamer extraGamer = MakeSignedInGamer("ExtraTag");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&extraGamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    // maxLocalGamers=2, but only 1 gamer (extraGamer) is actually signed in globally, so the
+    // constructor only fills 1 of the 2 local-gamer slots - leaving room for AddLocalGamer below.
+    NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 2, 8);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+
+    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
+    int joinCount = 0;
+    NetworkGamer* joinedGamer = nullptr;
+    session->GamerJoined += [&joinCount, &joinedGamer](System::Object*, const GamerJoinedEventArgs& e) {
+        ++joinCount;
+        joinedGamer = e.getGamerProperty();
+    };
+    // The += above already replayed once for extraGamer (Task 12.3's SetReplayHook) - reset so
+    // this test isolates AddLocalGamer's own new join below.
+    joinCount = 0;
+    joinedGamer = nullptr;
+
+    session->AddLocalGamer(&newGamer);
+    EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 2);
+
+    session->Update();
+    EXPECT_EQ(joinCount, 1);
+    ASSERT_NE(joinedGamer, nullptr);
+    EXPECT_EQ(joinedGamer, session->getLocalGamersProperty()[1]);
+
+    session->Dispose();
+}
+
+// Task 2.4: AddLocalGamer used to derive its new gamer's id from allGamers_.getCountProperty() at
+// call time, rather than a separate monotonic counter. Since RemoveGamer shrinks that live count
+// (once Task 2.2 fixed it to prune localGamers_ too), a remove-then-add sequence could hand a new
+// gamer the same id already owned by a still-present gamer, corrupting FindGamerById.
+TEST(NetworkSessionTest, RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision) {
+    // See Task 2.15's fix note above (AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler)
+    // for why this installs a fresh empty collection on teardown rather than restoring a captured
+    // "previous" pointer - Gamer::setSignedInGamersProperty deletes the old value unconditionally.
+    SignedInGamer gamerA = MakeSignedInGamer("A");
+    SignedInGamer gamerB = MakeSignedInGamer("B");
+    SignedInGamer gamerC = MakeSignedInGamer("C");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&gamerA, &gamerB, &gamerC})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 3, 8);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 3);
+    LocalNetworkGamer* local0 = session->getLocalGamersProperty()[0];
+    LocalNetworkGamer* local1 = session->getLocalGamersProperty()[1];
+    LocalNetworkGamer* local2 = session->getLocalGamersProperty()[2];
+    ASSERT_EQ(local0->getIdProperty(), 0);
+    ASSERT_EQ(local1->getIdProperty(), 1);
+    ASSERT_EQ(local2->getIdProperty(), 2);
+
+    // Remove the middle gamer (id 1): allGamers_/localGamers_ counts both drop to 2.
+    session->RemoveGamer(local1, NetworkSessionEndReason::Disconnected);
+    ASSERT_EQ(session->getAllGamersProperty().getCountProperty(), 2);
+
+    // Without Task 2.4's fix, this would derive the new id from allGamers_.getCountProperty()
+    // (now 2) - colliding with local2, which already owns id 2.
+    auto newSignedIn = MakeSignedInGamer("D");
+    session->AddLocalGamer(&newSignedIn);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 3); // local0, local2, newGamer
+    NetworkGamer* newGamer = session->getLocalGamersProperty()[2];
+    EXPECT_EQ(newGamer->getIdProperty(), 3);
+    EXPECT_NE(newGamer->getIdProperty(), local2->getIdProperty());
+
+    EXPECT_EQ(session->FindGamerById(0), local0);
+    EXPECT_EQ(session->FindGamerById(1), nullptr); // removed, and never reissued
+    EXPECT_EQ(session->FindGamerById(2), local2);
+    EXPECT_EQ(session->FindGamerById(3), newGamer);
 
     session->Dispose();
 }
@@ -217,15 +542,52 @@ TEST(NetworkSessionTest, StartAndEndGameAfterDisposeThrow) {
     EXPECT_THROW(session->EndGame(), System::ObjectDisposedException);
 }
 
-TEST(NetworkSessionTest, GamerJoinedRaisedOnUpdateAfterConstruction) {
+// Task 12.3 (DEFERRED.md item #21 in the sibling cna-samples repo): real XNA's GamerJoined
+// replays itself immediately for every gamer already in the session the instant a handler
+// subscribes via += - not deferred to the next Update() call, since no caller could possibly
+// have subscribed before Create()/Join() returned the session pointer in the first place.
+// sharp-runtime's EventHandler<T>::SetReplayHook() (set in NetworkSession's own constructor)
+// reproduces this; Update() afterward has nothing left to add for these construction-time gamers.
+TEST(NetworkSessionTest, GamerJoinedReplaysImmediatelyOnSubscriptionForConstructionTimeGamers) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
 
     int joinCount = 0;
-    session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs&) { ++joinCount; };
+    // Task 2.1: sender must be the raising NetworkSession itself (real XNA passes the raising
+    // instance for every event; NetworkSession used to hardcode nullptr since it didn't inherit
+    // System::Object at all, leaving no `this`-as-Object* to pass).
+    System::Object* observedSender = nullptr;
+    session->GamerJoined += [&joinCount, &observedSender](System::Object* sender, const GamerJoinedEventArgs&) {
+        ++joinCount;
+        observedSender = sender;
+    };
+    EXPECT_EQ(joinCount, 1); // fired synchronously by the += itself, before any Update() call
+    EXPECT_EQ(observedSender, session);
+
     session->Update();
+    EXPECT_EQ(joinCount, 1); // nothing left queued for Update() to drain
+
+    session->Dispose();
+}
+
+// A handler subscribing well after construction (and after other Update() calls already ran)
+// must still be caught up on every gamer currently in the session - not just gamers who join
+// after it subscribes.
+TEST(NetworkSessionTest, GamerJoinedReplaysForALateSubscriber) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    session->Update();
+    session->Update();
+
+    int joinCount = 0;
+    session->GamerJoined += [&joinCount, session](System::Object*, const GamerJoinedEventArgs& e) {
+        ++joinCount;
+        EXPECT_EQ(e.getGamerProperty(), session->getAllGamersProperty()[0]);
+    };
     EXPECT_EQ(joinCount, 1);
 
     session->Dispose();
@@ -364,18 +726,97 @@ TEST(NetworkSessionTest, EndFindWithMismatchedResultThrows) {
 
 // --- Static Join/BeginJoin/EndJoin family ---
 //
-// NOTE: Join(...) and EndJoin(...) beyond argument validation are not exercised here.
-// BeginJoin's NetworkSessionAction always carries a std::nullopt LocalGamers list (FNA passes
-// null unconditionally, marked FIXME upstream — see NetworkSession.cpp), so completing via
-// EndJoin always reaches the empty-global-SignedInGamers constructor throw described above the
-// Create family tests, and there is no way to call BeginJoin successfully and later reclaim
-// activeAction_ without hitting that throw. Only the null-check path below is safe to test.
+// NOTE: Join(...)/EndJoin(...) completing successfully needs the same temporary one-gamer global
+// SignedInGamers swap Task 2.3's AddLocalGamer test uses (BeginJoin's NetworkSessionAction always
+// carries a std::nullopt LocalGamers list - FNA passes null unconditionally, marked FIXME
+// upstream - so the constructor's fallback-to-global-list path is the only one EndJoin can ever
+// reach; an empty list there throws and permanently corrupts activeAction_ for the rest of the
+// process). See JoinActivatesRealNetworkingForTheCorrectSessionType below for the real,
+// full-round-trip Join() test this makes possible (Task 2.15).
 
 TEST(NetworkSessionTest, BeginJoinRejectsNullAvailableSession) {
     EXPECT_THROW(
         NetworkSession::BeginJoin(nullptr, System::AsyncCallback{}, std::any{}),
         System::ArgumentNullException
     );
+}
+
+// Task 2.15: BeginJoin/EndJoin hardcoded NetworkSessionType::PlayerMatch instead of deriving it
+// from the AvailableNetworkSession being joined (an acknowledged upstream FNA FIXME - harmless in
+// FNA itself since its networking is entirely stubbed out regardless of session type, but a real
+// functional gap in CNA, whose ENet transport is gated specifically on SystemLink). Every session
+// produced via the real public Join() entry point used to have real networking permanently
+// disabled; only tests calling ConnectToHost directly (bypassing Join()) ever exercised the real
+// handshake. This test calls the real public Join() - not ConnectToHost directly - and confirms
+// real networking actually activates end-to-end: the joined session reports the correct session
+// type, gets its own real ENet host bound, and actually connects out to (and completes a full
+// ClientHello/ServerWelcome handshake with) the session described by the AvailableNetworkSession.
+TEST(NetworkSessionTest, JoinActivatesRealNetworkingForTheCorrectSessionType) {
+    CNA::Internal::Net::ENetHostHandle fakeHostBeingJoined = CNA::Internal::Net::ENetHostHandle::CreateHost(0, 4, 2);
+    uint16_t fakeHostPort = fakeHostBeingJoined.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    // See Task 2.15's fix note on AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler
+    // (above) for why this installs a fresh empty collection on teardown rather than restoring a
+    // captured "previous" pointer - Gamer::setSignedInGamersProperty deletes the old value
+    // unconditionally, so reusing a captured "previous" pointer here is what actually surfaced
+    // this as a reproducible double-free in the first place.
+    SignedInGamer joiningGamer = MakeSignedInGamer("Joiner");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&joiningGamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    AvailableNetworkSession availableSession = AvailableNetworkSession::CreateInternal(
+        1, "FakeHost", 0, 8, NetworkSessionProperties{}, QualityOfService::CreateInternal(),
+        "127.0.0.1", fakeHostPort, NetworkSessionType::SystemLink
+    );
+
+    NetworkSession* joined = NetworkSession::Join(&availableSession);
+    ASSERT_NE(joined, nullptr);
+    EXPECT_EQ(joined->getSessionTypeProperty(), NetworkSessionType::SystemLink);
+    // Real networking activated at all - false under the old hardcoded-PlayerMatch bug, since
+    // RealNetworkingEnabled(PlayerMatch) is false and StartHosting is never called.
+    EXPECT_GT(CNA::Internal::Net::ENetBackend::GetBoundPort(joined), 0);
+
+    // The stronger, full round-trip proof: Join() actually called ConnectToHost with the right
+    // address/port, and the fake host on the other end sees a real CONNECT plus a ClientHello.
+    bool connected = false;
+    ENetPeer* peerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !connected; ++i) {
+        joined->Update();
+        ENetEvent evt{};
+        if (fakeHostBeingJoined.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+            peerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    CNA::Internal::Net::ClientHelloMessage* receivedHello = nullptr;
+    CNA::Internal::Net::ClientHelloMessage helloStorage;
+    for (int i = 0; i < 200 && !receivedHello; ++i) {
+        joined->Update();
+        ENetEvent evt{};
+        if (fakeHostBeingJoined.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            if (CNA::Internal::Net::NetPacketCodec::PeekTag(data) == CNA::Internal::Net::MessageTag::ClientHello) {
+                helloStorage = CNA::Internal::Net::NetPacketCodec::DecodeClientHello(data);
+                receivedHello = &helloStorage;
+            }
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_NE(receivedHello, nullptr);
+    ASSERT_EQ(receivedHello->LocalGamertags.size(), 1u);
+    EXPECT_EQ(receivedHello->LocalGamertags[0], "Joiner");
+    (void) peerFromHostSide;
+
+    joined->Dispose();
 }
 
 // --- Static JoinInvited/BeginJoinInvited/EndJoinInvited family ---
@@ -419,107 +860,10 @@ TEST(NetworkSessionTest, EndJoinInvitedWithMismatchedResultThrows) {
 }
 
 // --- LocalNetworkGamer ---
-
-namespace {
-    struct LocalGamerFixture {
-        SignedInGamer signedIn = MakeSignedInGamer();
-        NetworkSession* session = NetworkSession::Create(
-            NetworkSessionType::Local, std::vector<SignedInGamer*>{&signedIn}, 8, 0, NetworkSessionProperties{}
-        );
-        LocalNetworkGamer* gamer = session->getLocalGamersProperty()[0];
-
-        ~LocalGamerFixture() { session->Dispose(); }
-    };
-}
-
-TEST(LocalNetworkGamerTest, IsLocalIsTrue) {
-    LocalGamerFixture fixture;
-    EXPECT_TRUE(fixture.gamer->getIsLocalProperty());
-}
-
-TEST(LocalNetworkGamerTest, SignedInGamerPropertyMatchesConstructorArgument) {
-    LocalGamerFixture fixture;
-    EXPECT_EQ(fixture.gamer->getSignedInGamerProperty(), &fixture.signedIn);
-}
-
-TEST(LocalNetworkGamerTest, NoDataAvailableByDefault) {
-    LocalGamerFixture fixture;
-    EXPECT_FALSE(fixture.gamer->getIsDataAvailableProperty());
-}
-
-TEST(LocalNetworkGamerTest, ReceiveDataReturnsZeroWhenQueueEmpty) {
-    LocalGamerFixture fixture;
-    std::vector<SharpRuntime::bytecs> buffer(4);
-    NetworkGamer* sender = nullptr;
-    EXPECT_EQ(fixture.gamer->ReceiveData(buffer, sender), 0);
-    EXPECT_EQ(sender, nullptr);
-}
-
-TEST(LocalNetworkGamerTest, SendDataThenReceiveDataRoundtrip) {
-    LocalGamerFixture fixture;
-    std::vector<SharpRuntime::bytecs> payload{1, 2, 3, 4};
-    fixture.gamer->SendData(payload, SendDataOptions::Reliable);
-
-    // SendData enqueues a NetworkEvent on the session, not directly on packetQueue_. Update()'s
-    // PacketSend handling (Task 5.5) is gated behind ENetBackend::RealNetworkingEnabled(), which
-    // is false for this fixture's NetworkSessionType::Local — so it stays a no-op here (matching
-    // FNA's own always-empty PacketSend branch) and IsDataAvailable legitimately stays false. See
-    // CNA::Internal::Net::ENetBackendTest's AppData relay tests for the real (SystemLink) path.
-    fixture.session->Update();
-    EXPECT_FALSE(fixture.gamer->getIsDataAvailableProperty());
-}
-
-TEST(LocalNetworkGamerTest, SendDataWithOffsetAndCount) {
-    LocalGamerFixture fixture;
-    std::vector<SharpRuntime::bytecs> payload{1, 2, 3, 4, 5};
-    fixture.gamer->SendData(payload, 1, 3, SendDataOptions::None);
-}
-
-TEST(LocalNetworkGamerTest, SendDataToRecipient) {
-    LocalGamerFixture fixture;
-    std::vector<SharpRuntime::bytecs> payload{9, 9};
-    fixture.gamer->SendData(payload, SendDataOptions::InOrder, fixture.gamer);
-}
-
-TEST(LocalNetworkGamerTest, SendDataWithOffsetAndCountToRecipient) {
-    LocalGamerFixture fixture;
-    std::vector<SharpRuntime::bytecs> payload{1, 2, 3, 4};
-    fixture.gamer->SendData(payload, 0, 2, SendDataOptions::None, fixture.gamer);
-}
-
-TEST(LocalNetworkGamerTest, SendDataFromPacketWriter) {
-    LocalGamerFixture fixture;
-    PacketWriter writer;
-    writer.Write(static_cast<int32_t>(42));
-    fixture.gamer->SendData(writer, SendDataOptions::Reliable);
-}
-
-TEST(LocalNetworkGamerTest, SendDataFromPacketWriterToRecipient) {
-    LocalGamerFixture fixture;
-    PacketWriter writer;
-    writer.Write(static_cast<int32_t>(42));
-    fixture.gamer->SendData(writer, SendDataOptions::Reliable, fixture.gamer);
-}
-
-TEST(LocalNetworkGamerTest, ReceiveDataIntoPacketReaderReturnsZero) {
-    LocalGamerFixture fixture;
-    PacketReader reader;
-    NetworkGamer* sender = nullptr;
-    // No packet queued, so IsDataAvailable is false and this returns 0 immediately.
-    EXPECT_EQ(fixture.gamer->ReceiveData(reader, sender), 0);
-}
-
-TEST(LocalNetworkGamerTest, EnableSendVoiceAndSendPartyInvitesAreNoOps) {
-    LocalGamerFixture fixture;
-    fixture.gamer->EnableSendVoice(fixture.gamer, true);
-    fixture.gamer->SendPartyInvites();
-}
-
-TEST(LocalNetworkGamerTest, ClearPacketQueueLeavesNoDataAvailable) {
-    LocalGamerFixture fixture;
-    fixture.gamer->ClearPacketQueue();
-    EXPECT_FALSE(fixture.gamer->getIsDataAvailableProperty());
-}
+//
+// Task 5.12: LocalNetworkGamer's own test cases moved to a dedicated LocalNetworkGamerTests.cpp,
+// matching CHECKLIST.md's per-class test-file convention (pure test-file reorganization, no
+// behavior change).
 
 // --- Phase 5: real ENet-backed networking (SystemLink only) ---
 //
@@ -571,21 +915,47 @@ TEST(NetworkSessionTest, AddRemoteGamerJoinsRostersAndRaisesGamerJoined) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
-    session->Update(); // drain the local gamer's own GamerJoin event first
+
+    // Subscribing here replays once for the local gamer that already joined during
+    // construction (Task 12.3) - tracked separately from the remote join below, which is a
+    // real, queued, Update()-driven event (AddRemoteGamer is unaffected by the replay hook,
+    // which only fires for gamers already present at *subscription* time).
+    std::vector<std::string> joinedGamertags;
+    session->GamerJoined += [&joinedGamertags](System::Object*, const GamerJoinedEventArgs& e) {
+        joinedGamertags.push_back(e.getGamerProperty()->getGamertagProperty());
+    };
+    ASSERT_EQ(joinedGamertags.size(), 1u);
+    EXPECT_EQ(joinedGamertags[0], "Stub Gamer"); // LocalNetworkGamer always reports this gamertag
 
     NetworkGamer remote = NetworkGamer::CreateInternal(session, "RemotePlayer");
-    int joinCount = 0;
-    session->GamerJoined += [&joinCount](System::Object*, const GamerJoinedEventArgs& e) {
-        ++joinCount;
-        EXPECT_EQ(e.getGamerProperty()->getGamertagProperty(), "RemotePlayer");
-    };
-
     session->AddRemoteGamer(&remote);
     EXPECT_EQ(session->getRemoteGamersProperty().getCountProperty(), 1);
     EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 2);
 
     session->Update();
-    EXPECT_EQ(joinCount, 1);
+    ASSERT_EQ(joinedGamertags.size(), 2u);
+    EXPECT_EQ(joinedGamertags[1], "RemotePlayer");
+
+    session->Dispose();
+}
+
+// Task 2.5: AddRemoteGamer used to add any remote gamer unconditionally, regardless of maxGamers_,
+// silently violating the documented "maximum players allowed" contract.
+TEST(NetworkSessionTest, AddRemoteGamerThrowsWhenSessionIsAlreadyAtMaxGamers) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    ASSERT_EQ(session->getAllGamersProperty().getCountProperty(), 1);
+    // Create() hardcodes MaxGamers to 69 regardless of the caller's argument (a real, preserved
+    // FNA quirk - see EndCreate's own comment), so setMaxGamersProperty is used directly to force
+    // the host's own local gamer to already fill the only slot.
+    session->setMaxGamersProperty(1);
+
+    NetworkGamer remote = NetworkGamer::CreateInternal(session, "RemotePlayer");
+    EXPECT_THROW(session->AddRemoteGamer(&remote), System::InvalidOperationException);
+    EXPECT_EQ(session->getRemoteGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 1);
 
     session->Dispose();
 }
@@ -602,7 +972,12 @@ TEST(NetworkSessionTest, RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPre
     session->Update();
 
     int leftCount = 0;
-    session->GamerLeft += [&leftCount](System::Object*, const GamerLeftEventArgs&) { ++leftCount; };
+    // Task 2.1: sender must be the raising NetworkSession itself, not nullptr.
+    System::Object* observedSender = nullptr;
+    session->GamerLeft += [&leftCount, &observedSender](System::Object* sender, const GamerLeftEventArgs&) {
+        ++leftCount;
+        observedSender = sender;
+    };
 
     session->RemoveGamer(&remote, NetworkSessionEndReason::Disconnected);
     EXPECT_TRUE(remote.getHasLeftSessionProperty());
@@ -613,6 +988,7 @@ TEST(NetworkSessionTest, RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPre
 
     session->Update();
     EXPECT_EQ(leftCount, 1);
+    EXPECT_EQ(observedSender, session);
 
     session->Dispose();
 }
@@ -631,12 +1007,51 @@ TEST(NetworkSessionTest, RemoveGamerOnLocalGamerRaisesSessionEndedWithReason) {
         observedReason = e.getEndReasonProperty();
     };
 
-    session->RemoveGamer(session->getLocalGamersProperty()[0], NetworkSessionEndReason::HostEndedSession);
+    LocalNetworkGamer* localGamer = session->getLocalGamersProperty()[0];
+    session->RemoveGamer(localGamer, NetworkSessionEndReason::HostEndedSession);
     session->Update();
 
     EXPECT_EQ(endedCount, 1);
     EXPECT_EQ(observedReason, NetworkSessionEndReason::HostEndedSession);
     EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Ended);
+    // Task 2.2: localGamers_ used to never be pruned in RemoveGamer (unlike remoteGamers_/
+    // allGamers_, which already were) - a removed local gamer kept appearing in
+    // getLocalGamersProperty() forever, breaking the AllGamers == LocalGamers UNION RemoteGamers
+    // invariant.
+    EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getPreviousGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->getPreviousGamersProperty()[0], localGamer);
 
     session->Dispose();
+}
+
+// Task 3.1: every LocalNetworkGamer/NetworkGamer this session ever created (constructor-time
+// locals, AddLocalGamer, AddRemoteGamer) used to be permanently leaked - nothing anywhere in this
+// codebase ever deleted one. Confirms the fix: gamers created via the constructor and
+// AddLocalGamer are tracked (GetOwnedGamerCountForTesting() > 0) and all freed on Dispose().
+TEST(NetworkSessionTest, DisposeFreesEveryGamerTheSessionEverOwned) {
+    SignedInGamerCollection* previousGlobal = Gamer::getSignedInGamersProperty();
+    SignedInGamer extraGamer = MakeSignedInGamer("ExtraTag");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&extraGamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    // maxLocalGamers=2, but only 1 gamer is actually signed in globally - leaves room for
+    // AddLocalGamer below (see Task 2.3's identical setup for why this is needed at all).
+    NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 2, 8);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 1u);
+
+    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
+    session->AddLocalGamer(&newGamer);
+    EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 2u);
+
+    session->Dispose();
+    EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 0u);
 }

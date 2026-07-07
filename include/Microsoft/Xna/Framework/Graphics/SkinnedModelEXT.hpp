@@ -80,11 +80,16 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /**
-         * @brief Names a single renderable part (e.g. "body", "hair", "eyebrows") of the model.
+         * @brief Names a single renderable part of the model.
          */
         NOXNA struct PartEXT
         {
-            /** @brief Human-readable part name, used for appearance tinting. */
+            /**
+             * @brief Part name, used for appearance tinting (AvatarRenderer::PartTintEXT
+             * matches by substring, e.g. "Hair"/"Shirt"/"Pants"/"Shoes" — not exact
+             * equality, since this is the source Blender object name baked straight
+             * through by the content pipeline, e.g. "CNAAvatarHair").
+             */
             std::string Name;
             /** @brief The part's geometry; SkinnedModelEXT owns the referenced buffers. */
             ModelMeshPart* Part = nullptr;
@@ -142,7 +147,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Used by SkinnedModelTypeReader while loading content; not typically called by game code.
          *
-         * @param name         Part name (e.g. "body", "hair").
+         * @param name         Part name (see PartEXT::Name).
          * @param vertexBuffer Vertex buffer for this part; ownership transfers to this model.
          * @param indexBuffer  Index buffer for this part; ownership transfers to this model.
          * @param part         Mesh part referencing the above buffers; ownership transfers to this model.
@@ -154,6 +159,63 @@ namespace Microsoft::Xna::Framework::Graphics
                          std::unique_ptr<IndexBuffer> indexBuffer,
                          std::unique_ptr<ModelMeshPart> part,
                          Texture2D texture = Texture2D());
+
+        /**
+         * @brief Attaches every part from another, independently-loaded SkinnedModelEXT
+         * onto this model, taking ownership of its buffers.
+         *
+         * @note NOXNA — CNA extension (Task 11.21). Lets a standalone-converted wardrobe
+         * piece (`tools/avatar_builder/generate_wardrobe.py` + `convert_avatar.py`, Task
+         * 11.14) actually be worn by an already-loaded, running avatar — until this
+         * method existed, such a piece could be converted but never attached at
+         * runtime. Requires @p other to share this model's exact bone count and index
+         * order (guaranteed for any two models built from the same canonical skeleton —
+         * `tools/avatar_builder/generate_skeleton.py`'s `BONES` table, via
+         * `convert_avatar.py`'s deterministic topological bone sort — since a wardrobe
+         * piece's per-vertex joint indices are then already correct for this model's own
+         * `ParentBoneIndices`/`BindPoseLocal` arrays with no remapping needed). Does not
+         * support attaching a model built from a different skeleton (see @throws).
+         *
+         * Task 11.4: replace-by-name — any part(s) of this model already sharing a name
+         * with an incoming part are removed (via RemovePartEXT, freeing their owned GPU
+         * resources) before the incoming part is appended. Without this, re-attaching a
+         * same-named replacement (e.g. swapping hairstyles at runtime) silently left both
+         * the old and new part rendered simultaneously, since this method previously only
+         * ever appended.
+         *
+         * @param other Another SkinnedModelEXT sharing this model's exact bone layout;
+         *              left with no parts of its own afterward (moved-from).
+         * @throws System::ArgumentException if @p other's BoneCount differs from this
+         *         model's — the one cheap, always-available check that a mismatched
+         *         skeleton wasn't passed; it cannot detect a same-count-but-different
+         *         skeleton, so callers are still responsible for only attaching pieces
+         *         built from the same canonical skeleton as this model.
+         */
+        void AttachPartEXT(SkinnedModelEXT&& other);
+
+        /**
+         * @brief Removes every part with the given name, freeing its owned GPU resources.
+         *
+         * @note NOXNA — CNA extension (Task 11.4/11.5). Unlike erasing directly from the
+         * public Parts vector (the previous only available approach, and the direct cause
+         * of Task 11.5's GPU-resource leak — Parts merely holds non-owning descriptors),
+         * this also removes the matching entries from this model's own owned-resource
+         * vectors, actually releasing the underlying VertexBuffer/IndexBuffer/
+         * ModelMeshPart/Texture2D.
+         *
+         * @param name Part name to remove (see PartEXT::Name); every matching part is
+         *             removed, not just the first.
+         */
+        void RemovePartEXT(const std::string& name);
+
+        /** @brief Returns the number of owned vertex buffers, for testing (Task 11.5). */
+        NOXNA [[nodiscard]] std::size_t GetOwnedVertexBufferCountForTesting() const { return vertexBuffers_.size(); }
+        /** @brief Returns the number of owned index buffers, for testing (Task 11.5). */
+        NOXNA [[nodiscard]] std::size_t GetOwnedIndexBufferCountForTesting() const { return indexBuffers_.size(); }
+        /** @brief Returns the number of owned mesh parts, for testing (Task 11.5). */
+        NOXNA [[nodiscard]] std::size_t GetOwnedPartCountForTesting() const { return ownedParts_.size(); }
+        /** @brief Returns the number of owned textures, for testing (Task 11.5). */
+        NOXNA [[nodiscard]] std::size_t GetOwnedTextureCountForTesting() const { return textures_.size(); }
 
     private:
         std::vector<std::unique_ptr<VertexBuffer>> vertexBuffers_;

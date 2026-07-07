@@ -10,6 +10,15 @@ namespace Microsoft::Xna::Framework::GamerServices
 {
     /**
      * @brief A disposable read-only collection of FriendGamer objects.
+     *
+     * Task 7.12/10.2: a non-owning view, per `GamerCollection<T>`'s own doc comment (the single
+     * canonical statement of this contract) - `Dispose()` never deletes the `FriendGamer*`
+     * pointers it was constructed with, matching FNA's own real `FriendCollection.Dispose()`
+     * (`collection.Clear(); IsDisposed = true;`). `SignedInGamer::GetFriends()` only ever
+     * constructs an empty stub `FriendCollection` today, so no real leak is possible in practice
+     * yet - whoever eventually implements real friend-list population must establish its own
+     * ownership registry for the `FriendGamer` objects it creates, exactly like
+     * `GamerServicesDispatcher::Initialize()` already does for `SignedInGamer`.
      */
     class FriendCollection : public GamerCollection<FriendGamer>, public System::IDisposable
     {
@@ -22,7 +31,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] bool getIsDisposedProperty() const;
 
         /**
-         * @brief Clears the collection and marks it as disposed.
+         * @brief Clears the collection and marks it as disposed. Does not free the FriendGamer
+         * pointers themselves - see the class's own doc comment for the ownership contract.
          */
         void Dispose() override;
 

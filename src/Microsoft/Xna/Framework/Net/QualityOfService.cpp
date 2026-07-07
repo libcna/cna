@@ -9,9 +9,20 @@ namespace Microsoft::Xna::Framework::Net
     {
     }
 
+    QualityOfService::QualityOfService(System::TimeSpan roundtripTime)
+        : averageRoundtripTime_(roundtripTime)
+        , minimumRoundtripTime_(roundtripTime)
+    {
+    }
+
     QualityOfService QualityOfService::CreateInternal()
     {
         return QualityOfService();
+    }
+
+    QualityOfService QualityOfService::CreateInternal(System::TimeSpan roundtripTime)
+    {
+        return QualityOfService(roundtripTime);
     }
 
     System::TimeSpan QualityOfService::getAverageRoundtripTimeProperty() const { return averageRoundtripTime_; }

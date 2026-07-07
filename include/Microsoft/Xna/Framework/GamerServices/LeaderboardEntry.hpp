@@ -51,9 +51,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets the ranking of this entry on the leaderboard.
          *
+         * Task 7.10: `RankingEXT` is FNA's own extension, not part of the real XNA 4.0 API
+         * surface (real XNA's LeaderboardEntry exposes only Columns/Gamer/Rating) - FNA's own
+         * reference source already names it with the "EXT" suffix for exactly this reason.
+         *
          * @return The ranking.
          */
-        [[nodiscard]] int getRankingEXTProperty() const;
+        NOXNA [[nodiscard]] int getRankingEXTProperty() const;
 
         /**
          * @brief Determines whether this entry is structurally equal to another.

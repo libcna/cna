@@ -585,6 +585,18 @@ namespace Microsoft::Xna::Framework::Content
             template <typename T>
             T Read()
             {
+                // Task 11.7: a truncated/corrupt .skeleton.bin/.clip.bin (or a header value like
+                // boneCount/trackCount/keyCount inconsistent with the file's actual byte length)
+                // previously caused a real out-of-bounds heap read (undefined behavior) here
+                // instead of a clean, catchable error - this is the most serious memory-safety
+                // finding in the whole Avatar content-loading path.
+                if (Pos + sizeof(T) > Data.size())
+                {
+                    throw ContentLoadException(
+                        "Truncated or corrupt binary content: attempted to read " + std::to_string(sizeof(T))
+                            + " bytes at offset " + std::to_string(Pos) + ", but only "
+                            + std::to_string(Data.size()) + " bytes are available");
+                }
                 T value{};
                 std::memcpy(&value, Data.data() + Pos, sizeof(T));
                 Pos += sizeof(T);
@@ -602,15 +614,30 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
+        // Task 14.1: string-literal-aware - a brace/bracket embedded inside a JSON string value
+        // (e.g. a part/clip name like "Weird{Name}", structurally possible from
+        // convert_avatar.py's fully automated pipeline even if not currently produced) previously
+        // miscounted depth, since this only ever tracked raw character occurrences with no
+        // awareness of string-literal boundaries. Skips over "..." contents (respecting
+        // backslash escapes, so \" doesn't end the string early) without counting brackets
+        // inside them.
         std::size_t FindMatchingBracketEXT(const std::string& j, std::size_t openPos,
                                             char openCh, char closeCh)
         {
             int depth = 1;
             std::size_t pos = openPos + 1;
+            bool inString = false;
             while (pos < j.size() && depth > 0)
             {
-                if (j[pos] == openCh) { ++depth; }
-                else if (j[pos] == closeCh) { --depth; }
+                const char c = j[pos];
+                if (inString)
+                {
+                    if (c == '\\') { ++pos; } // skip the escaped character entirely
+                    else if (c == '"') { inString = false; }
+                }
+                else if (c == '"') { inString = true; }
+                else if (c == openCh) { ++depth; }
+                else if (c == closeCh) { --depth; }
                 ++pos;
             }
             return pos;
@@ -657,6 +684,11 @@ namespace Microsoft::Xna::Framework::Content
 
                 const std::string json = ReadTextFile(path);
                 const std::string root = cm.getRootDirectoryProperty();
+                // Every path the manifest references (skeleton/vertices/indices/texture/clip) is
+                // relative to the manifest's own directory, not the content root — so a bundle
+                // like Content/avatar/male/ is self-contained and relocatable without rewriting
+                // any of its internal paths.
+                const fs::path manifestDir = fs::path(path).parent_path();
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
 
                 auto model = std::make_shared<Graphics::SkinnedModelEXT>();
@@ -669,9 +701,26 @@ namespace Microsoft::Xna::Framework::Content
                         "SkinnedModel descriptor missing 'skeleton' field: " + path);
                 }
 
-                const auto skelBytes = ReadBinaryFile((fs::path(root) / skeletonRel).string());
+                const auto skelBytes = ReadBinaryFile((manifestDir / skeletonRel).string());
                 BinReaderEXT skelReader{skelBytes};
                 const int boneCount = skelReader.Read<std::int32_t>();
+                // Task 11.8: boneCount is a raw int32_t from file content with no validation
+                // before being cast to std::size_t and used to .resize() 3 vectors below - a
+                // negative value wraps to a huge std::size_t (static_cast<std::size_t>(-1) is
+                // SIZE_MAX), and even a merely-large-but-positive corrupt value could attempt a
+                // huge, wasteful allocation before Task 11.7's own per-Read() bounds check would
+                // ever get a chance to reject it. Reject both cleanly instead of risking
+                // std::length_error/std::bad_alloc (the wrong exception type for this project) or
+                // a crash. kMaxSaneBoneCount is a generous, arbitrary ceiling - real content uses
+                // 19 (avatar) or a handful more per wardrobe piece; nothing plausible ever
+                // approaches five figures.
+                constexpr int kMaxSaneBoneCount = 100000;
+                if (boneCount < 0 || boneCount > kMaxSaneBoneCount)
+                {
+                    throw ContentLoadException(
+                        "SkinnedModel skeleton has an invalid bone count (" + std::to_string(boneCount)
+                            + "): " + path);
+                }
                 model->BoneCount = boneCount;
                 model->ParentBoneIndices.resize(static_cast<std::size_t>(boneCount));
                 for (int i = 0; i < boneCount; ++i)
@@ -701,19 +750,49 @@ namespace Microsoft::Xna::Framework::Content
                     if (vertFile.empty() || idxFile.empty()) { continue; }
                     if (stride <= 0) { continue; }
 
-                    const auto vertBytes = ReadBinaryFile((fs::path(root) / vertFile).string());
-                    const auto idxBytes  = ReadBinaryFile((fs::path(root) / idxFile).string());
+                    const auto vertBytes = ReadBinaryFile((manifestDir / vertFile).string());
+                    const auto idxBytes  = ReadBinaryFile((manifestDir / idxFile).string());
+
+                    // Task 11.9: numVertices/numIndices below used to truncate silently if the
+                    // byte counts weren't exact multiples of stride/sizeof(uint16_t), and index
+                    // values were never checked to reference an in-range vertex - malformed/
+                    // corrupted part data could produce an index buffer referencing out-of-range
+                    // vertices with no validation anywhere in this path.
+                    if (vertBytes.size() % static_cast<std::size_t>(stride) != 0)
+                    {
+                        throw ContentLoadException(
+                            "SkinnedModel part '" + name + "' vertex data size (" + std::to_string(vertBytes.size())
+                                + ") is not a multiple of its vertexStride (" + std::to_string(stride) + "): " + path);
+                    }
+                    if (idxBytes.size() % sizeof(std::uint16_t) != 0)
+                    {
+                        throw ContentLoadException(
+                            "SkinnedModel part '" + name + "' index data size (" + std::to_string(idxBytes.size())
+                                + ") is not a multiple of " + std::to_string(sizeof(std::uint16_t)) + ": " + path);
+                    }
 
                     const int numVertices = static_cast<int>(vertBytes.size()) / stride;
                     const int numIndices  = static_cast<int>(idxBytes.size())
                                             / static_cast<int>(sizeof(std::uint16_t));
                     const int primCount   = numIndices / 3;
 
+                    const auto* indexData = reinterpret_cast<const std::uint16_t*>(idxBytes.data());
+                    for (int i = 0; i < numIndices; ++i)
+                    {
+                        if (static_cast<int>(indexData[i]) >= numVertices)
+                        {
+                            throw ContentLoadException(
+                                "SkinnedModel part '" + name + "' index " + std::to_string(i)
+                                    + " references vertex " + std::to_string(indexData[i]) + ", but only "
+                                    + std::to_string(numVertices) + " vertices exist: " + path);
+                        }
+                    }
+
                     auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
                     vb->SetDataRaw(vertBytes.data(), numVertices, stride);
 
                     auto ib = std::make_unique<Graphics::IndexBuffer>(device, numIndices);
-                    ib->SetData(reinterpret_cast<const std::uint16_t*>(idxBytes.data()), numIndices);
+                    ib->SetData(indexData, numIndices);
 
                     auto part = std::make_unique<Graphics::ModelMeshPart>(
                         vb.get(), ib.get(), numVertices, primCount, 0, 0);
@@ -721,7 +800,11 @@ namespace Microsoft::Xna::Framework::Content
                     Graphics::Texture2D texture;
                     if (!texFile.empty())
                     {
-                        texture = cm.Load<Graphics::Texture2D>(texFile);
+                        // cm.Load<T>() always resolves its argument relative to the content
+                        // root, not the manifest's directory — re-express texFile (manifest-
+                        // relative, like every other path here) as root-relative first.
+                        const std::string texRootRelative = fs::relative(manifestDir / texFile, root).string();
+                        texture = cm.Load<Graphics::Texture2D>(texRootRelative);
                     }
 
                     model->AddPartEXT(name, std::move(vb), std::move(ib), std::move(part),
@@ -735,7 +818,7 @@ namespace Microsoft::Xna::Framework::Content
                     const std::string clipFile = ExtractJsonStringField(ag, "clip");
                     if (name.empty() || clipFile.empty()) { continue; }
 
-                    const auto clipBytes = ReadBinaryFile((fs::path(root) / clipFile).string());
+                    const auto clipBytes = ReadBinaryFile((manifestDir / clipFile).string());
                     BinReaderEXT clipReader{clipBytes};
 
                     Graphics::AnimationClipEXT clip;
@@ -752,12 +835,31 @@ namespace Microsoft::Xna::Framework::Content
                         {
                             Graphics::KeyframeEXT key;
                             key.Time = System::TimeSpan::FromSeconds(clipReader.Read<double>());
-                            key.Translation = Vector3(clipReader.Read<float>(), clipReader.Read<float>(),
-                                                       clipReader.Read<float>());
-                            key.Rotation = Quaternion(clipReader.Read<float>(), clipReader.Read<float>(),
-                                                       clipReader.Read<float>(), clipReader.Read<float>());
-                            key.Scale = Vector3(clipReader.Read<float>(), clipReader.Read<float>(),
-                                                clipReader.Read<float>());
+                            // C++ does not guarantee left-to-right evaluation order for a single
+                            // function call's arguments — reading each float into its own named
+                            // local first (separate statements, strictly sequential) before
+                            // constructing Vector3/Quaternion is required here, not stylistic:
+                            // Vector3(clipReader.Read<float>(), clipReader.Read<float>(), ...)
+                            // previously let the compiler evaluate those Read<float>() calls (each
+                            // with the side effect of advancing clipReader's position) in whatever
+                            // order it liked, silently scrambling which bytes landed in which
+                            // component. Confirmed via a real rendering bug (Task 11.11): a
+                            // Spine bone keyframe's rotation bytes for (x,y,z,w) = (0,0,0,1) (identity)
+                            // were read back as (1,0,0,0) — exactly the reversed order a right-to-left
+                            // evaluation would produce.
+                            const float tx = clipReader.Read<float>();
+                            const float ty = clipReader.Read<float>();
+                            const float tz = clipReader.Read<float>();
+                            key.Translation = Vector3(tx, ty, tz);
+                            const float qx = clipReader.Read<float>();
+                            const float qy = clipReader.Read<float>();
+                            const float qz = clipReader.Read<float>();
+                            const float qw = clipReader.Read<float>();
+                            key.Rotation = Quaternion(qx, qy, qz, qw);
+                            const float sx = clipReader.Read<float>();
+                            const float sy = clipReader.Read<float>();
+                            const float sz = clipReader.Read<float>();
+                            key.Scale = Vector3(sx, sy, sz);
                             track.Keys.push_back(key);
                         }
                         clip.Tracks.push_back(std::move(track));

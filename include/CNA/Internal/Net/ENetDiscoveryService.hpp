@@ -34,6 +34,12 @@ namespace CNA::Internal::Net
      * platform at all (no browser, and no Node.js `ws` package, can send a raw datagram), so every
      * method below is a no-op there (RegisterHost/UnregisterHost/Poll do nothing; FindSessions
      * always returns empty). This is a permanent platform constraint, not a TODO.
+     *
+     * Task 6.4: single-threaded only, by design and by contract - same reasoning and same
+     * constraint as ENetBackend's own class-level doc comment. registeredHost_/socket_/
+     * currentResults_ (this file's internal state) have no synchronization at all; every real
+     * call path reaches this class exclusively through NetworkSession::Update() on whatever
+     * single thread the game itself drives its update loop from.
      */
     class ENetDiscoveryService
     {

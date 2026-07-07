@@ -1,0 +1,126 @@
+{
+  "skeleton": "skeleton.bin",
+  "parts": [
+    {
+      "name": "CNAAvatarBody",
+      "vertices": "CNAAvatarBody.verts.bin",
+      "indices": "CNAAvatarBody.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarBody.png"
+    },
+    {
+      "name": "CNAAvatarHair",
+      "vertices": "CNAAvatarHair.verts.bin",
+      "indices": "CNAAvatarHair.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarHair.png"
+    },
+    {
+      "name": "CNAAvatarPants",
+      "vertices": "CNAAvatarPants.verts.bin",
+      "indices": "CNAAvatarPants.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarPants.png"
+    },
+    {
+      "name": "CNAAvatarShirt",
+      "vertices": "CNAAvatarShirt.verts.bin",
+      "indices": "CNAAvatarShirt.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarShirt.png"
+    },
+    {
+      "name": "CNAAvatarShoes",
+      "vertices": "CNAAvatarShoes.verts.bin",
+      "indices": "CNAAvatarShoes.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarShoes.png"
+    }
+  ],
+  "animations": [
+    {
+      "name": "Celebrate",
+      "clip": "clips/Celebrate.clip.bin"
+    },
+    {
+      "name": "Clap",
+      "clip": "clips/Clap.clip.bin"
+    },
+    {
+      "name": "FemaleAngry",
+      "clip": "clips/FemaleAngry.clip.bin"
+    },
+    {
+      "name": "FemaleConfused",
+      "clip": "clips/FemaleConfused.clip.bin"
+    },
+    {
+      "name": "FemaleCry",
+      "clip": "clips/FemaleCry.clip.bin"
+    },
+    {
+      "name": "FemaleIdleCheckNails",
+      "clip": "clips/FemaleIdleCheckNails.clip.bin"
+    },
+    {
+      "name": "FemaleIdleFixShoe",
+      "clip": "clips/FemaleIdleFixShoe.clip.bin"
+    },
+    {
+      "name": "FemaleIdleLookAround",
+      "clip": "clips/FemaleIdleLookAround.clip.bin"
+    },
+    {
+      "name": "FemaleIdleShiftWeight",
+      "clip": "clips/FemaleIdleShiftWeight.clip.bin"
+    },
+    {
+      "name": "FemaleLaugh",
+      "clip": "clips/FemaleLaugh.clip.bin"
+    },
+    {
+      "name": "FemaleShocked",
+      "clip": "clips/FemaleShocked.clip.bin"
+    },
+    {
+      "name": "FemaleYawn",
+      "clip": "clips/FemaleYawn.clip.bin"
+    },
+    {
+      "name": "Stand0",
+      "clip": "clips/Stand0.clip.bin"
+    },
+    {
+      "name": "Stand1",
+      "clip": "clips/Stand1.clip.bin"
+    },
+    {
+      "name": "Stand2",
+      "clip": "clips/Stand2.clip.bin"
+    },
+    {
+      "name": "Stand3",
+      "clip": "clips/Stand3.clip.bin"
+    },
+    {
+      "name": "Stand4",
+      "clip": "clips/Stand4.clip.bin"
+    },
+    {
+      "name": "Stand5",
+      "clip": "clips/Stand5.clip.bin"
+    },
+    {
+      "name": "Stand6",
+      "clip": "clips/Stand6.clip.bin"
+    },
+    {
+      "name": "Stand7",
+      "clip": "clips/Stand7.clip.bin"
+    },
+    {
+      "name": "Wave",
+      "clip": "clips/Wave.clip.bin"
+    }
+  ]
+}

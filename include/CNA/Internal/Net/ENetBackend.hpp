@@ -31,6 +31,16 @@ namespace CNA::Internal::Net
      * backend interface, since ENet is this project's only networking implementation. Keeps all
      * ENet C-API types out of Microsoft::Xna::Framework::Net headers: per-session transport state
      * lives entirely in ENetBackend.cpp, keyed by NetworkSession* in a private registry.
+     *
+     * Task 6.4: single-threaded only, by design and by contract - every method here (and the
+     * process-wide session registry backing them) must always be called from the same thread,
+     * matching the same expectation real XNA's own single-threaded Game/Update loop already
+     * places on NetworkSession itself. There is no internal synchronization (no
+     * std::mutex/std::atomic anywhere in this module); every real call path drives this class
+     * exclusively through NetworkSession::Update() on whatever thread the game itself calls
+     * Update() from. A caller that invokes NetworkSession::Update() from more than one thread, or
+     * calls any of these methods directly off-thread, would race silently - this is an explicit,
+     * intentional constraint, not an oversight, and matches XNA's own single-threaded design.
      */
     class ENetBackend
     {
@@ -122,6 +132,49 @@ namespace CNA::Internal::Net
             const std::vector<SharpRuntime::bytecs>& payload,
             SendDataOptions options
         );
+
+        /**
+         * @brief Task 2.13: how many `SendAppData` calls have been silently dropped because
+         * sender and/or target weren't yet known to ENetBackend's wire-id map.
+         *
+         * Reachable in practice when `SendData` is called immediately after `Join()`/
+         * `ConnectToHost()`, before any `Update()` call has pumped the `ClientHello`/
+         * `ServerWelcome` round-trip that populates the map. Not part of real XNA; exists purely
+         * so this previously-totally-silent drop is at least observable (e.g. by tests, or a
+         * game's own diagnostics) instead of vanishing with no trace at all.
+         *
+         * @return The number of drops observed so far, process-wide, since startup or the last
+         * `ResetDroppedAppDataCount()` call.
+         */
+        static std::size_t GetDroppedAppDataCount();
+
+        /** @brief Task 2.13: resets the counter `GetDroppedAppDataCount()` reports back to zero. */
+        static void ResetDroppedAppDataCount();
+
+        /**
+         * @brief Task 3.1: the number of remote gamer objects session's own transport state
+         * currently owns and has not yet freed (created by `HandleClientHello`/
+         * `HandleServerWelcome`/`HandleGamerJoinBroadcast`, freed when this session's transport
+         * state is torn down). Exists purely to make Task 3.1's ownership fix testable; not part
+         * of real XNA.
+         *
+         * @param session The session to query.
+         * @return The number of currently-owned, not-yet-freed remote gamer objects, or 0 if
+         * session has no registered transport.
+         */
+        static std::size_t GetOwnedRemoteGamerCountForTesting(NetworkSession* session);
+
+        /**
+         * @brief Task 6.3: the number of sessions currently registered in `ENetBackend`'s own
+         * process-wide transport-state map.
+         *
+         * Exists purely to make `StartHosting`'s all-or-nothing registration invariant testable:
+         * a session should never be committed to this map unless *every* step of `StartHosting`
+         * (including discovery registration) succeeded. Not part of real XNA.
+         *
+         * @return The number of currently-registered sessions.
+         */
+        static std::size_t GetSessionCountForTesting();
 
         /**
          * @brief Broadcasts a session state change (StartGame/EndGame) to every connected peer.

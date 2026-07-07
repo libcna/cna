@@ -83,6 +83,27 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         System::IO::Stream* GetPicture();
 
+        /**
+         * @brief Determines whether this achievement is structurally equal to another.
+         *
+         * FNA's Achievement has no custom equality (falls back to reference identity); since
+         * achievements are stored by value here, structural comparison of every field is the
+         * closest achievable equivalent (same reasoning as LeaderboardEntry::operator==).
+         * Required by AchievementCollection's IndexOf/Contains/Remove (Task 8.2).
+         *
+         * @param other The achievement to compare against.
+         * @return true if every field is equal.
+         */
+        NOXNA [[nodiscard]] bool operator==(const Achievement& other) const;
+
+        /**
+         * @brief Determines whether this achievement differs from another.
+         *
+         * @param other The achievement to compare against.
+         * @return true if any field differs.
+         */
+        NOXNA [[nodiscard]] bool operator!=(const Achievement& other) const;
+
         /** @brief Creates an Achievement for CNA internal use. */
         NOXNA static Achievement CreateInternal(
             const std::string& key,

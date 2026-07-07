@@ -1,0 +1,126 @@
+{
+  "skeleton": "skeleton.bin",
+  "parts": [
+    {
+      "name": "CNAAvatarBody",
+      "vertices": "CNAAvatarBody.verts.bin",
+      "indices": "CNAAvatarBody.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarBody.png"
+    },
+    {
+      "name": "CNAAvatarHair",
+      "vertices": "CNAAvatarHair.verts.bin",
+      "indices": "CNAAvatarHair.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarHair.png"
+    },
+    {
+      "name": "CNAAvatarPants",
+      "vertices": "CNAAvatarPants.verts.bin",
+      "indices": "CNAAvatarPants.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarPants.png"
+    },
+    {
+      "name": "CNAAvatarShirt",
+      "vertices": "CNAAvatarShirt.verts.bin",
+      "indices": "CNAAvatarShirt.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarShirt.png"
+    },
+    {
+      "name": "CNAAvatarShoes",
+      "vertices": "CNAAvatarShoes.verts.bin",
+      "indices": "CNAAvatarShoes.idx.bin",
+      "vertexStride": 52,
+      "texture": "CNAAvatarShoes.png"
+    }
+  ],
+  "animations": [
+    {
+      "name": "Celebrate",
+      "clip": "clips/Celebrate.clip.bin"
+    },
+    {
+      "name": "Clap",
+      "clip": "clips/Clap.clip.bin"
+    },
+    {
+      "name": "MaleAngry",
+      "clip": "clips/MaleAngry.clip.bin"
+    },
+    {
+      "name": "MaleConfused",
+      "clip": "clips/MaleConfused.clip.bin"
+    },
+    {
+      "name": "MaleCry",
+      "clip": "clips/MaleCry.clip.bin"
+    },
+    {
+      "name": "MaleIdleCheckHand",
+      "clip": "clips/MaleIdleCheckHand.clip.bin"
+    },
+    {
+      "name": "MaleIdleLookAround",
+      "clip": "clips/MaleIdleLookAround.clip.bin"
+    },
+    {
+      "name": "MaleIdleShiftWeight",
+      "clip": "clips/MaleIdleShiftWeight.clip.bin"
+    },
+    {
+      "name": "MaleIdleStretch",
+      "clip": "clips/MaleIdleStretch.clip.bin"
+    },
+    {
+      "name": "MaleLaugh",
+      "clip": "clips/MaleLaugh.clip.bin"
+    },
+    {
+      "name": "MaleSurprised",
+      "clip": "clips/MaleSurprised.clip.bin"
+    },
+    {
+      "name": "MaleYawn",
+      "clip": "clips/MaleYawn.clip.bin"
+    },
+    {
+      "name": "Stand0",
+      "clip": "clips/Stand0.clip.bin"
+    },
+    {
+      "name": "Stand1",
+      "clip": "clips/Stand1.clip.bin"
+    },
+    {
+      "name": "Stand2",
+      "clip": "clips/Stand2.clip.bin"
+    },
+    {
+      "name": "Stand3",
+      "clip": "clips/Stand3.clip.bin"
+    },
+    {
+      "name": "Stand4",
+      "clip": "clips/Stand4.clip.bin"
+    },
+    {
+      "name": "Stand5",
+      "clip": "clips/Stand5.clip.bin"
+    },
+    {
+      "name": "Stand6",
+      "clip": "clips/Stand6.clip.bin"
+    },
+    {
+      "name": "Stand7",
+      "clip": "clips/Stand7.clip.bin"
+    },
+    {
+      "name": "Wave",
+      "clip": "clips/Wave.clip.bin"
+    }
+  ]
+}

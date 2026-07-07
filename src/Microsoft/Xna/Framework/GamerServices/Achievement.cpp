@@ -50,4 +50,22 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
         throw System::NotImplementedException();
     }
+
+    bool Achievement::operator==(const Achievement& other) const
+    {
+        return key_ == other.key_
+            && name_ == other.name_
+            && description_ == other.description_
+            && howToEarn_ == other.howToEarn_
+            && displayBeforeEarned_ == other.displayBeforeEarned_
+            && earnedOnline_ == other.earnedOnline_
+            && gamerScore_ == other.gamerScore_
+            && isEarned_ == other.isEarned_
+            && earnedDateTime_ == other.earnedDateTime_;
+    }
+
+    bool Achievement::operator!=(const Achievement& other) const
+    {
+        return !(*this == other);
+    }
 }

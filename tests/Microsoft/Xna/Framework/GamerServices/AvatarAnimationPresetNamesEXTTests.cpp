@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <utility>
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.hpp"
 #include "System/ArgumentException.hpp"
 
@@ -32,13 +33,38 @@ TEST(AvatarAnimationPresetNamesEXTTest, AllThirtyPresetsMapToNonEmptyName)
     }
 }
 
+// Task 13.5: previously only checked 4 of the 31 presets by hand; the other 27 mappings were
+// only ever checked for non-emptiness (AllThirtyPresetsMapToNonEmptyName above), so a spelling
+// typo in any untested mapping (e.g. "MaleSurprised" vs a hypothetical "MaleSurprized") would
+// have passed every existing test. Uses a stringizing macro rather than 31 hand-typed string
+// literals, so the expected name is always derived from the same enumerator token used to
+// reference the value - eliminating any chance of transcribing the same typo into both the
+// production mapping and this test independently.
 TEST(AvatarAnimationPresetNamesEXTTest, NameMatchesEnumeratorSpelling)
 {
-    EXPECT_EQ(AvatarAnimationPresetToClipNameEXT(AvatarAnimationPreset::Wave), "Wave");
-    EXPECT_EQ(AvatarAnimationPresetToClipNameEXT(AvatarAnimationPreset::Clap), "Clap");
-    EXPECT_EQ(AvatarAnimationPresetToClipNameEXT(AvatarAnimationPreset::FemaleIdleCheckNails),
-              "FemaleIdleCheckNails");
-    EXPECT_EQ(AvatarAnimationPresetToClipNameEXT(AvatarAnimationPreset::MaleYawn), "MaleYawn");
+#define AVATAR_PRESET_CASE(x) {AvatarAnimationPreset::x, #x}
+    const std::pair<AvatarAnimationPreset, const char*> table[] = {
+        AVATAR_PRESET_CASE(Stand0), AVATAR_PRESET_CASE(Stand1), AVATAR_PRESET_CASE(Stand2),
+        AVATAR_PRESET_CASE(Stand3), AVATAR_PRESET_CASE(Stand4), AVATAR_PRESET_CASE(Stand5),
+        AVATAR_PRESET_CASE(Stand6), AVATAR_PRESET_CASE(Stand7), AVATAR_PRESET_CASE(Clap),
+        AVATAR_PRESET_CASE(Wave), AVATAR_PRESET_CASE(Celebrate),
+        AVATAR_PRESET_CASE(FemaleIdleCheckNails), AVATAR_PRESET_CASE(FemaleIdleLookAround),
+        AVATAR_PRESET_CASE(FemaleIdleShiftWeight), AVATAR_PRESET_CASE(FemaleIdleFixShoe),
+        AVATAR_PRESET_CASE(FemaleAngry), AVATAR_PRESET_CASE(FemaleConfused),
+        AVATAR_PRESET_CASE(FemaleLaugh), AVATAR_PRESET_CASE(FemaleCry),
+        AVATAR_PRESET_CASE(FemaleShocked), AVATAR_PRESET_CASE(FemaleYawn),
+        AVATAR_PRESET_CASE(MaleIdleLookAround), AVATAR_PRESET_CASE(MaleIdleStretch),
+        AVATAR_PRESET_CASE(MaleIdleShiftWeight), AVATAR_PRESET_CASE(MaleIdleCheckHand),
+        AVATAR_PRESET_CASE(MaleAngry), AVATAR_PRESET_CASE(MaleConfused),
+        AVATAR_PRESET_CASE(MaleLaugh), AVATAR_PRESET_CASE(MaleCry),
+        AVATAR_PRESET_CASE(MaleSurprised), AVATAR_PRESET_CASE(MaleYawn),
+    };
+#undef AVATAR_PRESET_CASE
+    ASSERT_EQ(sizeof(table) / sizeof(table[0]), 31u);
+    for (const auto& [preset, name] : table)
+    {
+        EXPECT_EQ(AvatarAnimationPresetToClipNameEXT(preset), name);
+    }
 }
 
 TEST(AvatarAnimationPresetNamesEXTTest, UnrecognizedValueThrows)

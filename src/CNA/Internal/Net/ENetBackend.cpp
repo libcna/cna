@@ -11,6 +11,7 @@
 
 #include <enet/enet.h>
 #include <memory>
+#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
@@ -55,7 +56,26 @@ namespace CNA::Internal::Net
             // Host-only: which peer owns a given remote wire-id, for AppData relay (Task 5.5).
             // Never populated for the host's own local gamers (they need no peer to reach).
             std::unordered_map<uint8_t, ENetPeer*> WireIdToPeer;
+            // Task 2.11: ids reclaimed from disconnected peers (see HandleDisconnect), reused by
+            // AssignWireId before ever incrementing NextWireId. Without this, NextWireId (a
+            // uint8_t) wraps after 256 *cumulative* joins over the session's life (churn, not 256
+            // simultaneous gamers), silently reassigning an id already owned by a still-connected
+            // gamer and corrupting HandleAppData's wire-id-based routing.
+            std::vector<uint8_t> FreeWireIds;
+            // Task 3.1/10.2: every remote NetworkGamer this SessionState's own HandleClientHello/
+            // HandleServerWelcome/HandleGamerJoinBroadcast ever `new`s (NetworkSession::
+            // AddRemoteGamer deliberately never takes ownership - see its own doc comment - since
+            // its established contract also accepts non-heap gamers, e.g. in tests). This is this
+            // SessionState's own ownership registry per GamerCollection<T>'s canonical contract
+            // (see its doc comment); freed automatically when this SessionState is destroyed
+            // (TeardownSession erasing it from Sessions()), which already happens at the same time
+            // NetworkSession::Dispose() frees everything *it* owns.
+            std::vector<std::unique_ptr<NetworkGamer>> OwnedRemoteGamers;
         };
+
+        // Task 2.13: process-wide, since SendAppData's silent-drop path (sender/target not yet in
+        // any per-session SessionState::GamerToWireId map) isn't tied to one particular session.
+        std::size_t droppedAppDataCount_ = 0;
 
         std::unordered_map<NetworkSession*, std::unique_ptr<SessionState>>& Sessions()
         {
@@ -65,9 +85,22 @@ namespace CNA::Internal::Net
 
         uint8_t AssignWireId(SessionState& state, NetworkGamer* gamer)
         {
-            uint8_t id = state.NextWireId++;
+            uint8_t id;
+            if (!state.FreeWireIds.empty())
+            {
+                id = state.FreeWireIds.back();
+                state.FreeWireIds.pop_back();
+            }
+            else
+            {
+                id = state.NextWireId++;
+            }
             state.GamerToWireId[gamer] = id;
             state.WireIdToGamer[id] = gamer;
+            // Surface the real, cross-machine-consistent wire-id through the public
+            // NetworkGamer::Id property (see DEFERRED.md item #20 in the sibling cna-samples
+            // repo) - overwrites NetworkSession's own construction-time local placeholder id.
+            gamer->SetId(id);
             return id;
         }
 
@@ -108,9 +141,30 @@ namespace CNA::Internal::Net
             std::vector<RosterEntry> roster;
             for (NetworkGamer* gamer : session->getAllGamersProperty())
             {
-                roster.push_back(RosterEntry{state.GamerToWireId.at(gamer), WireGamertagFor(gamer)});
+                // Task 4.6: this runs on the host, whose own view of IsHost is already accurate
+                // for every gamer it knows about (its own local gamer is IsHost==true from
+                // construction; every remote gamer was set IsHost==false in HandleClientHello
+                // below) - forwarding it lets a newly-joining client's HandleServerWelcome
+                // correctly identify which roster entry is the host.
+                roster.push_back(RosterEntry{state.GamerToWireId.at(gamer), WireGamertagFor(gamer),
+                                              gamer->getIsHostProperty()});
             }
             return roster;
+        }
+
+        // Task 6.8: queues the packet on peer without flushing - used by per-peer broadcast
+        // fan-out loops, which queue every peer's copy first and flush exactly once after the
+        // loop (see SendTo just below for the single-recipient case, which still flushes
+        // immediately every time).
+        void QueueSend(
+            SessionState& state,
+            ENetPeer* peer,
+            const std::vector<SharpRuntime::bytecs>& bytes,
+            SendDataOptions options,
+            uint8_t channel = kControlChannel
+        )
+        {
+            state.Host.Send(peer, channel, bytes.data(), bytes.size(), NetPacketCodec::SendDataOptionsToEnetFlags(options));
         }
 
         void SendTo(
@@ -121,12 +175,24 @@ namespace CNA::Internal::Net
             uint8_t channel = kControlChannel
         )
         {
-            state.Host.Send(peer, channel, bytes.data(), bytes.size(), NetPacketCodec::SendDataOptionsToEnetFlags(options));
+            QueueSend(state, peer, bytes, options, channel);
             state.Host.Flush();
         }
 
         void HandleClientHello(NetworkSession* session, SessionState& state, ENetPeer* peer, const ClientHelloMessage& hello)
         {
+            // Task 2.7: incoming ClientHello was previously accepted unconditionally regardless of
+            // sessionState_/AllowJoinInProgress - a host with AllowJoinInProgress == false still
+            // silently accepted new players mid-Playing state. Reject by disconnecting the peer
+            // outright (rather than a silent drop) so the connecting client isn't left hanging
+            // forever waiting for a ServerWelcome that will never arrive.
+            if (session->getSessionStateProperty() == NetworkSessionState::Playing
+                && !session->getAllowJoinInProgressProperty())
+            {
+                state.Host.Disconnect(peer, 0);
+                return;
+            }
+
             EnsureLocalWireIds(session, state);
 
             ServerWelcomeMessage welcome;
@@ -138,11 +204,15 @@ namespace CNA::Internal::Net
             for (const std::string& gamertag : hello.LocalGamertags)
             {
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, gamertag));
+                state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
+                // We are the host handling an incoming ClientHello, so this gamer belongs to the
+                // connecting client - never the host.
+                gamer->SetIsHost(false);
                 uint8_t id = AssignWireId(state, gamer);
                 welcome.AssignedWireIds.push_back(id);
                 newWireIds.push_back(id);
                 newGamers.push_back(gamer);
-                broadcastMsg.NewGamers.push_back(RosterEntry{id, gamertag});
+                broadcastMsg.NewGamers.push_back(RosterEntry{id, gamertag, false});
                 state.WireIdToPeer[id] = peer;
             }
             state.PeerWireIds[peer] = std::move(newWireIds);
@@ -159,13 +229,17 @@ namespace CNA::Internal::Net
             if (!broadcastMsg.NewGamers.empty())
             {
                 auto bytes = NetPacketCodec::Encode(broadcastMsg);
+                // Task 6.8: queue every peer's copy first, flush exactly once after the loop -
+                // avoids one enet_host_flush() syscall per peer for what's otherwise identical
+                // fan-out traffic.
                 for (auto& [otherPeer, wireIds] : state.PeerWireIds)
                 {
                     if (otherPeer != peer)
                     {
-                        SendTo(state, otherPeer, bytes, SendDataOptions::Reliable);
+                        QueueSend(state, otherPeer, bytes, SendDataOptions::Reliable);
                     }
                 }
+                state.Host.Flush();
             }
         }
 
@@ -177,6 +251,9 @@ namespace CNA::Internal::Net
                 uint8_t id = welcome.AssignedWireIds[static_cast<size_t>(i)];
                 state.GamerToWireId[locals[i]] = id;
                 state.WireIdToGamer[id] = locals[i];
+                // Overwrite NetworkSession's own construction-time local placeholder id with the
+                // real, host-negotiated one (see DEFERRED.md item #20).
+                locals[i]->SetId(id);
             }
 
             for (const RosterEntry& entry : welcome.ExistingRoster)
@@ -186,8 +263,14 @@ namespace CNA::Internal::Net
                     continue;
                 }
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, entry.Gamertag));
+                state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
                 state.GamerToWireId[gamer] = entry.WireId;
                 state.WireIdToGamer[entry.WireId] = gamer;
+                gamer->SetId(entry.WireId);
+                // Task 4.6: RosterEntry now carries a real host flag (SnapshotRoster on the host
+                // side forwards each gamer's own accurate IsHost), so a client correctly learns
+                // which remote gamer is the actual host here instead of always defaulting false.
+                gamer->SetIsHost(entry.IsHost);
                 session->AddRemoteGamer(gamer);
             }
         }
@@ -201,8 +284,14 @@ namespace CNA::Internal::Net
                     continue;
                 }
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, entry.Gamertag));
+                state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
                 state.GamerToWireId[gamer] = entry.WireId;
                 state.WireIdToGamer[entry.WireId] = gamer;
+                gamer->SetId(entry.WireId);
+                // Task 4.6: same real host-flag propagation as HandleServerWelcome above - always
+                // false in practice here, since a newly-joining client (the only thing this
+                // broadcast ever announces) can never be the host.
+                gamer->SetIsHost(entry.IsHost);
                 session->AddRemoteGamer(gamer);
             }
         }
@@ -306,16 +395,23 @@ namespace CNA::Internal::Net
                 state.GamerToWireId.erase(gamer);
                 state.WireIdToGamer.erase(gamerIt);
                 state.WireIdToPeer.erase(wireId);
+                // Task 2.11: reclaim the id for reuse by a future AssignWireId call, instead of
+                // leaving NextWireId to eventually wrap around after enough cumulative join/leave
+                // churn.
+                state.FreeWireIds.push_back(wireId);
             }
             state.PeerWireIds.erase(peerWireIdsIt);
 
             if (!broadcastMsg.WireIds.empty())
             {
                 auto bytes = NetPacketCodec::Encode(broadcastMsg);
+                // Task 6.8: same batch-then-flush-once reasoning as HandleClientHello's own
+                // broadcast fan-out above.
                 for (auto& [otherPeer, wireIds] : state.PeerWireIds)
                 {
-                    SendTo(state, otherPeer, bytes, SendDataOptions::Reliable);
+                    QueueSend(state, otherPeer, bytes, SendDataOptions::Reliable);
                 }
+                state.Host.Flush();
             }
         }
 
@@ -343,30 +439,59 @@ namespace CNA::Internal::Net
                 return;
             }
 
-            switch (NetPacketCodec::PeekTag(data))
+            // Task 1.4: this packet arrived over an already-open ENet channel, but nothing else
+            // validates its payload — a truncated/corrupted packet from any connected peer makes
+            // any Decode* call below throw std::runtime_error (BinaryReader::ReadBytes/ReadString
+            // throw on underflow). Uncaught, that exception used to propagate straight out of
+            // Update() into the caller's own game loop: a remote DoS from a single bad packet. Drop
+            // the offending packet and keep the session running instead.
+            try
             {
-                case MessageTag::ClientHello:
-                    HandleClientHello(session, state, peer, NetPacketCodec::DecodeClientHello(data));
-                    break;
-                case MessageTag::ServerWelcome:
-                    HandleServerWelcome(session, state, NetPacketCodec::DecodeServerWelcome(data));
-                    break;
-                case MessageTag::GamerJoinBroadcast:
-                    HandleGamerJoinBroadcast(session, state, NetPacketCodec::DecodeGamerJoinBroadcast(data));
-                    break;
-                case MessageTag::GamerLeaveBroadcast:
-                    HandleGamerLeaveBroadcast(session, state, NetPacketCodec::DecodeGamerLeaveBroadcast(data));
-                    break;
-                case MessageTag::StateChangeBroadcast:
-                    HandleStateChangeBroadcast(session, state, NetPacketCodec::DecodeStateChangeBroadcast(data));
-                    break;
-                case MessageTag::AppData:
-                    HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
-                    break;
-                default:
-                    break;
+                switch (NetPacketCodec::PeekTag(data))
+                {
+                    case MessageTag::ClientHello:
+                        HandleClientHello(session, state, peer, NetPacketCodec::DecodeClientHello(data));
+                        break;
+                    case MessageTag::ServerWelcome:
+                        HandleServerWelcome(session, state, NetPacketCodec::DecodeServerWelcome(data));
+                        break;
+                    case MessageTag::GamerJoinBroadcast:
+                        HandleGamerJoinBroadcast(session, state, NetPacketCodec::DecodeGamerJoinBroadcast(data));
+                        break;
+                    case MessageTag::GamerLeaveBroadcast:
+                        HandleGamerLeaveBroadcast(session, state, NetPacketCodec::DecodeGamerLeaveBroadcast(data));
+                        break;
+                    case MessageTag::StateChangeBroadcast:
+                        HandleStateChangeBroadcast(session, state, NetPacketCodec::DecodeStateChangeBroadcast(data));
+                        break;
+                    case MessageTag::AppData:
+                        HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
+                        break;
+                    default:
+                        break;
+                }
+            }
+            catch (const std::exception&)
+            {
+                // Malformed/truncated payload - drop it and keep the session alive.
             }
         }
+
+        // Task 1.4: guarantees enet_packet_destroy runs even if HandleReceive somehow still lets
+        // an exception escape (defense-in-depth alongside the try/catch above) - previously a
+        // plain post-call `enet_packet_destroy(evt.packet)` in PumpSession was skipped whenever an
+        // exception unwound past it, leaking the packet.
+        class ReceivedPacketGuard
+        {
+        public:
+            explicit ReceivedPacketGuard(ENetPacket* packet) : packet_(packet) { }
+            ~ReceivedPacketGuard() { enet_packet_destroy(packet_); }
+            ReceivedPacketGuard(const ReceivedPacketGuard&) = delete;
+            ReceivedPacketGuard& operator=(const ReceivedPacketGuard&) = delete;
+
+        private:
+            ENetPacket* packet_;
+        };
     }
 
     bool ENetBackend::RealNetworkingEnabled(NetworkSessionType sessionType)
@@ -397,13 +522,40 @@ namespace CNA::Internal::Net
         );
 #endif
         uint16_t boundPort = state->Host.getBoundPortProperty();
-        sessions.emplace(session, std::move(state));
 
+        // Task 6.3: RegisterHost can throw (EnsureSocket's bind/create failure). Previously the
+        // session was already emplace()'d into Sessions() by this point - a throw here left a
+        // real, live, bound ENet host registered but never discoverable via Find(), with no
+        // rollback and no way to retry (StartHosting is a no-op once Sessions() already contains
+        // this session). Registering for discovery *before* committing to Sessions() means a
+        // throw here instead just unwinds normally: `state`'s ENetHostHandle destructor tears
+        // down the half-created host, and Sessions() never learns about it at all.
         ENetDiscoveryService::RegisterHost(session, boundPort);
+
+        sessions.emplace(session, std::move(state));
     }
 
     void ENetBackend::TeardownSession(NetworkSession* session)
     {
+        auto it = Sessions().find(session);
+        if (it != Sessions().end())
+        {
+            // Task 2.14: previously just erased from Sessions(), destroying the ENetHostHandle
+            // (-> enet_host_destroy()) with no prior enet_peer_disconnect for still-connected
+            // peers - they'd wait out ENet's internal connection timeout instead of receiving an
+            // immediate, clean disconnect notification. Disconnect every known peer first and
+            // flush so the DISCONNECT packets actually go out before the host is torn down.
+            SessionState& state = *it->second;
+            for (const auto& [peer, wireIds] : state.PeerWireIds)
+            {
+                state.Host.Disconnect(peer, 0);
+            }
+            if (state.HostPeer != nullptr)
+            {
+                state.Host.Disconnect(state.HostPeer, 0);
+            }
+            state.Host.Flush();
+        }
         Sessions().erase(session);
         ENetDiscoveryService::UnregisterHost(session);
     }
@@ -426,12 +578,28 @@ namespace CNA::Internal::Net
             }
             else if (evt.type == ENET_EVENT_TYPE_RECEIVE)
             {
+                ReceivedPacketGuard packetGuard(evt.packet);
                 HandleReceive(session, state, evt.peer, evt.packet);
-                enet_packet_destroy(evt.packet);
             }
             else if (evt.type == ENET_EVENT_TYPE_DISCONNECT)
             {
                 HandleDisconnect(session, state, evt.peer);
+            }
+        }
+
+        // Task 4.1: NetworkGamer::RoundtripTime was permanently dead (never assigned anywhere) -
+        // ENet already natively tracks real per-peer RTT; surface it every pump instead. Scoped to
+        // the host's view of each of its directly-connected remote gamers (WireIdToPeer only holds
+        // entries the host itself populated in HandleClientHello) - a client's own view of the
+        // host, or of any other client relayed through the host in this star topology, has no
+        // equivalent direct ENetPeer to read from without further plumbing, and stays at its
+        // default (unmeasured) TimeSpan::Zero.
+        for (const auto& [wireId, peer] : state.WireIdToPeer)
+        {
+            auto gamerIt = state.WireIdToGamer.find(wireId);
+            if (gamerIt != state.WireIdToGamer.end())
+            {
+                gamerIt->second->SetRoundtripTime(System::TimeSpan::FromMilliseconds(peer->roundTripTime));
             }
         }
     }
@@ -444,6 +612,31 @@ namespace CNA::Internal::Net
             return 0;
         }
         return it->second->Host.getBoundPortProperty();
+    }
+
+    std::size_t ENetBackend::GetDroppedAppDataCount()
+    {
+        return droppedAppDataCount_;
+    }
+
+    void ENetBackend::ResetDroppedAppDataCount()
+    {
+        droppedAppDataCount_ = 0;
+    }
+
+    std::size_t ENetBackend::GetOwnedRemoteGamerCountForTesting(NetworkSession* session)
+    {
+        auto it = Sessions().find(session);
+        if (it == Sessions().end())
+        {
+            return 0;
+        }
+        return it->second->OwnedRemoteGamers.size();
+    }
+
+    std::size_t ENetBackend::GetSessionCountForTesting()
+    {
+        return Sessions().size();
     }
 
     void ENetBackend::ConnectToHost(NetworkSession* session, const std::string& address, uint16_t port)
@@ -492,6 +685,12 @@ namespace CNA::Internal::Net
         auto targetIt = state.GamerToWireId.find(target);
         if (senderIt == state.GamerToWireId.end() || targetIt == state.GamerToWireId.end())
         {
+            // Task 2.13: reachable when SendData is called immediately after Join()/
+            // ConnectToHost(), before any Update() call has pumped the ClientHello/ServerWelcome
+            // round-trip that populates GamerToWireId. Previously a totally silent, unobservable
+            // drop; surfaced via a simple counter rather than a bigger queue-and-flush-once-ready
+            // redesign, since nothing else in this codebase retries a dropped send either.
+            ++droppedAppDataCount_;
             return;
         }
 
@@ -539,9 +738,12 @@ namespace CNA::Internal::Net
         StateChangeBroadcastMessage msg;
         msg.NewState = newState;
         auto bytes = NetPacketCodec::Encode(msg);
+        // Task 6.8: same batch-then-flush-once reasoning as HandleClientHello/HandleDisconnect's
+        // own broadcast fan-outs.
         for (auto& [peer, wireIds] : state.PeerWireIds)
         {
-            SendTo(state, peer, bytes, SendDataOptions::Reliable);
+            QueueSend(state, peer, bytes, SendDataOptions::Reliable);
         }
+        state.Host.Flush();
     }
 }

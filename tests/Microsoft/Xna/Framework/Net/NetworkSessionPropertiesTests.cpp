@@ -3,6 +3,8 @@
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using namespace Microsoft::Xna::Framework::Net;
 
@@ -51,6 +53,26 @@ TEST(NetworkSessionPropertiesTest, MutableIndexerOutOfRangeAppendsInsteadOfExten
     props[10] = 42;
     EXPECT_EQ(2, props.getCountProperty());
     EXPECT_EQ(42, props[1]);
+}
+
+// Task 2.10: a documented, structural divergence from FNA (see the non-const operator[]'s own
+// doc comment) - real XNA's separate get/set indexer accessors only auto-append on `set`; `get`
+// throws for an out-of-range index. IList<T>::operator[]'s single, fixed T& signature can't tell
+// a bare read apart from an assignment through the non-const overload, so even a read-only access
+// (no assignment at all) silently grows the list here, unlike the correctly-throwing const
+// overload. This test locks in that documented behavior so a future change doesn't silently
+// regress it back to a crash (or silently "fix" it without updating the doc comment).
+TEST(NetworkSessionPropertiesTest, MutableIndexerBareOutOfRangeReadAlsoAppends) {
+    NetworkSessionProperties props;
+    props.Add(1);
+    NetworkSessionProperties& mutableRef = props;
+    const std::optional<int>& read = mutableRef[10]; // no assignment - a bare read
+    EXPECT_EQ(props.getCountProperty(), 2);
+    EXPECT_EQ(read, std::nullopt);
+
+    // The const overload, by contrast, correctly throws for the same out-of-range index.
+    const NetworkSessionProperties& constRef = props;
+    EXPECT_THROW((void) constRef[10], std::out_of_range);
 }
 
 TEST(NetworkSessionPropertiesTest, IndexOfFoundAndNotFound) {
@@ -125,6 +147,40 @@ TEST(NetworkSessionPropertiesTest, ClearEmptiesList) {
     props.Add(2);
     props.Clear();
     EXPECT_EQ(0, props.getCountProperty());
+}
+
+// Task 4.5: NetworkSessionProperties implements CopyTo directly (sharp-runtime's generic
+// ICollection<T> has no CopyTo member of its own), matching real .NET's
+// ICollection<int?>.CopyTo(int?[], int) semantics exactly.
+TEST(NetworkSessionPropertiesTest, CopyToCopiesAllElementsStartingAtIndex) {
+    NetworkSessionProperties props;
+    props.Add(10);
+    props.Add(20);
+    props.Add(30);
+
+    std::vector<std::optional<int>> destination(5, std::nullopt);
+    props.CopyTo(destination, 1);
+
+    EXPECT_EQ(destination[0], std::nullopt);
+    EXPECT_EQ(destination[1], std::optional<int>(10));
+    EXPECT_EQ(destination[2], std::optional<int>(20));
+    EXPECT_EQ(destination[3], std::optional<int>(30));
+    EXPECT_EQ(destination[4], std::nullopt);
+}
+
+TEST(NetworkSessionPropertiesTest, CopyToNegativeIndexThrows) {
+    NetworkSessionProperties props;
+    props.Add(1);
+    std::vector<std::optional<int>> destination(5);
+    EXPECT_THROW(props.CopyTo(destination, -1), System::ArgumentOutOfRangeException);
+}
+
+TEST(NetworkSessionPropertiesTest, CopyToDestinationTooSmallThrows) {
+    NetworkSessionProperties props;
+    props.Add(1);
+    props.Add(2);
+    std::vector<std::optional<int>> destination(2);
+    EXPECT_THROW(props.CopyTo(destination, 1), System::ArgumentException);
 }
 
 TEST(NetworkSessionPropertiesTest, GetEnumeratorIteratesAllValues) {

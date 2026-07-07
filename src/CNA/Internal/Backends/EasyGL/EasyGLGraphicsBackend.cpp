@@ -2009,6 +2009,19 @@ void main()
             vao.set_attribute_pointer(2, 2, ::easygl::DataType::Float, false, s, (void*)24);
             break;
         case 52:
+            // Task 11.10: this layout is independently duplicated (magic stride 52) in
+            // BgfxGraphicsBackend.cpp's MakeBgfxLayout and VulkanGraphicsBackend.cpp's
+            // GetOrCreatePipelineSkinned3D - none derive it from the canonical
+            // VertexPositionNormalTextureSkinned::getVertexDeclarationStatic() (5 VertexElements:
+            // offset 0 Vector3 Position, 12 Vector3 Normal, 24 Vector2 TextureCoordinate,
+            // 32 Vector4 BlendWeight, 48 Byte4 BlendIndices). If that struct's field order or
+            // any individual offset ever changes (its total size is already guarded by
+            // VertexBuffer.cpp's own static_assert(sizeof(GpuVertex) == 52)), all 3 copies below
+            // must be updated together - investigated deriving this from a shared VertexElement
+            // list instead, but every backend's API boundary currently only receives a raw
+            // stride, not a VertexDeclaration; doing so would mean widening IGraphicsBackend's
+            // interface across all 4 backends for every existing magic-stride case (16/32/52),
+            // not just this one - deferred as a larger cross-backend refactor, not attempted here.
             // SkinnedVertex: float3 pos + float3 normal + float2 uv + float4 weights + ubyte4 indices
             vao.enable_attribute(0);
             vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);

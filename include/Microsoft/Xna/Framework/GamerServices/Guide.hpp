@@ -316,9 +316,12 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Shows the achievements UI (FNA extension). No-op in this platform's implementation.
          *
+         * Task 7.11: FNA's own addition, not part of real XNA 4.0's Guide API - FNA's own
+         * reference source already names it with the "EXT" suffix for exactly this reason.
+         *
          * @param player The player viewing achievements.
          */
-        static void ShowAchievementsEXT(Microsoft::Xna::Framework::PlayerIndex player);
+        NOXNA static void ShowAchievementsEXT(Microsoft::Xna::Framework::PlayerIndex player);
 
     private:
         static bool isTrialMode_;
