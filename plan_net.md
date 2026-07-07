@@ -2132,12 +2132,26 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   priority change is warranted. Pure investigation/documentation task — no code change, no test
   needed beyond what Task 7.5 already added.
 
-- [ ] **Task 10.5** — Decide whether `GamerCollection<T>` needs a virtual destructor. Confirmed not
+- [x] **Task 10.5** — Decide whether `GamerCollection<T>` needs a virtual destructor. Confirmed not
   currently exploited (all current code deletes via the concrete derived pointer type, e.g.
   `SignedInGamerCollection*`), but it's a latent risk if any future code ever holds/deletes a
   `GamerCollection<T>*` base pointer. Either add a virtual destructor, or explicitly document (with
   a comment and/or a `static_assert`/deleted-copy-style guard) that this type must never be used
   polymorphically via a base pointer.
+
+  Audited every current instance: the only heap-allocated one (`Gamer::signedInGamers_`, a
+  `SignedInGamerCollection*`) is always deleted through its own concrete type; every other
+  instance (`NetworkSession`'s 4 `GamerCollection<T>` members, `NetworkMachine::gamers_`) is a
+  plain by-value member destroyed via its own static type by the owning object's destructor —
+  zero current polymorphic-deletion exposure. **Decision: document, don't add a virtual
+  destructor.** `GamerCollection<T>` has no virtual members at all today (no vtable), and is used
+  heavily as a plain-value member in hot per-session/per-machine collections
+  (`NetworkSession`/`NetworkMachine`) — adding a vtable pointer to every instance purely as
+  defense against a scenario with zero current or planned exploitation isn't justified.
+  Added a doc-comment paragraph to `GamerCollection<T>` stating this constraint explicitly:
+  deleting a derived collection through a `GamerCollection<T>*` base pointer is undefined
+  behavior without a virtual destructor, and if that need ever arises, a virtual destructor must
+  be added first. No behavior change; build-verified only (comment-only edit).
 
 - [ ] **Task 10.6** — Re-verify `LeaderboardReader`'s page-slicing constructor loop bound
   (`for (int i = pageStart_; i < pageSize_ && i < entryCache_.size(); ++i)`) against every current

@@ -31,6 +31,19 @@ namespace Microsoft::Xna::Framework::GamerServices
      * friends-list service) must establish its own analogous ownership registry at the point of
      * creation — never make this view itself free anything.
      *
+     * Task 10.5: this type has no virtual members and is **not** designed to be used
+     * polymorphically through a base `GamerCollection<T>*`/`GamerCollection<T>&`. Every current
+     * heap-allocated instance (`Gamer::signedInGamers_`, a `SignedInGamerCollection*`) is deleted
+     * through its own concrete derived type, never through this base; every other instance
+     * (`NetworkSession`'s `allGamers_`/`localGamers_`/`remoteGamers_`/`previousGamers_`,
+     * `NetworkMachine::gamers_`) is a plain by-value member, destroyed via its own static type by
+     * the owning object's destructor. If any future code ever needs to `delete` a derived
+     * collection (e.g. `FriendCollection`, `SignedInGamerCollection`) through a
+     * `GamerCollection<T>*` base pointer, this class needs a virtual destructor first — deleting
+     * a derived object through a non-virtual base destructor is undefined behavior. Until that
+     * need actually exists, deliberately not adding one, since it would add a vtable pointer to
+     * every instance of this otherwise-trivial value type for no current benefit.
+     *
      * @tparam T A type derived from Gamer.
      */
     template<typename T>
