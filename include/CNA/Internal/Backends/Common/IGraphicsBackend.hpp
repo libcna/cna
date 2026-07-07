@@ -517,6 +517,9 @@ namespace CNA::Internal::Backends
         /// Sets the scissor clip rectangle. Default: no-op.
         virtual void SetScissorRect(int x, int y, int w, int h) {}
 
+        /// Sets the GPU viewport rectangle and depth range (Task 880). Default: no-op.
+        virtual void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) {}
+
         // ---- 3D pipeline ----
 
         /**

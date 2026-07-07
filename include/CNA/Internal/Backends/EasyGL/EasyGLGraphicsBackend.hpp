@@ -527,6 +527,7 @@ namespace CNA::Internal::Backends::EasyGL
                                int maxAnisotropy) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
         void SetScissorRect(int x, int y, int w, int h) override;
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
         // ---- 3D: IMPLEMENTED ----
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;

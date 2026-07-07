@@ -4534,10 +4534,20 @@ namespace CNA::Internal::Backends::Vulkan
         vkCmdBeginRenderPass(cb, &rp, VK_SUBPASS_CONTENTS_INLINE);
 
         VkViewport vp{};
-        vp.x = 0; vp.y = 0;
-        vp.width  = static_cast<float>(swapchainExtent_.width);
-        vp.height = static_cast<float>(swapchainExtent_.height);
-        vp.minDepth = 0.f; vp.maxDepth = 1.f;
+        if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0) {
+            // Task 880: honor a custom sub-region Viewport for the backbuffer pass.
+            vp.x = static_cast<float>(viewportX_);
+            vp.y = static_cast<float>(viewportY_);
+            vp.width    = static_cast<float>(viewportW_);
+            vp.height   = static_cast<float>(viewportH_);
+            vp.minDepth = viewportMinDepth_;
+            vp.maxDepth = viewportMaxDepth_;
+        } else {
+            vp.x = 0; vp.y = 0;
+            vp.width  = static_cast<float>(swapchainExtent_.width);
+            vp.height = static_cast<float>(swapchainExtent_.height);
+            vp.minDepth = 0.f; vp.maxDepth = 1.f;
+        }
         vkCmdSetViewport(cb, 0, 1, &vp);
         {
             VkRect2D sc{ {0, 0}, swapchainExtent_ };
@@ -5336,6 +5346,24 @@ namespace CNA::Internal::Backends::Vulkan
         scissorY_ = static_cast<int32_t>(y);
         scissorW_ = static_cast<uint32_t>(std::max(0, w));
         scissorH_ = static_cast<uint32_t>(std::max(0, h));
+    }
+
+    void VulkanGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
+    {
+        // Storage-only (Task 880); consumed at command-buffer-record time via
+        // vkCmdSetViewport, mirroring SetScissorRect's identical pattern. Only the
+        // backbuffer pass reads this state -- RT passes stay hardcoded to each RT's own
+        // full size, matching RecordCommandBuffer's existing per-RT-pass scissor-hardcoding
+        // precedent, since the deferred, potentially-multi-RT-per-frame recording model
+        // cannot recover "what Viewport was active when each RT's draws were issued" from a
+        // single frame-global stored value.
+        viewportX_        = static_cast<int32_t>(x);
+        viewportY_        = static_cast<int32_t>(y);
+        viewportW_        = static_cast<uint32_t>(std::max(0, w));
+        viewportH_        = static_cast<uint32_t>(std::max(0, h));
+        viewportMinDepth_ = minDepth;
+        viewportMaxDepth_ = maxDepth;
+        viewportSet_      = true;
     }
 
     void VulkanGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)

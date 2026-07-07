@@ -203,6 +203,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setViewportProperty(const Viewport& value)
     {
         viewport_ = value;
+        if (backend_)
+            backend_->SetViewport(value.getXProperty(), value.getYProperty(),
+                                   value.getWidthProperty(), value.getHeightProperty(),
+                                   value.getMinDepthProperty(), value.getMaxDepthProperty());
     }
 
     const IndexBuffer* GraphicsDevice::getIndicesProperty() const
@@ -1373,6 +1377,13 @@ namespace Microsoft::Xna::Framework::Graphics
         viewport_.setMaxDepthProperty(1.0f);
         viewport_.setWidthProperty(width);
         viewport_.setHeightProperty(height);
+
+        // Mutates viewport_'s fields directly (not via setViewportProperty(), to preserve the
+        // "compared against lastKnownViewportWidth/Height_, not viewport_" semantics above) --
+        // push the reset value to the backend explicitly (Task 880) so a window resize actually
+        // updates the GPU-side viewport too, not just the C++-side Viewport property.
+        if (backend_)
+            backend_->SetViewport(0, 0, width, height, 0.0f, 1.0f);
     }
 
     void GraphicsDevice::SetVirtualResolution(int width, int height)

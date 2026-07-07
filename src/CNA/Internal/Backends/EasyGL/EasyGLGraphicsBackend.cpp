@@ -1405,9 +1405,10 @@ void main()
     void EasyGLGraphicsBackend::Clear(float r, float g, float b, float a)
     {
         if (metagl::IsContextLost()) return;
-        int width, height;
-        SDL_GetWindowSize(window, &width, &height);
-        device.set_viewport(0, 0, width, height);
+        // Task 880: glClear() is viewport-independent (only the scissor rect, if enabled, can
+        // narrow it) -- no longer hardcodes the viewport to the full window here, so a
+        // previously-set custom Viewport (Task 880) survives across Clear() instead of being
+        // silently reset to full size as a side effect.
         device.set_clear_color(r, g, b, a);
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
     }
@@ -1841,9 +1842,18 @@ void main()
         if (metagl::IsContextLost()) return;
         if (w <= 0 || h <= 0) return; // invalid rect — leave scissor state unchanged
         // OpenGL scissor origin is bottom-left; convert from top-left XNA coordinates.
-        int physW, physH;
-        getPhysicalSize(physW, physH);
-        device.set_scissor(x, physH - y - h, w, h);
+        // Use the render target's own height for the Y-flip when an RT is bound (mirrors
+        // ReadBackbuffer's identical fbH pattern); fall back to the window's physical
+        // height for the default framebuffer. Task 880: previously always used the
+        // window's physical height even while an RT was bound, which is only latent
+        // (scissor test is opt-in via RasterizerState.ScissorTestEnable) but wrong.
+        int fbH = currentRtHeight_;
+        if (fbH == 0)
+        {
+            int physW;
+            getPhysicalSize(physW, fbH);
+        }
+        device.set_scissor(x, fbH - y - h, w, h);
         // Do NOT enable/disable scissor test here — that is controlled exclusively
         // by ApplyRasterizerState via RasterizerState.ScissorTestEnable.
     }
@@ -1852,6 +1862,27 @@ void main()
     {
         if (metagl::IsContextLost()) return;
         device.set_blend_color(r, g, b, a);
+    }
+
+    void EasyGLGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
+    {
+        if (metagl::IsContextLost()) return;
+        if (w <= 0 || h <= 0) return; // invalid rect — leave viewport state unchanged
+        // OpenGL viewport origin is bottom-left; convert from top-left XNA coordinates.
+        // Use the render target's own height for the Y-flip when an RT is bound (mirrors
+        // ReadBackbuffer's/SetScissorRect's identical fbH pattern); fall back to the
+        // window's physical height for the default framebuffer. Using the window's height
+        // unconditionally while an RT is bound produces a viewport y-offset that falls
+        // entirely outside the RT's actual pixel range whenever the RT is smaller than the
+        // window, discarding every fragment.
+        int fbH = currentRtHeight_;
+        if (fbH == 0)
+        {
+            int physW;
+            getPhysicalSize(physW, fbH);
+        }
+        device.set_viewport(x, fbH - y - h, w, h);
+        device.set_depth_range(minDepth, maxDepth);
     }
 
     void EasyGLGraphicsBackend::ApplySamplerState(int slot, int filter,
@@ -2940,9 +2971,7 @@ void main()
     void EasyGLGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         if (metagl::IsContextLost()) return;
-        int width, height;
-        SDL_GetWindowSize(window, &width, &height);
-        device.set_viewport(0, 0, width, height);
+        // Task 880: see Clear()'s identical comment -- glClear() is viewport-independent.
         device.set_clear_color(r, g, b, a);
         device.set_clear_depth(depth);
         device.set_depth_mask(true);

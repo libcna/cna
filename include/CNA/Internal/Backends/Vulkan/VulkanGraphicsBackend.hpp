@@ -512,6 +512,7 @@ namespace CNA::Internal::Backends::Vulkan
                                   float depthBias, float slopeScaleDepthBias) override;
 
         void SetScissorRect(int x, int y, int w, int h) override;
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DBackend>  CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
@@ -810,6 +811,13 @@ namespace CNA::Internal::Backends::Vulkan
         float    slopeScaleDepthBias_       = 0.0f;  // XNA RasterizerState.SlopeScaleDepthBias
         int32_t  scissorX_ = 0, scissorY_ = 0;
         uint32_t scissorW_ = 0, scissorH_ = 0;
+
+        // Viewport state (Task 880) -- storage-only; consumed at command-buffer-record
+        // time via vkCmdSetViewport (mirrors scissorX_/Y_/W_/H_'s identical pattern).
+        int32_t  viewportX_ = 0, viewportY_ = 0;
+        uint32_t viewportW_ = 0, viewportH_ = 0;
+        float    viewportMinDepth_ = 0.0f, viewportMaxDepth_ = 1.0f;
+        bool     viewportSet_      = false;
 
         // BlendFactor state (Task 63)
         float blendFactorR_ = 1.f, blendFactorG_ = 1.f,

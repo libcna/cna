@@ -1136,6 +1136,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 880: Viewport sub-region (split-screen) GPU wiring
+        cna_easygl_test(cna_test_easygl_viewport_subregion
+                        examples/easygl_viewport_subregion_test.cpp)
+        add_test(NAME EasyGL_Viewport_Subregion
+                 COMMAND cna_test_easygl_viewport_subregion)
+        set_tests_properties(EasyGL_Viewport_Subregion PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         cna_easygl_test(cna_test_easygl_disposed_resource
                         examples/easygl_disposed_resource_test.cpp)
         add_test(NAME EasyGL_DisposedResource
@@ -2490,6 +2499,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 880: GraphicsDevice.Viewport GPU wiring — sub-region viewport pixel-readback test
+        cna_vulkan_test(cna_test_vulkan_viewport_subregion
+                        examples/vulkan_viewport_subregion_test.cpp)
+        add_test(NAME Vulkan_Viewport_Subregion
+                 COMMAND cna_test_vulkan_viewport_subregion)
+        set_tests_properties(Vulkan_Viewport_Subregion PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
     endif()
 
 endif()
@@ -2869,6 +2887,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_DualTextureEffect_Combined
              COMMAND cna_test_bgfx_dualtextureeffect_combined)
     set_tests_properties(Bgfx_DualTextureEffect_Combined PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 880: GraphicsDevice.Viewport GPU wiring — sub-region viewport pixel-readback test
+    cna_bgfx_test(cna_test_bgfx_viewport_subregion
+                  examples/bgfx_viewport_subregion_test.cpp)
+    add_test(NAME Bgfx_Viewport_Subregion
+             COMMAND cna_test_bgfx_viewport_subregion)
+    set_tests_properties(Bgfx_Viewport_Subregion PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

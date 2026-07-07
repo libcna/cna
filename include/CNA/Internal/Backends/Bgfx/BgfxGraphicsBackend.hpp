@@ -253,6 +253,11 @@ namespace CNA::Internal::Backends::Bgfx
         uint32_t blendFactorPacked_ = 0xFFFFFFFFu; // packed RGBA8, passed to bgfx::setState
         // Scissor rect (0,0,0,0 = disabled)
         uint16_t scissorX_ = 0, scissorY_ = 0, scissorW_ = 0, scissorH_ = 0;
+        // Viewport rect (Task 880) -- storage-only; applied via an explicit bgfx::setViewRect
+        // override right before each 3D submit (see DrawPrimitivesEx), deliberately NOT folded
+        // into EnsureViewState() to avoid entangling the shared 2D SpriteBatch view-rect reset.
+        uint16_t viewportX_ = 0, viewportY_ = 0, viewportW_ = 0, viewportH_ = 0;
+        bool     viewportSet_ = false;
         // Stencil state (per-draw-call via bgfx::setStencil)
         uint32_t stencilFront_ = BGFX_STENCIL_NONE;
         uint32_t stencilBack_  = BGFX_STENCIL_NONE;
@@ -357,6 +362,7 @@ namespace CNA::Internal::Backends::Bgfx
                                   bool scissorTestEnable,
                                   float depthBias, float slopeScaleDepthBias) override;
         void SetScissorRect(int x, int y, int w, int h) override;
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
@@ -399,5 +405,10 @@ namespace CNA::Internal::Backends::Bgfx
 
     private:
         void EnsureViewState();
+
+        // Task 880: overrides the current 3D view's rect with a custom Viewport, if one was set
+        // via SetViewport() and the current view is the backbuffer (view 0). RT passes are
+        // deliberately left at their full-RT-size default -- see viewportX_/Y_/W_/H_'s comment.
+        void ApplyViewportOverride();
     };
 }

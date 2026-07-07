@@ -1241,6 +1241,31 @@ namespace CNA::Internal::Backends::Bgfx
         scissorH_ = static_cast<uint16_t>(h);
     }
 
+    void BgfxGraphicsBackend::SetViewport(int x, int y, int w, int h, float /*minDepth*/, float /*maxDepth*/)
+    {
+        // Storage-only (Task 880); applied via ApplyViewportOverride() right before each 3D
+        // submit. Depth range is an acceptable Bgfx deviation -- bgfx has no per-view depth
+        // range knob equivalent to VkViewport's minDepth/maxDepth (mirrors SetVirtualResolution's
+        // documented no-op precedent for parameters Bgfx has no matching concept for).
+        if (w <= 0 || h <= 0) { viewportW_ = viewportH_ = 0; viewportSet_ = false; return; }
+        viewportX_   = static_cast<uint16_t>(x);
+        viewportY_   = static_cast<uint16_t>(y);
+        viewportW_   = static_cast<uint16_t>(w);
+        viewportH_   = static_cast<uint16_t>(h);
+        viewportSet_ = true;
+    }
+
+    void BgfxGraphicsBackend::ApplyViewportOverride()
+    {
+        // Only the backbuffer (view 0) honors a custom sub-region Viewport -- RT passes stay at
+        // their EnsureViewState()/BindAsRenderTarget()-established full-RT-size default, since
+        // currentViewId_/spriteViewId are shared between the deferred-per-frame 2D SpriteBatch
+        // path and this 3D path, and a per-RT custom Viewport cannot be recovered from a single
+        // frame-global stored value (mirrors Vulkan's identical RT-pass scoping decision).
+        if (viewportSet_ && currentViewId_ == 0 && viewportW_ > 0 && viewportH_ > 0)
+            bgfx::setViewRect(currentViewId_, viewportX_, viewportY_, viewportW_, viewportH_);
+    }
+
     void BgfxGraphicsBackend::ApplySamplerState(int slot, int filter,
                                                  int addressU, int addressV,
                                                  int /*maxAnisotropy*/)
@@ -1443,6 +1468,8 @@ namespace CNA::Internal::Backends::Bgfx
         auto& vb = static_cast<const BgfxVertexBufferBackend&>(vb_in);
         if (!bgfx::isValid(vb.handle)) return;
 
+        ApplyViewportOverride();
+
         const Matrix wvp = world * view * projection;
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
@@ -1474,6 +1501,8 @@ namespace CNA::Internal::Backends::Bgfx
         auto& ib = static_cast<const BgfxIndexBufferBackend&>(ib_in);
         if (!bgfx::isValid(vb.handle) || !bgfx::isValid(ib.handle)) return;
 
+        ApplyViewportOverride();
+
         const Matrix wvp = world * view * projection;
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
@@ -1502,6 +1531,8 @@ namespace CNA::Internal::Backends::Bgfx
     {
         auto& vb = static_cast<const BgfxVertexBufferBackend&>(vb_in);
         if (!bgfx::isValid(vb.handle)) return;
+
+        ApplyViewportOverride();
 
         const Matrix wvp = world * view * projection;
         float wvp_col[16];
@@ -1813,6 +1844,8 @@ namespace CNA::Internal::Backends::Bgfx
         auto& ib     = static_cast<const BgfxIndexBufferBackend&>(ib_in);
         auto& instVb = static_cast<const BgfxVertexBufferBackend&>(*params.instanceVb);
         if (!bgfx::isValid(vb.handle) || instVb.cpuData.empty()) return;
+
+        ApplyViewportOverride();
 
         const int instCount = std::max(1, instanceCount);
         const uint16_t instStride = static_cast<uint16_t>(instVb.stride > 0 ? instVb.stride : 64);

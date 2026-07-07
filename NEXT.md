@@ -152,6 +152,29 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   FNA's, whose constructors throw on a null target) has a default constructor wrapping a null
   `Texture*`, and passing several through `SetRenderTargets` segfaults — not fixed, since a real
   game can never construct one this way given FNA's own API shape.
+  **Task 880 wires `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends** (Task 338
+  finding) — previously totally decorative everywhere, every backend hardcoded its actual viewport
+  to the full render-target/window size. Fixed by mirroring `ScissorRectangle`'s already-wired
+  pattern: `IGraphicsBackend::SetViewport(...)`, `GraphicsDevice::setViewportProperty()` now
+  forwards to it, plus a second fix in `UpdateViewportFromWindow()` (a separate direct-mutation
+  resize path) so window resizes also push the GPU-side viewport. EasyGL: real `SetViewport()` +
+  removed `Clear()`/`ClearColorAndDepth()`'s hardcoded viewport reset (glClear is
+  viewport-independent). **Found and fixed a real regression this immediately surfaced**: the
+  naive Y-flip using the *window's* physical height broke rendering into any bound
+  `RenderTarget2D` smaller than the window (viewport y-offset fell entirely outside the RT's real
+  pixel range) — traced to the identical latent bug already present in `SetScissorRect`, fixed both
+  using `currentRtHeight_` (mirrors `ReadBackbuffer`'s established pattern). Vulkan: storage-only
+  `SetViewport()`, wired into the backbuffer pass only — RT passes deliberately stay hardcoded to
+  each RT's own full size (deferred multi-RT-per-frame recording can't attribute one frame-global
+  viewport value to a specific RT's draws, same limitation already accepted for Vulkan's
+  RT-pass-scissor hardcoding). Bgfx: storage-only `SetViewport()` plus a new `ApplyViewportOverride()`
+  called from all 4 real 3D draw-dispatch entry points, backbuffer-only for the same reason as
+  Vulkan. 2D `SpriteBatch` deliberately untouched on all 3 backends. New tests, one per backend;
+  the Bgfx one needed a rewrite to read one sample point per render pass instead of two, after
+  hitting the documented "`GetBackBufferData()` only reflects the first read per frame" quirk.
+  `git stash` revert-and-rebuild confirmed all 3 tests fail exactly as predicted pre-fix. Full
+  regression: EasyGL 3636/3639 (3 pre-existing failures, unchanged), Vulkan 61/73 filtered +
+  `CnaTests` 3493/3495 (12 pre-existing failures, unchanged), Bgfx 3540/3540 (100%, zero failures).
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -411,6 +434,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `TBD` | 880 | **Real, confirmed universal gap found and FIXED on all 3 backends** (Task 338 finding): `GraphicsDevice.Viewport` was totally decorative, every backend hardcoded the full render-target/window size. Fixed by mirroring `ScissorRectangle`'s already-wired pattern (`IGraphicsBackend::SetViewport`, `setViewportProperty()` forwards to it, plus a second fix in the separate `UpdateViewportFromWindow()` resize path). **Found and fixed a real regression this immediately surfaced**: EasyGL's naive window-height-based Y-flip broke rendering into any bound `RenderTarget2D` smaller than the window — traced to the identical latent bug already present in `SetScissorRect`, fixed both using `currentRtHeight_` (mirrors `ReadBackbuffer`'s established pattern). Vulkan/Bgfx wired backbuffer-only, RT passes deliberately left hardcoded to each RT's own full size (deferred multi-RT-per-frame recording can't attribute one frame-global viewport to a specific RT, same shape as Vulkan's pre-existing RT-pass-scissor gap, documented as its own new row). New tests, one per backend; the Bgfx one needed a rewrite after hitting the documented one-read-per-frame quirk. `git stash` revert-and-rebuild confirmed all 3 fail exactly as predicted pre-fix. Full regression: EasyGL 3636/3639, Vulkan 61/73 filtered + `CnaTests` 3493/3495, Bgfx 3540/3540 (100%) — all pre-existing failures only, zero new regressions. |
 | `94f1827e` | 881 | **Real, confirmed spec-compliance divergence found and FIXED on all 3 backends** (Task 339 finding): `SetRenderTargets`'s cap didn't match FNA's real `MAX_RENDERTARGET_BINDINGS=4` (EasyGL/Bgfx hardcoded 8, Vulkan had none at all). Fixed with a single shared C++ check (`std::invalid_argument` when >4 targets) before any backend delegation. New `GraphicsDeviceValidationTest.SetRenderTargets_*` unit tests using real `RenderTarget2D` instances — discovered a real, separate, previously-unreported segfault when passing null-target `RenderTargetBinding`s (a CNA-only default-ctor deviation from FNA, unreachable in practice, not fixed here). `git stash` revert-and-rebuild confirmed discriminating power. Full regression: EasyGL 3635/3638 (3 pre-existing failures only); Vulkan/Bgfx sanity-rebuilt clean (shared, backend-agnostic file). |
 | `fd8c2dea` | 900 | **Real, confirmed gap found and FIXED on EasyGL** (opened by Task 888's research): `SkinnedEffect`/`EnvironmentMapEffect`'s `FillGpuDrawParams()` never forwarded fog fields at all, despite both having complete `IEffectFog`/`FogVector` machinery in `OnApply()` — the same gap Task 378/388 already fixed for `AlphaTestEffect`/`DualTextureEffect`. Fixed by mirroring `BasicEffect`'s pattern in both effects, plus adding fog uniforms/blend to EasyGL's `env_map3d`/`skinned3d` shaders (the only 2 of 7 EasyGL shader variants with zero fog code before this task) — `BindDrawParams()` needed no changes, its fog-uniform-setting block is already fully generic. New `easygl_{environmentmapeffect,skinnedeffect}_fog_test.cpp` (3 checks each) passed on the first attempt; `git stash` revert-and-rebuild reproduced the exact predicted pre-fix failure (1/3 PASS each). Full EasyGL regression: 3631/3634 pass, same 3 pre-existing failures. Vulkan/Bgfx's `env_map3d`/`skinned3d` pipelines still lack fog GPU-side, left for Task 899. |
 | `a42ae950` | 888 | **Real feature implemented on Bgfx (full) and Vulkan (partial, remainder split to Task 899).** Chose EasyGL's already-shipped raw-object-space-Z fog formula over FNA's view-space `FogVector` (equivalent only under identity World/View, which every test uses; matching EasyGL is what makes the verification-by-porting-existing-tests plan work). Bgfx: 2 shared uniforms set unconditionally per draw, new varying, fog logic added to all 7 applicable shader pairs — no push-constant budget constraint there. Vulkan: fixed only `alpha_test3d`/`alpha_test_colored3d` (28 spare push-constant bytes) and `lit_textured3d` (32 spare `LitLightParams` UBO bytes); the other 5 pipelines share a fully-packed push constant with zero spare bytes, split to Task 899. 6 new tests (2 Vulkan, 4 Bgfx) confirmed via `git stash` revert-and-rebuild. Found and fixed 2 real pre-existing test-authoring gotchas along the way: Vulkan's clip-space Z is `[0,1]` not `[-1,1]` (a ported test using `z=-0.9` got near-plane-clipped); 2 ported Bgfx tests needed the already-known `RasterizerState::CullNone` workaround. Full regression: Vulkan 3551/3563 (12 pre-existing failures only), Bgfx 3535/3535 (100%, zero failures). Opened Task 899 (Vulkan's remaining 5 pipelines) and Task 900 (`SkinnedEffect`/`EnvironmentMapEffect` fog forwarding gap, found during research). |
@@ -534,7 +558,8 @@ direct code reading.
 | Confirmed, universal, not fixed | `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` on every backend. | Task 871 |
 | Fixed on EasyGL, not fixed on Vulkan/Bgfx | `RenderTarget2D`/`RenderTargetCube`'s `mipMap` produces a real, pixel-verified mip chain on EasyGL (Task 336); Vulkan/Bgfx don't yet allocate/generate real GPU mips. | Task 878 |
 | Fixed on EasyGL, not fixed on Vulkan/Bgfx | `RenderTarget2D`/`RenderTargetCube`'s MSAA produces a real, pixel-verified anti-aliased resolve on EasyGL (Task 337); Vulkan/Bgfx honestly report `MultiSampleCount=0`. | Task 879 |
-| Confirmed, universal, not fixed | `GraphicsDevice.Viewport` is decorative — no backend actually applies it to the GPU; every backend hardcodes the full render-target/window size instead. | Task 880 |
+| Fixed, all 3 backends (backbuffer); RT-pass sub-region still hardcoded on Vulkan/Bgfx | `GraphicsDevice.Viewport` now has real GPU effect on the backbuffer for all 3 backends. Vulkan/Bgfx's RT passes still hardcode each RT's own full size regardless of a custom sub-region `Viewport` (deferred multi-RT-per-frame recording limitation, same shape as their existing RT-pass-scissor gap below). 2D `SpriteBatch` unaffected by `Viewport` on all 3 backends. | Task 880 (done) |
+| Confirmed, real, not fixed, separately found | Vulkan's `RecordCommandBuffer` RT pass hardcodes `vkCmdSetScissor` to each RT's own full size (`VkRect2D rtSc{{0,0},{rtW,rtH}}`), ignoring `scissorEnabled_`/`scissorX_`/etc. entirely — only the backbuffer pass reads the real dynamic scissor state. A custom `ScissorRectangle` therefore has zero effect while rendering into a bound `RenderTarget2D` on Vulkan. Found while scoping Task 880's identical Viewport limitation. | — |
 | Confirmed, severe, silent failure | `TextureCube::DDSFromStreamEXT` ignores its stream argument, always returns a blank 1×1 texture. | Task 663 |
 | Confirmed, severe, silent failure | `Texture3D`/`TextureCube::GetData` total no-op on Vulkan/Bgfx. | Task 865 |
 | Confirmed, silent failure | `Texture2D::SetData(level>0,...)` no-op on Vulkan/Bgfx; EasyGL renders solid black for mip filters on mip-incomplete textures. | Task 867 |
@@ -674,10 +699,10 @@ scoped real bugs (Tasks 664/665) are done. Task 884 (`EffectParameterCollection`
 normal-transform prerequisite fixes on Bgfx/Vulkan), Task 887 (`AlphaTestEffect.
 VertexColorEnabled` ignored on Vulkan/Bgfx), Task 888 (real fog on Bgfx + Vulkan's
 `alpha_test3d`/`lit_textured3d` pipelines), Task 900 (`SkinnedEffect`/`EnvironmentMapEffect`
-fog forwarding on EasyGL), and Task 881 (`SetRenderTargets`'s `MAX_RENDERTARGET_BINDINGS=4` cap)
-are all done — `BasicEffect` now fully matches FNA's lit-path formula on all 3 backends. In
-priority order, the rest are the accumulated backlog from earlier phases (Tasks 825–828, 863–882,
-889–896, 899).
+fog forwarding on EasyGL), Task 881 (`SetRenderTargets`'s `MAX_RENDERTARGET_BINDINGS=4` cap), and
+Task 880 (`GraphicsDevice.Viewport` GPU wiring on all 3 backends) are all done — `BasicEffect`
+now fully matches FNA's lit-path formula on all 3 backends. In priority order, the rest are the
+accumulated backlog from earlier phases (Tasks 825–828, 863–882, 889–896, 899).
 
 1. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -701,30 +726,26 @@ priority order, the rest are the accumulated backlog from earlier phases (Tasks 
    `VulkanGraphicsBackend.hpp`/`.cpp`; Bgfx's `vs/fs_env_map3d.sc`/`vs/fs_skinned3d.sc` for the
    Bgfx side (no infra needed there, same 2-uniform pattern as Task 888's other 7 pipelines).
 
-4. **Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends.**
-   Files: `IGraphicsBackend.hpp`, `GraphicsDevice.cpp`, all 3 backends' graphics-backend `.cpp`.
-   Verification: sub-region-viewport pixel test (should fail on all 3 backends today).
-
-5. **Task 878/879 — implement real mip/MSAA render-target support on Vulkan and Bgfx**, mirroring
+4. **Task 878/879 — implement real mip/MSAA render-target support on Vulkan and Bgfx**, mirroring
     Task 336/337's exact EasyGL fix shape. Files: each backend's render-target backend classes.
 
-6. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
+5. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
     attachments** on all 3 backends (currently hardcoded/coarse choices).
 
-7. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
+6. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
     (875); `RenderTargetCube` via `EnvironmentMapEffect` renders black after unbind, root cause not
     isolated (876, needs isolation before a fix is attempted — see §9).
 
-8. **Task 873/874 — fix Bgfx's wrong-handle-type `static_cast`s** for `RenderTarget2D`/
+7. **Task 873/874 — fix Bgfx's wrong-handle-type `static_cast`s** for `RenderTarget2D`/
     `RenderTargetCube` sampling. Files: `BgfxGraphicsBackend.hpp`/`.cpp`.
 
-9. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
+8. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
     test fixture *first*, then implement against it).
 
-10. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+9. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
     (`vkCmdCopyImageToBuffer` + staging buffer, mirroring the existing upload path in reverse).
 
-11. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
+10. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
     `Texture3D`/`TextureCube` (confirm with a failing test first, per Task 276's methodology).
 
 ---
@@ -763,8 +784,10 @@ priority order, the rest are the accumulated backlog from earlier phases (Tasks 
   Task 876 especially has 2 unisolated candidates (see `plan_graphics.md`).
 - **No opportunistic fix for Task 877 (DepthStencilFormat fidelity)** bundled into an unrelated
   task — verify with a dedicated stencil-in-RT pixel test first.
-- **No rushed fix for Task 880 (Viewport GPU wiring)** — write the sub-region-viewport pixel test
-  FIRST (it should fail on all 3 backends today) before attempting any backend wiring.
+- **No opportunistic fix for Vulkan/Bgfx's RT-pass sub-region Viewport/scissor limitation** (found
+  while scoping Task 880) bundled into an unrelated task — the deferred multi-RT-per-frame
+  recording architecture needs a real per-draw-call viewport/scissor capture design, not a quick
+  patch.
 - **No opportunistic fix for Task 145 (`EasyGL_MRT_TwoAttachments`)** bundled into any MRT-adjacent
   task — it needs its own dedicated root-cause investigation.
 - **No implementing `Effect::Clone()` (Task 883) as a side effect of an unrelated Phase 42 task** —
@@ -777,7 +800,7 @@ priority order, the rest are the accumulated backlog from earlier phases (Tasks 
 
 ```
 Read NEXT.md first. Inspect only the files needed for the first non-decision task in §8
-(Task 883/896 both need a scoping decision -- skip them if still autonomous; Task 887 is the
+(Task 883/896 both need a scoping decision -- skip them if still autonomous; Task 899 is the
 next well-defined non-decision task).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
@@ -827,10 +850,34 @@ wrong ad-hoc cap. Found a real, separate, previously-unreported segfault while w
 CNA's RenderTargetBinding (unlike FNA's, whose constructors throw ArgumentNullException on a null
 target) has a default constructor wrapping a null Texture*, and SetRenderTargets crashes deeper in
 the function if several are passed -- not fixed, unreachable in practice given FNA's own API shape
-(a real game can never construct a null-target RenderTargetBinding this way). Remaining backlog
-(Task 899/896/883) all need either new large infrastructure work or a scoping decision -- check
-NEXT.md's own backlog list (section 8) for the current best candidate when resuming. Task
-411 (opener) built the mock/recording
+(a real game can never construct a null-target RenderTargetBinding this way). Task 880 (wire
+GraphicsDevice.Viewport to a real GPU viewport on all 3 backends, Task 338 finding) is now ALSO
+DONE -- mirrored ScissorRectangle's already-wired pattern exactly (IGraphicsBackend::SetViewport,
+setViewportProperty() forwards to it, plus a second fix in the separate UpdateViewportFromWindow()
+resize path). Writing the sub-region-viewport pixel test FIRST (per this task's own prior
+caution) immediately paid off: it caught a real regression on EasyGL the moment SetViewport was
+implemented -- the naive Y-flip using the window's own physical height (not the bound
+RenderTarget2D's height) put the GL viewport's y-offset entirely outside the RT's real pixel
+range whenever an RT smaller than the window was bound, discarding every fragment. Root cause was
+an identical latent bug already present in SetScissorRect (never manifesting since scissor is
+opt-in); fixed both using currentRtHeight_, mirroring ReadBackbuffer's own already-established
+pattern. Vulkan and Bgfx were both wired backbuffer-only -- RT passes on both deliberately stay
+hardcoded to each RT's own full size, since the deferred, potentially-multi-RT-per-frame
+command-buffer/view recording architecture can't correctly attribute one frame-global stored
+viewport value to a specific RT's draws (the exact same limitation Vulkan's RT-pass scissor
+handling already has, now documented as its own NEXT.md row). 2D SpriteBatch rendering is
+deliberately unaffected by Viewport on all 3 backends. The Bgfx test needed a rewrite mid-task:
+the first version read 2 sample points per render pass and intermittently failed, traced to
+ReadBackbuffer's own bgfx::requestScreenShot()+bgfx::frame() sequence advancing the frame on every
+single GetBackBufferData call, so a second read in the same logical Clear+Draw cycle observes an
+extra empty frame with nothing newly submitted -- rewrote to one Clear+Draw+single-read pass per
+sample point, matching every other multi-point Bgfx test's already-established convention.
+git stash revert-and-rebuild confirmed all 3 new tests fail exactly as predicted pre-fix. Full
+regression: EasyGL 3636/3639 (3 pre-existing failures, unchanged), Vulkan 61/73 filtered +
+CnaTests 3493/3495 (12 pre-existing failures, unchanged), Bgfx 3540/3540 (100%, zero failures).
+Remaining backlog (Task 899/896/883) all need either new large infrastructure work or a scoping
+decision -- check NEXT.md's own backlog list (section 8) for the current best candidate when
+resuming. Task 411 (opener) built the mock/recording
 ISpriteBatchBackend infrastructure Tasks 412-416 depend on -- audited SpriteBatch's architecture
 first (it already has a dedicated ISpriteBatchBackend interface; flushBatch()'s stable_sort by
 layerDepth/texture-pointer followed by flushSingle()'s backend_->Draw(s.texture->GetBackend(),...)
@@ -1459,15 +1506,15 @@ TwoAttachments, EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-t
 sanity-rebuilt clean (GraphicsDevice.cpp is shared, backend-agnostic code with zero backend-
 specific branches, so a compile-only sanity check was sufficient rather than a full ctest run).
 
-Last full regression (all 3 backends, serial -j1, after Task 881's fix): EasyGL 3635/3638 pass
-(3 pre-existing failures, unchanged), Bgfx and Vulkan sanity-rebuilt clean (unchanged from Task
-900/888's own full regression runs, since Task 881 only touches shared, backend-agnostic code) --
-all failures independently reconfirmed pre-existing/documented (same exact-name-match lists as
-every prior task this session), zero new regressions on any backend.
+Last full regression (all 3 backends, serial -j1, after Task 880's fix): EasyGL 3636/3639 pass
+(3 pre-existing failures, unchanged), Vulkan 61/73 filtered + CnaTests 3493/3495 (12 pre-existing
+failures, unchanged), Bgfx 3540/3540 (100%, zero failures at all) -- all failures independently
+reconfirmed pre-existing/documented (same exact-name-match lists as every prior task this
+session), zero new regressions on any backend.
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-420, 664-665, 881, 884-900) rather than this file — this file
+directly (Tasks 351-420, 664-665, 880-881, 884-900) rather than this file — this file
 intentionally keeps only a one-line summary per task (see §3) to stay a genuinely quick-to-read
 handoff document.
 ```
