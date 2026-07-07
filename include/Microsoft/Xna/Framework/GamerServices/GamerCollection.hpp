@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 #include "CNA/CNAHelper.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include <algorithm>
 #include <vector>
@@ -106,6 +107,65 @@ namespace Microsoft::Xna::Framework::GamerServices
                 index, static_cast<int>(collection_.size()), "index"
             );
             return collection_[static_cast<std::size_t>(index)];
+        }
+
+        /**
+         * @brief Returns the index of the first occurrence of item, or -1 if not found.
+         *
+         * Task 8.3: FNA's real `GamerCollection<T>` derives from `ReadOnlyCollection<T>` and
+         * inherits its `IndexOf`/`Contains`/`CopyTo` — this port's own `GamerCollection<T>`
+         * lacked equivalents. Compares by pointer identity, which — unlike `Achievement`/
+         * `LeaderboardEntry`'s own value-storage workaround — already matches FNA's real
+         * reference-type equality semantics exactly for `Gamer`-derived types, since this
+         * collection stores `T*` and native C++ pointer comparison already is
+         * reference-identity comparison; no `operator==` needed.
+         *
+         * @param item The element to locate.
+         * @return The zero-based index, or -1 if not found.
+         */
+        [[nodiscard]] int IndexOf(T* item) const
+        {
+            for (std::size_t i = 0; i < collection_.size(); ++i)
+            {
+                if (collection_[i] == item)
+                {
+                    return static_cast<int>(i);
+                }
+            }
+            return -1;
+        }
+
+        /**
+         * @brief Determines whether the collection contains item.
+         *
+         * @param item The element to search for.
+         * @return true if found; otherwise false.
+         */
+        [[nodiscard]] bool Contains(T* item) const
+        {
+            return IndexOf(item) >= 0;
+        }
+
+        /**
+         * @brief Copies every element into destination, starting at index.
+         *
+         * @param destination The destination vector; must already be large enough to hold
+         * `index + getCountProperty()` elements.
+         * @param index The zero-based index in destination to begin writing at.
+         * @throws System::ArgumentOutOfRangeException if index is negative.
+         * @throws System::ArgumentException if destination is too small.
+         */
+        void CopyTo(std::vector<T*>& destination, int index) const
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
+            if (static_cast<int>(destination.size()) - index < static_cast<int>(collection_.size()))
+            {
+                throw System::ArgumentException(
+                    "The number of elements in the source collection is greater than the "
+                    "available space from index to the end of the destination array."
+                );
+            }
+            std::copy(collection_.begin(), collection_.end(), destination.begin() + index);
         }
 
         /**

@@ -1778,7 +1778,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   no revert-verify cycle applies to brand-new methods). Full suite: **3336/3338 passing** (2
   expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 8.3** — Extend `GamerCollection<T>` to expose the full `ReadOnlyCollection<T>` surface
+- [x] **Task 8.3** — Extend `GamerCollection<T>` to expose the full `ReadOnlyCollection<T>` surface
   FNA's equivalent provides (`Contains`, `IndexOf`, `CopyTo`), since FNA's `GamerCollection<T>`
   derives from `ReadOnlyCollection<T>`. `sharp-runtime` already has a full
   `System::Collections::ObjectModel::ReadOnlyCollection<T>` (already used elsewhere in this exact
@@ -1786,6 +1786,33 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   exists — either derive `GamerCollection<T>` from it or add equivalent methods directly. This
   affects every collection built on `GamerCollection<T>` (`SignedInGamerCollection`,
   `FriendCollection`). Add tests for the new members on at least one concrete collection type.
+
+  Confirmed against FNA's real `GamerCollection<T>.cs` (`: ReadOnlyCollection<T>, IEnumerable<T>,
+  IEnumerable`) — no own overrides, so `IndexOf`/`Contains`/`CopyTo` come straight from real
+  .NET's `ReadOnlyCollection<T>`. Chose to add equivalent methods directly to `GamerCollection<T>`
+  rather than deriving from `sharp-runtime`'s `ReadOnlyCollection<T>` — a safer, more surgical
+  change than restructuring the inheritance hierarchy of a base class used throughout both `Net`
+  and `GamerServices`, avoiding any risk of subtly changing already-relied-upon behavior
+  (`operator[]`'s exception types, etc.) inherited from a different base.
+
+  Unlike Task 8.2's `Achievement`/`LeaderboardEntry`'s own value-storage equality workaround,
+  `GamerCollection<T>` needed **no new `operator==`** at all: it stores `T*` (raw pointers), and
+  native C++ pointer comparison already *is* reference-identity comparison — an exact match for
+  FNA's own real `Gamer`-derived reference-type equality semantics, with no deviation needed.
+
+  Added `IndexOf(T*)`, `Contains(T*)`, and `CopyTo(std::vector<T*>&, int)` (validates `index`/
+  destination size, throwing `ArgumentOutOfRangeException`/`ArgumentException` respectively,
+  matching Task 8.2's `AchievementCollection::CopyTo` precedent). Added 5 new tests through
+  `SignedInGamerCollection` (a concrete `GamerCollection<T>` subclass):
+  `IndexOfFindsAndReportsNotFound`, `ContainsFindsAndReportsNotFound`,
+  `CopyToCopiesStartingAtIndex`, `CopyToThrowsWhenDestinationTooSmall`,
+  `CopyToThrowsForNegativeIndex`.
+
+  Pure API-surface addition, no prior behavior to regress against (no revert-verify cycle
+  applies). Full suite: **3341/3343 passing** (2 expected accelerometer/gyroscope skips), no
+  regressions.
+
+  **Phase 8 complete** — all 3 GamerServices API-gap tasks (Tasks 8.1-8.3) done.
 
 ---
 

@@ -293,6 +293,58 @@ TEST(SignedInGamerCollectionTest, PlayerIndexOutOfBounds) {
     EXPECT_EQ(nullptr, col[PlayerIndex::Four]);
 }
 
+// Task 8.3: GamerCollection<T>'s new IndexOf/Contains/CopyTo, matching FNA's real
+// GamerCollection<T> (which derives from ReadOnlyCollection<T> and inherits these). Compares by
+// pointer identity - already an exact match for FNA's own reference-type equality semantics,
+// since GamerCollection<T> stores T* and native pointer comparison already is reference-identity
+// comparison (no operator== needed, unlike Achievement/LeaderboardEntry's own value-storage
+// workaround). Exercised through SignedInGamerCollection, a concrete GamerCollection<T> subclass.
+
+TEST(SignedInGamerCollectionTest, IndexOfFindsAndReportsNotFound) {
+    auto gamerA = SignedInGamer::CreateInternal("a");
+    auto gamerB = SignedInGamer::CreateInternal("b");
+    auto gamerC = SignedInGamer::CreateInternal("c"); // never added to the collection
+    auto col = SignedInGamerCollection::CreateInternal({&gamerA, &gamerB});
+    EXPECT_EQ(0, col.IndexOf(&gamerA));
+    EXPECT_EQ(1, col.IndexOf(&gamerB));
+    EXPECT_EQ(-1, col.IndexOf(&gamerC));
+}
+
+TEST(SignedInGamerCollectionTest, ContainsFindsAndReportsNotFound) {
+    auto gamerA = SignedInGamer::CreateInternal("a");
+    auto gamerB = SignedInGamer::CreateInternal("b");
+    auto col = SignedInGamerCollection::CreateInternal({&gamerA});
+    EXPECT_TRUE(col.Contains(&gamerA));
+    EXPECT_FALSE(col.Contains(&gamerB));
+}
+
+TEST(SignedInGamerCollectionTest, CopyToCopiesStartingAtIndex) {
+    auto gamerA = SignedInGamer::CreateInternal("a");
+    auto gamerB = SignedInGamer::CreateInternal("b");
+    auto placeholder = SignedInGamer::CreateInternal("placeholder");
+    auto col = SignedInGamerCollection::CreateInternal({&gamerA, &gamerB});
+    std::vector<SignedInGamer*> dest(3, &placeholder);
+    col.CopyTo(dest, 1);
+    EXPECT_EQ(&placeholder, dest[0]);
+    EXPECT_EQ(&gamerA, dest[1]);
+    EXPECT_EQ(&gamerB, dest[2]);
+}
+
+TEST(SignedInGamerCollectionTest, CopyToThrowsWhenDestinationTooSmall) {
+    auto gamerA = SignedInGamer::CreateInternal("a");
+    auto gamerB = SignedInGamer::CreateInternal("b");
+    auto placeholder = SignedInGamer::CreateInternal("placeholder");
+    auto col = SignedInGamerCollection::CreateInternal({&gamerA, &gamerB});
+    std::vector<SignedInGamer*> dest(2, &placeholder);
+    EXPECT_THROW(col.CopyTo(dest, 1), System::ArgumentException);
+}
+
+TEST(SignedInGamerCollectionTest, CopyToThrowsForNegativeIndex) {
+    auto col = SignedInGamerCollection::CreateInternal({});
+    std::vector<SignedInGamer*> dest;
+    EXPECT_THROW(col.CopyTo(dest, -1), System::ArgumentOutOfRangeException);
+}
+
 // --- GamerCollection<T>::GamerCollectionEnumerator (Task 7.8) ---
 //
 // Raw std::vector::operator[] on an unvalidated position was real undefined behavior for
