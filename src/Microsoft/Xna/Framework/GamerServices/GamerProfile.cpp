@@ -6,7 +6,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     GamerProfile::GamerProfile()
         : gamerScore_(0)
         , gamerZone_(GamerZone::Pro)
-        , region_(System::Globalization::RegionInfo::CurrentRegion())
+        , region_(System::Globalization::RegionInfo::getCurrentRegionProperty())
         , reputation_(5.0f)
         , titlesPlayed_(1)
         , totalAchievements_(0)

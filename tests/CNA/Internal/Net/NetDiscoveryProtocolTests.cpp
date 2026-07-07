@@ -5,6 +5,7 @@
 #include "CNA/Internal/Net/NetDiscoveryProtocol.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
+#include "System/IO/EndOfStreamException.hpp"
 
 using namespace CNA::Internal::Net;
 using Microsoft::Xna::Framework::Net::NetworkSessionType;
@@ -155,7 +156,7 @@ TEST(NetDiscoveryProtocolTest, DecodeQueryThrowsOnTruncatedBuffer) {
 
     auto bytes = NetDiscoveryProtocol::Encode(message);
     bytes.resize(1); // keep only the tag byte
-    EXPECT_THROW(NetDiscoveryProtocol::DecodeQuery(bytes), std::runtime_error);
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeQuery(bytes), System::IO::EndOfStreamException);
 }
 
 TEST(NetDiscoveryProtocolTest, DecodeAnnounceThrowsOnTruncatedBuffer) {
@@ -165,5 +166,5 @@ TEST(NetDiscoveryProtocolTest, DecodeAnnounceThrowsOnTruncatedBuffer) {
 
     auto bytes = NetDiscoveryProtocol::Encode(message);
     bytes.resize(1);
-    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), std::runtime_error);
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), System::IO::EndOfStreamException);
 }

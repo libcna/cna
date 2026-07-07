@@ -5,6 +5,7 @@
 #include <string>
 
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/IO/EndOfStreamException.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketReader.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 
@@ -294,7 +295,7 @@ TEST(PacketReaderTest, ReadingPastEndOfBufferThrows) {
     w.Write(static_cast<int32_t>(1));
     PacketReader r = MakeReaderFromWriter(w);
     (void) r.ReadInt32();
-    EXPECT_THROW((void) r.ReadByte(), std::runtime_error);
+    EXPECT_THROW((void) r.ReadByte(), System::IO::EndOfStreamException);
 }
 
 TEST(PacketReaderTest, ReadingPartialValueAtEndOfBufferThrows) {
@@ -303,5 +304,5 @@ TEST(PacketReaderTest, ReadingPartialValueAtEndOfBufferThrows) {
     // the exact boundary the previous test covers.
     w.Write(static_cast<int16_t>(7));
     PacketReader r = MakeReaderFromWriter(w);
-    EXPECT_THROW((void) r.ReadInt32(), std::runtime_error);
+    EXPECT_THROW((void) r.ReadInt32(), System::IO::EndOfStreamException);
 }

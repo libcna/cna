@@ -1392,7 +1392,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   6.10 (added mid-session, logged under Phase 6 above) likewise requires a `sharp-runtime` change
   and remains open for the same reason.
 
-- [ ] **Task 6.10** — Investigate and fix (in `sharp-runtime`, coordinating per that repo's own
+- [x] **Task 6.10** — Investigate and fix (in `sharp-runtime`, coordinating per that repo's own
   modification rule — see Task 4.4) `BinaryReader::ReadBytes` throwing plain
   `std::runtime_error("Unexpected end of stream.")` on premature end-of-stream instead of
   `System::IO::EndOfStreamException`, which already exists in `sharp-runtime` (with its own passing
@@ -1401,6 +1401,43 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Task 5.10's `PacketReader` underrun tests (`ReadingPastEndOfBufferThrows`,
   `ReadingPartialValueAtEndOfBufferThrows`), which currently assert the actual (wrong-type)
   `std::runtime_error` — update those two tests to expect `EndOfStreamException` once this lands.
+
+  The user merged a large, independent batch of `sharp-runtime` work (many commits porting
+  `System.Text.Json`, `System.Security.Cryptography`, `System.Text.RegularExpressions`, and more)
+  that, among many other things, already included this exact fix: `BinaryReader.cpp`'s internal
+  `ReadBytesExact` (renamed from the old private `ReadBytes`) now throws
+  `System::IO::EndOfStreamException()` instead of `std::runtime_error`. Confirmed by reading the
+  current `sharp-runtime` source directly, not assumed from a commit message.
+
+  **cna_net-side fallout, found and fixed**: rebuilding `cna_net` against the merged
+  `sharp-runtime` surfaced two real issues, both fixed here as part of adapting to the merge:
+  1. **Build break**: `System::Globalization::RegionInfo::CurrentRegion()` was renamed to
+     `getCurrentRegionProperty()` (the same merge correctly aligning it with this project's own
+     C# property → C++ convention) — `cna_net`'s one call site
+     (`GamerProfile.cpp`'s constructor) still used the old spelling. Fixed the one call site
+     (confirmed via a full-tree `grep` that no other call sites existed).
+  2. **10 tests failed**, not just the 2 the task originally anticipated — every `Decode*
+     ThrowsOnTruncatedBuffer`-style test across the whole Net test suite asserted the old
+     `std::runtime_error`, not just `PacketReader`'s own two. Updated all 10, adding
+     `#include "System/IO/EndOfStreamException.hpp"` and changing the expected exception type,
+     each verified individually to be a genuine underrun-triggered assertion (not conflating them
+     with the unrelated, still-`std::runtime_error` `Encode*ThrowsWhenXExceeds255` 255-capacity-
+     guard tests, or `NetDiscoveryProtocolTest`'s own explicit version-mismatch/index-bounds
+     checks, which still throw `std::runtime_error` directly and correctly stayed unchanged):
+     `NetPacketCodecTest.DecodeClientHelloThrowsOnTruncatedBuffer`,
+     `DecodeServerWelcomeThrowsOnTruncatedBuffer`, `DecodeGamerJoinBroadcastThrowsOnTruncatedBuffer`,
+     `DecodeGamerLeaveBroadcastThrowsOnTruncatedBuffer`, `DecodeStateChangeBroadcastThrowsOnTruncatedBuffer`,
+     `DecodeAppDataThrowsOnTruncatedBuffer`; `NetDiscoveryProtocolTest.DecodeQueryThrowsOnTruncatedBuffer`,
+     `DecodeAnnounceThrowsOnTruncatedBuffer`; `PacketReaderTest.ReadingPastEndOfBufferThrows`,
+     `ReadingPartialValueAtEndOfBufferThrows` (the original 2 the task named).
+
+  Verified the fix already works genuinely (not just compiles): rebuilt `cna_net` fresh against
+  the merged `sharp-runtime` — first build failed exactly as described (the `RegionInfo` rename);
+  fixed that, rebuilt clean, ran the full suite — exactly the 10 tests above failed (asserting
+  `std::runtime_error` against an exception that is no longer one, confirming the exception-type
+  change is real and observable, not just a docstring update); updated all 10 to
+  `System::IO::EndOfStreamException`; reran — full suite **3398/3398 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 ---
 

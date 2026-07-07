@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "System/IO/EndOfStreamException.hpp"
 #include <enet/enet.h>
 
 using namespace CNA::Internal::Net;
@@ -173,7 +174,7 @@ TEST(NetPacketCodecTest, DecodeClientHelloThrowsOnTruncatedBuffer) {
     message.LocalGamertags = {"alice"};
     auto bytes = NetPacketCodec::Encode(message);
     bytes.resize(1); // keep only the tag byte
-    EXPECT_THROW(NetPacketCodec::DecodeClientHello(bytes), std::runtime_error);
+    EXPECT_THROW(NetPacketCodec::DecodeClientHello(bytes), System::IO::EndOfStreamException);
 }
 
 TEST(NetPacketCodecTest, DecodeServerWelcomeThrowsOnTruncatedBuffer) {
@@ -182,7 +183,7 @@ TEST(NetPacketCodecTest, DecodeServerWelcomeThrowsOnTruncatedBuffer) {
     message.ExistingRoster = {{1, "host"}};
     auto bytes = NetPacketCodec::Encode(message);
     bytes.resize(1);
-    EXPECT_THROW(NetPacketCodec::DecodeServerWelcome(bytes), std::runtime_error);
+    EXPECT_THROW(NetPacketCodec::DecodeServerWelcome(bytes), System::IO::EndOfStreamException);
 }
 
 TEST(NetPacketCodecTest, DecodeGamerJoinBroadcastThrowsOnTruncatedBuffer) {
@@ -190,7 +191,7 @@ TEST(NetPacketCodecTest, DecodeGamerJoinBroadcastThrowsOnTruncatedBuffer) {
     message.NewGamers = {{5, "newgamer"}};
     auto bytes = NetPacketCodec::Encode(message);
     bytes.resize(1);
-    EXPECT_THROW(NetPacketCodec::DecodeGamerJoinBroadcast(bytes), std::runtime_error);
+    EXPECT_THROW(NetPacketCodec::DecodeGamerJoinBroadcast(bytes), System::IO::EndOfStreamException);
 }
 
 TEST(NetPacketCodecTest, DecodeGamerLeaveBroadcastThrowsOnTruncatedBuffer) {
@@ -198,7 +199,7 @@ TEST(NetPacketCodecTest, DecodeGamerLeaveBroadcastThrowsOnTruncatedBuffer) {
     message.WireIds = {7, 8, 9};
     auto bytes = NetPacketCodec::Encode(message);
     bytes.resize(1);
-    EXPECT_THROW(NetPacketCodec::DecodeGamerLeaveBroadcast(bytes), std::runtime_error);
+    EXPECT_THROW(NetPacketCodec::DecodeGamerLeaveBroadcast(bytes), System::IO::EndOfStreamException);
 }
 
 TEST(NetPacketCodecTest, DecodeStateChangeBroadcastThrowsOnTruncatedBuffer) {
@@ -206,7 +207,7 @@ TEST(NetPacketCodecTest, DecodeStateChangeBroadcastThrowsOnTruncatedBuffer) {
     message.NewState = Microsoft::Xna::Framework::Net::NetworkSessionState::Playing;
     auto bytes = NetPacketCodec::Encode(message);
     bytes.resize(1);
-    EXPECT_THROW(NetPacketCodec::DecodeStateChangeBroadcast(bytes), std::runtime_error);
+    EXPECT_THROW(NetPacketCodec::DecodeStateChangeBroadcast(bytes), System::IO::EndOfStreamException);
 }
 
 TEST(NetPacketCodecTest, DecodeAppDataThrowsOnTruncatedBuffer) {
@@ -217,7 +218,7 @@ TEST(NetPacketCodecTest, DecodeAppDataThrowsOnTruncatedBuffer) {
     message.Payload = {10, 20, 30};
     auto bytes = NetPacketCodec::Encode(message);
     bytes.resize(1);
-    EXPECT_THROW(NetPacketCodec::DecodeAppData(bytes), std::runtime_error);
+    EXPECT_THROW(NetPacketCodec::DecodeAppData(bytes), System::IO::EndOfStreamException);
 }
 
 TEST(NetPacketCodecTest, SendDataOptionsToEnetFlagsMapping) {
