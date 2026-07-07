@@ -530,10 +530,25 @@ namespace
         return e;
     }
 
+    // Builds a single track event with an unrecognized type (2 -- a genuine gap in FAudio's own
+    // FACTEVENT_* enum: FACT_internal.h defines exactly {0,1,3,4,6,7,8,9,16,17,18}, so 2 can never
+    // appear in real XACT-tool-built content, but the parser must still handle it safely rather
+    // than misreading undefined bytes as a known event's fields).
+    std::vector<uint8_t> BuildUnknownTypeEventBytes()
+    {
+        std::vector<uint8_t> e;
+        AppendU32(e, 2u);  // evtInfo: type=2 (unrecognized), timestamp=0
+        AppendU16(e, 0);   // randomOffset
+        AppendU8(e, 0xFF); // separator
+        return e;
+    }
+
     // Minimal .xsb with zero cues/wavebanks and one complex sound whose single track's event
     // list is exactly `events` (each pre-encoded via the Build*EventBytes helpers above).
-    // Regression fixture for T-2E.
-    std::vector<uint8_t> BuildXsbWithComplexTrack(const std::vector<std::vector<uint8_t>>& events)
+    // Regression fixture for T-2E. `filterData`/`frequency` default to 0 (no filter, matching
+    // every pre-existing caller); P9-XACT-011's retention test passes real values.
+    std::vector<uint8_t> BuildXsbWithComplexTrack(const std::vector<std::vector<uint8_t>>& events,
+                                                   uint16_t filterData = 0, uint16_t frequency = 0)
     {
         constexpr uint32_t headerSize     = 74;
         constexpr uint32_t bankNameSize   = 64;
@@ -587,8 +602,8 @@ namespace
         AppendU8(data, 1);
         AppendU8(data, 0xFF);
         AppendU32(data, trackEventsOffset);
-        AppendU16(data, 0); // filterData
-        AppendU16(data, 0); // frequency
+        AppendU16(data, filterData);
+        AppendU16(data, frequency);
 
         // Track event array: eventCount followed by each event's raw bytes
         AppendU8(data, static_cast<uint8_t>(events.size()));
@@ -1270,6 +1285,68 @@ TEST(XactParserTest, ComplexTrackWithOnlyPlayWaveEventStillResolves)
     EXPECT_EQ(xsb.sounds[0].waves[0].loopCount, 1);
 }
 
+// P10-XACT-010: CNA's FACTEVENT_* constants match FAudio's real enum (FACT_internal.h) exactly --
+// there is no XACT event type CNA fails to recognize among the ones that actually exist. The one
+// remaining "unsupported" path is a genuinely unrecognized/malformed type (never emitted by real
+// content); its already-documented behavior (stop scanning rather than misinterpret the remaining
+// bytes as event headers) had no direct test proving it until now.
+TEST(XactParserTest, ComplexTrackStopsScanningAtUnrecognizedEventType)
+{
+    const XsbData xsb = ParseXsb(BuildXsbWithComplexTrack(
+        { BuildUnknownTypeEventBytes(), BuildPlayWaveEventBytes(42, 7, 3) }));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    // The scan gave up at the unrecognized event and never reached the PlayWave event after it.
+    EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 0xFF);
+    EXPECT_EQ(xsb.sounds[0].waves[0].waveIndex, 0xFFFFu);
+}
+
+// P9-XACT-010/011: a complex track's filterData/frequency used to be read-and-discarded. This
+// covers the has-filter bit (bit0), FAudio's own filter-type bit-decode ((filterData>>1)&0x02,
+// which structurally only ever yields 0/low-pass or 2/high-pass -- see plan_audio.md's
+// P9-XACT-010 note), the qfactor byte (upper byte of filterData), and the separate frequency u16.
+// filterData = 0x0605: qfactor=0x06, bit0=1 (has filter), bits (>>1)&0x02 == 2 (high-pass).
+TEST(XactParserTest, ComplexTrackFilterDataIsRetained)
+{
+    const XsbData xsb = ParseXsb(
+        BuildXsbWithComplexTrack({ BuildPlayWaveEventBytes(1, 0, 0) }, 0x0605, 8000));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    const auto& wave = xsb.sounds[0].waves[0];
+    EXPECT_EQ(wave.filterType, 2);
+    EXPECT_EQ(wave.filterFrequencyHz, 8000u);
+    EXPECT_EQ(wave.filterQFactorRaw, 6);
+}
+
+// filterData's bit0 clear means "no filter" regardless of whatever happens to be in the qfactor/
+// type bits or the frequency field -- filterType must come out as the 0xFF sentinel.
+TEST(XactParserTest, ComplexTrackWithFilterBitClearHasNoFilterSentinel)
+{
+    const XsbData xsb = ParseXsb(
+        BuildXsbWithComplexTrack({ BuildPlayWaveEventBytes(1, 0, 0) }, 0x0604, 8000));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    EXPECT_EQ(xsb.sounds[0].waves[0].filterType, 0xFF);
+}
+
+// Low-pass case: bit0=1, bits (>>1)&0x02 == 0 -- filterData = 0x0301 (qfactor=3, bit0 set, bit2
+// clear).
+TEST(XactParserTest, ComplexTrackFilterDataDecodesLowPassType)
+{
+    const XsbData xsb = ParseXsb(
+        BuildXsbWithComplexTrack({ BuildPlayWaveEventBytes(1, 0, 0) }, 0x0301, 4000));
+
+    ASSERT_EQ(xsb.sounds.size(), 1u);
+    ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
+    const auto& wave = xsb.sounds[0].waves[0];
+    EXPECT_EQ(wave.filterType, 0);
+    EXPECT_EQ(wave.filterFrequencyHz, 4000u);
+    EXPECT_EQ(wave.filterQFactorRaw, 3);
+}
+
 TEST(XactParserTest, DspBlockIsSkippedByCodeCountNotByLengthField)
 {
     const XsbData xsb = ParseXsb(BuildXsbWithDspThenSecondSound());
@@ -1278,6 +1355,88 @@ TEST(XactParserTest, DspBlockIsSkippedByCodeCountNotByLengthField)
     ASSERT_EQ(xsb.sounds[1].waves.size(), 1u);
     EXPECT_EQ(xsb.sounds[1].waves[0].wavebankIndex, 5);
     EXPECT_EQ(xsb.sounds[1].waves[0].waveIndex, 99u);
+}
+
+// P9-XACT-014: a simple cue's sound code that doesn't match any parsed sound (corrupt/malformed
+// data -- a real XACT-tool-built file's codes always resolve, since they're generated from the
+// very same sound table) used to silently fall back to soundIndex 0, aliasing onto whichever
+// sound happens to be first in the bank instead of resolving to nothing. `soundIndex` must come
+// out of range (>= sounds.size()) so Cue::Play()'s existing bounds check treats it as
+// unresolvable, matching the already-established "no sound found -> plays silently" behavior
+// (BuildXsbFixtureBytes's own comment) instead of substituting the wrong sound.
+TEST(XactParserTest, SimpleCueWithUnresolvableSoundCodeDoesNotAliasToSoundZero)
+{
+    constexpr uint32_t headerSize   = 74;
+    constexpr uint32_t bankNameSize = 64;
+    constexpr uint32_t soundOffset  = headerSize + bankNameSize; // 138
+    constexpr uint32_t soundSize    = 12; // simple (non-complex) sound, no RPC/DSP block
+    const uint32_t cueSimpleOffset  = soundOffset + 2 * soundSize;
+    // Deliberately bogus: past both sound entries, matches no real soundCodes[i] value.
+    const uint32_t bogusSoundCode   = soundOffset + 2 * soundSize + 1000;
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'S', 'D', 'B', 'K' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU16(data, 46); // contentVersion
+    AppendU16(data, 0);  // toolVersion
+    AppendU16(data, 0);  // CRC
+    for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+    AppendU8(data, 0);   // platform
+
+    AppendU16(data, 1); // cueSimpleCount
+    AppendU16(data, 0); // cueComplexCount
+    AppendU16(data, 0); // unknown
+    AppendU16(data, 0); // cueTotalAlign
+    AppendU8(data, 0);  // wavebankCount
+    AppendU16(data, 2); // soundCount
+    AppendU16(data, 0); // cueNameLength
+    AppendU16(data, 0); // unknown
+
+    AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+    AppendS32(data, -1); // cueComplexOffset
+    AppendS32(data, -1); // cueNameOffset
+    AppendS32(data, 0);  // unknown
+    AppendS32(data, -1); // variationOffset
+    AppendS32(data, 0);  // transitionOffset
+    AppendS32(data, -1); // wavebankNameOffset
+    AppendS32(data, 0);  // cueHashOffset
+    AppendS32(data, -1); // cueNameIndexOffset (unused, totalCues would need it, but we read the
+                         // cue struct directly, not by name)
+    AppendS32(data, static_cast<int32_t>(soundOffset));
+
+    AppendPadded(data, "TestSoundBank", bankNameSize);
+
+    // Sound 0: distinctive wave reference (so a test could tell if a cue wrongly resolved here).
+    AppendU8(data, 0x00);  // flags
+    AppendU16(data, 0);    // categoryIndex
+    AppendU8(data, 0xFF);  // volume byte
+    AppendS16(data, 0);    // pitchCents
+    AppendU8(data, 0);     // priority
+    AppendU16(data, 0);    // soundLength (skipped)
+    AppendU16(data, 77);   // waveIdx
+    AppendU8(data, 3);     // wbIdx
+
+    // Sound 1: another distinctive wave reference.
+    AppendU8(data, 0x00);
+    AppendU16(data, 0);
+    AppendU8(data, 0xFF);
+    AppendS16(data, 0);
+    AppendU8(data, 0);
+    AppendU16(data, 0);
+    AppendU16(data, 88);
+    AppendU8(data, 4);
+
+    // Simple cue: flags + bogus sound code.
+    AppendU8(data, 0);
+    AppendU32(data, bogusSoundCode);
+
+    const XsbData xsb = ParseXsb(data);
+
+    ASSERT_EQ(xsb.sounds.size(), 2u);
+    ASSERT_EQ(xsb.cues.size(), 1u);
+    EXPECT_TRUE(xsb.cues[0].isSingleSound);
+    EXPECT_GE(xsb.cues[0].soundIndex, xsb.sounds.size())
+        << "unresolvable sound code must not alias onto sound 0 (or any real sound)";
 }
 
 TEST(XactParserTest, VariationTypeInteractiveParsesSixteenByteEntry)
@@ -1477,6 +1636,94 @@ TEST(XactParserTest, ParseXsbBadMagicThrows)
 {
     std::vector<uint8_t> data(0x50, 0);
     EXPECT_THROW(ParseXsb(data), std::runtime_error);
+}
+
+// P10-XACT-004: a distinct corruption class from "too small to even have a header" (10 bytes)
+// and "bad magic" above -- a real, valid magic and a size that clears the coarse minimum-size
+// check, but truncated partway through a real record. Every field read in XactParser.cpp goes
+// through Ctx::u8()/u16()/u32()/f32()/skip()/seek(), each of which bounds-checks against the
+// buffer's actual end (not the declared header/segment sizes), so this must throw
+// std::runtime_error rather than read out of bounds -- exercised here rather than just assumed.
+TEST(XactParserTest, ParseXgsTruncatedMidRecordThrows)
+{
+    std::vector<uint8_t> full = BuildXgsFixture();
+    ASSERT_GT(full.size(), 0x50u); // the real fixture must exceed the coarse minimum-size check
+    std::vector<uint8_t> truncated(full.begin(), full.begin() + 0x50);
+    EXPECT_THROW(ParseXgs(truncated), std::runtime_error);
+}
+
+TEST(XactParserTest, ParseXwbTruncatedMidRecordThrows)
+{
+    std::vector<uint8_t> full = BuildCompactXwbFixture();
+    ASSERT_GT(full.size(), 52u);
+    std::vector<uint8_t> truncated(full.begin(), full.begin() + 52);
+    EXPECT_THROW(ParseXwb(truncated), std::runtime_error);
+}
+
+TEST(XactParserTest, ParseXsbTruncatedMidRecordThrows)
+{
+    std::vector<uint8_t> full = BuildXsbWithVariationOfType(3);
+    ASSERT_GT(full.size(), 0x50u);
+    std::vector<uint8_t> truncated(full.begin(), full.begin() + 0x50);
+    EXPECT_THROW(ParseXsb(truncated), std::runtime_error);
+}
+
+// P10-XACT-007: two categories sharing the same name is content a real XACT authoring tool would
+// never emit (names are validated identifiers at build time), but CNA must still not crash or
+// misbehave on it if handed a hand-crafted/adversarial file: categoryNameMap is a plain
+// `std::unordered_map<std::string, uint16_t>` built by a sequential `map[name] = i` loop
+// (XactParser.cpp), so a duplicate name deterministically resolves to the LAST-declared index --
+// well-defined, not UB -- rather than crashing or picking an arbitrary/unstable one.
+TEST(XactParserTest, DuplicateCategoryNamesResolveDeterministicallyToLastDeclaredIndex)
+{
+    constexpr uint32_t headerSize       = 65;
+    constexpr uint32_t categoryDataSize = 20; // 2 categories * 10 bytes
+    constexpr uint32_t variableDataSize = 13;
+
+    const uint32_t categoryOffset     = headerSize;
+    const uint32_t variableOffset     = categoryOffset + categoryDataSize;
+    const uint32_t categoryNameOffset = variableOffset + variableDataSize;
+    const std::string categoryName    = "Default"; // same name for both categories
+    const uint32_t variableNameOffset =
+        categoryNameOffset + 2 * (static_cast<uint32_t>(categoryName.size()) + 1);
+    const std::string variableName = "Volume";
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'X', 'G', 'S', 'F' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU16(data, 46); AppendU16(data, 0); AppendU16(data, 0);
+    for (int i = 0; i < 8; ++i) data.push_back(0);
+    AppendU8(data, 3);
+
+    AppendU16(data, 2); // categoryCount == 2
+    AppendU16(data, 1); // variableCount
+    AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0);
+
+    AppendU32(data, categoryOffset);
+    AppendU32(data, variableOffset);
+    AppendU32(data, 0); AppendU32(data, 0); AppendU32(data, 0); AppendU32(data, 0);
+    AppendU32(data, categoryNameOffset);
+    AppendU32(data, variableNameOffset);
+
+    // Category 0: instanceLimit=1, distinguishable from category 1's instanceLimit=2.
+    AppendU8(data, 1); AppendU16(data, 0); AppendU16(data, 0); AppendU8(data, 0);
+    AppendU16(data, 0xFFFF); AppendU8(data, 0xFF); AppendU8(data, 0);
+    // Category 1 (last-declared): instanceLimit=2.
+    AppendU8(data, 2); AppendU16(data, 0); AppendU16(data, 0); AppendU8(data, 0);
+    AppendU16(data, 0xFFFF); AppendU8(data, 0xFF); AppendU8(data, 0);
+
+    // Variable: accessibility, initialValue, minValue, maxValue.
+    AppendU8(data, 0x03); AppendF32(data, 0.5f); AppendF32(data, 0.0f); AppendF32(data, 1.0f);
+
+    AppendCStr(data, categoryName); // category 0's name
+    AppendCStr(data, categoryName); // category 1's name (duplicate)
+    AppendCStr(data, variableName);
+
+    const XgsData xgs = ParseXgs(data);
+    ASSERT_EQ(xgs.categories.size(), 2u);
+    ASSERT_TRUE(xgs.categoryNameMap.count("Default"));
+    EXPECT_EQ(xgs.categoryNameMap.at("Default"), 1u); // last-declared (index 1) wins
+    EXPECT_EQ(xgs.categories[1].instanceLimit, 2);
 }
 
 TEST(XactParserTest, XgsParsesCategoryAndVariable)

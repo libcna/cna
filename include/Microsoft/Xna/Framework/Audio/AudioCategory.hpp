@@ -5,6 +5,7 @@
 
 #include "System/IEquatable.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -78,10 +79,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     private:
         friend class AudioEngine;
-        AudioCategory(AudioEngine* engine, unsigned short index, std::string name);
+        AudioCategory(AudioEngine* engine, SharpRuntime::ushortcs index, std::string name);
 
         AudioEngine* parent_;
-        unsigned short index_;
+        SharpRuntime::ushortcs index_;
         std::string name_;
     };
 }

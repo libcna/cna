@@ -3716,6 +3716,23 @@ if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
     )
 endif()
 
+# --- Task P9-HARDWARE-005: standalone no-audio-hardware harness ---
+# A tiny standalone (non-GTest) executable that forces SDL_AUDIODRIVER to a nonexistent driver
+# name before any SDL audio call in this fresh process, then proves NoAudioHardwareException is
+# genuinely thrown. Spawned by tests/CNA/Internal/Audio/AudioMixerTests.cpp -- see that file /
+# tools/audio/audio_no_hardware_harness.cpp for why this needs its own process (AudioMixer.cpp's
+# g_mixer is a process-wide, once-ever-initialized cache).
+if(CNA_BUILD_TESTS)
+    add_executable(cna_audio_no_hardware_harness
+        tools/audio/audio_no_hardware_harness.cpp
+    )
+    target_link_libraries(cna_audio_no_hardware_harness
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
+endif()
+
 if(CNA_BUILD_TESTS)
     add_subdirectory(vendor/googletest)
 
@@ -3739,6 +3756,16 @@ if(CNA_BUILD_TESTS)
         # posix_spawn/sys-wait process APIs, for the same reasons — see TwoProcessLoopbackTest's
         # own exclusion comment just above.
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest\\.cpp$")
+    endif()
+
+    # AudioMixerTests.cpp (Task P9-HARDWARE-005) uses the same POSIX-only process APIs
+    # (posix_spawn, poll, sys/wait.h) to spawn tools/audio/audio_no_hardware_harness.cpp as an
+    # independent OS process, for the same reason TwoProcessLoopbackTest.cpp needs one above.
+    # Excluded on the same platforms and for the same reasons (no real process spawning in a
+    # single Node.js/Wasm module; CNA_AUDIO_NO_HARDWARE_HARNESS_PATH is a build-machine absolute
+    # path, meaningless on-device on Android).
+    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Audio/AudioMixerTests\\.cpp$")
     endif()
 
     add_executable(CnaTests
@@ -3799,6 +3826,14 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_net_gamerservices_dispatcher_harness)
         target_compile_definitions(CnaTests PRIVATE
             CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH="$<TARGET_FILE:cna_net_gamerservices_dispatcher_harness>"
+        )
+    endif()
+
+    if(TARGET cna_audio_no_hardware_harness)
+        # Same reasoning as cna_net_two_process_harness above, for AudioMixerTests.cpp.
+        add_dependencies(CnaTests cna_audio_no_hardware_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_AUDIO_NO_HARDWARE_HARNESS_PATH="$<TARGET_FILE:cna_audio_no_hardware_harness>"
         )
     endif()
 

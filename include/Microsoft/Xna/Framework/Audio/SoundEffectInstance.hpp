@@ -3,6 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -14,6 +15,7 @@ namespace Microsoft::Xna::Framework::Audio
     class AudioEmitter;
     class AudioListener;
     class SoundEffect;
+    class Cue;
 
     // T-4C: DSP filter state (kind/coefficients/recursive state), fully defined only in
     // SoundEffectInstance.cpp where SDL3_mixer's callback-registration types are available.
@@ -26,6 +28,9 @@ namespace Microsoft::Xna::Framework::Audio
     class SoundEffectInstance : public System::Object, public System::IDisposable
     {
         friend class SoundEffect;
+        // Cue::Play() wires real per-track XACT filter data into INTERNAL_applyXactTrackFilter
+        // (P9-XACT-011) -- see that method's declaration below.
+        NOXNA friend class Cue;
         // Tests need read access to the underlying MIX_Track handle to verify Play() idempotency
         // (that a repeated call while already playing doesn't restart the track).
         NOXNA friend struct SoundEffectInstanceTestAccess;
@@ -87,16 +92,136 @@ namespace Microsoft::Xna::Framework::Audio
         // FAudioFilterParameters::Frequency exactly, since these methods just forward it. No-op
         // if the track hasn't been created yet (matches FNA's `handle == IntPtr.Zero` guard);
         // not sticky across Stop(true)/replay, again matching FNA (the filter lives on the
-        // voice/track, not the instance).
-        void INTERNAL_applyLowPassFilter(float cutoff);
-        void INTERNAL_applyHighPassFilter(float cutoff);
-        void INTERNAL_applyBandPassFilter(float center);
+        // voice/track, not the instance). `oneOverQ` defaults to 1.0f, matching every call site
+        // in FNA's own (dead-code, never-called) SoundEffectInstance.cs equivalents -- P9-XACT-011
+        // adds real per-track Q fidelity for XACT-driven playback via
+        // INTERNAL_applyXactTrackFilter below, without changing this default for any other caller.
+        void INTERNAL_applyLowPassFilter(float cutoff, float oneOverQ = 1.0f);
+        void INTERNAL_applyHighPassFilter(float cutoff, float oneOverQ = 1.0f);
+        void INTERNAL_applyBandPassFilter(float center, float oneOverQ = 1.0f);
+
+        // P9-XACT-011: real entry point for a Cue-driven per-track XACT filter (parsed by
+        // XactParser.cpp into XsbWaveRef::filterType/filterFrequencyHz/filterQFactorRaw).
+        // `filterType` matches FAudioFilterType (0=low-pass, 1=band-pass, 2=high-pass);
+        // `frequencyHz` is the raw authored Hz value, converted to SDL3_mixer's expected
+        // normalized cutoff via the real device sample rate (INTERNAL_calculateFilterCutoff);
+        // `qfactorRaw` is the raw XACT Q-factor byte, converted via
+        // INTERNAL_calculateFilterOneOverQ. No-op for an unrecognized filterType (defensive only
+        // -- XactParser.cpp's bit-decode never actually produces one). Establishes this filter's
+        // base frequency/Q; itself only ever called once, at Play() time -- live RPC-driven
+        // frequency/Q targeting on top of this base is a separate, continuously-reapplied concern
+        // (P10-FILTER-002/003, see INTERNAL_applyRpcFilterOverride below).
+        NOXNA void INTERNAL_applyXactTrackFilter(uint8_t filterType, float frequencyHz, uint8_t qfactorRaw);
+
+        // P11-XACT-003: same role as INTERNAL_applyXactTrackFilter above (establishes this
+        // filter's base frequency/Q; itself only ever called once, at Play() time), but for a
+        // PlayWaveEffectVariation-family event's randomized override. Unlike
+        // INTERNAL_applyXactTrackFilter's raw XACT Q-factor byte, `oneOverQ` here is already the
+        // final coefficient -- the caller (Cue.cpp's ApplyEffectVariation) already took the
+        // reciprocal of the authored min/maxQFactor draw itself (matching FAudio's own
+        // `rngQFactor = 1.0f / (...)`, assigned directly to `activeWave.baseQFactor` with no
+        // further transformation downstream) -- so this method must NOT take another reciprocal.
+        NOXNA void INTERNAL_applyEffectVariationFilter(uint8_t filterType, float frequencyHz, float oneOverQ);
+
+        // P10-FILTER-002/003: continuous per-tick RPC targeting for filter frequency/Q, called
+        // every tick from Cue::ReconcileState() (the same continuous-tick infra P9-XACT-016
+        // already built for volume/pitch) whenever this cue has RPC bindings, plus once more at
+        // Play() right after the base filter is established. `rpcFrequencyHz`/`rpcQFactor` use a
+        // negative sentinel (matching FAudio's own `>= 0.0f` checks, FACT_internal.c) meaning "no
+        // RPC curve targets this axis this tick" -- that axis falls back to the filter's base
+        // (XACT-authored) value instead, exactly like real FAudio's per-tick fallback between
+        // `rpcData.rpcFilterFreq`/`rpcFilterQFactor` and `activeWave.baseFrequency`/`baseQFactor`.
+        // A no-op if this instance has no active filter at all (`waveRef.filterType == 0xFF`) --
+        // matches FAudio's own `if (sound->sound->tracks[i].filter != 0xFF)` guard around the
+        // whole filter-update block. Never touches `kind` or re-registers the cooked callback
+        // (already registered by INTERNAL_applyXactTrackFilter) -- only the two coefficient
+        // floats change, the same coefficient-only-write pattern the existing INTERNAL_apply*
+        // setters already use, so `yl`/`yb`'s recursive filter state is never disturbed
+        // (P10-FILTER-004: no click/pop from a live update, since nothing about the callback
+        // registration or recursive state changes, only the coefficients it reads).
+        NOXNA void INTERNAL_applyRpcFilterOverride(float rpcFrequencyHz, float rpcQFactor);
+
+        // P11-PAN-001 (RFC-1): lazily allocates filterState_ if this is the first DSP-affecting
+        // call for this instance (matching the existing INTERNAL_apply*Filter lazy-allocation
+        // pattern) and (re)registers the shared cooked callback on `track_`. Unlike the filter
+        // setters, this must run for EVERY playing track, not just filtered ones, since the
+        // crossfeed pan matrix below now lives in the same callback and needs to run
+        // unconditionally. Idempotent -- safe to call on every Play()/Apply3D(), matching
+        // MIX_SetTrackCookedCallback's own documented "may be called... at any time" contract.
+        // No-op if track_ hasn't been created yet.
+        void EnsureTrackDspState();
+
+        // Pure conversion helpers (P9-XACT-011), split out of INTERNAL_applyXactTrackFilter so
+        // they're independently unit-testable without a real SDL3_mixer device driving the
+        // sample rate. Both match FAudio's exact formulas (FACT_internal.c,
+        // FACT_INTERNAL_CalculateFilterFrequency and the inline `1.0f / (qfactor / 3.0f)` at the
+        // SOUND_FLAG_COMPLEX track-init site).
+        NOXNA static float INTERNAL_calculateFilterCutoff(float frequencyHz, float sampleRate);
+        NOXNA static float INTERNAL_calculateFilterOneOverQ(uint8_t qfactorRaw);
+
+        // P12-PITCH-001: converts the XNA `Pitch` property (range [-1,1], "-1 octave to +1
+        // octave") to the playback-rate ratio SDL3_mixer's `MIX_SetTrackFrequencyRatio` expects.
+        // Matches FNA exactly (SoundEffectInstance.cs:589-591): `(float)Math.Pow(2.0,
+        // INTERNAL_pitch)`, an exponential octave curve -- NOT a linear multiplier. Split out as
+        // a pure function, matching INTERNAL_calculatePan/INTERNAL_calculateFilterCutoff above,
+        // so it's independently unit-testable and has exactly one implementation shared by
+        // setPitchProperty(), Play()/Apply3D()'s ApplyTrackProperties(), and
+        // SoundEffect::Play(volume,pitch,pan)'s fire-and-forget path (a friend of this class).
+        NOXNA static float INTERNAL_calculatePitchRatio(float pitch);
+
+        // P9-3D-010: computes the listener's own world-space right axis from Forward/Up
+        // (Cross(Forward, Up), normalized; falls back to Vector3::Right if degenerate), split out
+        // so `Apply3D`'s orientation-aware pan projection is independently unit-testable without
+        // a real SoundEffectInstance/track. Used by `Apply3D` to project the emitter's relative
+        // position before calling `INTERNAL_calculatePan` below.
+        NOXNA static Microsoft::Xna::Framework::Vector3 INTERNAL_calculateListenerRight(
+            const Microsoft::Xna::Framework::Vector3& forward,
+            const Microsoft::Xna::Framework::Vector3& up);
+
+        // P9-3D-007/P9-3D-010: `Apply3D`'s pan approximation (listener-relative rightward
+        // displacement over distance, clamped to [-1,1]), split out so it's independently
+        // unit-testable -- SDL3_mixer has no `MIX_GetTrackStereo` getter (unlike gain/frequency-
+        // ratio), so the *result* of `Apply3D`'s pan computation can't be verified by reading the
+        // track back; this pure function can be tested directly instead. `rightDisplacement` is
+        // the emitter's position projected onto the listener's own Forward/Up-derived right axis
+        // (computed by the caller, `Apply3D`, via `INTERNAL_calculateListenerRight` above), not
+        // raw world-space X.
+        NOXNA static float INTERNAL_calculatePan(float rightDisplacement, float distance);
+
+        // P11-PAN-001 (RFC-1): computes FNA's exact 4-coefficient stereo crossfeed pan matrix
+        // for a 2-source-channel/2-destination-channel track (SoundEffectInstance.cs's
+        // SetPanMatrixCoefficients, the `dspSettings.SrcChannelCount == 2` branch) -- split out
+        // as a pure function so it's independently unit-testable, matching
+        // INTERNAL_calculatePan/INTERNAL_calculateFilterCutoff above. `ll`/`rl`/`lr`/`rr` name
+        // each coefficient as "destination-channel-from-source-channel" (e.g. `rl` = the left
+        // output's contribution from the right input channel); FNA's own `outputMatrix[0..3]`
+        // uses the same left-speaker-first, source-major layout. This same matrix also produces
+        // FNA's separate mono-source formula exactly when fed a duplicated-mono signal
+        // (L == R), so no separate mono branch is needed by the caller.
+        NOXNA static void INTERNAL_calculatePanCrossfeedMatrix(
+            float pan, float& ll, float& rl, float& lr, float& rr);
 
         // Test-only hook (SoundEffectInstanceTestAccess): runs this instance's filter state
         // through the exact same math the real SDL3_mixer callback uses, but synchronously and
         // directly -- the real callback only fires asynchronously from the mixing thread, which
-        // would make a test either flaky or need a real-time wait. No-op if no filter is active.
+        // would make a test either flaky or need a real-time wait. No-op if no filter/pan state
+        // is active at all (P11-PAN-001: now also applies the crossfeed pan matrix, a no-op at
+        // the default pan of 0.0f).
         void ProcessFilterSamplesForTest(float* pcm, int channels, int samples);
+
+        // Test-only hook (SoundEffectInstanceTestAccess, P9-XACT-011): reads back the active
+        // filter's kind (FilterState::Kind cast to int; 0 = none)/frequency/oneOverQ without
+        // exposing FilterState's definition outside SoundEffectInstance.cpp.
+        void INTERNAL_getFilterStateForTest(int& kind, float& frequency, float& oneOverQ) const;
+
+        // Test-only hooks (SoundEffectInstanceTestAccess, P11-PAN-001): read/write the DSP
+        // state's pan value directly, without a live track -- lets ProcessFilterSamplesForTest's
+        // crossfeed math be exercised in isolation from Play()/setPanProperty()'s SDL3_mixer
+        // side effects. The setter lazily allocates filterState_ (matching
+        // INTERNAL_applyLowPassFilter's own lazy-allocation pattern) so it works even before any
+        // filter has ever been applied.
+        void INTERNAL_setPanStateForTest(float pan);
+        [[nodiscard]] float INTERNAL_getPanStateForTest() const;
 
         /**
          * @brief Constructs a SoundEffectInstance bound to the given sound effect.

@@ -31,10 +31,11 @@ namespace Microsoft::Xna::Framework::Audio
             return instance.loopLength_;
         }
 
-        // CP-20: SDL3_mixer has no stereo-pan getter (MIX_SetTrackStereo has no counterpart,
-        // same limitation noted for CP-3/T-4B's Apply3D coverage), so the is3D latch itself is
-        // the only thing that can be verified directly -- it's the actual mechanism that keeps
-        // setPanProperty() from clobbering Apply3D's own pan approximation.
+        // CP-20: SDL3_mixer itself still has no stereo-pan getter (MIX_SetTrackStereo has no
+        // counterpart, same limitation noted for CP-3/T-4B's Apply3D coverage) -- but since
+        // P11-PAN-001 (RFC-1), CNA's own DSP state does (GetPanState below), so the is3D latch is
+        // no longer the ONLY thing verifiable here, just the mechanism that keeps setPanProperty()
+        // from clobbering Apply3D's own pan approximation.
         static bool Is3D(const SoundEffectInstance& instance)
         {
             return instance.is3D_;
@@ -48,22 +49,83 @@ namespace Microsoft::Xna::Framework::Audio
         {
             instance.INTERNAL_applyReverb(rvGain);
         }
-        static void ApplyLowPassFilter(SoundEffectInstance& instance, float cutoff)
+        static void ApplyLowPassFilter(SoundEffectInstance& instance, float cutoff, float oneOverQ = 1.0f)
         {
-            instance.INTERNAL_applyLowPassFilter(cutoff);
+            instance.INTERNAL_applyLowPassFilter(cutoff, oneOverQ);
         }
-        static void ApplyHighPassFilter(SoundEffectInstance& instance, float cutoff)
+        static void ApplyHighPassFilter(SoundEffectInstance& instance, float cutoff, float oneOverQ = 1.0f)
         {
-            instance.INTERNAL_applyHighPassFilter(cutoff);
+            instance.INTERNAL_applyHighPassFilter(cutoff, oneOverQ);
         }
-        static void ApplyBandPassFilter(SoundEffectInstance& instance, float center)
+        static void ApplyBandPassFilter(SoundEffectInstance& instance, float center, float oneOverQ = 1.0f)
         {
-            instance.INTERNAL_applyBandPassFilter(center);
+            instance.INTERNAL_applyBandPassFilter(center, oneOverQ);
         }
         static void ProcessFilterSamples(SoundEffectInstance& instance, float* pcm,
                                           int channels, int samples)
         {
             instance.ProcessFilterSamplesForTest(pcm, channels, samples);
+        }
+
+        // P9-XACT-011 wrappers.
+        static void ApplyXactTrackFilter(SoundEffectInstance& instance, uint8_t filterType,
+                                          float frequencyHz, uint8_t qfactorRaw)
+        {
+            instance.INTERNAL_applyXactTrackFilter(filterType, frequencyHz, qfactorRaw);
+        }
+
+        // P10-FILTER-002/003 wrapper.
+        static void ApplyRpcFilterOverride(SoundEffectInstance& instance,
+                                            float rpcFrequencyHz, float rpcQFactor)
+        {
+            instance.INTERNAL_applyRpcFilterOverride(rpcFrequencyHz, rpcQFactor);
+        }
+        static float CalculateFilterCutoff(float frequencyHz, float sampleRate)
+        {
+            return SoundEffectInstance::INTERNAL_calculateFilterCutoff(frequencyHz, sampleRate);
+        }
+        static float CalculateFilterOneOverQ(uint8_t qfactorRaw)
+        {
+            return SoundEffectInstance::INTERNAL_calculateFilterOneOverQ(qfactorRaw);
+        }
+        static void GetFilterState(const SoundEffectInstance& instance, int& kind,
+                                    float& frequency, float& oneOverQ)
+        {
+            instance.INTERNAL_getFilterStateForTest(kind, frequency, oneOverQ);
+        }
+
+        // P9-3D-007 wrapper.
+        static float CalculatePan(float dx, float distance)
+        {
+            return SoundEffectInstance::INTERNAL_calculatePan(dx, distance);
+        }
+
+        // P12-PITCH-001 wrapper.
+        static float CalculatePitchRatio(float pitch)
+        {
+            return SoundEffectInstance::INTERNAL_calculatePitchRatio(pitch);
+        }
+
+        // P11-PAN-001 (RFC-1) wrappers.
+        static void CalculatePanCrossfeedMatrix(float pan, float& ll, float& rl, float& lr, float& rr)
+        {
+            SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix(pan, ll, rl, lr, rr);
+        }
+        static void SetPanState(SoundEffectInstance& instance, float pan)
+        {
+            instance.INTERNAL_setPanStateForTest(pan);
+        }
+        static float GetPanState(const SoundEffectInstance& instance)
+        {
+            return instance.INTERNAL_getPanStateForTest();
+        }
+
+        // P9-3D-010 wrapper.
+        static Microsoft::Xna::Framework::Vector3 CalculateListenerRight(
+            const Microsoft::Xna::Framework::Vector3& forward,
+            const Microsoft::Xna::Framework::Vector3& up)
+        {
+            return SoundEffectInstance::INTERNAL_calculateListenerRight(forward, up);
         }
     };
 }

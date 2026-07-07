@@ -9,6 +9,10 @@ namespace CNA::Internal::Audio
 {
     namespace
     {
+        // P9-AUDIT-003: g_mixer's lazy-init check-then-create sequence below has no mutex around
+        // it. Every caller in this codebase runs on a single thread today, so this is untested as
+        // a real race; flagged here as an assumed (not enforced) main-thread-only contract, since
+        // nothing states it explicitly elsewhere.
         MIX_Mixer* g_mixer = nullptr;
     }
 

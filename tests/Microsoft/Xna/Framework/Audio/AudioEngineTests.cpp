@@ -5,12 +5,15 @@
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "AudioEngineTestAccess.hpp"
+#include "CueTestAccess.hpp"
 #include "SoundBankTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "System/Object.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
@@ -31,8 +34,10 @@ using Microsoft::Xna::Framework::Audio::AudioEngine;
 using Microsoft::Xna::Framework::Audio::AudioEngineTestAccess;
 using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
+using Microsoft::Xna::Framework::Audio::CueTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundBank;
 using Microsoft::Xna::Framework::Audio::SoundBankTestAccess;
+using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::WaveBank;
 
 namespace
@@ -131,8 +136,14 @@ namespace
         AppendU8(data, 0xFF);
         AppendU8(data, 0);
 
-        // Variable: accessibility, initialValue, minValue, maxValue
-        AppendU8(data, 0x03);
+        // Variable: accessibility, initialValue, minValue, maxValue.
+        // P12-VAR-001: PUBLIC only (0x1) -- FACT_internal.h's real bit values are PUBLIC=0x1,
+        // READONLY=0x2, CUE=0x4; this variable must be plain engine-global (PUBLIC set, CUE
+        // clear) and writable (READONLY clear) for GetGlobalVariable/SetGlobalVariable's tests
+        // below to mean what they say. Previously 0x03 (PUBLIC|READONLY), an arbitrary nonzero
+        // byte chosen before this project enforced accessibility semantics at all -- silently
+        // made SetGlobalVariableValidUpdatesValue test a no-op-writable variable by accident.
+        AppendU8(data, 0x01);
         AppendF32(data, 0.5f);
         AppendF32(data, 0.0f);
         AppendF32(data, 1.0f);
@@ -151,6 +162,102 @@ namespace
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xgs";
             const auto bytes = BuildXgsFixtureBytes();
+            std::ofstream f(file, std::ios::binary);
+            f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            return file.string();
+        }();
+        return path;
+    }
+
+    // P12-VAR-001: dedicated fixture with 4 variables spanning every combination of the
+    // PUBLIC/READONLY/CUE accessibility bits this project now enforces (FACT_internal.h:
+    // PUBLIC=0x1, READONLY=0x2, CUE=0x4):
+    //   "GlobalVar"   -- PUBLIC only (0x1): plain engine-global, readable+writable via
+    //                    GetGlobalVariable/SetGlobalVariable.
+    //   "ReadOnlyVar" -- PUBLIC|READONLY (0x3): engine-global, readable but SetGlobalVariable is
+    //                    a silent no-op (FNA's C# wrapper never checks
+    //                    FACTAudioEngine_SetGlobalVariable's native return code).
+    //   "CueVar"      -- PUBLIC|CUE (0x5): cue-scoped -- GetGlobalVariable/SetGlobalVariable must
+    //                    reject it outright, a different/mutually-exclusive domain.
+    //   "PrivateVar"  -- 0x0 (neither bit set): unreachable via either the engine-global or
+    //                    cue-scoped API.
+    // All four share min=0.0/max=10.0/initial=5.0 so the same clamp bounds cover every case.
+    std::vector<uint8_t> BuildVarAccessibilityXgsFixtureBytes()
+    {
+        constexpr uint32_t headerSize       = 65;
+        constexpr uint32_t categoryDataSize = 10;
+        constexpr uint32_t variableDataSize = 13;
+        constexpr uint32_t variableCount    = 4;
+
+        const uint32_t categoryOffset     = headerSize;
+        const uint32_t variableOffset     = categoryOffset + categoryDataSize;
+        const uint32_t categoryNameOffset = variableOffset + variableDataSize * variableCount;
+        const std::string categoryName    = "Default";
+        const std::string name0 = "GlobalVar";
+        const std::string name1 = "ReadOnlyVar";
+        const std::string name2 = "CueVar";
+        const std::string name3 = "PrivateVar";
+        const uint32_t variableNameOffset =
+            categoryNameOffset + static_cast<uint32_t>(categoryName.size()) + 1;
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'X', 'G', 'S', 'F' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // unknown
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 3);   // platform
+
+        AppendU16(data, 1); // categoryCount
+        AppendU16(data, variableCount);
+        AppendU16(data, 0); // blob1Count
+        AppendU16(data, 0); // blob2Count
+        AppendU16(data, 0); // rpcCount
+        AppendU16(data, 0); // dspPresetCount
+        AppendU16(data, 0); // dspParameterCount
+
+        AppendU32(data, categoryOffset);
+        AppendU32(data, variableOffset);
+        AppendU32(data, 0); // blob1Offset
+        AppendU32(data, 0); // categoryNameIndexOffset
+        AppendU32(data, 0); // blob2Offset
+        AppendU32(data, 0); // variableNameIndexOffset
+        AppendU32(data, categoryNameOffset);
+        AppendU32(data, variableNameOffset);
+
+        // Category: instanceLimit, fadeInMS, fadeOutMS, maxInstanceBehavior(skip), parentIndex, volume, visibility
+        AppendU8(data, 0xFF);
+        AppendU16(data, 0);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+        AppendU16(data, 0xFFFF);
+        AppendU8(data, 0xFF);
+        AppendU8(data, 0);
+
+        // Variables: accessibility, initialValue, minValue, maxValue.
+        AppendU8(data, 0x01); AppendF32(data, 5.0f); AppendF32(data, 0.0f); AppendF32(data, 10.0f); // GlobalVar
+        AppendU8(data, 0x03); AppendF32(data, 5.0f); AppendF32(data, 0.0f); AppendF32(data, 10.0f); // ReadOnlyVar
+        AppendU8(data, 0x05); AppendF32(data, 5.0f); AppendF32(data, 0.0f); AppendF32(data, 10.0f); // CueVar
+        AppendU8(data, 0x00); AppendF32(data, 5.0f); AppendF32(data, 0.0f); AppendF32(data, 10.0f); // PrivateVar
+
+        AppendCStr(data, categoryName);
+        AppendCStr(data, name0);
+        AppendCStr(data, name1);
+        AppendCStr(data, name2);
+        AppendCStr(data, name3);
+
+        return data;
+    }
+
+    const std::string& VarAccessibilityFixturePath()
+    {
+        static const std::string path = []() -> std::string
+        {
+            auto dir = std::filesystem::temp_directory_path() / "cna_audio_engine_test";
+            std::filesystem::create_directories(dir);
+            auto file = dir / "var_accessibility.xgs";
+            const auto bytes = BuildVarAccessibilityXgsFixtureBytes();
             std::ofstream f(file, std::ios::binary);
             f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
             return file.string();
@@ -350,8 +457,15 @@ namespace
         return data;
     }
 
+    // Fade duration authored on "P9StopLongCue" below (P9-STOP-010) -- far shorter than the
+    // underlying wave's 1 second, so reaching Stopped this fast can only be the authored fade
+    // timer elapsing, never the wave naturally finishing.
+    constexpr uint16_t kP9StopLongCueFadeOutMS = 300;
+
     // Same layout as BuildXA8XsbFixtureBytes, but referencing kLongWaveBankName and named
-    // "P9StopLongCue".
+    // "P9StopLongCue". Unlike a simple cue, this is a COMPLEX cue (CUE_FLAG_SINGLE_SOUND set)
+    // authoring a real fadeOutMS (P9-STOP-010) -- a simple cue's format has no such field at all
+    // (always 0), so it could never exercise real Stop(AsAuthored) fade timing.
     std::vector<uint8_t> BuildP9StopLongXsbFixtureBytes()
     {
         constexpr uint32_t headerSize   = 74;
@@ -360,8 +474,8 @@ namespace
 
         const uint32_t wavebankNameOffset = baseOffset;
         const uint32_t soundOffset        = wavebankNameOffset + 64;
-        const uint32_t cueSimpleOffset    = soundOffset + 12;
-        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueComplexOffset   = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueComplexOffset + 15;
         const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
         const std::string cueName = "P9StopLongCue";
 
@@ -374,8 +488,8 @@ namespace
         for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
         AppendU8(data, 0);   // platform
 
-        AppendU16(data, 1); // cueSimpleCount
-        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // cueSimpleCount
+        AppendU16(data, 1); // cueComplexCount
         AppendU16(data, 0); // unknown
         AppendU16(data, 0); // cueTotalAlign
         AppendU8(data, 1);  // wavebankCount
@@ -383,8 +497,8 @@ namespace
         AppendU16(data, 0); // cueNameLength
         AppendU16(data, 0); // unknown
 
-        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
-        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueSimpleOffset
+        AppendS32(data, static_cast<int32_t>(cueComplexOffset));
         AppendS32(data, -1); // cueNameOffset (unused by the parser)
         AppendS32(data, 0);  // unknown
         AppendS32(data, -1); // variationOffset
@@ -406,8 +520,15 @@ namespace
         AppendU16(data, 0);   // waveIdx
         AppendU8(data, 0);    // wbIdx
 
-        AppendU8(data, 0);
-        AppendU32(data, soundOffset);
+        // Complex cue "P9StopLongCue": single-sound (CUE_FLAG_SINGLE_SOUND), sbCode points
+        // directly at the one real sound above, authoring a real fadeOutMS.
+        AppendU8(data, 0x04); // flags: CUE_FLAG_SINGLE_SOUND
+        AppendU32(data, soundOffset); // sbCode
+        AppendU32(data, 0);   // transitionOffset
+        AppendU8(data, 0xFF); // instanceLimit
+        AppendU16(data, 0);   // fadeInMS
+        AppendU16(data, kP9StopLongCueFadeOutMS); // fadeOutMS
+        AppendU8(data, 0);    // maxInstanceBehavior
 
         AppendU32(data, cueNameStrOffset);
         AppendU16(data, 0);
@@ -524,6 +645,17 @@ TEST(AudioEngineTest, RendererDetailsNonEmpty)
     EXPECT_FALSE(engine.getRendererDetailsProperty().empty());
 }
 
+// P10-AUDIT-002/003: exact content, not just non-emptiness -- CNA has exactly one audio backend
+// (SDL3_mixer, no renderer-enumeration API), so RendererDetails is always this single entry.
+TEST(AudioEngineTest, RendererDetailsReportsExactlyOneSdlMixerEntry)
+{
+    AudioEngine engine(XgsFixturePath());
+    const auto& details = engine.getRendererDetailsProperty();
+    ASSERT_EQ(details.size(), 1u);
+    EXPECT_EQ(details[0].getFriendlyNameProperty(), "SDL3_mixer");
+    EXPECT_EQ(details[0].getRendererIdProperty(), "SDL3_mixer");
+}
+
 // ===================== GetCategory =====================
 
 TEST(AudioEngineTest, GetCategoryValidReturnsMatchingName)
@@ -552,18 +684,24 @@ TEST(AudioEngineTest, GetCategoryAfterDisposeThrowsObjectDisposed)
     EXPECT_THROW((void)engine.GetCategory("Default"), System::ObjectDisposedException);
 }
 
-// XA-13: a file that EXISTS but isn't a valid .xgs (bad magic/garbage) must behave the same as
-// a missing one -- construction doesn't throw, GetCategory() on any name then throws
-// InvalidOperationException (matching GetCategoryInvalidNameThrowsInvalidOperation's error), not
-// some other unhandled exception. (XA-9 decided to keep this "silent stub" behavior rather than
-// throw; this locks in that decision explicitly, on the "exists but corrupt" path specifically.)
-TEST(AudioEngineTest, ConstructorWithExistingButCorruptFileStaysInStubState)
+// P9-HARDWARE-003: matches FNA exactly (AudioEngine.cs) -- a missing settingsFile throws
+// FileNotFoundException (from TitleContainer.ReadToPointer) before any FACT call is made.
+TEST(AudioEngineTest, ConstructorWithMissingFileThrowsFileNotFound)
+{
+    const auto missing =
+        (std::filesystem::temp_directory_path() / "cna_audio_engine_test_missing.xgs").string();
+    EXPECT_THROW(AudioEngine engine(missing), System::IO::FileNotFoundException);
+}
+
+// XA-13/P9-HARDWARE-003: a file that EXISTS but isn't a valid .xgs (bad magic/garbage) matches
+// FNA's AudioEngine ctor, which checks FACTAudioEngine_Initialize's return code and throws
+// InvalidOperationException("Engine initialization failed!") (AudioEngine.cs) -- unlike a missing
+// file, this is a construction-time throw, not a lazily-discovered stub state.
+TEST(AudioEngineTest, ConstructorWithExistingButCorruptFileThrowsInvalidOperation)
 {
     const auto corrupt = WriteFixture(
         "corrupt.xgs", {'n', 'o', 't', ' ', 'a', ' ', 's', 'e', 't', 't', 'i', 'n', 'g', 's'});
-    AudioEngine engine(corrupt);
-    EXPECT_FALSE(engine.getIsDisposedProperty());
-    EXPECT_THROW((void)engine.GetCategory("Default"), System::InvalidOperationException);
+    EXPECT_THROW(AudioEngine engine(corrupt), System::InvalidOperationException);
 }
 
 // ===================== GetGlobalVariable =====================
@@ -621,11 +759,148 @@ TEST(AudioEngineTest, SetGlobalVariableAfterDisposeThrowsObjectDisposed)
     EXPECT_THROW(engine.SetGlobalVariable("Volume", 1.0f), System::ObjectDisposedException);
 }
 
+// ===================== P12-VAR-001: accessibility/clamping =====================
+
+TEST(AudioEngineTest, GetGlobalVariableRejectsCueScopedVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_THROW((void)engine.GetGlobalVariable("CueVar"), System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, SetGlobalVariableRejectsCueScopedVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_THROW(engine.SetGlobalVariable("CueVar", 1.0f), System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, GetGlobalVariableRejectsNonPublicVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_THROW((void)engine.GetGlobalVariable("PrivateVar"), System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, SetGlobalVariableRejectsNonPublicVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_THROW(engine.SetGlobalVariable("PrivateVar", 1.0f), System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, GetGlobalVariableOnReadOnlyVariableStillReadable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_FLOAT_EQ(engine.GetGlobalVariable("ReadOnlyVar"), 5.0f);
+}
+
+// Matches FACTAudioEngine_SetGlobalVariable's own READONLY rejection (FACT.c) -- FNA's C#
+// wrapper never checks this native call's return code, so a READONLY variable's
+// SetGlobalVariable() is a silent no-op in real XNA, not an exception.
+TEST(AudioEngineTest, SetGlobalVariableOnReadOnlyVariableIsSilentNoOp)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_NO_THROW(engine.SetGlobalVariable("ReadOnlyVar", 9.0f));
+    EXPECT_FLOAT_EQ(engine.GetGlobalVariable("ReadOnlyVar"), 5.0f);
+}
+
+TEST(AudioEngineTest, SetGlobalVariableClampsAboveMaximum)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    engine.SetGlobalVariable("GlobalVar", 999.0f);
+    EXPECT_FLOAT_EQ(engine.GetGlobalVariable("GlobalVar"), 10.0f);
+}
+
+TEST(AudioEngineTest, SetGlobalVariableClampsBelowMinimum)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    engine.SetGlobalVariable("GlobalVar", -999.0f);
+    EXPECT_FLOAT_EQ(engine.GetGlobalVariable("GlobalVar"), 0.0f);
+}
+
+TEST(AudioEngineTest, SetGlobalVariableWithinRangeIsNotClamped)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    engine.SetGlobalVariable("GlobalVar", 7.0f);
+    EXPECT_FLOAT_EQ(engine.GetGlobalVariable("GlobalVar"), 7.0f);
+}
+
+// "Volume" in XgsFixturePath()'s own fixture is PUBLIC-only (accessibility 0x1, engine-global)
+// -- Cue::GetVariable/SetVariable must reject it (matches FACTCue_GetVariableIndex's PUBLIC+CUE
+// requirement, FACT.c): an engine-global variable is a different, mutually-exclusive domain,
+// never reachable via the cue-level API in real XNA/FACT.
+TEST(AudioEngineTest, CueGetVariableRejectsEngineGlobalOnlyVariable)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wb(&engine, WriteFixture("var_reject.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("var_reject.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+
+    EXPECT_THROW((void)cue->GetVariable("Volume"), System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, CueSetVariableRejectsEngineGlobalOnlyVariable)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wb(&engine, WriteFixture("var_reject2.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("var_reject2.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+
+    EXPECT_THROW(cue->SetVariable("Volume", 1.0f), System::InvalidOperationException);
+}
+
+// "CueVar" in VarAccessibilityFixturePath()'s fixture IS PUBLIC|CUE -- unlike "Volume" above,
+// this one must be reachable via the cue-level API, reading back its authored initial value
+// since this fresh cue has never explicitly SetVariable()-d it (matches real FACT's per-cue
+// variableValues[i], initialized from the declared variable's own initialValue at cue creation).
+TEST(AudioEngineTest, CueGetVariableReadsCueScopedVariableInitialValue)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    WaveBank wb(&engine, WriteFixture("var_cue.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("var_cue.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+
+    EXPECT_FLOAT_EQ(cue->GetVariable("CueVar"), 5.0f);
+}
+
+TEST(AudioEngineTest, CueSetVariableClampsCueScopedVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    WaveBank wb(&engine, WriteFixture("var_cue2.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("var_cue2.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+
+    cue->SetVariable("CueVar", 999.0f);
+    EXPECT_FLOAT_EQ(cue->GetVariable("CueVar"), 10.0f);
+}
+
+TEST(AudioEngineTest, CueGetVariableRejectsPrivateVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    WaveBank wb(&engine, WriteFixture("var_private.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("var_private.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+
+    EXPECT_THROW((void)cue->GetVariable("PrivateVar"), System::InvalidOperationException);
+}
+
 // ===================== Update =====================
 
 TEST(AudioEngineTest, UpdateDoesNotThrow)
 {
     AudioEngine engine(XgsFixturePath());
+    EXPECT_NO_THROW(engine.Update());
+}
+
+// P10-XACT-007: unlike GetCategory/GetGlobalVariable/SetGlobalVariable above, Update() does NOT
+// check isDisposed_ and throw -- it relies on Dispose() having reset xactImpl_ to null, and
+// early-returns before touching anything. This is a deliberate asymmetry (matching neither FNA,
+// which has no IsDisposed guard on ANY of these -- see AudioEngine.cs's Update(), a raw
+// FACTAudioEngine_DoWork call with no null/disposed check at all, undefined behavior if disposed):
+// throwing here would penalize the common "call Update() every frame regardless of teardown
+// order" game-loop pattern for a call that CNA can already make perfectly safe. Locking down the
+// current, deliberate behavior with a regression test rather than leaving it unverified.
+TEST(AudioEngineTest, UpdateAfterDisposeDoesNotThrow)
+{
+    AudioEngine engine(XgsFixturePath());
+    engine.Dispose();
     EXPECT_NO_THROW(engine.Update());
 }
 
@@ -727,6 +1002,61 @@ TEST(AudioEngineTest, StopAsAuthoredDoesNotUnregisterFromAudioEngineWhileTailSti
         cue->Stop(AudioStopOptions::Immediate);
         EXPECT_TRUE(cue->getIsStoppedProperty());
         EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(engine), 0u);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// P9-STOP-010: AudioEngine::Update() must progress an in-progress authored fade on its own --
+// not just whenever some other code happens to query a getter on the cue (which would also
+// reconcile it, making a getter-based check unable to prove Update() specifically did the work).
+// CueTestAccess::ActiveInstance() is a raw field read, not a getter, so calling engine.Update()
+// as the *only* thing between Stop(AsAuthored) and reading the instance's volume back proves
+// Update() itself ticked the fade forward, matching real FACT games calling AudioEngine.Update()
+// every frame to keep every active fade progressing.
+TEST(AudioEngineTest, UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQuery)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioEngine engine(XgsFixturePath());
+        WaveBank wb(&engine, WriteFixture("p9stop_long_update.xwb", BuildP9StopLongXwbFixtureBytes()));
+        SoundBank sb(&engine, WriteFixture("p9stop_long_update.xsb", BuildP9StopLongXsbFixtureBytes()));
+
+        std::unique_ptr<Cue> cue(sb.GetCue("P9StopLongCue"));
+        cue->Play();
+
+        SoundEffectInstance* preStop = CueTestAccess::ActiveInstance(*cue, 0);
+        if (!preStop)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        const float startVolume = preStop->getVolumeProperty();
+        // P11-TEST-001: exact value, not just non-zero -- both the sound's and category 0's
+        // volume bytes are 0xFF, whose log-centibel amplitude conversion exceeds 1.0
+        // individually, so the combined pre-fade volume clamps to exactly 1.0 (see the fade
+        // comment below for the same 0xFF/0xFF fixture detail).
+        ASSERT_FLOAT_EQ(startVolume, 1.0f);
+
+        cue->Stop(AudioStopOptions::AsAuthored);
+
+        // 80% elapsed: see CueTests.cpp's StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration
+        // for why this needs to be well past 50% (both the sound's and category 0's volume bytes
+        // are 0xFF, whose log-centibel amplitude conversion exceeds 1.0 individually, so their
+        // product needs the fade multiplier below ~0.25 before the [0,1] clamp stops masking it).
+        std::this_thread::sleep_for(std::chrono::milliseconds(kP9StopLongCueFadeOutMS * 4 / 5));
+        engine.Update(); // the ONLY tick between Stop() and the readback below
+
+        SoundEffectInstance* postUpdate = CueTestAccess::ActiveInstance(*cue, 0);
+        ASSERT_NE(postUpdate, nullptr);
+        EXPECT_LT(postUpdate->getVolumeProperty(), startVolume);
+
+        cue->Stop(AudioStopOptions::Immediate); // clean up rather than leaking a Stopping cue
     }
     catch (...)
     {

@@ -99,6 +99,43 @@ namespace
         return wav;
     }
 
+    // Same as BuildMinimalWavBytes, but with "fmt " chunk's audioFormat set to an unsupported
+    // format tag (0x2000, a reserved/unused value -- not PCM(1), IEEE float(3), or WAVE_FORMAT_
+    // EXTENSIBLE(0xFFFE)) -- P10-SE-002 fixture for FromStream's unsupported-codec path.
+    std::vector<uint8_t> BuildWavBytesWithUnsupportedFormatTag()
+    {
+        std::vector<uint8_t> wav = BuildMinimalWavBytes();
+        constexpr std::size_t audioFormatOffset = 20; // "RIFF"+size+"WAVE"+"fmt "+size = 20
+        constexpr uint16_t unsupportedFormatTag  = 0x2000;
+        std::memcpy(wav.data() + audioFormatOffset, &unsupportedFormatTag, 2);
+        return wav;
+    }
+
+    // Same as BuildMinimalWavBytes, but the "fmt " chunk is truncated: its declared chunk size
+    // (16) is left unchanged, but the file itself ends partway through those 16 bytes, with no
+    // "data" chunk at all -- P10-SE-002 fixture for a malformed/truncated fmt chunk.
+    std::vector<uint8_t> BuildWavBytesWithTruncatedFmtChunk()
+    {
+        std::vector<uint8_t> wav;
+        tag(wav, "RIFF"); w32(wav, 4 + 8 + 16);
+        tag(wav, "WAVE");
+        tag(wav, "fmt "); w32(wav, 16); // declares 16 bytes of fmt payload
+        w16(wav, 1); w16(wav, 1); // audioFormat=PCM, channels=1 -- only 4 of the 16 bytes follow
+        return wav;
+    }
+
+    // Same as BuildMinimalWavBytes, but the "data" chunk's declared size (audioLen) is far larger
+    // than the number of sample bytes actually present in the file -- P10-SE-002 fixture for a
+    // malformed/truncated data chunk.
+    std::vector<uint8_t> BuildWavBytesWithTruncatedDataChunk()
+    {
+        std::vector<uint8_t> wav = BuildMinimalWavBytes();
+        constexpr uint32_t claimedAudioLen = 4410 * 100; // wildly exceeds what's really present
+        constexpr std::size_t dataSizeOffset = 12 + 8 + 16 + 4; // offset of "data"'s size field
+        std::memcpy(wav.data() + dataSizeOffset, &claimedAudioLen, 4);
+        return wav;
+    }
+
     // Same as BuildMinimalWavBytes, but with a trailing "smpl" chunk (one sample loop) after the
     // "data" chunk -- regression fixture for CP-17's FromStream loop-point parsing.
     std::vector<uint8_t> BuildWavBytesWithSmplChunk(uint32_t loopStartSample, uint32_t loopEndSample)
@@ -315,6 +352,59 @@ TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionToInstance)
     instance.Play(); // must not throw/crash with a real loop region applied
 }
 
+// P10-LOOP-005: loop region covering the entire sound (loopStart==0, loopLength==full frame
+// count) is a distinct edge case from the default all-zero "loop everything" region -- confirms
+// an explicitly-authored full-length region also propagates correctly and doesn't crash Play().
+TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionCoveringEntireSound)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
+    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
+                       0, 1000);
+
+    SoundEffectInstance instance = effect.CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 0u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 1000u);
+
+    instance.setIsLoopedProperty(true);
+    instance.Play();
+}
+
+// P10-LOOP-005: loopStart+loopLength landing exactly at the sample's full length (with a nonzero
+// start) is distinct from both the all-zero default and the start==0 full-cover case above.
+TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionEndingExactlyAtFullLength)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
+    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
+                       200, 800); // 200 + 800 == 1000, the full frame count
+
+    SoundEffectInstance instance = effect.CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 200u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 800u);
+
+    instance.setIsLoopedProperty(true);
+    instance.Play();
+}
+
+// P9-VALIDATION-002: an explicitly-invalid loop region (start+length exceeding the sample's
+// actual frame count) is intentionally NOT validated/clamped, matching FNA's own ctor -- the
+// values must still propagate exactly as given, and Play() must not throw or crash.
+TEST(SoundEffectTest, BufferRangeConstructorAcceptsLoopRegionExceedingActualSampleLength)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
+    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
+                       900, 5000); // 900 + 5000 far exceeds the 1000-frame sample
+
+    SoundEffectInstance instance = effect.CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 900u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 5000u);
+
+    instance.setIsLoopedProperty(true);
+    instance.Play(); // must not throw/crash despite the region exceeding the buffer
+}
+
 // ===================== FromStream (headless) =====================
 
 TEST(SoundEffectTest, FromStreamEmptyThrowsNotSupported)
@@ -362,7 +452,9 @@ TEST(SoundEffectTest, FromStreamValidWavSucceedsAndReportsNonzeroDuration)
 
     ASSERT_TRUE(fx != nullptr);
     EXPECT_FALSE(fx->getIsDisposedProperty());
-    EXPECT_GT(fx->getDurationProperty().getTotalSecondsProperty(), 0.0);
+    // P11-TEST-001: exact value, not just non-zero -- BuildMinimalWavBytes()'s 4410 frames at
+    // 44100Hz is exactly 0.1 seconds.
+    EXPECT_NEAR(fx->getDurationProperty().getTotalSecondsProperty(), 0.1, 1e-6);
 }
 
 // CP-17: FromStream must parse a WAV's "smpl" chunk into a real loop region, matching FNA's own
@@ -454,6 +546,81 @@ TEST(SoundEffectTest, FromStreamWithTruncatedSmplChunkDoesNotCrash)
     EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 0u);
 }
 
+// P10-SE-002: a WAV whose "fmt " chunk declares an audioFormat tag the underlying decoder does
+// not support must be rejected the same way plain garbage bytes are, not silently misread.
+TEST(SoundEffectTest, FromStreamUnsupportedFormatTagThrowsNotSupported)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto bytes = BuildWavBytesWithUnsupportedFormatTag();
+    std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    std::istringstream stream(s);
+
+    try
+    {
+        SoundEffect* loaded = SoundEffect::FromStream(stream);
+        delete loaded;
+        FAIL() << "expected an exception for an unsupported WAV format tag";
+    }
+    catch (const System::NotSupportedException&)
+    {
+        SUCCEED();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
+}
+
+// P10-SE-002: a WAV whose "fmt " chunk is truncated (declares 16 bytes of payload but the file
+// ends partway through them, with no "data" chunk at all) must be rejected, not overread.
+TEST(SoundEffectTest, FromStreamTruncatedFmtChunkThrowsNotSupported)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto bytes = BuildWavBytesWithTruncatedFmtChunk();
+    std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    std::istringstream stream(s);
+
+    try
+    {
+        SoundEffect* loaded = SoundEffect::FromStream(stream);
+        delete loaded;
+        FAIL() << "expected an exception for a truncated fmt chunk";
+    }
+    catch (const System::NotSupportedException&)
+    {
+        SUCCEED();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
+}
+
+// P10-SE-002: a WAV whose "data" chunk declares far more audio bytes than are actually present
+// in the file must be rejected, not read past the real end of the buffer.
+TEST(SoundEffectTest, FromStreamTruncatedDataChunkThrowsNotSupported)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    auto bytes = BuildWavBytesWithTruncatedDataChunk();
+    std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    std::istringstream stream(s);
+
+    try
+    {
+        SoundEffect* loaded = SoundEffect::FromStream(stream);
+        delete loaded;
+        FAIL() << "expected an exception for a truncated data chunk";
+    }
+    catch (const System::NotSupportedException&)
+    {
+        SUCCEED();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "audio device unavailable; could not exercise the decode path";
+    }
+}
+
 // ===================== path constructor (NOXNA) =====================
 
 TEST(SoundEffectTest, ConstructFromEmptyPathIsNoOp)
@@ -490,7 +657,9 @@ TEST(SoundEffectTest, ConstructFromBufferAndProperties)
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
     EXPECT_FALSE(fx->getIsDisposedProperty());
-    EXPECT_GT(fx->getDurationProperty().getTotalSecondsProperty(), 0.0);
+    // P10-AUDIT-002/003: exact value, not just non-zero -- makeEffect()'s 1024 stereo S16 frames
+    // at 44100Hz is 1024/44100 seconds.
+    EXPECT_NEAR(fx->getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
 }
 
 TEST(SoundEffectTest, NameGetSet)
@@ -568,6 +737,25 @@ TEST(SoundEffectTest, PlayReturnsTrue)
     if (!fx) GTEST_SKIP() << "no audio device";
     EXPECT_TRUE(fx->Play());
     EXPECT_TRUE(fx->Play(0.5f, 0.0f, 0.25f));
+}
+
+// P11-PAN-002 (RFC-1 for the fire-and-forget path): hard pan (pan = ±1) is exactly the case that
+// used to hard-eliminate the opposite channel outright (CHECKLIST.md CP-19) before this fix
+// registered a real crossfeed-matrix cooked callback on the fire-and-forget track (matching
+// P11-PAN-001's design for SoundEffectInstance -- SoundEffect::Play() computes the matrix once,
+// via the same SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix already unit-tested by
+// P11-PAN-001's SoundEffectInstanceFilterMathTest suite). This is a smoke/non-crash test, not a
+// sample-level verification -- the fire-and-forget path exposes no way for a test to reach the
+// MIX_Track it internally creates and destroys (same limitation P12-PITCH-001 already noted for
+// this exact call path), so the underlying matrix math's correctness is what P11-PAN-001's own
+// pure-math tests already establish; this only proves the new cooked-callback registration/
+// stereo-forcing plumbing doesn't crash across the full pan range, including both hard extremes.
+TEST(SoundEffectTest, PlayWithHardPanDoesNotCrash)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    EXPECT_TRUE(fx->Play(1.0f, 0.0f, 1.0f));
+    EXPECT_TRUE(fx->Play(1.0f, 0.0f, -1.0f));
 }
 
 TEST(SoundEffectTest, PlayThrowsOnPanOutOfRange)

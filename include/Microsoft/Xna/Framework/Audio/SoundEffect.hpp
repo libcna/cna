@@ -181,7 +181,8 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Gets the Doppler effect scale factor.
          *
-         * SDL3_mixer does not implement Doppler; this value is stored but not applied.
+         * Applied as a real closed-form pitch-shift factor in Apply3D (matches FAudio's
+         * F3DAudio.c CalculateDoppler exactly), not a native SDL3_mixer Doppler feature.
          *
          * @return Doppler scale factor.
          */
@@ -197,7 +198,8 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Gets the speed of sound used in Doppler calculations.
          *
-         * SDL3_mixer does not implement Doppler; this value is stored but not applied.
+         * Applied as a real closed-form pitch-shift factor in Apply3D (matches FAudio's
+         * F3DAudio.c CalculateDoppler exactly), not a native SDL3_mixer Doppler feature.
          *
          * @return Speed of sound in units per second.
          */

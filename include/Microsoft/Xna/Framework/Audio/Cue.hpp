@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/Audio/XactTypes.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -78,7 +80,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Gets the value of a per-cue XACT variable.
          *
          * @param name Variable name as defined in the SoundBank, or one of the built-in
-         *        3D variables ("Distance", "DopplerPitchScalar", "OrientationAngle").
+         *        cue variables ("Distance", "DopplerPitchScalar", "OrientationAngle",
+         *        "AttackTime", "ReleaseTime").
          * @return Current value of the variable.
          * @throws System::ObjectDisposedException if the cue has been disposed.
          * @throws System::ArgumentNullException if @p name is empty.
@@ -90,7 +93,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets the value of a per-cue XACT variable.
          *
          * @param name  Variable name as defined in the SoundBank, or one of the built-in
-         *        3D variables ("Distance", "DopplerPitchScalar", "OrientationAngle").
+         *        cue variables ("Distance", "DopplerPitchScalar", "OrientationAngle",
+         *        "AttackTime", "ReleaseTime").
          * @param value New value.
          * @throws System::ObjectDisposedException if the cue has been disposed.
          * @throws System::ArgumentNullException if @p name is empty.
@@ -128,7 +132,7 @@ namespace Microsoft::Xna::Framework::Audio
         friend class AudioEngine;
         Cue(std::string name, SoundBank* bank, uint16_t cueIndex);
 
-        enum class State { Created, Preparing, Prepared, Playing, Pausing, Paused, Stopping, Stopped };
+        enum class State { Created, Preparing, Prepared, Playing, Stopping, Stopped };
 
         std::string name_;
         SoundBank*  bank_;
@@ -137,12 +141,88 @@ namespace Microsoft::Xna::Framework::Audio
         State       state_      = State::Created;
         bool        isDisposed_ = false;
 
+        // P9-LIFECYCLE-013: real FACT (FACTCue_Pause, FACT.c) only ever sets/clears the PAUSED
+        // bit -- it never touches PLAYING, so a cue can be IsPlaying==true and IsPaused==true at
+        // the same time in real XNA/FNA. Modeled as an independent flag layered on top of
+        // State::Playing (rather than a separate mutually-exclusive State::Paused value) so
+        // getIsPlayingProperty()/getIsPausedProperty() can both be true simultaneously, matching
+        // FACT's bitmask semantics instead of a single-value enum.
+        bool        paused_     = false;
+
+        // P9-STOP-010: real authored fadeOutMS timing for Stop(AsAuthored). Only meaningful
+        // while state_ == State::Stopping and fadeOutMS_ > 0 -- see StopInternal()/
+        // ReconcileState() for how these drive the linear volume ramp and the eventual
+        // Stopping -> Stopped transition, matching FAudio's SOUND_STATE_FADE_OUT handling
+        // (FACT_INTERNAL_UpdateSound, FACT_internal.c) instead of waiting for the underlying
+        // wave to naturally finish.
+        std::chrono::steady_clock::time_point fadeStart_{};
+        uint16_t    fadeOutMS_  = 0;
+
+        // P9-CATEGORY-005/007/008: real category-level instanceLimit enforcement (see
+        // AudioEngine::CheckCategoryInstanceLimit(), called from Play()). fadeInMS_/fadeInStart_
+        // drive a linear fade-in ramp the same way fadeStart_/fadeOutMS_ already drive the
+        // fade-out ramp above, matching FACT_INTERNAL_UpdateSound's SOUND_STATE_FADE_IN handling
+        // (FACT_internal.c) -- only meaningful while state_ == State::Playing and fadeInMS_ > 0.
+        // priority_ is this cue's resolved sound priority (XsbSound::priority), captured at
+        // Play() time so a category's REPLACE_LOWEST_PRIORITY behavior can compare it against
+        // other currently-playing cues in the same category without re-reading the .xsb.
+        std::chrono::steady_clock::time_point fadeInStart_{};
+        uint16_t    fadeInMS_   = 0;
+        uint8_t     priority_   = 0;
+
+        // P10-RPC-003: real elapsed-time tracking for the built-in "AttackTime" RPC variable,
+        // matching FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c), which feeds the elapsed
+        // milliseconds since the cue started playing directly as an "AttackTime"-bound RPC
+        // curve's x-domain value. Captured once in Play(), right before every path that
+        // transitions to State::Playing. Not pause-adjusted, matching fadeStart_/fadeInStart_'s
+        // same existing simplification.
+        std::chrono::steady_clock::time_point playStart_{};
+
+        // P10-RPC-004: this cue's RPC-only release duration in milliseconds, computed once in
+        // Play() by scanning rpcCodes_ for a curve bound to a variable literally named
+        // "ReleaseTime" that targets RPC_PARAMETER_VOLUME, taking the max curve-point x value
+        // across all matches -- matches FAudio's FACT_internal.c:790-815
+        // (`cue->maxRpcReleaseTime`). StopInternal() consults this when the cue has no authored
+        // fadeOutMS, to decide whether Stop(AsAuthored) enters a real RPC-only release phase
+        // (FAudio's SOUND_STATE_RELEASE_RPC) instead of hard-stopping immediately.
+        uint32_t    maxRpcReleaseTime_ = 0;
+
+        // P10-RPC-004: only meaningful while state_ == State::Stopping AND releaseRpcMS_ > 0 --
+        // this cue's genuine RPC-only release phase, distinct from the authored fadeOutMS_/
+        // fadeStart_ tail above. Entered from StopInternal() when maxRpcReleaseTime_ > 0 but no
+        // authored fadeOutMS was authored. Unlike the authored fade, ReconcileState() applies no
+        // extra volume ramp of its own here -- FAudio's SOUND_STATE_RELEASE_RPC holds fadeVolume
+        // at a constant 1.0f (FACT_internal.c), leaving a "ReleaseTime"-bound RPC curve itself
+        // (evaluated live by EvaluateRpc() while in this phase) to shape the volume, if any.
+        std::chrono::steady_clock::time_point releaseStart_{};
+        uint32_t    releaseRpcMS_ = 0;
+
+        // P9-XACT-016: retained (captured once, at Play() time, from the resolved XsbSound) so
+        // ReconcileState() can continuously re-evaluate bound RPC (Runtime Parameter Control)
+        // curves every tick instead of only once at Play() -- matches FACT_INTERNAL_UpdateRPCs
+        // (FACT_internal.c), which recomputes fresh every engine tick rather than diffing.
+        // rpcCodes_ mirrors XsbSound::rpcCodes (whole-sound level only, same simplification
+        // already accepted for the one-shot version); basePitchCents_ is the sound's own
+        // authored pitchCents, recombined with a freshly-evaluated RPC pitch result every tick.
+        std::vector<uint32_t> rpcCodes_;
+        int16_t     basePitchCents_ = 0;
+
         std::unordered_map<std::string, float> variables_;
 
         struct PlaybackInstance
         {
             std::unique_ptr<SoundEffectInstance> instance;
             float baseVolume = 1.0f; // waveRef.volume, before category volume is combined in
+
+            // P11-XACT-003: PlayWaveEffectVariation-family per-play randomization, drawn once at
+            // Play() time (CNA's "first activation only" scope, matching P11-XACT-002's own
+            // precedent) and re-folded into every subsequent volume/pitch reapplication site
+            // (ReconcileState()'s fade/release/steady-state branches, ApplyCategoryVolume) so a
+            // later tick doesn't silently drop the randomized offset back to the plain authored
+            // value. Defaults are exact no-ops (1.0f multiplier, 0.0f cents), so an instance with
+            // no effect variation behaves identically to before this task.
+            float effectVolumeMultiplier = 1.0f; // amplitude ratio
+            float effectPitchCentsDelta  = 0.0f;  // cents
         };
         std::vector<PlaybackInstance> active_;
 
@@ -151,6 +231,16 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<WaveBank*> waveBanksUsed_;
 
         void StopInternal(bool immediate);
+
+        // P9-CATEGORY-005/007: called by AudioEngine::CheckCategoryInstanceLimit() when this cue
+        // is chosen as the victim to make room for a new cue exceeding its category's
+        // instanceLimit. Reuses the exact Stopping/fadeOutMS_ ramp ReconcileState() already
+        // implements for Stop(AsAuthored) (P9-STOP-010) -- a real FACT category-authored
+        // fadeOutMS produces the identical audible fade-out shape as a per-cue authored one, only
+        // the trigger differs. A zero fadeOutMS hard-stops immediately, matching
+        // FACT_INTERNAL_BeginFadeOut's effectively-instant behavior for fadeOutMS == 0
+        // (FACT_internal.c).
+        void ForceFadeOutForInstanceLimit(uint16_t fadeOutMS);
 
         // P9-LIFECYCLE-001/002: lazily reconciles state_ from Playing to Stopped once every
         // instance in active_ has finished naturally (no explicit Stop() call) -- matches FNA,
@@ -164,9 +254,77 @@ namespace Microsoft::Xna::Framework::Audio
         // StopInternal() (explicit Stop()/Dispose(), or SoundBank's fire-and-forget sweep).
         void ReconcileState() const;
 
+        // P12-VAR-001: internal-only variable resolution for RPC curve evaluation and
+        // INTERACTIVE variation-table selection (EvaluateRpc()/Play() below) -- matches FAudio's
+        // own asymmetry here (FACT_internal.c): unlike the PUBLIC GetVariable()/SetVariable()
+        // below, which reject a non-cue-scoped name outright (FACTCue_GetVariableIndex requires
+        // PUBLIC+CUE), internal engine bookkeeping reads a variable's current value regardless of
+        // which domain (cue-scoped or engine-global) it belongs to -- FACT_internal.c's
+        // get_active_variation_index explicitly dispatches to FACTCue_GetVariable or
+        // FACTAudioEngine_GetGlobalVariable depending on the ACCESSIBILITY_CUE bit, exactly what
+        // this reproduces. Falls back to 0.0f for a name that resolves to neither domain (should
+        // not happen for a real RPC/variation-table variable index, but stays defensive rather
+        // than throwing from deep inside tick-driven internal evaluation).
+        [[nodiscard]] float GetVariableForRpc(const std::string& name) const;
+
+        // P9-XACT-016/P10-FILTER-002/003: result of evaluating every curve in rpcCodes_ against
+        // each curve's bound variable's *current* value -- volumeMultiplier is an amplitude ratio
+        // (1.0f == no-op), pitch is already in XNA's [-1,1] range (CentsToPitch already applied).
+        // filterFrequencyHz/filterQFactor default to -1.0f (matching FAudio's own sentinel,
+        // FACT_internal.c) meaning "no RPC curve targets this axis" -- unlike volume/pitch, a
+        // filter-targeting RPC's result is a plain overwrite (last curve evaluated wins), never
+        // summed across multiple bound curves, matching FAudio's own "Yes, just overwrite..."
+        // comment. Called once at Play() time and continuously thereafter from ReconcileState().
+        struct RpcResult
+        {
+            float volumeMultiplier;
+            float pitch;
+            // P11-XACT-003: the raw combined cents sum `pitch` was itself converted from
+            // (basePitchCents_ + the summed RPC pitch curve result), exposed so a per-instance
+            // PlayWaveEffectVariation pitch delta (PlaybackInstance::effectPitchCentsDelta) can
+            // be added in before one shared CentsToPitch() conversion, instead of re-deriving the
+            // sum from scratch at every reapplication site. For an instance with no
+            // effect-variation pitch offset, CentsToPitch(pitchCentsBeforeConversion + 0.0f) ==
+            // pitch exactly.
+            float pitchCentsBeforeConversion = 0.0f;
+            float filterFrequencyHz = -1.0f;
+            float filterQFactor     = -1.0f;
+        };
+        [[nodiscard]] RpcResult EvaluateRpc() const;
+
         // Re-applies a new category volume to all currently active instances, recombining it
         // with each instance's stored baseVolume (see AudioEngine::SetCategoryVolumeInternal).
         void ApplyCategoryVolume(float catVol);
+
+        // P10-VAR-004: reseeds the file-local RNG (Cue.cpp's anonymous-namespace `Rng()`, shared
+        // by every Cue -- matching FAudio's own single process-wide RNG state, FACT_INTERNAL_rng)
+        // used for non-interactive weighted variation selection. Test-only: lets a test compute
+        // an expected pick independently (seeding an identical std::mt19937 + distribution in the
+        // test itself) and cross-check it against Cue::Play()'s real, deterministic-for-a-known-
+        // seed outcome, instead of relying on an unseeded std::random_device draw every run.
+        NOXNA static void INTERNAL_seedRngForTest(unsigned int seed);
+
+        // P11-XACT-002: test-only entry point for the PlayWaveTrackVariation-family selection
+        // algorithm (Cue.cpp's anonymous-namespace SelectTrackVariationIndex), so its exact
+        // Ordered/OrderedFromRandom/Random/RandomNoRepeats/Shuffle behavior can be unit-tested
+        // directly against a synthetic entry list, without needing a full XACT fixture wired
+        // through Cue::Play() for every case. Reuses the same shared Rng() INTERNAL_seedRngForTest
+        // above reseeds, for deterministic-for-a-known-seed test outcomes.
+        NOXNA static std::size_t INTERNAL_selectTrackVariationIndexForTest(
+            const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
+            CNA::Internal::Audio::XsbTrackVariationType type);
+
+        // P11-XACT-003: test-only entry point for the PlayWaveEffectVariation-family randomization
+        // algorithm (Cue.cpp's anonymous-namespace ApplyEffectVariation), so its exact pitch/
+        // volume/filter draws can be unit-tested directly against a synthetic XsbWaveRef, without
+        // needing a full XACT fixture wired through Cue::Play() for every axis/flag combination.
+        // Out-params (not a return-by-value struct) since ApplyEffectVariation's own result type
+        // is anonymous-namespace-private to Cue.cpp. Reuses the same shared Rng()
+        // INTERNAL_seedRngForTest above reseeds, for deterministic-for-a-known-seed test outcomes.
+        NOXNA static void INTERNAL_applyEffectVariationForTest(
+            const CNA::Internal::Audio::XsbWaveRef& waveRef,
+            float& pitchCentsDelta, float& volumeAmplitudeMultiplier,
+            bool& hasFilterOverride, float& filterFrequencyHz, float& filterQFactor);
 
         // Tests need to observe which sound a variation table selected (via the category
         // index it carries) without a real WaveBank/audio device backing playback.

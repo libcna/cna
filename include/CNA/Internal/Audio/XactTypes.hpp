@@ -28,6 +28,12 @@ namespace CNA::Internal::Audio
         uint16_t    fadeInMS;
         /** @brief Fade-out duration in milliseconds. */
         uint16_t    fadeOutMS;
+        /**
+         * @brief Behavior applied when a new cue would exceed instanceLimit: 0=fail (reject the
+         * new cue), 1=queue, 2=replace oldest, 3=replace quietest, 4=replace lowest priority.
+         * Matches FAudio's own max_instance_behavior enum (FACT_internal.h).
+         */
+        uint8_t     maxInstanceBehavior;
     };
 
     /** @brief One global variable entry parsed from a .XGS global settings file. */
@@ -41,7 +47,13 @@ namespace CNA::Internal::Audio
         float       minValue;
         /** @brief Maximum allowed value. */
         float       maxValue;
-        /** @brief Accessibility flags: bit0=public, bit1=global, bit2=read-only. */
+        /**
+         * @brief Accessibility flags, matching FAudio's ACCESSIBILITY_* bit values exactly
+         * (FACT_internal.h): 0x1=public, 0x2=read-only, 0x4=cue-scoped. A variable is either
+         * engine-global (public, cue-scoped bit clear -- AudioEngine::GetGlobalVariable/
+         * SetGlobalVariable) or cue-scoped (public and cue-scoped bits both set --
+         * Cue::GetVariable/SetVariable), never both; read-only only blocks writes, not reads.
+         */
         uint8_t     accessibility;
     };
 
@@ -144,6 +156,35 @@ namespace CNA::Internal::Audio
 
     // ── XSB ─────────────────────────────────────────────────────────────────
 
+    /**
+     * @brief Selection algorithm for a `PlayWaveTrackVariation`-family event's candidate wave
+     * list, matching FAudio's own `variation_type` values (`FACT_internal.h`).
+     */
+    enum class XsbTrackVariationType : uint8_t
+    {
+        /** @brief Cycle through entries in authored order, wrapping at the end. */
+        Ordered = 0,
+        /** @brief Like Ordered, but the starting point is chosen by a weighted random pick. */
+        OrderedFromRandom = 1,
+        /** @brief Weighted random pick among all entries every time. */
+        Random = 2,
+        /** @brief Weighted random pick, excluding whichever entry was just selected. */
+        RandomNoRepeats = 3,
+        /** @brief Same selection rule as RandomNoRepeats (FAudio treats both identically). */
+        Shuffle = 4,
+    };
+
+    /** @brief One candidate wave entry in a `PlayWaveTrackVariation`-family event's variation list. */
+    struct XsbTrackVariationEntry
+    {
+        /** @brief Index of the wave within its wave bank. */
+        uint16_t waveIndex;
+        /** @brief Index of the wave bank this wave belongs to. */
+        uint8_t  wavebankIndex;
+        /** @brief Selection weight (authored maxWeight - minWeight), matching FAudio's own conversion. */
+        uint8_t  weight;
+    };
+
     /** @brief Reference to a single wave, as resolved from a sound's track events. */
     struct XsbWaveRef
     {
@@ -155,6 +196,66 @@ namespace CNA::Internal::Audio
         uint8_t  loopCount;
         /** @brief Per-track amplitude, already combined with the sound's own volume. */
         float    volume;
+        /**
+         * @brief This track's filter type: 0=low-pass, 1=band-pass, 2=high-pass (matches
+         * FAudioFilterType); 0xFF = no filter on this track. Only ever populated for complex
+         * sounds (see XactParser.cpp's per-track metadata parsing); simple sounds never carry
+         * filter data in the format at all. FAudio's own bit-decode of the source filterData
+         * field structurally never produces 1 (band-pass) -- replicated as-is, see P9-XACT-010.
+         */
+        uint8_t  filterType = 0xFF;
+        /** @brief Desired filter cutoff frequency in Hz, as authored. Valid only when filterType != 0xFF. */
+        uint16_t filterFrequencyHz = 0;
+        /**
+         * @brief Raw XACT Q-factor byte (0..255). Converted to FAudioFilterParameters::OneOverQ
+         * via min(3.0f / qfactor, 1.0f) at apply time (FACT_internal.c). Valid only when
+         * filterType != 0xFF.
+         */
+        uint8_t  filterQFactorRaw = 0;
+
+        /**
+         * @brief Full candidate list for a `PlayWaveTrackVariation`-family event
+         * (`P11-XACT-002`), matching FAudio's own per-instance selection
+         * (`FACT_internal.c`'s `FACT_INTERNAL_GetNextWave`). Empty for a plain `PlayWave`/
+         * `PlayWaveEffectVariation` event -- in that case @ref waveIndex/@ref wavebankIndex
+         * above are used directly, unchanged. When non-empty, the real selection algorithm
+         * (@ref trackVariationType) is run once at `Cue::Play()` time and the chosen entry
+         * overwrites @ref waveIndex/@ref wavebankIndex, instead of this struct's own
+         * always-entry-0 parse-time fallback.
+         */
+        std::vector<XsbTrackVariationEntry> trackVariationEntries;
+        /** @brief Selection algorithm for @ref trackVariationEntries; meaningless when that list is empty. */
+        XsbTrackVariationType trackVariationType = XsbTrackVariationType::Ordered;
+
+        /**
+         * @brief `variationFlags` bitmask for a `PlayWaveEffectVariation`-family event
+         * (`P11-XACT-003`), matching FAudio's own `VARIATION_FLAG_PITCH`/`VARIATION_FLAG_VOLUME`/
+         * `VARIATION_FLAG_FREQUENCY_Q` bits (`FACT_internal.h`). Zero (the default) means "no
+         * per-play randomization on any axis" -- true for every plain `PlayWave`/
+         * `PlayWaveTrackVariation` event, not just ones that happen to author an empty range.
+         */
+        uint16_t effectVariationFlags = 0;
+        /** @brief Authored pitch-randomization range, in cents (matches FAudio's raw int16 units). Meaningful only when @ref effectVariationFlags has the pitch bit set. */
+        int16_t effectMinPitch = 0;
+        /** @brief See @ref effectMinPitch. */
+        int16_t effectMaxPitch = 0;
+        /** @brief Authored volume-randomization range, in centibels (matches FAudio's `read_volbyte` units). Meaningful only when @ref effectVariationFlags has the volume bit set. */
+        float effectMinVolume = 0.0f;
+        /** @brief See @ref effectMinVolume. */
+        float effectMaxVolume = 0.0f;
+        /** @brief Authored filter cutoff frequency-randomization range, in Hz. Meaningful only when @ref effectVariationFlags has the frequency/Q bit set. */
+        float effectMinFrequency = 0.0f;
+        /** @brief See @ref effectMinFrequency. */
+        float effectMaxFrequency = 0.0f;
+        /**
+         * @brief Authored filter Q-factor-randomization range, already in reciprocal-ready Q
+         * units, unlike the per-track @ref filterQFactorRaw byte (which needs the
+         * raw-byte-decode formula `min(3.0f/qfactor, 1.0f)` instead of a plain reciprocal).
+         * Meaningful only when @ref effectVariationFlags has the frequency/Q bit set.
+         */
+        float effectMinQFactor = 0.0f;
+        /** @brief See @ref effectMinQFactor. */
+        float effectMaxQFactor = 0.0f;
     };
 
     /** @brief One sound entry parsed from a .XSB sound bank file. */
@@ -224,6 +325,31 @@ namespace CNA::Internal::Audio
         uint32_t soundIndex;
         /** @brief Index into XsbData::variations; valid when isSingleSound is false. */
         uint32_t varIndex;
+        /**
+         * @brief Authored release fade duration in milliseconds (P9-STOP-010), 0 if none.
+         *
+         * Only present on a COMPLEX cue record; a "simple" cue's format has no such field at all
+         * (matches FAudio's FACT_internal.c, which hardcodes 0 for simple cues).
+         */
+        uint16_t fadeOutMS = 0;
+        /**
+         * @brief Maximum concurrent instances allowed for this specific cue definition
+         * (cue-level instanceLimit, independent of any category-level limit).
+         *
+         * Defaults to 0xFF (effectively unlimited), matching FAudio's own hardcoded default for
+         * a "simple" cue record, which has no such field at all (`FACT_internal.c`).
+         */
+        uint8_t  instanceLimit = 0xFF;
+        /** @brief Authored fade-in duration in milliseconds when this cue's own instanceLimit forces a fade-in; 0 for a simple cue. */
+        uint16_t fadeInMS = 0;
+        /**
+         * @brief Behavior applied when this cue's own instanceLimit would be exceeded: same
+         * encoding as XgsCategory::maxInstanceBehavior (0=fail, 1=queue, 2=replace oldest,
+         * 3=replace quietest, 4=replace lowest priority). Defaults to 0 (fail), matching
+         * FAudio's hardcoded default for a simple cue -- irrelevant there since instanceLimit
+         * defaults to 0xFF (never reached).
+         */
+        uint8_t  maxInstanceBehavior = 0;
     };
 
     /** @brief Parsed contents of a .XSB sound bank file. */

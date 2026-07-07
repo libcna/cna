@@ -12,6 +12,7 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/EventArgs.hpp"
+#include "System/TimeSpan.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstance;
@@ -53,6 +54,57 @@ TEST(DynamicSoundEffectInstanceTest, ConstructionDefaultState)
     EXPECT_FALSE(d.getIsLoopedProperty());
 }
 
+// P10-DYN-001/002/003 (2026-07-06 audit, Phase 10): real FNA's constructor (DynamicSoundEffectInstance.cs)
+// stores `sampleRate`/`channels` directly into a FAudioWaveFormatEx with zero validation -- no
+// range check, no throw, for ANY value (confirmed by reading the FNA source line-by-line: the
+// ctor body is a straight field-assignment + FAudioWaveFormatEx construction, no guard at all).
+// This diverges from MSDN's *documented* contract for this constructor (8,000-48,000 Hz,
+// ArgumentOutOfRangeException otherwise) -- an XNA-docs-vs-FNA-behavior split, resolved here in
+// favor of matching real FNA behavior (this project's established practical-compatibility
+// policy, consistent with e.g. P9-VALIDATION-001's identical resolution for SoundEffect's own
+// constructors). CNA's constructor already has zero validation, matching FNA -- these tests lock
+// that decision down instead of it being an untested, accidental gap.
+TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsSampleRateBelowXnaDocumentedMinimum)
+{
+    // MSDN documents 8000 as the minimum; FNA itself never enforces it.
+    EXPECT_NO_THROW(DynamicSoundEffectInstance d(4000, AudioChannels::Mono));
+}
+
+TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsSampleRateAboveXnaDocumentedMaximum)
+{
+    // MSDN documents 48000 as the maximum; FNA itself never enforces it.
+    EXPECT_NO_THROW(DynamicSoundEffectInstance d(96000, AudioChannels::Stereo));
+}
+
+TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsZeroSampleRate)
+{
+    EXPECT_NO_THROW(DynamicSoundEffectInstance d(0, AudioChannels::Mono));
+}
+
+TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsNegativeSampleRate)
+{
+    EXPECT_NO_THROW(DynamicSoundEffectInstance d(-1, AudioChannels::Mono));
+}
+
+// P10-DYN-004/005: real FNA's GetSampleDuration/GetSampleSizeInBytes (DynamicSoundEffectInstance.cs)
+// delegate straight to the static SoundEffect helpers using the stored sampleRate/channels
+// fields, with no `IsDisposed` guard at all -- confirmed by reading the FNA source. Matching that
+// (not adding a new ObjectDisposedException guard CNA-side) is the resolved decision; these tests
+// lock it down.
+TEST(DynamicSoundEffectInstanceTest, GetSampleDurationAfterDisposeDoesNotThrow)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    d.Dispose();
+    EXPECT_NO_THROW({ auto result = d.GetSampleDuration(4000); (void)result; });
+}
+
+TEST(DynamicSoundEffectInstanceTest, GetSampleSizeInBytesAfterDisposeDoesNotThrow)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    d.Dispose();
+    EXPECT_NO_THROW({ auto result = d.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0)); (void)result; });
+}
+
 TEST(DynamicSoundEffectInstanceTest, IsLoopedSetterIsNoOpDirect)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Mono);
@@ -81,6 +133,19 @@ TEST(DynamicSoundEffectInstanceTest, SampleDurationRoundTrip)
     EXPECT_NEAR(d.GetSampleDuration(176400).getTotalSecondsProperty(), 1.0, 1e-9);
 }
 
+// P9-DYNAMIC-008: the stereo round trip above doesn't independently exercise the channel-count
+// divisor/multiplier -- mono halves the byte count for the same duration (matches FNA's
+// SoundEffect.GetSampleDuration/GetSampleSizeInBytes, which both divide/multiply by
+// (int) AudioChannels directly).
+TEST(DynamicSoundEffectInstanceTest, SampleDurationRoundTripMono)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Mono);
+    // 1 second of 16-bit mono @ 44100 Hz = 44100 * 1ch * 2bytes = 88200 bytes.
+    const int bytes = d.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0));
+    EXPECT_EQ(bytes, 88200);
+    EXPECT_NEAR(d.GetSampleDuration(88200).getTotalSecondsProperty(), 1.0, 1e-9);
+}
+
 TEST(DynamicSoundEffectInstanceTest, GetSampleDurationIgnoresFloatFormatMatchingFNA)
 {
     // FNA's GetSampleSizeInBytes/GetSampleDuration always delegate to SoundEffect's versions,
@@ -102,6 +167,37 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferQueuesWhileStopped)
     std::vector<unsigned char> pcm(64, 0);
     d.SubmitBuffer(pcm);
     EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
+}
+
+// P9-DYNAMIC-001: multiple SubmitBuffer calls while stopped must each add to
+// PendingBufferCount, not just report 1 regardless of count.
+TEST(DynamicSoundEffectInstanceTest, PendingBufferCountAccumulatesAcrossMultipleSubmits)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<unsigned char> pcm(64, 0);
+    d.SubmitBuffer(pcm);
+    d.SubmitBuffer(pcm);
+    d.SubmitBuffer(pcm);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 3);
+}
+
+// P9-DYNAMIC-001: matches FNA's Stop()/Stop(bool) guard (`handle == IntPtr.Zero -> return`,
+// SoundEffectInstance.cs) -- calling the no-arg Stop() directly (not via Stop(bool)) on an
+// instance that was never played must be a safe no-op, not clear staged buffers. Previously
+// DynamicSoundEffectInstance::Stop() duplicated StopInternal()'s unconditional buffer-clearing
+// logic instead of delegating through Stop(bool)'s existing guard, so calling it directly here
+// used to drop PendingBufferCount to 0.
+TEST(DynamicSoundEffectInstanceTest, StopDirectCallWhileNeverPlayedDoesNotClearPendingBuffers)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<unsigned char> pcm(64, 0);
+    d.SubmitBuffer(pcm);
+    ASSERT_EQ(d.getPendingBufferCountProperty(), 1);
+
+    d.Stop();
+
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
+    EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
 }
 
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferRangeThrows)
@@ -130,6 +226,47 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferRangeIntegerOverflowThrows)
     constexpr int hugeOffset = 2000000000;
     constexpr int hugeCount  = 2000000000; // offset+count overflows int32
     EXPECT_THROW(d.SubmitBuffer(pcm, hugeOffset, hugeCount), System::ArgumentOutOfRangeException);
+}
+
+// P9-DYNAMIC-009: matches FNA's SubmitBuffer exactly -- there is no block-alignment validation
+// at all (FAudio's FACTSoundBank_Prepare-adjacent buffer submission just stores whatever byte
+// count is given; FAudioBuffer.PlayLength = AudioBytes / channels / bytesPerSample truncates via
+// plain integer division for a non-frame-aligned count, it never throws). A 16-bit stereo frame
+// is 4 bytes; 63 is deliberately not a multiple of that.
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferWithNonFrameAlignedByteCountDoesNotThrowWhileStopped)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<unsigned char> pcm(63, 0); // not a multiple of 4 (2ch * 2 bytes/sample)
+    EXPECT_NO_THROW(d.SubmitBuffer(pcm));
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1); // a whole buffer either way, alignment-agnostic
+}
+
+// P9-DYNAMIC-009: same as above, but for SubmitFloatBufferEXT, where `count` is a *sample* count
+// (not bytes) -- 3 float samples for a Stereo instance isn't a whole number of stereo frames
+// (3/2 = 1.5), mirroring the byte-count case above at the sample level. Still no validation in
+// FNA or CNA.
+TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferWithSampleCountNotDivisibleByChannelCountDoesNotThrow)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    std::vector<float> buf(3, 0.0f); // 3 samples, not a whole number of stereo frames
+    EXPECT_NO_THROW(d.SubmitFloatBufferEXT(buf));
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
+}
+
+// P9-DYNAMIC-009: a non-frame-aligned submission while actually playing must not crash or wedge
+// subsequent buffer bookkeeping (Update()'s byte-based consumption tracking is alignment-agnostic
+// by construction -- it compares total submitted bytes against SDL_GetAudioStreamQueued(), never
+// frame counts -- but this exercises the real SDL3_mixer/SDL_AudioStream path end-to-end).
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferWithNonFrameAlignedByteCountWhilePlayingDoesNotThrow)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    std::vector<unsigned char> misaligned(63, 0);
+    EXPECT_NO_THROW(d.SubmitBuffer(misaligned));
+    EXPECT_NO_THROW(d.Update());
 }
 
 // P9-VALIDATION-011: without this, a caller that keeps submitting after Dispose() would grow
@@ -280,6 +417,27 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresWhenStarved)
     EXPECT_GT(fired, 0);
 }
 
+// P9-DYNAMIC-001/005: matches FNA's exact starvation loop (`for (i = MINIMUM_BUFFER_CHECK -
+// PendingBufferCount; i > 0 && BufferNeeded != null; i -= 1) BufferNeeded(...)`, DynamicSoundEffectInstance.cs)
+// -- Update() must raise BufferNeeded exactly (MINIMUM_BUFFER_CHECK - PendingBufferCount) times,
+// not merely "at least once". tryStartHeadless() submits exactly 1 buffer before Play(), so
+// immediately after (before any real consumption could have happened), PendingBufferCount == 1
+// and MINIMUM_BUFFER_CHECK(3) - 1 == 2 raises are expected.
+TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresExactlyTheStarvedCount)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    ASSERT_EQ(d.getPendingBufferCountProperty(), 1);
+
+    int fired = 0;
+    d.BufferNeeded += [&fired](System::Object*, const System::EventArgs&) { ++fired; };
+    d.Update();
+    EXPECT_EQ(fired, 2); // MINIMUM_BUFFER_CHECK(3) - PendingBufferCount(1)
+}
+
 // CP-4: a buffer must remain "pending" until the stream reports it was actually consumed, not
 // the instant it's handed off to SDL. Pre-load 3 buffers (MINIMUM_BUFFER_CHECK,
 // DynamicSoundEffectInstance.cpp) before playing, then Update() immediately -- nothing has had
@@ -338,4 +496,131 @@ TEST(DynamicSoundEffectInstanceTest, PauseViaBaseRefResolvesToOverride)
 
     base.Resume();
     EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
+}
+
+// P9-DYNAMIC-001: Pause() must not touch PendingBufferCount at all (matches FNA's Pause(), which
+// only stops the voice -- no buffer bookkeeping). Submits a buffer while already playing (past
+// the initial buffer submitted by tryStartHeadless), pauses immediately after, and confirms the
+// count is exactly what it was right before pausing.
+TEST(DynamicSoundEffectInstanceTest, PendingBufferCountUnaffectedAcrossPause)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    std::vector<unsigned char> pcm(4 * 256, 0);
+    d.SubmitBuffer(pcm);
+    const SharpRuntime::intcs beforePause = d.getPendingBufferCountProperty();
+
+    d.Pause();
+    EXPECT_EQ(d.getStateProperty(), SoundState::Paused);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), beforePause);
+
+    d.Resume();
+    EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), beforePause);
+}
+
+// P9-DYNAMIC-001: a real (immediate) Stop() after playback has actually started must clear all
+// pending buffers, matching FNA's Stop(true) -> ClearBuffers() -- distinct from
+// StopDirectCallWhileNeverPlayedDoesNotClearPendingBuffers above, which covers the guarded
+// never-played case.
+TEST(DynamicSoundEffectInstanceTest, PendingBufferCountResetsToZeroAfterStopWhilePlaying)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    ASSERT_GT(d.getPendingBufferCountProperty(), 0);
+
+    d.Stop();
+
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+    EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
+}
+
+// P9-DYNAMIC-001: Dispose() must also clear pending buffers once playback has actually started
+// (via its own Stop() call), matching FNA's Dispose(bool) -> Stop(true) -> ClearBuffers().
+TEST(DynamicSoundEffectInstanceTest, PendingBufferCountResetsToZeroAfterDisposeWhilePlaying)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    ASSERT_GT(d.getPendingBufferCountProperty(), 0);
+
+    d.Dispose();
+
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+}
+
+// P9-DYNAMIC-001: SubmitBuffer while Playing must still increment PendingBufferCount immediately
+// (the buffer counts as pending the instant it's accepted, whether staged or handed straight to
+// the stream -- matches FNA, where a buffer stays in queuedBuffers.Count either way).
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferWhilePlayingIncrementsPendingBufferCount)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    const SharpRuntime::intcs before = d.getPendingBufferCountProperty();
+
+    std::vector<unsigned char> pcm(4 * 256, 0);
+    d.SubmitBuffer(pcm);
+
+    EXPECT_EQ(d.getPendingBufferCountProperty(), before + 1);
+}
+
+// P9-DYNAMIC-001: BufferNeeded must fire once per every subscriber, not just the first --
+// multiple independent subscribers (e.g. separate systems both tracking buffer starvation) must
+// each observe every raise.
+TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresForEveryIndependentSubscriber)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    int firedA = 0, firedB = 0;
+    d.BufferNeeded += [&firedA](System::Object*, const System::EventArgs&) { ++firedA; };
+    d.BufferNeeded += [&firedB](System::Object*, const System::EventArgs&) { ++firedB; };
+
+    d.Update();
+
+    EXPECT_GT(firedA, 0);
+    EXPECT_EQ(firedA, firedB);
+}
+
+// P9-DYNAMIC-007: a common event pattern is a subscriber that unsubscribes itself the first
+// time it fires ("handle once"). Update()'s starvation loop raises BufferNeeded more than once
+// per call whenever PendingBufferCount is more than 1 short of MINIMUM_BUFFER_CHECK, so this
+// must not crash or corrupt the remaining subscriber's firing (matches System::EventHandler<T>'s
+// snapshot-before-iterating Raise() semantics -- sharp-runtime).
+TEST(DynamicSoundEffectInstanceTest, BufferNeededSubscriberCanRemoveItselfDuringCallbackWithoutCrashing)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    int firedOnce = 0, firedOther = 0;
+    System::EventHandler<System::EventArgs>::Token onceToken = 0;
+    onceToken = d.BufferNeeded.Add(
+        [&](System::Object*, const System::EventArgs&)
+        {
+            ++firedOnce;
+            d.BufferNeeded.Remove(onceToken);
+        });
+    d.BufferNeeded += [&firedOther](System::Object*, const System::EventArgs&) { ++firedOther; };
+
+    EXPECT_NO_THROW(d.Update());
+
+    EXPECT_EQ(firedOnce, 1);
+    EXPECT_GT(firedOther, 0);
+    EXPECT_EQ(d.BufferNeeded.Size(), 1u); // only the still-subscribed "other" handler remains
 }

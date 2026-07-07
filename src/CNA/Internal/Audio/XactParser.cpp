@@ -112,6 +112,16 @@ namespace CNA::Internal::Audio
     static constexpr uint8_t  SOUND_FLAG_HAS_DSP       = 0x10;
     static constexpr uint8_t  CUE_FLAG_SINGLE_SOUND    = 0x04;
 
+    // P9-XACT-014: sentinel for "this cue/variation-entry's sound code didn't resolve to any
+    // parsed sound" (a corrupt/malformed .xsb -- every code a real XACT-tool-built file emits
+    // always resolves, since `soundCodeMap` is built from the exact same file's sound entries).
+    // Deliberately NOT 0 -- falling back to 0 would silently alias an unresolvable reference onto
+    // whatever sound happens to be first in the bank and play it, instead of playing nothing.
+    // `XsbCue`/`XsbVariEntry`'s `soundIndex` bounds checks in Cue.cpp (`< xsb->sounds.size()`)
+    // already treat any out-of-range value as "no sound" -- this sentinel just relies on that
+    // same path instead of adding a new one.
+    static constexpr uint32_t kInvalidSoundIndex = 0xFFFFFFFFu;
+
     static constexpr uint8_t  FACTEVENT_STOP                        = 0;
     static constexpr uint8_t  FACTEVENT_PLAYWAVE                    = 1;
     static constexpr uint8_t  FACTEVENT_PLAYWAVETRACKVARIATION      = 3;
@@ -169,45 +179,101 @@ namespace CNA::Internal::Audio
                 uint8_t  wbIdx   = ctx.u8();
                 uint8_t  loopCnt = ctx.u8();
                 ctx.u16(); ctx.u16(); // position, angle
-                // effect variation parameters (skip)
-                ctx.s16(); ctx.s16(); // minPitch, maxPitch
-                ReadVolByte(ctx); ReadVolByte(ctx); // minVol, maxVol
-                ctx.f32(); ctx.f32(); // minFreq, maxFreq
-                ctx.f32(); ctx.f32(); // minQFactor, maxQFactor
-                ctx.u16(); // variationFlags
+
+                // P11-XACT-003: retained (previously "(skip)") so Cue::Play() can run FAudio's
+                // real per-play pitch/volume/filter randomization (FACT_internal.c:309-425)
+                // instead of always using the track's plain authored values.
+                const int16_t minPitch = ctx.s16();
+                const int16_t maxPitch = ctx.s16();
+                const float   minVol   = ReadVolByte(ctx);
+                const float   maxVol   = ReadVolByte(ctx);
+                const float   minFreq  = ctx.f32();
+                const float   maxFreq  = ctx.f32();
+                const float   minQ     = ctx.f32();
+                const float   maxQ     = ctx.f32();
+                const uint16_t variationFlags = ctx.u16();
+
                 result = {wbIdx, waveIdx, loopCnt, trackVol};
+                result.effectVariationFlags = variationFlags;
+                result.effectMinPitch     = minPitch;
+                result.effectMaxPitch     = maxPitch;
+                result.effectMinVolume    = minVol;
+                result.effectMaxVolume    = maxVol;
+                result.effectMinFrequency = minFreq;
+                result.effectMaxFrequency = maxFreq;
+                result.effectMinQFactor   = minQ;
+                result.effectMaxQFactor   = maxQ;
                 break;
             }
             else if (type == FACTEVENT_PLAYWAVETRACKVARIATION ||
                      type == FACTEVENT_PLAYWAVETRACKEFFECTVARIATION)
             {
-                // Complex track variation — pick first entry
+                // P11-XACT-002: retains the FULL candidate list + selection algorithm (not just
+                // entry 0) so Cue::Play() can run FAudio's real per-instance selection
+                // (FACT_internal.c's FACT_INTERNAL_GetNextWave) instead of always picking the
+                // first authored entry.
                 ctx.u8(); // flags
                 uint8_t loopCnt = ctx.u8();
                 ctx.u16(); ctx.u16(); // position, angle
 
+                // P11-XACT-003: retained (previously "(skip)"), same fields/units as the plain
+                // PLAYWAVEEFFECTVARIATION branch above.
+                bool     hasEffect        = false;
+                int16_t  effMinPitch = 0, effMaxPitch = 0;
+                float    effMinVol = 0.0f, effMaxVol = 0.0f;
+                float    effMinFreq = 0.0f, effMaxFreq = 0.0f;
+                float    effMinQ = 0.0f, effMaxQ = 0.0f;
+                uint16_t effFlags = 0;
                 if (type == FACTEVENT_PLAYWAVETRACKEFFECTVARIATION)
                 {
-                    ctx.s16(); ctx.s16(); // minPitch, maxPitch
-                    ReadVolByte(ctx); ReadVolByte(ctx);
-                    ctx.f32(); ctx.f32(); ctx.f32(); ctx.f32();
-                    ctx.u16(); // variationFlags
+                    hasEffect  = true;
+                    effMinPitch = ctx.s16();
+                    effMaxPitch = ctx.s16();
+                    effMinVol   = ReadVolByte(ctx);
+                    effMaxVol   = ReadVolByte(ctx);
+                    effMinFreq  = ctx.f32();
+                    effMaxFreq  = ctx.f32();
+                    effMinQ     = ctx.f32();
+                    effMaxQ     = ctx.f32();
+                    effFlags    = ctx.u16();
                 }
 
+                // Matches FAudio's real parse (FACT_internal.c:2303-2322): evtInfo's low 16 bits
+                // are wave_count, bits 16-18 are variation_type (VARIATION_TYPE_MASK = 0x7).
                 uint32_t evtInfoInner = ctx.u32();
                 uint16_t waveCount = static_cast<uint16_t>(evtInfoInner & 0xFFFF);
+                auto variationType = static_cast<XsbTrackVariationType>((evtInfoInner >> 16) & 0x07u);
                 ctx.skip(4); // unknown
 
                 uint16_t waveIdx = 0xFFFF;
                 uint8_t  wbIdx   = 0xFF;
+                std::vector<XsbTrackVariationEntry> entries;
+                entries.reserve(waveCount);
                 for (uint16_t j = 0; j < waveCount; ++j)
                 {
-                    uint16_t wi = ctx.u16();
-                    uint8_t  wb = ctx.u8();
-                    ctx.u8(); ctx.u8(); // min/max weight
+                    uint16_t wi        = ctx.u16();
+                    uint8_t  wb        = ctx.u8();
+                    uint8_t  minWeight = ctx.u8();
+                    uint8_t  maxWeight = ctx.u8();
+                    // FACT_internal.c:2321: weights[j] = maxWeight - minWeight.
+                    entries.push_back({wi, wb, static_cast<uint8_t>(maxWeight - minWeight)});
                     if (j == 0) { waveIdx = wi; wbIdx = wb; }
                 }
                 result = {wbIdx, waveIdx, loopCnt, trackVol};
+                result.trackVariationEntries = std::move(entries);
+                result.trackVariationType    = variationType;
+                if (hasEffect)
+                {
+                    result.effectVariationFlags = effFlags;
+                    result.effectMinPitch     = effMinPitch;
+                    result.effectMaxPitch     = effMaxPitch;
+                    result.effectMinVolume    = effMinVol;
+                    result.effectMaxVolume    = effMaxVol;
+                    result.effectMinFrequency = effMinFreq;
+                    result.effectMaxFrequency = effMaxFreq;
+                    result.effectMinQFactor   = effMinQ;
+                    result.effectMaxQFactor   = effMaxQ;
+                }
                 break;
             }
             else if (type == FACTEVENT_PITCH || type == FACTEVENT_VOLUME ||
@@ -265,7 +331,13 @@ namespace CNA::Internal::Audio
         Ctx ctx{data.data(), data.data() + data.size(), data.data()};
 
         uint32_t magic = ctx.u32();
-        // Accept LE "XGSF" or BE "FSGX"
+        // P9-AUDIT-003: accepting the BE "FSGX" magic is cosmetic only -- every other multi-byte
+        // field below is read via Ctx::u16()/u32()/f32(), a raw memcpy with no byte-swap logic
+        // anywhere in this file. A genuinely BE-authored (e.g. Xbox 360-built) file would pass
+        // this check and then silently misparse every subsequent field, not throw. ParseXwb's own
+        // magic check only accepts the LE form, so this "BE support" isn't even applied uniformly
+        // across the three parsers. Not fixed here: real byte-swap support is new feature work
+        // outside this audit's scope, not a one-line correction.
         if (magic != 0x46534758u && magic != 0x58475346u)
             throw std::runtime_error("XGS: invalid magic");
 
@@ -309,7 +381,7 @@ namespace CNA::Internal::Audio
         }
 
         // Category data (10 bytes each at categoryOffset): instanceLimit, fadeInMS, fadeOutMS,
-        // maxInstanceBehavior (skip), parentIndex, volume, visibility.
+        // maxInstanceBehavior, parentIndex, volume, visibility.
         result.categories.resize(categoryCount);
         {
             Ctx cc = ctx;
@@ -321,7 +393,10 @@ namespace CNA::Internal::Audio
                 cat.instanceLimit = cc.u8();           // 1 byte
                 cat.fadeInMS      = cc.u16();          // 2 bytes
                 cat.fadeOutMS     = cc.u16();          // 2 bytes
-                cc.u8();                               // maxInstanceBehavior >> 3, skip
+                // P9-CATEGORY-005: retained (was discarded) -- see FACT_internal.c's
+                // ParseXGSHeader, which shifts the same byte right by 3 to isolate
+                // max_instance_behavior from its low 3 bits (unused/reserved by FACT itself).
+                cat.maxInstanceBehavior = cc.u8() >> 3; // 1 byte
                 cat.parentIndex   = cc.u16();          // 2 bytes
                 cat.volume        = ReadVolByteAsAmplitude(cc); // 1 byte
                 cc.u8();                               // visibility
@@ -664,6 +739,8 @@ namespace CNA::Internal::Audio
         Ctx ctx{data.data(), data.data() + data.size(), data.data()};
 
         uint32_t magic = ctx.u32();
+        // P9-AUDIT-003: BE magic acceptance here is cosmetic only, same as ParseXgs above --
+        // see that function's comment.
         if (magic != 0x4B424453u && magic != 0x5344424Bu)
             throw std::runtime_error("XSB: invalid magic (expected SDBK)");
 
@@ -802,16 +879,33 @@ namespace CNA::Internal::Audio
 
                 if (flags & SOUND_FLAG_COMPLEX)
                 {
-                    struct TrackMeta { float vol; uint32_t code; };
+                    struct TrackMeta
+                    {
+                        float    vol;
+                        uint32_t code;
+                        uint8_t  filterType;
+                        uint16_t frequency;
+                        uint8_t  qfactor;
+                    };
                     std::vector<TrackMeta> tracks(trackCount);
 
                     for (uint8_t t = 0; t < trackCount; ++t)
                     {
                         tracks[t].vol  = ReadVolByteAsAmplitude(sc);
                         tracks[t].code = sc.u32();
-                        // filter data (2 bytes) + frequency (2 bytes)
-                        sc.u16(); // filterData
-                        sc.u16(); // frequency
+
+                        // filterData (2 bytes) + frequency (2 bytes) (P9-XACT-010/011). Bit
+                        // layout (FACT_internal.c, FACTSoundBank_Prepare): bit0 = has-filter;
+                        // when set, filter type is (filterData>>1)&0x02 -- FAudio's own math,
+                        // which structurally only ever yields 0 (low-pass) or 2 (high-pass);
+                        // band-pass (1) is never reachable this way. qfactor occupies the upper
+                        // byte regardless of the has-filter bit. Replicated exactly, not "fixed."
+                        const uint16_t filterData = sc.u16();
+                        tracks[t].qfactor    = static_cast<uint8_t>((filterData >> 8) & 0xFF);
+                        tracks[t].filterType = (filterData & 0x0001)
+                            ? static_cast<uint8_t>((filterData >> 1) & 0x02)
+                            : 0xFF;
+                        tracks[t].frequency  = sc.u16();
                     }
 
                     // Parse track events (they're at absolute offsets)
@@ -821,6 +915,9 @@ namespace CNA::Internal::Audio
                         XsbWaveRef wr = ParseFirstPlayWave(sc, tracks[t].code, tracks[t].vol);
                         // Combine track vol with sound vol
                         wr.volume *= sound.volume;
+                        wr.filterType        = tracks[t].filterType;
+                        wr.filterFrequencyHz = tracks[t].frequency;
+                        wr.filterQFactorRaw  = tracks[t].qfactor;
                         sound.waves.push_back(wr);
                     }
                 }
@@ -863,8 +960,12 @@ namespace CNA::Internal::Audio
 
                 result.cues[cueIdx].isSingleSound = true;
                 auto it = soundCodeMap.find(sbCode);
-                result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : 0;
+                result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : kInvalidSoundIndex;
                 result.cues[cueIdx].varIndex   = 0;
+                // fadeOutMS/fadeInMS (0) and instanceLimit (0xFF)/maxInstanceBehavior (0, FAIL)
+                // all stay at their struct defaults: a simple cue's format has no such fields at
+                // all, matching FAudio's own hardcoded defaults for simple cues (P9-STOP-010,
+                // P9-CATEGORY-011).
             }
         }
 
@@ -880,18 +981,24 @@ namespace CNA::Internal::Audio
                 uint8_t  flags           = cc.u8();
                 uint32_t sbCode          = cc.u32();
                 uint32_t transitionOffset = cc.u32();
-                cc.u8();  // instanceLimit
-                cc.u16(); // fadeInMS
-                cc.u16(); // fadeOutMS
-                cc.u8();  // maxInstanceBehavior
+                // P9-CATEGORY-011: instanceLimit/fadeInMS/maxInstanceBehavior retained (were
+                // discarded) alongside fadeOutMS (P9-STOP-010), same 6-byte block.
+                uint8_t  instanceLimit   = cc.u8();
+                uint16_t fadeInMS        = cc.u16();
+                uint16_t fadeOutMS       = cc.u16();
+                uint8_t  maxInstanceBehavior = cc.u8() >> 3; // same bit-shift as XgsCategory's
 
                 bool isSingle = (flags & CUE_FLAG_SINGLE_SOUND) != 0;
                 result.cues[cueIdx].isSingleSound = isSingle;
+                result.cues[cueIdx].fadeOutMS = fadeOutMS;
+                result.cues[cueIdx].instanceLimit = instanceLimit;
+                result.cues[cueIdx].fadeInMS = fadeInMS;
+                result.cues[cueIdx].maxInstanceBehavior = maxInstanceBehavior;
 
                 if (isSingle)
                 {
                     auto it = soundCodeMap.find(sbCode);
-                    result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : 0;
+                    result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : kInvalidSoundIndex;
                     result.cues[cueIdx].varIndex   = 0;
                 }
                 else
@@ -940,7 +1047,7 @@ namespace CNA::Internal::Audio
                                 entry.weightMin     = vc.u8();
                                 entry.weightMax     = vc.u8();
                                 auto sit = soundCodeMap.find(code);
-                                entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : 0;
+                                entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : kInvalidSoundIndex;
                             }
                             else if (var.type == 3) // INTERACTIVE
                             {
@@ -952,7 +1059,7 @@ namespace CNA::Internal::Audio
                                 // which has no XNA-public equivalent on Cue -- read and discarded.
                                 vc.u32(); // linger
                                 auto sit = soundCodeMap.find(code);
-                                entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : 0;
+                                entry.soundIndex = (sit != soundCodeMap.end()) ? sit->second : kInvalidSoundIndex;
                             }
                             else
                             {
@@ -977,7 +1084,7 @@ namespace CNA::Internal::Audio
                         // Fallback: treat as single sound
                         result.cues[cueIdx].isSingleSound = true;
                         auto it = soundCodeMap.find(sbCode);
-                        result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : 0;
+                        result.cues[cueIdx].soundIndex = (it != soundCodeMap.end()) ? it->second : kInvalidSoundIndex;
                     }
                 }
             }

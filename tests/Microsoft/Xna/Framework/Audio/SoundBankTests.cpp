@@ -14,6 +14,7 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "System/Object.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -157,12 +158,49 @@ namespace
         return path;
     }
 
-    // AudioEngine constructed against a nonexistent .xgs — runs as the documented
-    // "stub" (no categories/variables), which is all SoundBank/Cue need here.
+    // Minimal parseable .xgs: zero categories/variables/rpcs, padded to ParseXgs's 0x50-byte
+    // minimum (XactParser.cpp). AudioEngine's ctor now throws FileNotFoundException on a missing
+    // settings file (P9-HARDWARE-003, matching FNA's TitleContainer.ReadToPointer), so this must
+    // be a real, existing, parseable file rather than a deliberately-nonexistent path -- it still
+    // has no categories/variables, which is all SoundBank/Cue need here.
+    std::vector<uint8_t> BuildMinimalXgsFixtureBytes()
+    {
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'X', 'G', 'S', 'F' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // unknown
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 0); // categoryCount
+        AppendU16(data, 0); // variableCount
+        AppendU16(data, 0); // blob1Count
+        AppendU16(data, 0); // blob2Count
+        AppendU16(data, 0); // rpcCount
+        AppendU16(data, 0); // dspPresetCount
+        AppendU16(data, 0); // dspParameterCount
+
+        for (int i = 0; i < 9; ++i) AppendU32(data, 0); // all nine offset fields
+
+        data.resize(0x50, 0); // ParseXgs requires >= 0x50 bytes total
+        return data;
+    }
+
     AudioEngine& SharedEngine()
     {
-        static AudioEngine engine(
-            (std::filesystem::temp_directory_path() / "cna_soundbank_test_nonexistent.xgs").string());
+        static const std::string path = []() -> std::string
+        {
+            auto dir = std::filesystem::temp_directory_path() / "cna_soundbank_test";
+            std::filesystem::create_directories(dir);
+            auto file = dir / "fixture_engine.xgs";
+            const auto bytes = BuildMinimalXgsFixtureBytes();
+            std::ofstream f(file, std::ios::binary);
+            f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            return file.string();
+        }();
+        static AudioEngine engine(path);
         return engine;
     }
 
@@ -329,6 +367,15 @@ TEST(SoundBankTest, ConstructorEmptyFilenameThrowsArgumentNull)
     EXPECT_THROW(SoundBank bank(&SharedEngine(), ""), System::ArgumentNullException);
 }
 
+// P9-HARDWARE-003: matches FNA exactly (SoundBank.cs) -- a missing filename throws
+// FileNotFoundException (from TitleContainer.ReadToPointer) before any FACT call is made.
+TEST(SoundBankTest, ConstructorMissingFileThrowsFileNotFound)
+{
+    const auto missing =
+        (std::filesystem::temp_directory_path() / "cna_soundbank_test_missing.xsb").string();
+    EXPECT_THROW(SoundBank bank(&SharedEngine(), missing), System::IO::FileNotFoundException);
+}
+
 TEST(SoundBankTest, ConstructorLoadsValidFixture)
 {
     SoundBank bank(&SharedEngine(), XsbFixturePath());
@@ -442,6 +489,18 @@ TEST(SoundBankTest, PlayCueThreeArgValidDoesNotThrow)
     EXPECT_NO_THROW(bank.PlayCue("Explosion", listener, emitter));
 }
 
+// P10-XACT-007: the 3-arg overload shares PlayCueInternal with the 2-arg one (tested above via
+// PlayCueTwoArgAfterDisposeThrowsObjectDisposed), but per this project's overload-testing
+// convention each overload gets its own dedicated case rather than assuming shared internals.
+TEST(SoundBankTest, PlayCueThreeArgAfterDisposeThrowsObjectDisposed)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    AudioListener listener;
+    AudioEmitter emitter;
+    bank.Dispose();
+    EXPECT_THROW(bank.PlayCue("Explosion", listener, emitter), System::ObjectDisposedException);
+}
+
 // T-4B: the 3D PlayCue overload must actually reach Cue::Apply3D on the resulting
 // fire-and-forget cue, not just accept listener/emitter without using them. XsbFixtureBytes'
 // wavebank-less "Explosion" cue can't exercise this (Cue::active_ stays empty), so this uses a
@@ -543,6 +602,41 @@ TEST(SoundBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
     bank.Dispose();
 }
 
+// P12-BANK-001: IsInUse used to only look at fireAndForget_, so a cue the caller obtained via
+// GetCue() (not PlayCue()) and is playing independently was invisible to it -- now activeCues_
+// tracks both origins, matching WaveBank's already-correct broader registry.
+TEST(SoundBankTest, IsInUseTrueForCueObtainedViaGetCueNotJustFireAndForget)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    std::unique_ptr<Cue> cue(bank.GetCue("Explosion"));
+    ASSERT_FALSE(bank.getIsInUseProperty());
+
+    cue->Play();
+    EXPECT_TRUE(bank.getIsInUseProperty());
+
+    cue->Stop(AudioStopOptions::Immediate);
+    EXPECT_FALSE(bank.getIsInUseProperty());
+}
+
+// P12-BANK-001: real FACT (FACTSoundBank_Destroy, FACT.c) force-stops every cue still using the
+// bank when it's destroyed, including ones the caller obtained via GetCue() and is still holding
+// -- previously SoundBank::Dispose() only cleared fireAndForget_, leaving a GetCue()-obtained cue
+// playing (and its bank_ pointer dangling once the SoundBank itself was later destructed).
+TEST(SoundBankTest, DisposeForceStopsCueObtainedViaGetCue)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    Cue* cue = bank.GetCue("Explosion");
+    cue->Play();
+    ASSERT_TRUE(cue->getIsPlayingProperty());
+    ASSERT_FALSE(cue->getIsDisposedProperty());
+
+    bank.Dispose();
+
+    EXPECT_TRUE(cue->getIsDisposedProperty());
+    EXPECT_FALSE(cue->getIsPlayingProperty());
+    delete cue; // caller-owned; Cue::Dispose() is idempotent so the already-forced disposal is safe
+}
+
 // P9-LIFECYCLE-003/006: unlike "Explosion" above, "Apply3DCue" has a real (200-byte, ~1.13ms)
 // WaveBank-backed instance, so its fire-and-forget cue actually finishes naturally -- IsInUse must
 // become false soon afterward without any explicit Stop() or a second PlayCue() call to trigger
@@ -627,7 +721,8 @@ TEST(SoundBankTest, PausedFireAndForgetCueSurvivesSweepAndCanStillBeResumed)
     ASSERT_NE(cue, nullptr);
     cue->Pause();
     ASSERT_TRUE(cue->getIsPausedProperty());
-    ASSERT_FALSE(cue->getIsPlayingProperty());
+    // P9-LIFECYCLE-013: matches real FACT -- pausing never clears IsPlaying.
+    ASSERT_TRUE(cue->getIsPlayingProperty());
 
     bank.PlayCue("Explosion"); // triggers the sweep again
     EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 2u); // paused entry must have survived

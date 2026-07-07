@@ -2,6 +2,8 @@
 
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 
+#include <algorithm>
+
 namespace Microsoft::Xna::Framework
 {
     bool FrameworkDispatcher::ActiveSongChanged = false;
@@ -11,27 +13,39 @@ namespace Microsoft::Xna::Framework
 
     void FrameworkDispatcher::Update()
     {
+        // P11-DISPATCH-001: instance->Update() below can synchronously fire BufferNeeded (a
+        // realistic XNA usage pattern is disposing the instance from inside that very handler
+        // once no more data will be provided), which reaches DynamicSoundEffectInstance::
+        // StopInternal() -- which itself locks StreamsMutex to remove itself from Streams. A
+        // std::mutex is not recursive, so calling instance->Update() while still holding
+        // StreamsMutex here would self-deadlock the very first time real game code disposed a
+        // stream from its own BufferNeeded handler. Snapshot the list under the lock, then run
+        // every instance's Update() with the lock released; a disposed instance already removes
+        // itself from Streams via StopInternal(), so the trailing cleanup pass below is mostly
+        // defensive (matches the previous code's own belt-and-suspenders erase-if-disposed check).
+        std::vector<Audio::DynamicSoundEffectInstance*> snapshot;
         {
             std::lock_guard<std::mutex> lock(StreamsMutex);
+            snapshot = Streams;
+        }
 
-            for (std::size_t i = 0; i < Streams.size();)
+        for (Audio::DynamicSoundEffectInstance* instance : snapshot)
+        {
+            if (instance != nullptr)
             {
-                Audio::DynamicSoundEffectInstance* instance = Streams[i];
-
-                if (instance != nullptr)
-                {
-                    instance->Update();
-                }
-
-                if (instance == nullptr || instance->getIsDisposedProperty())
-                {
-                    Streams.erase(Streams.begin() + static_cast<std::ptrdiff_t>(i));
-                }
-                else
-                {
-                    ++i;
-                }
+                instance->Update();
             }
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(StreamsMutex);
+            Streams.erase(
+                std::remove_if(Streams.begin(), Streams.end(),
+                    [](Audio::DynamicSoundEffectInstance* instance)
+                    {
+                        return instance == nullptr || instance->getIsDisposedProperty();
+                    }),
+                Streams.end());
         }
 
         Audio::Microphone::CheckAllBuffers();

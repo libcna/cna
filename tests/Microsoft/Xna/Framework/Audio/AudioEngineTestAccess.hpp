@@ -16,5 +16,14 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return engine.ActiveCueCountForTest();
         }
+
+        // P12-CATEGORY-001: exposes AudioEngine::GetCategoryVolume (private, called by
+        // AudioCategory/Cue) so a test can verify SetVolume's parent->child hierarchy cascade by
+        // reading a category's own stored volume directly, without a public AudioCategory getter
+        // (matches real XNA -- Volume is a command-only property on AudioCategory.cs, no getter).
+        static float GetCategoryVolume(const AudioEngine& engine, unsigned short idx)
+        {
+            return engine.GetCategoryVolume(idx);
+        }
     };
 }

@@ -43,7 +43,7 @@ multiplayer game will not compile at all.
 | **Framework** (Game, math, collision, curves) | ~50 | 41 | ~95 % | ~90 % | Game loop, all math types, BoundingBox/Sphere/Frustum, Curve, MathHelper fully implemented |
 | **Framework.Graphics** | ~75 | 117 | ~95 % | see per-backend table | Detailed in next section |
 | **Framework.Input** | ~20 | 26 | ~100 % | ~90 % | Keyboard, Mouse, GamePad, Touch wired to SDL3; rumble/vibration untested |
-| **Framework.Audio** | ~15 | 20 | ~100 % | ~90 % | SoundEffect/Instance real (SDL3_mixer, real filters, instance-tracking cascade); AudioEngine/Cue/WaveBank/SoundBank real (hand-written XACT parser, category/lifecycle/3D all functional); Microphone real (SDL3 capture). Remaining gaps are documented accepted deviations (no HRTF/Doppler, `instanceLimit`/fade parsed not enforced), not stubs — updated 2026-07-04, see `plan_audio.md` |
+| **Framework.Audio** | ~15 | 20 | ~100 % | ~90 % | SoundEffect/Instance real (SDL3_mixer, real filters, instance-tracking cascade); AudioEngine/Cue/WaveBank/SoundBank real (hand-written XACT parser, category/lifecycle/3D all functional); Microphone real (SDL3 capture). Remaining gaps are documented accepted deviations (no HRTF/elevation, `instanceLimit`/fade parsed not enforced), not stubs — updated 2026-07-04, see `plan_audio.md` |
 | **Framework.Media** | ~25 | 24 | ~100 % | ~55 % | MediaPlayer and VideoPlayer real (FFmpeg); Song/Album/Artist/Genre/Picture/MediaLibrary = pure stubs |
 | **Framework.Content** | ~20 | 4 | ~20 % | ~60 % | ContentManager works with custom JSON/PNG/OGG descriptors; **no .xnb binary support** |
 | **Framework.Storage** | ~5 | 3 | ~100 % | ~75 % | StorageDevice/Container with filesystem; async patterns simplified |
@@ -140,7 +140,7 @@ multiplayer game will not compile at all.
 | **Framework.Net — 0 %** | Blocking for multiplayer games | NetworkSession, NetworkGamer, PacketReader/Writer, LocalNetworkGamer entirely absent — no headers, no stubs |
 | **Content pipeline (.xnb) — 0 %** | Blocking for most existing XNA games | XNA binary asset format not supported; ContentManager requires CNA custom JSON/PNG/OGG descriptors |
 | **GamerServices — ~5 %** | Blocking for Xbox Live games | Achievements, leaderboards, Gamer profiles, FriendCollection absent |
-| **XACT audio runtime — ~90 %** | Mostly closed (updated 2026-07-04) | Real hand-written `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; remaining gap is documented accepted deviations (`instanceLimit`/fade parsed not enforced, no HRTF/Doppler), not stubbing — see `plan_audio.md` |
+| **XACT audio runtime — ~90 %** | Mostly closed (updated 2026-07-04) | Real hand-written `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; remaining gap is documented accepted deviations (`instanceLimit`/fade parsed not enforced, no HRTF/elevation), not stubbing — see `plan_audio.md` |
 | **Microphone — ~95 %** | Minor (updated 2026-07-04) | Real SDL3 capture device enumeration, Start/Stop, GetData/GetQueuedBytes, BufferReady event |
 | **Media library (Album/Artist/Genre) — ~5 %** | Minor for most games | Song/Video playback real; device media-library browsing = pure stubs |
 | **Bgfx: EnvironmentMapEffect** | Medium | No cube-map reflection shader; falls back to lit shader |
