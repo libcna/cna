@@ -2401,13 +2401,29 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   expected accelerometer/gyroscope skips), no regressions. Re-ran all 3 GPU avatar integration
   tests to confirm real content loading is unaffected.
 
-- [ ] **Task 11.9** — Add vertex/index consistency validation in `SkinnedModelTypeReader::Read()`.
+- [x] **Task 11.9** — Add vertex/index consistency validation in `SkinnedModelTypeReader::Read()`.
   Confirmed (`ContentManager.cpp`, ~lines 712-715): `numVertices = vertBytes.size() / stride`
   truncates silently if the byte count isn't an exact multiple of `stride`; index values from
   `idxBytes` are never checked to be `< numVertices`. Malformed/corrupted part data can produce an
   index buffer that references out-of-range vertices with no validation anywhere in this path. Add
   the checks (throwing `ContentLoadException` on a mismatch) and a test with deliberately
   inconsistent vertex/index data.
+
+  Added 2 checks per part, both before `numVertices`/`numIndices` are computed: vertex byte count
+  must be an exact multiple of `stride`, and index byte count must be an exact multiple of
+  `sizeof(std::uint16_t)`. Then, after computing `numVertices`/`numIndices`, added a loop checking
+  every index value is `< numVertices` before the index buffer is ever created/uploaded. Added
+  `VertexByteCountNotMultipleOfStrideThrows` (10 vertex bytes, stride 52) and
+  `OutOfRangeIndexThrows` (exactly 1 vertex's worth of vertex data, but an index value of 5) to
+  `ContentManagerSkinnedModelTests.cpp`, via a new `WriteManifestWithOnePart` helper (a 0-bone
+  skeleton — the simplest possible valid one — plus a single part).
+
+  **Revert-verify:** removed both new checks (and the index-range loop), rebuilt, confirmed both
+  new tests failed ("it throws nothing" — a silently-wrong part, not a crash, since these
+  particular small buffers happened not to trip Task 11.7's own bounds check either). Restored the
+  fix, rebuilt, confirmed green, full suite, and re-ran all 3 GPU avatar integration tests to
+  confirm real (well-formed) content loading is unaffected. Full suite: 3383/3383 passing (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 11.10** — Investigate consolidating the vertex-layout-by-magic-stride-number pattern
   for the Skinned (52-byte) vertex format specifically. Confirmed the same `switch(stride){case

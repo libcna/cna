@@ -738,16 +738,46 @@ namespace Microsoft::Xna::Framework::Content
                     const auto vertBytes = ReadBinaryFile((manifestDir / vertFile).string());
                     const auto idxBytes  = ReadBinaryFile((manifestDir / idxFile).string());
 
+                    // Task 11.9: numVertices/numIndices below used to truncate silently if the
+                    // byte counts weren't exact multiples of stride/sizeof(uint16_t), and index
+                    // values were never checked to reference an in-range vertex - malformed/
+                    // corrupted part data could produce an index buffer referencing out-of-range
+                    // vertices with no validation anywhere in this path.
+                    if (vertBytes.size() % static_cast<std::size_t>(stride) != 0)
+                    {
+                        throw ContentLoadException(
+                            "SkinnedModel part '" + name + "' vertex data size (" + std::to_string(vertBytes.size())
+                                + ") is not a multiple of its vertexStride (" + std::to_string(stride) + "): " + path);
+                    }
+                    if (idxBytes.size() % sizeof(std::uint16_t) != 0)
+                    {
+                        throw ContentLoadException(
+                            "SkinnedModel part '" + name + "' index data size (" + std::to_string(idxBytes.size())
+                                + ") is not a multiple of " + std::to_string(sizeof(std::uint16_t)) + ": " + path);
+                    }
+
                     const int numVertices = static_cast<int>(vertBytes.size()) / stride;
                     const int numIndices  = static_cast<int>(idxBytes.size())
                                             / static_cast<int>(sizeof(std::uint16_t));
                     const int primCount   = numIndices / 3;
 
+                    const auto* indexData = reinterpret_cast<const std::uint16_t*>(idxBytes.data());
+                    for (int i = 0; i < numIndices; ++i)
+                    {
+                        if (static_cast<int>(indexData[i]) >= numVertices)
+                        {
+                            throw ContentLoadException(
+                                "SkinnedModel part '" + name + "' index " + std::to_string(i)
+                                    + " references vertex " + std::to_string(indexData[i]) + ", but only "
+                                    + std::to_string(numVertices) + " vertices exist: " + path);
+                        }
+                    }
+
                     auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
                     vb->SetDataRaw(vertBytes.data(), numVertices, stride);
 
                     auto ib = std::make_unique<Graphics::IndexBuffer>(device, numIndices);
-                    ib->SetData(reinterpret_cast<const std::uint16_t*>(idxBytes.data()), numIndices);
+                    ib->SetData(indexData, numIndices);
 
                     auto part = std::make_unique<Graphics::ModelMeshPart>(
                         vb.get(), ib.get(), numVertices, primCount, 0, 0);

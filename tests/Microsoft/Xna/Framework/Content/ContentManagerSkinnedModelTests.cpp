@@ -110,6 +110,14 @@ namespace
         std::memcpy(bytes.data(), &boneCount, sizeof(boneCount));
         WriteBytes(path, bytes);
     }
+
+    template <typename T>
+    void AppendValue(std::vector<std::uint8_t>& bytes, T value)
+    {
+        const std::size_t offset = bytes.size();
+        bytes.resize(offset + sizeof(T));
+        std::memcpy(bytes.data() + offset, &value, sizeof(T));
+    }
 }
 
 // Task 11.8: boneCount was cast to std::size_t and used to .resize() 3 vectors with no
@@ -137,6 +145,57 @@ TEST_F(ContentManagerSkinnedModelTest, AbsurdlyLargeBoneCountThrowsContentLoadEx
     ScratchContentRoot root;
     WriteFile(root.path() / "avatar.skinnedmodel.json", R"({"skeleton": "skeleton.bin"})");
     WriteSkeletonWithBoneCount(root.path() / "skeleton.bin", 2000000000);
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    EXPECT_THROW(
+        cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"),
+        ContentLoadException);
+}
+
+namespace
+{
+    // A manifest with a 0-bone (simplest possible valid) skeleton and a single part referencing
+    // test.verts.bin/test.idx.bin with the given vertexStride.
+    void WriteManifestWithOnePart(const std::filesystem::path& root, int vertexStride)
+    {
+        WriteFile(root / "avatar.skinnedmodel.json",
+                  R"({"skeleton": "skeleton.bin", "parts": [{"name": "Test", "vertices": "test.verts.bin", )"
+                  R"("indices": "test.idx.bin", "vertexStride": )" + std::to_string(vertexStride) + "}]}");
+        WriteSkeletonWithBoneCount(root / "skeleton.bin", 0);
+    }
+}
+
+// Task 11.9: numVertices = vertBytes.size() / stride truncated silently if the byte count wasn't
+// an exact multiple of stride.
+TEST_F(ContentManagerSkinnedModelTest, VertexByteCountNotMultipleOfStrideThrows)
+{
+    ScratchContentRoot root;
+    WriteManifestWithOnePart(root.path(), 52);
+    WriteBytes(root.path() / "test.verts.bin", std::vector<std::uint8_t>(10, 0)); // 10 % 52 != 0
+    WriteBytes(root.path() / "test.idx.bin", {});
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    EXPECT_THROW(
+        cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"),
+        ContentLoadException);
+}
+
+// Task 11.9: index values from idxBytes were never checked to be < numVertices - malformed/
+// corrupted part data could produce an index buffer that references out-of-range vertices with
+// no validation anywhere in this path.
+TEST_F(ContentManagerSkinnedModelTest, OutOfRangeIndexThrows)
+{
+    ScratchContentRoot root;
+    WriteManifestWithOnePart(root.path(), 52);
+    WriteBytes(root.path() / "test.verts.bin", std::vector<std::uint8_t>(52, 0)); // exactly 1 vertex
+
+    std::vector<std::uint8_t> idxBytes;
+    AppendValue<std::uint16_t>(idxBytes, 5); // references vertex 5, but only 1 vertex exists
+    WriteBytes(root.path() / "test.idx.bin", idxBytes);
 
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
