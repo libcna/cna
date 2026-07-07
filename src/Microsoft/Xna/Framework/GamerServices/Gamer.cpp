@@ -8,10 +8,10 @@ namespace Microsoft::Xna::Framework::GamerServices
 {
     SignedInGamerCollection* Gamer::signedInGamers_ = nullptr;
 
-    Gamer::Gamer(const std::string& gamertag, const std::string& displayName)
-        // C# `displayName ?? gamertag`; empty string is used as the "null" sentinel since
-        // std::string has no null state.
-        : displayName_(displayName.empty() ? gamertag : displayName)
+    Gamer::Gamer(const std::string& gamertag, std::optional<std::string> displayName)
+        // Task 10.1: matches FNA's `displayName ?? gamertag` exactly - substitutes only when
+        // displayName was never supplied, never for an explicitly-passed empty string.
+        : displayName_(displayName.has_value() ? std::move(*displayName) : gamertag)
         , gamertag_(gamertag)
     {
     }

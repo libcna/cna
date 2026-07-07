@@ -6,6 +6,7 @@
 #include "System/IAsyncResult.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include <any>
+#include <optional>
 #include <string>
 
 namespace Microsoft::Xna::Framework::GamerServices
@@ -186,10 +187,18 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Constructs a Gamer with the given gamertag and display name.
          *
+         * Task 10.1: matches FNA's own `DisplayName = displayName ?? gamertag` exactly - the
+         * fallback applies only when displayName is omitted (C#'s implicit `null`), never for an
+         * explicitly-supplied empty string, which is preserved as-is. A plain empty-string
+         * sentinel (as this constructor previously used) cannot make that distinction, since
+         * std::string has no null state; std::optional<std::string> models C#'s nullable
+         * `string displayName = null` default precisely.
+         *
          * @param gamertag    The gamertag string.
-         * @param displayName The display name string; falls back to gamertag when empty.
+         * @param displayName The display name; when omitted, falls back to gamertag. An
+         * explicitly-passed empty string is kept as empty.
          */
-        Gamer(const std::string& gamertag, const std::string& displayName = "");
+        Gamer(const std::string& gamertag, std::optional<std::string> displayName = std::nullopt);
 
         /**
          * @brief Internal IAsyncResult implementation backing Gamer's asynchronous Begin/End methods.

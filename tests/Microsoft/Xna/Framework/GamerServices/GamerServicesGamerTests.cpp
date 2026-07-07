@@ -23,6 +23,16 @@ namespace {
     FriendGamer MakeGamer() {
         return FriendGamer::CreateInternal("tag1", "Display1", false, false, false, false, false, false);
     }
+
+    // Task 10.1: no current production subclass (FriendGamer/SignedInGamer/NetworkGamer) ever
+    // omits Gamer's own displayName argument - they all forward an explicit (possibly empty)
+    // string. This minimal test-only subclass exercises the true "argument omitted entirely"
+    // path (Gamer's own std::nullopt default), which is otherwise unreachable from outside the
+    // GamerServices/Net namespaces.
+    class TestOnlyGamer : public Gamer {
+    public:
+        explicit TestOnlyGamer(const std::string& gamertag) : Gamer(gamertag) {}
+    };
 }
 
 // --- Gamer (via FriendGamer, since Gamer itself is abstract) ---
@@ -34,8 +44,20 @@ TEST(GamerTest, DisplayNameGetSet) {
     EXPECT_EQ("NewName", g.getDisplayNameProperty());
 }
 
-TEST(GamerTest, DisplayNameFallsBackToGamertagWhenEmpty) {
+// Task 10.1: matches FNA's own `DisplayName = displayName ?? gamertag`, which substitutes only
+// for a true C# null, never for an explicitly-passed empty string. FriendGamer's displayName
+// parameter is required (not optional/defaulted) in both FNA and this port, so a caller passing
+// an explicit "" must have that "" preserved, not silently coerced to the gamertag.
+TEST(GamerTest, DisplayNameStaysEmptyWhenExplicitlyEmpty) {
     auto g = FriendGamer::CreateInternal("tagonly", "", false, false, false, false, false, false);
+    EXPECT_EQ("", g.getDisplayNameProperty());
+}
+
+// The gamertag fallback only applies when displayName is omitted entirely (Gamer's own
+// std::nullopt default) - unreachable through any current production subclass, so exercised
+// directly via TestOnlyGamer instead.
+TEST(GamerTest, DisplayNameFallsBackToGamertagWhenOmitted) {
+    TestOnlyGamer g("tagonly");
     EXPECT_EQ("tagonly", g.getDisplayNameProperty());
 }
 

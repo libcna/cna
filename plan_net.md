@@ -1999,7 +1999,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
 
 ## Phase 10 — GamerServices: Further Investigation
 
-- [ ] **Task 10.1** — Re-evaluate `Gamer`'s empty-string-as-null-sentinel for `displayName`
+- [x] **Task 10.1** — Re-evaluate `Gamer`'s empty-string-as-null-sentinel for `displayName`
   (`displayName_(displayName.empty() ? gamertag : displayName)`). Confirmed FNA's `DisplayName =
   displayName ?? gamertag` only substitutes on a true C# `null`, not on an explicit empty string — a
   caller intentionally passing `""` as a blank display name keeps `""` in FNA but gets silently
@@ -2008,6 +2008,34 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   replace the sentinel, since `FriendGamer`'s constructor forwards externally-sourced display names
   through this same path. Decide and implement (or explicitly re-affirm the current documented
   deviation as intentional and sufficient).
+
+  Decided: fix it, not just re-affirm. Confirmed this divergence is immediately reachable (not
+  merely latent) — `FriendGamer`'s own real FNA constructor forwards a required, non-defaulted
+  `displayName` straight to `base(gamertag, displayName)`, so any caller-supplied `""` was already
+  silently coerced to the gamertag by the old sentinel, exactly what the pre-existing (now
+  corrected) test `DisplayNameFallsBackToGamertagWhenEmpty` had locked in as if it were correct
+  behavior. Changed `Gamer`'s protected constructor from
+  `Gamer(const std::string&, const std::string& displayName = "")` to
+  `Gamer(const std::string&, std::optional<std::string> displayName = std::nullopt)` — matching
+  this codebase's own existing `std::optional<T>` convention for modeling nullable C# parameters
+  (already used in `Guide::EndShowMessageBox`, `AvatarDescription`), and mirroring FNA's `string
+  displayName = null` exactly. `displayName_` is now `displayName.has_value() ? std::move(*displayName)
+  : gamertag`. All 3 existing subclasses (`FriendGamer`, `SignedInGamer`, `NetworkGamer`) always
+  pass an explicit `const std::string&` for this argument, which converts implicitly to
+  `std::optional<std::string>` — none needed any signature change, and none ever relied on the old
+  default value, so this is a pure internal-substitution-logic fix, not an API break.
+
+  Updated the pre-existing test (renamed `DisplayNameFallsBackToGamertagWhenEmpty` →
+  `DisplayNameStaysEmptyWhenExplicitlyEmpty`, now asserting `""` is preserved) and added
+  `DisplayNameFallsBackToGamertagWhenOmitted`, exercised via a minimal test-only `TestOnlyGamer`
+  subclass — no current production subclass ever omits the second argument, so the true
+  omitted-entirely fallback path needed its own direct test.
+
+  Revert-verify: temporarily reverted `Gamer.hpp`/`Gamer.cpp` to the old empty-string-sentinel via
+  `git stash`, rebuilt, and confirmed `DisplayNameStaysEmptyWhenExplicitlyEmpty` failed with the
+  exact predicted symptom (`getDisplayNameProperty()` returned `"tagonly"` instead of the expected
+  `""`). Restored via `git stash pop`, rebuilt, confirmed green again. Full suite: 3368/3368
+  passing (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 10.2** — Design and document the ownership contract for `T*` items inside
   `GamerCollection<T>`-derived collections (broader framing of Tasks 3.1/7.5/7.12). No documented
