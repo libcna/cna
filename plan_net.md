@@ -1890,9 +1890,19 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   already-correct code). Full suite: 3355/3355 passing (2 expected accelerometer/gyroscope skips), no
   regressions.
 
-- [ ] **Task 9.5** — Add an out-of-range int-index test for `AchievementCollection::operator[](int)`
+- [x] **Task 9.5** — Add an out-of-range int-index test for `AchievementCollection::operator[](int)`
   (only the string-key-not-found case is currently tested) — add alongside Task 7.9's exception-type
   fix.
+
+  Cross-reference: Task 7.9's own commit (`853aa27b`) already added
+  `AchievementCollectionTest.IndexByIntOutOfRangeThrowsArgumentOutOfRangeException`, covering
+  `col[0]`/`col[-1]` on an *empty* collection. That only exercises the boundary at `index ==
+  size() == 0`; it doesn't prove the check still holds once the collection actually has elements.
+  Added `IndexByIntOutOfRangeOnPopulatedCollectionThrowsArgumentOutOfRangeException` (a genuinely new
+  case: 1-element collection, `col[1]` at `index == size()` and `col[-1]`), closing that remaining
+  gap. No revert-verify applies (pure test-coverage addition for already-correct code, confirmed
+  fixed in Task 7.9). Full suite: 3356/3356 passing (2 expected accelerometer/gyroscope skips), no
+  regressions.
 
 - [ ] **Task 9.6** — Add tests for the 3 untested `PropertyDictionary::GetValueX` overloads
   (`GetValueDateTime`, `GetValueStream`, `GetValueTimeSpan`) and both `operator[]` overloads (get,

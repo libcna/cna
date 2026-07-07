@@ -55,6 +55,18 @@ TEST(AchievementCollectionTest, IndexByIntOutOfRangeThrowsArgumentOutOfRangeExce
     EXPECT_THROW((void) col[-1], System::ArgumentOutOfRangeException);
 }
 
+// Task 9.5: the empty-collection case above only ever exercises index == 0 == size(); confirm
+// the boundary check also holds once the collection is actually populated (index == size() with
+// count > 0, not just count == 0).
+TEST(AchievementCollectionTest, IndexByIntOutOfRangeOnPopulatedCollectionThrowsArgumentOutOfRangeException) {
+    System::DateTime dt;
+    std::vector<Achievement> v;
+    v.push_back(Achievement::CreateInternal("k1", "Name1", "Desc", false, false, dt));
+    auto col = AchievementCollection::CreateInternal(std::move(v));
+    EXPECT_THROW((void) col[1], System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void) col[-1], System::ArgumentOutOfRangeException);
+}
+
 TEST(AchievementCollectionTest, Dispose) {
     auto col = AchievementCollection::CreateInternal({});
     col.Dispose();
