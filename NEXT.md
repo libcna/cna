@@ -16,46 +16,23 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   pixel-readback integration tests, verified against the authoritative FNA reference source
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `plan_graphics.md`; per-phase synthesis docs live in `docs/*.md`.
-- **Current development phase:** Phases 1–45 are complete. **Phase 46 ("SkinnedEffect exactness",
-  Tasks 401–410) is open** — Task 401 (opener) audited `SkinnedEffect` against FNA: all property
-  defaults, `MaxBones`=72, `SetBoneTransforms`/`GetBoneTransforms` bounds-checking, and `OnApply()`'s
-  shader-index formula match exactly. **Found and FIXED a real bug**: `Clone()` never preserved
-  `SpecularColor`/`SpecularPower` — the identical architectural bug shape Task 392 already fixed
-  for `FogColor` across 4 stock effects, undetected here since `SkinnedEffect` had zero prior test
-  coverage. Opened 3 new backlog tasks: **Task 893** (`DirectionalLight1`/`2` unforwarded, same
-  shape as Tasks 885/890), **Task 894** (zero specular GPU implementation on any backend, same
-  shape as Task 886), and **Task 895** (`WeightsPerVertex` is a complete GPU no-op on all 3
-  backends — FNA's real shader only sums the first N weight/index pairs per vertex, CNA always
-  sums all 4 regardless of the property). **Task 402 wrote 52 new `SkinnedEffectTests.cpp` unit
-  tests** (zero prior coverage existed), whose `Clone()` test is the regression guard proving
-  Task 401's `SpecularColor`/`SpecularPower` fix is correct (`git stash`-confirmed the test fails
-  exactly as predicted with the fix reverted). Also fixed an unrelated build-breaking discovery:
-  `SkinnedEffect::MaxBones` (an in-class-initialized `static const int`) had no out-of-line
-  definition, causing a linker error the moment any code (here, GTest's comparison machinery)
-  took its address — fixed per CLAUDE.md's own "Static Members and Named Constants" convention.
-  **Tasks 403/405 were already fully satisfied by Task 402's own test coverage** (no new code) —
-  marked done directly. **Task 404 verified `GetBoneTransforms` returns a genuinely independent
-  copy, not an alias** — zero bugs found; confirmed `EffectParameter::GetValueMatrixArray()`
-  builds a brand-new `std::vector<Matrix>` from scratch every call, matching FNA's own
-  array-allocating semantics. **Task 406 (first real pixel test in this phase) confirmed the
-  identity bone palette produces zero deformation on all 3 backends — zero bugs found**, but
-  surfaced a real Bgfx-specific *test-harness* pitfall (not a `SkinnedEffect`/backend bug):
-  reading 3 distinct screen rectangles from a single rendered Bgfx frame only reliably reflects
-  the *first* read — every prior multi-region Bgfx pixel test in this project reads exactly one
-  rectangle per draw+retry pass, a convention this task's test now also follows. **Task 407
-  formalized the pre-existing (Task 123) EasyGL-only translation-bone test into all 3 backends
-  for the first time — zero bugs found**, confirming a single real (non-identity)
-  `Matrix.CreateTranslation` bone correctly shifts the mesh on EasyGL, Vulkan, and Bgfx alike,
-  reusing Task 406's own `renderAndRead()` helper on Bgfx. **Task 408 verified genuine 2-bone
-  weighted blending on all 3 backends — zero bugs found**, using a deliberately discriminating
-  bone pair (`Translate(-0.5,0,0)`/`Translate(+1.5,0,0)`, weights `0.5`/`0.5` → blended shift
-  `+0.5`, distinct from either bone's own individual shift) and independently confirming
-  discriminating power by temporarily swapping to weights `(1,0)` and observing the predicted
-  `-0.5`-shift swap before restoring the real test. **Task 409 (capstone) combined Tasks 406–408's
-  pieces into one scene, one bone-palette upload, one draw call covering 3 quads — zero new
-  bugs**, proving identity/single-bone/two-bone-blend skinning all compose correctly together
-  within a single draw, not just in isolated scenes; all 3 backends produced the exact predicted
-  output on the first attempt, each byte-identical across all 3 quads within itself. Phase 45
+- **Current development phase:** Phases 1–46 are complete. **Phase 47 ("SpriteBatch renderer
+  correctness", Tasks 411–420) is open** — Task 411 (opener) is next: create a mock/recording
+  `ISpriteBatchBackend` for deterministic unit tests, a prerequisite for the sort-mode test tasks
+  (412–416) that follow it.
+- Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
+  `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
+  Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
+  the identical architectural shape Task 392 already fixed for `FogColor`), 52 new unit tests plus
+  an unrelated `MaxBones` linker-gap fix (Task 402), 2 already-satisfied bounds-checking tasks
+  marked done without new code (Tasks 403/405), `GetBoneTransforms` independent-copy verification
+  (Task 404), and 3 pixel tests plus a capstone (Tasks 406–409) that verified identity/single-bone/
+  two-bone-blend skinning with zero bugs found, byte-identical across all 3 backends — Task 406
+  additionally surfaced a genuinely new Bgfx-specific test-harness pitfall (`GetBackBufferData()`
+  only reliably reflects the first read per rendered frame), fixed with a `renderAndRead()`
+  per-checkpoint helper reused by every subsequent test in the phase. Opened 3 new follow-up
+  tasks: Task 893 (`DirectionalLight1`/`2` unforwarded), Task 894 (zero specular GPU
+  implementation), and Task 895 (`WeightsPerVertex` complete GPU no-op on all 3 backends). Phase 45
   ("EnvironmentMapEffect exactness", Tasks
   391–400) is
   **CLOSED** — Task 400 wrote `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399:
@@ -120,7 +97,8 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 409.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 409
+  (Task 410 was documentation-only — no code/test changes, no rebuild needed).
 
 ### Test status (last verified: Task 409)
 - **EasyGL, full `ctest -j1`:** 3609/3612 pass. 3 pre-existing/documented failures (see §5):
@@ -287,7 +265,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 409 | **Capstone, zero new bugs found**: combined Tasks 406–408's pieces (identity no-op, single-bone translation, 2-bone weighted blend) into one scene, one bone-palette upload, one draw call covering 3 quads distinguished only by per-vertex weight/index data. All 3 backends produced the exact predicted output on the first attempt, each byte-identical across all 3 quads within itself and matching each backend's own Task 406–408 single-quad values exactly — proving the pieces compose correctly within a single draw, not just in isolation. |
+| — | 410 | **Doc, closes Phase 46.** Wrote `docs/skinnedeffect-support.md` synthesizing Tasks 401–409 (mirrors `docs/basiceffect-support.md`/`docs/alphatesteffect-support.md`/`docs/dualtextureeffect-support.md`/`docs/environmentmapeffect-support.md`'s style) — per-task summaries, full 3-backend support matrix, "Open, tracked follow-up work" listing Tasks 893/894/895. No code changed. |
+| `aa9aa8a3` | 409 | **Capstone, zero new bugs found**: combined Tasks 406–408's pieces (identity no-op, single-bone translation, 2-bone weighted blend) into one scene, one bone-palette upload, one draw call covering 3 quads distinguished only by per-vertex weight/index data. All 3 backends produced the exact predicted output on the first attempt, each byte-identical across all 3 quads within itself and matching each backend's own Task 406–408 single-quad values exactly — proving the pieces compose correctly within a single draw, not just in isolation. |
 | `d0eebe95` | 408 | **Verify-only, zero bugs found**: confirmed genuine 2-bone weighted blending (`skinMat = w0×Bones[i0] + w1×Bones[i1]`) on all 3 backends using a deliberately discriminating bone pair whose blended result differs from either bone's own individual shift. Independently verified discriminating power by temporarily swapping to a `(1,0)` weight split and observing the predicted `-0.5`-shift swap (quad moves to the *left* read-back point instead of centre) before restoring the real `0.5`/`0.5` test. |
 | `8906d776` | 407 | **Verify-only, zero bugs found**: formalized the pre-existing (Task 123) EasyGL-only `skinned_effect_integration_test.cpp` translation-bone scenario into Phase 46's own per-backend naming convention, extending it to Vulkan and Bgfx for the first time. All 3 backends produced the exact predicted output on the first attempt, confirming a real non-identity `Matrix.CreateTranslation` bone correctly shifts the mesh everywhere. Bgfx reused Task 406's `renderAndRead()` helper. |
 | `fa5f026a` | 406 | **Opens the phase's first real pixel test, verify-only, zero `SkinnedEffect`/backend bugs found**: confirmed an identity bone palette (`Bones[0]=Identity`, `WeightsPerVertex=1`) produces zero mesh deformation on all 3 backends — direct contrast with the pre-existing Task 123 integration test. Surfaced a genuinely new Bgfx *test-harness* pitfall: `GetBackBufferData()` only reliably reflects the first read call per rendered frame; reading 3 rectangles from one frame silently returned blank data for reads 2 and 3. Fixed by refactoring to a `renderAndRead()` helper doing one full clear+draw+retry+read pass per checkpoint — now the established pattern for future multi-point Bgfx tests. |
@@ -519,22 +498,21 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 46 (Task 410 fully scoped in `plan_graphics.md`,
-the final task of the phase);
+In priority order — the first opens Phase 47 (Task 411 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 410 — document `SkinnedEffect` backend parity, closes Phase 46**
-   - Goal: write `docs/skinnedeffect-support.md`, synthesizing Tasks 401–409, mirroring
-     `docs/basiceffect-support.md`/`docs/alphatesteffect-support.md`/
-     `docs/dualtextureeffect-support.md`/`docs/environmentmapeffect-support.md`'s established
-     style: per-task summary sections, a full 3-backend support matrix (property defaults,
-     `Clone()`'s `SpecularColor`/`SpecularPower` fix, bone bounds-checking, identity/single-bone/
-     two-bone-blend pixel-verified correctness), and an "Open, tracked follow-up work" section
-     listing Task 893 (`DirectionalLight1`/`2` unforwarded), Task 894 (`SpecularColor`/
-     `SpecularPower` zero GPU implementation), and Task 895 (`WeightsPerVertex` complete GPU
-     no-op). No production code or tests expected to change — pure documentation task, matching
-     Task 380/390/400's precedent.
-   - Files: new `docs/skinnedeffect-support.md`.
+1. **Task 411 — create mock/recording `ISpriteBatchBackend` for deterministic unit tests**
+   - Goal: opens Phase 47 ("SpriteBatch renderer correctness", Tasks 411–420). Build a
+     mock/recording implementation of `ISpriteBatchBackend` that records draw calls (texture,
+     source/dest rects, color, rotation, origin, effects, layer depth) instead of issuing real GPU
+     draws, enabling deterministic unit tests of `SpriteBatch`'s sorting/batching logic without a
+     graphics context. This is an explicit prerequisite for Tasks 412–416 (completing tests for
+     each `SpriteSortMode`), which depend on it per `plan_graphics.md`'s own "Task 161/162/163/
+     164/165 dependency" notes.
+   - Files: likely new `include/CNA/Internal/Backends/Mock/...` + `src/CNA/Internal/Backends/
+     Mock/...` (mirroring the existing `Common`/`SDL`/`EasyGL`/`Vulkan`/`Bgfx` backend directory
+     structure per CLAUDE.md's "Internal (CNA) vs XNA Layer" table), plus a new test file exercising
+     it directly.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -658,140 +636,38 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 410).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 411).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
 instruction — do not wait to be asked; one task = one commit = one push).
 
-Current status: Phases 1-45 are FULLY COMPLETE. Phase 46 ("SkinnedEffect exactness",
-plan_graphics.md Tasks 401-410) is OPEN: Task 401 (opener) audited SkinnedEffect against FNA
-line-by-line -- all property defaults, MaxBones=72, SetBoneTransforms/GetBoneTransforms
-bounds-checking, and OnApply()'s shader-index formula match exactly (byte-for-byte identical
-constants to FNA's own if/else chain: +1 no-fog, +2/+4 for 2/4 weights, +12 per-pixel-preferred,
-+6 one-light). FOUND AND FIXED A REAL BUG: Clone()'s copy constructor set the private
-specularColor_/specularPower_ cache fields directly but never updated the freshly-recreated
-specularColorParam_/specularPowerParam_ EffectParameters -- since the getters always read from
-the parameter when non-null (always true post-CacheEffectParameters()), every clone's
-SpecularColor/SpecularPower silently reset to (0,0,0)/0 regardless of the source's actual
-values -- the IDENTICAL architectural bug shape Task 392 already fixed for FogColor across 4
-stock effects, undetected here since SkinnedEffect has zero existing test coverage. FIXED with
-the same one-line-per-field pattern used for FogColor:
-`if (specularColorParam_) specularColorParam_->SetValue(src.getSpecularColorProperty());` and
-the SpecularPower equivalent. Verification deferred to Task 402's Clone() test (mirrors Task
-392's exact precedent). Opened 3 new backlog tasks: Task 893 (DirectionalLight1/2 unforwarded,
-same shape as Tasks 885/890), Task 894 (SpecularColor/SpecularPower have zero GPU
-implementation on any backend, same shape as Task 886), and Task 895 (WeightsPerVertex is a
-complete GPU no-op on all 3 backends -- FNA's real Skin(vin,boneCount) HLSL function only sums
-the first boneCount weight/index pairs per vertex, but CNA's skinning shader on all 3 backends
-unconditionally sums all 4 regardless of the property's value; only visible when unused weight
-slots hold nonzero data, since well-formed content typically zeros them). Also noted, NOT
-opened as a bug (acceptable, strictly-more-accurate deviation, same class as Task 396's
-per-pixel-Fresnel note): PreferPerPixelLighting=false is effectively a no-op since NdotL is
-always computed in the fragment shader on every backend.
+Current status: Phases 1-46 are FULLY COMPLETE. Phase 47 ("SpriteBatch renderer correctness",
+plan_graphics.md Tasks 411-420) is OPEN: Task 411 (opener, NEXT) creates a mock/recording
+ISpriteBatchBackend for deterministic unit tests, an explicit prerequisite for Tasks 412-416
+(completing tests for each SpriteSortMode) per plan_graphics.md's own dependency notes.
 
-Task 402 wrote 52 new SkinnedEffectTests.cpp unit tests (zero prior coverage existed), mirroring
-Task 372/382/392's precedent exactly -- every property default, LightingEnabled's throw
-behavior, EnableDefaultLighting()'s effects, SetBoneTransforms/GetBoneTransforms's full
-bounds-checking matrix, WeightsPerVertex's accept-1/2/4/throw-otherwise validation, setter
-round-trips, and a Clone() test. The Clone() test is the regression guard for Task 401's fix --
-it deliberately sets SpecularColor/SpecularPower to non-default values before cloning.
-git-stash-confirmed (via direct edit+rebuild) the test fails exactly as predicted with Task
-401's fix reverted (SpecularColor read back (0,0,0) instead of (0.7,0.8,0.9), SpecularPower read
-back 0 instead of 64); restored and reconfirmed all 52 green. Also fixed an unrelated
-build-breaking discovery: SkinnedEffect::MaxBones (in-class-initialized static const int) had no
-out-of-line definition, causing a linker error the moment any code (here, GTest's comparison
-machinery) took its address -- fixed per CLAUDE.md's own "Static Members and Named Constants"
-convention (`const int SkinnedEffect::MaxBones;` added to SkinnedEffect.cpp).
-
-Tasks 403 ("verify SetBoneTransforms accepts exactly supported bone count") and 405 ("verify too
-many bones throws correct exception") were BOTH ALREADY FULLY SATISFIED by Task 402's own
-SetBoneTransformsAcceptsExactlyMaxBones/SetBoneTransformsThrowsWhenExceedingMaxBones tests --
-marked done in plan_graphics.md with a note pointing to Task 402's existing coverage, no new
-code needed.
-
-Task 404 verified GetBoneTransforms returns an independent copy, not an alias into internal
-storage -- zero bugs found. Read EffectParameter::GetValueMatrixArray()'s implementation
-directly: it builds a brand-new std::vector<Matrix> and push_backs freshly-constructed Matrix
-value objects copied out of floatData_, matching FNA's own array-allocating semantics exactly
-(bonesParam.GetValueMatrixArray(count) likewise allocates a fresh Matrix[] every call). Added a
-test that gets bones once, mutates element [0] of the returned vector to a distinctive
-non-identity transform, then gets bones again and confirms the second call's [0] is still
-Matrix.Identity -- discriminating power confirmed by construction (had GetValueMatrixArray
-returned an alias instead of a copy, the mutation would have corrupted the underlying storage
-and the second call would read back the corrupted value). 1 new test added
-(GetBoneTransformsReturnsIndependentCopy), all 53 tests in SkinnedEffectTests.cpp green. No
-production code changed.
-
-Task 406 was the phase's first real pixel/rendering test -- confirmed an identity bone palette
-(every one of the 72 default bone slots = Matrix.Identity, no SetBoneTransforms call made) produces
-ZERO mesh deformation on all 3 backends, a direct contrast with the pre-existing Task 123
-examples/skinned_effect_integration_test.cpp (same quad geometry/stride-52 layout, but bone 0 set
-to a +0.5 X translation there). Zero SkinnedEffect/backend bugs found. FOUND A GENUINELY NEW
-Bgfx-specific TEST-HARNESS pitfall (not a product bug): reading 3 distinct screen rectangles from
-a single rendered Bgfx frame inside one retry-loop iteration only reliably returns correct data
-for the FIRST read -- subsequent reads in the same frame return stale/blank data. Confirmed by
-auditing every existing bgfx_*_test.cpp in the project: all of them already read exactly one
-rectangle per draw+retry pass, a convention this task's initial implementation violated by
-accident. FIXED (the test, not production code) by refactoring to a renderAndRead() helper that
-performs its own full clear+draw+retry-loop+single-read pass per checkpoint (3 independent render
-passes instead of 1 pass with 3 reads) -- now the established pattern for future multi-point Bgfx
-pixel tests (see NEXT.md §5). Also worked around the already-known Bgfx SetDepthTestEnabled
-throw-stub (Task 375) by omitting the call entirely, matching the bgfx_dual_texture_test.cpp
-precedent. 1/1 PASS on all 3 backends, exact match. Added
-examples/{easygl,vulkan,bgfx}_skinnedeffect_identity_bones_test.cpp. No production code changed.
-
-Task 407 formalized the pre-existing (Task 123) EasyGL-only translation-bone scenario into all 3
-backends for the first time -- verify-only, zero bugs found. Reused Task 123's exact geometry
-(quad NDC x:-1..0,y:-1..1, bone 0 = Matrix.CreateTranslation(+0.5,0,0), weight=1) under Phase 46's
-own per-backend naming/registration convention. All 3 backends produced the exact predicted output
-on the first attempt: EasyGL centre=(174,0,0), Vulkan centre=(160,0,0), Bgfx centre=(160,0,0) (the
-small EasyGL-vs-Vulkan/Bgfx RGB difference is the same pre-existing per-backend lighting-precision
-variance seen throughout this phase, not a bug). Bgfx reused Task 406's own renderAndRead()
-per-checkpoint helper plus the established RasterizerState::CullNone (Task 364/884) and
-omitted-SetDepthTestEnabled (Task 375) workarounds; EasyGL/Vulkan needed no such workaround. Added
-examples/{easygl,vulkan,bgfx}_skinnedeffect_translation_bone_test.cpp; the pre-existing Task 123
-test is left untouched as its own independent, earlier-established EasyGL coverage. No production
-code changed.
-
-Task 408 verified genuine 2-bone weighted blending on all 3 backends -- verify-only, zero bugs
-found. Deliberately chose a discriminating, non-trivial bone pair: Bone 0 = Translate(-0.5,0,0),
-Bone 1 = Translate(+1.5,0,0), weights split 0.5/0.5 -> net blended shift = 0.5*(-0.5)+0.5*(+1.5) =
-+0.5, a value distinct from either bone's own individual shift (-0.5 or +1.5) -- so a bug that
-picked one bone alone (ignoring the other's weight) would produce a clearly different, wrong
-result rather than accidentally matching. All 3 backends produced the exact predicted output on
-the first attempt, byte-identical to Task 407's own per-backend values (EasyGL centre=(174,0,0),
-Vulkan/Bgfx centre=(160,0,0)), strong evidence the blend is computed correctly end-to-end.
-Independently verified discriminating power: temporarily changed the EasyGL test's weights to
-(1,0) (bone 0 alone) and reran -- predicted shift becomes -0.5, moving the quad to NDC x:
--1.5..-0.5; observed exactly the predicted swap (left=(174,0,0) now inside the shifted quad,
-centre=(0,255,0) now outside) -- confirmed the shader genuinely reads and applies both weights.
-Restored the real 0.5/0.5 test afterward and reconfirmed it passes. Bgfx reused Task 406's own
-renderAndRead() helper plus the established RasterizerState::CullNone/omitted-SetDepthTestEnabled
-workarounds. Added examples/{easygl,vulkan,bgfx}_skinnedeffect_twobone_blend_test.cpp. No
-production code changed.
-
-Task 409 (capstone) combined Tasks 406-408's individually-verified pieces (identity bone no-op,
-single-bone translation, 2-bone weighted blend) into ONE scene, ONE bone-palette upload, ONE
-DrawPrimitives call covering 3 quads distinguished ONLY by per-vertex weight/index data -- zero
-new bugs found. Quad A (w0=1,i0=0 -> Bones[0]=Identity) stays at x:-1.0..-0.5; Quad B (w0=1,i0=1
--> Bones[1]=Translate(+0.75,0,0)) shifts to x:-0.25..0.25; Quad C (w0=w1=0.5,i0=2,i1=3 ->
-Bones[2]=Translate(+1.0,0,0), Bones[3]=Translate(+2.0,0,0), blended shift +1.5) shifts to
-x:0.5..1.0 -- reusing the exact same 3 pixel columns (W/8, W/2, 7W/8) from every Task 406-408
-test, but now each column answers "which quad is visible here" instead of "inside vs outside one
-quad". All 3 backends produced the exact predicted output on the first attempt, each
-byte-identical across all 3 quads within itself and matching each backend's own Task 406-408
-single-quad values exactly (EasyGL all 3 = (174,0,0); Vulkan/Bgfx all 3 = (160,0,0)) -- strong
-evidence the 3 independent bone/weight combinations apply correctly and simultaneously within one
-draw call. Bgfx reused Task 406's renderAndRead() helper (extended with a triCount parameter).
-Added examples/{easygl,vulkan,bgfx}_skinnedeffect_combined_test.cpp. No production code changed.
-
-Task 410 (NEXT) is the final task of Phase 46: write docs/skinnedeffect-support.md synthesizing
-Tasks 401-409, mirroring docs/basiceffect-support.md/docs/alphatesteffect-support.md/
-docs/dualtextureeffect-support.md/docs/environmentmapeffect-support.md's established style --
-per-task summaries, full 3-backend support matrix, and an "Open, tracked follow-up work" section
-listing Tasks 893/894/895. No production code or tests expected to change -- pure documentation
-task, closing Phase 46.
+Phase 46 ("SkinnedEffect exactness", Tasks 401-410) CLOSED with Task 410
+(docs/skinnedeffect-support.md, full synthesis of Tasks 401-409). Summary of what it found/fixed:
+Task 401 (opener) audited SkinnedEffect against FNA line-by-line -- all property defaults,
+MaxBones=72, bounds-checking, and OnApply()'s shader-index formula matched exactly. FOUND AND
+FIXED a real bug: Clone() never preserved SpecularColor/SpecularPower -- the identical
+architectural shape Task 392 already fixed for FogColor across 4 stock effects. Opened Tasks 893
+(DirectionalLight1/2 unforwarded), 894 (zero specular GPU implementation), and 895
+(WeightsPerVertex complete GPU no-op on all 3 backends). Task 402 wrote 52 new
+SkinnedEffectTests.cpp unit tests (zero prior coverage existed) plus fixed an unrelated
+MaxBones linker gap. Tasks 403/405 were already fully satisfied by Task 402's own coverage --
+marked done without new code. Task 404 verified GetBoneTransforms returns a genuinely
+independent copy -- zero bugs. Task 406 (phase's first real pixel test) confirmed an identity
+bone palette produces zero deformation on all 3 backends -- zero bugs, but surfaced a genuinely
+new Bgfx-specific test-harness pitfall (GetBackBufferData() only reliably reflects the first read
+per rendered frame), fixed with a renderAndRead() per-checkpoint helper reused by every
+subsequent test in the phase. Task 407 formalized the pre-existing (Task 123) EasyGL-only
+translation-bone test into all 3 backends -- zero bugs. Task 408 verified genuine 2-bone
+weighted blending using a deliberately discriminating bone pair, independently confirmed via a
+temporary (1,0)-weight swap -- zero bugs. Task 409 (capstone) combined Tasks 406-408's pieces
+into one scene, one bone-palette upload, one draw call covering 3 quads -- zero new bugs, all 3
+backends byte-identical across all 3 quads within itself.
 
 Phase 45 ("EnvironmentMapEffect exactness", Tasks 391-400) CLOSED with Task 400
 (docs/environmentmapeffect-support.md, full synthesis of Tasks 391-399). Summary of what it
@@ -845,16 +721,16 @@ lit-textured shader transforms normals by the full World*View*Projection matrix,
 bug found while fixing Task 398). Task 401 opened 3 more: Task 893 (SkinnedEffect.
 DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/SpecularPower have zero
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
-GPU no-op on all 3 backends). None of these 11 block Phase 46's remaining tasks.
+GPU no-op on all 3 backends). None of these 11 block Phase 47's tasks.
 
 Last full 3-backend regression (Task 409 — capstone, verify-only, 1 new test per backend, no
-production code changed):
+production code changed; Task 410 was documentation-only, no rebuild):
 EasyGL 3609/3612 pass (3 documented pre-existing failures, no flakes this run).
 Vulkan 3529/3542 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
 Bgfx 3513/3513 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46 found, read plan_graphics.md
-directly (Tasks 351-409) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-410) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
