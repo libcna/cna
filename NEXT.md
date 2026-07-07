@@ -67,24 +67,22 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P12-PITCH-001`, on top of `P11-PAN-001`,
-  `P11-XACT-003/004/002`, `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`,
-  and everything in Phase 10). EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer
-  linked. Required a one-line unrelated unblock first (`GamerProfile.cpp`'s
-  `RegionInfo::CurrentRegion()` call, renamed upstream in sharp-runtime -- see §3). `cna_demo_sound`/
-  `cna_demo_2d` example targets not rebuilt this pass (no Audio *public XNA* API surface touched --
-  `P12-PITCH-001`'s changes are all internal to `SoundEffect.cpp`/`SoundEffectInstance.{hpp,cpp}`'s
-  `NOXNA`/private surface).
-- **Tests:** `CnaTests` whole-suite count is **3378 / 3380 pass** (2 skipped:
+- **Build:** clean, rebuilt and reverified this pass (`P12-PAUSE-001`, on top of `P12-DOC-001`,
+  `P12-PITCH-001`, `P11-PAN-001`, `P11-XACT-003/004/002`, `P11-DISPATCH-001`, `P11-XACT-001`,
+  `P11-TEST-001`, `P11-CHECKLIST-001`, and everything in Phase 10). EasyGL backend (Linux
+  default), `SOUND_ENABLED` on, SDL3_mixer linked. Required a one-line unrelated unblock first
+  (`GamerProfile.cpp`'s `RegionInfo::CurrentRegion()` call, renamed upstream in sharp-runtime --
+  see §3). `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt this pass (no Audio *public
+  XNA* API surface touched by any Phase 12 work so far).
+- **Tests:** `CnaTests` whole-suite count is **3379 / 3381 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected — not Audio; the 6-test increase since the last sync is
-  `P12-PITCH-001`'s new pitch-curve coverage, see §3). Prior sync's 16-test increase was
-  `P11-PAN-001`'s new pan-crossfeed coverage. The audio-scoped subset (§7's `--gtest_filter` list)
-  was reverified under a **fresh one-off ThreadSanitizer build** during `P11-PAN-001` (497/497
-  pass, zero `WARNING: ThreadSanitizer` reports); not re-run for `P12-PITCH-001` (a pure-math
-  formula change plus 3 call-site swaps, no new threading/ownership surface at all). A fresh
-  dedicated ASan+UBSan build (466/466 pass at the time) was last run during the post-Phase-10
-  sweep.
+  hardware-dependent, expected — not Audio; the 1-test increase since the last sync is
+  `P12-PAUSE-001`'s new `InstanceLimitStillCountsAPausedCue` regression lock, see §3). Prior
+  sync's 6-test increase was `P12-PITCH-001`'s new pitch-curve coverage. The audio-scoped subset
+  (§7's `--gtest_filter` list) was reverified under a **fresh one-off ThreadSanitizer build**
+  during `P11-PAN-001` (497/497 pass, zero `WARNING: ThreadSanitizer` reports); not re-run for
+  `P12-PITCH-001`/`P12-PAUSE-001` (neither touches threading/ownership surface). A fresh dedicated
+  ASan+UBSan build (466/466 pass at the time) was last run during the post-Phase-10 sweep.
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
@@ -138,6 +136,24 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12" s
   extremely recent Phase 9-11 work there), and `Microphone`/the 3 exception classes. Follow-up
   tasks (`P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`, `P12-DOC-001`, plus
   the pre-existing `P11-PAN-002`) tracked in `plan_audio.md`, being worked one at a time.
+- **`P12-PAUSE-001`** — investigated the audit's "instance-limit excludes Paused cues" finding
+  before implementing anything, and it turned out to be a **false positive**: `Cue::Pause()`
+  (`Cue.cpp:1089-1096`) only sets the independent `paused_` bool, never touching `state_` (stays
+  `State::Playing` throughout a pause, matching this branch's own documented invariant, `NEXT.md`
+  §6) -- so `AudioEngine::CheckCategoryInstanceLimit`/`CheckCueInstanceLimit`'s existing `state_ ==
+  Playing` checks already correctly count/consider a paused cue. The audit's finding had reasoned
+  from `P9-LIFECYCLE-014`'s own note, which describes the code as it was *before*
+  `P9-LIFECYCLE-013` added the `paused_`-bool split -- now stale on this specific point. Added one
+  new regression test (`AudioCategoryTest.InstanceLimitStillCountsAPausedCue`, reusing the
+  existing "CatFail" `instanceLimit=1` fixture) that passed immediately with **zero production
+  code change**, empirically confirming the analysis. `plan_audio.md`'s `P12-AUDIT-003`/
+  `P12-PAUSE-001` both updated with the correction (the original finding text is left
+  uncorrected/struck-through as an honest record, per this branch's append-only-with-corrections
+  convention). Full suite 3379/3381 pass (was 3378/3380; +1 new test).
+- **`P12-DOC-001`** — fixed `AUDIT.md` line 88's stale claim that `NoAudioHardwareException` is
+  "never actually thrown by the audio backend" -- stale since `P9-HARDWARE-002` made
+  `SoundEffect.cpp`/`DynamicSoundEffectInstance.cpp` throw it for real. Reworded to match
+  `CHECKLIST.md`'s already-accurate row. Docs-only.
 - **`P12-PITCH-001`** — fixed the Pitch→frequency-ratio bug the audit above found: CNA used a
   piecewise-linear formula (`(pitch<0)?(1+pitch*0.5f):(1+pitch)`) in three duplicated call sites
   (`SoundEffect::Play`'s fire-and-forget path, the shared `ApplyTrackProperties` helper used by
@@ -628,24 +644,22 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 **Phase 11 is fully closed.** `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly
 **rejected** by the user 2026-07-07 -- staying on SDL3_mixer (see §9).
 
-**Phase 12 (fresh logic-correctness audit, user-requested 2026-07-07) found 6 real gaps; one is
-fixed (`P12-PITCH-001`, see §3), five remain, being worked one at a time per the user's own
-explicit instruction to do so autonomously:**
+**Phase 12 (fresh logic-correctness audit, user-requested 2026-07-07) found 6 candidate gaps.**
+Status: `P12-PITCH-001` fixed (real bug); `P12-DOC-001` fixed (docs); `P12-PAUSE-001` investigated
+and found to be a **false positive** -- `Cue::state_` already stays `Playing` throughout a pause
+(the independent `paused_` bool, `P9-LIFECYCLE-013`), so the audit's finding did not reproduce; a
+new passing regression test (`InstanceLimitStillCountsAPausedCue`) locks in the already-correct
+behavior with zero code change (see §3). Three remain, being worked one at a time per the user's
+own explicit instruction to do so autonomously:
 
-1. **`P12-DOC-001`** -- trivial one-line fix: `AUDIT.md` line 88 stales claims
-   `NoAudioHardwareException` is never thrown; it has been since `P9-HARDWARE-002`. Pure docs,
-   zero risk -- good next pick.
-2. **`P12-PAUSE-001`** -- category/cue instance-limit live-count/victim-search should include
-   Paused cues, matching real FACT's non-mutually-exclusive Playing/Paused states. Narrow,
-   contained fix inside `AudioEngine::CheckCategoryInstanceLimit`/`CheckCueInstanceLimit`.
-3. **`P12-CATEGORY-001`** -- implement XACT category parent/child hierarchy cascading for
+1. **`P12-CATEGORY-001`** -- implement XACT category parent/child hierarchy cascading for
    `SetVolume`/`Pause`/`Resume`/`Stop` (`XgsCategory::parentIndex` is parsed but has zero
    consumers). Real feature work, moderate size -- `AudioEngine.cpp`'s 4 category-op methods plus
-   likely `AudioCategory`/`XactParser` wiring.
-4. **`P12-VAR-001`** -- enforce global-variable PUBLIC/CUE/READONLY accessibility + min/max
+   likely `AudioCategory`/`XactParser` wiring. Good next pick.
+2. **`P12-VAR-001`** -- enforce global-variable PUBLIC/CUE/READONLY accessibility + min/max
    clamping in `GetGlobalVariable`/`SetGlobalVariable`, and fix `XactTypes.hpp`'s mislabeled
    accessibility-bit doxygen. Real feature work, touches `AudioEngine` and likely `Cue`.
-5. **`P12-BANK-001`** -- `SoundBank`/`WaveBank::Dispose()` doesn't force-stop cues still using the
+3. **`P12-BANK-001`** -- `SoundBank`/`WaveBank::Dispose()` doesn't force-stop cues still using the
    bank, unlike real FACT. **Needs a design decision, not just an implementation** (a `GetCue()`'d
    `Cue*` is currently documented as caller-owned) -- candidate for user input rather than
    autonomous self-selection; see `plan_audio.md` P12-AUDIT-004 for the full tension.

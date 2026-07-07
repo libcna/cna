@@ -4897,6 +4897,13 @@ context-free agents, explicitly instructed not to modify any files):
      Paused same-category cue is invisible to both the live count and victim eligibility -- a
      category can silently exceed its authored `instanceLimit` whenever one of its cues happens to
      be paused when a new one plays. Lower severity/narrower than findings 1-2.
+     **Correction (`P12-PAUSE-001`, below): this finding does not actually reproduce.**
+     `P9-LIFECYCLE-013` (after `P9-LIFECYCLE-014` was written) already gave `Cue` an independent
+     `paused_` bool that leaves `state_` at `Playing` throughout a pause, so the `state_ ==
+     Playing` checks this finding worried about already correctly include paused cues -- verified
+     by both direct source reading and a new passing test, no code change needed. Left in place
+     here, uncorrected, as an honest record of what the audit pass originally reported; see
+     `P12-PAUSE-001` for the actual investigation and its result.
   See `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001` below for follow-up tasks.
 
 * [x] P12-AUDIT-004: `SoundBank`, `WaveBank`, `Cue`.
@@ -4995,9 +5002,32 @@ context-free agents, explicitly instructed not to modify any files):
   in `AudioEngine::GetGlobalVariable`/`SetGlobalVariable`, and fix `XactTypes.hpp`'s mislabeled
   accessibility-bit doxygen comment (`P12-AUDIT-003` finding 2). Not started.
 
-* [ ] P12-PAUSE-001: include Paused cues in category/cue instance-limit live-count and victim
+* [x] P12-PAUSE-001: include Paused cues in category/cue instance-limit live-count and victim
   eligibility, matching FACT's non-mutually-exclusive Playing/Paused state (`P12-AUDIT-003`
-  finding 3, narrower manifestation of `P9-LIFECYCLE-014`). Not started.
+  finding 3, narrower manifestation of `P9-LIFECYCLE-014`).
+  *Status:* **Investigated -- found to already be correct; no code change needed, a false
+  positive.** Before implementing anything, read `Cue::Pause()` (`Cue.cpp:1089-1096`) directly:
+  it only sets the independent `paused_` bool (`Cue.hpp:150`) and never touches `state_`, which
+  stays `State::Playing` throughout a pause -- matching this branch's own documented invariant
+  (`NEXT.md` §6: "`Cue::Pause()`/`IsPaused` never clear/depend on `IsPlaying`") and confirmed by
+  `Cue.cpp:375-376`'s own comment ("`IsPlaying` can both be true at once, since `paused_` is an
+  independent flag on top of `Playing`"). This means `AudioEngine::CheckCategoryInstanceLimit`/
+  `CheckCueInstanceLimit`'s existing `cue->state_ == Cue::State::Playing` checks (both the
+  live-count loop and the victim-search loop) **already** count/consider a paused cue exactly
+  like a playing one, with zero code change needed -- the audit's finding #3 appears to have
+  been reasoning from `P9-LIFECYCLE-014`'s own note (which describes a state of the code from
+  *before* `P9-LIFECYCLE-013` introduced the `paused_`-bool split) without cross-checking against
+  the current, actual `Cue.cpp` implementation. `P9-LIFECYCLE-014`'s own note is now itself stale
+  on this specific point and should be read as historical, not current.
+  *Verification, not implementation:* added
+  `AudioCategoryTest.InstanceLimitStillCountsAPausedCue` (`AudioCategoryTests.cpp`, reusing the
+  existing "CatFail" `instanceLimit=1` fixture from `P9-CATEGORY-005`): plays cueA, `Pause()`s it
+  (confirms `IsPlaying &amp;&amp; IsPaused` both true, per `P9-LIFECYCLE-013`), then plays cueB in the
+  same category and asserts it's still rejected exactly as if cueA were unpaused -- this test
+  **passed immediately, with no production code change**, empirically confirming the source-level
+  analysis above. A regression lock for genuinely-correct-and-now-tested behavior, not a bug fix.
+  Full suite 3379/3381 pass (was 3378/3380; +1 new test, no regressions), same 2 pre-existing
+  hardware-only skips.
 
 * [ ] P12-BANK-001: decide and implement `SoundBank`/`WaveBank::Dispose()`'s cue force-stop
   cascade, or explicitly re-scope/document the caller-owns-`GetCue()`-cues design as an accepted

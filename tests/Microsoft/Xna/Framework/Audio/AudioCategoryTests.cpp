@@ -1184,6 +1184,58 @@ TEST(AudioCategoryTest, InstanceLimitFailRejectsNewCueOnceLimitReached)
     }
 }
 
+// P12-PAUSE-001: real FACT's instanceCount is only decremented once a sound is actually
+// destroyed (FACT_INTERNAL_DestroySound), never at Pause -- FACT_STATE_PAUSED never clears
+// FACT_STATE_PLAYING (FACT.c:2647/2651), so a Paused cue still counts toward its category's
+// instanceLimit. This was flagged as a possible gap by a Phase 12 audit pass, but investigating
+// CNA's own Cue::Pause() (Cue.cpp) shows it never changes state_ away from State::Playing --
+// pause is tracked entirely via the independent paused_ bool (matching NEXT.md's own documented
+// invariant, "Cue::Pause()/IsPaused never clear/depend on IsPlaying"). This test empirically
+// confirms AudioEngine::CheckCategoryInstanceLimit's `state_ == Playing` check therefore already
+// counts a Paused cue correctly, with no code change needed -- a "confirmed correct, not a bug"
+// regression lock, not a new fix.
+TEST(AudioCategoryTest, InstanceLimitStillCountsAPausedCue)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cueA(CategoryLimitBank().GetCue("CatFailCueA"));
+        cueA->Play();
+        if (!CueTestAccess::ActiveInstance(*cueA, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        ASSERT_TRUE(cueA->getIsPlayingProperty());
+
+        cueA->Pause();
+        ASSERT_TRUE(cueA->getIsPlayingProperty()); // P9-LIFECYCLE-013: independent flags
+        ASSERT_TRUE(cueA->getIsPausedProperty());
+
+        // "CatFail" has instanceLimit=1 -- cueA being Paused (not Stopped) must still count
+        // toward that limit, so cueB must still be rejected exactly as if cueA were unpaused.
+        std::unique_ptr<Cue> cueB(CategoryLimitBank().GetCue("CatFailCueB"));
+        cueB->Play();
+
+        EXPECT_TRUE(cueB->getIsStoppedProperty());
+        EXPECT_FALSE(cueB->getIsPlayingProperty());
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*cueB, 0), nullptr);
+
+        // cueA must be completely unaffected -- still playing (and still paused).
+        EXPECT_TRUE(cueA->getIsPlayingProperty());
+        EXPECT_TRUE(cueA->getIsPausedProperty());
+        EXPECT_NE(CueTestAccess::ActiveInstance(*cueA, 0), nullptr);
+
+        cueA->Stop(AudioStopOptions::Immediate);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
 // REPLACE_OLDEST (2): once "CatReplace" (instanceLimit=1) already has one cue playing, a second
 // cue in the same category must fade out the first (over the category's authored fadeOutMS,
 // State::Stopping) and fade itself in from silence (over the category's authored fadeInMS) --
