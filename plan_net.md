@@ -2957,13 +2957,54 @@ done — "it compiles" is not sufficient.
   expected accelerometer/gyroscope skips), no regressions (new demo-only files, no library
   changes).
 
-- [ ] **Task 15.6** — `cna_demo_gamer_roster_hud`: the full gamer-roster event surface —
+- [x] **Task 15.6** — `cna_demo_gamer_roster_hud`: the full gamer-roster event surface —
   `GamerJoined`, `GamerLeft`, `HostChanged`, `SessionEnded`, plus per-gamer `IsHost`/`IsLocal`/
   `IsReady`/`IsTalking` flags. A live-updating panel lists every `NetworkGamer` in `AllGamers` with
   colored flag icons updating in real time. Single process via `NetworkSessionType::Local` with
   multiple local gamers for a quick version, or two real processes for a fuller join/leave/host-migration
   proof (the latter also doubles as a live demo of Phase 2's Task 2.6 host-migration fix, if
   implemented).
+
+  **Re-checked Task 2.6 before building**: it confirmed real host migration is genuinely
+  unimplemented (`ENetBackend::HandleDisconnect` unconditionally ends the session the instant the
+  host peer disconnects, no election logic anywhere), matching FNA's own reference — so
+  `HostChanged` can never fire in this demo. Built and wired the handler anyway (exercising the
+  full event surface as the task asks), expecting and asserting a `0` fire count rather than
+  omitting it.
+
+  New files: `examples/demo_gamer_roster_hud/src/{RosterGame.hpp,RosterGame.cpp,Main.cpp}`,
+  registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
+  `cna_demo_net_client_server_arena`. Real two-process `NetworkSession::Create/Find/Join`
+  (Task 15.1's proven pattern), subscribing all 4 roster events (`GamerJoined`/`GamerLeft`/
+  `HostChanged`/`SessionEnded`) and rendering a live panel over `AllGamers` (gamertag, `Host`/
+  `Local`/`Ready`/`Talking` as Y/N columns, local gamer's row highlighted). `R` toggles the local
+  gamer's `IsReady` (edge-triggered against a stored previous-frame `KeyboardState`). `--smoke N`
+  deterministically flips local `IsReady` every 60 frames (no real keyboard in smoke mode,
+  matching the established convention) and asserts `hostChangedFireCount == 0` at completion.
+
+  Checking `NetworkGamer.cpp`/`ENetBackend.cpp` before wiring the `IsReady` toggle surfaced that
+  `IsReady` is plain local storage with no wire message ever sending it (confirmed by `grep`);
+  `IsTalking` has no setter anywhere (always `false`, no voice-chat backend). Documented both
+  honestly in the demo's own comments and console output rather than presenting them as if they
+  were live-synced multiplayer state.
+
+  Verified end-to-end with two real OS processes (`--host --smoke 180` / `--join --smoke 180`, one
+  second apart), both exiting `0`. Host log: `GamerJoined` fired for both the local and remote
+  gamer with correct `Host`/`Local` flags (`Host:Y Local:Y` for itself, `Host:N Local:N` for the
+  client); the deterministic `Ready` toggle visibly flipped `Y`/`N` over time on the host's own row
+  while the remote gamer's `Ready` column stayed `N` the entire run — direct, live proof `IsReady`
+  is not synced across the wire. Smoke summary: `hostChangedFireCount=0`, exactly as predicted.
+  Client log surfaced a genuine, real, *already-known* limitation rather than a new bug: the
+  client's own roster panel shows `Host:N` for **both** rows, including the row that is actually
+  the host — traced to `ENetBackend.cpp`'s `HandleServerWelcome`/`HandleGamerJoinBroadcast`
+  (`RosterEntry doesn't carry a host flag, so this new remote gamer's IsHost stays at NetworkGamer's
+  default (false) even when it's actually the host's gamer`), which references `cna-samples/
+  DEFERRED.md` item #20 — resolved for the main `IsHost`/`Id` bug back in Task 12.2, with this one
+  specific client-side-view gap explicitly called out there as a still-open, already-scoped,
+  already-tracked limitation, not something newly discovered by this task. `SessionEnded` also
+  fired correctly on the client when the host exited first (same incidental proof pattern as
+  Task 15.1). Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no
+  regressions (new demo-only files, no library changes).
 
 - [ ] **Task 15.7** — `cna_demo_session_lifecycle_events`: `NetworkSession::StartGame()`/`EndGame()`,
   `NetworkSessionState` transitions (Lobby→Playing→Ended), `GameStarted`/`GameEnded` events, and a
