@@ -15,7 +15,7 @@
 > pushed), N-004 skipped (engineering conflict, not an owner question), N-012 Pen cancelled (explicit
 > owner scope cut). **Nothing is queued from this backlog** — §6/§8 are kept for reference/precedent
 > only. If asked to keep going, see §6's "if new NOXNA work is requested" note before inventing scope.
-> Branch in sync with `origin/feature/input` at `<haptics-commit-hash>` (fill in after the N-013 commit).
+> Branch in sync with `origin/feature/input` at `74c323a9`.
 
 ## 1. Project summary
 
@@ -68,7 +68,7 @@
 ## 3. This session's commits (most recent first, all on `feature/input`, all pushed)
 
 ```
-<haptics-commit-hash> input(N-013):  CNA::Input::Haptics + HapticDevice SDL3 force-feedback
+74c323a9 input(N-013):  CNA::Input::Haptics + HapticDevice SDL3 force-feedback
 8e99997c input(N-007):  CNA::Input::Joysticks raw-joystick access
 95db2319 input(N-014b): TextInputEXT input-type hint EXT
 f92dc71a fix(GamerServices): follow sharp-runtime's RegionInfo::CurrentRegion rename
@@ -92,7 +92,7 @@ d6aa0e23 input(N-005):  Mouse horizontal scroll wheel EXT
 ca88dd23 input(N-001):  CNA::Input::Clipboard — SDL3 clipboard text
 ```
 
-## 4. Reusable patterns (follow these — the remaining task fits one)
+## 4. Reusable patterns (kept for precedent — apply to any future NOXNA task)
 
 **Pattern 1 — GamePad-seam extension (poll-based).** For "more of an existing gamepad concept."
 1. Add a `virtual` to `ISdlGamepadBackend` (`include/CNA/Internal/Input/SdlGamepadBackend.hpp`); real
