@@ -1084,6 +1084,41 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         endif()
     endif()
 
+    # Task 15.20: cna_demo_avatar_bone_state_boundary - documents the real, verified
+    # AvatarRenderer skeleton-API boundary (State/ParentBones/BindPose) vs the working
+    # SkinnedModelEXT EXT path. Reuses demo_avatar's Content/ directory (copied by CMake, not
+    # duplicated) - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_avatar_bone_state_boundary
+            examples/demo_avatar_bone_state_boundary/src/Main.cpp
+            examples/demo_avatar_bone_state_boundary/src/BoundaryDemo.cpp
+        )
+        target_include_directories(cna_demo_avatar_bone_state_boundary PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar_bone_state_boundary/src
+        )
+        target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE SDL3::SDL3main)
+        endif()
+        add_custom_command(TARGET cna_demo_avatar_bone_state_boundary POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_avatar/Content"
+                "$<TARGET_FILE_DIR:cna_demo_avatar_bone_state_boundary>/Content"
+            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_bone_state_boundary executable")
+        if(WIN32)
+            set_target_properties(cna_demo_avatar_bone_state_boundary PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_avatar_bone_state_boundary)
+        endif()
+    endif()
+
     # EasyGL integration tests (Task 85, 86, 87)
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")

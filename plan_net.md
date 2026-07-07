@@ -3530,7 +3530,7 @@ done — "it compiles" is not sufficient.
   code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
   regressions (new demo-only files, no library changes).
 
-- [ ] **Task 15.20** — `cna_demo_avatar_bone_state_boundary`: documents the surprising,
+- [x] **Task 15.20** — `cna_demo_avatar_bone_state_boundary`: documents the surprising,
   verified-intentional `AvatarRenderer` behavior — `getStateProperty()` always returns
   `Unavailable`, and `getParentBonesProperty()`/`getBindPoseProperty()` always throw
   `InvalidOperationException` — contrasted against the *working* real skeleton reachable through
@@ -3538,6 +3538,35 @@ done — "it compiles" is not sufficient.
   Attempts both APIs, catches/prints the expected exception from the faithful path, then prints the
   real bone count/hierarchy from the EXT path — teaching exactly where the "real" boundary sits.
   Console or minimal window, single process.
+
+  **Corrected an imprecision in this task's own original description while reading
+  `AvatarRenderer.cpp` directly, before writing a line of demo code**: `getParentBonesProperty()`
+  does *not* throw at all — it's a plain, always-succeeding getter returning a real, fixed
+  71-entry Xbox-standard parent-bone-index table (`kParentBoneIds`), entirely independent of
+  `State`. Only `getBindPoseProperty()` actually throws `InvalidOperationException` (it checks the
+  raw internal state field directly against `Ready`, which nothing anywhere ever sets it to). The
+  demo's own console output documents the corrected, real 3-way split (`State`: always
+  `Unavailable`; `ParentBones`: genuinely works; `BindPose`: always throws) rather than the
+  originally-assumed 1-works/2-throw split.
+
+  New files: `examples/demo_avatar_bone_state_boundary/src/{BoundaryDemo.hpp,BoundaryDemo.cpp,
+  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
+  gate as `cna_demo_avatar`, reusing its `Content/` directory. A minimal window (no meaningful
+  rendering) whose entire content is printed to console during `Initialize()`: constructs a bare
+  `AvatarRenderer(nullptr)` (no `EnableRealRenderingEXT` call — the plain, un-rendered XNA-shaped
+  path), reads `State`, reads `ParentBones` (prints its first 5 real entries), attempts
+  `BindPose` in a try/catch printing the caught exception's message, then loads the real
+  avatar via `ContentManager` and prints `SkinnedModelEXT::BoneCount`/`ParentBoneIndices`/`Clips`/
+  `Parts` counts for direct contrast. Exits itself after 30 frames.
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0`: console output confirmed
+  exactly the corrected 3-way split — `State=Unavailable`; `ParentBones=71 real entries`
+  (`[-1, 0, 0, 0, 0]` first 5, no exception); `BindPose` threw `InvalidOperationException`
+  (`"The avatar's bind pose is not available."`) as expected — then the real EXT-path contrast:
+  `SkinnedModelEXT::BoneCount=19` (genuinely different from `AvatarRenderer`'s own fixed 71, per
+  the class's own doc comment that the two bone systems are "entirely independent"), 21 real
+  clips, 5 real parts. Exit code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/
+  gyroscope skips), no regressions (new demo-only files, no library changes).
 
 - [ ] **Task 15.21** — `cna_demo_net_avatar_sync` (bonus, cross-cutting): combines Net + Avatar —
   each of two processes loads its own gendered avatar, and every frame sends local position/yaw
