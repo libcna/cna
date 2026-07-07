@@ -386,6 +386,10 @@ namespace CNA::Internal::Backends::EasyGL
             int loc_ambient       = -1;
             int loc_l0dir         = -1;
             int loc_l0diff        = -1;
+            int loc_l1dir         = -1;  ///< BasicEffect.DirectionalLight1 (lit shader only)
+            int loc_l1diff        = -1;
+            int loc_l2dir         = -1;  ///< BasicEffect.DirectionalLight2 (lit shader only)
+            int loc_l2diff        = -1;
             int loc_texture       = -1;
             int loc_texture2      = -1;  ///< second sampler (DualTextureEffect only)
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)

@@ -750,6 +750,10 @@ namespace CNA::Internal::Backends::Bgfx
                 light0Dir3DUnif_    = bgfx::createUniform("u_light0Dir",      bgfx::UniformType::Vec4);
                 light0Diff3DUnif_   = bgfx::createUniform("u_light0Diffuse",  bgfx::UniformType::Vec4);
                 lightingEn3DUnif_   = bgfx::createUniform("u_lightingEnabled",bgfx::UniformType::Vec4);
+                light1Dir3DUnif_    = bgfx::createUniform("u_light1Dir",      bgfx::UniformType::Vec4);
+                light1Diff3DUnif_   = bgfx::createUniform("u_light1Diffuse",  bgfx::UniformType::Vec4);
+                light2Dir3DUnif_    = bgfx::createUniform("u_light2Dir",      bgfx::UniformType::Vec4);
+                light2Diff3DUnif_   = bgfx::createUniform("u_light2Diffuse",  bgfx::UniformType::Vec4);
                 vertexColorEn3DUnif_= bgfx::createUniform("u_vertexColorEnabled3D", bgfx::UniformType::Vec4);
                 texColor3DSampler_  = bgfx::createUniform("s_texColor",       bgfx::UniformType::Sampler);
                 alphaTestUnif_      = bgfx::createUniform("u_alphaTest",      bgfx::UniformType::Vec4);
@@ -818,6 +822,10 @@ namespace CNA::Internal::Backends::Bgfx
         destroyU(ambientColor3DUnif_);
         destroyU(light0Dir3DUnif_);
         destroyU(light0Diff3DUnif_);
+        destroyU(light1Dir3DUnif_);
+        destroyU(light1Diff3DUnif_);
+        destroyU(light2Dir3DUnif_);
+        destroyU(light2Diff3DUnif_);
         destroyU(vertexColorEn3DUnif_);
         destroyU(lightingEn3DUnif_);
         destroyU(texColor3DSampler_);
@@ -1631,6 +1639,21 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(light0Diff3DUnif_, diff);
             float litEn[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(lightingEn3DUnif_, litEn);
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1],
+                               params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1],
+                               params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
 
             if (bgfx::isValid(texColor3DSampler_))
             {

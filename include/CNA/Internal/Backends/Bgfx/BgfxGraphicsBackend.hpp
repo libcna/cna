@@ -277,6 +277,11 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::UniformHandle light0Dir3DUnif_    = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle light0Diff3DUnif_   = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle lightingEn3DUnif_   = BGFX_INVALID_HANDLE;
+        /// BasicEffect.DirectionalLight1/2 (lit-textured shader only, Task 885).
+        bgfx::UniformHandle light1Dir3DUnif_    = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle light1Diff3DUnif_   = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle light2Dir3DUnif_    = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle light2Diff3DUnif_   = BGFX_INVALID_HANDLE;
         /// BasicEffect.VertexColorEnabled gate for the no-texture colored3D path (Task 364).
         bgfx::UniformHandle vertexColorEn3DUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle texColor3DSampler_  = BGFX_INVALID_HANDLE;

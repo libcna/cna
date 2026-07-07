@@ -911,6 +911,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 885: BasicEffect pixel test — DirectionalLight1/2 + EmissiveColor on the lit path
+        cna_easygl_test(cna_test_easygl_basiceffect_multilight_emissive
+                        examples/easygl_basiceffect_multilight_emissive_test.cpp)
+        add_test(NAME EasyGL_BasicEffect_MultiLightEmissive
+                 COMMAND cna_test_easygl_basiceffect_multilight_emissive)
+        set_tests_properties(EasyGL_BasicEffect_MultiLightEmissive PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 168: transformMatrix in SpriteBatch::Begin — translation pixel readback
         cna_easygl_test(cna_test_easygl_transform_matrix
                         examples/easygl_transform_matrix_test.cpp)
@@ -2625,6 +2634,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_BasicEffect_OneLight
              COMMAND cna_test_bgfx_basiceffect_one_light)
     set_tests_properties(Bgfx_BasicEffect_OneLight PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 885: BasicEffect pixel test — DirectionalLight1/2 + EmissiveColor on the lit path
+    cna_bgfx_test(cna_test_bgfx_basiceffect_multilight_emissive
+                  examples/bgfx_basiceffect_multilight_emissive_test.cpp)
+    add_test(NAME Bgfx_BasicEffect_MultiLightEmissive
+             COMMAND cna_test_bgfx_basiceffect_multilight_emissive)
+    set_tests_properties(Bgfx_BasicEffect_MultiLightEmissive PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

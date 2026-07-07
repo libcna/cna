@@ -307,6 +307,12 @@ namespace CNA::Internal::Backends
         float ambientColor[3]  = {0,0,0};                   ///< RGB 0..1 (BasicEffect path)
         float light0Dir[3]     = {0,-1,0};                  ///< World-space, pre-normalized
         float light0Diffuse[3] = {1,1,1};                   ///< RGB 0..1
+        /// BasicEffect: DirectionalLight1's direction/diffuse, zeroed when disabled. World-space, pre-normalized.
+        float light1Dir[3]     = {0,-1,0};
+        float light1Diffuse[3] = {0,0,0};
+        /// BasicEffect: DirectionalLight2's direction/diffuse, zeroed when disabled. World-space, pre-normalized.
+        float light2Dir[3]     = {0,-1,0};
+        float light2Diffuse[3] = {0,0,0};
         float worldColMajor[16] = {                         ///< Column-major world matrix
             1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
         /// Alpha-test parameters (x=refVal, y=tolerance, z=passWeight, w=failWeight).
@@ -314,6 +320,10 @@ namespace CNA::Internal::Backends
         /// Default {0,0,1,1} = Always pass (never discard).
         float alphaTest[4]      = {0.0f, 0.0f, 1.0f, 1.0f};
         /// EnvironmentMapEffect: emissive+ambient combined, RGB 0..1.
+        /// BasicEffect (lit path only): raw EmissiveColor*Alpha, added after the ambient/light
+        /// sum is multiplied by DiffuseColor (CNA folds ambient into that multiply instead of
+        /// FNA's pre-baked "ambient+emissive" shader uniform — numerically equivalent net result,
+        /// see BasicEffect::FillGpuDrawParams()).
         float emissiveColor[3]  = {0,0,0};
         /// EnvironmentMapEffect: specular tint from env map, RGB 0..1.
         float envMapSpecular[3] = {0,0,0};

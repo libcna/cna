@@ -2421,13 +2421,21 @@ void main()
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
+"uniform vec3 uLight1Dir;\n"
+"uniform vec3 uLight1Diffuse;\n"
+"uniform vec3 uLight2Dir;\n"
+"uniform vec3 uLight2Diffuse;\n"
+"uniform vec3 uEmissiveColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
-"    float NdotL=max(dot(N,-uLight0Dir),0.0);\n"
-"    vec3 litRGB=(uAmbientColor+uLight0Diffuse*NdotL)*uDiffuseColor.rgb;\n"
+"    float NdotL0=max(dot(N,-uLight0Dir),0.0);\n"
+"    float NdotL1=max(dot(N,-uLight1Dir),0.0);\n"
+"    float NdotL2=max(dot(N,-uLight2Dir),0.0);\n"
+"    vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+"    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "    FragColor=texture(uTexture,vUV)*vec4(litRGB,uDiffuseColor.a);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
@@ -2441,6 +2449,11 @@ void main()
         prog_lit_textured_.loc_ambient     = prog_lit_textured_.prog.uniform_location("uAmbientColor");
         prog_lit_textured_.loc_l0dir       = prog_lit_textured_.prog.uniform_location("uLight0Dir");
         prog_lit_textured_.loc_l0diff      = prog_lit_textured_.prog.uniform_location("uLight0Diffuse");
+        prog_lit_textured_.loc_l1dir       = prog_lit_textured_.prog.uniform_location("uLight1Dir");
+        prog_lit_textured_.loc_l1diff      = prog_lit_textured_.prog.uniform_location("uLight1Diffuse");
+        prog_lit_textured_.loc_l2dir       = prog_lit_textured_.prog.uniform_location("uLight2Dir");
+        prog_lit_textured_.loc_l2diff      = prog_lit_textured_.prog.uniform_location("uLight2Diffuse");
+        prog_lit_textured_.loc_emissive    = prog_lit_textured_.prog.uniform_location("uEmissiveColor");
         prog_lit_textured_.loc_texture     = prog_lit_textured_.prog.uniform_location("uTexture");
         prog_lit_textured_.loc_alphatest   = prog_lit_textured_.prog.uniform_location("uAlphaTest");
         prog_lit_textured_.loc_fog_enabled = prog_lit_textured_.prog.uniform_location("uFogEnabled");
@@ -2743,6 +2756,18 @@ void main()
                 if (p.loc_l0diff >= 0)
                     p.prog.set_uniform(p.loc_l0diff,
                         params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2]);
+                if (p.loc_l1dir >= 0)
+                    p.prog.set_uniform(p.loc_l1dir,
+                        params.light1Dir[0], params.light1Dir[1], params.light1Dir[2]);
+                if (p.loc_l1diff >= 0)
+                    p.prog.set_uniform(p.loc_l1diff,
+                        params.light1Diffuse[0], params.light1Diffuse[1], params.light1Diffuse[2]);
+                if (p.loc_l2dir >= 0)
+                    p.prog.set_uniform(p.loc_l2dir,
+                        params.light2Dir[0], params.light2Dir[1], params.light2Dir[2]);
+                if (p.loc_l2diff >= 0)
+                    p.prog.set_uniform(p.loc_l2diff,
+                        params.light2Diffuse[0], params.light2Diffuse[1], params.light2Diffuse[2]);
             }
             else
             {
@@ -2750,6 +2775,10 @@ void main()
                 p.prog.set_uniform(p.loc_ambient, 1.0f, 1.0f, 1.0f);
                 if (p.loc_l0dir  >= 0) p.prog.set_uniform(p.loc_l0dir,  0.0f, -1.0f, 0.0f);
                 if (p.loc_l0diff >= 0) p.prog.set_uniform(p.loc_l0diff, 0.0f,  0.0f, 0.0f);
+                if (p.loc_l1dir  >= 0) p.prog.set_uniform(p.loc_l1dir,  0.0f, -1.0f, 0.0f);
+                if (p.loc_l1diff >= 0) p.prog.set_uniform(p.loc_l1diff, 0.0f,  0.0f, 0.0f);
+                if (p.loc_l2dir  >= 0) p.prog.set_uniform(p.loc_l2dir,  0.0f, -1.0f, 0.0f);
+                if (p.loc_l2diff >= 0) p.prog.set_uniform(p.loc_l2diff, 0.0f,  0.0f, 0.0f);
             }
         }
 

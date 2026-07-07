@@ -82,7 +82,16 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   assertion but actually **segfaulted** (`EffectPassCollectionTest`, a genuine use-after-free).
   **Split the RasterizerState-default GPU-sync gap out of Task 884's old bundled title into its
   own Task 896** (not fixed — needs a scoping decision on its large, unaudited blast radius
-  across ~128 EasyGL/Vulkan example files before it can safely land; see §5/§8).
+  across ~128 EasyGL/Vulkan example files before it can safely land; see §5/§8). **Task 885 fixed
+  the confirmed `BasicEffect` lit-path gap on EasyGL and Bgfx**: `DirectionalLight1`/
+  `DirectionalLight2` were completely unforwarded and `EmissiveColor` was silently dropped whenever
+  `LightingEnabled=true` (only the disabled-lighting path had it, Task 369). Fixed both backends'
+  shaders to sum all 3 lights and add `EmissiveColor` after the diffuse multiply (matching FNA's
+  `Lighting.fxh` formula exactly); discriminating power independently verified on both backends via
+  `git stash` revert-and-rebuild (pre-fix: identical `(89,13,13)` ambient+light0-only result on
+  both). **Split Vulkan out to its own Task 897** — its 128-byte push constant is already fully
+  packed, so this needs new descriptor-set/UBO infrastructure mirroring `EnvironmentMapEffect`'s/
+  `SkinnedEffect`'s own pattern, not a shader-only tweak.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -335,6 +344,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| — | 885 | **Real, confirmed gap found and FIXED on EasyGL/Bgfx (Vulkan split out to Task 897).** `BasicEffect::FillGpuDrawParams()` never forwarded `DirectionalLight1`/`DirectionalLight2` and silently dropped `EmissiveColor` whenever `LightingEnabled=true`. Added `GpuDrawParams` fields for light1/2, reused the existing `emissiveColor` field; fixed both backends' lit shaders to sum all 3 lights and add `EmissiveColor` after the diffuse multiply (not scaled by it), matching FNA's `Lighting.fxh` exactly — Bgfx's pre-existing formula needed restructuring since it multiplied the whole lit result by `DiffuseColor` naively. New `{EasyGL,Bgfx}_BasicEffect_MultiLightEmissive` tests (3 checks each: all-3-lights-summed, per-light `Enabled` gating, per-light independent `Direction` field) confirmed via `git stash` revert-and-refail — pre-fix, both backends produced the identical `(89,13,13)` ambient+light0-only result. |
 | `6e3b41a5` | 884 | **Real, confirmed dangling-pointer hazard found and FIXED** — `EffectParameterCollection`/`EffectPassCollection` stored their elements **by value** in a `std::vector`, the same hazard Task 355 already fixed for `EffectTechniqueCollection`. Switched both to `vector<unique_ptr<T>>` with matching custom iterators; no call-site changes needed anywhere (every usage went through `operator[]`/`GetParameterBySemantic`/range-`for`). New `PointerStableAcrossReallocatingAdd` tests on both collections; discriminating power independently verified via `git stash` revert-and-rebuild — pre-fix, `EffectParameterCollectionTest` failed on a pointer-address mismatch and `EffectPassCollectionTest` **segfaulted** (genuine use-after-free), both confirming the hazard was real. Split the RasterizerState-default GPU-sync gap out of this task's old bundled title into its own Task 896 (needs a scoping decision, not fixed here). |
 | `1c20d985` | 665 | **Real, confirmed Vulkan bug found and FIXED — both predicted root causes confirmed present.** `VulkanSpriteBatchBackend` never overrode `SetSamplerFilter`/`SetSamplerAddressMode` (always used the texture's own fixed descriptor set, bypassing the per-slot `VkSampler` cache entirely); `Draw()` separately clamped UVs to `[0,1]` regardless of `sourceRectangle`, defeating `Wrap`/`Mirror` addressing even if the sampler wiring alone were fixed. Fixed both, mirroring EasyGL's Task 269/118 pattern. New `Vulkan_TextureAddressMode` test (direct port of Task 269's EasyGL test) confirmed via `git stash` revert-and-refail — pre-fix both `PointWrap`/`PointClamp` read the identical blended color. Closes both of Phase 47's originally-scoped SpriteBatch bugs. |
 | `b9094009` | 664 | **Real, confirmed Vulkan bug found and FIXED.** Root cause isolated via instrumentation/tracing (per this task's own instruction, not guess-fixed): `VulkanSpriteBatchBackend::Begin()` destructively cleared the same mutable vectors a prior `End()` had just populated, before the once-per-frame harvest could read them; a second, latent bug meant the harvest always wrote to a hardcoded offset 0 instead of an accumulating cursor. Fixed with a per-cycle `BatchSnapshot` moved into `activeBatches_` at `End()`, plus a genuine running `vbOff`/`ibOff` cursor mirroring the already-correct 3D draw path. New `Vulkan_SpriteBatch_MultiBeginEnd` regression test confirmed via `git stash` revert-and-refail. |
@@ -471,7 +481,8 @@ direct code reading.
 | Confirmed, pre-existing, flaky | `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage`: order-dependent, only one fails per full-suite run. | — |
 | Confirmed, architectural, not fixed | `GraphicsDevice`'s default `RasterizerState` is never pushed to any backend's actual GPU state at construction; Bgfx's hardcoded default happens to be the only one matching FNA's, so it alone silently culls standard-winding quads unless `CullNone` is set explicitly. Fixing this correctly has a large, unaudited blast radius (~128 EasyGL/Vulkan example files never set `RasterizerState` and rely on those backends' incorrect no-culling default) — needs a scoping decision before it can land. | Task 896 |
 | Confirmed, architectural, not fixed | `Effect::Clone()` doesn't exist — needs an ownership-model decision plus fixing an `EffectPass::Apply()` owner-aliasing hazard plus `Clone()` overrides in all 7 stock effects. | Task 883 |
-| Confirmed, real, not fixed | `BasicEffect::FillGpuDrawParams()` only forwards `DirectionalLight0` (never `SpecularColor`/`SpecularPower`/`DirectionalLight1`/`DirectionalLight2`); lit path still omits `+EmissiveColor` (disabled-lighting path fixed Task 369). No specular infra exists anywhere. | Tasks 885/886 |
+| Confirmed, real, not fixed | `BasicEffect::FillGpuDrawParams()` never forwards `SpecularColor`/`SpecularPower` on any backend. No specular infra exists anywhere (`DirectionalLight1`/`DirectionalLight2`/lit-path `EmissiveColor` forwarding fixed by Task 885 on EasyGL/Bgfx; Vulkan still pending, Task 897). | Task 886 |
+| Confirmed, architectural, not fixed | Vulkan's lit-textured pipeline still doesn't forward `DirectionalLight1`/`DirectionalLight2`/`EmissiveColor` (fixed on EasyGL/Bgfx by Task 885) — its 128-byte push-constant range is already fully packed, so this needs new descriptor-set/UBO infrastructure (mirroring `EnvironmentMapEffect`'s/`SkinnedEffect`'s own small-UBO pattern), not a shader-only tweak. | Task 897 |
 | Confirmed, real, not fixed (empirically verified) | `AlphaTestEffect.VertexColorEnabled` has **zero effect on Vulkan or Bgfx** — their alpha-test pipeline/shader never declares a color vertex attribute at all, and this pipeline is used by default (`AlphaFunction=Greater`/`ReferenceAlpha=0` already trigger it). Correct on EasyGL (reuses `BasicEffect`'s already-fixed stride-24 shader). | Task 887 |
 | Confirmed, project-wide, not fixed | **Fog is a total GPU no-op on Vulkan and Bgfx for every 3D effect** — grepped every shader file in both backends for "fog", zero matches anywhere. Affects `BasicEffect` too (its `FillGpuDrawParams()` already forwards fog correctly; only the GPU side is missing). EasyGL already has fog fully working generically (confirmed for `BasicEffect` since Task 195, and `AlphaTestEffect` since Task 378). | Task 888 |
 | Confirmed, real, not fixed | `DualTextureEffect.VertexColorEnabled` has **zero effect on all 3 backends** — every backend's dual-texture dispatch is a dedicated shader/pipeline declaring only `position`+`texcoord` inputs (Vulkan explicitly reuses the generic textured-only vertex shader; Bgfx hardcodes `v_color0` to the diffuse uniform, not a real per-vertex attribute). Found while writing Task 389's capstone test — Phase 44 never had a dedicated audit task for this property, unlike `AlphaTestEffect`'s Task 377. | Task 889 |
@@ -584,8 +595,9 @@ There is no known reproducible failing build command right now (see §4).
 Phase 47 ("SpriteBatch renderer correctness") is now fully closed — Tasks 411–420 (mock-backend
 infrastructure + all 5 sort modes + real GPU pixel tests) and both of the phase's originally-
 scoped real bugs (Tasks 664/665) are done. Task 884 (`EffectParameterCollection`/
-`EffectPassCollection` dangling-pointer hazard) is also done. In priority order, the rest are the
-accumulated backlog from earlier phases (Tasks 825–828, 863–882, 885–896).
+`EffectPassCollection` dangling-pointer hazard) and Task 885 (`BasicEffect` lit-path
+`DirectionalLight1`/`2`/`EmissiveColor` on EasyGL/Bgfx) are also done. In priority order, the rest
+are the accumulated backlog from earlier phases (Tasks 825–828, 863–882, 886–897).
 
 1. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -598,17 +610,21 @@ accumulated backlog from earlier phases (Tasks 825–828, 863–882, 885–896).
    of those files or an explicit decision on how to sequence that cleanup first). Files:
    `GraphicsDevice.cpp` (ctor), potentially many `examples/*.cpp` files.
 
-3. **Task 885 — forward `EmissiveColor` on `BasicEffect`'s lit path + `DirectionalLight1`/`2`**
-   (opened by Task 369). Needs a new uniform on EasyGL/Bgfx's lit shaders (straightforward) plus
-   expanding Vulkan's shared 128-byte `pipelineLayoutExt3D_` push-constant budget (also used by
-   `SkinnedEffect` — coordinate testing across both). Files: `BasicEffect.cpp`, each backend's lit
-   shader, `GpuDrawParams`.
+3. **Task 897 — expand Vulkan's push-constant/UBO budget for `BasicEffect`'s lit path**
+   (`DirectionalLight1`/`2`/`EmissiveColor`, split out of Task 885 which already fixed EasyGL/
+   Bgfx). Needs new descriptor-set/pipeline-layout/UBO-ring-buffer infrastructure for the
+   lit-textured pipeline specifically, mirroring `EnvironmentMapEffect`'s/`SkinnedEffect`'s own
+   small-UBO pattern (`descriptorSetLayoutEnvMap_`/`pipelineLayoutEnvMap3D_`/`envMapUBO_`) — the
+   128-byte push constant is already fully packed with existing MVP/diffuse/ambient/light0/flags
+   data, so this is new infrastructure, not a shader-only tweak. Files: `VulkanGraphicsBackend.
+   hpp`/`.cpp`, `lit_textured3d.vert/frag.glsl`.
 
 4. **Task 886 — implement real specular highlights for `BasicEffect`** (opened by Task 369; a new
    feature, not a bug fix — zero specular infrastructure exists today). Needs world-space-position
    varyings, eye-position uniform (reuse `EnvironmentMapEffect`/`SkinnedEffect`'s
    `Matrix::Invert(view).Translation` technique), half-vector math, and `SpecularColor`/
-   `SpecularPower` forwarding, all 3 backends. Likely shares Task 885's Vulkan push-constant work.
+   `SpecularPower` forwarding, all 3 backends. Likely shares Task 897's Vulkan push-constant/UBO
+   work.
 
 5. **Task 887 — fix `AlphaTestEffect.VertexColorEnabled` being ignored on Vulkan/Bgfx** (opened by
    Task 377; true by default, not an edge case). Needs unifying Vulkan/Bgfx's alpha-test dispatch
@@ -669,14 +685,14 @@ accumulated backlog from earlier phases (Tasks 825–828, 863–882, 885–896).
   sibling `easy-gl` repo.
 - **No refactor of the stride-keyed vertex layout system** — load-bearing for all 3D tests across
   all backends; needs its own dedicated phase with full regression testing.
-- **No opportunistic fix for Task 885 (lit-path EmissiveColor/multi-light)** bundled into an
-  unrelated task — the Vulkan half specifically requires expanding a push-constant budget shared
-  with `SkinnedEffect` (`FillExtPushConst()`'s `float[32]`), which needs coordinated re-verification
-  across both effect classes, not a quick Vulkan-shader-only tweak.
+- **No opportunistic fix for Task 897 (Vulkan lit-path push-constant/UBO expansion)** bundled into
+  an unrelated task — needs its own dedicated descriptor-set/pipeline-layout/UBO-ring-buffer
+  infrastructure (mirroring `EnvironmentMapEffect`'s/`SkinnedEffect`'s own pattern), not a quick
+  Vulkan-shader-only tweak. EasyGL/Bgfx are already fixed (Task 885).
 - **No rushed specular implementation for Task 886** — it's a new feature (zero existing
   infrastructure), not a bug fix; needs its own dedicated design pass for world-space-position
-  varyings and half-vector math across all 3 backends, likely bundled with Task 885's Vulkan
-  push-constant work.
+  varyings and half-vector math across all 3 backends, likely bundled with Task 897's Vulkan
+  push-constant/UBO work.
 - **No further changes to the `GraphicsDevice` user-primitive scratch buffers** without re-running
   the full `DrawUserPrimitives`/`DrawUserIndexedPrimitives` pixel-readback suite.
 - **No API renames or namespace moves** — XNA API names and shapes are frozen by the FNA reference.
@@ -719,9 +735,13 @@ instruction — do not wait to be asked; one task = one commit = one push).
 
 Current status: Phases 1-47 are FULLY COMPLETE (Tasks 664/665 closed Phase 47's own 2 real bugs).
 Task 884 (EffectParameterCollection/EffectPassCollection dangling-pointer hazard) is also DONE.
-Task 896 (RasterizerState-default GPU-sync gap, split out of Task 884's old bundled title) is
-OPEN but deliberately not started -- needs a scoping decision first (see NEXT.md Task 896 note
-in section 8). Task 883 is next in the backlog. Task 411 (opener) built the mock/recording
+Task 885 (BasicEffect lit-path DirectionalLight1/2 + EmissiveColor forwarding) is DONE on EasyGL
+and Bgfx; its Vulkan half was split out to Task 897 (OPEN, not started -- needs new descriptor-
+set/UBO infrastructure, not a quick shader tweak). Task 896 (RasterizerState-default GPU-sync gap,
+split out of Task 884's old bundled title) is OPEN but deliberately not started -- needs a scoping
+decision first (see NEXT.md Task 896 note in section 8). Task 883 is next in the backlog (also
+needs a decision -- skip it too if still autonomous; Task 897 is a well-defined non-decision task
+if a technical task is wanted instead). Task 411 (opener) built the mock/recording
 ISpriteBatchBackend infrastructure Tasks 412-416 depend on -- audited SpriteBatch's architecture
 first (it already has a dedicated ISpriteBatchBackend interface; flushBatch()'s stable_sort by
 layerDepth/texture-pointer followed by flushSingle()'s backend_->Draw(s.texture->GetBackend(),...)
@@ -1061,17 +1081,45 @@ historical plan_graphics.md row that pointed at "Task 884" for this specific bug
 366, 367, 368, 370, 375, 384, 399) to point at Task 896 instead, so the tracking numbers stay
 accurate.
 
-Last full regression: Task 884 (EasyGL-config full ctest after restoring the fix) --
-3626/3630 pass (4 pre-existing unrelated failures: EasyGL_MRT_TwoAttachments,
-EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests,
-ENetDiscoveryServiceTest.UnregisterHostIsSafeForAnUnregisteredOrMismatchedSession -- all previously
-documented flaky/pre-existing, unrelated to Effect collections).
+Task 885 fixed BasicEffect's lit-path gap on EasyGL and Bgfx: DirectionalLight1/DirectionalLight2
+were completely unforwarded to the GPU (only DirectionalLight0 ever was), and EmissiveColor was
+silently dropped whenever LightingEnabled=true (only the disabled-lighting path, Task 369, had
+it). Derived the exact FNA formula from Lighting.fxh via a research agent first: EmissiveColor is
+added AFTER the ambient+light-sum is multiplied by DiffuseColor, not scaled by it -- CNA folds
+AmbientLightColor into the same light-sum multiply rather than FNA's pre-baked "ambient+emissive"
+shader uniform (confirmed mathematically equivalent net result by direct expansion of both
+formulas). Added GpuDrawParams fields for light1/light2 direction+diffuse (mirroring light0's
+existing shape) and reused the pre-existing emissiveColor field (previously EnvironmentMapEffect-
+only). Fixed both backends' lit shaders to sum all 3 lights (each light's Enabled state gated the
+same way Task 368 gated light0) and add EmissiveColor after the diffuse multiply -- Bgfx's
+pre-existing formula needed restructuring (not just extension) since it multiplied the *entire*
+lit result by DiffuseColor via a single vec4 multiply, which would have incorrectly scaled
+EmissiveColor by DiffuseColor too if added naively. New PointerStable-style discriminating tests,
+one per backend (examples/{easygl,bgfx}_basiceffect_multilight_emissive_test.cpp, 3 checks each:
+all-3-lights-plus-emissive summed correctly, per-light Enabled gating, per-light independent
+Direction field to catch a copy-paste-aliasing hazard). Independently verified discriminating
+power on both backends via git stash revert-and-rebuild: pre-fix, both backends produced the
+identical (89,13,13) ambient+light0-only result on all 3 checks, exactly as predicted; restored
+and reconfirmed all 6 checks (3 per backend) pass with the exact hand-derived expected values.
+Vulkan's lit-textured pipeline was investigated too (its own pipelineLayoutExt3D_ push-constant
+struct, confirmed via direct code reading to be fully packed at 32/32 floats, shared with strides
+20/24 and Instanced3D but NOT literally shared with SkinnedEffect's own separate
+pipelineLayoutSkinned3D_/descriptorSetLayoutSkinned_) -- landing the same fix there needs a new,
+dedicated descriptor-set/pipeline-layout/UBO-ring-buffer for the lit-textured pipeline specifically
+(mirroring EnvironmentMapEffect's own descriptorSetLayoutEnvMap_/pipelineLayoutEnvMap3D_/
+envMapUBO_ pattern, not a simple push-constant-widening tweak), so it was split out into its own
+Task 897 rather than rushed into the same commit.
+
+Last full regression: Task 885 (both EasyGL-config and Bgfx-config full ctest after restoring the
+fix) -- EasyGL 3628/3631 pass (3 pre-existing unrelated failures: EasyGL_MRT_TwoAttachments,
+EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests, unchanged from baseline).
+Bgfx 3527/3528 pass (1 pre-existing flaky ENetDiscoveryServiceTest.UnregisterHostStopsAnsweringQueries,
+reconfirmed passing cleanly in isolation).
 Vulkan last verified at Task 665: 3544/3556 pass (same 12 of 13 documented pre-existing failures
 as Task 664's run, exact-name match, zero new regressions; +1 new test).
-Bgfx last verified at Task 416: 3525/3525 pass (100%, no flakes).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-420, 664-665, 884, 896) rather than this file — this file intentionally keeps
-only a one-line summary per task (see §3) to stay a genuinely quick-to-read handoff document.
+directly (Tasks 351-420, 664-665, 884-885, 896-897) rather than this file — this file intentionally
+keeps only a one-line summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
