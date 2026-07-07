@@ -144,6 +144,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   before this task). 2 new tests passed on the first attempt; `git stash` revert-and-rebuild
   reproduced the exact predicted pre-fix failure. Vulkan/Bgfx's `env_map3d`/`skinned3d` GPU shader
   pipelines still don't implement fog — deliberately left for Task 899's scope, not this task's.
+  **Task 881 caps `GraphicsDevice.SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`**
+  (Task 339 finding) — added a single shared C++ check (`std::invalid_argument` when >4 targets)
+  before any backend delegation, making each backend's own pre-existing ad-hoc cap (EasyGL/Bgfx's
+  hardcoded 8, Vulkan's none at all) unreachable in practice. Discovered a real, separate,
+  previously-unreported robustness gap while writing the test: CNA's `RenderTargetBinding` (unlike
+  FNA's, whose constructors throw on a null target) has a default constructor wrapping a null
+  `Texture*`, and passing several through `SetRenderTargets` segfaults — not fixed, since a real
+  game can never construct one this way given FNA's own API shape.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -347,6 +355,10 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   both transformed the lit-textured vertex normal by the full World×View×Projection matrix instead
   of World's inverse-transpose, wrong under any non-identity camera — invisible until Task 886's
   test needed a real, non-degenerate `Matrix::CreateLookAt` camera for the first time on this path.
+- **`GraphicsDevice.SetRenderTargets` now correctly caps at FNA's real `MAX_RENDERTARGET_BINDINGS=4`
+  on all 3 backends** (Task 881 fix) — a single shared C++ check throws `std::invalid_argument`
+  before any backend delegation, superseding each backend's own previously-wrong ad-hoc cap
+  (EasyGL/Bgfx's hardcoded 8, Vulkan's none at all).
 
 ### What does NOT work yet
 - **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
@@ -371,8 +383,6 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   correct fix has a much larger blast radius than it looks (128 EasyGL/Vulkan example files never
   set `RasterizerState` at all and rely on those backends' incorrect no-culling default), needs a
   scoping decision before it can safely land.
-- `SetRenderTargets`'s simultaneous-target cap doesn't match FNA's real `MAX_RENDERTARGET_BINDINGS
-  = 4`: EasyGL/Bgfx silently cap at 8, Vulkan has no CNA-level cap at all (Task 881).
 - `EasyGL_MRT_TwoAttachments` (Task 145): even a basic, same-size/format 2-target MRT setup doesn't
   render correctly on EasyGL — attachment 1 stays black. Pre-existing, off-limits for opportunistic
   fixing (see §9).
@@ -401,6 +411,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| _pending_ | 881 | **Real, confirmed spec-compliance divergence found and FIXED on all 3 backends** (Task 339 finding): `SetRenderTargets`'s cap didn't match FNA's real `MAX_RENDERTARGET_BINDINGS=4` (EasyGL/Bgfx hardcoded 8, Vulkan had none at all). Fixed with a single shared C++ check (`std::invalid_argument` when >4 targets) before any backend delegation. New `GraphicsDeviceValidationTest.SetRenderTargets_*` unit tests using real `RenderTarget2D` instances — discovered a real, separate, previously-unreported segfault when passing null-target `RenderTargetBinding`s (a CNA-only default-ctor deviation from FNA, unreachable in practice, not fixed here). `git stash` revert-and-rebuild confirmed discriminating power. Full regression: EasyGL 3635/3638 (3 pre-existing failures only); Vulkan/Bgfx sanity-rebuilt clean (shared, backend-agnostic file). |
 | `fd8c2dea` | 900 | **Real, confirmed gap found and FIXED on EasyGL** (opened by Task 888's research): `SkinnedEffect`/`EnvironmentMapEffect`'s `FillGpuDrawParams()` never forwarded fog fields at all, despite both having complete `IEffectFog`/`FogVector` machinery in `OnApply()` — the same gap Task 378/388 already fixed for `AlphaTestEffect`/`DualTextureEffect`. Fixed by mirroring `BasicEffect`'s pattern in both effects, plus adding fog uniforms/blend to EasyGL's `env_map3d`/`skinned3d` shaders (the only 2 of 7 EasyGL shader variants with zero fog code before this task) — `BindDrawParams()` needed no changes, its fog-uniform-setting block is already fully generic. New `easygl_{environmentmapeffect,skinnedeffect}_fog_test.cpp` (3 checks each) passed on the first attempt; `git stash` revert-and-rebuild reproduced the exact predicted pre-fix failure (1/3 PASS each). Full EasyGL regression: 3631/3634 pass, same 3 pre-existing failures. Vulkan/Bgfx's `env_map3d`/`skinned3d` pipelines still lack fog GPU-side, left for Task 899. |
 | `a42ae950` | 888 | **Real feature implemented on Bgfx (full) and Vulkan (partial, remainder split to Task 899).** Chose EasyGL's already-shipped raw-object-space-Z fog formula over FNA's view-space `FogVector` (equivalent only under identity World/View, which every test uses; matching EasyGL is what makes the verification-by-porting-existing-tests plan work). Bgfx: 2 shared uniforms set unconditionally per draw, new varying, fog logic added to all 7 applicable shader pairs — no push-constant budget constraint there. Vulkan: fixed only `alpha_test3d`/`alpha_test_colored3d` (28 spare push-constant bytes) and `lit_textured3d` (32 spare `LitLightParams` UBO bytes); the other 5 pipelines share a fully-packed push constant with zero spare bytes, split to Task 899. 6 new tests (2 Vulkan, 4 Bgfx) confirmed via `git stash` revert-and-rebuild. Found and fixed 2 real pre-existing test-authoring gotchas along the way: Vulkan's clip-space Z is `[0,1]` not `[-1,1]` (a ported test using `z=-0.9` got near-plane-clipped); 2 ported Bgfx tests needed the already-known `RasterizerState::CullNone` workaround. Full regression: Vulkan 3551/3563 (12 pre-existing failures only), Bgfx 3535/3535 (100%, zero failures). Opened Task 899 (Vulkan's remaining 5 pipelines) and Task 900 (`SkinnedEffect`/`EnvironmentMapEffect` fog forwarding gap, found during research). |
 | `60ffbdbd` | 887 | **Real, confirmed gap found and FIXED on Vulkan/Bgfx** (opened by Task 377): `AlphaTestEffect.VertexColorEnabled` had zero effect since neither backend's alpha-test shader ever declared a color vertex attribute. Fixed with a smaller-footprint approach than originally scoped — added a stride-24-only sibling vertex shader to each backend's existing `alpha_test3d` pipeline (`alpha_test_colored3d.vert.glsl` on Vulkan, `vs_alpha_test_colored3d.sc` on Bgfx) rather than unifying all dispatch into the per-stride pipelines. New `{Vulkan,Bgfx}_AlphaTest_VertexColor` tests (ports of Task 377's EasyGL test) confirmed via `git stash` revert-and-rebuild on both backends — pre-fix, identical diffuse-alone `(122,82,163)` result on both checks. Full regression: Vulkan 3549/3561 (12 pre-existing failures only), Bgfx 3531/3531 (100%, zero failures). |
@@ -536,7 +547,8 @@ direct code reading.
 | Confirmed, architectural, deliberate | `GraphicsDevice` stores state objects by value, unlike FNA's reference-type aliasing. No game code here relies on FNA's behavior. | Task 869 |
 | Confirmed, incomplete | `SpriteBatch`'s `SamplerState` (`Begin()`) is a no-op on Bgfx (fixed on Vulkan by Task 665; EasyGL already correct). | — |
 | Confirmed, pre-existing | `EasyGL_MRT_TwoAttachments`: attachment 1 stays black with 2 render targets. | Task 145 |
-| Confirmed, minor, not fixed | `SetRenderTargets`'s simultaneous-target cap doesn't match FNA's real `MAX_RENDERTARGET_BINDINGS=4`. | Task 881 |
+| Fixed, all 3 backends | `SetRenderTargets`'s simultaneous-target cap now matches FNA's real `MAX_RENDERTARGET_BINDINGS=4` via a single shared C++ check. | Task 881 (done) |
+| Confirmed, real, not fixed, separately found | CNA's `RenderTargetBinding` (unlike FNA's, whose constructors throw on a null target) has a default constructor wrapping a null `Texture*`; passing several through `SetRenderTargets` segfaults. Unreachable in practice given FNA's own API shape (a real game can never construct one this way), found while testing Task 881. | — |
 | Confirmed, incomplete | `PresentationMode::Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer` aren't distinctly implemented on EasyGL; Vulkan/Bgfx implement no virtual-resolution scaling at all. | Task 882 (not yet a formal `plan_graphics.md` row — referenced inline in Task 348) |
 | Confirmed, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` aborts on an internal assert in the sibling `easy-gl` repo. | — |
 | Confirmed, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. | — |
@@ -661,10 +673,11 @@ scoped real bugs (Tasks 664/665) are done. Task 884 (`EffectParameterCollection`
 `DirectionalLight1`/`2`/`EmissiveColor`), Task 886/892/898 (real specular highlights + 2
 normal-transform prerequisite fixes on Bgfx/Vulkan), Task 887 (`AlphaTestEffect.
 VertexColorEnabled` ignored on Vulkan/Bgfx), Task 888 (real fog on Bgfx + Vulkan's
-`alpha_test3d`/`lit_textured3d` pipelines), and Task 900 (`SkinnedEffect`/`EnvironmentMapEffect`
-fog forwarding on EasyGL) are all done — `BasicEffect` now fully matches FNA's lit-path formula on
-all 3 backends. In priority order, the rest are the accumulated backlog from earlier phases (Tasks
-825–828, 863–882, 889–896, 899).
+`alpha_test3d`/`lit_textured3d` pipelines), Task 900 (`SkinnedEffect`/`EnvironmentMapEffect`
+fog forwarding on EasyGL), and Task 881 (`SetRenderTargets`'s `MAX_RENDERTARGET_BINDINGS=4` cap)
+are all done — `BasicEffect` now fully matches FNA's lit-path formula on all 3 backends. In
+priority order, the rest are the accumulated backlog from earlier phases (Tasks 825–828, 863–882,
+889–896, 899).
 
 1. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -688,33 +701,30 @@ all 3 backends. In priority order, the rest are the accumulated backlog from ear
    `VulkanGraphicsBackend.hpp`/`.cpp`; Bgfx's `vs/fs_env_map3d.sc`/`vs/fs_skinned3d.sc` for the
    Bgfx side (no infra needed there, same 2-uniform pattern as Task 888's other 7 pipelines).
 
-4. **Task 881 — cap `SetRenderTargets` at FNA's real `MAX_RENDERTARGET_BINDINGS=4`.**
-   Files: `GraphicsDevice.cpp` (`SetRenderTargets`). Verification: 5-target call throws, 1–4 work.
-
-5. **Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends.**
+4. **Task 880 — wire `GraphicsDevice.Viewport` to a real GPU viewport on all 3 backends.**
    Files: `IGraphicsBackend.hpp`, `GraphicsDevice.cpp`, all 3 backends' graphics-backend `.cpp`.
    Verification: sub-region-viewport pixel test (should fail on all 3 backends today).
 
-6. **Task 878/879 — implement real mip/MSAA render-target support on Vulkan and Bgfx**, mirroring
+5. **Task 878/879 — implement real mip/MSAA render-target support on Vulkan and Bgfx**, mirroring
     Task 336/337's exact EasyGL fix shape. Files: each backend's render-target backend classes.
 
-7. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
+6. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
     attachments** on all 3 backends (currently hardcoded/coarse choices).
 
-8. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
+7. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
     (875); `RenderTargetCube` via `EnvironmentMapEffect` renders black after unbind, root cause not
     isolated (876, needs isolation before a fix is attempted — see §9).
 
-9. **Task 873/874 — fix Bgfx's wrong-handle-type `static_cast`s** for `RenderTarget2D`/
+8. **Task 873/874 — fix Bgfx's wrong-handle-type `static_cast`s** for `RenderTarget2D`/
     `RenderTargetCube` sampling. Files: `BgfxGraphicsBackend.hpp`/`.cpp`.
 
-10. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
+9. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
     test fixture *first*, then implement against it).
 
-11. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+10. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
     (`vkCmdCopyImageToBuffer` + staging buffer, mirroring the existing upload path in reverse).
 
-12. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
+11. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
     `Texture3D`/`TextureCube` (confirm with a failing test first, per Task 276's methodology).
 
 ---
@@ -755,10 +765,8 @@ all 3 backends. In priority order, the rest are the accumulated backlog from ear
   task — verify with a dedicated stencil-in-RT pixel test first.
 - **No rushed fix for Task 880 (Viewport GPU wiring)** — write the sub-region-viewport pixel test
   FIRST (it should fail on all 3 backends today) before attempting any backend wiring.
-- **No opportunistic fix for Task 145 (`EasyGL_MRT_TwoAttachments`)** bundled into Task 881 or any
-  MRT-adjacent task — it needs its own dedicated root-cause investigation.
-- **No rushed fix for Task 881 (MRT count cap mismatch)** without a real unit test proving both the
-  throw-past-4 behavior and that 1–4 targets still work.
+- **No opportunistic fix for Task 145 (`EasyGL_MRT_TwoAttachments`)** bundled into any MRT-adjacent
+  task — it needs its own dedicated root-cause investigation.
 - **No implementing `Effect::Clone()` (Task 883) as a side effect of an unrelated Phase 42 task** —
   it needs its own dedicated task given the ownership-model decision and the `owner_`-aliasing fix
   it requires.
@@ -811,7 +819,15 @@ pre-existing failures. Vulkan/Bgfx's env_map3d/skinned3d GPU shader pipelines st
 implement fog -- left for Task 899 (noting Vulkan's env_map3d specifically already has ~160 spare
 UBO bytes and could be picked up cheaply there, and Bgfx's env_map3d/skinned3d need no new infra
 at all, same 2-uniform pattern as Task 888's other 7 pipelines -- neither was in Task 888/900's own
-scope though, since their C++ side wasn't even forwarding fog until this task). Remaining backlog
+scope though, since their C++ side wasn't even forwarding fog until this task). Task 881 (cap
+SetRenderTargets at FNA's real MAX_RENDERTARGET_BINDINGS=4, Task 339 finding) is now ALSO DONE on
+all 3 backends -- a single shared C++ check in GraphicsDevice::SetRenderTargets throws
+std::invalid_argument before any backend delegation, superseding each backend's own previously-
+wrong ad-hoc cap. Found a real, separate, previously-unreported segfault while writing the test:
+CNA's RenderTargetBinding (unlike FNA's, whose constructors throw ArgumentNullException on a null
+target) has a default constructor wrapping a null Texture*, and SetRenderTargets crashes deeper in
+the function if several are passed -- not fixed, unreachable in practice given FNA's own API shape
+(a real game can never construct a null-target RenderTargetBinding this way). Remaining backlog
 (Task 899/896/883) all need either new large infrastructure work or a scoping decision -- check
 NEXT.md's own backlog list (section 8) for the current best candidate when resuming. Task
 411 (opener) built the mock/recording
@@ -1407,15 +1423,51 @@ C++ side wasn't forwarding fog until Task 900 fixed it) -- left as a natural ext
 bytes in its existing EnvMapParams UBO and could be done cheaply, and Bgfx's env_map3d/skinned3d
 need zero new infrastructure at all, same 2-uniform pattern as Task 888's other 7 pipelines).
 
-Last full regression (all 3 backends, serial -j1, after Task 900's fix): EasyGL 3631/3634 pass
-(3 pre-existing failures), Bgfx 3535/3535 pass (100%, zero failures, unchanged from Task 888),
-Vulkan 3551/3563 pass (unchanged from Task 888) -- all failures independently reconfirmed
-pre-existing/documented (same exact-name-match lists as every prior task this session), zero new
-regressions on any backend.
+Task 881 then capped GraphicsDevice.SetRenderTargets at FNA's real MAX_RENDERTARGET_BINDINGS=4
+(Task 339's original finding). Read FNA's real SetRenderTargets source directly: it doesn't
+explicitly validate the count with a named exception -- the cap comes implicitly from
+Array.Copy(renderTargets, renderTargetBindings, renderTargets.Length) throwing when the source
+exceeds the fixed-size (4-element) destination array. Added a single explicit check at the very
+top of GraphicsDevice::SetRenderTargets (a new file-local constexpr MAX_RENDERTARGET_BINDINGS=4,
+before ResetViewportAndScissorForRenderTarget/any backend access) throwing std::invalid_argument
+when renderTargets.size()>4 -- matching this project's own closer precedent (SkinnedEffect::
+SetBoneTransforms already throws the identical std::invalid_argument shape for "exceeds MaxBones",
+Task 402) rather than the row's own tentative System::ArgumentOutOfRangeException guess. Each
+backend's own pre-existing ad-hoc cap (EasyGL/Bgfx hardcoded 8, Vulkan none at all) is now
+unreachable in practice since the shared layer rejects anything over 4 first -- left in place as
+defense-in-depth, not removed, since removing them wasn't part of the fix shape.
+
+New GraphicsDeviceValidationTest.SetRenderTargets_{FiveTargets_Throws,FourTargets_DoesNotThrow,
+OneTarget_DoesNotThrow,Empty_DoesNotThrow} unit tests using REAL RenderTarget2D instances, not
+default-constructed RenderTargetBinding -- discovered while writing the first draft of this test
+(using default-constructed bindings) that CNA's RenderTargetBinding, unlike FNA's (whose only
+constructors throw ArgumentNullException on a null target), has a default constructor wrapping a
+null Texture*, and passing several through SetRenderTargets SEGFAULTS deeper in the function (once
+backend_ is non-null and it forwards the null-pointer array to the backend's own SetRenderTargets).
+This is a real, separate, previously-unreported robustness gap -- NOT fixed here, since a real game
+can never actually construct a null-target RenderTargetBinding the way FNA's API is shaped (every
+constructor requires a non-null target), so exercising that path would test an unreachable state
+rather than this task's actual cap-check behavior. Rewrote the test to construct real 4x4
+RenderTarget2D instances against a real (non-headless -- GraphicsDevice's own default constructor
+turns out to create a real window/backend, not a headless stub) GraphicsDevice instead.
+
+Discriminating power independently verified: git stash-reverted the one production file, rebuilt,
+reran -- SetRenderTargets_FiveTargets_Throws failed exactly as predicted ("throws nothing"), the
+other 3 (all <=4 targets) correctly kept passing; restored and reconfirmed all 4 pass. Full
+regression: EasyGL serial -j1 3635/3638 pass (same 3 pre-existing failures: EasyGL_MRT_
+TwoAttachments, EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests); Vulkan/Bgfx
+sanity-rebuilt clean (GraphicsDevice.cpp is shared, backend-agnostic code with zero backend-
+specific branches, so a compile-only sanity check was sufficient rather than a full ctest run).
+
+Last full regression (all 3 backends, serial -j1, after Task 881's fix): EasyGL 3635/3638 pass
+(3 pre-existing failures, unchanged), Bgfx and Vulkan sanity-rebuilt clean (unchanged from Task
+900/888's own full regression runs, since Task 881 only touches shared, backend-agnostic code) --
+all failures independently reconfirmed pre-existing/documented (same exact-name-match lists as
+every prior task this session), zero new regressions on any backend.
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-420, 664-665, 884-900) rather than this file — this file
+directly (Tasks 351-420, 664-665, 881, 884-900) rather than this file — this file
 intentionally keeps only a one-line summary per task (see §3) to stay a genuinely quick-to-read
 handoff document.
 ```

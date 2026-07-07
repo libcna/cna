@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
@@ -70,4 +77,59 @@ TEST(TextureCollectionValidationTest, LiveTexture_DoesNotThrowForDisposedCheck)
     TextureCollection col;
     Texture2D tex; // not disposed
     EXPECT_NO_THROW(col(0, &tex));
+}
+
+// =============================================================================
+// GraphicsDevice.SetRenderTargets — MAX_RENDERTARGET_BINDINGS=4 cap (Task 881)
+//
+// Matches FNA's real behavior: GraphicsDevice.MAX_RENDERTARGET_BINDINGS=4, and
+// SetRenderTargets's Array.Copy into the fixed-size renderTargetBindings array throws when
+// given more than 4 targets.
+//
+// Real RenderTarget2D instances are used throughout (not default-constructed
+// RenderTargetBinding, which -- unlike FNA's RenderTargetBinding, whose only constructors throw
+// ArgumentNullException on a null target -- wraps a null Texture* in CNA and crashes deeper in
+// SetRenderTargets, an unrelated, separately-tracked null-target robustness gap; a real game
+// can never actually construct a null-target RenderTargetBinding, so exercising that path here
+// would test an unreachable state instead of this task's actual cap-check behavior).
+// =============================================================================
+
+TEST(GraphicsDeviceValidationTest, SetRenderTargets_FiveTargets_Throws)
+{
+    GraphicsDevice gd;
+    std::vector<std::unique_ptr<RenderTarget2D>> targets;
+    std::vector<RenderTargetBinding> bindings;
+    for (int i = 0; i < 5; ++i)
+    {
+        targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
+        bindings.emplace_back(targets.back().get());
+    }
+    EXPECT_THROW(gd.SetRenderTargets(bindings), std::invalid_argument);
+}
+
+TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
+{
+    GraphicsDevice gd;
+    std::vector<std::unique_ptr<RenderTarget2D>> targets;
+    std::vector<RenderTargetBinding> bindings;
+    for (int i = 0; i < 4; ++i)
+    {
+        targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
+        bindings.emplace_back(targets.back().get());
+    }
+    EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
+}
+
+TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
+{
+    GraphicsDevice gd;
+    RenderTarget2D rt(gd, 4, 4);
+    std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
+    EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
+}
+
+TEST(GraphicsDeviceValidationTest, SetRenderTargets_Empty_DoesNotThrow)
+{
+    GraphicsDevice gd;
+    EXPECT_NO_THROW(gd.SetRenderTargets({}));
 }

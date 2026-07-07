@@ -39,6 +39,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     namespace
     {
+        // Matches FNA's internal GraphicsDevice.MAX_RENDERTARGET_BINDINGS.
+        constexpr std::size_t MAX_RENDERTARGET_BINDINGS = 4;
+
         std::runtime_error makeSdlError(const char* operation)
         {
             return std::runtime_error(std::string(operation) + " failed: " + SDL_GetError());
@@ -1668,6 +1671,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)
     {
+        if (renderTargets.size() > MAX_RENDERTARGET_BINDINGS)
+            throw std::invalid_argument("SetRenderTargets: at most " +
+                std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");
+
         currentRenderTargets_ = renderTargets;
         renderTargetBound_ = !renderTargets.empty();
         if (renderTargets.empty())
