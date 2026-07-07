@@ -1644,11 +1644,17 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   applies. Full suite: **3311/3313 passing** (2 expected accelerometer/gyroscope skips), no
   regressions.
 
-- [ ] **Task 7.11** — Add the missing `NOXNA` marker to `Guide::ShowAchievementsEXT`. Confirmed this
+- [x] **Task 7.11** — Add the missing `NOXNA` marker to `Guide::ShowAchievementsEXT`. Confirmed this
   is FNA's own addition (not real XNA 4.0 API — the doc comment even says "(FNA extension)"), but
   neither the declaration (`Guide.hpp`, ~line 321) nor the definition carries `NOXNA` anywhere in
   the file, unlike all ~25 other `Guide` members (which are real XNA API and correctly unmarked).
   Add the marker.
+
+  Confirmed directly in FNA's own real `Guide.cs`: `ShowAchievementsEXT` is FNA's own addition,
+  already named with the "EXT" suffix by FNA's own author. Added `NOXNA` to the declaration.
+
+  Marker-only change, no behavior change, no revert-verify applies. Full suite: **3311/3313
+  passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 7.12** — Fix `FriendCollection::Dispose()` never deleting the raw `FriendGamer*`
   pointers it owns (mirrors the same ownership-model gap as Net's Task 3.1). Confirmed:
