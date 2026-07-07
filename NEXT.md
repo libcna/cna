@@ -24,7 +24,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   is flushed) — fixed both with new `NOXNA` test-only constructors/factories
   (`SpriteBatch(unique_ptr<ISpriteBatchBackend>)`, `Texture2D::CreateWithBackendForTests(...)`),
   then built `RecordingSpriteBatchBackend`/`DummyTextureBackend` and 5 tests proving the whole
-  injection path works end-to-end. Tasks 412–416 (per-`SpriteSortMode` assertions) are next.
+  injection path works end-to-end. **Task 412 fulfilled Task 161's ask — zero bugs found**:
+  verified `SpriteSortMode::Immediate` flushes each sprite inside `Draw()` itself, strictly
+  before `End()`, independently confirming discriminating power by temporarily breaking the
+  dispatch and watching both new tests fail exactly as predicted while a `Deferred` negative
+  control kept passing. Tasks 413–416 (the remaining per-`SpriteSortMode` assertions) are next.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -102,14 +106,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 411.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 412.
 
-### Test status (last verified: Task 411)
-- **EasyGL, full `ctest -j1`:** 3614/3617 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 412)
+- **EasyGL, full `ctest -j1`:** 3617/3620 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3534/3547 pass. 13 documented pre-existing failures (see §5),
+- **Vulkan, full `ctest -j1`:** 3537/3550 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3518/3518 pass — 100%, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3521/3521 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -269,7 +273,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 411 | **Opens Phase 47. Infrastructure task, 2 real gaps found and fixed**: `SpriteBatch` had no way to inject a custom backend without a real `GraphicsDevice`, and `Texture2D::CreateCpuOnlyForTests()`'s null backend would crash `flushSingle()` the moment a sprite is flushed. Fixed both with new `NOXNA` test-only constructors/factories, then built `RecordingSpriteBatchBackend`/`DummyTextureBackend` (new shared `tests/.../RecordingSpriteBatchBackend.hpp`) and 5 tests proving Begin/End/Draw dispatch and multi-texture discrimination work end-to-end, headlessly. |
+| — | 412 | **Verify-only, zero bugs found**: fulfills Task 161 — confirmed `SpriteSortMode::Immediate` flushes each sprite inside `Draw()` itself, strictly before `End()`, using Task 411's `RecordingSpriteBatchBackend`. Independently verified discriminating power: temporarily forced `pushSprite()` to always queue (breaking the Immediate branch) and confirmed both new tests fail exactly as predicted, while a `Deferred` negative control kept passing. |
+| `93a725b8` | 411 | **Opens Phase 47. Infrastructure task, 2 real gaps found and fixed**: `SpriteBatch` had no way to inject a custom backend without a real `GraphicsDevice`, and `Texture2D::CreateCpuOnlyForTests()`'s null backend would crash `flushSingle()` the moment a sprite is flushed. Fixed both with new `NOXNA` test-only constructors/factories, then built `RecordingSpriteBatchBackend`/`DummyTextureBackend` (new shared `tests/.../RecordingSpriteBatchBackend.hpp`) and 5 tests proving Begin/End/Draw dispatch and multi-texture discrimination work end-to-end, headlessly. |
 | `fe509dbd` | 410 | **Doc, closes Phase 46.** Wrote `docs/skinnedeffect-support.md` synthesizing Tasks 401–409 (mirrors `docs/basiceffect-support.md`/`docs/alphatesteffect-support.md`/`docs/dualtextureeffect-support.md`/`docs/environmentmapeffect-support.md`'s style) — per-task summaries, full 3-backend support matrix, "Open, tracked follow-up work" listing Tasks 893/894/895. No code changed. |
 | `aa9aa8a3` | 409 | **Capstone, zero new bugs found**: combined Tasks 406–408's pieces (identity no-op, single-bone translation, 2-bone weighted blend) into one scene, one bone-palette upload, one draw call covering 3 quads distinguished only by per-vertex weight/index data. All 3 backends produced the exact predicted output on the first attempt, each byte-identical across all 3 quads within itself and matching each backend's own Task 406–408 single-quad values exactly — proving the pieces compose correctly within a single draw, not just in isolation. |
 | `d0eebe95` | 408 | **Verify-only, zero bugs found**: confirmed genuine 2-bone weighted blending (`skinMat = w0×Bones[i0] + w1×Bones[i1]`) on all 3 backends using a deliberately discriminating bone pair whose blended result differs from either bone's own individual shift. Independently verified discriminating power by temporarily swapping to a `(1,0)` weight split and observing the predicted `-0.5`-shift swap (quad moves to the *left* read-back point instead of centre) before restoring the real `0.5`/`0.5` test. |
@@ -503,20 +508,21 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 47 (Task 412 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 47 (Task 413 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 412 — complete tests for `SpriteSortMode::Immediate` (Task 161 dependency)**
-   - Goal: using Task 411's `RecordingSpriteBatchBackend` (`tests/Microsoft/Xna/Framework/Graphics/
-     RecordingSpriteBatchBackend.hpp`) and `SpriteBatch`'s new backend-injecting constructor,
-     verify Task 161's exact ask: a sprite drawn under `SpriteSortMode::Immediate` must be flushed
-     to the backend **inside** `Draw()`, not deferred until `End()`. Concretely: call
-     `batch.Begin(SpriteSortMode::Immediate, ...)`, then `batch.Draw(...)`, then assert
-     `rec->drawCalls.size() == 1` **before** calling `batch.End()` — proving `pushSprite()`'s
-     `sortMode_ == SpriteSortMode::Immediate` branch (`flushSingle(info)` called directly, no
-     queueing) actually takes effect end-to-end, not just in isolated code-reading.
-   - Files: extend `tests/Microsoft/Xna/Framework/Graphics/SpriteBatchTests.cpp` (or a new
-     dedicated test file) with the `SpriteSortMode::Immediate` case.
+1. **Task 413 — complete tests for `SpriteSortMode::Deferred` (Task 162 dependency)**
+   - Goal: using the same `RecordingSpriteBatchBackend` infrastructure, verify Task 162's exact
+     ask: sprites submitted under the default `SpriteSortMode::Deferred` are delivered to the
+     backend in their original `Draw()` call order (no reordering), all at `End()` — the mirror
+     image of Task 412's Immediate test. Concretely: queue 3+ `Draw()` calls with distinct,
+     identifiable textures in a specific order, call `End()`, then assert
+     `rec->drawCalls[i].texture` matches the original call order exactly. Task 412's own
+     `DeferredDoesNotFlushBeforeEnd` negative control already covers the "not flushed before
+     End()" half of Deferred's contract — this task's job is the "preserves submission order"
+     half.
+   - Files: extend `tests/Microsoft/Xna/Framework/Graphics/SpriteBatchTests.cpp` with the
+     `SpriteSortMode::Deferred` order-preservation case.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -640,7 +646,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 412).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 413).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -675,10 +681,25 @@ Deferred order preservation, Texture grouping, FrontToBack/BackToFront ordering)
 this task's job was only proving the shared infrastructure itself works. No existing production
 behavior changed; only new NOXNA test-only injection points added.
 
-Task 412 (NEXT) is the natural next step: complete tests for SpriteSortMode::Immediate (Task 161
-dependency) using Task 411's RecordingSpriteBatchBackend -- verify a sprite drawn under
-SpriteSortMode::Immediate is flushed to the backend INSIDE Draw(), not deferred until End(): call
-Begin(Immediate,...), Draw(...), then assert rec->drawCalls.size()==1 BEFORE calling End().
+Task 412 fulfilled Task 161's exact ask -- verify-only, zero bugs found. FNA/XNA's contract for
+SpriteSortMode::Immediate is that each sprite is submitted the instant Draw() is called, not
+queued and flushed at End() like every other mode -- this must be observable BEFORE End() is ever
+called. Added ImmediateFlushesInsideDrawBeforeEnd (asserts rec->drawCalls.size()==1 immediately
+after Draw(), strictly before End(), then stays at 1 after End() -- no double-flush),
+ImmediateFlushesEachDrawSeparatelyInCallOrder (2 distinct textures, count increments by exactly 1
+per Draw() call), and DeferredDoesNotFlushBeforeEnd (negative control: proves the assertion
+methodology is genuinely discriminating, not spuriously passing regardless of sort mode).
+Independently verified discriminating power: temporarily replaced pushSprite()'s
+`if (sortMode_ == SpriteSortMode::Immediate)` with `if (false)` and rebuilt -- both Immediate
+tests failed exactly as predicted (count read 0 instead of 1 before End()), while the Deferred
+negative control correctly kept passing; reverted and reconfirmed all 8 SpriteBatch mock-backend
+tests green. No production code changed.
+
+Task 413 (NEXT) is the natural next step: complete tests for SpriteSortMode::Deferred (Task 162
+dependency) -- verify sprites submitted under the default Deferred mode are delivered to the
+backend in their original Draw() call order (no reordering), all at End(). Queue 3+ Draw() calls
+with distinct, identifiable textures in a specific order, call End(), then assert
+rec->drawCalls[i].texture matches the original call order exactly.
 
 Phase 46 ("SkinnedEffect exactness", Tasks 401-410) CLOSED with Task 410
 (docs/skinnedeffect-support.md, full synthesis of Tasks 401-409). Summary of what it found/fixed:
@@ -756,14 +777,14 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 47's tasks.
 
-Last full 3-backend regression (Task 411 — infrastructure, 5 new tests per backend, 2 new NOXNA
-test-only injection points added, no existing production behavior changed):
-EasyGL 3614/3617 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3534/3547 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3518/3518 pass (100%, no flakes this run).
+Last full 3-backend regression (Task 412 — verify-only, 3 new tests per backend, no production
+code changed):
+EasyGL 3617/3620 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3537/3550 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3521/3521 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-411) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-412) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

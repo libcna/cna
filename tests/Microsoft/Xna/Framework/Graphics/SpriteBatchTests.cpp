@@ -405,3 +405,89 @@ TEST(SpriteBatchBackendInjectionTest, DistinctTexturesProduceDistinctRecordedPoi
     EXPECT_EQ(rec->drawCalls[1].texture, &backendB);
     EXPECT_NE(rec->drawCalls[0].texture, rec->drawCalls[1].texture);
 }
+
+// -----------------------------------------------------------------------
+// Task 412: complete tests for SpriteSortMode::Immediate (Task 161 dependency)
+//
+// FNA/XNA's contract for SpriteSortMode::Immediate is that each sprite is submitted to the
+// graphics device the instant Draw() is called, rather than being queued and flushed in a batch
+// at End() (the behaviour every other sort mode uses). This must be observable BEFORE End() is
+// ever called -- a backend that only flushes at End() would pass every other SpriteBatch test in
+// this file (which all read the recording after End()) while still violating Immediate's actual
+// contract, so the assertion here is placed deliberately between Draw() and End().
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchSortModeTest, ImmediateFlushesInsideDrawBeforeEnd)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackend(4, 4);
+    Texture2D tex = Texture2D::CreateWithBackendForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+
+    batch.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+    batch.Draw(tex, 0.0f, 0.0f);
+
+    // The critical assertion: the draw must already be recorded here, before End() runs.
+    ASSERT_EQ(rec->drawCalls.size(), 1u);
+    EXPECT_EQ(rec->drawCalls[0].texture, &texBackend);
+
+    batch.End();
+
+    // End() must not re-flush or duplicate the already-immediate draw.
+    EXPECT_EQ(rec->drawCalls.size(), 1u);
+}
+
+TEST(SpriteBatchSortModeTest, ImmediateFlushesEachDrawSeparatelyInCallOrder)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend backendA(4, 4);
+    DummyTextureBackend backendB(8, 8);
+    Texture2D texA = Texture2D::CreateWithBackendForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendA, [](auto*) {}));
+    Texture2D texB = Texture2D::CreateWithBackendForTests(8, 8,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendB, [](auto*) {}));
+
+    batch.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+
+    batch.Draw(texA, 0.0f, 0.0f);
+    ASSERT_EQ(rec->drawCalls.size(), 1u);
+    EXPECT_EQ(rec->drawCalls[0].texture, &backendA);
+
+    batch.Draw(texB, 0.0f, 0.0f);
+    ASSERT_EQ(rec->drawCalls.size(), 2u);
+    EXPECT_EQ(rec->drawCalls[1].texture, &backendB);
+
+    batch.End();
+    EXPECT_EQ(rec->drawCalls.size(), 2u);
+}
+
+TEST(SpriteBatchSortModeTest, DeferredDoesNotFlushBeforeEnd)
+{
+    // Negative control: proves the test methodology above actually discriminates Immediate from
+    // the default (Deferred) mode, rather than every mode happening to flush eagerly.
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackend(4, 4);
+    Texture2D tex = Texture2D::CreateWithBackendForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+
+    batch.Begin(); // default: SpriteSortMode::Deferred
+    batch.Draw(tex, 0.0f, 0.0f);
+
+    EXPECT_EQ(rec->drawCalls.size(), 0u);
+
+    batch.End();
+    EXPECT_EQ(rec->drawCalls.size(), 1u);
+}
