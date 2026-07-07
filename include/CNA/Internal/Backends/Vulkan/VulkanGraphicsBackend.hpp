@@ -198,6 +198,18 @@ namespace CNA::Internal::Backends::Vulkan
 
         void SetCustomEffect(Effect* effect) override { customEffect_ = effect; }
 
+        // Task 665 fix: previously unoverridden (silent no-op via the base class's default
+        // empty bodies). Stores pending values applied via VulkanGraphicsBackend::
+        // ApplySamplerState(0, ...) (Task 118's existing per-slot VkSampler cache) at flush
+        // time, mirroring EasyGLSpriteBatchBackend's exact pendingFilter_/pendingAddressU_/
+        // pendingAddressV_ pattern.
+        void SetSamplerFilter(int textureFilter) override { pendingFilter_ = textureFilter; }
+        void SetSamplerAddressMode(int addressU, int addressV) override
+        {
+            pendingAddressU_ = addressU;
+            pendingAddressV_ = addressV;
+        }
+
         void Draw(const ITextureBackend& texture, float x, float y) override;
         void Draw(const ITextureBackend& texture,
                   const Rectangle& dest, const Rectangle& src,
@@ -234,6 +246,12 @@ namespace CNA::Internal::Backends::Vulkan
         const IVulkanSamplable*          currentTexture_      = nullptr;
         uint32_t                         batchFirstIndex_     = 0;
         VulkanRTSource*                  activeRT_            = nullptr;
+
+        // Task 665 fix: pending SamplerState, applied at flush time (mirrors EasyGL's exact
+        // field names/defaults — SamplerState.LinearClamp is SpriteBatch's own real default).
+        int                              pendingFilter_       = 0; // TextureFilter::Linear
+        int                              pendingAddressU_     = 1; // TextureAddressMode::Clamp
+        int                              pendingAddressV_     = 1; // TextureAddressMode::Clamp
 
         void FlushTexture();
     };

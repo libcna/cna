@@ -425,7 +425,15 @@ namespace CNA::Internal::Backends::Vulkan
         if (!currentTexture_) return;
         uint32_t count = static_cast<uint32_t>(indices_.size()) - batchFirstIndex_;
         if (count == 0) return;
-        draws_.push_back({ currentTexture_->GetVkDescriptorSet(), batchFirstIndex_, count });
+        // Task 665 fix: previously always used the texture's own pre-baked descriptor set
+        // (currentTexture_->GetVkDescriptorSet(), built once at texture-load time with a fixed
+        // default sampler), completely bypassing SetSamplerFilter/SetSamplerAddressMode. Apply
+        // the pending SamplerState to slot 0 (Task 118's existing per-slot VkSampler cache) and
+        // build a fresh descriptor set combining the texture's own image view with THAT sampler.
+        backend_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        VkDescriptorSet ds = backend_->GetOrCreateTexSamplerDescSet(
+            currentTexture_->GetVkImageView(), backend_->slotSamplers_[0]);
+        draws_.push_back({ ds, batchFirstIndex_, count });
         batchFirstIndex_ = static_cast<uint32_t>(indices_.size());
     }
 
@@ -492,10 +500,16 @@ namespace CNA::Internal::Backends::Vulkan
         float tw = static_cast<float>(texture.GetWidth());
         float th = static_cast<float>(texture.GetHeight());
 
-        float u1 = std::clamp((float)src.X / tw, 0.f, 1.f);
-        float v1 = std::clamp((float)src.Y / th, 0.f, 1.f);
-        float u2 = std::clamp((float)(src.X + src.Width)  / tw, 0.f, 1.f);
-        float v2 = std::clamp((float)(src.Y + src.Height) / th, 0.f, 1.f);
+        // Task 665 fix: no [0,1] clamp here — matches FNA, which divides straight through with
+        // no clamping (SpriteBatch.cs). A sourceRectangle that extends past the texture bounds
+        // intentionally produces UVs outside [0,1], letting the bound SamplerState's
+        // TextureAddressMode (Wrap/Mirror/Clamp) govern edge sampling — the classic XNA
+        // scrolling/tiling-background technique. Clamping here (the pre-fix behaviour) silently
+        // defeated Wrap/Mirror addressing entirely, regardless of which sampler was bound.
+        float u1 = (float)src.X / tw;
+        float v1 = (float)src.Y / th;
+        float u2 = (float)(src.X + src.Width)  / tw;
+        float v2 = (float)(src.Y + src.Height) / th;
 
         if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally))
             std::swap(u1, u2);

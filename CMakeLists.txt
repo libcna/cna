@@ -2237,6 +2237,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 665: SpriteBatch Begin()'s SamplerState (TextureAddressMode) must take effect
+        cna_vulkan_test(cna_test_vulkan_texture_address_mode
+                        examples/vulkan_texture_address_mode_test.cpp)
+        add_test(NAME Vulkan_TextureAddressMode
+                 COMMAND cna_test_vulkan_texture_address_mode)
+        set_tests_properties(Vulkan_TextureAddressMode PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 338: SetRenderTarget(nullptr) resets Viewport/ScissorRectangle to the backbuffer
         cna_vulkan_test(cna_test_vulkan_rendertarget_viewport_scissor_reset
                         examples/rendertarget_viewport_scissor_reset_test.cpp)
