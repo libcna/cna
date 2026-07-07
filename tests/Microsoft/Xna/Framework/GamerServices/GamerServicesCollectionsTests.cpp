@@ -399,3 +399,77 @@ TEST(GamerCollectionEnumeratorTest, MoveNextAndGetCurrentEnumerateInOrder) {
     EXPECT_EQ(&gamerB, it.getCurrent());
     EXPECT_FALSE(it.MoveNext());
 }
+
+// Task 9.3: Reset() had zero test coverage - confirms enumeration genuinely restarts from before
+// the first element, not just that Reset() compiles.
+TEST(GamerCollectionEnumeratorTest, ResetRestartsEnumeration) {
+    auto gamerA = SignedInGamer::CreateInternal("a");
+    auto gamerB = SignedInGamer::CreateInternal("b");
+    auto col = SignedInGamerCollection::CreateInternal({&gamerA, &gamerB});
+    auto it = col.GetEnumerator();
+    ASSERT_TRUE(it.MoveNext());
+    ASSERT_TRUE(it.MoveNext());
+    EXPECT_EQ(&gamerB, it.getCurrent());
+    EXPECT_FALSE(it.MoveNext()); // now past the end
+
+    it.Reset();
+    EXPECT_THROW((void) it.getCurrent(), System::ArgumentOutOfRangeException); // back to pre-MoveNext()
+    ASSERT_TRUE(it.MoveNext());
+    EXPECT_EQ(&gamerA, it.getCurrent()); // enumeration genuinely restarted, not just position_ + 1
+}
+
+// Task 9.3: the same enumerator behavior (GetEnumerator/MoveNext/getCurrent/Reset/Dispose) was
+// only ever exercised through SignedInGamerCollection - confirms it works identically through
+// FriendCollection, GamerCollection<T>'s other concrete subclass, with 2+ elements (not just 0 or
+// 1, which the pre-existing FriendCollectionTest cases were limited to).
+TEST(GamerCollectionEnumeratorTest, WorksThroughFriendCollectionToo) {
+    auto fgA = FriendGamer::CreateInternal("a", "A", false, false, false, false, false, false);
+    auto fgB = FriendGamer::CreateInternal("b", "B", false, false, false, false, false, false);
+    auto col = FriendCollection::CreateInternal({&fgA, &fgB});
+    auto it = col.GetEnumerator();
+    ASSERT_TRUE(it.MoveNext());
+    EXPECT_EQ(&fgA, it.getCurrent());
+    ASSERT_TRUE(it.MoveNext());
+    EXPECT_EQ(&fgB, it.getCurrent());
+    EXPECT_FALSE(it.MoveNext());
+
+    it.Reset();
+    ASSERT_TRUE(it.MoveNext());
+    EXPECT_EQ(&fgA, it.getCurrent());
+}
+
+// Task 9.3: GamerCollection<T>::Add/Remove (NOXNA mutators) had zero test coverage across every
+// GamerServices test file - exactly the coverage gap that let Task 7.8's getCurrent() bug ship
+// undetected. Exercised through both concrete subclasses, with 2+ elements.
+
+TEST(SignedInGamerCollectionTest, AddAppendsAndRemoveDeletesTheRightElement) {
+    auto gamerA = SignedInGamer::CreateInternal("a");
+    auto gamerB = SignedInGamer::CreateInternal("b");
+    auto gamerC = SignedInGamer::CreateInternal("c");
+    auto col = SignedInGamerCollection::CreateInternal({&gamerA, &gamerB});
+
+    col.Add(&gamerC);
+    ASSERT_EQ(3, col.getCountProperty());
+    EXPECT_EQ(&gamerC, col[2]);
+
+    col.Remove(&gamerA);
+    ASSERT_EQ(2, col.getCountProperty());
+    EXPECT_EQ(&gamerB, col[0]);
+    EXPECT_EQ(&gamerC, col[1]);
+}
+
+TEST(FriendCollectionTest, AddAppendsAndRemoveDeletesTheRightElement) {
+    auto fgA = FriendGamer::CreateInternal("a", "A", false, false, false, false, false, false);
+    auto fgB = FriendGamer::CreateInternal("b", "B", false, false, false, false, false, false);
+    auto fgC = FriendGamer::CreateInternal("c", "C", false, false, false, false, false, false);
+    auto col = FriendCollection::CreateInternal({&fgA, &fgB});
+
+    col.Add(&fgC);
+    ASSERT_EQ(3, col.getCountProperty());
+    EXPECT_EQ(&fgC, col[2]);
+
+    col.Remove(&fgA);
+    ASSERT_EQ(2, col.getCountProperty());
+    EXPECT_EQ(&fgB, col[0]);
+    EXPECT_EQ(&fgC, col[1]);
+}

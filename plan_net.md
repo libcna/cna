@@ -1850,12 +1850,24 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   unrelated by passing individually and on a clean full-suite re-run), no regressions from this
   change.
 
-- [ ] **Task 9.3** — Add real iteration/mutation tests for `GamerCollection<T>`'s custom enumerator
+- [x] **Task 9.3** — Add real iteration/mutation tests for `GamerCollection<T>`'s custom enumerator
   and NOXNA mutators, for both `FriendCollection` and `SignedInGamerCollection`. Confirmed a grep
   across all GamerServices test files for enumerator/`Add`/`Remove` usage returns nothing — this is
   exactly the coverage gap that let Task 7.8's `getCurrent()` bug ship undetected. Test
   `GetEnumerator()`, `MoveNext()`, `getCurrent()`, `Reset()`, `Dispose()` on the enumerator, and the
   `Add()`/`Remove()` mutators, with at least 2+ elements (not just 0 or 1).
+
+  Task 7.8 already added `GetEnumerator()`/`MoveNext()`/`getCurrent()`/`Dispose()` coverage
+  (through `SignedInGamerCollection`); this task filled the remaining gaps: added
+  `ResetRestartsEnumeration` (confirms enumeration genuinely restarts from before the first
+  element, not just that `Reset()` compiles), `WorksThroughFriendCollectionToo` (the same
+  enumerator behavior through `FriendCollection`, `GamerCollection<T>`'s other concrete
+  subclass, with 2 elements), and `AddAppendsAndRemoveDeletesTheRightElement` for both
+  `SignedInGamerCollection` and `FriendCollection` (the `NOXNA` `Add`/`Remove` mutators,
+  previously exercised by zero tests anywhere in `GamerServices`).
+
+  Pure test-coverage addition for already-correct code, no revert-verify applies. Full suite:
+  **3346/3348 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 9.4** — Add ordinal-value assertions to `GamerPresenceModeTest` and sibling enum tests
   (`GamerPrivilegeSettingTest`, `GamerZoneTest`, `ControllerSensitivityTest`, `GameDifficultyTest`,
