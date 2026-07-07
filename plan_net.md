@@ -2920,11 +2920,42 @@ done — "it compiles" is not sufficient.
   host exited first. Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no
   regressions (new demo-only files, no library changes).
 
-- [ ] **Task 15.5** — `cna_demo_session_browser`: `NetworkSession::Find(...)` returning an
+- [x] **Task 15.5** — `cna_demo_session_browser`: `NetworkSession::Find(...)` returning an
   `AvailableNetworkSessionCollection`, and `Join`. One process hosts/advertises (title "Hosting…");
   the other shows a scrollable list of `AvailableNetworkSession` entries (host gamertag,
   current/max gamer counts) with Up/Down to select and Enter/A to `Join` — the classic "session
   lobby" screen. Two real processes.
+
+  New files: `examples/demo_session_browser/src/{BrowserGame.hpp,BrowserGame.cpp,Main.cpp}`,
+  registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
+  `cna_demo_net_client_server_arena`. `--host [--max-gamers N]` advertises a session (title
+  "Hosting…"); `--browse` repeatedly calls `NetworkSession::Find()` every ~300ms, copies each
+  discovered entry into a plain owned `std::vector<AvailableNetworkSession>` (sidestepping
+  `AvailableNetworkSessionCollection`'s own throwing non-const `operator[]`, per Task 15.1's
+  finding, entirely by not re-indexing the throwing collection type at all), and renders a
+  scrollable list with a `>`-prefixed, highlighted selection cursor. Up/Down move the selection
+  (edge-triggered against a stored previous-frame `KeyboardState` so holding a key scrolls one
+  entry per press, not the whole list in one frame); Enter joins the selected entry. Since every
+  stub gamer's gamertag is identically "Stub Gamer" (the same real, faithful FNA behavior already
+  confirmed in Task 15.1), each list entry is disambiguated by its real discovered
+  `AvailableNetworkSession::GetConnectPort()` instead, alongside `current/max` gamer counts (max
+  computed as `CurrentGamerCount + OpenPublicGamerSlots + OpenPrivateGamerSlots`). Supports
+  launching several `--host` processes at once with different `--max-gamers` values, relying on
+  `ENetDiscoveryService`'s own Task 6.5 support for multiple independent processes sharing the
+  well-known discovery port, to prove the list genuinely scrolls across multiple distinct real
+  entries rather than a single-item stub. `--smoke N [--select I]` has no real keyboard driving
+  it, so it deterministically auto-selects and joins entry `I` (default 0) once at least `I + 1`
+  entries have been discovered (matching the established Phase 15 deterministic-nudge convention).
+
+  Verified end-to-end with 4 real OS processes: three hosts (`--max-gamers 4`/`8`/`16`, each
+  `--smoke 100`) plus one browser (`--browse --select 1 --smoke 100`, started 1s later). Browser
+  log: `discovered=3` (all three real hosts found via one shared discovery port), successfully
+  joined index 1 (`Joined "Stub Gamer" (port 44258) as "Stub Gamer"`, a real, distinct discovered
+  port disambiguating which of the three identically-named hosts was selected), smoke summary
+  `discovered=3 joined=true`. All 3 host logs correctly echoed back their own distinct
+  `maxGamers=4`/`8`/`16` values. All 4 processes exited `0`. Full suite: 3397/3397 passing (2
+  expected accelerometer/gyroscope skips), no regressions (new demo-only files, no library
+  changes).
 
 - [ ] **Task 15.6** — `cna_demo_gamer_roster_hud`: the full gamer-roster event surface —
   `GamerJoined`, `GamerLeft`, `HostChanged`, `SessionEnded`, plus per-gamer `IsHost`/`IsLocal`/
