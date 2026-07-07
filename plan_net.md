@@ -3122,12 +3122,47 @@ done — "it compiles" is not sufficient.
   accelerometer/gyroscope skips), no regressions (demo-only files; the one library change,
   Task 9.11, is already covered by its own dedicated commit/test above).
 
-- [ ] **Task 15.9** — `cna_demo_achievement_showcase`: `Achievement`, `AchievementCollection`,
+- [x] **Task 15.9** — `cna_demo_achievement_showcase`: `Achievement`, `AchievementCollection`,
   `SignedInGamer::AwardAchievement`/`GetAchievements`. A grid of achievement tiles (built via
   `CreateInternal` since the real `GetAchievements()` is empty on this platform) shows
   locked/unlocked art, gamerscore badges, `EarnedDateTime`; number keys call `AwardAchievement(key)`
   and flip a tile to "earned" with a small animation. Single process, reuses `demo_2d`'s
   SpriteBatch/SpriteFont setup.
+
+  New files: `examples/demo_achievement_showcase/src/{AchievementGame.hpp,AchievementGame.cpp,
+  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
+  gate as `cna_demo_avatar`. Real `GamerServicesComponent` registration (same pattern as Task
+  15.8). 6 fixed local achievement tiles built via `Achievement::CreateInternal` at startup (one
+  with `displayBeforeEarned=false`, rendering as a hidden `"???"` tile until earned — a real,
+  meaningful field this demo actually exercises). Number keys 1-6 call the real
+  `SignedInGamer::AwardAchievement(key)` and flip that tile to earned with a brief flash-color
+  animation.
+
+  **Confirmed before writing any demo code that `Achievement` is immutable once constructed** —
+  `CreateInternal`'s only constructor takes `earned`/`earnedDateTime` as fixed arguments with no
+  setter anywhere in the class. "Earning" a tile therefore means constructing a *new* `Achievement`
+  value (with `earned=true`, `earnedDateTime=DateTime::getNowProperty()`) and swapping it into the
+  demo's own local grid — the grid is deliberately the demo's own state, not something read back
+  from `GetAchievements()`.
+
+  **Confirmed `AwardAchievement()`/`GetAchievements()` are real, faithful no-ops** before design:
+  `SignedInGamer::AwardAchievement`'s body is empty and `GetAchievements()` always returns
+  `AchievementCollection::CreateInternal({})` — matching FNA's own reference exactly (its
+  `AwardAchievement` is likewise empty and `GetAchievements` likewise always empty). Rather than
+  silently working around this, the demo calls the real API on every award and prints the real
+  `GetAchievements().Count` each time, proving it stays `0` regardless of what was "awarded."
+
+  **Confirmed `GamerScore` is hardcoded to `0` in both FNA and CNA's `Achievement` constructor**
+  (checked FNA's `Achievement.cs` directly: `GamerScore = 0;`, no way to configure it via any
+  public constructor there either) — not a CNA gap, so the demo's gamerscore badge honestly always
+  reads `0` rather than fabricating a nonzero value the real API has no way to produce.
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 200`, one
+  deterministic award every 30 frames): all 6 tiles awarded in order (including the hidden `"???"`
+  one), each award's console line confirmed real `GetAchievements()` stayed at count `0`; final
+  summary `locallyEarned=6/6 realGetAchievementsCount=0`. Exit code `0`. Full suite: 3398/3398
+  passing (2 expected accelerometer/gyroscope skips), no regressions (demo-only files, no library
+  changes).
 
 - [ ] **Task 15.10** — `cna_demo_leaderboard_viewer`: `LeaderboardReader` (`PageUp`/`PageDown`,
   `CanPageUp/Down`, `Entries`, `PageStart`, `TotalLeaderboardSize`) plus an explicit demonstration of

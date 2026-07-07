@@ -754,6 +754,35 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         endif()
     endif()
 
+    # Task 15.9: cna_demo_achievement_showcase - Achievement/AchievementCollection,
+    # SignedInGamer::AwardAchievement/GetAchievements. Needs CNA_GamerServices and windowing
+    # (SpriteBatch/SpriteFont HUD) - same gating as cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_achievement_showcase
+            examples/demo_achievement_showcase/src/Main.cpp
+            examples/demo_achievement_showcase/src/AchievementGame.cpp
+        )
+        target_include_directories(cna_demo_achievement_showcase PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_achievement_showcase/src
+        )
+        target_link_libraries(cna_demo_achievement_showcase PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_achievement_showcase PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_achievement_showcase PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_achievement_showcase PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_achievement_showcase PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_achievement_showcase)
+        endif()
+    endif()
+
     # EasyGL integration tests (Task 85, 86, 87)
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
