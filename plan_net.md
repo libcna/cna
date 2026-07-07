@@ -1904,10 +1904,21 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   fixed in Task 7.9). Full suite: 3356/3356 passing (2 expected accelerometer/gyroscope skips), no
   regressions.
 
-- [ ] **Task 9.6** — Add tests for the 3 untested `PropertyDictionary::GetValueX` overloads
+- [x] **Task 9.6** — Add tests for the 3 untested `PropertyDictionary::GetValueX` overloads
   (`GetValueDateTime`, `GetValueStream`, `GetValueTimeSpan`) and both `operator[]` overloads (get,
   set, and missing-key path) — currently only int/float/double/long/string/outcome plus
   `ContainsKey`/`TryGetValue`/`CountIncrementsOnSet` are covered.
+
+  Added `SetAndGetDateTime`, `SetAndGetTimeSpan` (both via the existing `SetValue` overloads), and
+  `SetAndGetStream`. Confirmed against the real FNA source that `GetValueStream` has no matching
+  `SetValue` overload there either — Stream values only ever enter the dictionary through the
+  generic object indexer setter in C#; in this C++ port, `Add(key, std::any)` (Task 8.1) is the
+  closest equivalent generic entry point, so the new test stores a `System::IO::MemoryStream*`
+  through `Add` and reads it back via `GetValueStream`. Also added `ConstIndexerReadsExistingKey`
+  and `ConstIndexerThrowsOnMissingKey` — the const `operator[]` overload was previously only ever
+  exercised incidentally through a non-const reference, never directly on a `const
+  PropertyDictionary&`. No revert-verify applies (pure test-coverage addition for already-correct
+  code). Full suite: 3361/3361 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 9.7** — Add equal-case and not-equal-case (differing gamer, rating, ranking) tests for
   `LeaderboardEntry::operator==`/`operator!=` — currently zero coverage, despite the class's own

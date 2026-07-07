@@ -3,6 +3,7 @@
 #include <algorithm>
 #include "System/ArgumentException.hpp"
 #include "System/NotImplementedException.hpp"
+#include "System/IO/MemoryStream.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp"
@@ -56,6 +57,31 @@ TEST(PropertyDictionaryTest, SetAndGetOutcome) {
     EXPECT_EQ(LeaderboardOutcome::Win, dict.GetValueOutcome("outcome"));
 }
 
+TEST(PropertyDictionaryTest, SetAndGetDateTime) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    System::DateTime dt(2024, 6, 15);
+    dict.SetValue("when", dt);
+    EXPECT_TRUE(dt == dict.GetValueDateTime("when"));
+}
+
+TEST(PropertyDictionaryTest, SetAndGetTimeSpan) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    System::TimeSpan ts(1, 2, 3);
+    dict.SetValue("elapsed", ts);
+    EXPECT_TRUE(ts == dict.GetValueTimeSpan("elapsed"));
+}
+
+// Task 9.6: unlike every other GetValueX overload, GetValueStream has no matching SetValue
+// overload in FNA either (Stream values only ever get in through the generic object indexer) -
+// Add() (a Task 8.1 addition, taking a std::any) is this port's own closest equivalent entry
+// point for storing an arbitrary-typed value like a Stream pointer.
+TEST(PropertyDictionaryTest, SetAndGetStream) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    System::IO::MemoryStream stream;
+    dict.Add("payload", static_cast<System::IO::Stream*>(&stream));
+    EXPECT_EQ(&stream, dict.GetValueStream("payload"));
+}
+
 TEST(PropertyDictionaryTest, ContainsKey) {
     auto dict = PropertyDictionary::CreateInternal({});
     EXPECT_FALSE(dict.ContainsKey("x"));
@@ -100,6 +126,20 @@ TEST(PropertyDictionaryTest, MutableIndexerReadsAndOverwritesExistingKey) {
     EXPECT_EQ(42, std::any_cast<int>(dict["score"]));
     dict["score"] = 99;
     EXPECT_EQ(99, dict.GetValueInt32("score"));
+}
+
+// Task 9.6: the const operator[] overload had no dedicated coverage of its own - only ever
+// exercised incidentally through a non-const PropertyDictionary&.
+TEST(PropertyDictionaryTest, ConstIndexerReadsExistingKey) {
+    PropertyDictionary dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("score", 42);
+    const PropertyDictionary& constDict = dict;
+    EXPECT_EQ(42, std::any_cast<int>(constDict["score"]));
+}
+
+TEST(PropertyDictionaryTest, ConstIndexerThrowsOnMissingKey) {
+    const PropertyDictionary dict = PropertyDictionary::CreateInternal({});
+    EXPECT_THROW((void) dict["missing"], std::out_of_range);
 }
 
 // Task 8.1: matches Dictionary<TKey,TValue>.Add's real behavior - unlike SetValue/the indexer
