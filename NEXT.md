@@ -31,7 +31,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   control kept passing. **Task 413 fulfilled Task 162's ask — zero bugs found**: confirmed
   `SpriteSortMode::Deferred` preserves original submission order (no sort at all), independently
   confirmed by temporarily reversing the flush order and watching the test fail exactly as
-  predicted. Tasks 414–416 (the remaining per-`SpriteSortMode` assertions) are next.
+  predicted. **Task 414 fulfilled Task 163's ask — zero bugs found**: confirmed
+  `SpriteSortMode::Texture` groups draws by texture pointer (regardless of which texture sorts
+  first, since that depends on runtime addresses) while preserving `stable_sort`'s within-group
+  order, independently confirmed by temporarily disabling the sort and watching the test fail
+  exactly as predicted. Tasks 415–416 (FrontToBack/BackToFront) are next.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -109,14 +113,16 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 413.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 414.
 
-### Test status (last verified: Task 413)
-- **EasyGL, full `ctest -j1`:** 3618/3621 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 414)
+- **EasyGL, full `ctest -j1`:** 3619/3622 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3538/3551 pass. 13 documented pre-existing failures (see §5),
-  exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3522/3522 pass — 100%, no flakes this run.
+- **Vulkan, full `ctest -j1`:** 3536/3552 pass. 13 documented pre-existing failures (see §5),
+  exact-name match; this run also hit 3 unrelated flakes (`CueTest.PlayCalledTwiceWhile...`,
+  `NetworkSessionTest.FindReturnsEmptyCollection`/`EndFindWithMismatchedResultThrows`) — all 3
+  reran individually and passed, confirming pre-existing flakiness, not a regression.
+- **Bgfx, full `ctest -j1`:** 3523/3523 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -276,7 +282,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 413 | **Verify-only, zero bugs found**: fulfills Task 162 — confirmed `SpriteSortMode::Deferred` preserves original `Draw()` submission order (no sort at all). Independently verified discriminating power: temporarily added an unconditional `std::reverse()` before the flush loop and confirmed the test fails exactly as predicted (recorded order came back reversed). |
+| — | 414 | **Verify-only, zero bugs found**: fulfills Task 163 — confirmed `SpriteSortMode::Texture` groups draws by texture pointer (adjacency, not a predicted order since that depends on runtime addresses) while preserving `stable_sort`'s within-group submission order. Independently verified discriminating power: temporarily disabled the `Texture` sort branch and confirmed the test fails exactly as predicted (interleaved draw stayed un-grouped). |
+| `80ba1276` | 413 | **Verify-only, zero bugs found**: fulfills Task 162 — confirmed `SpriteSortMode::Deferred` preserves original `Draw()` submission order (no sort at all). Independently verified discriminating power: temporarily added an unconditional `std::reverse()` before the flush loop and confirmed the test fails exactly as predicted (recorded order came back reversed). |
 | `a79f4091` | 412 | **Verify-only, zero bugs found**: fulfills Task 161 — confirmed `SpriteSortMode::Immediate` flushes each sprite inside `Draw()` itself, strictly before `End()`, using Task 411's `RecordingSpriteBatchBackend`. Independently verified discriminating power: temporarily forced `pushSprite()` to always queue (breaking the Immediate branch) and confirmed both new tests fail exactly as predicted, while a `Deferred` negative control kept passing. |
 | `93a725b8` | 411 | **Opens Phase 47. Infrastructure task, 2 real gaps found and fixed**: `SpriteBatch` had no way to inject a custom backend without a real `GraphicsDevice`, and `Texture2D::CreateCpuOnlyForTests()`'s null backend would crash `flushSingle()` the moment a sprite is flushed. Fixed both with new `NOXNA` test-only constructors/factories, then built `RecordingSpriteBatchBackend`/`DummyTextureBackend` (new shared `tests/.../RecordingSpriteBatchBackend.hpp`) and 5 tests proving Begin/End/Draw dispatch and multi-texture discrimination work end-to-end, headlessly. |
 | `fe509dbd` | 410 | **Doc, closes Phase 46.** Wrote `docs/skinnedeffect-support.md` synthesizing Tasks 401–409 (mirrors `docs/basiceffect-support.md`/`docs/alphatesteffect-support.md`/`docs/dualtextureeffect-support.md`/`docs/environmentmapeffect-support.md`'s style) — per-task summaries, full 3-backend support matrix, "Open, tracked follow-up work" listing Tasks 893/894/895. No code changed. |
@@ -512,22 +519,19 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 47 (Task 414 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 47 (Task 415 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 414 — complete tests for `SpriteSortMode::Texture` (Task 163 dependency)**
-   - Goal: verify sprites are sorted by texture pointer (grouped by texture, minimizing GPU state
-     changes) — draw 3 sprites alternating between 2 distinct textures (e.g. A, B, A submission
-     order) and assert the recorded backend calls arrive grouped by texture rather than in raw
-     submission order. Needs `std::stable_sort`'s stability to be respected too: 2 sprites sharing
-     the *same* texture should retain their relative submission order within their group (a
-     `stable_sort`, not a plain `sort`, is what `flushBatch()` actually uses — worth asserting
-     explicitly since `Texture2D*` comparison gives no natural secondary key). Task 411's own
-     `DistinctTexturesProduceDistinctRecordedPointers` test already established the precondition
-     (2 distinct `Texture2D` instances are observable as 2 distinct backend pointers); this task
-     builds the actual grouping assertion on top of it.
+1. **Task 415 — complete tests for `SpriteSortMode::FrontToBack` (Task 164 dependency)**
+   - Goal: verify sprites are sorted by **ascending** `layerDepth` (front, i.e. smallest depth,
+     drawn first) — draw 3 sprites at depths `0.5, 0.1, 0.9` (deliberately out of order and
+     matching plan_graphics.md's own Task 164 example) and assert the recorded backend calls
+     arrive in ascending depth order (`0.1, 0.5, 0.9`), i.e. by their distinguishing texture/dest
+     markers rather than submission order. Reuse the `TextureGroupsDrawsByTextureAndPreservesGroupOrder`-
+     style marker technique (distinct dest-rect X per sprite) to identify which recorded call
+     corresponds to which original depth.
    - Files: extend `tests/Microsoft/Xna/Framework/Graphics/SpriteBatchTests.cpp` with the
-     `SpriteSortMode::Texture` grouping case.
+     `SpriteSortMode::FrontToBack` case.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -651,7 +655,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 414).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 415).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -712,12 +716,28 @@ spriteQueue_.end()) right before the flush loop and rebuilt -- the test failed e
 predicted (recorded order came back reversed, B,A,C instead of C,A,B); reverted and reconfirmed
 all 9 SpriteBatch mock-backend tests green. No production code changed.
 
-Task 414 (NEXT) is the natural next step: complete tests for SpriteSortMode::Texture (Task 163
-dependency) -- verify sprites are sorted by texture pointer (grouped by texture to minimize GPU
-state changes): draw 3 sprites alternating between 2 distinct textures (A, B, A submission order)
-and assert the recorded backend calls arrive grouped by texture rather than in raw submission
-order. Also worth asserting flushBatch()'s stable_sort preserves relative order within a group
-(2 sprites sharing the same texture keep their submission order among themselves).
+Task 414 fulfilled Task 163's exact ask -- verify-only, zero bugs found. FNA/XNA's contract for
+SpriteSortMode::Texture is: sprites grouped by texture (minimize GPU texture-bind changes), sorted
+by raw texture reference. flushBatch() implements this as a POINTER comparison
+(a.texture < b.texture), so which texture sorts first depends on runtime addresses, not something
+a test can predict -- designed the test around only the 2 properties that ARE part of the
+contract regardless of address ordering: (1) draws sharing a texture end up adjacent, and (2) they
+keep their original relative submission order (stable_sort's stability). Added
+TextureGroupsDrawsByTextureAndPreservesGroupOrder: 2 distinct textures A/B drawn interleaved
+(A, B, A), asserting the 2 A-entries end up adjacent (regardless of which group sorts first) and
+in original order (X=1 before X=3, marker fields unrelated to sorting). Independently verified
+discriminating power: temporarily disabled the Texture sort branch and rebuilt -- the test failed
+exactly as predicted (the interleaved B-draw stayed between the 2 un-grouped A-draws); reverted
+and reconfirmed all 10 SpriteBatch mock-backend tests green. No production code changed. This
+run's full Vulkan regression also hit 3 unrelated flakes (CueTest audio-timing,
+2 NetworkSessionTest cases) -- all reran individually and passed, confirming pre-existing
+flakiness, not a regression from this change.
+
+Task 415 (NEXT) is the natural next step: complete tests for SpriteSortMode::FrontToBack (Task
+164 dependency) -- verify sprites are sorted by ASCENDING layerDepth (smallest depth drawn
+first/front). Draw 3 sprites at depths 0.5, 0.1, 0.9 (plan_graphics.md's own Task 164 example,
+deliberately out of order) and assert the recorded backend calls arrive in ascending depth order
+(0.1, 0.5, 0.9), identified via the same distinct-dest-rect-marker technique used for Task 414.
 
 Phase 46 ("SkinnedEffect exactness", Tasks 401-410) CLOSED with Task 410
 (docs/skinnedeffect-support.md, full synthesis of Tasks 401-409). Summary of what it found/fixed:
@@ -795,14 +815,16 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 47's tasks.
 
-Last full 3-backend regression (Task 413 — verify-only, 1 new test per backend, no production
+Last full 3-backend regression (Task 414 — verify-only, 1 new test per backend, no production
 code changed):
-EasyGL 3618/3621 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3538/3551 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3522/3522 pass (100%, no flakes this run).
+EasyGL 3619/3622 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3536/3552 pass (13 documented pre-existing failures, exact-name match; 3 additional
+unrelated flakes this run -- CueTest audio-timing + 2 NetworkSessionTest cases -- reran
+individually and passed 3/3, confirming pre-existing flakiness, not a regression).
+Bgfx 3523/3523 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-413) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-414) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

@@ -15,7 +15,9 @@
 
 #include "RecordingSpriteBatchBackend.hpp"
 
+#include <cstddef>
 #include <memory>
+#include <vector>
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -530,4 +532,59 @@ TEST(SpriteBatchSortModeTest, DeferredPreservesSubmissionOrder)
     EXPECT_EQ(rec->drawCalls[0].texture, &backendC);
     EXPECT_EQ(rec->drawCalls[1].texture, &backendA);
     EXPECT_EQ(rec->drawCalls[2].texture, &backendB);
+}
+
+// -----------------------------------------------------------------------
+// Task 414: complete tests for SpriteSortMode::Texture (Task 163 dependency)
+//
+// FNA/XNA's contract for SpriteSortMode::Texture is: sprites are grouped by texture (to minimize
+// GPU texture-bind state changes), sorted by raw texture reference. flushBatch() implements this
+// as std::stable_sort(..., [](a,b){ return a.texture < b.texture; }) -- a *pointer* comparison,
+// so which texture ends up "first" depends on runtime addresses, not something a test can predict
+// in advance. The test below only asserts the 2 properties that are actually part of the
+// contract and don't depend on address ordering: (1) all draws sharing a texture end up adjacent
+// (grouped, no interleaving with the other texture), and (2) draws sharing the same texture keep
+// their original relative submission order (stable_sort's stability, not a plain sort).
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchSortModeTest, TextureGroupsDrawsByTextureAndPreservesGroupOrder)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend backendA(1, 1), backendB(2, 2);
+    Texture2D texA = Texture2D::CreateWithBackendForTests(1, 1,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendA, [](auto*) {}));
+    Texture2D texB = Texture2D::CreateWithBackendForTests(2, 2,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendB, [](auto*) {}));
+
+    // Alternating submission order (A, B, A) -- deliberately interleaved so a no-op/Deferred-like
+    // implementation would leave B sandwiched between the 2 A draws. The 2 A draws use distinct
+    // dest-rect X coordinates (1 and 3) purely as a submission-order marker, unrelated to sorting.
+    batch.Begin(SpriteSortMode::Texture, Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend);
+    batch.Draw(texA, Rectangle(1, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+    batch.Draw(texB, Rectangle(2, 0, 2, 2), Rectangle(0, 0, 2, 2), Color::White);
+    batch.Draw(texA, Rectangle(3, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 3u);
+
+    std::vector<std::size_t> aIndices, bIndices;
+    for (std::size_t i = 0; i < rec->drawCalls.size(); ++i)
+    {
+        if (rec->drawCalls[i].texture == &backendA) aIndices.push_back(i);
+        else if (rec->drawCalls[i].texture == &backendB) bIndices.push_back(i);
+    }
+    ASSERT_EQ(aIndices.size(), 2u);
+    ASSERT_EQ(bIndices.size(), 1u);
+
+    // Grouped: the 2 A draws must be adjacent, regardless of whether A sorts before or after B
+    // (that depends on runtime pointer addresses, not something this test can or should assume).
+    EXPECT_EQ(aIndices[1], aIndices[0] + 1);
+
+    // Stable within the group: the draw submitted first (dest X=1) must still precede the draw
+    // submitted second (dest X=3) among the 2 A entries.
+    EXPECT_EQ(rec->drawCalls[aIndices[0]].destinationRectangle.X, 1);
+    EXPECT_EQ(rec->drawCalls[aIndices[1]].destinationRectangle.X, 3);
 }
