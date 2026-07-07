@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 #include "CNA/CNAHelper.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include <algorithm>
 #include <vector>
 #include <stdexcept>
@@ -25,9 +26,24 @@ namespace Microsoft::Xna::Framework::GamerServices
              * @brief Gets the element at the current position.
              *
              * @return Pointer to the current element.
+             * @throws System::ArgumentOutOfRangeException if called before the first MoveNext(),
+             * after enumeration has run past the end, or after Dispose().
              */
             [[nodiscard]] T* getCurrent() const
             {
+                // Task 7.8: raw std::vector::operator[] on an unvalidated position_ was real
+                // undefined behavior for position_ == -1 (the pre-MoveNext() starting value,
+                // casting to a huge std::size_t) or past the end - FNA's own equivalent
+                // (`collection[position]`, via ReadOnlyCollection<T>'s indexer -> List<T>'s own
+                // indexer) throws a catchable ArgumentOutOfRangeException in both cases instead.
+                // Also guards the post-Dispose() case (collection_ set to nullptr), which would
+                // otherwise be a null-pointer dereference.
+                if (collection_ == nullptr
+                    || position_ < 0
+                    || position_ >= static_cast<int>(collection_->size()))
+                {
+                    throw System::ArgumentOutOfRangeException("position");
+                }
                 return (*collection_)[static_cast<std::size_t>(position_)];
             }
 

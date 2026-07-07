@@ -1562,7 +1562,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Restored the `TestAccess` indirection; full suite: **3305/3307 passing** (2 expected
   accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 7.8** — Fix `GamerCollection<T>::GamerCollectionEnumerator::getCurrent()` having no
+- [x] **Task 7.8** — Fix `GamerCollection<T>::GamerCollectionEnumerator::getCurrent()` having no
   bounds check — undefined behavior, not a catchable exception like FNA's equivalent. Confirmed:
   `return (*collection_)[static_cast<std::size_t>(position_)];` uses raw `std::vector::operator[]`.
   Calling `getCurrent()` before the first `MoveNext()` (`position_ == -1`, casts to a huge
@@ -1571,6 +1571,27 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   situation. Fix: bounds-check and throw the matching `sharp-runtime` exception type. Add a test for
   both misuse cases (this is exactly the gap Task 8.3's test-coverage task would otherwise leave
   undiscovered).
+
+  Confirmed against FNA's real `GamerCollection<T>.GamerCollectionEnumerator.Current` getter
+  (`return collection[position];`, via `ReadOnlyCollection<T>`'s indexer → `List<T>`'s own
+  indexer, which throws `ArgumentOutOfRangeException`). Fixed `getCurrent()` with an explicit
+  bounds check covering all three unsafe cases: `position_ < 0` (pre-`MoveNext()`), `position_ >=
+  size()` (past the end), and — an additional case found while fixing this, not explicitly named
+  by the task — `collection_ == nullptr` (post-`Dispose()`, previously a null-pointer dereference).
+  All three throw `System::ArgumentOutOfRangeException` now.
+
+  Added `GamerCollectionEnumeratorTest` (4 tests) exercised through `SignedInGamerCollection`, a
+  concrete `GamerCollection<T>` subclass: `GetCurrentBeforeFirstMoveNextThrows`,
+  `GetCurrentPastTheEndThrows`, `GetCurrentAfterDisposeThrows`, and
+  `MoveNextAndGetCurrentEnumerateInOrder` (proving normal enumeration still works correctly, not
+  just that misuse throws).
+
+  Revert-verify-restore: reverting just the bounds check (keeping the new tests) reproduced all
+  three predicted failure modes — the first two silently returned/misbehaved instead of throwing,
+  and critically the third (`GetCurrentAfterDisposeThrows`) **crashed the entire test binary with
+  a real SIGSEGV** (exit code 139), confirming this was genuine memory-unsafety, not just a
+  theoretical concern. Restored the fix; full suite: **3309/3311 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions, no crash.
 
 - [ ] **Task 7.9** — Fix the wrong exception types thrown by 3 collection indexers, for consistency
   with FNA and with this same file's own other, correctly-typed exceptions. Confirmed:

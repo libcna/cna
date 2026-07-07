@@ -4,8 +4,10 @@
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/DateTime.hpp"
 
 using namespace Microsoft::Xna::Framework::GamerServices;
@@ -116,4 +118,51 @@ TEST(SignedInGamerCollectionTest, PlayerIndexOutOfBounds) {
     auto col = SignedInGamerCollection::CreateInternal({});
     EXPECT_EQ(nullptr, col[PlayerIndex::One]);
     EXPECT_EQ(nullptr, col[PlayerIndex::Four]);
+}
+
+// --- GamerCollection<T>::GamerCollectionEnumerator (Task 7.8) ---
+//
+// Raw std::vector::operator[] on an unvalidated position was real undefined behavior for
+// position == -1 (the pre-MoveNext() starting value, casting to a huge std::size_t) or past the
+// end of the collection. FNA's own equivalent (`collection[position]`, via
+// ReadOnlyCollection<T>'s indexer -> List<T>'s own indexer) throws a catchable
+// ArgumentOutOfRangeException in both cases instead. Exercised through SignedInGamerCollection,
+// a concrete GamerCollection<T> subclass.
+
+TEST(GamerCollectionEnumeratorTest, GetCurrentBeforeFirstMoveNextThrows) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    auto col = SignedInGamerCollection::CreateInternal({&gamer});
+    auto it = col.GetEnumerator();
+    EXPECT_THROW((void) it.getCurrent(), System::ArgumentOutOfRangeException);
+}
+
+TEST(GamerCollectionEnumeratorTest, GetCurrentPastTheEndThrows) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    auto col = SignedInGamerCollection::CreateInternal({&gamer});
+    auto it = col.GetEnumerator();
+    ASSERT_TRUE(it.MoveNext());
+    EXPECT_EQ(&gamer, it.getCurrent());
+    EXPECT_FALSE(it.MoveNext()); // advances past the single element
+    EXPECT_THROW((void) it.getCurrent(), System::ArgumentOutOfRangeException);
+}
+
+TEST(GamerCollectionEnumeratorTest, GetCurrentAfterDisposeThrows) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    auto col = SignedInGamerCollection::CreateInternal({&gamer});
+    auto it = col.GetEnumerator();
+    ASSERT_TRUE(it.MoveNext());
+    it.Dispose();
+    EXPECT_THROW((void) it.getCurrent(), System::ArgumentOutOfRangeException);
+}
+
+TEST(GamerCollectionEnumeratorTest, MoveNextAndGetCurrentEnumerateInOrder) {
+    auto gamerA = SignedInGamer::CreateInternal("a");
+    auto gamerB = SignedInGamer::CreateInternal("b");
+    auto col = SignedInGamerCollection::CreateInternal({&gamerA, &gamerB});
+    auto it = col.GetEnumerator();
+    ASSERT_TRUE(it.MoveNext());
+    EXPECT_EQ(&gamerA, it.getCurrent());
+    ASSERT_TRUE(it.MoveNext());
+    EXPECT_EQ(&gamerB, it.getCurrent());
+    EXPECT_FALSE(it.MoveNext());
 }
