@@ -1412,7 +1412,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         // Entry: wait for the previous frame's texture sample AND the previous frame's
         // depth-buffer writes (shared depth image) before this frame clears/tests depth.
-        // Task 901: this must match renderPass_'s (CreateRenderPass()) dependencies exactly --
+        // Task 905: this must match renderPass_'s (CreateRenderPass()) dependencies exactly --
         // not just a "wait for shader reads" subset -- because GetOrCreatePipeline3D() (and
         // every other GetOrCreatePipelineXxx3D) creates its msaa=false pipeline variant against
         // renderPass_, and that same pipeline is reused to draw into rtRenderPass_/
@@ -1420,7 +1420,7 @@ namespace CNA::Internal::Backends::Vulkan
         // "compatibility" (VUID-vkCmdDraw-renderPass-02684) requires matching subpass dependency
         // stage/access masks too, not just attachment descriptions/subpass shape -- confirmed via
         // live Vulkan validation errors from a depth-tested 3D draw into a non-MSAA RT before this
-        // fix (see plan_graphics.md Task 901; the previous narrower deps[] here pre-dates Task
+        // fix (see plan_graphics.md Task 905; the previous narrower deps[] here pre-dates Task
         // 878/879 and was never actually exercised by an existing test until Task 878/879's new
         // RT-MSAA differential test happened to also cover the non-MSAA RT comparison case).
         VkSubpassDependency deps[2]{};
