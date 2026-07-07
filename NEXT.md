@@ -14,7 +14,7 @@
 > **As of 2026-07-07:** 20 of the input_noxna.md tasks are done (one commit each, all pushed).
 > **N-012 Pen was cancelled by the owner** (explicit scope cut, not an engineering conflict) — it will
 > not be implemented. What remains is exactly **one** task: N-013 Haptics (see §6/§8). Branch in sync
-> with `origin/feature/input` at `95db2319`.
+> with `origin/feature/input` at `8e99997c`.
 
 ## 1. Project summary
 
@@ -61,7 +61,7 @@
 ## 3. This session's commits (most recent first, all on `feature/input`, all pushed)
 
 ```
-<joystick-commit-hash> input(N-007):  CNA::Input::Joysticks raw-joystick access
+8e99997c input(N-007):  CNA::Input::Joysticks raw-joystick access
 95db2319 input(N-014b): TextInputEXT input-type hint EXT
 f92dc71a fix(GamerServices): follow sharp-runtime's RegionInfo::CurrentRegion rename
 462ca465 input(N-014):  TextInputEXT IME candidate-list event
