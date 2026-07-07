@@ -2715,12 +2715,70 @@ wherever it fits, rather than rebuilding boilerplate from scratch. Every demo mu
 be manually screenshot/run-verified (per this repo's own established rigor) before being considered
 done — "it compiles" is not sufficient.
 
-- [ ] **Task 15.1** — `cna_demo_net_client_server_arena`: real two-process `NetworkSession::Create/
+- [x] **Task 15.1** — `cna_demo_net_client_server_arena`: real two-process `NetworkSession::Create/
   Find/Join`, `LocalNetworkGamer::SendData`/`ReceiveData`, `PacketReader/Writer`, and `GamerJoined`/
   `SessionEnded` events over real ENet. A small 2D arena (reusing `demo_2d`'s SpriteBatch/window
   setup) where each connected gamer controls a colored square with arrow keys, every other gamer's
   square visibly moves too, with gamertag labels drawn above each square. Host launched with
   `--host`, client with `--join <ip>`.
+
+  New files: `examples/demo_net_client_server_arena/src/{ArenaGame.hpp,ArenaGame.cpp,Main.cpp}`,
+  registered in `CMakeLists.txt` (same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
+  `cna_demo_avatar`, linking `CNA_GamerServices`/`CNA_Net`). CLI: `--host` (default) or `--join`
+  (uses `NetworkSession::Find(SystemLink, 1, {})`, polling up to 5s), plus a `--smoke N` flag
+  (defaults to 180) that exits cleanly after N `Draw` frames with a summary line, for automated
+  two-process verification without a human at the keyboard — the same convention `cna_demo_2d`
+  established.
+
+  Building this real, working demo surfaced three real issues, none of which were "it compiles" —
+  each is a genuine bug/design constraint that the demo could not run to completion without
+  addressing, which is the "test that would fail without the fix" proof for this task (a runnable
+  two-process demo, not a unit test):
+
+  1. **`AvailableNetworkSessionCollection`'s non-const `operator[]` throws.** The client's first
+     attempt (`NetworkSession::Join(&available[0])` on a non-const local) crashed immediately with
+     `System::NotSupportedException("Collection is read-only.")` — the non-const `operator[]` is a
+     mutating accessor that always throws for a genuinely read-only collection, matching real
+     .NET's `ReadOnlyCollection<T>` semantics; only the `const` overload returns a plain reference.
+     Fixed by binding through `const auto& constAvailable = available;` before indexing. This is a
+     real gotcha for any future Net demo/game code indexing a `Find()` result and is now documented
+     inline in `ArenaGame.cpp`.
+
+  2. **`NetworkSession::Join()` has only one overload and requires `Gamer::SignedInGamers` to
+     already be populated.** Confirmed via `NetworkSession.hpp` that (unlike `Create()`, which has
+     both a `maxLocalGamers`-only overload and an explicit-`std::vector<SignedInGamer*>` overload)
+     `Join()` has no explicit-gamer-list variant — it always falls back to the global
+     `Gamer::getSignedInGamersProperty()` list for local gamers. The demo's first `Initialize()`
+     constructed its own standalone `SignedInGamer` and never touched that global list, so `Join()`
+     threw `ArgumentOutOfRangeException("'index' must be less than 0.")` indexing an empty
+     collection. Fixed by calling `GamerServicesDispatcher::Initialize(nullServiceProvider)` at the
+     top of `Initialize()` (matching how a real XNA game with `GamerServicesComponent` registered
+     behaves) and fetching `localGamer_` from `(*Gamer::getSignedInGamersProperty())[0]` instead —
+     a non-owning pointer into `GamerServicesDispatcher`'s 4 auto-created stub gamers, per
+     `GamerCollection<T>`'s own ownership contract. The host's session creation was switched to the
+     simple `Create(SystemLink, 1, 8)` overload for consistency with `Join()`'s reliance on the
+     same global list.
+
+  3. **Investigated, confirmed NOT a bug: every `NetworkGamer`'s gamertag reads "Stub Gamer".**
+     Traced `LocalNetworkGamer`'s constructor (`: NetworkGamer(session)` — forwards only the
+     session, never the wrapped `SignedInGamer`'s real gamertag) and `NetworkGamer`'s default
+     parameter (`gamertag = "Stub Gamer"`) against FNA's actual reference source
+     (`FNA.NetStub/src/Net/NetworkGamer.cs`: `internal NetworkGamer(NetworkSession session) : base
+     ("Stub Gamer", "Stub Gamer")`; `LocalNetworkGamer.cs`: `internal LocalNetworkGamer
+     (SignedInGamer gamer, NetworkSession session) : base(session)`) — this is genuine, deliberate,
+     already-documented upstream FNA behavior, not a CNA porting bug, so no fix was made. The demo
+     correctly reads the local player's own label from `localGamer_->getGamertagProperty()` (the
+     underlying `SignedInGamer`, not the `NetworkGamer` wrapper) instead.
+
+  Verified end-to-end by running two genuine, separate OS processes under
+  `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--host --smoke 180` and, one second later, `--join --smoke
+  180`), both exiting `0`. Host log: session created, `GamerJoined` fired for both the local and
+  the remote gamer, position advanced and synced (`knownRemotes=1`), clean smoke-test exit. Client
+  log: `Find`/`Join` succeeded, `GamerJoined` fired for both gamers, position synced
+  (`knownRemotes=1`), and — an unplanned but welcome extra proof of event wiring — `SessionEnded`
+  correctly fired when the host process exited first. Full suite: 3397/3397 passing (2 expected
+  accelerometer/gyroscope skips); this task added no unit tests (a runnable demo, not a library
+  API) so the full suite is a pure no-regression check.
 
 - [ ] **Task 15.2** — `cna_demo_packet_roundtrip`: every XNA-type `PacketWriter::Write`/`PacketReader::Read`
   overload (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `float`, `double`). Console-only: writes
