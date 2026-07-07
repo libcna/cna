@@ -118,6 +118,26 @@ TEST(FriendCollectionTest, Dispose) {
     EXPECT_TRUE(col.getIsDisposedProperty());
 }
 
+// Task 7.12: FriendCollection (like GamerCollection<T> in general) is a non-owning view -
+// Dispose() must never attempt to delete FriendGamer pointers it doesn't own, matching FNA's own
+// real FriendCollection.Dispose() (collection.Clear() alone, relying on .NET's GC). Confirmed by
+// constructing a real, caller-owned FriendGamer and proving it survives Dispose() intact and is
+// still safely deletable by the caller afterward - if Dispose() had wrongly freed it, this would
+// be a use-after-free/double-free.
+TEST(FriendCollectionTest, DisposeDoesNotOwnOrFreeFriendGamerPointers) {
+    auto* fg = new FriendGamer(FriendGamer::CreateInternal(
+        "tag1", "Display1", false, false, false, false, false, false
+    ));
+    auto col = FriendCollection::CreateInternal({fg});
+    ASSERT_EQ(1, col.getCountProperty());
+
+    col.Dispose();
+    EXPECT_TRUE(col.getIsDisposedProperty());
+    EXPECT_EQ("tag1", fg->getGamertagProperty()); // still valid, not freed by Dispose()
+
+    delete fg; // caller-owned; safe only because Dispose() never touched it
+}
+
 // --- SignedInGamerCollection ---
 
 TEST(SignedInGamerCollectionTest, EmptyCollection) {

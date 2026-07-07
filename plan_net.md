@@ -1656,7 +1656,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Marker-only change, no behavior change, no revert-verify applies. Full suite: **3311/3313
   passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 7.12** — Fix `FriendCollection::Dispose()` never deleting the raw `FriendGamer*`
+- [x] **Task 7.12** — Fix `FriendCollection::Dispose()` never deleting the raw `FriendGamer*`
   pointers it owns (mirrors the same ownership-model gap as Net's Task 3.1). Confirmed:
   `Dispose()` does `collection_.clear()`, which only drops the pointers from the vector, never
   deleting the pointed-to objects. Currently masked because `SignedInGamer::GetFriends()` only ever
@@ -1666,6 +1666,30 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   population work begins, using the same design decision as Task 3.1/7.5's ownership-model
   question. Add a test (with a test-double/instance counter) proving no leak on `Dispose()` once
   real `FriendGamer` objects can exist in the collection.
+
+  Confirmed against FNA's real `FriendCollection.Dispose()` (`collection.Clear(); IsDisposed =
+  true;`) — FNA itself never frees individual `FriendGamer` objects either, relying entirely on
+  .NET's GC once nothing else references them (the identical class of gap as Task 7.5, not a CNA
+  logic divergence). Decided: `FriendCollection` stays a **non-owning view**, consistent with
+  `GamerCollection<T>`'s general design and Task 3.1's precedent (the *creator* of `Gamer`-derived
+  objects owns them — e.g. `NetworkSession::ownedGamers_`, `ENetBackend::SessionState::
+  OwnedRemoteGamers`, or `GamerServicesDispatcher::Initialize()`'s explicit free-before-replace
+  pattern — never the read-only view collection holding non-owning pointers to them). Making
+  `Dispose()` delete pointers it doesn't actually own would be the wrong fix, not a fix at all —
+  since there is no real population code yet to establish who *does* own them, added an explicit
+  doc comment to the class stating this contract for whoever implements real friend-list
+  population later, rather than writing speculative ownership code for a scenario that doesn't
+  exist yet.
+
+  Added `FriendCollectionTest.DisposeDoesNotOwnOrFreeFriendGamerPointers`: constructs a real,
+  caller-owned heap `FriendGamer`, wraps it in a `FriendCollection`, calls `Dispose()`, and proves
+  the `FriendGamer` is still valid and safely deletable by the caller afterward — if `Dispose()`
+  had wrongly freed it, this would be a use-after-free/double-free.
+
+  No source behavior change (confirmed already-correct), no revert-verify applies. Full suite:
+  **3312/3314 passing** (2 expected accelerometer/gyroscope skips), no regressions.
+
+  **Phase 7 complete** — all 12 GamerServices bug tasks (Tasks 7.1-7.12) done.
 
 ---
 
