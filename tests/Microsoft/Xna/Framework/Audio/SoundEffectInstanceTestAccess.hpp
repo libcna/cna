@@ -100,6 +100,12 @@ namespace Microsoft::Xna::Framework::Audio
             return SoundEffectInstance::INTERNAL_calculatePan(dx, distance);
         }
 
+        // P12-PITCH-001 wrapper.
+        static float CalculatePitchRatio(float pitch)
+        {
+            return SoundEffectInstance::INTERNAL_calculatePitchRatio(pitch);
+        }
+
         // P11-PAN-001 (RFC-1) wrappers.
         static void CalculatePanCrossfeedMatrix(float pan, float& ll, float& rl, float& lr, float& rr)
         {

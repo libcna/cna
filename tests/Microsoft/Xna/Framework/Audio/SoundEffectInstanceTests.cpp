@@ -252,6 +252,35 @@ TEST_F(SoundEffectInstanceTest, PitchClampsToRange)
     EXPECT_FLOAT_EQ(inst.getPitchProperty(), -1.0f);
 }
 
+// P12-PITCH-001: setPitchProperty() must actually push the exponential-octave-curve ratio to the
+// live track, not just update the Pitch_ property -- verified via the real MIX_Track (SDL3_mixer
+// has a real MIX_GetTrackFrequencyRatio getter, unlike stereo pan before P11-PAN-001).
+TEST_F(SoundEffectInstanceTest, PitchSetterAppliesExponentialRatioToLiveTrack)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+
+    inst.setPitchProperty(1.0f); // +1 octave -> 2x speed
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 2.0f, 1e-5f);
+
+    inst.setPitchProperty(-1.0f); // -1 octave -> half speed
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 0.5f, 1e-5f);
+
+    // The regression case: the old linear formula gave 1.5 here instead of the correct
+    // 2^0.5 ~= 1.41421356 (~1 semitone off, audible) -- this is the value that would have failed
+    // against the pre-fix code (see this task's git-stash verification).
+    inst.setPitchProperty(0.5f);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), std::pow(2.0f, 0.5f), 1e-5f);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.41421356f, 1e-5f);
+
+    inst.setPitchProperty(0.0f); // center: both formulas agree here, sanity check only
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-5f);
+}
+
 // P10-SEI-002: like Volume, FNA's Pitch setter has no IsDisposed/hasStarted guard at all -- it
 // always accepts and clamps the new value, only conditionally pushing it to the live voice.
 TEST_F(SoundEffectInstanceTest, PitchSetWhilePlayingDoesNotThrow)
@@ -1066,6 +1095,43 @@ TEST(SoundEffectInstanceFilterMathTest, CalculateFilterOneOverQMatchesFAudioForm
 TEST(SoundEffectInstanceFilterMathTest, CalculateFilterOneOverQGuardsDivideByZero)
 {
     EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculateFilterOneOverQ(0), 1.0f, 1e-6f);
+}
+
+// P12-PITCH-001: pure-math coverage for the Pitch-to-frequency-ratio exponential octave curve
+// (FNA's SoundEffectInstance.cs:589-591, `Math.Pow(2.0, INTERNAL_pitch)`).
+TEST(SoundEffectInstanceFilterMathTest, CalculatePitchRatioIsOneAtCenterPitch)
+{
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePitchRatio(0.0f), 1.0f, 1e-6f);
+}
+
+TEST(SoundEffectInstanceFilterMathTest, CalculatePitchRatioIsDoubleAtPlusOneOctave)
+{
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePitchRatio(1.0f), 2.0f, 1e-6f);
+}
+
+TEST(SoundEffectInstanceFilterMathTest, CalculatePitchRatioIsHalfAtMinusOneOctave)
+{
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculatePitchRatio(-1.0f), 0.5f, 1e-6f);
+}
+
+// The actual regression case: this is where the old linear formula (`1.0f + pitch`) diverges from
+// the correct exponential curve -- 1.5 (old, wrong) vs. 2^0.5 ~= 1.41421356 (correct), a ~6%/~1
+// semitone difference. Endpoints (-1, 0, 1) coincidentally agree between both formulas, which is
+// exactly why this bug went undetected: no pre-existing test ever exercised a non-endpoint pitch.
+TEST(SoundEffectInstanceFilterMathTest, CalculatePitchRatioAtHalfOctaveMatchesExponentialNotLinearCurve)
+{
+    const float ratio = SoundEffectInstanceTestAccess::CalculatePitchRatio(0.5f);
+    EXPECT_NEAR(ratio, std::pow(2.0f, 0.5f), 1e-6f);
+    EXPECT_NEAR(ratio, 1.41421356f, 1e-5f);
+    EXPECT_GT(std::abs(ratio - 1.5f), 0.05f); // clearly NOT the old linear formula's 1.5
+}
+
+TEST(SoundEffectInstanceFilterMathTest, CalculatePitchRatioAtNegativeHalfOctaveMatchesExponentialNotLinearCurve)
+{
+    const float ratio = SoundEffectInstanceTestAccess::CalculatePitchRatio(-0.5f);
+    EXPECT_NEAR(ratio, std::pow(2.0f, -0.5f), 1e-6f);
+    EXPECT_NEAR(ratio, 0.70710678f, 1e-5f);
+    EXPECT_GT(std::abs(ratio - 0.75f), 0.03f); // clearly NOT the old linear formula's 0.75
 }
 
 // P9-3D-007: Apply3D's pan formula, unit-tested directly since SDL3_mixer has no

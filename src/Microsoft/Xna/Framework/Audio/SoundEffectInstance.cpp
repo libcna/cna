@@ -66,6 +66,24 @@ namespace Microsoft::Xna::Framework::Audio
             return static_cast<MIX_Track*>(p);
         }
 
+        // P12-PITCH-001: the real implementation behind
+        // SoundEffectInstance::INTERNAL_calculatePitchRatio (a thin forwarding shim, defined
+        // further down) -- lives here, not as a class member body, purely so ApplyTrackProperties
+        // below and SoundEffect::Play()'s fire-and-forget path (a friend of SoundEffectInstance,
+        // SoundEffect.cpp) can both call it without needing a class-member-only path. Matches
+        // FNA exactly (SoundEffectInstance.cs:589-591):
+        // `FAudioSourceVoice_SetFrequencyRatio(handle, (float)Math.Pow(2.0, INTERNAL_pitch) *
+        // doppler, 0)` -- Pitch's whole [-1,1] range is explicitly octave-based ("-1 octave to +1
+        // octave"), an exponential curve, NOT a linear multiplier (a prior version of this file
+        // used `(pitch<0)?(1+pitch*0.5f):(1+pitch)`, which only agrees with `2^pitch` at
+        // pitch=-1,0,1 and is audibly wrong -- up to ~6%/1 semitone off -- everywhere else;
+        // P12-AUDIT-001 found this via a fresh audit, since every pre-existing test only ever
+        // exercised the default Pitch=0, where the two formulas coincidentally agree).
+        float ComputePitchRatio(float pitch)
+        {
+            return std::pow(2.0f, pitch);
+        }
+
         // CP-16: master volume is applied once, globally, via MIX_SetMixerGain (SDL3_mixer's own
         // master gain stage), not baked into each track's own gain here -- doing both would
         // double-apply it, and only the mixer-level gain re-applies live to already-playing
@@ -98,9 +116,7 @@ namespace Microsoft::Xna::Framework::Audio
                 MIX_UnlockMixer(mixer);
             }
 
-            const float ratio = ((pitch < 0.0f)
-                ? (1.0f + pitch * 0.5f)
-                : (1.0f + pitch)) * doppler;
+            const float ratio = ComputePitchRatio(pitch) * doppler;
             MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
         }
 
@@ -687,6 +703,15 @@ namespace Microsoft::Xna::Framework::Audio
         return std::min(3.0f / static_cast<float>(qfactorRaw), 1.0f);
     }
 
+    float SoundEffectInstance::INTERNAL_calculatePitchRatio(float pitch)
+    {
+        // Forwards to ComputePitchRatio (anonymous namespace, top of this file) -- the single
+        // canonical implementation, shared with the real-time-callback-adjacent
+        // ApplyTrackProperties() and (via friendship) SoundEffect::Play()'s fire-and-forget path,
+        // so there is exactly one copy of this math to keep in sync with FNA (P12-PITCH-001).
+        return ComputePitchRatio(pitch);
+    }
+
     Microsoft::Xna::Framework::Vector3 SoundEffectInstance::INTERNAL_calculateListenerRight(
         const Microsoft::Xna::Framework::Vector3& forward,
         const Microsoft::Xna::Framework::Vector3& up)
@@ -1054,9 +1079,7 @@ namespace Microsoft::Xna::Framework::Audio
         MIX_Track* track = AsTrack(track_);
         if (track)
         {
-            const float ratio = (Pitch_ < 0.0f)
-                ? (1.0f + Pitch_ * 0.5f)
-                : (1.0f + Pitch_);
+            const float ratio = INTERNAL_calculatePitchRatio(Pitch_);
             MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
         }
 #endif

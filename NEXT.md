@@ -67,24 +67,24 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P11-PAN-001`, on top of `P11-XACT-003/004/002`,
-  `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`, and everything in
-  Phase 10). EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked. Required a
-  one-line unrelated unblock first (`GamerProfile.cpp`'s `RegionInfo::CurrentRegion()` call, renamed
-  upstream in sharp-runtime -- see §3). `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt
-  this pass (no Audio *public XNA* API surface touched -- `P11-PAN-001`'s changes are all internal
-  to `SoundEffectInstance.{hpp,cpp}`'s `NOXNA`/private surface).
-- **Tests:** `CnaTests` whole-suite count is **3372 / 3374 pass** (2 skipped:
+- **Build:** clean, rebuilt and reverified this pass (`P12-PITCH-001`, on top of `P11-PAN-001`,
+  `P11-XACT-003/004/002`, `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`,
+  and everything in Phase 10). EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer
+  linked. Required a one-line unrelated unblock first (`GamerProfile.cpp`'s
+  `RegionInfo::CurrentRegion()` call, renamed upstream in sharp-runtime -- see §3). `cna_demo_sound`/
+  `cna_demo_2d` example targets not rebuilt this pass (no Audio *public XNA* API surface touched --
+  `P12-PITCH-001`'s changes are all internal to `SoundEffect.cpp`/`SoundEffectInstance.{hpp,cpp}`'s
+  `NOXNA`/private surface).
+- **Tests:** `CnaTests` whole-suite count is **3378 / 3380 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected — not Audio; the 16-test increase since the last sync is
-  `P11-PAN-001`'s new pan-crossfeed coverage, see §3). Prior sync's 8-test increase was
-  `P11-XACT-003`'s new `CueTest.ApplyEffectVariation*`/`PlayWiresEffectVariation*IntoSpawnedInstance`
-  tests. The audio-scoped subset (§7's `--gtest_filter` list) was reverified this pass under a
-  **fresh one-off ThreadSanitizer build** (497/497 pass, zero `WARNING: ThreadSanitizer` reports --
-  see §3's `P11-PAN-001` entry for why this was necessary, not just precedent); a fresh dedicated
-  ASan+UBSan build (466/466 pass at the time) was last run during the post-Phase-10 sweep, not
-  re-run this pass (`P11-PAN-001`'s new code has no new heap-ownership surface beyond the existing
-  `unique_ptr<FilterState>` pattern already covered there).
+  hardware-dependent, expected — not Audio; the 6-test increase since the last sync is
+  `P12-PITCH-001`'s new pitch-curve coverage, see §3). Prior sync's 16-test increase was
+  `P11-PAN-001`'s new pan-crossfeed coverage. The audio-scoped subset (§7's `--gtest_filter` list)
+  was reverified under a **fresh one-off ThreadSanitizer build** during `P11-PAN-001` (497/497
+  pass, zero `WARNING: ThreadSanitizer` reports); not re-run for `P12-PITCH-001` (a pure-math
+  formula change plus 3 call-site swaps, no new threading/ownership surface at all). A fresh
+  dedicated ASan+UBSan build (466/466 pass at the time) was last run during the post-Phase-10
+  sweep.
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
@@ -120,8 +120,43 @@ framework/runtime, not a game.
 ## 3. Recent changes
 
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
-every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11" sections.
+every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12" sections.
 
+- **Phase 12 audit** (`P12-AUDIT-001..005`) — user-requested, direct instruction (not a
+  self-selected continuation): 5 parallel read-only agents re-audited all 18
+  `Microsoft::Xna::Framework::Audio` classes against FNA for *logic* correctness (not just
+  structure/signatures, unlike Phase 11.1/11.2), each cross-checking findings against
+  `CHECKLIST.md`/`plan_audio.md`'s extensive prior history first. Real findings (most severe
+  first): **Pitch→frequency-ratio conversion was linear, not FNA's real `2^pitch` exponential
+  curve** (fixed same pass, see `P12-PITCH-001` below); XACT category parent/child hierarchy
+  parsed but never applied for `SetVolume`/`Pause`/`Resume`/`Stop`; global-variable PUBLIC/CUE/
+  READONLY accessibility and min/max clamping unenforced (plus a mislabeled doxygen comment);
+  category/cue instance-limit excludes Paused cues (narrower case of already-known
+  `P9-LIFECYCLE-014`); `SoundBank`/`WaveBank::Dispose()` doesn't force-stop cues still using the
+  bank (a design question, not a one-line fix); one stale `AUDIT.md` line. Zero new findings in
+  `AudioListener`/`AudioEmitter`/`RendererDetail`/the 3 small enums, `Cue.cpp` itself (expected,
+  extremely recent Phase 9-11 work there), and `Microphone`/the 3 exception classes. Follow-up
+  tasks (`P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`, `P12-DOC-001`, plus
+  the pre-existing `P11-PAN-002`) tracked in `plan_audio.md`, being worked one at a time.
+- **`P12-PITCH-001`** — fixed the Pitch→frequency-ratio bug the audit above found: CNA used a
+  piecewise-linear formula (`(pitch<0)?(1+pitch*0.5f):(1+pitch)`) in three duplicated call sites
+  (`SoundEffect::Play`'s fire-and-forget path, the shared `ApplyTrackProperties` helper used by
+  `SoundEffectInstance::Play()`/`Apply3D()`, and `setPitchProperty()`) instead of FNA's real
+  exponential octave curve (`Math.Pow(2.0, INTERNAL_pitch)`,
+  `SoundEffectInstance.cs:589-591`, independently re-verified against the actual file before
+  fixing anything). The two formulas only agree at `pitch=-1,0,1`; at `pitch=0.5` the bug gave
+  ratio `1.5` instead of the correct `2^0.5≈1.4142` (~1 semitone off, audible) -- and since
+  `Cue.cpp` routes all XACT pitch application through `setPitchProperty()`, this affected every
+  pitched XACT cue too, not just direct `SoundEffectInstance.Pitch` usage. Never caught before
+  because every pre-existing pitch/Doppler test only ever exercised the default `Pitch=0` (where
+  both formulas coincidentally agree). Fixed with one new shared, pure, testable helper
+  (`SoundEffectInstance::INTERNAL_calculatePitchRatio`, matching the established
+  `INTERNAL_calculatePan`/`INTERNAL_calculatePanCrossfeedMatrix` pure-helper pattern) so there's
+  now exactly one implementation instead of three copies. 6 new tests (5 pure-math, including two
+  that explicitly assert the ratio is NOT the old linear formula's value; 1 end-to-end via the
+  real `MIX_GetTrackFrequencyRatio` getter). `git stash`-verified. Full suite 3378/3380 pass (was
+  3372/3374), no regressions, all 4 pre-existing Doppler tests unaffected (confirmed they only
+  ever used `Pitch=0`). See `plan_audio.md`.
 - **`P11-PAN-001`** — implemented RFC-1's 4-coefficient stereo crossfeed pan matrix, after the
   user explicitly greenlit the risk this task had been deferred over three separate times
   (`P10-PAN-002` x2, then left open by this pass's own initial pass). `SoundEffectInstance`'s
@@ -590,31 +625,36 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**Phase 11 is now fully closed** (`plan_audio.md`, started 2026-07-07 at the user's explicit
-request: a fresh structural + signature audit of CNA's Audio API vs FNA, plus real follow-up
-fixes/improvements). Every task group is **closed** (`P11-CHECKLIST-001`, `P11-TEST-001`,
-`P11-XACT-001`, `P11-DISPATCH-001`, `P11-TODO-001`, `P11-XACT-002`, `P11-XACT-004`, `P11-XACT-003`,
-`P11-PAN-001` -- see §3 for each). `P11-PAN-001` (RFC-1 stereo crossfeed) was explicitly
-user-greenlit 2026-07-07 after being deferred three times, then implemented and verified this pass.
+**Phase 11 is fully closed.** `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly
+**rejected** by the user 2026-07-07 -- staying on SDL3_mixer (see §9).
 
-One small follow-up it spawned, not yet started:
+**Phase 12 (fresh logic-correctness audit, user-requested 2026-07-07) found 6 real gaps; one is
+fixed (`P12-PITCH-001`, see §3), five remain, being worked one at a time per the user's own
+explicit instruction to do so autonomously:**
+
+1. **`P12-DOC-001`** -- trivial one-line fix: `AUDIT.md` line 88 stales claims
+   `NoAudioHardwareException` is never thrown; it has been since `P9-HARDWARE-002`. Pure docs,
+   zero risk -- good next pick.
+2. **`P12-PAUSE-001`** -- category/cue instance-limit live-count/victim-search should include
+   Paused cues, matching real FACT's non-mutually-exclusive Playing/Paused states. Narrow,
+   contained fix inside `AudioEngine::CheckCategoryInstanceLimit`/`CheckCueInstanceLimit`.
+3. **`P12-CATEGORY-001`** -- implement XACT category parent/child hierarchy cascading for
+   `SetVolume`/`Pause`/`Resume`/`Stop` (`XgsCategory::parentIndex` is parsed but has zero
+   consumers). Real feature work, moderate size -- `AudioEngine.cpp`'s 4 category-op methods plus
+   likely `AudioCategory`/`XactParser` wiring.
+4. **`P12-VAR-001`** -- enforce global-variable PUBLIC/CUE/READONLY accessibility + min/max
+   clamping in `GetGlobalVariable`/`SetGlobalVariable`, and fix `XactTypes.hpp`'s mislabeled
+   accessibility-bit doxygen. Real feature work, touches `AudioEngine` and likely `Cue`.
+5. **`P12-BANK-001`** -- `SoundBank`/`WaveBank::Dispose()` doesn't force-stop cues still using the
+   bank, unlike real FACT. **Needs a design decision, not just an implementation** (a `GetCue()`'d
+   `Cue*` is currently documented as caller-owned) -- candidate for user input rather than
+   autonomous self-selection; see `plan_audio.md` P12-AUDIT-004 for the full tension.
+
+Also still open, spawned by `P11-PAN-001` (not part of Phase 12's audit, but same "confirm before
+starting" caveat):
 - **`P11-PAN-002`** -- apply the same crossfeed fix to the static fire-and-forget
-  `SoundEffect::Play(volume, pitch, pan)` helper (`SoundEffect.cpp`), which has its own separate,
-  unfixed copy of the old hard-pan bug (no `SoundEffectInstance`/DSP-state machinery exists for
-  that path at all). Lower risk than `P11-PAN-001` was (no existing filter/callback to share or
-  regress) but still new scope beyond what was greenlit -- confirm with the user before starting.
-  *Files:* `SoundEffect.cpp` (`OnFireAndForgetStopped`, the `Play(volume,pitch,pan)` overload).
-
-`P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly **rejected** by the user
-2026-07-07 -- staying on SDL3_mixer, not a live option going forward barring a future explicit
-reversal (see §9).
-
-**Phase 12 is starting now, per explicit user direction (2026-07-07):** a new audit of every
-`Microsoft::Xna::Framework::Audio` class/method/logic against the real XNA 4.0 API and FNA source,
-checking correctness of class/method placement and logic -- and, per the user's own instruction,
-any real gaps the audit finds should be worked on autonomously afterward, one at a time, following
-this branch's established process (implement, `git stash`-verify, rebuild, full suite, update
-`plan_audio.md`/`CHECKLIST.md`/`NEXT.md`, commit, no push without fresh confirmation).
+  `SoundEffect::Play(volume, pitch, pan)` helper. Lower risk than `P11-PAN-001` (no existing
+  filter/callback to share or regress) but still new scope beyond what was greenlit.
 
 ---
 

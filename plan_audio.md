@@ -4950,10 +4950,43 @@ context-free agents, explicitly instructed not to modify any files):
 
 ## Phase 12 follow-up tasks (from the findings above)
 
-* [ ] P12-PITCH-001: fix the linear-vs-exponential Pitch curve bug (`P12-AUDIT-001`'s finding).
-  *Priority: highest* -- widest-reaching, most audible, most independently-confirmed finding of
-  this whole audit pass. Not started yet in this entry; see the next task worked in this session
-  for the actual fix and its own full write-up.
+* [x] P12-PITCH-001: fix the linear-vs-exponential Pitch curve bug (`P12-AUDIT-001`'s finding).
+  *Status:* Fixed. Independently re-verified the FNA citation first
+  (`SoundEffectInstance.cs:589-591`: `FAudioSourceVoice_SetFrequencyRatio(handle, (float)
+  Math.Pow(2.0, INTERNAL_pitch) * doppler, 0)`) before touching any code. Replaced all three
+  duplicated linear-formula call sites with a single new shared, pure, independently-testable
+  helper: `SoundEffectInstance::INTERNAL_calculatePitchRatio(pitch)` (returns `std::pow(2.0f,
+  pitch)`), matching the project's established pure-conversion-helper pattern
+  (`INTERNAL_calculatePan`/`INTERNAL_calculateFilterCutoff`). Its real implementation lives as an
+  anonymous-namespace `ComputePitchRatio` free function (`SoundEffectInstance.cpp`, same
+  forwarding-shim pattern `INTERNAL_calculatePanCrossfeedMatrix` already established in
+  `P11-PAN-001`) so `ApplyTrackProperties()` (an anonymous-namespace free function itself) can call
+  it directly. Call sites fixed: `SoundEffectInstance::setPitchProperty()`, the shared
+  `ApplyTrackProperties()` helper (used by both `Play()` and `Apply3D()`), and
+  `SoundEffect::Play(volume,pitch,pan)`'s fire-and-forget path (a friend of `SoundEffectInstance`,
+  so it calls the same private static method directly -- one canonical implementation shared
+  across both translation units, not three copies of the same math). Also caught and fixed a
+  second, smaller bug while at it: `ApplyTrackProperties()`'s own doc comment (`P9-3D-005`) already
+  *claimed* to match `(2^INTERNAL_pitch) * doppler` -- a stale/aspirational comment that was never
+  actually true until this fix, exactly the kind of unverified claim this audit pass exists to
+  catch.
+  *Tests:* 6 new (`SoundEffectInstanceFilterMathTest`: center/+1-octave/-1-octave/two
+  regression-pinning cases at ±0.5 octaves that explicitly assert the ratio is NOT the old linear
+  formula's value; `SoundEffectInstanceTest.PitchSetterAppliesExponentialRatioToLiveTrack`,
+  end-to-end via the real `MIX_GetTrackFrequencyRatio` getter). All 4 pre-existing Doppler tests
+  (`Apply3DAppliesDopplerPitch*`) re-verified passing unchanged, since they all use the default
+  `Pitch=0`, where the old and new formulas coincidentally agree exactly (`2^0 == 1+0 == 1.0`) --
+  confirming why this bug went undetected until a fresh audit deliberately looked past the
+  endpoints. `git stash`-verified (stashing the 3 production files alone breaks the new tests'
+  compile, since `INTERNAL_calculatePitchRatio` doesn't exist on the pre-fix class). Full suite
+  3378/3380 pass (was 3372/3374; +6 new tests, no regressions), same 2 pre-existing hardware-only
+  skips.
+  *Scope note:* the fire-and-forget `SoundEffect::Play(volume,pitch,pan)` path's fix could not be
+  end-to-end verified the same way as the `SoundEffectInstance` path -- that method returns only
+  `bool` and exposes no way for a test to reach the `MIX_Track` it internally creates. Judged
+  sufficient anyway: it's a one-line call into the exact same, already-thoroughly-tested
+  `INTERNAL_calculatePitchRatio`, and the existing `SoundEffectTest.PlayClampsPitchInsteadOfThrowing`
+  test already confirms this code path runs without crashing for extreme pitch values.
 
 * [ ] P12-CATEGORY-001: implement XACT category parent/child hierarchy cascading for
   `SetVolume`/`Pause`/`Resume`/`Stop` (`P12-AUDIT-003` finding 1). Not started.

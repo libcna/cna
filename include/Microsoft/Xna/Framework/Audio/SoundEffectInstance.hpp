@@ -159,6 +159,16 @@ namespace Microsoft::Xna::Framework::Audio
         NOXNA static float INTERNAL_calculateFilterCutoff(float frequencyHz, float sampleRate);
         NOXNA static float INTERNAL_calculateFilterOneOverQ(uint8_t qfactorRaw);
 
+        // P12-PITCH-001: converts the XNA `Pitch` property (range [-1,1], "-1 octave to +1
+        // octave") to the playback-rate ratio SDL3_mixer's `MIX_SetTrackFrequencyRatio` expects.
+        // Matches FNA exactly (SoundEffectInstance.cs:589-591): `(float)Math.Pow(2.0,
+        // INTERNAL_pitch)`, an exponential octave curve -- NOT a linear multiplier. Split out as
+        // a pure function, matching INTERNAL_calculatePan/INTERNAL_calculateFilterCutoff above,
+        // so it's independently unit-testable and has exactly one implementation shared by
+        // setPitchProperty(), Play()/Apply3D()'s ApplyTrackProperties(), and
+        // SoundEffect::Play(volume,pitch,pan)'s fire-and-forget path (a friend of this class).
+        NOXNA static float INTERNAL_calculatePitchRatio(float pitch);
+
         // P9-3D-010: computes the listener's own world-space right axis from Forward/Up
         // (Cross(Forward, Up), normalized; falls back to Vector3::Right if degenerate), split out
         // so `Apply3D`'s orientation-aware pan projection is independently unit-testable without

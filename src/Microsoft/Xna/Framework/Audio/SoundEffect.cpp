@@ -369,9 +369,11 @@ namespace Microsoft::Xna::Framework::Audio
 
         if (pitch != 0.0f)
         {
-            const float ratio = (pitch < 0.0f)
-                ? (1.0f + pitch * 0.5f)
-                : (1.0f + pitch);
+            // P12-PITCH-001: matches FNA's real exponential octave curve (SoundEffectInstance.cs:
+            // 589-591, `Math.Pow(2.0, INTERNAL_pitch)`) via SoundEffectInstance's shared, friended
+            // conversion helper -- NOT a linear multiplier (this call site previously duplicated
+            // the same wrong formula setPitchProperty()/ApplyTrackProperties() also had).
+            const float ratio = SoundEffectInstance::INTERNAL_calculatePitchRatio(pitch);
             MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
         }
 
