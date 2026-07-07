@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <optional>
+#include <stdexcept>
 
 #include "CNA/Internal/Input/GestureDetector.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
@@ -69,6 +70,66 @@ TEST_F(TouchEdgeCaseTest, GetStatePrefersTouchesArrayAndDoesNotDoubleReport)
     EXPECT_EQ(state[0].getIdProperty(), 5);   // the touches_ finger, not id 99
 }
 
+// DEC-13: TouchPanel::Update() copies touches_ -> previousTouches_ (reversed vs FNA's gesture-first
+// order, but inert because GestureDetector::OnUpdate touches neither array). This pins the slot-path
+// continuity the copy provides: SetFinger reads previousTouches_, so after Update() a moving finger sees
+// its prior pressed location. If Update() failed to copy, the second SetFinger would see Invalid and
+// produce a fresh Pressed instead of a Moved-with-previous.
+TEST_F(TouchEdgeCaseTest, UpdatePropagatesTouchesToPreviousForSlotPathContinuity)
+{
+    // Frame 1: finger down at slot 0 (previousTouches_[0] is Invalid, so this is a Pressed).
+    TouchPanel::SetFinger(0, 5, Vector2(10, 20));
+    ASSERT_EQ(TouchPanel::GetState()[0].getStateProperty(), TouchLocationState::Pressed);
+
+    // Update() copies touches_ -> previousTouches_.
+    TouchPanel::Update();
+
+    // Frame 2: same finger moves; SetFinger reads previousTouches_ (Pressed@(10,20)) to build a Moved.
+    TouchPanel::SetFinger(0, 5, Vector2(30, 40));
+
+    const TouchCollection s = TouchPanel::GetState();
+    ASSERT_EQ(s.getCountProperty(), 1);
+    EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Moved);
+    TouchLocation prev;
+    ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+    EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(prev.getPositionProperty(), Vector2(10, 20));
+}
+
+// P5-007: the fingerId == NO_FINGER release path (FNA TouchPanel.cs:167-195), "was there a finger here
+// and the user just released it?". A held finger that lifts becomes a single Released touch carrying its
+// previous location. Exercises the first branch of the release condition. (Regression guard for the
+// historical duplicated nested condition — the current code must have exactly one.)
+TEST_F(TouchEdgeCaseTest, SetFingerReleaseOfHeldFingerProducesReleasedWithPreviousLocation)
+{
+    TouchPanel::SetFinger(0, 7, Vector2(10, 20)); // Pressed
+    TouchPanel::Update();
+    TouchPanel::SetFinger(0, 7, Vector2(11, 21)); // Moved
+    ASSERT_EQ(TouchPanel::GetState()[0].getStateProperty(), TouchLocationState::Moved);
+    TouchPanel::Update();
+
+    // Finger lifted: previous was Moved (not Invalid/Released) -> Released, position/previous preserved.
+    TouchPanel::SetFinger(0, TouchPanel::NO_FINGER, Vector2::Zero);
+
+    const TouchCollection s = TouchPanel::GetState();
+    ASSERT_EQ(s.getCountProperty(), 1);
+    EXPECT_EQ(s[0].getIdProperty(), 7);
+    EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Released);
+    EXPECT_EQ(s[0].getPositionProperty(), Vector2(11, 21));
+    TouchLocation prev;
+    ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+    EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Moved);
+}
+
+// P5-007: the else branch of the release condition — releasing a slot that had no prior finger
+// (previous is Invalid) inserts Invalid data so the slot is excluded from GetState() (FNA:181-192).
+TEST_F(TouchEdgeCaseTest, SetFingerReleaseWithNoPriorFingerInsertsInvalidAndReportsNothing)
+{
+    TouchPanel::SetFinger(0, TouchPanel::NO_FINGER, Vector2::Zero); // previous Invalid -> stays Invalid
+    EXPECT_EQ(TouchPanel::GetState().getCountProperty(), 0)
+        << "an empty slot released again must not create a ghost touch";
+}
+
 // --- Task 826: multi-touch edge cases ---
 
 TEST_F(TouchEdgeCaseTest, ReleasingAnUnknownFingerIsSafe)
@@ -78,14 +139,40 @@ TEST_F(TouchEdgeCaseTest, ReleasingAnUnknownFingerIsSafe)
     EXPECT_NO_THROW(TouchPanel::INTERNAL_onTouchEvent(42, TouchLocationState::Released, 0.5f, 0.5f, 0, 0));
 }
 
+// P5-008: an unknown finger that is Released without a prior Pressed must not fabricate a bogus
+// previous location. It surfaces at most as a single Released whose PreviousState stayed Invalid
+// (TryGetPreviousLocation == false), then is flushed after one snapshot — never a Moved and never a
+// Released carrying a garbage previous.
+TEST_F(TouchEdgeCaseTest, UnknownReleasedFingerHasNoBogusPreviousAndClears)
+{
+    InputManager::SetTouchState(42, TouchLocationState::Released, Vector2(5, 5));
+
+    TouchLocation prev;
+    const TouchCollection first = InputManager::GetTouchState();
+    ASSERT_EQ(first.getCountProperty(), 1);
+    EXPECT_EQ(first[0].getStateProperty(), TouchLocationState::Released);
+    EXPECT_EQ(first[0].getPositionProperty(), Vector2(5, 5));
+    EXPECT_FALSE(first[0].TryGetPreviousLocation(prev)); // no bogus previous — previous is Invalid
+
+    // Released is flushed after that one snapshot; nothing lingers.
+    EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 0);
+}
+
+// P5-009: a repeated Pressed for the same finger id REPLACES (does not duplicate, ignore, or transition):
+// in production `get_or_create_touch_id` keeps the same touch id until FINGER_UP, so a second FINGER_DOWN
+// overwrites position while the state stays Pressed (no phantom second touch, no premature Moved). SDL
+// never actually emits down-after-down for a live finger, so this is a defensive superset of FNA.
 TEST_F(TouchEdgeCaseTest, RepeatedFingerDownWithSameIdOverwritesRatherThanDuplicates)
 {
     InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(10, 10));
     InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(20, 20));
 
+    TouchLocation prev;
     const TouchCollection state = InputManager::GetTouchState();
-    ASSERT_EQ(state.getCountProperty(), 1);
-    EXPECT_EQ(state[0].getPositionProperty(), Vector2(20, 20));
+    ASSERT_EQ(state.getCountProperty(), 1);                                // replaced, not duplicated
+    EXPECT_EQ(state[0].getStateProperty(), TouchLocationState::Pressed);   // still Pressed, not transitioned
+    EXPECT_EQ(state[0].getPositionProperty(), Vector2(20, 20));            // last position wins
+    EXPECT_FALSE(state[0].TryGetPreviousLocation(prev));                   // a fresh Pressed has no previous
 }
 
 TEST_F(TouchEdgeCaseTest, FingerIdReusedAfterReleaseStartsFresh)
@@ -101,15 +188,39 @@ TEST_F(TouchEdgeCaseTest, FingerIdReusedAfterReleaseStartsFresh)
     EXPECT_EQ(state[0].getPositionProperty(), Vector2(30, 30));
 }
 
-TEST_F(TouchEdgeCaseTest, MoreThanMaxTouchesAreAllReportedByEventDrivenInputManager)
+TEST_F(TouchEdgeCaseTest, MoreThanMaxTouchesAreCappedAtMaxTouchesByTouchPanelGetState)
 {
-    // Documented behavior/deviation: the event-driven InputManager touch map is not capped at
-    // MAX_TOUCHES (=8) — that constant only bounds the SetFinger touches_ array. CNA reports every
-    // finger SDL delivers; FNA caps at 8. Kept as-is (which finger to drop would be arbitrary).
+    // DEC-10: FNA's TouchPanel tracks a fixed TouchLocation[MAX_TOUCHES] array, so its public state
+    // never exceeds MAX_TOUCHES (=8) simultaneous touches. CNA's event-driven InputManager map is
+    // unbounded (an implementation detail), but TouchPanel::GetState() caps the public snapshot at
+    // MAX_TOUCHES to match FNA.
     for (int i = 0; i < 10; ++i)
         InputManager::SetTouchState(i, TouchLocationState::Pressed, Vector2(static_cast<float>(i), 0));
 
-    EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 10);
+    const TouchCollection capped = TouchPanel::GetState();
+    ASSERT_EQ(capped.getCountProperty(), TouchPanel::MAX_TOUCHES);
+
+    // P5-011: the truncation is DETERMINISTIC, not arbitrary. GetTouchState() sorts touch ids ascending
+    // and GetState() keeps the first MAX_TOUCHES, so ids 0..MAX_TOUCHES-1 survive and the highest ids
+    // (8, 9) are dropped. (Position.x == id in this test, so it doubles as an id check.)
+    for (int i = 0; i < TouchPanel::MAX_TOUCHES; ++i)
+    {
+        EXPECT_EQ(capped[static_cast<std::size_t>(i)].getIdProperty(), i);
+        EXPECT_EQ(capped[static_cast<std::size_t>(i)].getPositionProperty().X, static_cast<float>(i));
+    }
+}
+
+// P5-011: the slot-path SetFinger writes touches_[index]; an out-of-range index must throw
+// std::out_of_range rather than write past the fixed MAX_TOUCHES array (no OOB). The boundary indices
+// 0 and MAX_TOUCHES-1 are the valid extremes and must NOT throw.
+TEST_F(TouchEdgeCaseTest, SetFingerRejectsOutOfRangeSlotIndexWithoutOutOfBoundsWrite)
+{
+    EXPECT_THROW(TouchPanel::SetFinger(-1, 1, Vector2::Zero), std::out_of_range);
+    EXPECT_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES, 1, Vector2::Zero), std::out_of_range);
+    EXPECT_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES + 5, 1, Vector2::Zero), std::out_of_range);
+
+    EXPECT_NO_THROW(TouchPanel::SetFinger(0, 1, Vector2::Zero));
+    EXPECT_NO_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES - 1, 2, Vector2::Zero));
 }
 
 // --- Tasks 868-871: event-driven path preserves TouchLocation previous-location ---
@@ -196,7 +307,7 @@ TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsConnectedOnceTouchDeviceExists)
     TouchPanel::setTouchDeviceExistsProperty(true);
     const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
     EXPECT_TRUE(caps.getIsConnectedProperty());
-    EXPECT_EQ(caps.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4); // DEC-09: XNA/FNA always report 4
 }
 
 TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsConnectedViaInputManagerFallbackWhenFlagUnset)
@@ -205,7 +316,30 @@ TEST_F(TouchEdgeCaseTest, GetCapabilitiesIsConnectedViaInputManagerFallbackWhenF
     InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(5, 5));
     const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
     EXPECT_TRUE(caps.getIsConnectedProperty());
-    EXPECT_EQ(caps.getMaximumTouchCountProperty(), TouchPanel::MAX_TOUCHES);
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4); // DEC-09: XNA/FNA always report 4
+}
+
+TEST_F(TouchEdgeCaseTest, GetCapabilitiesHasNoSideEffectOnTouchState)
+{
+    // Regression (task 894/896): the InputManager-fallback branch of GetCapabilities() must NOT
+    // consume a frame of touch state. Previously it called GetTouchState(), which advances
+    // previous-location tracking and promotes Pressed->Moved, so a GetCapabilities() call silently
+    // corrupted the next GetState(). With the non-mutating HasAnyTouch() peek, the Pressed touch
+    // must survive unchanged.
+    InputManager::SetTouchState(7, TouchLocationState::Pressed, Vector2(5, 5));
+
+    // Call it repeatedly — none of these may mutate touch state.
+    (void) TouchPanel::GetCapabilities();
+    (void) TouchPanel::GetCapabilities();
+
+    const TouchCollection state = TouchPanel::GetState();
+    ASSERT_EQ(state.getCountProperty(), 1);
+    EXPECT_EQ(state[0].getIdProperty(), 7);
+    EXPECT_EQ(state[0].getStateProperty(), TouchLocationState::Pressed)
+        << "GetCapabilities() must not promote Pressed to Moved";
+    TouchLocation prev;
+    EXPECT_FALSE(state[0].TryGetPreviousLocation(prev))
+        << "the first GetState after a press has no previous location";
 }
 
 TEST_F(TouchEdgeCaseTest, GetCapabilitiesReturnsToDisconnectedAfterReset)

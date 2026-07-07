@@ -83,7 +83,10 @@ namespace Microsoft::Xna::Framework::Input
 
     int GamePadThumbSticks::GetHashCode() const
     {
-        return left_.GetHashCode() + 37 * right_.GetHashCode();
+        // Unsigned wraparound avoids signed-overflow UB (caught by UBSan, INPUT-BUILD-006) while
+        // preserving FNA's unchecked `Left.GetHashCode() + 37 * Right.GetHashCode()` result.
+        return static_cast<int>(static_cast<unsigned>(left_.GetHashCode())
+                                + 37u * static_cast<unsigned>(right_.GetHashCode()));
     }
 
     bool operator==(const GamePadThumbSticks& left, const GamePadThumbSticks& right)

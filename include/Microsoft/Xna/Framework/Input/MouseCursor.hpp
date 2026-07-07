@@ -5,7 +5,11 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/IDisposable.hpp"
 
-#include <SDL3/SDL.h>
+// Opaque forward declaration of SDL's cursor handle. This public header wraps an SDL cursor but must
+// not pull <SDL3/SDL.h> into consumers: a strict-XNA header (Mouse.hpp) includes this one, so doing so
+// would drag all of SDL into the public XNA include tree. A pointer to the incomplete type is all the
+// public API needs; MouseCursor.cpp includes the real SDL header.
+struct SDL_Cursor;
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -137,6 +141,8 @@ namespace Microsoft::Xna::Framework::Input
         // and risks a free-after-SDL_Quit at static teardown).
         bool        isSystemSingleton_ = false;
 
-        NOXNA static MouseCursor MakeSystem(SDL_SystemCursor id);
+        // Takes the SDL_SystemCursor value as a plain int so the enum stays out of this public header
+        // (the .cpp casts it back). id values come from SDL_SYSTEM_CURSOR_* in MouseCursor.cpp.
+        NOXNA static MouseCursor MakeSystem(int systemCursorId);
     };
 }

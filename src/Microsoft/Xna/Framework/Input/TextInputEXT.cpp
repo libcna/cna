@@ -10,12 +10,30 @@ namespace
     {
         return reinterpret_cast<SDL_Window*>(handle);
     }
+
+    SDL_TextInputType ToSdlTextInputType(CNA::Input::TextInputTypeEXT type)
+    {
+        switch (type)
+        {
+            case CNA::Input::TextInputTypeEXT::Text:                 return SDL_TEXTINPUT_TYPE_TEXT;
+            case CNA::Input::TextInputTypeEXT::TextName:             return SDL_TEXTINPUT_TYPE_TEXT_NAME;
+            case CNA::Input::TextInputTypeEXT::TextEmail:            return SDL_TEXTINPUT_TYPE_TEXT_EMAIL;
+            case CNA::Input::TextInputTypeEXT::TextUsername:         return SDL_TEXTINPUT_TYPE_TEXT_USERNAME;
+            case CNA::Input::TextInputTypeEXT::TextPasswordHidden:   return SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_HIDDEN;
+            case CNA::Input::TextInputTypeEXT::TextPasswordVisible:  return SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_VISIBLE;
+            case CNA::Input::TextInputTypeEXT::Number:                return SDL_TEXTINPUT_TYPE_NUMBER;
+            case CNA::Input::TextInputTypeEXT::NumberPasswordHidden:  return SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_HIDDEN;
+            case CNA::Input::TextInputTypeEXT::NumberPasswordVisible: return SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_VISIBLE;
+        }
+        return SDL_TEXTINPUT_TYPE_TEXT;
+    }
 }
 
 namespace Microsoft::Xna::Framework::Input
 {
-    std::function<void(charcs)>                     TextInputEXT::TextInput   = nullptr;
-    std::function<void(const std::string&, int, int)> TextInputEXT::TextEditing = nullptr;
+    System::MulticastAction<charcs>                       TextInputEXT::TextInput;
+    System::MulticastAction<const std::string&, int, int> TextInputEXT::TextEditing;
+    System::MulticastAction<const std::vector<std::string>&, int, bool> TextInputEXT::TextEditingCandidatesEXT;
     std::uintptr_t                                  TextInputEXT::windowHandle_ = 0;
 
     std::uintptr_t TextInputEXT::getWindowHandleProperty()
@@ -69,6 +87,17 @@ namespace Microsoft::Xna::Framework::Input
         }
     }
 
+    void TextInputEXT::StartTextInputWithTypeEXT(CNA::Input::TextInputTypeEXT type)
+    {
+        if (SDL_Window* window = ToSdlWindow(windowHandle_))
+        {
+            SDL_PropertiesID props = SDL_CreateProperties();
+            SDL_SetNumberProperty(props, SDL_PROP_TEXTINPUT_TYPE_NUMBER, ToSdlTextInputType(type));
+            SDL_StartTextInputWithProperties(window, props);
+            SDL_DestroyProperties(props);
+        }
+    }
+
     void TextInputEXT::SetInputRectangle(const Microsoft::Xna::Framework::Rectangle& rectangle)
     {
         if (SDL_Window* window = ToSdlWindow(windowHandle_))
@@ -97,5 +126,20 @@ namespace Microsoft::Xna::Framework::Input
     {
         if (TextEditing)
             TextEditing(text, start, length);
+    }
+
+    void TextInputEXT::INTERNAL_OnTextEditingCandidates(
+        const std::vector<std::string>& candidates, int selected, bool horizontal)
+    {
+        if (TextEditingCandidatesEXT)
+            TextEditingCandidatesEXT(candidates, selected, horizontal);
+    }
+
+    void TextInputEXT::ResetForTests()
+    {
+        TextInput    = nullptr;
+        TextEditing  = nullptr;
+        TextEditingCandidatesEXT = nullptr;
+        windowHandle_ = 0;
     }
 }

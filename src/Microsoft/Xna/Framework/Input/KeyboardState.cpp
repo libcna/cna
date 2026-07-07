@@ -70,7 +70,15 @@ namespace Microsoft::Xna::Framework::Input
         for (const Keys k : pressedKeys_)
         {
             const auto value = static_cast<unsigned int>(k);
-            words[value >> 5] |= (1u << (value & 0x1fu));
+            // FNA's InternalSetKey (KeyboardState.cs) switches on ((int)key)>>5 with cases
+            // 0..7 and no default, so a Keys value outside 0..255 (out-of-range enum, or a
+            // negative value that wraps to a huge unsigned) maps to no bitfield and is
+            // ignored. Guarding here keeps the same behavior and prevents an out-of-bounds
+            // write into the fixed 8-word array.
+            if (value < 256u)
+            {
+                words[value >> 5] |= (1u << (value & 0x1fu));
+            }
         }
         return static_cast<int>(words[0] ^ words[1] ^ words[2] ^ words[3] ^
                                  words[4] ^ words[5] ^ words[6] ^ words[7]);

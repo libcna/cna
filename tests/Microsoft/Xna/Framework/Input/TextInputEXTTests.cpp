@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include "CNA/Input/TextInputType.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
@@ -46,6 +47,36 @@ TEST_F(TextInputEXTTest, TextInputWithoutSubscriberIsSafe)
 {
     TextInputEXT::TextInput = nullptr;
     EXPECT_NO_THROW(TextInputEXT::INTERNAL_OnTextInput(u'x'));
+}
+
+// DEC-06: TextInput/TextEditing are multicast System::MulticastAction (match FNA's event Action<...>).
+TEST_F(TextInputEXTTest, TextInputIsMulticastAndDeliversToEverySubscriber)
+{
+    TextInputEXT::TextInput = nullptr;
+    std::u16string a;
+    std::u16string b;
+    TextInputEXT::TextInput += [&a](charcs c) { a += c; };
+    TextInputEXT::TextInput += [&b](charcs c) { b += c; };
+
+    TextInputEXT::INTERNAL_OnTextInput(u'X');
+    TextInputEXT::INTERNAL_OnTextInput(u'Y');
+
+    EXPECT_EQ(a, u"XY");
+    EXPECT_EQ(b, u"XY");
+}
+
+TEST_F(TextInputEXTTest, TextEditingIsMulticastAndDeliversToEverySubscriber)
+{
+    TextInputEXT::TextEditing = nullptr;
+    int calls1 = 0;
+    int calls2 = 0;
+    TextInputEXT::TextEditing += [&calls1](const std::string&, int, int) { ++calls1; };
+    TextInputEXT::TextEditing += [&calls2](const std::string&, int, int) { ++calls2; };
+
+    TextInputEXT::INTERNAL_OnTextEditing("draft", 0, 5);
+
+    EXPECT_EQ(calls1, 1);
+    EXPECT_EQ(calls2, 1);
 }
 
 TEST_F(TextInputEXTTest, TextEditingDispatchesTextStartAndLength)
@@ -108,6 +139,23 @@ TEST_F(TextInputEXTTest, WindowHandlePropertyRoundTrips)
     EXPECT_EQ(TextInputEXT::getWindowHandleProperty(), std::uintptr_t{0});
 }
 
+// P8-005(c): the framework never leaves a stale window handle behind — ResetForTests clears it to 0, so
+// after a reset every window-dependent call takes the null-guarded no-op path instead of dereferencing a
+// possibly-freed SDL_Window*. (A non-null stale handle is the caller's contract: CNA cannot validate an
+// arbitrary pointer without handing it to SDL, so it only guards handle == 0; the framework-managed
+// lifecycle avoids that by clearing the handle on reset.)
+TEST_F(TextInputEXTTest, ResetForTestsClearsWindowHandleSoLaterCallsAreNullGuarded)
+{
+    TextInputEXT::setWindowHandleProperty(0xDEADBEEFu); // a handle that must never be dereferenced
+    TextInputEXT::ResetForTests();
+    EXPECT_EQ(TextInputEXT::getWindowHandleProperty(), std::uintptr_t{0});
+
+    // With the handle cleared, these are safe no-ops (the bogus handle is never passed to SDL).
+    EXPECT_NO_THROW(TextInputEXT::StartTextInput());
+    EXPECT_NO_THROW(TextInputEXT::StopTextInput());
+    EXPECT_FALSE(TextInputEXT::IsTextInputActive());
+}
+
 TEST_F(TextInputEXTTest, IsTextInputActiveIsFalseWithoutWindow)
 {
     // No window handle -> the null guard returns false without touching SDL.
@@ -126,6 +174,31 @@ TEST_F(TextInputEXTTest, StartStopAndSetRectangleWithoutWindowAreSafeNoOps)
     EXPECT_NO_THROW(TextInputEXT::StartTextInput());
     EXPECT_NO_THROW(TextInputEXT::StopTextInput());
     EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(0, 0, 10, 10)));
+}
+
+// N-014b: StartTextInputWithTypeEXT shares StartTextInput's null-window guard, for every hint value.
+TEST_F(TextInputEXTTest, StartTextInputWithTypeWithoutWindowIsSafeNoOpForEveryType)
+{
+    using CNA::Input::TextInputTypeEXT;
+    for (const TextInputTypeEXT type : {
+             TextInputTypeEXT::Text, TextInputTypeEXT::TextName, TextInputTypeEXT::TextEmail,
+             TextInputTypeEXT::TextUsername, TextInputTypeEXT::TextPasswordHidden,
+             TextInputTypeEXT::TextPasswordVisible, TextInputTypeEXT::Number,
+             TextInputTypeEXT::NumberPasswordHidden, TextInputTypeEXT::NumberPasswordVisible })
+    {
+        EXPECT_NO_THROW(TextInputEXT::StartTextInputWithTypeEXT(type));
+    }
+    EXPECT_FALSE(TextInputEXT::IsTextInputActive());
+}
+
+// P7-009(c): SetInputRectangle must not crash on zero-size or negative rectangle values. With no window
+// the null guard makes every call a safe no-op; when a window exists the geometry is passed straight to
+// SDL, which tolerates degenerate rects.
+TEST_F(TextInputEXTTest, SetInputRectangleWithZeroOrNegativeValuesIsSafe)
+{
+    EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(0, 0, 0, 0)));
+    EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(-5, -5, 0, 0)));
+    EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(-10, -20, -30, -40)));
 }
 
 TEST_F(TextInputEXTTest, StartStopAndIsActiveRoundTripThroughRealWindow)
@@ -164,6 +237,50 @@ TEST_F(TextInputEXTTest, StartStopAndIsActiveRoundTripThroughRealWindow)
 
     TextInputEXT::StopTextInput();
     EXPECT_FALSE(TextInputEXT::IsTextInputActive());
+
+    SDL_DestroyWindow(window);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+// N-014b: the type-hinted start reaches the real SDL_StartTextInputWithProperties path (not just the
+// no-window guard) and activates text input the same way StartTextInput does, for every hint value.
+TEST_F(TextInputEXTTest, StartTextInputWithTypeRoundTripsThroughRealWindowForEveryType)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Window* window = SDL_CreateWindow("TextInputEXTTests", 64, 64, SDL_WINDOW_HIDDEN);
+    if (!window)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+    }
+
+    TextInputEXT::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
+
+    using CNA::Input::TextInputTypeEXT;
+    for (const TextInputTypeEXT type : {
+             TextInputTypeEXT::Text, TextInputTypeEXT::TextName, TextInputTypeEXT::TextEmail,
+             TextInputTypeEXT::TextUsername, TextInputTypeEXT::TextPasswordHidden,
+             TextInputTypeEXT::TextPasswordVisible, TextInputTypeEXT::Number,
+             TextInputTypeEXT::NumberPasswordHidden, TextInputTypeEXT::NumberPasswordVisible })
+    {
+        TextInputEXT::StartTextInputWithTypeEXT(type);
+        if (!TextInputEXT::IsTextInputActive())
+        {
+            // Mirrors StartStopAndIsActiveRoundTripThroughRealWindow: some platforms/IME setups may
+            // not toggle SDL_TextInputActive on a hidden window; skip rather than fail.
+            SDL_DestroyWindow(window);
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+            GTEST_SKIP() << "SDL_StartTextInputWithProperties did not activate text input on a "
+                            "hidden window in this environment";
+        }
+        EXPECT_TRUE(TextInputEXT::IsTextInputActive());
+        TextInputEXT::StopTextInput();
+        EXPECT_FALSE(TextInputEXT::IsTextInputActive());
+    }
 
     SDL_DestroyWindow(window);
     SDL_QuitSubSystem(SDL_INIT_VIDEO);

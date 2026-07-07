@@ -64,7 +64,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] const GamePadTriggers& getTriggersProperty() const;
 
         /** @brief Constructs a disconnected state with all values at rest. */
-        GamePadState();
+        NOXNA GamePadState();
 
         /**
          * @brief Constructs a fully specified connected gamepad state.

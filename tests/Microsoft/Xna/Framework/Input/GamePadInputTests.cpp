@@ -158,3 +158,36 @@ TEST(GamePadInputTest, PacketNumberBumpsOnConnectButtonAndAxisChangesOnly)
 
     ResetGamePadState();
 }
+
+// DEC-04 / task 916. CNA synthesizes GamePadState::PacketNumber (FNA leaves it hardcoded to 0); it
+// increments on any RAW axis change, dead-zone-independent, matching XInput's dwPacketNumber. So a
+// wobble that stays entirely within the dead zone still bumps PacketNumber, even though the
+// default-dead-zoned thumbstick reads at rest both times. This pins that by-design behavior: the raw
+// input changed, so PacketNumber reflects it; the dead zone is a GetState-time projection, not stored.
+TEST(GamePadInputTest, PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZonedStateStaysAtRest)
+{
+    using CNA::Internal::Input::InputManager;
+    using CNA::Internal::Input::GamePadAxis;
+
+    ResetGamePadState();
+    InputManager::SetGamePadConnection(PlayerIndex::One, true);
+
+    // Left-stick dead zone is ~0.2395 (GamePad::LeftDeadZone = 7849/32768); both values are below it.
+    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickX, 0.05f);
+    const auto first = GamePad::GetState(PlayerIndex::One); // default = IndependentAxes dead zone
+    EXPECT_FLOAT_EQ(first.getThumbSticksProperty().getLeftProperty().X, 0.0f);
+    const int packetFirst = first.getPacketNumberProperty();
+
+    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickX, 0.15f);
+    const auto second = GamePad::GetState(PlayerIndex::One);
+    EXPECT_FLOAT_EQ(second.getThumbSticksProperty().getLeftProperty().X, 0.0f); // still at rest (dead-zoned)
+
+    // The dead-zoned view is unchanged, but the raw axis changed, so PacketNumber bumped.
+    EXPECT_GT(second.getPacketNumberProperty(), packetFirst);
+
+    // Confirm the raw value actually changed (what drove the bump): with no dead zone it reads 0.15.
+    const auto raw = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None);
+    EXPECT_FLOAT_EQ(raw.getThumbSticksProperty().getLeftProperty().X, 0.15f);
+
+    ResetGamePadState();
+}

@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Input/GamePadDPad.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadTriggers.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
@@ -183,7 +184,36 @@ void InputDemo::Update(GameTime& gameTime)
     }
     prevToggleKey_ = toggle;
 
+    // INP-0219: F2 toggles relative mouse mode (pointer lock); F3 warps the cursor. Both exercise the
+    // Mouse EXT/warp APIs end-to-end. In relative mode SetPosition is a documented no-op.
+    const bool relKey = kb.IsKeyDown(Keys::F2);
+    if (relKey && !prevRelKey_)
+    {
+        relativeMouse_ = !relativeMouse_;
+        Mouse::setIsRelativeMouseModeEXTProperty(relativeMouse_);
+    }
+    prevRelKey_ = relKey;
+
+    const bool warpKey = kb.IsKeyDown(Keys::F3);
+    if (warpKey && !prevWarpKey_)
+    {
+        Mouse::SetPosition(507, 300); // warp toward the window centre (exercises SetPosition/warp)
+        warpFlash_ = 30;
+    }
+    prevWarpKey_ = warpKey;
+    if (warpFlash_ > 0) --warpFlash_;
+
     TouchPanel::Update();
+
+    // INP-0220: drain the recognized-gesture queue (ReadGesture) and remember the latest, so the demo
+    // surfaces recognized gestures (Tap/FreeDrag/Flick are enabled in LoadContent), not just raw points.
+    while (TouchPanel::getIsGestureAvailableProperty())
+    {
+        const GestureSample g = TouchPanel::ReadGesture();
+        lastGesture_  = static_cast<int>(g.getGestureTypeProperty());
+        gestureFlash_ = 45;
+    }
+    if (gestureFlash_ > 0) --gestureFlash_;
 
     // Drive rumble motors from trigger pressure for every player slot (One..Four), exercising
     // GamePad::SetVibration end-to-end. Harmless no-op (returns false) for disconnected slots.
@@ -192,6 +222,18 @@ void InputDemo::Update(GameTime& gameTime)
         const auto playerIndex = static_cast<PlayerIndex>(p);
         const auto& trig = GamePad::GetState(playerIndex).getTriggersProperty();
         GamePad::SetVibration(playerIndex, trig.getLeftProperty(), trig.getRightProperty());
+    }
+
+    // INP-0221: cycle Player One's light bar and read its motion sensors. All are capability-gated:
+    // no-ops / false when the controller is absent or lacks the feature (harmless on other pads).
+    {
+        const auto p1  = PlayerIndex::One;
+        const auto hue = static_cast<std::uint8_t>((frame_ * 2) & 0xFF);
+        lightBar_ = Color(hue, static_cast<std::uint8_t>(255 - hue), std::uint8_t{128}, std::uint8_t{255});
+        GamePad::SetLightBarEXT(p1, lightBar_);
+        Vector3 g, a;
+        haveGyro_  = GamePad::GetGyroEXT(p1, g);          if (haveGyro_)  gyro_  = g;
+        haveAccel_ = GamePad::GetAccelerometerEXT(p1, a); if (haveAccel_) accel_ = a;
     }
 }
 
@@ -355,6 +397,18 @@ void InputDemo::DrawMouse(int ox, int oy, const MsState& ms)
     const int mx = std::max(0, std::min(ms.getXProperty(), 440));
     const int my = std::max(0, std::min(ms.getYProperty(), 580));
     DrawRect(mx - 5, my - 5, 10, 10, CURSOR_CLR);
+
+    // --- INP-0219: relative-mode (F2, green when active) + warp flash (F3, yellow pulse).
+    DrawRect(ox,      oy + 95, 30, 30, relativeMouse_ ? MOUSE_ON : MOUSE_OFF);
+    DrawRect(ox + 40, oy + 95, 30, 30, warpFlash_ > 0 ? Color{255, 220, 0, 255} : MOUSE_OFF);
+
+    // --- INP-0220: last recognized gesture (ReadGesture) — one lit cell per set GestureType bit,
+    // flashing briefly after a gesture is read.
+    for (int b = 0; b < 8; ++b)
+    {
+        const bool on = gestureFlash_ > 0 && (lastGesture_ & (1 << b)) != 0;
+        DrawRect(ox + 90 + b * 16, oy + 95, 14, 30, on ? TOUCH_CLR : MOUSE_OFF);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -425,6 +479,18 @@ void InputDemo::DrawGamePad(int ox, int oy, const GpState& gp)
     DrawStick(ox + 235, oy + 270, 55,
               stick.getRightProperty().X,
               stick.getRightProperty().Y);
+
+    // --- INP-0221: light-bar swatch (the color SetLightBarEXT is driving) + gyro/accel magnitude bars.
+    DrawRect(ox + 10, oy + 350, 60, 24, lightBar_);
+    auto sensorBar = [&](int y, const Vector3& v, bool have)
+    {
+        const float mag = have
+            ? std::min(1.0f, std::sqrt(v.X * v.X + v.Y * v.Y + v.Z * v.Z) / 10.0f)
+            : 0.0f;
+        DrawBar(ox + 90, oy + y, 200, 18, mag, TRIG_BG, have ? MOUSE_ON : GP_OFF);
+    };
+    sensorBar(350, gyro_,  haveGyro_);
+    sensorBar(374, accel_, haveAccel_);
 }
 
 // ---------------------------------------------------------------------------

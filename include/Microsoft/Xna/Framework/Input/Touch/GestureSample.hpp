@@ -62,7 +62,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
         NOXNA [[nodiscard]] int getFingerId2EXTProperty() const;
 
         /** @brief Constructs an empty gesture sample. */
-        GestureSample();
+        NOXNA GestureSample();
 
         /**
          * @brief Constructs a gesture sample; finger ids are set to NO_FINGER.

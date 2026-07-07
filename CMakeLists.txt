@@ -29,6 +29,17 @@ if(CNA_ENABLE_NET)
     cna_configure_vendored_enet()
 endif()
 
+# Optional sanitizers (INPUT-BUILD-006 / INPUT-CI-005). Empty = off. Comma-separated clang/gcc
+# sanitizer list, e.g. -DCNA_SANITIZE=address,undefined. Applied from here on, so CNA, sharp-runtime,
+# and the tests are instrumented; the vendored SDL/ENet builds above stay uninstrumented (ASan/UBSan
+# tolerate mixing). For diagnostics/CI only — never ship a sanitized build.
+set(CNA_SANITIZE "" CACHE STRING "Comma-separated sanitizers to enable (e.g. address,undefined); empty disables")
+if(CNA_SANITIZE)
+    message(STATUS "CNA: sanitizers enabled: ${CNA_SANITIZE}")
+    add_compile_options(-fsanitize=${CNA_SANITIZE} -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=${CNA_SANITIZE})
+endif()
+
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
 # sharp-runtime is a SIBLING repository checkout, not a git submodule of this
 # repo (Task DEV-BUILD-001) -- `git submodule update --init` cannot fetch it.
@@ -3926,6 +3937,28 @@ if(CNA_BUILD_TESTS)
 
     include(GoogleTest)
     gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)
+
+    # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
+    # The input subset used to be selected by a long --gtest_filter string copy-pasted across the docs
+    # and CI, which silently drifted whenever a new suite name fell outside its tokens (e.g. the
+    # ButtonState/KeyState/Buttons suites from INPUT-TEST-001). Keep the token list HERE only; docs and
+    # CI select the subset via `ctest -L input` (see docs/input-build-and-test.md). When you add an input
+    # test suite whose name matches none of these tokens, extend this one string.
+    set(CNA_INPUT_TEST_FILTER
+        "*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*:*CnaInput*:*Joystick*:*Haptic*")
+    # INPUT-BUILD-009: `--gtest_shuffle --gtest_repeat=5` is the standardized order-independence gate.
+    # The input state is a process-wide singleton (InputManager / GestureDetector / MouseCursor stock
+    # cursors persist for the whole binary), so a static-state leak would reintroduce order dependence;
+    # running the filtered subset 5x under a fresh shuffle each iteration is the required check that
+    # catches it. `ctest -L input` runs exactly this on every backend/CI job.
+    add_test(NAME CnaInputTests
+             COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5)
+    # Headless-safe audio everywhere; the video driver is left to the runner (Xvfb+x11 in CI, real
+    # display or `xvfb-run` locally) because the MouseCursor tests need real cursors (the SDL dummy
+    # driver has null cursors).
+    set_tests_properties(CnaInputTests PROPERTIES
+        LABELS input
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     if(MINGW)
         # Statically link MinGW runtime into the test binary too, so it can

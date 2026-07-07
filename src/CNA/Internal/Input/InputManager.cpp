@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "CNA/Internal/Input/GestureDetector.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
+#include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <algorithm>
 #include <array>
@@ -28,6 +33,7 @@ namespace CNA::Internal::Input
             int X = 0;
             int Y = 0;
             int ScrollWheelValue = 0;
+            int HorizontalScrollWheelValue = 0; // NOXNA/EXT — SDL wheel.x, surfaced via MouseState EXT
             ButtonState LeftButton = ButtonState::Released;
             ButtonState RightButton = ButtonState::Released;
             ButtonState MiddleButton = ButtonState::Released;
@@ -74,6 +80,8 @@ namespace CNA::Internal::Input
             // touch exposes TryGetPreviousLocation() (task 868–870). Invalid = no previous yet.
             TouchLocationState PreviousState = TouchLocationState::Invalid;
             Microsoft::Xna::Framework::Vector2 PreviousPosition = Microsoft::Xna::Framework::Vector2();
+            // NOXNA/EXT: SDL finger pressure (0..1), surfaced via TouchLocation::getPressureEXT.
+            float Pressure = 0.0f;
         };
 
         struct InternalInputState
@@ -116,6 +124,19 @@ namespace CNA::Internal::Input
         getInternalInputState() = InternalInputState{};
     }
 
+    void InputManager::ResetAllForTests()
+    {
+        // Deterministic order: clear the bridge's file-static event bookkeeping first, then the
+        // accumulated input singleton, then the higher-level panels/handlers. All entries are
+        // independent process-wide statics, so ordering is for reproducibility, not correctness.
+        SdlInputBridge::ResetForTests();
+        ResetForTests();
+        Microsoft::Xna::Framework::Input::Touch::TouchPanel::ResetForTests();
+        GestureDetector::ResetForTests();
+        Microsoft::Xna::Framework::Input::Mouse::ResetForTests();
+        Microsoft::Xna::Framework::Input::TextInputEXT::ResetForTests();
+    }
+
     void InputManager::SetMousePosition(const int x, const int y)
     {
         auto& mouseState = getInternalInputState().Mouse;
@@ -153,6 +174,12 @@ namespace CNA::Internal::Input
     {
         auto& mouseState = getInternalInputState().Mouse;
         mouseState.ScrollWheelValue += delta;
+    }
+
+    void InputManager::AddHorizontalScrollWheelDelta(const int delta)
+    {
+        auto& mouseState = getInternalInputState().Mouse;
+        mouseState.HorizontalScrollWheelValue += delta;
     }
 
     void InputManager::SetMouseRelativeMode(const bool enabled)
@@ -193,7 +220,8 @@ namespace CNA::Internal::Input
     void InputManager::SetTouchState(
         const int touchId,
         const TouchLocationState state,
-        const Microsoft::Xna::Framework::Vector2& position
+        const Microsoft::Xna::Framework::Vector2& position,
+        const float pressure
     )
     {
         auto& touchLocations = getInternalInputState().TouchLocations;
@@ -201,6 +229,7 @@ namespace CNA::Internal::Input
         touchLocation.Id = touchId;
         touchLocation.State = state;
         touchLocation.Position = position;
+        touchLocation.Pressure = pressure;
         touchLocation.RemoveAfterSnapshot = state == TouchLocationState::Released;
     }
 
@@ -343,7 +372,8 @@ namespace CNA::Internal::Input
             mouseState.MiddleButton,
             mouseState.RightButton,
             mouseState.XButton1,
-            mouseState.XButton2
+            mouseState.XButton2,
+            mouseState.HorizontalScrollWheelValue // NOXNA/EXT 9th arg
         );
     }
 
@@ -364,6 +394,11 @@ namespace CNA::Internal::Input
         }
 #endif
         return Microsoft::Xna::Framework::Input::KeyboardState(pressedKeys);
+    }
+
+    bool InputManager::HasAnyTouch()
+    {
+        return !getInternalInputState().TouchLocations.empty();
     }
 
     Microsoft::Xna::Framework::Input::Touch::TouchCollection InputManager::GetTouchState()
@@ -397,11 +432,13 @@ namespace CNA::Internal::Input
             if (touchLocation.PreviousState != TouchLocationState::Invalid)
             {
                 snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position,
-                                      touchLocation.PreviousState, touchLocation.PreviousPosition);
+                                      touchLocation.PreviousState, touchLocation.PreviousPosition,
+                                      touchLocation.Pressure);
             }
             else
             {
-                snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position);
+                snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position,
+                                      touchLocation.Pressure);
             }
 
             // Record the location just reported as "previous" for the next snapshot — done before
@@ -430,10 +467,6 @@ namespace CNA::Internal::Input
         return Microsoft::Xna::Framework::Input::Touch::TouchCollection(std::move(snapshot));
     }
 
-    GamePadState InputManager::GetGamePadState(const PlayerIndex playerIndex)
-    {
-        return Microsoft::Xna::Framework::Input::GamePad::GetState(playerIndex);
-    }
 
     RawGamePadState InputManager::GetRawGamePadState(const PlayerIndex playerIndex)
     {

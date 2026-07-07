@@ -1,0 +1,13834 @@
+# CNA Input Deep Audit, Stabilization, and Repair Plan — 2026-07-07
+
+## About this plan
+
+This is a **fresh plan**, generated from scratch on 2026-07-07. It supersedes and replaces the
+previous `plan_input.md` in every respect.
+
+- The previous plan was archived verbatim to `plan_input_20260707.md`. It was **not** read,
+  grepped, summarized, or otherwise consulted while writing this plan or while executing it.
+- `plan_input_20260707.md` is historical only and **must not be used as a source of truth** for
+  status, scope, or completion claims in this plan. Any fact needed from "before" must be
+  re-derived from the current repository state (git history, current source, current tests,
+  current docs), not from the archived file.
+- **CNA Input is being kept.** Nothing in `Microsoft::Xna::Framework::Input` is being reverted
+  or removed by this plan.
+- **NOXNA Input extensions are intentional and are being kept.** The `CNA::Input` extension
+  layer (Clipboard, GamePad extensions, Haptics, Joysticks, Power, Sensors, TextInputType, etc.)
+  is a deliberate part of this project, not scope creep to be undone. This plan audits, hardens,
+  documents, and tests that layer — it does not discard it.
+- The goal is:
+  1. **Strict XNA 4.0 parity** where the type/member is part of the original XNA 4.0 API surface
+     (validated against the local FNA reference tree at
+     `/rv/data/library/github.com/FNA-XNA/FNA`).
+  2. **FNA-compatible behavior** where FNA itself made a documented, load-bearing implementation
+     choice beyond the bare XNA 4.0 spec.
+  3. **Clearly documented CNA/NOXNA extensions** where functionality goes beyond XNA 4.0/FNA —
+     each such member is marked with the `NOXNA` macro (inside `Microsoft::Xna`) or lives under
+     the `CNA` namespace, and is described as an intentional extension, not an accidental
+     deviation.
+
+## Status legend
+
+```md
+- [ ] Not started
+- [~] In progress
+- [x] Completed
+- [!] Blocked
+- [?] Needs verification
+```
+
+## Execution rules (binding for every task below)
+
+1. Execute tasks strictly in the order given, unless a task is genuinely blocked (in which case
+   mark it `[!]`, record why, and move to the next task — do not skip ahead silently).
+2. One task = one focused audit/fix/test/documentation action. Do not batch unrelated fixes into
+   one task's execution.
+3. Update this file immediately when a task completes, with: status, exact files changed, exact
+   tests added/updated, exact commands run, result, and remaining risk — filled into that task's
+   **Result** field.
+4. Never mark a task `[x]` without evidence that it was actually done in this checkout. Never
+   claim a test passed without having run it. Never claim hardware/manual validation (Phase 11)
+   without an actual physical device in hand.
+5. Do not add features beyond audit/repair/test/documentation scope. Do not remove any NOXNA
+   Input extension.
+6. Strict XNA behavior and NOXNA/EXT behavior are audited and reported on separately, even when a
+   single task's Files list touches both (e.g. an SDL bridge fix that affects both a strict-XNA
+   getter and a NOXNA extension getter).
+7. Public XNA-compatible headers must never require an application to also include a
+   `CNA::Input` extension header (see P1-027). Public headers must not expose concrete SDL types
+   unless a task in this plan (P3-036/P3-037, P7-024/P7-025) explicitly decides to allow it, with
+   the decision documented.
+
+## Phase overview
+
+| Phase | Title | Task count | IDs |
+|---|---|---|---|
+| 0  | Baseline, repository hygiene, and plan reset | 20 | P0-001..020 |
+| 1  | Strict XNA Input public API audit | 45 | P1-001..045 |
+| 2  | Keyboard and text input audit/fixes | 60 | P2-001..060 |
+| 3  | Mouse and cursor audit/fixes | 45 | P3-001..045 |
+| 4  | GamePad audit/fixes | 70 | P4-001..070 |
+| 5  | TouchPanel, TouchCollection, and TouchLocation audit/fixes | 45 | P5-001..045 |
+| 6  | Gesture audit/fixes | 45 | P6-001..045 |
+| 7  | CNA / NOXNA Input extension audit/fixes | 40 | P7-001..040 |
+| 8  | SDL bridge and backend integration audit/fixes | 40 | P8-001..040 |
+| 9  | Tests, fuzzing, sanitizers, and CI | 35 | P9-001..035 |
+| 10 | Documentation and public compatibility notes | 25 | P10-001..025 |
+| 11 | Manual hardware validation checklist | 15 | P11-001..015 |
+| 12 | Final readiness gates and merge decision | 15 | P12-001..015 |
+| **Total** | | **500** | |
+
+Phase 0 was executed while authoring this plan (2026-07-07) — see its 20 tasks below, all
+`[x]` with the exact commands and output that produced each fact. Execution continues at
+**P1-001**.
+
+---
+
+## P0-001 — Record git branch and HEAD commit hash `[x]`
+**Goal:** Capture the exact branch and commit this audit pass starts from.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Baseline reference point for every later diff/commit in this plan.
+
+**Result:** `git branch --show-current` → `feature/input`. `git log -1 --format="%H %ci"` → `b89baad7770aa3b086289e3be18921780946125a 2026-07-07 18:53:28 +0200`.
+
+---
+
+## P0-002 — Record toolchain versions (compiler, CMake, Ninja) `[x]`
+**Goal:** Capture the exact build toolchain in use so build failures can be triaged against a known-good baseline.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Version drift in the compiler/CMake is a common source of false "regressions".
+
+**Result:** `cmake --version` → 3.31.6. `g++ --version` → g++ (Debian 14.2.0-19) 14.2.0. `ninja --version` → 1.12.1.
+
+---
+
+## P0-003 — Record OS/kernel version `[x]`
+**Goal:** Capture the host OS so platform-specific input behavior (e.g. SDL backend selection) can be reasoned about.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Linux-only baseline; Phase 11 hardware checklist still applies to other OSes separately.
+
+**Result:** `uname -a` → Linux thinkpadt14 6.12.90+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.90-1 (2026-05-22) x86_64 GNU/Linux.
+
+---
+
+## P0-004 — Record SDL/SDL_image/SDL_mixer/googletest submodule pinned commits `[x]`
+**Goal:** Capture exact vendored dependency revisions relevant to Input (SDL event/gamepad/haptic/sensor APIs).
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** SDL API behavior (e.g. gamepad mapping, haptic effect struct layout) is version-sensitive.
+
+**Result:** `git submodule status` → third_party/SDL @ cbe3fbe9 (release-3.4.0-685-gcbe3fbe9f), third_party/SDL_image @ fcb9d0b1, third_party/SDL_mixer @ 3075d3ed, vendor/googletest @ 7e2c425d.
+
+---
+
+## P0-005 — Record sharp-runtime sibling repository status `[x]`
+**Goal:** Confirm the required sibling checkout is present and clean, since CNA depends on it as a non-submodule sibling.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Per [[project_sharp_runtime_concurrent_editing]]: a committed sharp-runtime interface change (not just mid-edit) can break the cna_input build; recorded here as a pre-flight check.
+
+**Result:** `../sharp-runtime`: HEAD `123f602f2218d1b9938706ffb8692016bc576d47` @ 2026-07-07 18:46:48 +0200, `git status --short` clean.
+
+---
+
+## P0-006 — Record existing CMake build directories `[x]`
+**Goal:** Enumerate available preconfigured build directories so later phases reuse them instead of reconfiguring from scratch.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Dedicated `cmake-build-input-*` directories already exist for asan/bgfx/easygl/sdlrenderer/vulkan variants.
+
+**Result:** `ls -d cmake-build*` → cmake-build-bgfx, cmake-build-debug, cmake-build-input-asan, cmake-build-input-bgfx, cmake-build-input-easygl, cmake-build-input-sdlrenderer, cmake-build-input-vulkan, cmake-build-vulkan.
+
+---
+
+## P0-007 — Record working tree cleanliness before starting `[x]`
+**Goal:** Confirm no unrelated in-progress work is present before this pass begins modifying files.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** A dirty tree here would risk this plan's commits bundling unrelated changes, which CLAUDE.md forbids.
+
+**Result:** `git status --short` → clean (no output) immediately before archiving the old plan.
+
+---
+
+## P0-008 — Archive previous plan_input.md to plan_input_20260707.md `[x]`
+**Goal:** Preserve the previous plan as a historical artifact without treating it as a source of truth for this pass.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input_20260707.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Per explicit instruction: the archived file was not read, grepped, or summarized before or after the rename.
+
+**Result:** `mv plan_input.md plan_input_20260707.md`. Verified via `ls -la plan_input_20260707.md` (83583 bytes) and `git status --short` showing ` D plan_input.md` / `?? plan_input_20260707.md`.
+
+---
+
+## P0-009 — Create fresh plan_input.md skeleton with phases and legend `[x]`
+**Goal:** Author a brand-new plan file from scratch, independent of the archived one, with the required title, legend, and 500-task structure.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** This document is that file.
+
+**Result:** Generated programmatically from `gen_plan.py` in the session scratchpad to guarantee exact task counts/IDs per phase; written to `plan_input.md`.
+
+---
+
+## P0-010 — Inventory strict XNA Input public headers `[x]`
+**Goal:** Enumerate every header under `include/Microsoft/Xna/Framework/Input` to scope Phase 1–6.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** 26 headers found (incl. `Touch/` subdirectory).
+
+**Result:** `find include/Microsoft/Xna/Framework/Input -type f` → Buttons, ButtonState, GamePad(+Buttons/Capabilities/DeadZone/DPad/State/ThumbSticks/Triggers/Type), Keyboard, KeyboardState, Keys, KeyState, Mouse, MouseCursor, MouseState, TextInputEXT, Touch/{GestureSample,GestureType,TouchCollection,TouchLocation,TouchLocationState,TouchPanel,TouchPanelCapabilities}.
+
+---
+
+## P0-011 — Inventory strict XNA Input source files `[x]`
+**Goal:** Enumerate every `.cpp` under `src/Microsoft/Xna/Framework/Input` to pair with the header inventory.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** 18 `.cpp` files found; `Buttons`, `ButtonState`, `GamePadDeadZone`, `GamePadType`, `KeyState`, `TouchLocationState`, `TouchPanelCapabilities`-adjacent pure-enum/header-only types have no matching `.cpp` (expected for enum-only headers).
+
+**Result:** `find src/Microsoft/Xna/Framework/Input -type f` → GamePad(+Buttons/Capabilities/DPad/State/ThumbSticks/Triggers), Keyboard, KeyboardState, Mouse, MouseCursor, MouseState, TextInputEXT, Touch/{GestureSample,TouchCollection,TouchLocation,TouchPanelCapabilities,TouchPanel}.
+
+---
+
+## P0-012 — Inventory CNA/NOXNA Input public headers `[x]`
+**Goal:** Enumerate every header under `include/CNA/Input` to scope Phase 7.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** 24 headers found, matching the blueprint list exactly.
+
+**Result:** `find include/CNA/Input -type f` → Clipboard, GamePadButtonLabel, GamePadConnectionState, HapticCapabilities, HapticDevice, HapticDirection, HapticEffect, HapticEffectType, HapticFeature, HapticInfo, Haptics, InputDeviceInfo, InputDevices, JoystickCapabilities, JoystickHatPosition, JoystickInfo, Joysticks, JoystickState, JoystickType, KeyModifiers, Power, PowerState, Sensors, TextInputType.
+
+---
+
+## P0-013 — Inventory CNA/NOXNA Input source files `[x]`
+**Goal:** Enumerate every `.cpp` under `src/CNA/Input` to pair with the header inventory.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** 7 `.cpp` files found; remaining headers are enum/struct-only (no source needed) — confirm this is intentional per-header in Phase 7.
+
+**Result:** `find src/CNA/Input -type f` → Clipboard, HapticDevice, Haptics, InputDevices, Joysticks, Power, Sensors.
+
+---
+
+## P0-014 — Inventory Input test files `[x]`
+**Goal:** Enumerate every test file touching Input across strict-XNA, CNA extension, and internal-bridge suites.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Confirms substantial existing coverage from the prior NOXNA/plan passes ([[project_input_noxna_progress]], [[project_plan_input_progress]]) — this pass audits/extends it rather than starting from zero.
+
+**Result:** `find tests -iname` (input/keyboard/mouse/gamepad/touch/gesture/joystick/haptic/clipboard/sensor/power) → ~40 files across `tests/CNA/Input`, `tests/CNA/Internal/Input` (incl. `FakeSdl*Backend.hpp` fakes, golden/fuzz/candidate suites), `tests/Microsoft/Xna/Framework/Input` (incl. `PublicApiInputCompileTests.cpp`, `PublicApiInputSignatureFreezeTests.cpp`), and `tests/Microsoft/Devices/Sensors`.
+
+---
+
+## P0-015 — Inventory Input-related documentation files `[x]`
+**Goal:** Enumerate existing Input docs so Phase 10 updates them instead of duplicating them.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** 10 docs already exist and are cross-linked (see `docs/input-manual-verification-results.md` header) — Phase 10 must update these in place.
+
+**Result:** `find docs -iname "*input*"` → demo-input-checklist.md, input-backend.md, input-build-and-test.md, input-fna-fidelity.md, input-manual-verification-results.md, input-member-parity-matrix.md, input-pre-merge-checklist.md, input-public-api-frozen.md, input-test-coverage.md, platform-input-notes.md.
+
+---
+
+## P0-016 — Inventory CMake targets/tests related to Input `[x]`
+**Goal:** Locate the canonical Input test selector and any Input-specific executables in the build.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `CMakeLists.txt`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** `CnaInputTests` (CMakeLists.txt:1959) is the single-source-of-truth filtered gtest selector (CMakeLists.txt:1946-1964); `cna_input_smoke` (CMakeLists.txt:494) and the `InputDemo` sources (CMakeLists.txt:419-422) are manual/demo executables, not automated tests.
+
+**Result:** `grep -n Input CMakeLists.txt` → matches at lines 419-422 (demo), 492-494 (smoke sample), 1946-1964 (`CnaInputTests` gtest filter + labels).
+
+---
+
+## P0-017 — Inventory SDL bridge and backend Input files `[x]`
+**Goal:** Enumerate the internal SDL-facing bridge/backend files Phase 8 audits.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** 6 header/source pairs found under `CNA/Internal/Input`, cleanly separated from the public XNA/CNA headers.
+
+**Result:** `find src include -iname "*SdlInputBridge*" -o -iname "*SdlGamepad*" -o -iname "*SdlJoystick*" -o -iname "*SdlHaptic*" -o -iname "*GestureDetector*" -o -iname "*InputManager*"` → GestureDetector, InputManager, SdlGamepadBackend, SdlHapticBackend, SdlInputBridge, SdlJoystickBackend (each with matching `.hpp`/`.cpp`).
+
+---
+
+## P0-018 — Inventory fake backend test helpers `[x]`
+**Goal:** Enumerate fake/mock SDL backend headers used to make hardware-dependent tests deterministic and headless-safe.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** 3 fake backends exist (gamepad, haptic, joystick); Phase 9 must confirm mouse/keyboard/touch paths are similarly mockable or already deterministic via direct bridge calls.
+
+**Result:** `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`, `FakeSdlHapticBackend.hpp`, `FakeSdlJoystickBackend.hpp`.
+
+---
+
+## P0-019 — Record known manual-validation gaps and platform-support claims `[x]`
+**Goal:** Capture the current state of hardware-gated verification so Phase 11 doesn't re-derive it from scratch.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** `docs/input-manual-verification-results.md` already documents a hardware verification matrix (INP-0215) with all cells unchecked (no hardware available in the audit environment) — this pass must not mark any Phase 11 task done without an actual device.
+
+**Result:** `grep -in "manual\|hardware\|platform" docs/input-manual-verification-results.md` → confirms rumble/triggers/GUID-on-real-hardware, touch hardware, 4-simultaneous-controllers, and non-US layouts are explicitly hardware/human-gated and unverified as of 2026-07-04.
+
+---
+
+## P0-020 — Write Phase 0 baseline checkpoint `[x]`
+**Goal:** Close out Phase 0 with a single summary statement confirming the baseline is recorded and the plan is ready for Phase 1.
+
+**Steps:**
+1. Run the recording command(s) in the repository root.
+2. Paste the exact output into the Result field below.
+3. Confirm no destructive action was taken.
+
+**Acceptance criteria:**
+- The fact is recorded verbatim in this file with the command that produced it.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Checkpoint convention used at the end of every phase in this plan.
+
+**Result:** Baseline recorded 2026-07-07 on `feature/input` @ `b89baad7`. Repository clean, sibling deps clean, 26 strict-XNA + 23 CNA/NOXNA Input headers inventoried, ~40 existing Input test files inventoried, 10 existing Input docs inventoried, 6 SDL bridge files inventoried. Phase 0 complete — proceeding to Phase 1.
+
+---
+
+## P1-001 — Audit ButtonState member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `ButtonState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `ButtonState` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/ButtonState.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/ButtonState.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-002 — Audit Buttons member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `Buttons` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `Buttons` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Buttons.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Buttons.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-003 — Audit GamePad member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GamePad` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GamePad` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadMappingTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-004 — Audit GamePadButtons member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GamePadButtons` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GamePadButtons` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadButtons.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadButtons.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-005 — Audit GamePadCapabilities member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GamePadCapabilities` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GamePadCapabilities` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadCapabilities.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp (locate/verify dedicated coverage; add GamePadCapabilitiesTests.cpp if missing)`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadCapabilities.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-006 — Audit GamePadDPad member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GamePadDPad` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GamePadDPad` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadDPad.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp (locate/verify dedicated coverage; add GamePadDPadTests.cpp if missing)`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadDPad.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-007 — Audit GamePadDeadZone member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GamePadDeadZone` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GamePadDeadZone` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadDeadZoneTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadDeadZone.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-008 — Audit GamePadState member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GamePadState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GamePadState` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadState.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-009 — Audit GamePadThumbSticks member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GamePadThumbSticks` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GamePadThumbSticks` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadThumbSticks.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadThumbSticksTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadThumbSticks.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-010 — Audit GamePadTriggers member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GamePadTriggers` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GamePadTriggers` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadTriggers.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTriggersTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadTriggers.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-011 — Audit GamePadType member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GamePadType` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GamePadType` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadType.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTypeTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadType.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-012 — Audit KeyState member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `KeyState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `KeyState` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/KeyState.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp (locate/verify dedicated coverage; add KeyStateTests.cpp if missing)`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/KeyState.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-013 — Audit Keyboard member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `Keyboard` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `Keyboard` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/KeyboardModStateTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Keyboard.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-014 — Audit KeyboardState member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `KeyboardState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `KeyboardState` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/KeyboardState.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-015 — Audit Keys member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `Keys` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `Keys` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardKeyNameTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/KeyboardScancodeNameTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Keys.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-016 — Audit Mouse member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `Mouse` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `Mouse` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-017 — Audit MouseCursor member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `MouseCursor` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `MouseCursor` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp (locate/verify dedicated coverage; add MouseCursorTests.cpp if missing)`
+
+**Notes:** No FNA/XNA 4.0 equivalent exists — confirm the type is correctly marked `NOXNA` even though it lives under the strict-XNA directory (this is the documented CLAUDE.md mechanism for non-XNA members inside `Microsoft::Xna`).
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-018 — Audit MouseState member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `MouseState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `MouseState` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/MouseState.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-019 — Audit TextInputEXT member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `TextInputEXT` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `TextInputEXT` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/TextInputEXT.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-020 — Audit GestureSample member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GestureSample` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GestureSample` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp (locate/verify dedicated coverage; add GestureSampleTests.cpp if missing)`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-021 — Audit GestureType member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `GestureType` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `GestureType` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureType.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-022 — Audit TouchCollection member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `TouchCollection` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `TouchCollection` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/TouchCollection.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-023 — Audit TouchLocation member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `TouchLocation` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `TouchLocation` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/TouchLocation.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-024 — Audit TouchLocationState member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `TouchLocationState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `TouchLocationState` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/TouchLocationStateTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/TouchLocationState.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-025 — Audit TouchPanel member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `TouchPanel` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `TouchPanel` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/TouchPanel.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-026 — Audit TouchPanelCapabilities member parity vs FNA `[ ]`
+**Goal:** Perform a full member-by-member audit of `TouchPanelCapabilities` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every public member of `TouchPanelCapabilities` has been checked against FNA (or its NOXNA status confirmed).
+- Any accidental divergence found is fixed and covered by a test.
+- Any intentional divergence is documented, not silently present.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanelCapabilities.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanelCapabilities.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp (locate/verify dedicated coverage; add TouchPanelCapabilitiesTests.cpp if missing)`
+
+**Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/TouchPanelCapabilities.cs`.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-027 — Header self-containment audit across strict XNA Input headers `[ ]`
+**Goal:** Confirm every header under `include/Microsoft/Xna/Framework/Input` compiles standalone and does not require an application to also include a `CNA::Input` extension header.
+
+**Steps:**
+1. Compile each strict-XNA Input header alone in a throwaway translation unit (or rely on `PublicApiInputCompileTests.cpp`).
+2. Check for any `#include "CNA/Input/..."` inside a strict-XNA header.
+3. Remove/relocate any such dependency found.
+4. Re-run the compile-tests target.
+
+**Acceptance criteria:**
+- No strict-XNA Input header includes a `CNA/Input/*` header.
+- `PublicApiInputCompileTests.cpp` passes.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/*.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/*.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`
+
+**Notes:** Direct implementation of CLAUDE.md rule: "Public XNA-compatible headers must not require users to include CNA extension headers."
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-028 — SDL include-leakage audit across strict XNA Input headers `[ ]`
+**Goal:** Confirm no strict-XNA Input header pulls `<SDL3/SDL.h>` (or any SDL header) into consumer translation units.
+
+**Steps:**
+1. Grep every strict-XNA Input header for `SDL3/` or `SDL_` includes.
+2. For any hit, replace with an opaque forward declaration (the pattern already used in `MouseCursor.hpp` for `SDL_Cursor`).
+3. Move the real include into the matching `.cpp`.
+4. Rebuild and confirm no new warnings.
+
+**Acceptance criteria:**
+- `grep -rn "SDL3/\|#include <SDL" include/Microsoft/Xna/Framework/Input` returns no matches, or every match is justified and recorded here.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/**/*.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`
+
+**Notes:** MouseCursor.hpp already documents the intended pattern (opaque `struct SDL_Cursor;` forward decl) — use it as the reference example.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-029 — Enum numeric-value freeze audit `[ ]`
+**Goal:** Confirm the underlying numeric values of `Buttons`, `GamePadType`, `TouchLocationState`, `GestureType`, `KeyState`, and `ButtonState` exactly match FNA's enum values (these are often serialized/bit-tested and must not silently renumber).
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every enumerator's numeric value matches FNA.
+- A freeze test exists asserting the numeric values, not just the names.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Buttons.hpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/KeyState.hpp`
+- `include/Microsoft/Xna/Framework/Input/ButtonState.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-030 — Default-value audit sweep `[ ]`
+**Goal:** Confirm every default-constructed strict-XNA Input struct/state (KeyboardState, MouseState, GamePadState, TouchLocation, GestureSample, etc.) matches FNA's default field values.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Each type's parameterless/default construction path is verified against FNA and covered by an explicit `*_DefaultValues` test.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/**/*.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/**`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-031 — Equality/inequality operator audit sweep `[ ]`
+**Goal:** Confirm `==`/`!=` (and `Equals`) on every value type in this list matches FNA's field-wise comparison semantics, including which fields participate.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Each equality operator is verified field-by-field against FNA and covered by an equal-case and unequal-case test, per CLAUDE.md's testing rules.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/**/*.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/**`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-032 — GetHashCode/hash behavior consistency sweep `[ ]`
+**Goal:** Confirm every value type's hash implementation is internally consistent (equal objects produce equal hashes) and, where practical, matches FNA's hash composition strategy.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Equal-value hash-equality is tested for every type.
+- Any deliberate deviation (e.g. `std::size_t` vs FNA's `int`) is listed in CHECKLIST.md's deviation table.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/**/*.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/**`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-033 — Constructor overload audit sweep `[ ]`
+**Goal:** Confirm every FNA constructor overload for these types (default, full-field, copy) has a matching C++ constructor with matching parameter order and defaults.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- No FNA constructor overload is missing in C++.
+- Parameter order matches FNA (CLAUDE.md member-order rule).
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/**/*.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/**`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-034 — Static factory/method audit sweep `[ ]`
+**Goal:** Confirm static entry points (`Keyboard::GetState`, `Mouse::GetState`/`SetPosition`, `GamePad::GetState`/`GetCapabilities`/`SetVibration`, `TouchPanel::GetState`/`GetCapabilities`) match FNA overload sets exactly, including `PlayerIndex`-taking overloads.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Every FNA static overload exists with matching behavior.
+- No extra strict-XNA-namespace overload exists unless wrapped in `NOXNA`.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/**`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-035 — C++ deviation-from-C# documentation sweep `[ ]`
+**Goal:** Collect every intentional C++-vs-C# deviation identified across Phase 1 tasks (out/ref params, hash type, null-guard omission, etc.) into the CHECKLIST.md deviation table.
+
+**Steps:**
+1. Walk the results of P1-001..034.
+2. Cross-check each deviation is already listed in `CHECKLIST.md`; add any missing entries.
+3. Confirm no deviation is documented only as a source comment without also being tracked centrally.
+
+**Acceptance criteria:**
+- `CHECKLIST.md`'s acceptable-deviation table accounts for every deviation found in Phase 1.
+
+**Files likely touched:**
+- `CHECKLIST.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-036 — FNA line-by-line comparison pass — Keyboard family `[ ]`
+**Goal:** Do a dedicated FNA-vs-CNA line-by-line pass across `Keyboard`, `KeyboardState`, `Keys`, `KeyState` together, since FNA implements them as tightly coupled friend types.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Cross-type invariants (e.g. `GetPressedKeys` ordering sourced from `KeyboardState`'s internal bitmask) match FNA.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+- `include/Microsoft/Xna/Framework/Input/KeyState.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-037 — FNA line-by-line comparison pass — Mouse family `[ ]`
+**Goal:** Do a dedicated FNA-vs-CNA line-by-line pass across `Mouse`, `MouseState`, `MouseCursor` together.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Cross-type invariants (state snapshot vs live cursor object) match FNA/MonoGame's documented behavior.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-038 — FNA line-by-line comparison pass — GamePad family `[ ]`
+**Goal:** Do a dedicated FNA-vs-CNA line-by-line pass across `GamePad`, `GamePadState`, `GamePadButtons`, `GamePadDPad`, `GamePadThumbSticks`, `GamePadTriggers`, `GamePadCapabilities`, `GamePadType`, `GamePadDeadZone`, `Buttons`, `ButtonState` together.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Cross-type invariants (dead-zone application order, packet-number semantics) match FNA exactly.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad*.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePad*.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-039 — FNA line-by-line comparison pass — Touch family `[ ]`
+**Goal:** Do a dedicated FNA-vs-CNA line-by-line pass across `TouchPanel`, `TouchPanelCapabilities`, `TouchCollection`, `TouchLocation`, `TouchLocationState` together.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Cross-type invariants (previous-location linkage, collection mutability) match FNA exactly.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/*.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/Touch/TouchLocationStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-040 — FNA line-by-line comparison pass — Gesture family `[ ]`
+**Goal:** Do a dedicated FNA-vs-CNA line-by-line pass across `GestureSample`, `GestureType`, and the `TouchPanel` gesture-queue members together.
+
+**Steps:**
+1. Open the CNA header/source and the matching FNA reference file for this member/feature.
+2. Compare behavior line-by-line against FNA: signatures, defaults, clamping, casts, ordering, exceptions.
+3. Record every divergence found, intentional or accidental.
+4. Fix accidental divergences; for intentional ones add/confirm a deviation note in `docs/input-fna-fidelity.md`.
+5. Confirm Doxygen (`/** @brief ... */`) coverage on every public member touched.
+6. Run the relevant existing test binary/filter and add missing coverage if the behavior was previously untested.
+
+**Acceptance criteria:**
+- Cross-type invariants (gesture-to-touch coupling) match FNA exactly.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-041 — Doxygen coverage sweep across strict XNA Input headers `[ ]`
+**Goal:** Confirm every public method, constructor, property getter/setter, operator, and constant in every strict-XNA Input header has a full `/** @brief ... */` Doxygen block, per CLAUDE.md.
+
+**Steps:**
+1. Grep each header for public members lacking a preceding `/**` block.
+2. Add missing Doxygen blocks, porting intent from the FNA XML doc comments where available.
+3. Confirm no bare `///` remains on a public declaration.
+
+**Acceptance criteria:**
+- 100% of public members in scope have a Doxygen block.
+- No bare `///` on any public declaration.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/**/*.hpp`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-042 — XNA-compatibility-comment sweep `[ ]`
+**Goal:** Confirm every strict-XNA header carries a clear statement of its XNA 4.0 origin, and every `NOXNA`-marked member inside it (e.g. `MouseCursor`) carries a clear non-XNA note, per the existing `MouseCursor.hpp` pattern.
+
+**Steps:**
+1. Read each header's top-of-type Doxygen block.
+2. Add/adjust notes so XNA-vs-non-XNA status is unambiguous at a glance.
+
+**Acceptance criteria:**
+- Every type/member in scope states its XNA/NOXNA status in its Doxygen block.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/**/*.hpp`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-043 — Signature-freeze test coverage audit `[ ]`
+**Goal:** Confirm `PublicApiInputSignatureFreezeTests.cpp` actually exercises all 26 types in this phase's scope, not just a subset.
+
+**Steps:**
+1. Read the freeze test file.
+2. Cross-reference its coverage against the 26-type list above.
+3. Add missing freeze assertions (static_assert on signatures/sizes/enum values) for any gap found.
+
+**Acceptance criteria:**
+- Every type in the Phase 1 list has at least one freeze assertion.
+
+**Files likely touched:**
+- `tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-044 — Public API parity matrix regeneration `[ ]`
+**Goal:** Regenerate `docs/input-member-parity-matrix.md` from the actual results of P1-001..043, replacing any stale rows left over from before this pass.
+
+**Steps:**
+1. Walk the completed results of every Phase 1 task.
+2. Update the matrix row for each type with current parity status and links to relevant tests.
+3. Cross-check against `docs/input-fna-fidelity.md` for consistency.
+
+**Acceptance criteria:**
+- The matrix reflects this pass's actual findings, not the archived plan's findings.
+
+**Files likely touched:**
+- `docs/input-member-parity-matrix.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Must not copy content from the archived `plan_input_20260707.md` — regenerate from this pass's own results only.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P1-045 — Phase 1 checkpoint and summary `[ ]`
+**Goal:** Close out Phase 1 with a summary of parity status across all 26 strict-XNA Input types and any open follow-ups carried into later phases.
+
+**Steps:**
+1. Summarize pass/fail/deferred counts across P1-001..044.
+2. List any item requiring a follow-up task in a later phase, with a cross-reference.
+
+**Acceptance criteria:**
+- Summary is written into this file with concrete counts, not a vague "looks good".
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-001 — Keys enum completeness vs FNA `[ ]`
+**Goal:** Confirm every `Keys` enumerator FNA defines exists in `Keys.hpp` with no gaps.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-002 — Keys enum numeric values vs FNA `[ ]`
+**Goal:** Confirm every `Keys` enumerator's numeric value matches FNA exactly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-003 — Invalid Keys value safety `[ ]`
+**Goal:** Confirm passing an out-of-range `Keys` value to `KeyboardState::IsKeyDown`/`IsKeyUp` cannot read out of bounds.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-004 — Negative key enum handling `[ ]`
+**Goal:** Confirm a negative underlying value cast to `Keys` is handled safely (no UB, no OOB array access).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-005 — Too-large key enum handling `[ ]`
+**Goal:** Confirm a too-large underlying value cast to `Keys` is handled safely (no UB, no OOB array access).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-006 — KeyboardState::GetHashCode safety with invalid keys `[ ]`
+**Goal:** Confirm hash computation cannot crash or read OOB when the state contains an invalid key bit.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-007 — KeyboardState::IsKeyDown parity `[ ]`
+**Goal:** Confirm `IsKeyDown` semantics (true iff key currently pressed) match FNA exactly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-008 — KeyboardState::IsKeyUp parity `[ ]`
+**Goal:** Confirm `IsKeyUp` is the exact logical negation of `IsKeyDown`, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-009 — KeyboardState::GetPressedKeys parity `[ ]`
+**Goal:** Confirm `GetPressedKeys` returns exactly the set of currently-down keys, matching FNA's array contents.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-010 — Pressed key ordering `[ ]`
+**Goal:** Confirm the ordering of keys returned by `GetPressedKeys` matches FNA's documented/observed ordering (or document the deviation).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-011 — Duplicate key prevention in GetPressedKeys `[ ]`
+**Goal:** Confirm no key can appear twice in a single `GetPressedKeys` result.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-012 — Default KeyboardState value `[ ]`
+**Goal:** Confirm a default-constructed `KeyboardState` reports every key up, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-013 — KeyboardState equality `[ ]`
+**Goal:** Confirm `KeyboardState::operator==` compares full key-state equality matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-014 — KeyboardState inequality `[ ]`
+**Goal:** Confirm `KeyboardState::operator!=` is the exact logical negation of `operator==`.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-015 — KeyboardState hash stability `[ ]`
+**Goal:** Confirm two equal `KeyboardState` instances always produce equal hashes across repeated calls.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-016 — SDL keycode mapping completeness `[ ]`
+**Goal:** Confirm every SDL3 keycode CNA claims to support maps to the correct `Keys` value.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-017 — SDL scancode mapping completeness `[ ]`
+**Goal:** Confirm every SDL3 scancode CNA claims to support maps to the correct `Keys` value via `GetKeyFromScancodeEXT`.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardScancodeNameTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-018 — Left/right modifier key distinction `[ ]`
+**Goal:** Confirm LeftShift/RightShift, LeftControl/RightControl, LeftAlt/RightAlt map to distinct `Keys` values matching FNA, not a single generic modifier.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/KeyboardModStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-019 — CapsLock/NumLock/ScrollLock behavior `[ ]`
+**Goal:** Confirm lock-key state is reported as a momentary key event (not a toggle), matching FNA's XNA-compatible behavior.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardModStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-020 — OEM punctuation key mapping `[ ]`
+**Goal:** Confirm OEM punctuation keys (`OemSemicolon`, `OemComma`, `OemPeriod`, etc.) map correctly on a US layout and degrade sanely on others.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardKeyNameTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-021 — Keyboard layout caveats documented `[ ]`
+**Goal:** Confirm known layout-dependent caveats (physical-vs-logical key mapping) are documented in `docs/platform-input-notes.md`.
+
+**Steps:**
+1. Open `docs/platform-input-notes.md` and `docs/demo-input-checklist.md`.
+2. Confirm the checklist item named in this task's Goal is present, accurate, and actionable for a human tester.
+3. Add or correct the checklist entry; do not perform the hardware test itself here (see Phase 11 for the actual run).
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-022 — Czech keyboard checklist accuracy `[ ]`
+**Goal:** Review/correct the Czech-keyboard manual-test checklist entry (physical QWERTZ layout, diacritic OEM keys).
+
+**Steps:**
+1. Open `docs/platform-input-notes.md` and `docs/demo-input-checklist.md`.
+2. Confirm the checklist item named in this task's Goal is present, accurate, and actionable for a human tester.
+3. Add or correct the checklist entry; do not perform the hardware test itself here (see Phase 11 for the actual run).
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Checklist only — the actual run is [[P11-002]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-023 — US keyboard checklist accuracy `[ ]`
+**Goal:** Review/correct the US-keyboard manual-test checklist entry.
+
+**Steps:**
+1. Open `docs/platform-input-notes.md` and `docs/demo-input-checklist.md`.
+2. Confirm the checklist item named in this task's Goal is present, accurate, and actionable for a human tester.
+3. Add or correct the checklist entry; do not perform the hardware test itself here (see Phase 11 for the actual run).
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Checklist only — the actual run is [[P11-001]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-024 — Non-QWERTY keyboard checklist accuracy `[ ]`
+**Goal:** Review/correct the non-QWERTY (e.g. AZERTY/Dvorak) manual-test checklist entry.
+
+**Steps:**
+1. Open `docs/platform-input-notes.md` and `docs/demo-input-checklist.md`.
+2. Confirm the checklist item named in this task's Goal is present, accurate, and actionable for a human tester.
+3. Add or correct the checklist entry; do not perform the hardware test itself here (see Phase 11 for the actual run).
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Checklist only — the actual run is [[P11-003]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-025 — Key repeat behavior `[ ]`
+**Goal:** Confirm CNA does not synthesize XNA-level key-repeat events for `KeyboardState` (XNA polls, it does not repeat) while `TextInputEXT` legitimately repeats characters via SDL text-input events.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-026 — Focus loss clears keyboard state `[ ]`
+**Goal:** Confirm losing window focus clears all pressed-key bits so keys don't appear stuck down.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-027 — Window minimized keyboard behavior `[ ]`
+**Goal:** Confirm minimizing the window behaves the same as focus loss for keyboard state.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-028 — Keyboard reset behavior between tests `[ ]`
+**Goal:** Confirm `InputResetAllForTests`-style reset fully clears keyboard state with no leftover bits.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-029 — Keyboard test isolation `[ ]`
+**Goal:** Confirm keyboard tests do not leak state into unrelated tests run in the same process (gtest ordering/shuffle safe).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-030 — TextInputEXT scope-as-extension documented `[ ]`
+**Goal:** Confirm `TextInputEXT` is clearly documented as a NOXNA/FNA-EXT addition, not part of strict XNA 4.0.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-031 — UTF-8 decoding correctness `[ ]`
+**Goal:** Confirm SDL3 UTF-8 text-input events are decoded into correct characters end to end.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-032 — UTF-16 surrogate pair behavior `[ ]`
+**Goal:** Confirm codepoints outside the BMP are correctly represented (e.g. via surrogate pairs or `char32_t` per the project's `charcs` alias) with no data loss.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-033 — Invalid UTF-8 handling `[ ]`
+**Goal:** Confirm malformed UTF-8 byte sequences from SDL are handled without crashing or corrupting subsequent characters.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-034 — Truncated UTF-8 handling `[ ]`
+**Goal:** Confirm a UTF-8 sequence truncated mid-codepoint (e.g. split across two SDL events) is handled correctly or safely dropped.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-035 — Empty text input event handling `[ ]`
+**Goal:** Confirm an empty SDL text-input event does not raise a spurious character.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-036 — Text editing (composition) events forwarded `[ ]`
+**Goal:** Confirm `SDL_TEXTEDITING` events forward start/length correctly, per existing `TextEditingEventForwardsTextStartLength` coverage.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-037 — IME composition correctness `[ ]`
+**Goal:** Confirm an in-progress IME composition does not emit committed characters until composition ends.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-038 — IME candidate list behavior `[ ]`
+**Goal:** Confirm whether candidate-list UI is in scope; if not implemented, document that explicitly rather than leaving it ambiguous.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-039 — Backspace synthesis via TextInputEXT `[ ]`
+**Goal:** Confirm Backspace is synthesized as a control character consistent with FNA's TextInputEXT behavior.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-040 — Tab synthesis via TextInputEXT `[ ]`
+**Goal:** Confirm Tab is synthesized as a control character consistent with FNA's TextInputEXT behavior.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-041 — Enter synthesis via TextInputEXT `[ ]`
+**Goal:** Confirm Enter/Return is synthesized as a control character consistent with FNA's TextInputEXT behavior.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-042 — Delete synthesis via TextInputEXT `[ ]`
+**Goal:** Confirm Delete is synthesized as a control character consistent with FNA's TextInputEXT behavior.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-043 — Ctrl+V paste synthesis `[ ]`
+**Goal:** Confirm Ctrl+V synthesizes the paste control character and suppresses the literal 'v', per existing `CtrlVEmitsPasteCharAndSuppressesLiteralText` coverage.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-044 — Clipboard interaction with text input `[ ]`
+**Goal:** Confirm `CNA::Input::Clipboard` content is what actually gets pasted, with no double-insertion or encoding mismatch.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `include/CNA/Input/Clipboard.hpp`
+- `src/CNA/Input/Clipboard.cpp`
+
+**Tests:**
+- `tests/CNA/Input/ClipboardTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-045 — Double text insertion prevention `[ ]`
+**Goal:** Confirm a single physical keypress cannot produce two `TextInputEXT` character events (e.g. plain 'v' not suppressed per `PlainVWithoutCtrlIsNotSuppressed`, but no accidental duplication elsewhere).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-046 — Start text input lifecycle `[ ]`
+**Goal:** Confirm starting text input correctly calls into the SDL3 text-input API and updates internal state.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-047 — Stop text input lifecycle `[ ]`
+**Goal:** Confirm stopping text input correctly calls into the SDL3 text-input API and suppresses further character events.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-048 — No-window text input behavior `[ ]`
+**Goal:** Confirm calling text-input start/stop with no window is a safe no-op rather than a crash.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-049 — Text input rectangle (IME candidate placement) `[ ]`
+**Goal:** Confirm the text-input rectangle (used to position IME candidate windows) is forwarded correctly if implemented, or documented as not-yet-implemented.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-050 — Mobile soft-keyboard hints `[ ]`
+**Goal:** Confirm `CNA::Input::TextInputTypeEXT` hints (e.g. numeric/email) are forwarded to SDL3's soft-keyboard hint API where applicable.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/CNA/Input/TextInputType.hpp`
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-051 — CNA::Input::TextInputTypeEXT consistency `[ ]`
+**Goal:** Confirm the `TextInputTypeEXT` enum values and naming are internally consistent with `TextInputEXT`'s own EXT-suffix convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/CNA/Input/TextInputType.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-052 — KeyboardState array-constructor overload parity `[ ]`
+**Goal:** Confirm the FNA `KeyboardState(Keys[])`-style constructor overload (params array of pressed keys) has a matching C++ constructor.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-053 — Keyboard.GetState(PlayerIndex) overload parity `[ ]`
+**Goal:** Confirm `Keyboard::GetState(PlayerIndex)` matches FNA (single shared keyboard state regardless of player index).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-054 — Keys enum Doxygen coverage `[ ]`
+**Goal:** Confirm every `Keys` enumerator has at least a one-line Doxygen `@brief` per CLAUDE.md's simple-member rule.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-055 — KeyboardState debug-display audit `[ ]`
+**Goal:** Confirm there is no public `ToString`/ostream operator that leaks internal representation beyond what FNA exposes (FNA's `KeyboardState` has no public `ToString` override).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-056 — Simultaneous modifier-key combination stress test `[ ]`
+**Goal:** Add/verify a test pressing Shift+Ctrl+Alt (and both left/right variants) simultaneously and confirm all three read correctly independent of order.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-057 — Numpad key parity `[ ]`
+**Goal:** Confirm numpad keys (`NumPad0`-`NumPad9`, `Decimal`, `Add`, `Subtract`, `Multiply`, `Divide`) map correctly and remain distinct from the top-row digit keys.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-058 — Text input layout independence audit `[ ]`
+**Goal:** Confirm text-input characters come from SDL3's logical/layout-aware text event (not scancode-derived), so non-US layouts produce correct characters.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-059 — Regression tests for all Phase 2 fixes `[ ]`
+**Goal:** Sweep P2-001..059 for any task that produced a code fix and confirm each has a durable regression test, not just a manual confirmation.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference under `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA (and against SDL3 semantics where the behavior originates at the SDL boundary).
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if it is not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Keyboard.hpp`
+- `src/Microsoft/Xna/Framework/Input/Keyboard.cpp`
+- `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp`
+- `src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`
+- `include/Microsoft/Xna/Framework/Input/Keys.hpp`
+- `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`
+- `src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P2-060 — Phase 2 checkpoint and summary `[ ]`
+**Goal:** Close out Phase 2 with a summary of keyboard/text-input parity status and any open follow-ups carried into later phases.
+
+**Steps:**
+1. Summarize pass/fail/deferred counts across P2-001..059.
+2. List any item requiring a follow-up task in a later phase, with a cross-reference.
+
+**Acceptance criteria:**
+- Summary is written into this file with concrete counts.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-001 — MouseState default values `[ ]`
+**Goal:** Confirm a default-constructed `MouseState` matches FNA's default field values.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-002 — Button default values `[ ]`
+**Goal:** Confirm all five button fields default to `ButtonState::Released`.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-003 — X/Y position defaults `[ ]`
+**Goal:** Confirm `X`/`Y` default to 0, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-004 — Scroll wheel value defaults `[ ]`
+**Goal:** Confirm `ScrollWheelValue`/`HorizontalScrollWheelValue` default to 0.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-005 — MouseState equality `[ ]`
+**Goal:** Confirm `MouseState::operator==` compares every field FNA compares, in the same way.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-006 — MouseState hash `[ ]`
+**Goal:** Confirm equal `MouseState` values always hash equal.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-007 — Left button state parity `[ ]`
+**Goal:** Confirm `LeftButton` tracks SDL's left-button bit correctly through press/release.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-008 — Middle button state parity `[ ]`
+**Goal:** Confirm `MiddleButton` tracks SDL's middle-button bit correctly through press/release.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-009 — Right button state parity `[ ]`
+**Goal:** Confirm `RightButton` tracks SDL's right-button bit correctly through press/release.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-010 — XButton1 state parity `[ ]`
+**Goal:** Confirm `XButton1` tracks SDL's first extra button correctly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-011 — XButton2 state parity `[ ]`
+**Goal:** Confirm `XButton2` tracks SDL's second extra button correctly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-012 — Unknown SDL mouse button handling `[ ]`
+**Goal:** Confirm an SDL button index beyond XButton2 is ignored safely rather than corrupting adjacent state.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-013 — Mouse motion event handling `[ ]`
+**Goal:** Confirm `SDL_MOUSEMOTION` updates `X`/`Y` without disturbing button/scroll fields.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-014 — Button event coordinate update `[ ]`
+**Goal:** Confirm a button-down/up event carries the correct coordinate at the time of the event, matching SDL's reported position.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-015 — Wheel 120-unit compatibility `[ ]`
+**Goal:** Confirm `ScrollWheelValue` accumulates in FNA/XNA's 120-per-notch convention, not raw SDL wheel units.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-016 — Horizontal wheel policy `[ ]`
+**Goal:** Confirm `HorizontalScrollWheelValue` behavior/sign convention is documented and matches FNA where FNA defines it.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-017 — Fractional SDL wheel handling `[ ]`
+**Goal:** Confirm SDL3's fractional wheel values (`SDL_MouseWheelEvent.x/y` as float) are rounded/accumulated without silent truncation bugs.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-018 — Negative mouse coordinates `[ ]`
+**Goal:** Confirm negative X/Y (cursor outside window bounds) round-trips through `MouseState` without clamping unless FNA clamps.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-019 — Large mouse coordinates `[ ]`
+**Goal:** Confirm very large X/Y (multi-monitor setups) do not overflow the underlying integer type.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-020 — Mouse::GetState parity `[ ]`
+**Goal:** Confirm `Mouse::GetState()` returns a snapshot matching FNA's semantics (no live aliasing to internal state).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-021 — Mouse::SetPosition parity `[ ]`
+**Goal:** Confirm `Mouse::SetPosition(x, y)` warps the OS cursor and is reflected in the next `GetState()`, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-022 — Mouse::SetPosition null-window guard `[ ]`
+**Goal:** Confirm calling `SetPosition` with no active window is a safe no-op rather than a crash (Phase-0 concern #7).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-023 — State consistency after warp `[ ]`
+**Goal:** Confirm `GetState()` immediately after `SetPosition()` reports the warped coordinates, not stale pre-warp ones.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-024 — Relative mouse mode extension audit `[ ]`
+**Goal:** Audit the NOXNA relative-mouse-mode extension for correct SDL3 relative-mode toggling.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-025 — Relative delta accumulation `[ ]`
+**Goal:** Confirm relative-mode deltas accumulate correctly across multiple SDL motion events within one frame.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-026 — Relative delta drain behavior `[ ]`
+**Goal:** Confirm reading the accumulated relative delta resets it to zero (drain semantics), matching the documented NOXNA contract.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-027 — Relative mode with no window `[ ]`
+**Goal:** Confirm enabling relative mouse mode with no window is a safe no-op.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-028 — Window handle resolution for mouse ops `[ ]`
+**Goal:** Confirm `Mouse` resolves the correct active window handle consistently with `Keyboard`/`TouchPanel`.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-029 — MouseCursor default cursor behavior `[ ]`
+**Goal:** Confirm the default cursor is `MouseCursor::Arrow`, matching MonoGame/FNA-EXT convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-030 — System cursor creation `[ ]`
+**Goal:** Confirm each stock system cursor (`Arrow`, `IBeam`, `Hand`, etc.) creates the corresponding SDL system cursor lazily and correctly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-031 — Custom cursor creation from Texture2D `[ ]`
+**Goal:** Confirm creating a custom cursor from a `Texture2D` + hotspot produces a correctly-formed SDL cursor.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-032 — Cursor hotspot validation `[ ]`
+**Goal:** Confirm an out-of-bounds hotspot is rejected or clamped predictably rather than corrupting the cursor image.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-033 — Disposed cursor behavior `[ ]`
+**Goal:** Confirm using a disposed `MouseCursor` throws `std::runtime_error` per the project's `IDisposable` convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-034 — Double dispose of cursor `[ ]`
+**Goal:** Confirm calling `Dispose()` twice on the same `MouseCursor` is safe (idempotent), matching `System::IDisposable` convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-035 — Setting cursor before window exists `[ ]`
+**Goal:** Confirm `Mouse::SetCursor`-equivalent before any window is created is a safe no-op or defers correctly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-036 — Public SDL cursor leakage audit `[ ]`
+**Goal:** Confirm `MouseCursor`'s public API does not force consumers to depend on `<SDL3/SDL.h>` (opaque `SDL_Cursor*` forward-decl only).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref Phase-0 concern #2.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-037 — MouseCursor::GetSDLCursor exposure decision `[ ]`
+**Goal:** Decide and document whether an internal SDL-cursor accessor should remain public NOXNA or be made internal-only; implement the decision.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Record the decision and rationale in `docs/input-fna-fidelity.md`, not just as a code comment.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-038 — Mouse/cursor header hygiene tests `[ ]`
+**Goal:** Confirm `Mouse.hpp`/`MouseState.hpp`/`MouseCursor.hpp` each compile standalone with no leaked SDL or CNA-extension include.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-039 — High-DPI mouse coordinate behavior `[ ]`
+**Goal:** Confirm mouse coordinates are reported in the same coordinate space (logical vs physical pixels) that `TouchPanel`/window-size APIs use, avoiding a DPI-scale mismatch.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-040 — Manual mouse checklist accuracy `[ ]`
+**Goal:** Review/correct the manual mouse-testing checklist entries (standard buttons, extra buttons, relative mode) in `docs/demo-input-checklist.md`.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/demo-input-checklist.md`
+- `docs/platform-input-notes.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Checklist only — the actual runs are [[P11-004]], [[P11-005]], [[P11-006]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-041 — Mouse wheel multi-event accumulation `[ ]`
+**Goal:** Confirm multiple wheel events delivered within a single frame/poll accumulate correctly rather than only keeping the last one.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-042 — MouseState equality with scroll-only difference `[ ]`
+**Goal:** Confirm two `MouseState` values differing only in scroll value compare unequal (a common off-by-omission bug).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-043 — Stock cursor caching/reuse audit `[ ]`
+**Goal:** Confirm repeated access to a stock cursor property (e.g. `MouseCursor::getArrowProperty()`) returns the same cached instance rather than leaking a new SDL cursor each call.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseCursor.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-044 — Mouse capture-on-drag behavior `[ ]`
+**Goal:** Confirm mouse-button-down outside then move/release still reports coordinates correctly if SDL mouse capture is enabled during a drag.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs` / `MouseState.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 mouse-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Mouse.hpp`
+- `src/Microsoft/Xna/Framework/Input/Mouse.cpp`
+- `include/Microsoft/Xna/Framework/Input/MouseState.hpp`
+- `src/Microsoft/Xna/Framework/Input/MouseState.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/MouseGlobalTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P3-045 — Phase 3 checkpoint and summary `[ ]`
+**Goal:** Close out Phase 3 with a summary of mouse/cursor parity status and any open follow-ups carried into later phases.
+
+**Steps:**
+1. Summarize pass/fail/deferred counts across P3-001..044.
+2. List any item requiring a follow-up task in a later phase, with a cross-reference.
+
+**Acceptance criteria:**
+- Summary is written into this file with concrete counts.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-001 — Buttons enum values vs FNA `[ ]`
+**Goal:** Confirm every `Buttons` flag's numeric bit value matches FNA exactly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Buttons.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-002 — Extension Buttons values audit `[ ]`
+**Goal:** Confirm any NOXNA-added `Buttons` bits are clearly separated from the FNA-defined range and marked `NOXNA`.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Buttons.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-003 — No bit collisions in Buttons `[ ]`
+**Goal:** Confirm no two `Buttons` flags share a bit, including NOXNA extension bits.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Buttons.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-004 — GamePadState default value `[ ]`
+**Goal:** Confirm a default-constructed `GamePadState` reports disconnected with zeroed sticks/triggers, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-005 — GamePadState constructor overload parity `[ ]`
+**Goal:** Confirm every FNA `GamePadState` constructor overload exists with matching parameter order.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-006 — GamePadState packet number semantics `[ ]`
+**Goal:** Confirm `PacketNumber` increments only on real input change, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-007 — GamePadState connected-state parity `[ ]`
+**Goal:** Confirm `IsConnected == true` state fields behave per FNA when a controller is attached.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-008 — GamePadState disconnected-state parity `[ ]`
+**Goal:** Confirm `IsConnected == false` returns FNA's documented disconnected snapshot (all-zero state, packet number 0).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-009 — GamePadState equality `[ ]`
+**Goal:** Confirm `GamePadState::operator==` compares every field FNA compares.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-010 — GamePadState hash `[ ]`
+**Goal:** Confirm equal `GamePadState` values always hash equal.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-011 — GamePadButtons properties audit `[ ]`
+**Goal:** Confirm every FNA `GamePadButtons` button property exists and reads the correct bit.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-012 — Every XNA button property individually verified `[ ]`
+**Goal:** Walk A/B/X/Y/Back/Start/BigButton/LeftShoulder/RightShoulder/LeftStick/RightStick and confirm each against FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-013 — Extension button properties audit `[ ]`
+**Goal:** Confirm any NOXNA-added button properties (e.g. paddles/share/misc) are clearly `NOXNA`-marked and documented.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-014 — GamePadDPad member audit `[ ]`
+**Goal:** Confirm `GamePadDPad`'s Up/Down/Left/Right members match FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-015 — DPad-to-Buttons flag mapping `[ ]`
+**Goal:** Confirm SDL hat/DPad state maps to the correct `Buttons` DPad flags and `GamePadDPad` fields consistently.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp`
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-016 — GamePadThumbSticks member audit `[ ]`
+**Goal:** Confirm `GamePadThumbSticks`'s Left/Right `Vector2` members match FNA's axis convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadThumbSticksTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-017 — Left stick axis mapping `[ ]`
+**Goal:** Confirm SDL's left-stick X/Y axes map to `GamePadThumbSticks.Left` with FNA's sign/scale convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-018 — Right stick axis mapping `[ ]`
+**Goal:** Confirm SDL's right-stick X/Y axes map to `GamePadThumbSticks.Right` with FNA's sign/scale convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-019 — Dead zone application audit `[ ]`
+**Goal:** Confirm dead-zone application happens at the correct layer (per `GamePadDeadZone` mode passed to `GetState`), matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadDeadZoneTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-020 — Independent-axes dead zone math `[ ]`
+**Goal:** Confirm `GamePadDeadZone::IndependentAxes` applies the dead zone per-axis, matching FNA's formula.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadDeadZoneTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-021 — Circular dead zone math `[ ]`
+**Goal:** Confirm `GamePadDeadZone::Circular` applies the dead zone by stick magnitude, matching FNA's formula.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadDeadZoneTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-022 — No dead zone passthrough `[ ]`
+**Goal:** Confirm `GamePadDeadZone::None` passes raw axis values through unmodified (only clamped).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadDeadZoneTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-023 — Thumbstick clamping to [-1,1] `[ ]`
+**Goal:** Confirm stick axis values are clamped to FNA's [-1,1] range after dead-zone processing.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadDeadZoneTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-024 — Thumbstick Y-axis inversion `[ ]`
+**Goal:** Confirm the Y axis inversion (SDL down-positive vs XNA up-positive) is applied exactly once, matching FNA sign convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-025 — GamePadTriggers member audit `[ ]`
+**Goal:** Confirm `GamePadTriggers`'s Left/Right float members match FNA's [0,1] convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTriggersTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-026 — Trigger clamping to [0,1] `[ ]`
+**Goal:** Confirm trigger values are clamped to [0,1], matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTriggersTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-027 — Trigger dead zone application `[ ]`
+**Goal:** Confirm trigger dead-zone handling (if any) matches FNA's documented behavior (FNA generally does not dead-zone triggers).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTriggersTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-028 — SDL axis normalization audit `[ ]`
+**Goal:** Confirm SDL3's int16 axis range is normalized to float with correct rounding at the extremes (no off-by-one at +32767).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-029 — SDL button mapping completeness `[ ]`
+**Goal:** Confirm every SDL3 gamepad button constant CNA claims to support maps to the correct `Buttons` flag.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-030 — SDL hat mapping completeness `[ ]`
+**Goal:** Confirm SDL hat/DPad values map correctly for controllers exposing DPad as a hat rather than buttons.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-031 — SDL gamepad connect event handling `[ ]`
+**Goal:** Confirm `SDL_EVENT_GAMEPAD_ADDED` correctly assigns a `PlayerIndex` slot and marks the state connected.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-032 — SDL gamepad disconnect event handling `[ ]`
+**Goal:** Confirm `SDL_EVENT_GAMEPAD_REMOVED` correctly frees the slot and marks the state disconnected without disturbing other players.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-033 — Slot assignment stability `[ ]`
+**Goal:** Confirm a connected controller keeps its `PlayerIndex` slot for its session (no silent reassignment).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-034 — Slot reuse after disconnect `[ ]`
+**Goal:** Confirm a freed slot can be reused by the next connected controller, matching FNA's first-available-slot behavior.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-035 — Four-player slot limit `[ ]`
+**Goal:** Confirm at most four simultaneous `PlayerIndex` slots are assignable and a fifth controller is handled gracefully (ignored, not crashed).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-036 — Invalid PlayerIndex handling `[ ]`
+**Goal:** Confirm `GamePad::GetState`/`GetCapabilities` with an out-of-range `PlayerIndex` returns a safe disconnected state rather than reading OOB.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-037 — GamePad::GetState overload parity `[ ]`
+**Goal:** Confirm all FNA `GetState` overloads (with/without dead zone, with/without player index) exist and behave identically to FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-038 — GamePad::GetCapabilities parity `[ ]`
+**Goal:** Confirm `GetCapabilities` returns FNA-consistent capability flags for a connected controller.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-039 — GamePadCapabilities default values `[ ]`
+**Goal:** Confirm default/disconnected capabilities report `IsConnected = false` and all feature flags false, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-040 — GamePadCapabilities per-feature flags `[ ]`
+**Goal:** Walk each capability flag (HasAButton...HasVoiceSupport) individually against FNA and real SDL capability queries.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-041 — GamePadType enum audit `[ ]`
+**Goal:** Confirm `GamePadType` enumerators and values match FNA, including the unknown/default value.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadType.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTypeTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-042 — Unknown controller type fallback `[ ]`
+**Goal:** Confirm a controller SDL can't classify maps to `GamePadType::Unknown` rather than crashing or defaulting incorrectly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadType.hpp`
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTypeTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-043 — GUID extension audit `[ ]`
+**Goal:** Confirm the NOXNA GUID-retrieval extension (`GetGUIDEXT` or similar) correctly surfaces SDL's joystick GUID.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-044 — Controller name extension audit `[ ]`
+**Goal:** Confirm the NOXNA controller-name extension surfaces SDL's reported controller name correctly, including empty/unknown names.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-045 — Battery/power extension audit `[ ]`
+**Goal:** Confirm any gamepad battery/power extension correctly reflects SDL's joystick power-level API and degrades gracefully when unsupported.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+- `include/CNA/Input/Power.hpp`
+- `src/CNA/Input/Power.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+- `tests/CNA/Input/PowerTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-046 — Rumble (SetVibration) parity `[ ]`
+**Goal:** Confirm `GamePad::SetVibration` maps left/right motor strengths to SDL3's rumble API matching FNA's clamping/semantics.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-047 — Trigger vibration extension `[ ]`
+**Goal:** Confirm a NOXNA trigger-rumble extension (if present) maps correctly to SDL3's trigger-rumble API.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-048 — Duration-based vibration extension `[ ]`
+**Goal:** Confirm a NOXNA duration-limited vibration extension correctly stops rumble after the specified duration.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-049 — Light bar extension audit `[ ]`
+**Goal:** Confirm a NOXNA light-bar-color extension (DualShock/DualSense) maps to SDL3's LED API and no-ops safely on controllers without one.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-050 — Sensors extension audit (gamepad-attached) `[ ]`
+**Goal:** Confirm gamepad-attached sensor access (if exposed via `CNA::Input::Sensors`) is wired to the correct SDL joystick/gamepad, not a stray global sensor.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/CNA/Input/Sensors.hpp`
+- `src/CNA/Input/Sensors.cpp`
+
+**Tests:**
+- `tests/CNA/Input/SensorsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-051 — Gyroscope extension audit `[ ]`
+**Goal:** Confirm gyroscope data (if exposed) matches SDL3's `SDL_SENSOR_GYRO` units/axis convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/CNA/Input/Sensors.hpp`
+- `src/CNA/Input/Sensors.cpp`
+
+**Tests:**
+- `tests/CNA/Input/SensorsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-052 — Accelerometer extension audit `[ ]`
+**Goal:** Confirm accelerometer data (if exposed) matches SDL3's `SDL_SENSOR_ACCEL` units/axis convention.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/CNA/Input/Sensors.hpp`
+- `src/CNA/Input/Sensors.cpp`
+
+**Tests:**
+- `tests/CNA/Input/SensorsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-053 — No-haptic-device fallback `[ ]`
+**Goal:** Confirm calling rumble/haptic APIs on a controller with no haptic support is a safe no-op, not a crash.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticDevice.hpp`
+- `src/CNA/Input/HapticDevice.cpp`
+- `src/CNA/Internal/Input/SdlHapticBackend.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlHapticBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-054 — No-sensor fallback `[ ]`
+**Goal:** Confirm calling sensor APIs on a controller with no sensor support is a safe no-op, not a crash.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/CNA/Input/Sensors.hpp`
+- `src/CNA/Input/Sensors.cpp`
+
+**Tests:**
+- `tests/CNA/Input/SensorsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-055 — Fake gamepad backend coverage audit `[ ]`
+**Goal:** Confirm `FakeSdlGamepadBackend.hpp` can simulate every state transition exercised by P4-001..051 without touching real hardware.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-056 — Real Xbox-compatible controller checklist accuracy `[ ]`
+**Goal:** Review/correct the Xbox-controller manual-test checklist entry in `docs/demo-input-checklist.md`.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Checklist only — the actual run is [[P11-007]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-057 — Real PlayStation-compatible controller checklist accuracy `[ ]`
+**Goal:** Review/correct the PlayStation-controller manual-test checklist entry.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Checklist only — the actual run is [[P11-008]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-058 — Generic/unbranded controller checklist accuracy `[ ]`
+**Goal:** Review/correct the generic-controller manual-test checklist entry.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Checklist only — the actual run is [[P11-009]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-059 — Packet number stability under no input `[ ]`
+**Goal:** Confirm `PacketNumber` does not increment when polled repeatedly with no state change.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-060 — Packet number change on input change `[ ]`
+**Goal:** Confirm `PacketNumber` increments exactly once per distinct polled state change.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-061 — Packet number change on connect/disconnect `[ ]`
+**Goal:** Confirm connect/disconnect transitions bump `PacketNumber`, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-062 — Packet number non-change on duplicate state read `[ ]`
+**Goal:** Confirm reading the same unchanged state twice in a row does not double-bump the packet number, per existing `PacketNumberBumpsOnConnectButtonAndAxisChangesOnly` coverage.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-063 — GamePad reset behavior between tests `[ ]`
+**Goal:** Confirm `InputResetAllForTests`-style reset fully clears all four gamepad slots.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-064 — GamePad test isolation `[ ]`
+**Goal:** Confirm gamepad tests do not leak fake-backend state into unrelated tests run in the same process.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-065 — GamePadDeadZone enum value parity `[ ]`
+**Goal:** Confirm `GamePadDeadZone::None`/`IndependentAxes`/`Circular` numeric values match FNA exactly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadDeadZoneTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-066 — GamePadState.IsButtonDown/IsButtonUp helper parity `[ ]`
+**Goal:** Confirm the convenience `IsButtonDown`/`IsButtonUp` helper methods match FNA's semantics exactly, including combined-flag queries.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-067 — GamePad.SetVibration signature and clamping parity `[ ]`
+**Goal:** Confirm `SetVibration`'s parameter order and [0,1] clamping matches FNA exactly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-068 — GamePadCapabilities.GamePadType field parity `[ ]`
+**Goal:** Confirm `GamePadCapabilities` exposes the detected `GamePadType` consistently with `GamePadState`'s own type info, if both exist.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-069 — Regression tests for all Phase 4 fixes `[ ]`
+**Goal:** Sweep P4-001..068 for any task that produced a code fix and confirm each has a durable regression test.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 gamepad-event semantics, using the fake gamepad backend for deterministic input.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists (using the fake gamepad/haptic backend where relevant) that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/GamePad.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePad.cpp`
+- `include/Microsoft/Xna/Framework/Input/GamePadState.hpp`
+- `src/Microsoft/Xna/Framework/Input/GamePadState.cpp`
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P4-070 — Phase 4 checkpoint and summary `[ ]`
+**Goal:** Close out Phase 4 with a summary of gamepad parity status and any open follow-ups carried into later phases.
+
+**Steps:**
+1. Summarize pass/fail/deferred counts across P4-001..069.
+2. List any item requiring a follow-up task in a later phase, with a cross-reference.
+
+**Acceptance criteria:**
+- Summary is written into this file with concrete counts.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-001 — TouchCollection read-only-by-default audit `[ ]`
+**Goal:** Confirm `TouchCollection` matches FNA's read-only-list contract for consumer code (`IsReadOnly` semantics).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-002 — TouchCollection mutation-method inventory `[ ]`
+**Goal:** Enumerate every mutation method FNA's `TouchCollection` exposes (as an `IList<TouchLocation>`) and confirm CNA's surface matches intentionally.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-003 — TouchCollection::Add behavior `[ ]`
+**Goal:** Confirm `Add` matches FNA/`IList` semantics or throws `NotSupportedException`-equivalent if FNA's collection is read-only there.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-004 — TouchCollection::Clear behavior `[ ]`
+**Goal:** Confirm `Clear` matches FNA/`IList` semantics.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-005 — TouchCollection::Insert behavior `[ ]`
+**Goal:** Confirm `Insert` matches FNA/`IList` semantics.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-006 — TouchCollection::Remove behavior `[ ]`
+**Goal:** Confirm `Remove` matches FNA/`IList` semantics.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-007 — TouchCollection::RemoveAt behavior `[ ]`
+**Goal:** Confirm `RemoveAt` matches FNA/`IList` semantics, including out-of-range index handling.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-008 — TouchCollection indexer behavior `[ ]`
+**Goal:** Confirm `operator[]`/indexer bounds-checking matches FNA (throw vs UB) and is exercised by a test.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-009 — TouchCollection::CopyTo behavior `[ ]`
+**Goal:** Confirm `CopyTo` matches FNA semantics including destination-array bounds checking.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-010 — TouchCollection::CopyTo offset behavior `[ ]`
+**Goal:** Confirm the `arrayIndex` offset parameter of `CopyTo` is honored correctly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-011 — TouchCollection capacity behavior `[ ]`
+**Goal:** Confirm capacity/reserve behavior (if exposed) does not affect observable `Count`/iteration semantics.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-012 — Empty TouchCollection behavior `[ ]`
+**Goal:** Confirm an empty collection reports `Count == 0` and iterates zero times without UB.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-013 — TouchCollection enumeration order `[ ]`
+**Goal:** Confirm range-for/iterator enumeration order matches FNA's insertion/index order.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-014 — TouchCollection::Count parity `[ ]`
+**Goal:** Confirm `Count` always reflects the live number of touches, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-015 — TouchCollection::Contains behavior `[ ]`
+**Goal:** Confirm `Contains` uses `TouchLocation` value-equality matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-016 — TouchCollection index-lookup (IndexOf) behavior `[ ]`
+**Goal:** Confirm `IndexOf` matches FNA's linear-search value-equality semantics.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-017 — Deterministic touch ordering guarantee `[ ]`
+**Goal:** Confirm the collection returned by `TouchPanel::GetState()` orders touches deterministically (e.g. by touch ID) matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-018 — TouchLocation constructor overload parity `[ ]`
+**Goal:** Confirm every FNA `TouchLocation` constructor overload (with/without pressure, with/without previous-state) exists.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-019 — TouchLocation::Id parity `[ ]`
+**Goal:** Confirm the touch `Id` is stable for the lifetime of a single finger contact, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-020 — TouchLocation::State parity `[ ]`
+**Goal:** Confirm `State` (Pressed/Moved/Released/Invalid) transitions match FNA exactly across a full touch lifecycle.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-021 — TouchLocation::Position parity `[ ]`
+**Goal:** Confirm `Position` units/coordinate space match FNA (window-space float pixels).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-022 — TouchLocation::Pressure parity `[ ]`
+**Goal:** Confirm `Pressure` (if implemented) maps SDL's normalized finger pressure correctly, or is documented as always 1.0 if FNA does not use it meaningfully.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-023 — TouchLocation previous-location linkage `[ ]`
+**Goal:** Confirm each `TouchLocation` correctly carries its previous location for delta computation, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-024 — TouchLocation::TryGetPreviousLocation parity `[ ]`
+**Goal:** Confirm `TryGetPreviousLocation` returns false with an `Invalid`-state placeholder when there is no previous location, matching FNA. Cross-ref the I12 event-driven previous-location bug fixed in [[project_chatgpt_review_pending]].
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** Re-verify this specific historical bug does not regress.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-025 — TouchLocation equality `[ ]`
+**Goal:** Confirm `TouchLocation::operator==` compares every field FNA compares (Id, State, Position).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-026 — TouchLocation hash `[ ]`
+**Goal:** Confirm equal `TouchLocation` values always hash equal.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-027 — TouchLocationState numeric values `[ ]`
+**Goal:** Confirm `Invalid`/`Released`/`Pressed`/`Moved` numeric values match FNA exactly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/TouchLocationStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-028 — TouchPanel::GetState overall parity `[ ]`
+**Goal:** Confirm `TouchPanel::GetState()` composes active+released touches into one `TouchCollection` exactly as FNA does per frame.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-029 — Active touches tracked correctly `[ ]`
+**Goal:** Confirm currently-pressed/moved touches appear in every `GetState()` call until released.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-030 — Previous touches available for delta `[ ]`
+**Goal:** Confirm the previous frame's touch positions remain queryable via `TryGetPreviousLocation` while a touch is still active.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-031 — Released touch cleanup after one frame `[ ]`
+**Goal:** Confirm a released touch appears exactly once with `State == Released` then is removed from subsequent `GetState()` results, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-032 — Repeated touch-down on same finger ID `[ ]`
+**Goal:** Confirm a new SDL finger-down reusing a stale ID does not corrupt the previous touch's state.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-033 — Unknown finger-release handling `[ ]`
+**Goal:** Confirm an SDL finger-up event for an ID CNA never saw pressed is ignored safely.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-034 — Touch cancel event handling `[ ]`
+**Goal:** Confirm `SDL_EVENT_FINGER_CANCELED` (if used) is handled the same as a release, matching FNA's expectations for interrupted touches.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-035 — Max simultaneous touch count `[ ]`
+**Goal:** Confirm `TouchPanelCapabilities::MaximumTouchCount` is respected or at least accurately reported, and excess touches are handled predictably.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-036 — Touch ID ordering stability `[ ]`
+**Goal:** Confirm the order touches appear in `GetState()` is stable and documented (e.g. ID-ascending), matching FNA or documenting the deviation.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-037 — Touch coordinate scaling to window size `[ ]`
+**Goal:** Confirm SDL's normalized [0,1] finger coordinates are scaled to window pixel space correctly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-038 — Display size zero edge case `[ ]`
+**Goal:** Confirm a zero-sized display/window does not produce a divide-by-zero when scaling touch coordinates.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-039 — High-DPI touch coordinate behavior `[ ]`
+**Goal:** Confirm touch coordinates use the same coordinate space as mouse coordinates on high-DPI displays.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-040 — TouchPanel::GetCapabilities parity `[ ]`
+**Goal:** Confirm `GetCapabilities` reports `IsConnected`/`MaximumTouchCount` matching FNA/SDL3 touch-device queries.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-041 — Capabilities query does not mutate touch state `[ ]`
+**Goal:** Confirm calling `GetCapabilities()` before any touch never mutates active-touch tracking state (Phase-0 concern #8).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-042 — TouchPanel reset behavior between tests `[ ]`
+**Goal:** Confirm `InputResetAllForTests`-style reset fully clears all active/previous touch state.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-043 — Real touchscreen manual checklist accuracy `[ ]`
+**Goal:** Review/correct the touchscreen manual-test checklist entry in `docs/demo-input-checklist.md`.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Checklist only — the actual run is [[P11-012]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-044 — Regression tests for all Phase 5 fixes `[ ]`
+**Goal:** Sweep P5-001..043 for any task that produced a code fix and confirm each has a durable regression test.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/*.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA and SDL3 finger-event semantics.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA/SDL3 expectations (or the deviation is documented).
+- A test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchLocation.cpp`
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P5-045 — Phase 5 checkpoint and summary `[ ]`
+**Goal:** Close out Phase 5 with a summary of touch parity status and any open follow-ups carried into later phases.
+
+**Steps:**
+1. Summarize pass/fail/deferred counts across P5-001..044.
+2. List any item requiring a follow-up task in a later phase, with a cross-reference.
+
+**Acceptance criteria:**
+- Summary is written into this file with concrete counts.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-001 — GestureType enum numeric values `[ ]`
+**Goal:** Confirm every `GestureType` flag's numeric bit value matches FNA exactly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-002 — GestureType bitwise combination behavior `[ ]`
+**Goal:** Confirm combining `GestureType` flags with `|` and testing with `&` matches FNA's flag-enum semantics.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-003 — Default EnabledGestures value `[ ]`
+**Goal:** Confirm `TouchPanel::EnabledGestures` defaults to `GestureType::None`, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-004 — Enabling gestures via EnabledGestures setter `[ ]`
+**Goal:** Confirm setting `EnabledGestures` actually enables detection for exactly the requested flags.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-005 — Disabling gestures via EnabledGestures setter `[ ]`
+**Goal:** Confirm clearing a flag from `EnabledGestures` stops that gesture type from being detected/queued.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-006 — Gesture queue behavior `[ ]`
+**Goal:** Confirm detected gestures are queued FIFO and drained only by `ReadGesture`, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-007 — TouchPanel::IsGestureAvailable parity `[ ]`
+**Goal:** Confirm `IsGestureAvailable` reflects the true non-empty state of the queue without side effects.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-008 — TouchPanel::ReadGesture parity `[ ]`
+**Goal:** Confirm `ReadGesture` dequeues exactly one `GestureSample` per call, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-009 — Empty gesture queue behavior `[ ]`
+**Goal:** Confirm calling `ReadGesture` on an empty queue matches FNA's documented behavior (exception vs default value) exactly.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-010 — Gesture queue FIFO ordering `[ ]`
+**Goal:** Confirm gestures are read back in the exact order they were detected.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-011 — GestureSample constructor overload parity `[ ]`
+**Goal:** Confirm every FNA `GestureSample` constructor overload exists with matching parameter order.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-012 — GestureSample timestamp behavior `[ ]`
+**Goal:** Confirm `GestureSample.Timestamp` uses the same time source/units as the rest of CNA's `GameTime`, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-013 — GestureSample.Position parity `[ ]`
+**Goal:** Confirm the primary `Position` field matches FNA's convention for single-touch gestures.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-014 — GestureSample.Position2 parity `[ ]`
+**Goal:** Confirm `Position2` is populated only for two-touch gestures (Pinch), matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-015 — GestureSample.Delta parity `[ ]`
+**Goal:** Confirm `Delta` reports the correct per-gesture movement delta, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-016 — GestureSample.Delta2 parity `[ ]`
+**Goal:** Confirm `Delta2` is populated only for two-touch gestures, matching FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-017 — Tap gesture detection `[ ]`
+**Goal:** Confirm a quick single-finger press-release within FNA's tap thresholds produces exactly one `Tap` sample.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-018 — DoubleTap gesture detection `[ ]`
+**Goal:** Confirm two taps within FNA's double-tap time/distance window produce a `DoubleTap` sample instead of two `Tap` samples.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-019 — Hold gesture detection `[ ]`
+**Goal:** Confirm a stationary press held past FNA's hold-duration threshold produces a `Hold` sample.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-020 — HorizontalDrag gesture detection `[ ]`
+**Goal:** Confirm a predominantly-horizontal drag produces `HorizontalDrag` samples matching FNA's angle threshold.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-021 — VerticalDrag gesture detection `[ ]`
+**Goal:** Confirm a predominantly-vertical drag produces `VerticalDrag` samples matching FNA's angle threshold.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-022 — FreeDrag gesture detection `[ ]`
+**Goal:** Confirm `FreeDrag` (any-direction) is produced only when `HorizontalDrag`/`VerticalDrag` are not both more specific and enabled, matching FNA's precedence.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-023 — Flick gesture detection `[ ]`
+**Goal:** Confirm a fast release produces a `Flick` sample with velocity matching FNA's formula.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-024 — Pinch gesture detection `[ ]`
+**Goal:** Confirm two simultaneous touches moving apart/together produce `Pinch` samples with correct `Position`/`Position2`/`Delta`/`Delta2`.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-025 — PinchComplete gesture detection `[ ]`
+**Goal:** Confirm releasing either finger of an active pinch produces exactly one `PinchComplete` sample.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-026 — Movement threshold constants vs FNA `[ ]`
+**Goal:** Confirm the minimum-movement-to-count-as-drag threshold constant matches FNA's source value.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-027 — Duration threshold constants vs FNA `[ ]`
+**Goal:** Confirm the hold-duration and double-tap-time threshold constants match FNA's source values.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-028 — Flick velocity calculation formula `[ ]`
+**Goal:** Confirm the velocity formula (distance/time windowing) matches FNA's implementation, not just its approximate feel.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-029 — Disabled-gesture-type filtering `[ ]`
+**Goal:** Confirm a gesture type not present in `EnabledGestures` is never queued, even if the underlying touch pattern would otherwise trigger it.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-030 — Multi-touch interaction between simultaneous gestures `[ ]`
+**Goal:** Confirm three-or-more simultaneous touches don't produce malformed Pinch/Drag data (FNA generally only tracks two touches for gestures).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-031 — Gesture-detector reset behavior `[ ]`
+**Goal:** Confirm `InputResetAllForTests`-style reset clears in-progress gesture-detection state (partial holds/drags/pinches).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-032 — Deterministic clock tests for gesture timing `[ ]`
+**Goal:** Confirm gesture-timing tests use an injectable/fixed clock rather than real wall-clock sleeps, so they are not flaky.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-033 — Display-size-dependent gesture thresholds `[ ]`
+**Goal:** Confirm any DPI/display-size-scaled thresholds (e.g. drag distance in pixels vs logical units) are documented and consistent with the touch-coordinate-scaling behavior audited in Phase 5.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-034 — Touch-to-gesture event ordering `[ ]`
+**Goal:** Confirm a single SDL finger event updates `TouchPanel::GetState()` and feeds the gesture detector in a consistent, documented order within one frame.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-035 — Gesture queue overflow policy `[ ]`
+**Goal:** Confirm behavior when gestures are detected faster than they are read (unbounded growth vs a documented cap) and that this matches or intentionally extends FNA.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-036 — Gesture deviations documented `[ ]`
+**Goal:** Confirm every intentional CNA gesture-detection deviation from FNA is listed in `docs/input-fna-fidelity.md`, not just in source comments.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/input-fna-fidelity.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-037 — Real-device gesture manual checklist accuracy `[ ]`
+**Goal:** Review/correct the multi-touch-gesture manual-test checklist entry in `docs/demo-input-checklist.md`.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Checklist only — the actual run is [[P11-013]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-038 — GestureType.DragComplete parity `[ ]`
+**Goal:** Confirm `DragComplete` is emitted when an active drag ends, matching FNA's flag and timing.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-039 — GestureSample equality/ToString audit `[ ]`
+**Goal:** Confirm `GestureSample` does not silently diverge from FNA on equality/`ToString` if FNA defines them (FNA's `GestureSample` has no such overrides — confirm CNA doesn't add unexpected ones).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-040 — GestureType.None handling in detector `[ ]`
+**Goal:** Confirm `EnabledGestures == None` fully disables the detector (no wasted computation, no stray queued samples).
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/GestureSample.cpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp`
+- `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-041 — Simultaneous-gesture precedence rules `[ ]`
+**Goal:** Confirm precedence when a touch pattern could match multiple enabled gesture types at once (e.g. Pinch vs FreeDrag) matches FNA's priority order.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-042 — Gesture-detector reset-between-tests audit `[ ]`
+**Goal:** Cross-check the reset behavior audited in P6-031 is actually invoked by every gesture test's setup/teardown, not just available.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-043 — Gesture threshold constants vs FNA source values documented `[ ]`
+**Goal:** Add a small table to `docs/input-fna-fidelity.md` listing every gesture threshold constant and its FNA source value side by side.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `docs/input-fna-fidelity.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-044 — Regression tests for all Phase 6 fixes `[ ]`
+**Goal:** Sweep P6-001..043 for any task that produced a code fix and confirm each has a durable, deterministic-clock regression test.
+
+**Steps:**
+1. Open the header/source and the matching FNA reference `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`, `GestureType.cs`, and the gesture-detection logic in `TouchPanel.cs`.
+2. Compare the specific behavior named in this task's Goal line-by-line against FNA's gesture-detection state machine.
+3. Fix any accidental divergence; document any intentional one in `docs/input-fna-fidelity.md`.
+4. Add or extend a targeted, deterministic (fixed-clock) test for exactly this behavior if not already covered.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- The specific behavior in the Goal line matches FNA's gesture state machine (or the deviation is documented).
+- A test exists, using a deterministic fixed clock/seed, that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/Touch/GestureTypeTests.cpp`
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P6-045 — Phase 6 checkpoint and summary `[ ]`
+**Goal:** Close out Phase 6 with a summary of gesture parity status and any open follow-ups carried into later phases.
+
+**Steps:**
+1. Summarize pass/fail/deferred counts across P6-001..044.
+2. List any item requiring a follow-up task in a later phase, with a cross-reference.
+
+**Acceptance criteria:**
+- Summary is written into this file with concrete counts.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-001 — Audit include/CNA/Input/Clipboard.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `Clipboard.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/Clipboard.hpp`
+- `src/CNA/Input/Clipboard.cpp`
+
+**Tests:**
+- `tests/CNA/Input/ClipboardTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-002 — Audit include/CNA/Input/GamePadButtonLabel.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `GamePadButtonLabel.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/GamePadButtonLabel.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadMappingTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-003 — Audit include/CNA/Input/GamePadConnectionState.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `GamePadConnectionState.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/GamePadConnectionState.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-004 — Audit include/CNA/Input/HapticCapabilities.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `HapticCapabilities.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticCapabilities.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-005 — Audit include/CNA/Input/HapticDevice.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `HapticDevice.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticDevice.hpp`
+- `src/CNA/Input/HapticDevice.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlHapticBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-006 — Audit include/CNA/Input/HapticDirection.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `HapticDirection.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticDirection.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-007 — Audit include/CNA/Input/HapticEffect.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `HapticEffect.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticEffect.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-008 — Audit include/CNA/Input/HapticEffectType.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `HapticEffectType.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticEffectType.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-009 — Audit include/CNA/Input/HapticFeature.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `HapticFeature.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticFeature.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-010 — Audit include/CNA/Input/HapticInfo.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `HapticInfo.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticInfo.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-011 — Audit include/CNA/Input/Haptics.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `Haptics.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/Haptics.hpp`
+- `src/CNA/Input/Haptics.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-012 — Audit include/CNA/Input/InputDeviceInfo.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `InputDeviceInfo.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/InputDeviceInfo.hpp`
+
+**Tests:**
+- `tests/CNA/Input/InputDevicesTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-013 — Audit include/CNA/Input/InputDevices.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `InputDevices.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/InputDevices.hpp`
+- `src/CNA/Input/InputDevices.cpp`
+
+**Tests:**
+- `tests/CNA/Input/InputDevicesTests.cpp`
+- `tests/CNA/Input/InputDevicesHotplugTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-014 — Audit include/CNA/Input/JoystickCapabilities.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `JoystickCapabilities.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/JoystickCapabilities.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-015 — Audit include/CNA/Input/JoystickHatPosition.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `JoystickHatPosition.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/JoystickHatPosition.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-016 — Audit include/CNA/Input/JoystickInfo.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `JoystickInfo.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/JoystickInfo.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-017 — Audit include/CNA/Input/Joysticks.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `Joysticks.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/Joysticks.hpp`
+- `src/CNA/Input/Joysticks.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-018 — Audit include/CNA/Input/JoystickState.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `JoystickState.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/JoystickState.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-019 — Audit include/CNA/Input/JoystickType.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `JoystickType.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/JoystickType.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-020 — Audit include/CNA/Input/KeyModifiers.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `KeyModifiers.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/KeyModifiers.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/KeyboardModStateTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-021 — Audit include/CNA/Input/Power.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `Power.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/Power.hpp`
+- `src/CNA/Input/Power.cpp`
+
+**Tests:**
+- `tests/CNA/Input/PowerTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-022 — Audit include/CNA/Input/PowerState.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `PowerState.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/PowerState.hpp`
+
+**Tests:**
+- `tests/CNA/Input/PowerTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-023 — Audit include/CNA/Input/Sensors.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `Sensors.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/Sensors.hpp`
+- `src/CNA/Input/Sensors.cpp`
+
+**Tests:**
+- `tests/CNA/Input/SensorsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-024 — Audit include/CNA/Input/TextInputType.hpp `[ ]`
+**Goal:** Audit `CNA::Input`'s `TextInputType.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Header is self-contained, has no SDL leakage beyond an intentionally-documented opaque handle, and is fully Doxygen-covered.
+- Existing tests for the type pass; new coverage is added for any gap found.
+
+**Files likely touched:**
+- `include/CNA/Input/TextInputType.hpp`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-025 — HapticDevice ownership model and concrete-SDL-type exposure policy `[ ]`
+**Goal:** Decide and implement whether `HapticDevice` should keep exposing a raw `SDL_Haptic*` publicly or move to an opaque/PIMPL handle (Phase-0 concern #2), and write a single authoritative policy note covering which `CNA::Input` types may expose concrete SDL types publicly at all.
+
+**Steps:**
+1. Review `HapticDevice.hpp`'s current public surface for any `SDL_Haptic*` accessor.
+2. Weigh the tradeoff: raw pointer (simple, leaks concrete SDL type) vs opaque non-SDL handle (extra indirection, cleaner boundary).
+3. Implement the chosen approach for `HapticDevice`.
+4. Enumerate every other public SDL type referenced across `include/CNA/Input/*.hpp` and classify each as allowed (documented exception) or disallowed (needs opaque wrapper).
+5. Record both the `HapticDevice` decision and the general policy in `docs/input-fna-fidelity.md`.
+
+**Acceptance criteria:**
+- The `HapticDevice` decision is implemented consistently and documented.
+- Every other public SDL-type exposure in `CNA::Input` is classified against the written policy.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticDevice.hpp`
+- `src/CNA/Input/HapticDevice.cpp`
+- `docs/input-fna-fidelity.md`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-026 — Clipboard functional behavior audit `[ ]`
+**Goal:** Confirm `CNA::Input::Clipboard` get/set/has-text operations round-trip UTF-8 text correctly through SDL3's clipboard API.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Get/Set/HasText behave correctly for empty, ASCII, and multi-byte UTF-8 clipboard content.
+
+**Files likely touched:**
+- `include/CNA/Input/Clipboard.hpp`
+- `src/CNA/Input/Clipboard.cpp`
+
+**Tests:**
+- `tests/CNA/Input/ClipboardTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-027 — Power functional behavior audit `[ ]`
+**Goal:** Confirm `CNA::Input::Power`/`PowerState` correctly reflect SDL3's power-info API (battery percent, charging state, unsupported fallback).
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Battery/charging fields match SDL3's reported values or a documented unsupported fallback.
+
+**Files likely touched:**
+- `include/CNA/Input/Power.hpp`
+- `include/CNA/Input/PowerState.hpp`
+- `src/CNA/Input/Power.cpp`
+
+**Tests:**
+- `tests/CNA/Input/PowerTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-028 — Sensors functional behavior audit `[ ]`
+**Goal:** Confirm `CNA::Input::Sensors` correctly enumerates and reads SDL3 sensor devices, with a safe unsupported-platform fallback.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Sensor availability/read behaves correctly or degrades safely when unsupported.
+
+**Files likely touched:**
+- `include/CNA/Input/Sensors.hpp`
+- `src/CNA/Input/Sensors.cpp`
+
+**Tests:**
+- `tests/CNA/Input/SensorsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-029 — Joystick enumeration functional audit `[ ]`
+**Goal:** Confirm `CNA::Input::Joysticks` enumerates connected joysticks (including hotplug add/remove) correctly via SDL3.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Enumeration count and indices update correctly across hotplug events.
+
+**Files likely touched:**
+- `include/CNA/Input/Joysticks.hpp`
+- `src/CNA/Input/Joysticks.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-030 — Joystick state functional audit `[ ]`
+**Goal:** Confirm `CNA::Input::JoystickState` correctly reads back axes, buttons, and hats from the SDL3 joystick API.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Axis/button/hat values match what the fake/real SDL joystick backend reports.
+
+**Files likely touched:**
+- `include/CNA/Input/JoystickState.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-031 — Haptic capabilities functional audit `[ ]`
+**Goal:** Confirm `HapticCapabilities` feature flags match SDL3's `SDL_GetHapticFeatures` bitmask for the underlying device.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Each capability flag correctly reflects the corresponding SDL feature bit.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticCapabilities.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-032 — Haptic effect validation audit `[ ]`
+**Goal:** Confirm invalid `HapticEffect` parameters (out-of-range magnitude/duration) are rejected predictably rather than passed straight to SDL3 with undefined results.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Invalid effect parameters produce a defined, tested error path.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticEffect.hpp`
+- `include/CNA/Input/HapticEffectType.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-033 — Haptic effect lifecycle audit `[ ]`
+**Goal:** Confirm the upload → run → stop → destroy lifecycle of a `HapticEffect` on a `HapticDevice` is correct and leak-free.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- A full upload/run/stop/destroy cycle is exercised by a test with no leaked SDL handles.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticDevice.hpp`
+- `src/CNA/Input/HapticDevice.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-034 — Haptic device cleanup/dispose audit `[ ]`
+**Goal:** Confirm `HapticDevice` releases its underlying SDL haptic handle exactly once on destruction/dispose, matching the project's `IDisposable`/RAII conventions.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- No double-free, no leak, verified under the project's sanitizer build (cross-ref Phase 9).
+
+**Files likely touched:**
+- `include/CNA/Input/HapticDevice.hpp`
+- `src/CNA/Input/HapticDevice.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-035 — Move-only semantics audit across HapticDevice/Joystick RAII types `[ ]`
+**Goal:** Confirm `HapticDevice` and joystick-owning RAII types are move-only (deleted copy ctor/assign) and moved-from state is safe to destroy.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Copy is deleted; move leaves the source in a safe, destructible state; a test exercises move construction/assignment.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticDevice.hpp`
+- `include/CNA/Input/Joysticks.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-036 — Disposed-object-after-use behavior audit across CNA::Input types `[ ]`
+**Goal:** Confirm every disposable `CNA::Input` type throws `std::runtime_error` (per CLAUDE.md's IDisposable rule) when used after disposal, rather than crashing.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Post-dispose use throws the documented exception type for every disposable extension type.
+
+**Files likely touched:**
+- `include/CNA/Input/HapticDevice.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-037 — No-device fallback behavior audit `[ ]`
+**Goal:** Confirm `Joysticks::GetCount() == 0` / no haptic devices present is handled as a normal, safe state throughout the extension layer.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Every API behaves sanely when zero devices are present, exercised by a dedicated test.
+
+**Files likely touched:**
+- `include/CNA/Input/Joysticks.hpp`
+- `include/CNA/Input/Haptics.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-038 — Platform-unsupported fallback behavior audit `[ ]`
+**Goal:** Confirm sensors/power/haptics degrade to a documented safe/unsupported state on platforms where the SDL3 subsystem is unavailable, rather than failing to build or crashing at runtime.
+
+**Steps:**
+1. Open `include/CNA/Input/{header}` and its `.cpp` if one exists.
+2. Confirm the type is under the `CNA` namespace (not `Microsoft::Xna`), uses the project's EXT-suffix convention where it mirrors a platform concept, and needs no `NOXNA` marker (it is already outside `Microsoft::Xna`).
+3. Confirm the header is self-contained and does not leak a concrete SDL type into its public surface (opaque pointer/forward-declare only).
+4. Confirm every public member has a full Doxygen `/** @brief ... */` block.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- Unsupported-platform paths are covered by a test (via a fake/no-op backend) and documented.
+
+**Files likely touched:**
+- `include/CNA/Input/Sensors.hpp`
+- `include/CNA/Input/Power.hpp`
+- `include/CNA/Input/Haptics.hpp`
+
+**Tests:**
+- `tests/CNA/Input/SensorsTests.cpp`
+- `tests/CNA/Input/PowerTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-039 — Manual validation checklist cross-reference for CNA::Input extensions `[ ]`
+**Goal:** Confirm every hardware-gated `CNA::Input` extension (haptics, joystick, sensors) has a corresponding entry in the Phase 11 manual checklist, with no extension silently unverifiable.
+
+**Steps:**
+1. Cross-reference the 24-header list against `docs/demo-input-checklist.md` and Phase 11 tasks below.
+2. Add any missing checklist entry.
+
+**Acceptance criteria:**
+- Every hardware-dependent extension has a named Phase 11 task or documented reason it needs none.
+
+**Files likely touched:**
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P7-040 — Phase 7 checkpoint and summary `[ ]`
+**Goal:** Close out Phase 7 with a summary of CNA/NOXNA extension audit status and any open follow-ups carried into later phases.
+
+**Steps:**
+1. Summarize pass/fail/deferred counts across P7-001..039.
+2. List any item requiring a follow-up task in a later phase, with a cross-reference.
+
+**Acceptance criteria:**
+- Summary is written into this file with concrete counts.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-001 — SDL initialization ownership `[ ]`
+**Goal:** Confirm exactly one owner initializes the SDL input-relevant subsystems (events/gamepad/haptic/sensor) and re-init is guarded.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-002 — SDL shutdown safety `[ ]`
+**Goal:** Confirm shutdown tears down input subsystems in a safe order with no use-after-shutdown access.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-003 — Event pump assumptions documented `[ ]`
+**Goal:** Confirm and document which thread/loop is assumed to call `SDL_PollEvent`/`SDL_PumpEvents`, and that the bridge doesn't assume a second implicit pump.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-004 — Keyboard event routing `[ ]`
+**Goal:** Confirm `SDL_EVENT_KEY_DOWN`/`SDL_EVENT_KEY_UP` route to `KeyboardState` correctly, matching Phase 2's findings.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-005 — Text event routing `[ ]`
+**Goal:** Confirm `SDL_EVENT_TEXT_INPUT`/`SDL_EVENT_TEXT_EDITING` route to `TextInputEXT` correctly, matching Phase 2's findings.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTextInputTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-006 — Mouse event routing `[ ]`
+**Goal:** Confirm `SDL_EVENT_MOUSE_MOTION`/`SDL_EVENT_MOUSE_BUTTON_*` route to `MouseState` correctly, matching Phase 3's findings.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-007 — Wheel event routing `[ ]`
+**Goal:** Confirm `SDL_EVENT_MOUSE_WHEEL` routes to `MouseState`'s scroll fields correctly, matching Phase 3's findings.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-008 — Touch event routing `[ ]`
+**Goal:** Confirm `SDL_EVENT_FINGER_DOWN`/`MOTION`/`UP` route to `TouchPanel` correctly, matching Phase 5's findings.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-009 — Gesture event routing `[ ]`
+**Goal:** Confirm touch events feed the gesture detector in the correct order relative to `TouchPanel` state updates, matching Phase 6's findings.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+- `src/CNA/Internal/Input/GestureDetector.cpp`
+- `include/CNA/Internal/Input/GestureDetector.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-010 — Gamepad connect event routing `[ ]`
+**Goal:** Confirm `SDL_EVENT_GAMEPAD_ADDED` routes to slot assignment correctly, matching Phase 4's findings.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-011 — Gamepad disconnect event routing `[ ]`
+**Goal:** Confirm `SDL_EVENT_GAMEPAD_REMOVED` routes to slot teardown correctly, matching Phase 4's findings.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-012 — Controller remap events `[ ]`
+**Goal:** Confirm `SDL_EVENT_GAMEPAD_REMAPPED` (mapping changes) is handled without corrupting an in-progress `GamePadState` read.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+- `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-013 — Joystick events (raw, non-gamepad) `[ ]`
+**Goal:** Confirm raw `SDL_EVENT_JOYSTICK_*` events route correctly to `CNA::Input::Joysticks`/`JoystickState` without double-counting devices already exposed as gamepads.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlJoystickBackend.cpp`
+- `include/CNA/Internal/Input/SdlJoystickBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-014 — Sensor events `[ ]`
+**Goal:** Confirm `SDL_EVENT_SENSOR_UPDATE` routes correctly to `CNA::Input::Sensors`.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Input/Sensors.cpp`
+
+**Tests:**
+- `tests/CNA/Input/SensorsTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-015 — Haptic lifecycle at the bridge layer `[ ]`
+**Goal:** Confirm the bridge opens/closes SDL haptic devices in step with gamepad/joystick connect-disconnect, not leaking a handle per reconnect.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlHapticBackend.cpp`
+- `include/CNA/Internal/Input/SdlHapticBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-016 — Window handle resolution `[ ]`
+**Goal:** Confirm the bridge resolves 'the active window' consistently for all input subsystems (mouse/keyboard/touch/text) rather than each subsystem tracking its own notion.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-017 — Null window behavior at the bridge layer `[ ]`
+**Goal:** Confirm every bridge entry point is a safe no-op (not a crash) when called before any window exists.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-018 — Stale window handle behavior `[ ]`
+**Goal:** Confirm the bridge does not retain a dangling window handle after the window is destroyed/recreated.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-019 — Focus lost handling `[ ]`
+**Goal:** Confirm `SDL_EVENT_WINDOW_FOCUS_LOST` triggers the keyboard/mouse-button clearing behavior audited in Phase 2/3.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-020 — Focus gained handling `[ ]`
+**Goal:** Confirm `SDL_EVENT_WINDOW_FOCUS_GAINED` does not spuriously report stale pressed keys/buttons from before the focus loss.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-021 — Minimize handling `[ ]`
+**Goal:** Confirm `SDL_EVENT_WINDOW_MINIMIZED` is treated consistently with focus-lost for input-clearing purposes.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-022 — Restore handling `[ ]`
+**Goal:** Confirm `SDL_EVENT_WINDOW_RESTORED` resumes normal input routing without requiring an explicit re-init call.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-023 — Display resize handling `[ ]`
+**Goal:** Confirm a window resize updates whatever coordinate-scaling state mouse/touch routing depends on (Phase 3/5 coordinate-scaling findings).
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-024 — High-DPI resize handling `[ ]`
+**Goal:** Confirm a DPI change (`SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED` or platform equivalent) is handled consistently with the Phase 3/5 high-DPI findings.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-025 — Backend reset correctness `[ ]`
+**Goal:** Confirm the bridge's reset-for-tests entry point clears every subsystem's state completely (keyboard, mouse, touch, gesture, gamepad slots, joystick, haptic handles).
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+- `src/CNA/Internal/Input/SdlGamepadBackend.cpp`
+- `include/CNA/Internal/Input/SdlGamepadBackend.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-026 — Test-only reset does not leak into production path `[ ]`
+**Goal:** Confirm the reset-for-tests function is not reachable/callable from normal game code (test-only visibility).
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-027 — Fake event helper coverage audit `[ ]`
+**Goal:** Confirm the test helpers for synthesizing `SDL_Event`s cover keyboard, mouse, touch, and gamepad shapes needed by Phases 2-6's tests.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-028 — Event ordering within one poll cycle `[ ]`
+**Goal:** Confirm multiple queued events of different types in one poll cycle are applied in the order SDL delivered them, not reordered by subsystem.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-029 — Duplicate event handling `[ ]`
+**Goal:** Confirm a duplicate/replayed event (e.g. two identical key-down events with no key-up between) does not corrupt state.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeFuzzTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-030 — Unknown/unhandled event ignoring `[ ]`
+**Goal:** Confirm an SDL event type the bridge doesn't recognize is safely ignored, not mis-routed.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeCandidatesTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-031 — Thread-safety assumptions documented `[ ]`
+**Goal:** Document (and verify via code inspection) whether the bridge assumes single-threaded access, and where that assumption is enforced or asserted.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-032 — Main-thread assumptions documented `[ ]`
+**Goal:** Confirm any main-thread-only SDL calls (e.g. window/cursor APIs) are documented as such, matching SDL3's own thread-safety documentation.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-033 — Public/private boundary audit `[ ]`
+**Goal:** Confirm no public XNA/CNA Input header includes an internal `CNA/Internal/Input/*` header (the dependency direction must be internal → public wrapper, never the reverse import).
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `include/Microsoft/Xna/Framework/Input`
+- `include/CNA/Input`
+
+**Tests:**
+- `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-034 — Internal-only SDL usage audit `[ ]`
+**Goal:** Confirm `<SDL3/SDL.h>` is included only from `.cpp` files and `CNA/Internal/**` headers, never from a public header.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src`
+- `include/CNA/Internal`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-035 — Build with EasyGL backend `[ ]`
+**Goal:** Build the `EASYGL` graphics-backend configuration and confirm Input compiles/links/tests pass identically to the default backend.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `cmake-build-input-easygl`
+
+**Tests:**
+- `CnaInputTests (EasyGL config)`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-036 — Build with Vulkan backend `[ ]`
+**Goal:** Build the `VULKAN` graphics-backend configuration and confirm Input compiles/links/tests pass identically to the default backend.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `cmake-build-input-vulkan`
+
+**Tests:**
+- `CnaInputTests (Vulkan config)`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-037 — Build with bgfx backend `[ ]`
+**Goal:** Build the `BGFX` graphics-backend configuration and confirm Input compiles/links/tests pass identically to the default backend.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `cmake-build-input-bgfx`
+
+**Tests:**
+- `CnaInputTests (bgfx config)`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-038 — Build with SDL renderer backend `[ ]`
+**Goal:** Build the `SDL_RENDERER` graphics-backend configuration and confirm Input compiles/links/tests pass identically to the default backend.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `cmake-build-input-sdlrenderer`
+
+**Tests:**
+- `CnaInputTests (SDL_RENDERER config)`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-039 — Regression tests for all Phase 8 fixes `[ ]`
+**Goal:** Sweep P8-001..038 for any task that produced a code fix and confirm each has a durable regression test.
+
+**Steps:**
+1. Open `src/CNA/Internal/Input/SdlInputBridge.cpp` (and `InputManager.cpp`/relevant backend file) for the subsystem named in this task's Goal.
+2. Trace the exact SDL3 event(s) or API call(s) involved end to end into the public XNA/CNA state they populate.
+3. Compare against FNA's own SDL2/SDL3 platform driver behavior where FNA has an equivalent, and against SDL3's documented semantics otherwise.
+4. Fix any bug found; add/extend a deterministic test using the fake backend or a synthetic `SDL_Event`.
+5. Run the listed test file(s) and record the result.
+
+**Acceptance criteria:**
+- The traced behavior is correct end to end and matches FNA/SDL3 semantics (or the deviation is documented).
+- A deterministic test exists that would fail if this behavior regressed.
+
+**Files likely touched:**
+- `src/CNA/Internal/Input/SdlInputBridge.cpp`
+- `include/CNA/Internal/Input/SdlInputBridge.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `include/CNA/Internal/Input/InputManager.hpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P8-040 — Phase 8 checkpoint and summary `[ ]`
+**Goal:** Close out Phase 8 with a summary of SDL bridge/backend audit status and any open follow-ups carried into later phases.
+
+**Steps:**
+1. Summarize pass/fail/deferred counts across P8-001..039.
+2. List any item requiring a follow-up task in a later phase, with a cross-reference.
+
+**Acceptance criteria:**
+- Summary is written into this file with concrete counts.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-001 — Confirm focused Input test target builds `[ ]`
+**Goal:** Build only the `CnaInputTests` target (or its containing test binary) in isolation and confirm it links.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `CMakeLists.txt`
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-002 — Run ctest -R CnaInputTests / -L input `[ ]`
+**Goal:** Run the canonical Input test selector end to end and record pass/fail counts.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `CMakeLists.txt`
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-003 — Repeated-run stability check `[ ]`
+**Goal:** Run the Input test selector 3x in a row (`ctest --repeat until-fail:3` or equivalent) and confirm identical results each run.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- (none)
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-004 — Shuffled-order stability check `[ ]`
+**Goal:** Run the Input tests with gtest's `--gtest_shuffle` and confirm no ordering-dependent failure appears.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- (none)
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-005 — AddressSanitizer build `[ ]`
+**Goal:** Build `cmake-build-input-asan` and run the Input test selector under ASan, recording any report.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `cmake-build-input-asan`
+
+**Tests:**
+- `CnaInputTests (ASan)`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-006 — UndefinedBehaviorSanitizer build `[ ]`
+**Goal:** Build (or reconfigure) with `-DCNA_SANITIZE=undefined` and run the Input test selector, recording any report.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `CMakeLists.txt`
+
+**Tests:**
+- `CnaInputTests (UBSan)`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-007 — Valgrind pass if practical `[ ]`
+**Goal:** If Valgrind is available and the ASan build is not already sufficient, run the Input test binary under `valgrind --leak-check=full` and record findings; if impractical (e.g. runtime cost), document why it was skipped.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- (none)
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-008 — Public header compile tests pass `[ ]`
+**Goal:** Confirm `PublicApiInputCompileTests.cpp` builds and passes, proving every public Input header compiles standalone.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`
+
+**Tests:**
+- `PublicApiInputCompileTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-009 — Strict XNA signature-freeze tests pass `[ ]`
+**Goal:** Confirm `PublicApiInputSignatureFreezeTests.cpp` builds and passes after all Phase 1-6 changes.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp`
+
+**Tests:**
+- `PublicApiInputSignatureFreezeTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-010 — CNA extension signature-freeze tests exist and pass `[ ]`
+**Goal:** Confirm an equivalent freeze-test exists for `CNA::Input` extension types (add one if missing) and that it passes.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Input`
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-011 — Enum freeze tests pass `[ ]`
+**Goal:** Confirm the enum-numeric-value freeze assertions from P1-029 and P4-066 actually execute and pass.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- (none)
+
+**Tests:**
+- `PublicApiInputSignatureFreezeTests`
+- `GamePadDeadZoneTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-012 — Keyboard fuzz-style event tests `[ ]`
+**Goal:** Run/extend a fuzz-style test feeding randomized (seeded) sequences of key events at `SdlInputBridge` and confirm no crash/UB.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/SdlInputBridgeFuzzTests.cpp`
+
+**Tests:**
+- `SdlInputBridgeFuzzTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-013 — Mouse fuzz-style event tests `[ ]`
+**Goal:** Run/extend a fuzz-style test feeding randomized (seeded) sequences of mouse events and confirm no crash/UB.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/SdlInputBridgeFuzzTests.cpp`
+
+**Tests:**
+- `SdlInputBridgeFuzzTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-014 — Touch fuzz-style event tests `[ ]`
+**Goal:** Run/extend a fuzz-style test feeding randomized (seeded) sequences of finger events and confirm no crash/UB.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/SdlInputBridgeFuzzTests.cpp`
+
+**Tests:**
+- `SdlInputBridgeFuzzTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-015 — Gesture fuzz-style event tests `[ ]`
+**Goal:** Run/extend a fuzz-style test feeding randomized (seeded) multi-touch sequences at the gesture detector and confirm no crash/UB.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/GestureDetectorTests.cpp`
+
+**Tests:**
+- `GestureDetectorTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-016 — GamePad fuzz-style event tests `[ ]`
+**Goal:** Run/extend a fuzz-style test feeding randomized (seeded) axis/button/connect sequences at the fake gamepad backend and confirm no crash/UB.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`
+
+**Tests:**
+- `SdlGamepadBackendTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-017 — Joystick fuzz-style event tests `[ ]`
+**Goal:** Run/extend a fuzz-style test feeding randomized (seeded) joystick event sequences and confirm no crash/UB.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp`
+
+**Tests:**
+- `SdlJoystickBackendTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-018 — Haptic invalid-input tests `[ ]`
+**Goal:** Extend haptic tests with deliberately invalid effect parameters (NaN/negative/huge magnitude) and confirm the P7-032 validation path is actually exercised.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/SdlHapticBackendTests.cpp`
+
+**Tests:**
+- `SdlHapticBackendTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-019 — Deterministic seed recording `[ ]`
+**Goal:** Confirm every fuzz-style test records its RNG seed on failure so a failure is reproducible, per CLAUDE.md's testing rigor expectations.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/SdlInputBridgeFuzzTests.cpp`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-020 — Golden event sequence coverage audit `[ ]`
+**Goal:** Confirm `SdlInputBridgeGoldenTests.cpp` covers at least one golden sequence per subsystem (keyboard/mouse/touch/gesture/gamepad).
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
+
+**Tests:**
+- `SdlInputBridgeGoldenTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-021 — Test isolation audit across the Input suite `[ ]`
+**Goal:** Confirm no Input test depends on execution order or leftover state from a previous test (cross-ref reset-behavior tasks in Phases 2-8).
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-022 — Reset-between-tests enforcement audit `[ ]`
+**Goal:** Confirm every Input test fixture actually calls the reset-for-tests entry point in `SetUp`/`TearDown`, not just that the entry point exists.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input/InputResetTests.cpp`
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-023 — CI workflow audit for Input `[ ]`
+**Goal:** Review the CI workflow configuration and confirm `CnaInputTests` (and the sanitizer/backend builds relevant to Input) actually run in CI, not just locally.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `.github/workflows`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-024 — Missing-SDL-submodule diagnostics `[ ]`
+**Goal:** Confirm CMake configuration fails with a clear, actionable message (not a cryptic missing-header error) if `third_party/SDL` is not checked out.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `CMakeLists.txt`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-025 — Optional system-SDL policy documented `[ ]`
+**Goal:** Confirm/document whether building against a system-installed SDL3 (instead of the vendored submodule) is supported, and if so, that Input tests still pass that way.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `CMakeLists.txt`
+- `docs/input-build-and-test.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-026 — Failure artifact logging `[ ]`
+**Goal:** Confirm a failing Input test produces enough logged context (input event sequence, seed, state dump) to debug without re-running locally.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-027 — Coverage document update `[ ]`
+**Goal:** Update `docs/input-test-coverage.md` to reflect the actual current test inventory and any gaps found across Phases 1-8.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `docs/input-test-coverage.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-028 — Test naming consistency audit `[ ]`
+**Goal:** Confirm Input test names follow one consistent convention (`TypeName_Behavior` or similar) across all suites touched in this plan.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/Microsoft/Xna/Framework/Input`
+- `tests/CNA/Input`
+- `tests/CNA/Internal/Input`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-029 — No-flaky-tests confirmation `[ ]`
+**Goal:** Cross-reference the repeated-run (P9-003) and shuffled-order (P9-004) results; if any flake was found, root-cause and fix it here rather than retrying in a loop.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- (none)
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-030 — No-hardware-dependent-automated-tests audit `[ ]`
+**Goal:** Confirm every automated (non-Phase-11) Input test runs headlessly against a fake backend or synthetic event, with zero reliance on physically present hardware.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `tests/CNA/Internal/Input`
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-031 — Full CNA test suite pass `[ ]`
+**Goal:** Run the complete CNA test suite (not just the Input filter) once, to confirm Input changes have not regressed unrelated subsystems.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- (none)
+
+**Tests:**
+- `ctest (full suite)`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-032 — Build matrix documentation `[ ]`
+**Goal:** Document the full build matrix (debug/asan/ubsan × EasyGL/Vulkan/bgfx/SDL_RENDERER) actually exercised by Phases 8-9 in `docs/input-build-and-test.md`.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `docs/input-build-and-test.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-033 — Regression test list compiled `[ ]`
+**Goal:** Compile a single list (in `docs/input-test-coverage.md`) of every new/extended test added across Phases 1-9, cross-referenced to its originating task ID.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `docs/input-test-coverage.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-034 — Sanitizer suppression file audit `[ ]`
+**Goal:** Confirm any ASan/UBSan suppression file used for third-party SDL/googletest noise is minimal, documented, and does not accidentally suppress CNA Input code.
+
+**Steps:**
+1. Identify the exact command(s) needed to exercise the behavior named in this task's Goal.
+2. Run the command(s) in the current checkout and capture full output.
+3. If a gap or failure is found, fix it or file it as a tracked follow-up with a cross-reference.
+4. Record the exact command and result in this task's Result field — never claim a test passed without running it, per CLAUDE.md.
+
+**Acceptance criteria:**
+- The exact command was actually run in this checkout and its real output is recorded.
+- No claim of a passing/failing test is made without a command + output backing it.
+
+**Files likely touched:**
+- `cmake-build-input-asan`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P9-035 — Phase 9 checkpoint and summary (final Input test gate) `[ ]`
+**Goal:** Re-run the full Input selector one final time after all Phase 9 fixes, record a clean baseline before documentation work begins, and close out Phase 9 with a summary of test/CI/sanitizer status and any open follow-ups carried into later phases.
+
+**Steps:**
+1. Run the canonical Input test selector one final time and record the exact command and output.
+2. Summarize pass/fail/deferred counts across P9-001..034.
+3. List any item requiring a follow-up task in a later phase, with a cross-reference.
+
+**Acceptance criteria:**
+- A single clean, fully-passing run is recorded with its exact command and output.
+- Summary is written into this file with concrete counts.
+
+**Files likely touched:**
+- (none)
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-001 — Update docs/input-fna-fidelity.md `[ ]`
+**Goal:** Update the FNA-fidelity/deviation document with every deviation found across Phases 1-8.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-fna-fidelity.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-002 — Update docs/input-member-parity-matrix.md `[ ]`
+**Goal:** Reconcile the member-parity matrix with the final Phase 1-6 results (supersedes the P1-044 draft).
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-member-parity-matrix.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-003 — Update docs/input-public-api-frozen.md `[ ]`
+**Goal:** Update the frozen-API/tier-glossary document with any signature changes from Phases 1-8.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-public-api-frozen.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-004 — Update docs/input-test-coverage.md `[ ]`
+**Goal:** Final reconciliation of the test-coverage document with Phase 9's compiled regression-test list.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-test-coverage.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-005 — Update docs/input-backend.md `[ ]`
+**Goal:** Update the SDL-backend architecture document with any Phase 8 findings.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-backend.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-006 — Update docs/input-build-and-test.md `[ ]`
+**Goal:** Update the build/test instructions with the Phase 9 build-matrix documentation.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-build-and-test.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-007 — Update docs/platform-input-notes.md `[ ]`
+**Goal:** Update platform-specific caveats (layouts, DPI, controller mapping) with Phase 2-5 findings.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-008 — Update docs/input-manual-verification-results.md `[ ]`
+**Goal:** Update the hardware-verification matrix header/links; do not mark any cell verified without an actual Phase 11 run.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-009 — Update docs/input-pre-merge-checklist.md `[ ]`
+**Goal:** Update the pre-merge checklist to reference this plan's Phase 12 readiness gates.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-pre-merge-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-010 — Update NOXNA.md `[ ]`
+**Goal:** Confirm every NOXNA Input extension audited in Phase 7 is correctly listed and described in the project-wide NOXNA registry, and remove any stale 'analysis only' wording for code that is now implemented (Phase-0 concern #3).
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `NOXNA.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-011 — Update README.md Input section `[ ]`
+**Goal:** Update the top-level README's Input section to describe the current strict-XNA + NOXNA extension surface accurately.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `README.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-012 — Update NEXT.md `[ ]`
+**Goal:** Record this plan's completion state and handoff notes in `NEXT.md`, matching the project's existing handoff convention.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `NEXT.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-013 — Add/verify public API usage examples `[ ]`
+**Goal:** Confirm `docs/input-fna-fidelity.md` or a dedicated examples doc has at least one minimal usage example per major subsystem (keyboard/mouse/gamepad/touch/gesture).
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-fna-fidelity.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-014 — Strict XNA compatibility notes pass `[ ]`
+**Goal:** Write a short, explicit statement of strict XNA 4.0 compatibility scope/limits for Input.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-fna-fidelity.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-015 — FNA compatibility notes pass `[ ]`
+**Goal:** Write a short, explicit statement of FNA-specific (beyond bare XNA 4.0) compatibility scope/limits for Input.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-fna-fidelity.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-016 — CNA extension notes pass `[ ]`
+**Goal:** Write a short, explicit statement of what NOXNA/CNA Input extensions exist and why, cross-referenced to Phase 7.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-fna-fidelity.md`
+- `NOXNA.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-017 — SDL dependency notes pass `[ ]`
+**Goal:** Document the exact SDL3 subsystems/APIs Input depends on and the pinned version from Phase 0.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/input-backend.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-018 — Platform limitations documented `[ ]`
+**Goal:** Document known platform limitations (e.g. mobile soft-keyboard hints, IME candidate UI) discovered across Phases 2-8.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-019 — Hardware limitations documented `[ ]`
+**Goal:** Document known hardware limitations (e.g. controllers without rumble/sensors) discovered across Phase 4/7.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-020 — High-DPI notes documented `[ ]`
+**Goal:** Document the High-DPI coordinate-space findings from Phases 3/5/8 in one place.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-021 — IME notes documented `[ ]`
+**Goal:** Document IME composition/candidate-list findings from Phase 2 in one place.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-022 — Touch notes documented `[ ]`
+**Goal:** Document touch coordinate-scaling and multi-touch findings from Phase 5 in one place.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-023 — Gamepad notes documented `[ ]`
+**Goal:** Document gamepad slot-assignment, dead-zone, and vibration findings from Phase 4 in one place.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-024 — Haptic notes documented `[ ]`
+**Goal:** Document haptic capability/lifecycle findings from Phase 7 in one place.
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs/platform-input-notes.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P10-025 — Phase 10 checkpoint and summary: final documentation consistency pass `[ ]`
+**Goal:** Read all ten Input docs together end to end, fix any remaining cross-reference or terminology inconsistency, and close out Phase 10 with a summary confirming documentation reflects this pass's actual results (not the archived plan's).
+
+**Steps:**
+1. Open the document named in this task's Goal.
+2. Cross-check its content against the actual, current results of Phases 1-9 (not the archived plan).
+3. Correct stale, missing, or contradictory content.
+4. Confirm cross-links to/from the other Input docs remain consistent.
+
+**Acceptance criteria:**
+- The document accurately reflects this pass's actual findings.
+- Cross-links to other Input docs are correct.
+
+**Files likely touched:**
+- `docs`
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-001 — US keyboard manual validation `[!]`
+**Goal:** Physically validate keyboard input on a US QWERTY keyboard.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P2-023]] checklist.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-002 — Czech keyboard manual validation `[!]`
+**Goal:** Physically validate keyboard input on a Czech QWERTZ keyboard, including diacritic OEM keys.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P2-022]] checklist.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-003 — Non-QWERTY keyboard manual validation `[!]`
+**Goal:** Physically validate keyboard input on a non-QWERTY (e.g. AZERTY/Dvorak) layout.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P2-024]] checklist.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-004 — Standard mouse manual validation `[!]`
+**Goal:** Physically validate left/middle/right buttons and wheel on a standard 3-button mouse.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P3-040]] checklist.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-005 — Extra mouse buttons manual validation `[!]`
+**Goal:** Physically validate XButton1/XButton2 on a mouse with extra side buttons.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P3-040]] checklist.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-006 — Relative mouse mode manual validation `[!]`
+**Goal:** Physically validate relative mouse mode (e.g. for camera-look controls) with a real mouse.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P3-024]]-[[P3-026]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-007 — Xbox-compatible gamepad manual validation `[!]`
+**Goal:** Physically validate button/stick/trigger/rumble mapping on a real Xbox-compatible controller.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P4-055]] checklist.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-008 — PlayStation-compatible gamepad manual validation `[!]`
+**Goal:** Physically validate button/stick/trigger/rumble/light-bar mapping on a real PlayStation-compatible controller.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P4-056]] checklist.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-009 — Generic gamepad manual validation `[!]`
+**Goal:** Physically validate mapping on a real generic/unbranded controller.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P4-057]] checklist.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-010 — Rumble manual validation `[!]`
+**Goal:** Physically feel and confirm rumble/vibration strength and timing on real hardware.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P4-045]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-011 — Advanced haptics manual validation `[!]`
+**Goal:** Physically validate trigger-rumble/light-bar/advanced haptic effects on real hardware that supports them.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P4-046]]-[[P4-048]], [[P7-033]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-012 — Touchscreen manual validation `[!]`
+**Goal:** Physically validate single-touch input on a real touchscreen device.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P5-043]] checklist.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-013 — Multi-touch gestures manual validation `[!]`
+**Goal:** Physically validate Tap/DoubleTap/Hold/Drag/Flick/Pinch gestures on a real multi-touch device.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P6-036]] checklist.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-014 — IME/text composition manual validation `[!]`
+**Goal:** Physically validate IME composition (e.g. Japanese/Chinese input method) with a real input method editor.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P2-036]]-[[P2-037]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P11-015 — High-DPI display manual validation `[!]`
+**Goal:** Physically validate mouse/touch coordinate correctness on a real high-DPI display.
+
+**Steps:**
+1. Obtain the physical device/hardware named in this task's Goal.
+2. Run the demo/smoke app (`cna_input_smoke` or `InputDemo`) and exercise the specific behavior by hand.
+3. Record the exact device/OS/driver used, the steps performed, and the Pass/Fail result in `docs/input-manual-verification-results.md`.
+4. Only then update this task's status — never mark `[x]` without an actual device in hand.
+
+**Acceptance criteria:**
+- A real device was used and the result is recorded with device/OS/driver details.
+- Status remains `[!]` Blocked until an actual run occurs; it is never marked done speculatively.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+- `docs/demo-input-checklist.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** Cross-ref [[P3-039]], [[P5-038]].
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-001 — Clean checkout rebuild `[ ]`
+**Goal:** Confirm the project builds from a clean checkout (fresh build directory) with no stale-cache artifacts masking a real error.
+
+**Steps:**
+1. Remove or create a fresh build directory.
+2. Reconfigure with CMake.
+3. Build the default target.
+4. Record the exact commands and result.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `cmake-build-debug`
+
+**Tests:**
+- `full build`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-002 — Submodule verification `[ ]`
+**Goal:** Re-verify all four submodules (SDL, SDL_image, SDL_mixer, googletest) are present and pinned as recorded in Phase 0.
+
+**Steps:**
+1. Run `git submodule status`.
+2. Compare against the Phase 0 baseline.
+3. Record any drift.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `.gitmodules`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-003 — EasyGL build gate `[ ]`
+**Goal:** Re-confirm the EasyGL backend build (from P8-035) still passes after all subsequent Phase 9-11 changes.
+
+**Steps:**
+1. Rebuild `cmake-build-input-easygl`.
+2. Run `CnaInputTests`.
+3. Record result.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `cmake-build-input-easygl`
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-004 — Vulkan build gate `[ ]`
+**Goal:** Re-confirm the Vulkan backend build (from P8-036) still passes after all subsequent Phase 9-11 changes.
+
+**Steps:**
+1. Rebuild `cmake-build-input-vulkan`.
+2. Run `CnaInputTests`.
+3. Record result.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `cmake-build-input-vulkan`
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-005 — bgfx build gate `[ ]`
+**Goal:** Re-confirm the bgfx backend build (from P8-037) still passes after all subsequent Phase 9-11 changes.
+
+**Steps:**
+1. Rebuild `cmake-build-input-bgfx`.
+2. Run `CnaInputTests`.
+3. Record result.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `cmake-build-input-bgfx`
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-006 — SDL renderer build gate `[ ]`
+**Goal:** Re-confirm the SDL_RENDERER backend build (from P8-038) still passes after all subsequent Phase 9-11 changes.
+
+**Steps:**
+1. Rebuild `cmake-build-input-sdlrenderer`.
+2. Run `CnaInputTests`.
+3. Record result.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `cmake-build-input-sdlrenderer`
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-007 — Focused Input tests final gate `[ ]`
+**Goal:** Run the `CnaInputTests` selector one final time on the default debug build as the last word on Input correctness.
+
+**Steps:**
+1. Run the canonical Input test selector.
+2. Record full pass/fail counts and command.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- (none)
+
+**Tests:**
+- `CnaInputTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-008 — Full CNA test suite final gate `[ ]`
+**Goal:** Run the complete CNA test suite one final time to confirm no non-Input regression was introduced.
+
+**Steps:**
+1. Run the full test suite.
+2. Record full pass/fail counts and command.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- (none)
+
+**Tests:**
+- `ctest (full suite)`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-009 — Sanitizer result final gate `[ ]`
+**Goal:** Re-run the ASan/UBSan builds from Phase 9 one final time and record a clean (or explicitly triaged) result.
+
+**Steps:**
+1. Rebuild and run the sanitizer configuration(s).
+2. Record full output.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `cmake-build-input-asan`
+
+**Tests:**
+- `CnaInputTests (sanitizers)`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-010 — Public API freeze result `[ ]`
+**Goal:** Confirm the signature-freeze tests (strict-XNA and CNA extension) both pass as the final API-stability gate.
+
+**Steps:**
+1. Run the freeze test suites.
+2. Record result.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- (none)
+
+**Tests:**
+- `PublicApiInputSignatureFreezeTests`
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-011 — Documentation freeze result `[ ]`
+**Goal:** Confirm every doc touched in Phase 10 is internally consistent and committed.
+
+**Steps:**
+1. Re-read all ten Input docs.
+2. Confirm no TODO/FIXME/stale-plan-reference remains.
+3. Record result.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `docs`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-012 — Manual validation status summary `[ ]`
+**Goal:** Summarize the real (not speculative) state of all 15 Phase 11 hardware checks — how many were actually performed vs still blocked.
+
+**Steps:**
+1. Read the Result field of every P11-* task.
+2. Tally performed vs blocked.
+3. Record the tally here plainly, including if the count is 0/15.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `docs/input-manual-verification-results.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-013 — Known risk summary `[ ]`
+**Goal:** Compile a single list of every unresolved risk/deferred item surfaced across Phases 1-11's checkpoint tasks.
+
+**Steps:**
+1. Read every phase checkpoint task's Result field.
+2. Compile the union of deferred/open items into one list.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-014 — Merge/no-merge recommendation `[ ]`
+**Goal:** Based on P12-001..013's actual results (not aspirational status), state a clear merge or no-merge recommendation with reasoning.
+
+**Steps:**
+1. Weigh build/test/sanitizer gate results against the known-risk summary.
+2. State the recommendation explicitly — do not leave it implicit.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** This is a recommendation for the user, who makes the final merge decision per CLAUDE.md/session convention.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P12-015 — Final plan_input.md completion statement `[ ]`
+**Goal:** Write the closing statement of this plan: total tasks completed vs blocked, and confirmation that CNA Input and NOXNA Input extensions were preserved and hardened, not removed.
+
+**Steps:**
+1. Tally final status counts across all 500 tasks.
+2. State explicitly that no NOXNA Input extension was removed during this pass.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- `plan_input.md`
+
+**Tests:**
+- (none — audit-only task; add a test if a fix is required)
+
+**Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## Plan-level notes
+
+- This file is regenerated task-by-task, not rewritten wholesale, as work proceeds — each task's
+  own section is the append point for its Result.
+- Cross-references between tasks use `[[P#-###]]` — a plain task-ID pointer, not a wiki link.
+- If a task is found to be inapplicable after investigation (e.g. a listed test file turns out
+  not to exist and the behavior is covered elsewhere), do not silently delete the task — mark it
+  `[x]` with a Result explaining the finding, or `[!]` if it surfaces a real gap needing a new
+  follow-up task appended at the end of its phase.

@@ -12,6 +12,8 @@ vendor/wgpu-native/
 cmake-build-input-easygl/*
 cmake-build-input-vulkan/*
 cmake-build-input-bgfx/*
+cmake-build-input-sdlrenderer/*
+cmake-build-input-asan/*
 cmake-build-android/*
 cmake-build-devices-asan/*
 cmake-build-devices-tsan/*

@@ -63,6 +63,13 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     void TouchCollection::CopyTo(std::vector<TouchLocation>& array, int arrayIndex) const
     {
+        // C++ deviation from .NET List<T>.CopyTo (which overwrites pre-allocated slots of a
+        // fixed-size array): CNA's destination is a growable std::vector, so this INSERTS at
+        // arrayIndex. Guard the index — `array.begin() + arrayIndex` with arrayIndex < 0 or
+        // > size() forms an invalid iterator and std::vector::insert is undefined behavior.
+        // FNA throws ArgumentOutOfRangeException for a bad index; we map that to std::out_of_range.
+        if (arrayIndex < 0 || static_cast<std::size_t>(arrayIndex) > array.size())
+            throw std::out_of_range("TouchCollection::CopyTo: arrayIndex is out of range");
         for (const auto& t : touches_)
             array.insert(array.begin() + arrayIndex++, t);
     }

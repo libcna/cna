@@ -87,4 +87,71 @@ namespace Microsoft::Xna::Framework::Input
     {
         return CNA::Internal::Input::SdlInputBridge::GetAccelerometer(playerIndex, accel);
     }
+
+    int GamePad::GetPlayerIndexEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetPlayerIndex(playerIndex);
+    }
+
+    bool GamePad::SetPlayerIndexEXT(PlayerIndex playerIndex, int index)
+    {
+        return CNA::Internal::Input::SdlInputBridge::SetPlayerIndex(playerIndex, index);
+    }
+
+    CNA::Input::PowerStateEXT GamePad::GetPowerInfoEXT(PlayerIndex playerIndex, int& percent)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetPowerInfo(playerIndex, percent);
+    }
+
+    CNA::Input::GamePadButtonLabelEXT GamePad::GetButtonLabelEXT(PlayerIndex playerIndex, Buttons button)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetButtonLabel(playerIndex, button);
+    }
+
+    std::string GamePad::GetNameEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetName(playerIndex);
+    }
+
+    std::string GamePad::GetPathEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetPath(playerIndex);
+    }
+
+    std::string GamePad::GetSerialEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetSerial(playerIndex);
+    }
+
+    std::uint16_t GamePad::GetFirmwareVersionEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetFirmwareVersion(playerIndex);
+    }
+
+    std::uint64_t GamePad::GetSteamHandleEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetSteamHandle(playerIndex);
+    }
+
+    CNA::Input::GamePadConnectionStateEXT GamePad::GetConnectionStateEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetConnectionState(playerIndex);
+    }
+
+    int GamePad::GetTouchpadCountEXT(PlayerIndex playerIndex)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetTouchpadCount(playerIndex);
+    }
+
+    int GamePad::GetTouchpadFingerCountEXT(PlayerIndex playerIndex, int touchpad)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetTouchpadFingerCount(playerIndex, touchpad);
+    }
+
+    bool GamePad::GetTouchpadFingerEXT(PlayerIndex playerIndex, int touchpad, int finger,
+                                       bool& down, float& x, float& y, float& pressure)
+    {
+        return CNA::Internal::Input::SdlInputBridge::GetTouchpadFinger(
+            playerIndex, touchpad, finger, down, x, y, pressure);
+    }
 }

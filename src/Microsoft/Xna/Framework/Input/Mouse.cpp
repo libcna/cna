@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SystemMouseBackend.hpp"
 #include <SDL3/SDL.h>
 
 namespace
@@ -59,7 +60,8 @@ namespace
 namespace Microsoft::Xna::Framework::Input
 {
     std::uintptr_t           Mouse::windowHandle_           = 0;
-    std::function<void(int)> Mouse::ClickedEXT              = nullptr;
+    // DEC-06: ClickedEXT is multicast (MulticastAction<int>), matching FNA's Action<int>.
+    System::MulticastAction<int> Mouse::ClickedEXT;
 
     std::uintptr_t Mouse::getWindowHandleProperty()
     {
@@ -98,7 +100,15 @@ namespace Microsoft::Xna::Framework::Input
 
         // ...but warp the OS cursor in window space: convert logical -> window so the cursor lands
         // at the correct physical pixel on a scaled/letterboxed window (a-0001).
+        // Guard the same way getIsRelativeMouseModeEXTProperty/setIsRelativeMouseModeEXTProperty do:
+        // if there is no window (no published handle and no focused window), never hand SDL a null
+        // window — SDL_WarpMouseInWindow(NULL, ...) is undefined/implementation-dependent. Internal
+        // state was already updated above, so GetState() still reflects the requested position.
         SDL_Window* window = resolve_mouse_window(windowHandle_);
+        if (window == nullptr)
+        {
+            return;
+        }
         float windowX, windowY;
         logical_to_window(window, static_cast<float>(x), static_cast<float>(y), windowX, windowY);
         SDL_WarpMouseInWindow(window, windowX, windowY);
@@ -127,6 +137,8 @@ namespace Microsoft::Xna::Framework::Input
         {
             return false;
         }
+        // DEC-14: read SDL live at the API boundary (no cache); InputManager keeps its own flag,
+        // written by the setter, to gate relative-delta accumulation without depending on SDL.
         return SDL_GetWindowRelativeMouseMode(window);
     }
 
@@ -143,9 +155,35 @@ namespace Microsoft::Xna::Framework::Input
         CNA::Internal::Input::InputManager::SetMouseRelativeMode(value);
     }
 
+    bool Mouse::SetCaptureEXT(const bool enabled)
+    {
+        return CNA::Internal::Input::system_mouse_backend().CaptureMouse(enabled);
+    }
+
+    void Mouse::GetGlobalPositionEXT(int& x, int& y)
+    {
+        float fx = 0.0f;
+        float fy = 0.0f;
+        CNA::Internal::Input::system_mouse_backend().GetGlobalMouseState(&fx, &fy);
+        x = static_cast<int>(fx);
+        y = static_cast<int>(fy);
+    }
+
+    bool Mouse::WarpGlobalEXT(const int x, const int y)
+    {
+        return CNA::Internal::Input::system_mouse_backend().WarpMouseGlobal(
+            static_cast<float>(x), static_cast<float>(y));
+    }
+
     void Mouse::INTERNAL_onClicked(int button)
     {
         if (ClickedEXT)
             ClickedEXT(button);
+    }
+
+    void Mouse::ResetForTests()
+    {
+        windowHandle_ = 0;
+        ClickedEXT    = nullptr;
     }
 }

@@ -86,6 +86,38 @@ TEST(MouseStateTest, EightArgConstructorSetsEveryFieldInTheRightSlot)
     EXPECT_EQ(state.getRightButtonProperty(), ButtonState::Pressed);
     EXPECT_EQ(state.getXButton1Property(), ButtonState::Released);
     EXPECT_EQ(state.getXButton2Property(), ButtonState::Pressed);
+
+    // N-005: the 8-arg XNA ctor leaves the NOXNA/EXT horizontal wheel at 0.
+    EXPECT_EQ(state.getHorizontalScrollWheelValueEXTProperty(), 0);
+}
+
+// N-005: the 9-arg NOXNA/EXT ctor sets the horizontal wheel while keeping every XNA field in the same slot.
+TEST(MouseStateTest, NineArgConstructorAlsoSetsHorizontalScrollWheelEXT)
+{
+    const MouseState state(10, 20, 30,
+                            ButtonState::Pressed, ButtonState::Released, ButtonState::Pressed,
+                            ButtonState::Released, ButtonState::Pressed,
+                            240); // horizontal wheel
+
+    EXPECT_EQ(state.getXProperty(), 10);
+    EXPECT_EQ(state.getScrollWheelValueProperty(), 30);
+    EXPECT_EQ(state.getHorizontalScrollWheelValueEXTProperty(), 240);
+}
+
+// N-005: the horizontal wheel is a NOXNA/EXT extra field deliberately EXCLUDED from Equals and GetHashCode,
+// so those stay byte-identical to FNA (which has no horizontal wheel). Two states differing only in the
+// horizontal wheel are equal and hash equal.
+TEST(MouseStateTest, HorizontalScrollWheelEXTIsExcludedFromEqualityAndHash)
+{
+    const MouseState a(1, 2, 3, ButtonState::Pressed, ButtonState::Released, ButtonState::Released,
+                       ButtonState::Released, ButtonState::Released, 120);
+    const MouseState b(1, 2, 3, ButtonState::Pressed, ButtonState::Released, ButtonState::Released,
+                       ButtonState::Released, ButtonState::Released, 999);
+
+    EXPECT_TRUE(a.Equals(b));
+    EXPECT_TRUE(a == b);
+    EXPECT_FALSE(a != b);
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
 }
 
 TEST(MouseStateTest, EqualsAndOperatorsReturnTrueForIdenticalStates)
@@ -237,6 +269,44 @@ TEST(MouseTest, InternalOnClickedFiresClickedEXTWithButtonIndex)
     ResetMouseState();
 }
 
+// DEC-06: ClickedEXT is a multicast System::MulticastAction<int> (matches FNA's Action<int>).
+TEST(MouseTest, ClickedEXTIsMulticastAndInvokesAllSubscribersInOrder)
+{
+    ResetMouseState();
+    Mouse::ClickedEXT = nullptr;
+
+    std::vector<int> order;
+    Mouse::ClickedEXT += [&order](int) { order.push_back(1); };
+    Mouse::ClickedEXT += [&order](const int button) { order.push_back(100 + button); };
+
+    Mouse::INTERNAL_onClicked(3);
+
+    ASSERT_EQ(order.size(), 2u) << "both subscribers must fire (multicast, matching FNA)";
+    EXPECT_EQ(order[0], 1);
+    EXPECT_EQ(order[1], 103);
+
+    ResetMouseState();
+}
+
+// DEC-06: `=` replaces the whole invocation list (C# `field = handler;`), while `+=` adds.
+TEST(MouseTest, ClickedEXTAssignmentReplacesAllSubscribers)
+{
+    ResetMouseState();
+    Mouse::ClickedEXT = nullptr;
+
+    int viaAdded = 0;
+    int viaAssigned = 0;
+    Mouse::ClickedEXT += [&viaAdded](int) { ++viaAdded; };
+    Mouse::ClickedEXT = [&viaAssigned](int) { ++viaAssigned; }; // replaces the += subscriber above
+
+    Mouse::INTERNAL_onClicked(0);
+
+    EXPECT_EQ(viaAdded, 0) << "assignment must replace, not append";
+    EXPECT_EQ(viaAssigned, 1);
+
+    ResetMouseState();
+}
+
 TEST(MouseTest, InternalOnClickedIsSafeWithNoSubscriber)
 {
     ResetMouseState();
@@ -305,6 +375,39 @@ TEST(MouseTest, IsRelativeMouseModeEXTRoundTripsThroughRealWindow)
     ResetMouseState();
 }
 
+// DEC-14: the public setter keeps InputManager's relative-mode flag in sync with SDL, so there is no
+// cache desync reachable through CNA's own API — after setIsRelativeMouseModeEXTProperty(true), GetState
+// reports accumulated relative deltas.
+TEST(MouseTest, SetIsRelativeMouseModeEXTSyncsInputManagerDeltaHandling)
+{
+    ResetMouseState();
+
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+    SDL_Window* window = SDL_CreateWindow("MouseInputTests", 64, 64, SDL_WINDOW_HIDDEN);
+    if (!window)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+    }
+    Mouse::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
+
+    Mouse::setIsRelativeMouseModeEXTProperty(true); // also enables InputManager's relative mode
+    CNA::Internal::Input::InputManager::AddMouseRelativeDelta(5.0f, 6.0f);
+
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state.getXProperty(), 5);
+    EXPECT_EQ(state.getYProperty(), 6);
+
+    Mouse::setIsRelativeMouseModeEXTProperty(false);
+    Mouse::setWindowHandleProperty(0);
+    SDL_DestroyWindow(window);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    ResetMouseState();
+}
+
 TEST(MouseTest, SetPositionIsNoOpWhenRelativeModeEnabled)
 {
     ResetMouseState();
@@ -345,6 +448,29 @@ TEST(MouseTest, SetRelativeMouseModeIsSafeNoOpWithNoWindow)
 
     EXPECT_NO_THROW(Mouse::setIsRelativeMouseModeEXTProperty(true));
     EXPECT_FALSE(Mouse::getIsRelativeMouseModeEXTProperty());
+
+    ResetMouseState();
+}
+
+TEST(MouseTest, SetPositionIsSafeAndUpdatesInternalStateWithNoWindow)
+{
+    // P3-001: with no published handle and no focused window, resolve_mouse_window() returns null.
+    // SetPosition must NOT hand a null window to SDL_WarpMouseInWindow (undefined), yet must still
+    // update the internal position so GetState() reflects the requested logical coordinate.
+    ResetMouseState();
+    ASSERT_EQ(Mouse::getWindowHandleProperty(), 0u);
+
+    EXPECT_NO_THROW(Mouse::SetPosition(123, 456));
+
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state.getXProperty(), 123);
+    EXPECT_EQ(state.getYProperty(), 456);
+
+    // Negative and large coordinates must be equally safe with no window (no crash, state tracks).
+    EXPECT_NO_THROW(Mouse::SetPosition(-100, -100));
+    EXPECT_NO_THROW(Mouse::SetPosition(1 << 20, 1 << 20));
+    EXPECT_EQ(Mouse::GetState().getXProperty(), 1 << 20);
+    EXPECT_EQ(Mouse::GetState().getYProperty(), 1 << 20);
 
     ResetMouseState();
 }

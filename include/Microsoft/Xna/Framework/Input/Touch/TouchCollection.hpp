@@ -27,7 +27,17 @@ namespace Microsoft::Xna::Framework::Input::Touch
         [[nodiscard]] bool getIsConnectedProperty() const;
 
         /**
-         * @brief Always returns true — this collection does not support mutation.
+         * @brief Returns whether the collection reports itself read-only. Always true, matching
+         *        XNA/FNA's `TouchCollection.IsReadOnly` (hard-coded to `true`).
+         *
+         * @note This flag is advisory, exactly as in FNA: FNA's `IsReadOnly` getter returns `true`,
+         *       yet its `Add`/`Clear`/`Insert`/`Remove`/`RemoveAt` methods still mutate the backing
+         *       `List<TouchLocation>` whenever it is non-null (i.e. the state returned by
+         *       `TouchPanel::GetState`). CNA is faithful to that — this getter returns `true` while
+         *       the mutation methods below actually succeed. The one unavoidable C++ deviation is the
+         *       default-constructed collection: FNA leaves its backing list `null` so mutating it
+         *       throws `NullReferenceException`; CNA's backing is a value `std::vector`, so a default
+         *       collection is simply empty and mutable instead of null-and-throwing.
          * @return Always true.
          */
         [[nodiscard]] bool getIsReadOnlyProperty() const;

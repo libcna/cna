@@ -1,0 +1,125 @@
+# INPUT-CI-001 / INPUT-CI-002 / INPUT-CI-005 — CI for the Input track.
+#
+# Matrix of build configurations, each running the (backend-agnostic) input test suite headless:
+#   - EasyGL / SDL_RENDERER / Vulkan / bgfx : the four graphics backends.
+#   - ASan+UBSan (on EasyGL)                : built with -DCNA_SANITIZE=address,undefined; any UB /
+#                                             memory error fails the job (halt_on_error=1).
+# All sibling repos (sharp-runtime, easy-gl, meta-gl) are public and clone over HTTPS with no token.
+# third_party/enet is committed here; SDL/SDL_image/SDL_mixer/googletest are submodules; bgfx is
+# FetchContent'd at configure time. The prebuilt SDL is cached (built uninstrumented, shared by all).
+name: input-ci
+
+on:
+  push:
+    branches: [feature/input, develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: input-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  input-tests:
+    name: ${{ matrix.name }} (Linux)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: EasyGL
+            backend: EASYGL
+            sanitize: ""
+            asan_options: ""
+            ubsan_options: ""
+          - name: ASan+UBSan
+            backend: EASYGL
+            sanitize: "address,undefined"
+            asan_options: "detect_leaks=0:halt_on_error=1"
+            ubsan_options: "print_stacktrace=1:halt_on_error=1"
+          - name: SDL_RENDERER
+            backend: SDL_RENDERER
+            sanitize: ""
+            asan_options: ""
+            ubsan_options: ""
+          - name: Vulkan
+            backend: VULKAN
+            sanitize: ""
+            asan_options: ""
+            ubsan_options: ""
+          - name: bgfx
+            backend: BGFX
+            sanitize: ""
+            asan_options: ""
+            ubsan_options: ""
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - name: Checkout cna (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone sibling repos (public, no token needed)
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          for repo in sharp-runtime easy-gl meta-gl; do
+            git clone --depth 1 --branch develop \
+              "https://github.com/openeggbert/${repo}.git" "${repo}"
+          done
+
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build pkg-config xvfb \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libvulkan-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev libxtst-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+
+      - name: Record SDL submodule commit (for the cache key)
+        id: sdlsha
+        run: echo "sha=$(git -C third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache prebuilt SDL (built once from the submodule, reused across runs)
+        uses: actions/cache@v4
+        with:
+          path: .sdl-prebuilt-Linux-x86_64
+          key: sdl-${{ runner.os }}-${{ steps.sdlsha.outputs.sha }}
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCNA_GRAPHICS_BACKEND=${{ matrix.backend }} \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_SANITIZE=${{ matrix.sanitize }}
+
+      - name: Build CnaTests
+        run: cmake --build build --target CnaTests
+
+      # A virtual X server (Xvfb) provides real windows/cursors headlessly (the SDL "dummy" driver has
+      # null cursors, which fails the MouseCursor tests). For the ASan+UBSan entry, halt_on_error=1 turns
+      # any UB / memory error into a job failure.
+      # Selects the input subset via the `input` CTest label (INPUT-BUILD-003) — the canonical filter
+      # lives in exactly one place, CMakeLists.txt (CNA_INPUT_TEST_FILTER); the CnaInputTests entry runs
+      # it shuffled x3 for order-independence.
+      - name: Run input tests (ctest -L input, headless via Xvfb, shuffled)
+        env:
+          SDL_VIDEODRIVER: x11
+          SDL_AUDIODRIVER: dummy
+          ASAN_OPTIONS: ${{ matrix.asan_options }}
+          UBSAN_OPTIONS: ${{ matrix.ubsan_options }}
+        run: xvfb-run -a ctest --test-dir build -L input --output-on-failure

@@ -30,8 +30,6 @@ namespace CNA::Internal::Input
 
     /**
      * @brief Internal identification of supported mouse buttons.
-     *
-     * @note Status: IMPLEMENTED
      */
     enum class MouseButton
     {
@@ -44,8 +42,6 @@ namespace CNA::Internal::Input
 
     /**
      * @brief Internal identification of supported gamepad buttons.
-     *
-     * @note Status: PARTIAL
      */
     enum class GamePadButton
     {
@@ -74,8 +70,6 @@ namespace CNA::Internal::Input
 
     /**
      * @brief Internal identification of supported gamepad axes.
-     *
-     * @note Status: PARTIAL
      */
     enum class GamePadAxis
     {
@@ -107,8 +101,6 @@ namespace CNA::Internal::Input
      *       `Game::PollEvents()`, reads from game `Update()`/`Draw()`, all on the same thread
      *       (matching XNA/FNA and required by SDL's event model). See `docs/input-backend.md` §6.
      *       Do not call `Set*`/`Get*` from a background thread. No locking is added.
-     *
-     * @note Status: PARTIAL
      */
     class InputManager
     {
@@ -132,6 +124,11 @@ namespace CNA::Internal::Input
         static void AddScrollWheelDelta(int delta);
 
         /**
+         * @brief NOXNA/EXT: adds a horizontal mouse wheel delta (SDL wheel.x) to internal state.
+         */
+        static void AddHorizontalScrollWheelDelta(int delta);
+
+        /**
          * @brief Toggles FNA extension relative-mouse-mode accumulation and flushes
          * any pending relative delta (matches SDL3_FNAPlatform's flush-on-enable).
          */
@@ -151,11 +148,16 @@ namespace CNA::Internal::Input
 
         /**
          * @brief Updates one touch point in the internal touch state.
+         * @param touchId The touch id.
+         * @param state The touch location state.
+         * @param position The touch position in pixels.
+         * @param pressure NOXNA/EXT: SDL finger pressure (0..1); surfaced via TouchLocation::getPressureEXT.
          */
         static void SetTouchState(
             int touchId,
             Microsoft::Xna::Framework::Input::Touch::TouchLocationState state,
-            const Microsoft::Xna::Framework::Vector2& position
+            const Microsoft::Xna::Framework::Vector2& position,
+            float pressure = 0.0f
         );
 
         /**
@@ -197,11 +199,14 @@ namespace CNA::Internal::Input
         static Microsoft::Xna::Framework::Input::Touch::TouchCollection GetTouchState();
 
         /**
-         * @brief Returns a snapshot of current gamepad state for one player.
+         * @brief Returns whether any touch point is currently tracked, without mutating state.
+         *
+         * Unlike GetTouchState(), this does not advance previous-location tracking, consume
+         * Released touches, or promote Pressed to Moved. Safe to call from capability queries.
+         *
+         * @return true if at least one touch location is currently tracked.
          */
-        static Microsoft::Xna::Framework::Input::GamePadState GetGamePadState(
-            Microsoft::Xna::Framework::PlayerIndex playerIndex
-        );
+        static bool HasAnyTouch();
 
         /**
          * @brief Returns raw gamepad values (no dead-zone applied) for one player.
@@ -221,5 +226,16 @@ namespace CNA::Internal::Input
          * leaking state into later tests. Not part of the runtime input path — for tests only.
          */
         static void ResetForTests();
+
+        /**
+         * @brief Test-only: resets ALL input subsystems' process-wide state in a deterministic order.
+         *
+         * Central entry point that fans out to every input subsystem so a test does not have to
+         * know (and remember) the full list of individual reset helpers: SdlInputBridge file-static
+         * state, this InputManager singleton, TouchPanel statics (incl. display metrics + window
+         * handle), GestureDetector statics, Mouse statics, and TextInputEXT callbacks/handle.
+         * Call this in a fixture SetUp()/TearDown() to guarantee input tests are order-independent.
+         */
+        static void ResetAllForTests();
     };
 }

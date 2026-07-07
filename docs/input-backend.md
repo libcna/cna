@@ -1,8 +1,17 @@
 # Input Backend Architecture
 
+> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+
 Describes how CNA wires SDL3 input events to the `Microsoft::Xna::Framework::Input` (and
 `Input::Touch`) public API. Reference implementation: `feature/input` branch, `plan_input.md`
-(Phases I1–I6, tasks 700–777). FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+(Phases I1–I6, legacy tasks 700–777). FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+
+> **Task-number scheme (INPUT-AUDIT-004).** Bare 3-digit numbers in this doc-set (e.g. "task 734",
+> "tasks 700–777") are the **legacy pre-`INPUT-*` input numbering** and are historical provenance only —
+> the current, authoritative input backlog uses the `INPUT-*` scheme in `plan_input.md`. These legacy
+> numbers are **not** related to the identically-numbered items in the Graphics track (`GRAPHICS_TASKS.md`,
+> e.g. tasks 710–717 or 868–872 there mean SDL_Renderer / DepthStencil work, not input). When a doc needs
+> to point at Graphics work it names `GRAPHICS_TASKS.md` explicitly; a bare number here always means input.
 
 ---
 
@@ -167,7 +176,7 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
   calls (`SDL_WarpMouseInWindow`, `SDL_Get/SetWindowRelativeMouseMode`) rather than stubs
   (Phase I4, tasks 745–749).
 - `SetPosition` converts the caller's logical coordinates to window space before the warp
-  (`plan.md` a-0001, task 846), so the OS cursor lands at the correct pixel on a scaled window: the
+  (INPUT-MOUSE-002 (decision a-0001)), so the OS cursor lands at the correct pixel on a scaled window: the
   SDL_Renderer path uses `SDL_RenderCoordinatesToWindow` (**offset-aware**, so true-letterbox bars
   map correctly — verified for a 200×100 window in task 858), and EasyGL uses its
   `TransformLogicalToWindow` (a uniform height-scale with no offset, which is exact for EasyGL's
@@ -197,21 +206,22 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
 - `SDL_EVENT_FINGER_*` feed `TouchPanel::INTERNAL_onTouchEvent`, which drives
   `GestureDetector`'s state machine directly — this is what makes Tap, DoubleTap, Hold,
   Horizontal/Vertical/Free drag, Flick, Pinch, and PinchComplete recognition work end-to-end
-  (Phase I2, tasks 710–722; previously the pipeline was entirely dead — no caller ever reached
-  `GestureDetector`).
+  (Phase I2, the INPUT-TOUCH-* / INPUT-GESTURE-* cluster; previously the pipeline was entirely dead —
+  no caller ever reached `GestureDetector`).
 - `TouchDeviceExists` only becomes true after the *first* touch event, matching FNA's own
   comment ("Windows only notices a touch screen once it's touched").
 - `TouchPanel::GetState()` reports `TouchLocation`s with their previous location preserved for
   Moved/Released touches, so `TryGetPreviousLocation()` works on the real event-driven path —
   `InputManager` now stores each touch's previous state/position and advances it per snapshot
-  (tasks 868–872). A new Pressed touch has no previous, matching FNA.
+  (INPUT-TOUCH-007; the Phase I12 event-driven previous-location fix). A new Pressed touch has no
+  previous, matching FNA.
 - Known deviation (behaviourally equivalent, not a gap): `GetState()` reads `InputManager`'s
   event-driven snapshot rather than FNA's per-frame `SetFinger`/`SDL_GetTouchFingers` poll of
-  `touches_` — see §3. The event-driven touch map is also not capped at `MAX_TOUCHES` (8) the way
-  FNA is.
-- `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and
-  `MAX_TOUCHES` when connected, matching FNA's `touchDeviceExists ? 4 : 0` (fixed in task 790;
-  task 721 originally noted the pre-fix bug).
+  `touches_` — see §3. The event-driven `InputManager` map is internally unbounded, but
+  `GetState()` caps the public snapshot at `MAX_TOUCHES` (8) to match FNA (DEC-10, 2026-07-05).
+- `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and **4** when
+  connected, matching FNA's `touchDeviceExists ? 4 : 0` (DEC-09, 2026-07-05 — XNA always reports 4;
+  the value is a fixed XNA-compat constant, not the `MAX_TOUCHES` tracking cap).
 
 ### TextInputEXT
 
@@ -238,19 +248,18 @@ git submodule update --init --recursive   # first time only (see README)
 cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-input-easygl --target CnaTests -j"$(nproc)"
 
-./cmake-build-input-easygl/CnaTests \
-  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*'
+# Canonical input-test selector (INPUT-BUILD-003): runs the single-source-of-truth filter
+# (CNA_INPUT_TEST_FILTER in CMakeLists.txt), shuffled x3 for order-independence.
+ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 ```
 
-This filter selects the 165 input-related tests out of the full suite. To shake out
-order-dependence in the process-wide static input state (`InputManager`, `GestureDetector`, and
-the `MouseCursor` stock-cursor singletons all persist for the process lifetime), add:
-
-```bash
-./cmake-build-input-easygl/CnaTests \
-  --gtest_filter='*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*' \
-  --gtest_shuffle --gtest_repeat=10
-```
+`ctest -L input` is the one authoritative way to run the input subset; the token list lives only in
+`CMakeLists.txt` (`CNA_INPUT_TEST_FILTER`) and the **authoritative counts** live in
+`docs/input-build-and-test.md` (§Test counts). Order-dependence in the process-wide static input state
+(`InputManager`, `GestureDetector`, and the `MouseCursor` stock-cursor singletons all persist for the
+process lifetime) is shaken out by the baked-in `--gtest_shuffle --gtest_repeat=5` — the standardized
+determinism gate (INPUT-BUILD-009); bump the repeat higher via a direct binary invocation with the same
+filter variable if you want more iterations.
 
 Swap `-DCNA_GRAPHICS_BACKEND=EASYGL` for `VULKAN` or `BGFX` to verify the same input tests on the
 other backends (bgfx adds 4 backend-specific, input-unrelated tests). The full suite is just
@@ -284,3 +293,12 @@ subsequent mutation is unsynchronized — which is fine under the single-thread 
 from a background thread while the game loop is pumping events — that is outside the XNA input
 contract and would be an unsynchronized data race. No locking is added because the single-thread
 model makes it unnecessary; adding it would only cost per-frame overhead.
+
+**Event-pump freshness (INPUT-KBD-022).** Because writes are event-driven, every `Get*State()`
+snapshot — keyboard, mouse, gamepad, touch — is only as fresh as the **last `Game::PollEvents()`**
+(pumped once per `Game::Tick()`, before `Update()`/`Draw()`). CNA does **not** re-query SDL inside
+`Get*State()` (FNA does poll fresh; see §3), so a key pressed between two frames is not observed
+until the next tick pumps its `SDL_EVENT_KEY_DOWN`. Within a single `Update()` the state is stable.
+This is the authoritative statement of both properties (single-thread + per-tick freshness); the
+`InputManager` class doc and [`docs/platform-input-notes.md`](platform-input-notes.md) (§Cross-cutting)
+point here.

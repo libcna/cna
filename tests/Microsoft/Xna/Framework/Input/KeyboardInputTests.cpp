@@ -199,6 +199,23 @@ TEST(KeyboardStateTest, IndexerMatchesGetItemAndIsKeyDown)
     EXPECT_TRUE(state.IsKeyUp(Keys::B));
 }
 
+// A2-001: dedicated IsKeyUp coverage — it is the exact complement of IsKeyDown (FNA
+// KeyboardState.cs:125 `IsKeyUp => !IsKeyDown`). A pressed key reads Up=false / Down=true; an unpressed
+// key reads Up=true / Down=false; for every key exactly one of IsKeyDown/IsKeyUp is true.
+TEST(KeyboardStateTest, IsKeyUpIsTheComplementOfIsKeyDown)
+{
+    const KeyboardState state{Keys::A, Keys::Space};
+
+    EXPECT_FALSE(state.IsKeyUp(Keys::A));       // pressed -> not up
+    EXPECT_TRUE(state.IsKeyDown(Keys::A));
+    EXPECT_TRUE(state.IsKeyUp(Keys::B));        // unpressed -> up
+    EXPECT_FALSE(state.IsKeyDown(Keys::B));
+    for (const Keys k : {Keys::A, Keys::Space, Keys::B, Keys::Enter})
+    {
+        EXPECT_NE(state.IsKeyDown(k), state.IsKeyUp(k)) << "exactly one of Down/Up must hold";
+    }
+}
+
 // ===========================================================================
 // KeyboardState — GetPressedKeys ordering
 // ===========================================================================
@@ -272,6 +289,64 @@ TEST(KeyboardStateTest, GetHashCodeMatchesFNAWordXorFormula)
 }
 
 // ===========================================================================
+// KeyboardState — invalid / out-of-range Keys hardening (P2-002)
+// ===========================================================================
+//
+// FNA's KeyboardState stores pressed keys as eight 32-bit bitfields (keys0..keys7) covering
+// Keys values 0..255; InternalSetKey switches on ((int)key)>>5 with cases 0..7 and no default,
+// so any Keys value outside 0..255 maps to no bitfield and is silently ignored. CNA's
+// GetHashCode mirrors that with an 8-word array indexed by value>>5; without a range guard an
+// out-of-range Keys value (>=256, or a negative value that wraps to a huge unsigned) would
+// write past the array. These tests pin the guard: constructing a state from such values and
+// exercising every accessor must not crash or read/write out of bounds.
+
+TEST(KeyboardStateTest, GetHashCodeIgnoresOutOfRangeKeysValue)
+{
+    // 999 >> 5 == 31, far past the 8-word array; the guard must drop it (contributes no bit),
+    // so the hash equals that of the same state without the out-of-range key.
+    const KeyboardState withInvalid{Keys::A, static_cast<Keys>(999)};
+    const KeyboardState withoutInvalid{Keys::A};
+    EXPECT_EQ(withInvalid.GetHashCode(), withoutInvalid.GetHashCode());
+}
+
+TEST(KeyboardStateTest, GetHashCodeIgnoresNegativeKeysValue)
+{
+    // A negative Keys value casts to a huge unsigned (>= 256) and must be guarded out, not
+    // shifted into an out-of-bounds index.
+    const KeyboardState withNegative{Keys::A, static_cast<Keys>(-1)};
+    const KeyboardState onlyValid{Keys::A};
+    EXPECT_EQ(withNegative.GetHashCode(), onlyValid.GetHashCode());
+}
+
+TEST(KeyboardStateTest, GetHashCodeIgnoresBoundaryKeysValue256)
+{
+    // 256 is the first value past the 0..255 range (256>>5 == 8, one past words[7]); it must be
+    // ignored so the hash matches the empty state.
+    const KeyboardState boundary{static_cast<Keys>(256)};
+    EXPECT_EQ(boundary.GetHashCode(), KeyboardState{}.GetHashCode());
+}
+
+TEST(KeyboardStateTest, AccessorsAreSafeForOutOfRangeKeysValues)
+{
+    // Every public accessor must be memory-safe for out-of-range/negative/unknown Keys, even
+    // though such a state is not producible from real hardware.
+    const KeyboardState state{static_cast<Keys>(999), static_cast<Keys>(-5),
+                              static_cast<Keys>(70000), Keys::A};
+
+    EXPECT_TRUE(state.IsKeyDown(Keys::A));
+    EXPECT_FALSE(state.IsKeyDown(Keys::B));
+    EXPECT_TRUE(state.IsKeyUp(Keys::B));
+
+    // Querying an out-of-range key must not crash.
+    EXPECT_NO_THROW((void)state.IsKeyDown(static_cast<Keys>(999)));
+    EXPECT_NO_THROW((void)state[static_cast<Keys>(-5)]);
+
+    // GetPressedKeys and GetHashCode must not read/write out of bounds regardless of contents.
+    EXPECT_NO_THROW((void)state.GetPressedKeys());
+    EXPECT_NO_THROW((void)state.GetHashCode());
+}
+
+// ===========================================================================
 // KeyboardState — ToString
 // ===========================================================================
 
@@ -282,22 +357,199 @@ TEST(KeyboardStateTest, ToStringMatchesFNAValueTypeDefault)
 }
 
 // ===========================================================================
-// Keys / KeyState — value spot-checks
+// Keys — exhaustive numeric parity vs FNA / Windows Virtual-Key (INPUT-KBD-001 / INPUT-API-034)
 // ===========================================================================
+//
+// Every Keys enumerator is pinned to its exact FNA Keys.cs / Windows VK value. These values are
+// ABI: games and serialized input bindings persist Keys by number, so a silent renumbering would
+// break save/binding compatibility. This table is the ABI guardrail (INPUT-API-034 for Keys):
+//   * removing a member -> compile error (every member is referenced by name below),
+//   * renumbering a member -> the EXPECT_EQ against its hardcoded literal fails,
+//   * adding/removing a member -> the static_assert size anchor fails until the table is updated.
+// Verified name-for-name and value-for-value against the FNA reference (src/Input/Keys.cs): 160
+// members, byte-identical (no missing member, no value drift on either side).
 
 TEST(KeyboardStateTest, KeysValuesMatchXNANumericConstants)
 {
-    EXPECT_EQ(static_cast<int>(Keys::None), 0);
-    EXPECT_EQ(static_cast<int>(Keys::Back), 8);
-    EXPECT_EQ(static_cast<int>(Keys::Enter), 13);
-    EXPECT_EQ(static_cast<int>(Keys::Space), 32);
-    EXPECT_EQ(static_cast<int>(Keys::D0), 48);
-    EXPECT_EQ(static_cast<int>(Keys::A), 65);
-    EXPECT_EQ(static_cast<int>(Keys::Z), 90);
-    EXPECT_EQ(static_cast<int>(Keys::F1), 112);
-    EXPECT_EQ(static_cast<int>(Keys::F24), 135);
-    EXPECT_EQ(static_cast<int>(Keys::OemClear), 254);
+    struct Case { Keys key; int value; };
+    static const Case cases[] = {
+        {Keys::None, 0},
+        {Keys::Back, 8},
+        {Keys::Tab, 9},
+        {Keys::Enter, 13},
+        {Keys::Pause, 19},
+        {Keys::CapsLock, 20},
+        {Keys::Kana, 21},
+        {Keys::Kanji, 25},
+        {Keys::Escape, 27},
+        {Keys::ImeConvert, 28},
+        {Keys::ImeNoConvert, 29},
+        {Keys::Space, 32},
+        {Keys::PageUp, 33},
+        {Keys::PageDown, 34},
+        {Keys::End, 35},
+        {Keys::Home, 36},
+        {Keys::Left, 37},
+        {Keys::Up, 38},
+        {Keys::Right, 39},
+        {Keys::Down, 40},
+        {Keys::Select, 41},
+        {Keys::Print, 42},
+        {Keys::Execute, 43},
+        {Keys::PrintScreen, 44},
+        {Keys::Insert, 45},
+        {Keys::Delete, 46},
+        {Keys::Help, 47},
+        {Keys::D0, 48},
+        {Keys::D1, 49},
+        {Keys::D2, 50},
+        {Keys::D3, 51},
+        {Keys::D4, 52},
+        {Keys::D5, 53},
+        {Keys::D6, 54},
+        {Keys::D7, 55},
+        {Keys::D8, 56},
+        {Keys::D9, 57},
+        {Keys::A, 65},
+        {Keys::B, 66},
+        {Keys::C, 67},
+        {Keys::D, 68},
+        {Keys::E, 69},
+        {Keys::F, 70},
+        {Keys::G, 71},
+        {Keys::H, 72},
+        {Keys::I, 73},
+        {Keys::J, 74},
+        {Keys::K, 75},
+        {Keys::L, 76},
+        {Keys::M, 77},
+        {Keys::N, 78},
+        {Keys::O, 79},
+        {Keys::P, 80},
+        {Keys::Q, 81},
+        {Keys::R, 82},
+        {Keys::S, 83},
+        {Keys::T, 84},
+        {Keys::U, 85},
+        {Keys::V, 86},
+        {Keys::W, 87},
+        {Keys::X, 88},
+        {Keys::Y, 89},
+        {Keys::Z, 90},
+        {Keys::LeftWindows, 91},
+        {Keys::RightWindows, 92},
+        {Keys::Apps, 93},
+        {Keys::Sleep, 95},
+        {Keys::NumPad0, 96},
+        {Keys::NumPad1, 97},
+        {Keys::NumPad2, 98},
+        {Keys::NumPad3, 99},
+        {Keys::NumPad4, 100},
+        {Keys::NumPad5, 101},
+        {Keys::NumPad6, 102},
+        {Keys::NumPad7, 103},
+        {Keys::NumPad8, 104},
+        {Keys::NumPad9, 105},
+        {Keys::Multiply, 106},
+        {Keys::Add, 107},
+        {Keys::Separator, 108},
+        {Keys::Subtract, 109},
+        {Keys::Decimal, 110},
+        {Keys::Divide, 111},
+        {Keys::F1, 112},
+        {Keys::F2, 113},
+        {Keys::F3, 114},
+        {Keys::F4, 115},
+        {Keys::F5, 116},
+        {Keys::F6, 117},
+        {Keys::F7, 118},
+        {Keys::F8, 119},
+        {Keys::F9, 120},
+        {Keys::F10, 121},
+        {Keys::F11, 122},
+        {Keys::F12, 123},
+        {Keys::F13, 124},
+        {Keys::F14, 125},
+        {Keys::F15, 126},
+        {Keys::F16, 127},
+        {Keys::F17, 128},
+        {Keys::F18, 129},
+        {Keys::F19, 130},
+        {Keys::F20, 131},
+        {Keys::F21, 132},
+        {Keys::F22, 133},
+        {Keys::F23, 134},
+        {Keys::F24, 135},
+        {Keys::NumLock, 144},
+        {Keys::Scroll, 145},
+        {Keys::LeftShift, 160},
+        {Keys::RightShift, 161},
+        {Keys::LeftControl, 162},
+        {Keys::RightControl, 163},
+        {Keys::LeftAlt, 164},
+        {Keys::RightAlt, 165},
+        {Keys::BrowserBack, 166},
+        {Keys::BrowserForward, 167},
+        {Keys::BrowserRefresh, 168},
+        {Keys::BrowserStop, 169},
+        {Keys::BrowserSearch, 170},
+        {Keys::BrowserFavorites, 171},
+        {Keys::BrowserHome, 172},
+        {Keys::VolumeMute, 173},
+        {Keys::VolumeDown, 174},
+        {Keys::VolumeUp, 175},
+        {Keys::MediaNextTrack, 176},
+        {Keys::MediaPreviousTrack, 177},
+        {Keys::MediaStop, 178},
+        {Keys::MediaPlayPause, 179},
+        {Keys::LaunchMail, 180},
+        {Keys::SelectMedia, 181},
+        {Keys::LaunchApplication1, 182},
+        {Keys::LaunchApplication2, 183},
+        {Keys::OemSemicolon, 186},
+        {Keys::OemPlus, 187},
+        {Keys::OemComma, 188},
+        {Keys::OemMinus, 189},
+        {Keys::OemPeriod, 190},
+        {Keys::OemQuestion, 191},
+        {Keys::OemTilde, 192},
+        {Keys::ChatPadGreen, 202},
+        {Keys::ChatPadOrange, 203},
+        {Keys::OemOpenBrackets, 219},
+        {Keys::OemPipe, 220},
+        {Keys::OemCloseBrackets, 221},
+        {Keys::OemQuotes, 222},
+        {Keys::Oem8, 223},
+        {Keys::OemBackslash, 226},
+        {Keys::ProcessKey, 229},
+        {Keys::OemCopy, 242},
+        {Keys::OemAuto, 243},
+        {Keys::OemEnlW, 244},
+        {Keys::Attn, 246},
+        {Keys::Crsel, 247},
+        {Keys::Exsel, 248},
+        {Keys::EraseEof, 249},
+        {Keys::Play, 250},
+        {Keys::Zoom, 251},
+        {Keys::Pa1, 253},
+        {Keys::OemClear, 254},
+    };
+
+    static_assert(sizeof(cases) / sizeof(cases[0]) == 160,
+                  "Keys member count changed - update this FNA parity table deliberately");
+
+    std::unordered_set<int> seen;
+    for (const Case& c : cases)
+    {
+        EXPECT_EQ(static_cast<int>(c.key), c.value);
+        EXPECT_TRUE(seen.insert(c.value).second) << "duplicate Keys numeric value " << c.value;
+    }
+    EXPECT_EQ(seen.size(), 160u) << "every Keys value must be present and distinct";
 }
+
+// ===========================================================================
+// KeyState — value spot-check (exhaustively pinned in the dedicated KeyStateTests suite)
+// ===========================================================================
 
 TEST(KeyboardStateTest, KeyStateValuesMatchXNAConstants)
 {

@@ -99,7 +99,9 @@ namespace Microsoft::Xna::Framework::Input
 
     int GamePadState::GetHashCode() const
     {
-        return buttons_.GetHashCode() ^ (packetNumber_ * 31);
+        // Unsigned wraparound avoids signed-overflow UB in packetNumber_ * 31 (INPUT-BUILD-006).
+        return static_cast<int>(static_cast<unsigned>(buttons_.GetHashCode())
+                                ^ (static_cast<unsigned>(packetNumber_) * 31u));
     }
 
     std::string GamePadState::ToString() const

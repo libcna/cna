@@ -30,6 +30,22 @@ namespace Microsoft::Xna::Framework::Input
     {
     }
 
+    MouseState::MouseState(int x, int y, int scrollWheel,
+                           ButtonState leftButton, ButtonState middleButton,
+                           ButtonState rightButton,
+                           ButtonState xButton1, ButtonState xButton2,
+                           int horizontalScrollWheel)
+        : x_(x), y_(y),
+          leftButton_(leftButton),
+          rightButton_(rightButton),
+          middleButton_(middleButton),
+          xButton1_(xButton1),
+          xButton2_(xButton2),
+          scrollWheelValue_(scrollWheel),
+          horizontalScrollWheelValue_(horizontalScrollWheel)
+    {
+    }
+
     int         MouseState::getXProperty()               const { return x_; }
     int         MouseState::getYProperty()               const { return y_; }
     ButtonState MouseState::getLeftButtonProperty()      const { return leftButton_; }
@@ -38,6 +54,7 @@ namespace Microsoft::Xna::Framework::Input
     ButtonState MouseState::getXButton1Property()        const { return xButton1_; }
     ButtonState MouseState::getXButton2Property()        const { return xButton2_; }
     int         MouseState::getScrollWheelValueProperty() const { return scrollWheelValue_; }
+    int         MouseState::getHorizontalScrollWheelValueEXTProperty() const { return horizontalScrollWheelValue_; }
 
     bool MouseState::Equals(const MouseState& other) const
     {
@@ -53,7 +70,10 @@ namespace Microsoft::Xna::Framework::Input
 
     int MouseState::GetHashCode() const
     {
-        return x_ ^ (y_ * 31) ^ (scrollWheelValue_ * 17);
+        // Unsigned wraparound avoids signed-overflow UB in the *31 / *17 terms (INPUT-BUILD-006).
+        return static_cast<int>(static_cast<unsigned>(x_)
+                                ^ (static_cast<unsigned>(y_) * 31u)
+                                ^ (static_cast<unsigned>(scrollWheelValue_) * 17u));
     }
 
     std::string MouseState::ToString() const

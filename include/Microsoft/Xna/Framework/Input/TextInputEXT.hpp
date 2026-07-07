@@ -2,12 +2,15 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Input/TextInputType.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/MulticastAction.hpp"
 
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -18,6 +21,12 @@ namespace Microsoft::Xna::Framework::Input
      * @note NOXNA — not part of the XNA 4.0 API. FNA extension (the `EXT` suffix
      *       marks an FNA addition beyond XNA 4.0). XNA 4.0 had no portable text-input
      *       event; FNA exposes this static class backed by SDL.
+     *
+     * @note Threading (INPUT-TEXT-016): like all CNA input, `TextInput`/`TextEditing` are dispatched on
+     *       the event-pump (game-loop) thread during `Game::PollEvents()`; do not subscribe/raise from a
+     *       background thread. The `TextEditing` composition is a **UTF-8** `std::string` (multi-byte), and
+     *       its `start`/`length` are passed straight through from SDL's IME model — index the string
+     *       carefully, since a byte offset is not a character/code-point count for multi-byte text.
      */
     NOXNA class TextInputEXT
     {
@@ -32,15 +41,33 @@ namespace Microsoft::Xna::Framework::Input
          * (e.g. an emoji) is delivered as two calls — a high surrogate then a low surrogate —
          * exactly as FNA's `Encoding.UTF8.GetChars` decode does. This event supports key repeat
          * and is not raised by non-character keys.
+         *
+         * Multicast (matches FNA's `event Action<char>`): use `+=` to add subscribers, `=` to set a
+         * single handler or `= nullptr` to clear.
          */
-        NOXNA static std::function<void(charcs)> TextInput;
+        NOXNA static System::MulticastAction<charcs> TextInput;
 
         /**
          * @brief Raised during IME composition with draft text, start offset, and length.
          *
          * Allows displaying draft text before it has been committed as input.
+         *
+         * Multicast (matches FNA's `event Action<string, int, int>`): use `+=` to add subscribers,
+         * `=` to set a single handler or `= nullptr` to clear.
          */
-        NOXNA static std::function<void(const std::string&, int, int)> TextEditing;
+        NOXNA static System::MulticastAction<const std::string&, int, int> TextEditing;
+
+        /**
+         * @brief NOXNA/EXT: raised with the current IME candidate list during composition.
+         *
+         * SDL3-new (`SDL_EVENT_TEXT_EDITING_CANDIDATES`); older SDL/XNA had no candidate-list event.
+         * Lets a game render the CJK/IME candidate popup itself. The arguments are the candidate
+         * strings (UTF-8), the index of the pre-selected candidate (or -1 if none), and whether the
+         * list is laid out horizontally (otherwise vertically).
+         *
+         * Multicast: use `+=` to add subscribers, `=` to set a single handler or `= nullptr` to clear.
+         */
+        NOXNA static System::MulticastAction<const std::vector<std::string>&, int, bool> TextEditingCandidatesEXT;
 
         /**
          * @brief Returns the native window handle used by the text input APIs.
@@ -84,6 +111,18 @@ namespace Microsoft::Xna::Framework::Input
         NOXNA static void StopTextInput();
 
         /**
+         * @brief NOXNA/EXT: activates text input mode with an input-type hint for the on-screen
+         *        keyboard / IME (e.g. a numeric pad or a hidden-password field).
+         *
+         * SDL3-new (`SDL_StartTextInputWithProperties` + `SDL_PROP_TEXTINPUT_TYPE_NUMBER`); XNA 4.0
+         * and older SDL had no input-type hint. Falls back to the plain `StartTextInput` no-op
+         * behavior when no window handle is set.
+         *
+         * @param type The kind of text being entered.
+         */
+        NOXNA static void StartTextInputWithTypeEXT(CNA::Input::TextInputTypeEXT type);
+
+        /**
          * @brief Hints to the platform where text is being entered (for IME popup placement).
          * @param rectangle Text input location relative to GameWindow.ClientBounds.
          */
@@ -102,6 +141,20 @@ namespace Microsoft::Xna::Framework::Input
          * @param length The length of the active editing region.
          */
         NOXNA static void INTERNAL_OnTextEditing(const std::string& text, int start, int length);
+
+        /**
+         * @brief Internal: dispatches an IME candidate-list event to subscribers.
+         * @param candidates The candidate strings (UTF-8).
+         * @param selected The index of the selected candidate, or -1 if none.
+         * @param horizontal True if the candidate list is horizontal; false if vertical.
+         */
+        NOXNA static void INTERNAL_OnTextEditingCandidates(
+            const std::vector<std::string>& candidates, int selected, bool horizontal);
+
+        /**
+         * @brief Test-only: resets TextInputEXT's static state (callbacks, window handle).
+         */
+        NOXNA static void ResetForTests();
 
     private:
         /** @brief Backing store for the window handle property. */

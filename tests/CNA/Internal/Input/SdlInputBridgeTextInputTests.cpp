@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 
 #include <string>
+#include <vector>
 
 using CNA::Internal::Input::InputManager;
 using CNA::Internal::Input::SdlInputBridge;
@@ -79,6 +80,30 @@ TEST_F(SdlInputBridgeTextInputTest, TextInputEventForwardsAsciiAsCodeUnits)
     EXPECT_EQ(captured, u"abc");
 }
 
+// P7-003(b): an empty SDL_EVENT_TEXT_INPUT has nothing to decode, so it delivers zero TextInput calls.
+TEST_F(SdlInputBridgeTextInputTest, EmptyTextInputEventDeliversNoCodeUnits)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent(""));
+
+    EXPECT_TRUE(captured.empty());
+}
+
+// P7-003(d): multiple TextInput subscribers fire in REGISTRATION order (multicast delegate semantics).
+TEST_F(SdlInputBridgeTextInputTest, TextInputSubscribersFireInRegistrationOrder)
+{
+    std::vector<int> order;
+    TextInputEXT::TextInput += [&order](charcs) { order.push_back(1); };
+    TextInputEXT::TextInput += [&order](charcs) { order.push_back(2); };
+    TextInputEXT::TextInput += [&order](charcs) { order.push_back(3); };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("a")); // single code unit -> one round of dispatch
+
+    EXPECT_EQ(order, (std::vector<int>{1, 2, 3}));
+}
+
 TEST_F(SdlInputBridgeTextInputTest, TextInputEventDecodesTwoByteUtf8ToSingleCodeUnit)
 {
     std::u16string captured;
@@ -90,6 +115,55 @@ TEST_F(SdlInputBridgeTextInputTest, TextInputEventDecodesTwoByteUtf8ToSingleCode
 
     ASSERT_EQ(captured.size(), 1u);
     EXPECT_EQ(captured[0], charcs{0x00E9});
+}
+
+// DEC-08: malformed UTF-8 is replaced with U+FFFD (matching FNA's Encoding.UTF8), not dropped.
+// (These byte sequences cannot actually come from SDL, which emits valid UTF-8, but the decoder is
+// defensive and must match FNA.) String literals are split so a hex escape does not eat the next
+// character (e.g. "\xFF" "b", since 'b' is a hex digit).
+TEST_F(SdlInputBridgeTextInputTest, InvalidLeadByteBecomesReplacementCharAndPreservesSurroundingText)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("a\xFF" "b")); // 0xFF is not a valid UTF-8 lead byte
+    EXPECT_EQ(captured, u"a\uFFFDb");
+}
+
+TEST_F(SdlInputBridgeTextInputTest, TruncatedMultiByteSequenceBecomesReplacementChar)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("x\xC3")); // 0xC3 starts a 2-byte seq with no continuation
+    EXPECT_EQ(captured, u"x\uFFFD");
+}
+
+TEST_F(SdlInputBridgeTextInputTest, BadContinuationEmitsReplacementCharThenResyncsToValidText)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("\xE0" "A")); // 0xE0 expects 2 continuations; 'A' is not one
+    EXPECT_EQ(captured, u"\uFFFDA");
+}
+
+TEST_F(SdlInputBridgeTextInputTest, OverlongEncodingBecomesReplacementChar)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("\xC0\x80")); // overlong encoding of U+0000
+    EXPECT_EQ(captured, u"\uFFFD");
+}
+
+TEST_F(SdlInputBridgeTextInputTest, SurrogateCodePointEncodedInUtf8BecomesReplacementChar)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("\xED\xA0\x80")); // U+D800 (a lone surrogate) via UTF-8
+    EXPECT_EQ(captured, u"\uFFFD");
 }
 
 TEST_F(SdlInputBridgeTextInputTest, ControlKeysSynthesizeTextInputCharacters)
@@ -115,6 +189,19 @@ TEST_F(SdlInputBridgeTextInputTest, ControlKeysSynthesizeTextInputCharacters)
         ASSERT_EQ(captured.size(), 1u) << "keycode " << c.key;
         EXPECT_EQ(captured[0], c.expected) << "keycode " << c.key;
     }
+}
+
+// P7-006(b): a repeated (non-control) TEXT_INPUT stream is delivered per event — text input is decoded
+// independently per SDL event and is NOT de-duplicated, so two identical events yield two code units.
+TEST_F(SdlInputBridgeTextInputTest, RepeatedTextInputEventsAreEachDelivered)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(textInputEvent("a"));
+    SdlInputBridge::ProcessEvent(textInputEvent("a"));
+
+    EXPECT_EQ(captured, u"aa");
 }
 
 TEST_F(SdlInputBridgeTextInputTest, KeyRepeatReemitsControlCharacter)
@@ -152,6 +239,27 @@ TEST_F(SdlInputBridgeTextInputTest, CtrlVEmitsPasteCharAndSuppressesLiteralText)
     captured.clear();
     SdlInputBridge::ProcessEvent(textInputEvent("x"));
     EXPECT_EQ(captured, u"x");
+}
+
+// P8-008(a): SdlInputBridge::ResetForTests must clear the text-input suppression flag in isolation. Enter a
+// Ctrl+V paste (which turns suppression ON to swallow the literal echo), reset WITHOUT releasing the keys,
+// then confirm a following TEXT_INPUT flows normally — proving reset cleared the flag rather than leaving it
+// stuck for the next test.
+TEST_F(SdlInputBridgeTextInputTest, ResetForTestsClearsTextInputSuppressionFlag)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+
+    SdlInputBridge::ProcessEvent(keyEvent(true, SDLK_LCTRL));
+    SdlInputBridge::ProcessEvent(keyEvent(true, SDLK_V)); // paste char 22 emitted, suppression ON
+    SdlInputBridge::ProcessEvent(textInputEvent("v"));    // literal 'v' echo is suppressed while ON
+    captured.clear();
+
+    SdlInputBridge::ResetForTests(); // must clear g_textInputSuppress (and the control-down flags)
+
+    // ResetForTests does not touch TextInputEXT's callback, so the subscriber above is still registered.
+    SdlInputBridge::ProcessEvent(textInputEvent("x"));
+    EXPECT_EQ(captured, u"x") << "reset must clear the paste-suppression flag so text flows again";
 }
 
 TEST_F(SdlInputBridgeTextInputTest, CtrlVSuppressionDoesNotStickWhenCtrlReleasedWithoutVKeyUp)
@@ -291,6 +399,29 @@ TEST_F(SdlInputBridgeTextInputTest, TextEditingEventForwardsTextStartLength)
     EXPECT_EQ(text, "draft");
     EXPECT_EQ(start, 1);
     EXPECT_EQ(length, 2);
+}
+
+// P7-007(d): TextEditing start/length are SDL's raw BYTE offsets into the UTF-8 composition string, passed
+// through unchanged (NOT converted to UTF-16 code-unit indices — documented in TextInputEXT.hpp
+// INPUT-TEXT-016). Composition "éxy" = bytes C3 A9 'x' 'y'; byte offset 2 points at 'x', whose UTF-16 index
+// would be 1. CNA must report the byte offset (2), which discriminates byte- from UTF-16-semantics.
+TEST_F(SdlInputBridgeTextInputTest, TextEditingStartLengthAreRawByteOffsetsNotUtf16Indices)
+{
+    std::string text;
+    int start = -1;
+    int length = -1;
+    TextInputEXT::TextEditing = [&](const std::string& t, int s, int l)
+    {
+        text = t;
+        start = s;
+        length = l;
+    };
+
+    SdlInputBridge::ProcessEvent(textEditingEvent("\xC3\xA9xy", 2, 1)); // "éxy", byte offset 2 == 'x'
+
+    EXPECT_EQ(text, std::string("\xC3\xA9xy")); // UTF-8 bytes preserved unchanged
+    EXPECT_EQ(start, 2);   // byte offset (the UTF-16 index of 'x' would be 1) -> byte, not UTF-16, semantics
+    EXPECT_EQ(length, 1);
 }
 
 TEST_F(SdlInputBridgeTextInputTest, TextEditingEmptyCompositionForwardsZeroes)

@@ -81,9 +81,13 @@ namespace Microsoft::Xna::Framework::Input
 
         /**
          * @brief Retrieves a string representation of this object.
+         *
+         * CNA convenience with no XNA/FNA counterpart: FNA's `KeyboardState` (unlike `MouseState`,
+         * `GamePadState`, and `TouchLocation`) declares no `ToString`, so this is tagged `NOXNA`.
+         *
          * @return The string representation.
          */
-        [[nodiscard]] std::string ToString() const;
+        NOXNA [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Compares two KeyboardState instances for equality.
