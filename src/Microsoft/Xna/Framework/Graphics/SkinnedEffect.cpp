@@ -31,6 +31,8 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    const int SkinnedEffect::MaxBones;
+
     SkinnedEffect::SkinnedEffect(GraphicsDevice& device)
         : Effect(device)
         , dirtyFlags_(DirtyAll)

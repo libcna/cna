@@ -26,7 +26,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   shape as Tasks 885/890), **Task 894** (zero specular GPU implementation on any backend, same
   shape as Task 886), and **Task 895** (`WeightsPerVertex` is a complete GPU no-op on all 3
   backends — FNA's real shader only sums the first N weight/index pairs per vertex, CNA always
-  sums all 4 regardless of the property). Phase 45 ("EnvironmentMapEffect exactness", Tasks
+  sums all 4 regardless of the property). **Task 402 wrote 52 new `SkinnedEffectTests.cpp` unit
+  tests** (zero prior coverage existed), whose `Clone()` test is the regression guard proving
+  Task 401's `SpecularColor`/`SpecularPower` fix is correct (`git stash`-confirmed the test fails
+  exactly as predicted with the fix reverted). Also fixed an unrelated build-breaking discovery:
+  `SkinnedEffect::MaxBones` (an in-class-initialized `static const int`) had no out-of-line
+  definition, causing a linker error the moment any code (here, GTest's comparison machinery)
+  took its address — fixed per CLAUDE.md's own "Static Members and Named Constants" convention.
+  Phase 45 ("EnvironmentMapEffect exactness", Tasks
   391–400) is
   **CLOSED** — Task 400 wrote `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399:
   property/default audit (zero bugs, Task 391), a real `Clone()`-drops-`FogColor` bug found and
@@ -90,15 +97,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 401.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 402.
 
-### Test status (last verified: Task 401)
-- **EasyGL, full `ctest -j1`:** 3552/3555 pass. 3 pre-existing/documented failures (see §5):
-  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`
-  (the earlier `CueTest` flake from Task 399's run did not recur).
-- **Vulkan, full `ctest -j1`:** 3472/3485 pass. 13 documented pre-existing failures (see §5),
+### Test status (last verified: Task 402)
+- **EasyGL, full `ctest -j1`:** 3604/3607 pass. 3 pre-existing/documented failures (see §5):
+  `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
+- **Vulkan, full `ctest -j1`:** 3524/3537 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3456/3456 pass — 100%, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3508/3508 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -258,7 +264,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 401 | **Opens Phase 46. Real, confirmed bug found and fixed**: `SkinnedEffect`'s `Clone()` never preserved `SpecularColor`/`SpecularPower` — the identical bug shape Task 392 fixed for `FogColor` across 4 stock effects, undetected here since `SkinnedEffect` had zero prior test coverage. All property defaults, `MaxBones`/bone bounds-checking, and `OnApply()`'s shader-index formula confirmed matching FNA exactly. Opened Tasks 893 (`DirectionalLight1`/`2` unforwarded), 894 (zero specular GPU implementation), and 895 (`WeightsPerVertex` complete GPU no-op on all 3 backends). |
+| — | 402 | **52 new unit tests, regression guard for Task 401's fix**: wrote `SkinnedEffectTests.cpp` from scratch (zero prior coverage). `Clone()` test deliberately sets `SpecularColor`/`SpecularPower` before cloning — `git stash`-confirmed it fails exactly as predicted with Task 401's fix reverted. Also fixed an unrelated build-breaking discovery: `SkinnedEffect::MaxBones` had no out-of-line definition, causing a linker error the moment any code took its address. |
+| `eb68b5bc` | 401 | **Opens Phase 46. Real, confirmed bug found and fixed**: `SkinnedEffect`'s `Clone()` never preserved `SpecularColor`/`SpecularPower` — the identical bug shape Task 392 fixed for `FogColor` across 4 stock effects, undetected here since `SkinnedEffect` had zero prior test coverage. All property defaults, `MaxBones`/bone bounds-checking, and `OnApply()`'s shader-index formula confirmed matching FNA exactly. Opened Tasks 893 (`DirectionalLight1`/`2` unforwarded), 894 (zero specular GPU implementation), and 895 (`WeightsPerVertex` complete GPU no-op on all 3 backends). |
 | `eaf5c852` | 400 | **Documentation only, closes Phase 45.** Wrote `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399: per-task summaries, full 3-backend support matrix, and an "Open, tracked follow-up work" section listing Tasks 890/891/892. No production code or tests changed. |
 | `9d1d7a56` | 399 | **Capstone, verify-only, zero bugs found**: combined Tasks 394–398's fixes (lerp blend, alpha-scaled specular, Fresnel suppression, `EyePosition`, non-uniform `World` scale) into one scene. All 3 backends produced the exact predicted `(151,101,76)` on the first attempt — genuine cross-backend consistency, closing Phase 45's per-task verification arc. |
 | `44aac0ca` | 398 | **Real, confirmed formula bug found and fixed on 2 of 3 backends**: `EnvironmentMapEffect`'s normal was transformed by the raw `World` matrix instead of `transpose(inverse(World3x3))`, wrong under non-uniform scale. EasyGL and Bgfx both had this bug (Vulkan was already correct); fixed both via a CPU-side cofactor/det shortcut. Empirically confirmed pre-fix output `(1,12,242)` (buggy blue) on both vs FNA's correct yellow. Opened Task 892 for a worse sibling bug in `BasicEffect`'s Bgfx lit shader (transforms normals by the full WVP matrix). `git stash`-confirmed both fixes independently. |
@@ -482,25 +489,27 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 46 (Task 402 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 46 (Task 404 fully scoped in `plan_graphics.md`,
+since Tasks 403/405 are already satisfied by Task 402's own test coverage — see plan_graphics.md);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 402 — unit test default values for all `SkinnedEffect` properties**
-   - Goal: write `tests/Microsoft/Xna/Framework/Graphics/SkinnedEffectTests.cpp` from scratch
-     (zero prior coverage exists), mirroring Task 372/382/392's precedent exactly: every property
-     default (`World`/`View`/`Projection`=Identity, `DiffuseColor`=One, `EmissiveColor`/
-     `AmbientLightColor`=Zero, `Alpha`=1, `PreferPerPixelLighting`=false, `FogEnabled`=false,
-     `FogStart`=0, `FogEnd`=1, `FogColor`=Zero, `Texture`=null, `WeightsPerVertex`=4,
-     `SpecularColor`=One, `SpecularPower`=16, `MaxBones`=72), `DirectionalLight0.Enabled`=true/
-     `Light1`/`Light2`=false, `LightingEnabled`'s throw-on-`false`/no-throw-on-`true`,
-     `SetBoneTransforms`/`GetBoneTransforms`'s bounds-checking (empty, `>MaxBones`, `count<=0`),
-     `WeightsPerVertex`'s throw-on-invalid-value (not 1/2/4), setter round-trips, and a
-     `Clone()` test. **Important**: the `Clone()` test should specifically set `SpecularColor`
-     and `SpecularPower` to non-default values before cloning — Task 401 already found and fixed
-     a real bug here (identical shape to Task 392's `FogColor` fix) but this test is what proves
-     the fix is correct and guards against regression, mirroring exactly how Task 392's own
-     `Clone()` test caught the original `FogColor` bug for 4 other effects.
-   - Files: new `tests/Microsoft/Xna/Framework/Graphics/SkinnedEffectTests.cpp`.
+1. **Task 404 — verify `GetBoneTransforms` returns an independent copy, not an alias**
+   - Goal: FNA's `GetBoneTransforms(count)` calls `bonesParam.GetValueMatrixArray(count)`, which
+     allocates a fresh `Matrix[]` each call (not an alias into the parameter's internal storage).
+     CNA's `EffectParameter::GetValueMatrixArray` similarly builds a fresh `std::vector<Matrix>`
+     each call (confirmed by reading `EffectParameter.cpp`), so this is very likely already
+     correct — but Task 402's own test suite never specifically verified it. Write a test that
+     calls `GetBoneTransforms()`, mutates the returned vector, then calls `GetBoneTransforms()`
+     again (or checks a subsequent draw/`FillGpuDrawParams()` call) to confirm the mutation did
+     NOT affect the effect's actual stored bone state — the "independent copy" semantics FNA's
+     own array-allocating implementation guarantees.
+   - Files: extend `tests/Microsoft/Xna/Framework/Graphics/SkinnedEffectTests.cpp`.
+
+   (Task 403 — "verify `SetBoneTransforms` accepts exactly supported bone count" — and Task 405 —
+   "verify too many bones throws correct exception" — were both already fully covered by Task
+   402's own `SetBoneTransformsAcceptsExactlyMaxBones`/`SetBoneTransformsThrowsWhenExceedingMaxBones`
+   tests; mark both ✅ in `plan_graphics.md` with a note pointing to Task 402's existing coverage,
+   no new code needed, before starting Task 404.)
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -624,7 +633,8 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 402).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 404, after
+quickly marking 403/405 as already-satisfied by Task 402 — see §8).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -654,9 +664,29 @@ unconditionally sums all 4 regardless of the property's value; only visible when
 slots hold nonzero data, since well-formed content typically zeros them). Also noted, NOT
 opened as a bug (acceptable, strictly-more-accurate deviation, same class as Task 396's
 per-pixel-Fresnel note): PreferPerPixelLighting=false is effectively a no-op since NdotL is
-always computed in the fragment shader on every backend. Task 402 (NEXT) is the standard
-unit-test-default-values task, mirroring Task 372/382/392's precedent -- its own Clone() test
-is what will prove Task 401's SpecularColor/SpecularPower fix is correct.
+always computed in the fragment shader on every backend.
+
+Task 402 wrote 52 new SkinnedEffectTests.cpp unit tests (zero prior coverage existed), mirroring
+Task 372/382/392's precedent exactly -- every property default, LightingEnabled's throw
+behavior, EnableDefaultLighting()'s effects, SetBoneTransforms/GetBoneTransforms's full
+bounds-checking matrix, WeightsPerVertex's accept-1/2/4/throw-otherwise validation, setter
+round-trips, and a Clone() test. The Clone() test is the regression guard for Task 401's fix --
+it deliberately sets SpecularColor/SpecularPower to non-default values before cloning.
+git-stash-confirmed (via direct edit+rebuild) the test fails exactly as predicted with Task
+401's fix reverted (SpecularColor read back (0,0,0) instead of (0.7,0.8,0.9), SpecularPower read
+back 0 instead of 64); restored and reconfirmed all 52 green. Also fixed an unrelated
+build-breaking discovery: SkinnedEffect::MaxBones (in-class-initialized static const int) had no
+out-of-line definition, causing a linker error the moment any code (here, GTest's comparison
+machinery) took its address -- fixed per CLAUDE.md's own "Static Members and Named Constants"
+convention (`const int SkinnedEffect::MaxBones;` added to SkinnedEffect.cpp).
+
+Tasks 403 ("verify SetBoneTransforms accepts exactly supported bone count") and 405 ("verify too
+many bones throws correct exception") are BOTH ALREADY FULLY SATISFIED by Task 402's own
+SetBoneTransformsAcceptsExactlyMaxBones/SetBoneTransformsThrowsWhenExceedingMaxBones tests --
+mark both done in plan_graphics.md with a note pointing to Task 402's existing coverage (no new
+code needed) before starting Task 404 (NEXT), which verifies GetBoneTransforms returns an
+independent copy rather than an alias into internal storage -- genuinely not yet covered by any
+existing test.
 
 Phase 45 ("EnvironmentMapEffect exactness", Tasks 391-400) CLOSED with Task 400
 (docs/environmentmapeffect-support.md, full synthesis of Tasks 391-399). Summary of what it
@@ -712,14 +742,14 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 46's remaining tasks.
 
-Last full 3-backend regression (Task 401 — Clone() fix touches shared SkinnedEffect.cpp,
-compiled into all 3 backends, no new tests added yet):
-EasyGL 3552/3555 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3472/3485 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3456/3456 pass (100%, no flakes this run).
+Last full 3-backend regression (Task 402 — 52 new tests, plus a MaxBones linker fix touching
+shared SkinnedEffect.cpp, compiled into all 3 backends):
+EasyGL 3604/3607 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3524/3537 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3508/3508 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46 found, read plan_graphics.md
-directly (Tasks 351-401) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-402) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
