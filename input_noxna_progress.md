@@ -22,14 +22,16 @@
 - [x] **N-006 `TouchLocation::getPressureEXT`** — expose SDL finger pressure (XNA dropped Pressure).
 
 ## Phase P2 — needs an injectable seam, desktop-strong
-- [ ] **N-007 `CNA::Input::Joystick`** — raw joystick (axes/buttons/hats/balls); test via virtual joystick.
+- [x] **N-007 `CNA::Input::Joysticks`** — raw joystick (axes/buttons/hats/balls); tested via injectable `ISdlJoystickBackend` fake.
 - [x] **N-008 `GamePad` touchpad fingers EXT** — `GetTouchpadCountEXT`/`GetTouchpadFingerCountEXT`/`GetTouchpadFingerEXT` (poll-based).
 - [x] **N-009 `GamePad` player-index EXT** — `Get/SetPlayerIndexEXT` (SDL device player-number LED).
 - [x] **N-009b `GamePad` battery/power EXT** — `GetPowerInfoEXT` (`SDL_GetGamepadPowerInfo`) + shared `CNA::Input::PowerStateEXT`.
 - [x] **N-010 `GamePad` metadata EXT** — `Get{Name,Path,Serial,FirmwareVersion,SteamHandle}EXT`.
 - [x] **N-010b `GamePad` connection-state EXT** — `GetConnectionStateEXT -> {Wired,Wireless,Unknown}`.
 - [x] **N-011 `GamePad` button labels EXT** — `GetButtonLabelEXT` (ABXY vs cross/circle/square/triangle).
-- [ ] **N-012 `CNA::Input::Pen`** — stylus (pressure/tilt/rotation/eraser/buttons); event-decoded.
+- [!] **N-012 `CNA::Input::Pen`** — **CANCELLED (2026-07-07, owner request).** Stylus support (pressure/
+  tilt/rotation/eraser/buttons) will not be implemented in this pass. Not an engineering conflict like
+  N-004 — an explicit scope cut so the pass can move straight to N-007/N-013.
 
 ## Phase P3 — powerful but platform-narrow / manual actuation
 - [ ] **N-013 `CNA::Input::Haptics`** — SDL_haptic force-feedback (constant/periodic/ramp/condition/custom + gain/autocenter).
@@ -51,6 +53,37 @@
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-012 CANCELLED (2026-07-07, owner request):** stylus/pen support removed from scope for this
+  pass. Not implemented; no code changes.
+- **N-007 done (2026-07-07):** `CNA::Input::Joysticks` — raw joystick access (axes/buttons/hats/
+  trackballs), independent of `GamePad`'s mapped view of the same hardware. New descriptor/state
+  headers `include/CNA/Input/{JoystickType,JoystickHatPosition,JoystickInfo,JoystickCapabilities,
+  JoystickState}.hpp` (`JoystickTypeEXT` mirrors `SDL_JoystickType`; `JoystickHatPositionEXT`
+  enumerates the 9 reachable `SDL_HAT_*` combinations rather than exposing them as flags;
+  `JoystickCapabilitiesEXT` reuses the shared `PowerStateEXT` from N-009b/N-018).
+  New, deliberately-separate seam `ISdlJoystickBackend` (`include|src/CNA/Internal/Input/
+  SdlJoystickBackend.hpp/.cpp`) — kept apart from `ISdlGamepadBackend` per NEXT.md guidance since a
+  gamepad is a *mapped* joystick and this is the raw device; the same physical device is opened
+  independently through both seams. `SdlInputBridge` opens every joystick on `SDL_EVENT_JOYSTICK_
+  ADDED` into a new `std::unordered_map<SDL_JoystickID, SDL_Joystick*>` registry (closed on
+  `_REMOVED`), fires `Joysticks::Connected/DisconnectedEXT` (mirrors N-017b's direct-invoke style),
+  and does NOT handle AXIS_MOTION/BUTTON_DOWN/UP/HAT_MOTION/BALL_MOTION events at all — SDL's own
+  event pump already updates its internal per-joystick state cache independent of what CNA does with
+  each dequeued event, so `GetJoystickState` polls `SDL_GetJoystickAxis/Button/Hat/Ball` live via the
+  seam on every call (same poll-on-demand principle as the GamePad EXT metadata getters). Public
+  `CNA::Input::Joysticks` (whole-class NOXNA, additive — no freeze pin, matches Sensors/Power/
+  InputDevices precedent): `GetJoysticksEXT()`, `GetCapabilitiesEXT(id)`, `GetStateEXT(id)`,
+  `Connected/DisconnectedEXT`. Tests `tests/CNA/Internal/Input/SdlJoystickBackendTests.cpp` (new
+  `FakeSdlJoystickBackend.hpp`) drive the real `SdlInputBridge::ProcessEvent` path with synthetic
+  `SDL_EVENT_JOYSTICK_ADDED/REMOVED`: hot-plug open/close/duplicate-add/unknown-remove/open-failure,
+  enumeration, hot-plug events, capabilities (counts/type/name/guid/power) and disconnected-default,
+  state (axes/buttons/hats/balls) and disconnected-default, exhaustive hat-position and joystick-type
+  mapping, plus descriptor-equality tests. Added `*Joystick*` to `CNA_INPUT_TEST_FILTER`
+  (CMakeLists.txt) so `ctest -L input` picks up the new suite. `ctest -L input` green; ASan-clean
+  (`detect_leaks=0` for the documented `libGLX_mesa` false positive). Files: JoystickType.hpp,
+  JoystickHatPosition.hpp, JoystickInfo.hpp, JoystickCapabilities.hpp, JoystickState.hpp,
+  Joysticks.hpp/.cpp, SdlJoystickBackend.hpp/.cpp, SdlInputBridge.hpp/.cpp, FakeSdlJoystickBackend.hpp
+  (new), SdlJoystickBackendTests.cpp (new), CMakeLists.txt.
 - **N-014b done (2026-07-07):** `TextInputEXT::StartTextInputWithTypeEXT(CNA::Input::TextInputTypeEXT)`
   — input-type hint (text/name/email/username/password-hidden/password-visible/number/number-password-
   hidden/number-password-visible) for the on-screen keyboard / IME, completing the N-014 split.  New

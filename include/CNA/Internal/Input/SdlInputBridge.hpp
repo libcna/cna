@@ -5,9 +5,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "CNA/Input/GamePadButtonLabel.hpp"
 #include "CNA/Input/GamePadConnectionState.hpp"
+#include "CNA/Input/JoystickCapabilities.hpp"
+#include "CNA/Input/JoystickInfo.hpp"
+#include "CNA/Input/JoystickState.hpp"
 #include "CNA/Input/KeyModifiers.hpp"
 #include "CNA/Input/PowerState.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -170,6 +174,15 @@ namespace CNA::Internal::Input
         static Microsoft::Xna::Framework::Input::GamePadCapabilities GetCapabilities(
             Microsoft::Xna::Framework::PlayerIndex playerIndex
         );
+
+        /** @brief NOXNA/EXT: enumerates the connected raw joysticks (id/name/type). */
+        static std::vector<CNA::Input::JoystickInfoEXT> GetJoysticks();
+
+        /** @brief NOXNA/EXT: static hardware shape/identity of a raw joystick; default if not connected. */
+        static CNA::Input::JoystickCapabilitiesEXT GetJoystickCapabilities(std::uint32_t id);
+
+        /** @brief NOXNA/EXT: current axis/button/hat/trackball state of a raw joystick; all-empty if not connected. */
+        static CNA::Input::JoystickStateEXT GetJoystickState(std::uint32_t id);
 
         /**
          * @brief Translates a US-layout Keys value to the Keys value the current keyboard

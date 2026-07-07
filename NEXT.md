@@ -11,9 +11,10 @@
 >    Live tracker + per-task log: **`input_noxna_progress.md`** (repo root). Analysis/design doc:
 >    **`input_noxna.md`** (repo root).
 >
-> **As of 2026-07-07:** 18 of the input_noxna.md tasks are done (one commit each, all pushed). What
-> remains is 3 big new subsystems + 1 small item (see §8). Branch in sync with `origin/feature/input`
-> at `462ca465`.
+> **As of 2026-07-07:** 20 of the input_noxna.md tasks are done (one commit each, all pushed).
+> **N-012 Pen was cancelled by the owner** (explicit scope cut, not an engineering conflict) — it will
+> not be implemented. What remains is exactly **one** task: N-013 Haptics (see §6/§8). Branch in sync
+> with `origin/feature/input` at `95db2319`.
 
 ## 1. Project summary
 
@@ -34,7 +35,7 @@
 
 - **Build:** clean. Every task this pass builds on **EasyGL** (`cmake-build-input-easygl`) and the
   **ASan** build (`cmake-build-input-asan`); `ctest -L input` = 100% green after each.
-- **18 tasks DONE** (each = its own commit, tested, pushed). See §3 for the commit list and
+- **20 tasks DONE** (each = its own commit, tested, pushed). See §3 for the commit list and
   `input_noxna_progress.md` for the full per-task log. Grouped:
   - **GamePad EXT (poll via `ISdlGamepadBackend`):** N-009 player-index · N-009b battery/power (shared
     `PowerStateEXT`) · N-010 metadata (name/path/serial/firmware/steam-handle) · N-010b connection-state
@@ -44,11 +45,15 @@
   - **Mouse / Touch EXT:** N-005 horizontal scroll-wheel · N-006 `TouchLocation::getPressureEXT` ·
     N-016 capture + global-position/warp.
   - **New `CNA::Input` types:** N-001 `Clipboard` · N-018 `Power` · N-015 `Sensors` · N-017
-    `InputDevices` (enumeration) · N-017b InputDevices hot-plug events.
-  - **Text:** N-014 `TextInputEXT::TextEditingCandidatesEXT` (IME candidate list).
+    `InputDevices` (enumeration) · N-017b InputDevices hot-plug events · N-007 `Joysticks` (raw
+    joystick, its own `ISdlJoystickBackend` seam separate from the gamepad seam).
+  - **Text:** N-014 `TextInputEXT::TextEditingCandidatesEXT` (IME candidate list) · N-014b
+    `StartTextInputWithTypeEXT` (input-type hints).
 - **Skipped:** **N-004** (Mouse cursor-visibility EXT) — would conflict with the existing
   `Game::IsMouseVisible` path (which already calls `SDL_ShowCursor`). Engineering decision, not an
   owner question. Recorded in `input_noxna_progress.md`.
+- **Cancelled:** **N-012 `CNA::Input::Pen`** (stylus support) — explicit owner request (2026-07-07),
+  not an engineering conflict. Will not be implemented in this pass.
 - **Not headless-verifiable (by design):** real gamepad/joystick/haptic **actuation**, real **IME**
   composition, live **sensors**, OS **hot-plug** on physical hardware. The injectable seams + fakes
   prove translation/plumbing; real-device wiring is manual `[!]`.
@@ -56,6 +61,9 @@
 ## 3. This session's commits (most recent first, all on `feature/input`, all pushed)
 
 ```
+<joystick-commit-hash> input(N-007):  CNA::Input::Joysticks raw-joystick access
+95db2319 input(N-014b): TextInputEXT input-type hint EXT
+f92dc71a fix(GamerServices): follow sharp-runtime's RegionInfo::CurrentRegion rename
 462ca465 input(N-014):  TextInputEXT IME candidate-list event
 8096705d input(N-017b): InputDevices mouse/keyboard hot-plug events
 653915bc input(N-008):  GamePad touchpad-finger EXT (poll-based)
@@ -76,7 +84,7 @@ d6aa0e23 input(N-005):  Mouse horizontal scroll wheel EXT
 ca88dd23 input(N-001):  CNA::Input::Clipboard — SDL3 clipboard text
 ```
 
-## 4. THREE reusable patterns (follow these — every remaining task fits one)
+## 4. Reusable patterns (follow these — the remaining task fits one)
 
 **Pattern 1 — GamePad-seam extension (poll-based).** For "more of an existing gamepad concept."
 1. Add a `virtual` to `ISdlGamepadBackend` (`include/CNA/Internal/Input/SdlGamepadBackend.hpp`); real
@@ -104,10 +112,28 @@ Examples: N-005 (`MouseState` horizontal wheel), N-006 (`TouchLocation` pressure
   mod-state), `ISystemDeviceBackend` (N-017), `ISystemMouseBackend` (N-016), `ISystemSensorBackend`
   (N-015). Mirror any of them for a new one.
 
+**Pattern 4 (N-007 Joystick) — standalone type + its OWN device-scoped seam, hot-plug through the
+bridge.** For a raw-device subsystem that needs an *open handle* (not just a stateless system query)
+and has its own hot-plug lifecycle independent of gamepad slots.
+- New `ISdlJoystickBackend` (`include|src/CNA/Internal/Input/SdlJoystickBackend.hpp/.cpp`) —
+  deliberately SEPARATE from `ISdlGamepadBackend` even though both wrap `SDL_Joystick*`; a gamepad is
+  a *mapped* view of the same device, this is the raw one, and both may be opened independently.
+- `SdlInputBridge` opens every device on its own `_ADDED` event into a plain
+  `std::unordered_map<SDL_JoystickID, SDL_Joystick*>` (no slot/player-index concept needed — unlike
+  gamepad, XNA has no 4-controller constraint here), closes on `_REMOVED`, and fires the public type's
+  `Connected/DisconnectedEXT` directly (mirrors N-017b's direct-invoke style, no `INTERNAL_On` needed).
+- **No handling needed for per-frame motion events** (axis/button/hat/ball): SDL's own event pump
+  already updates its internal per-device state cache regardless of what the bridge's switch does with
+  a dequeued event, so state getters just poll the seam live on demand (same principle as Pattern 1's
+  gamepad EXT metadata getters) — don't add motion-event cases unless you have a concrete reason to.
+- Public type is whole-class NOXNA and additive (no freeze pin), same as Pattern 3.
+
 **Enums / flags** live in their own `include/CNA/Input/*.hpp` headers (`PowerState`, `KeyModifiers`
-w/ constexpr bit-ops like `Buttons`, `GamePadButtonLabel`, `GamePadConnectionState`, `SensorType`).
+w/ constexpr bit-ops like `Buttons`, `GamePadButtonLabel`, `GamePadConnectionState`, `SensorType`,
+`JoystickType`, `JoystickHatPosition`).
 **Events** use `System::MulticastAction<Args...>` (`sharp-runtime`) fired from the bridge via an
-`INTERNAL_On…` dispatcher (see N-014 candidates, N-017b hot-plug).
+`INTERNAL_On…` dispatcher (see N-014 candidates) or a direct `.Invoke(...)` call for simple hot-plug
+id-only events (see N-017b, N-007).
 
 ## 5. Per-task discipline (do this for EVERY task — do not batch)
 
@@ -127,40 +153,22 @@ w/ constexpr bit-ops like `Buttons`, `GamePadButtonLabel`, `GamePadConnectionSta
 - New source files under `src/**` and `tests/**` are auto-globbed (CONFIGURE_DEPENDS); `ninja` will
   reconfigure. New `CNA::Input` test suites must be named `CnaInput<Type>Test`.
 
-## 6. Remaining tasks (§8 has ordering; each is big enough to deserve fresh context)
+## 6. Remaining tasks
 
-- **N-007 `CNA::Input::Joystick` (raw joystick — BIGGEST).** Whole new subsystem, Pattern 3-style but
-  bigger. Needs a **new `ISdlJoystickBackend` seam + fake** (keep it SEPARATE from the gamepad seam —
-  a gamepad is a *mapped* joystick; this is the raw device). SDL: `SDL_GetJoysticks`,
-  `SDL_OpenJoystick`, `SDL_GetJoystickAxis/Button/Hat/Ball`, `SDL_GetNumJoystickAxes/Buttons/Hats/Balls`,
-  `SDL_GetJoystickName/ID/GUID/Type/PowerInfo`, events `SDL_EVENT_JOYSTICK_{ADDED,REMOVED,AXIS_MOTION,
-  BUTTON_{DOWN,UP},HAT_MOTION,BALL_MOTION}`. Shape: `Joysticks::GetJoysticksEXT()` (id+name list),
-  `Joysticks::GetState(index) -> JoystickStateEXT` (axes[]/buttons[]/hats[]/balls[]) +
-  `GetCapabilities`/connect events. Test via a fake feeding canned axis/button/hat values. **Testable
-  with a virtual joystick fake — no real hardware needed.**
-- **N-013 `CNA::Input::Haptics` (SDL_haptic — BIG).** Force-feedback beyond simple rumble. SDL:
-  `SDL_haptic.h` — `SDL_OpenHapticFromJoystick`/`SDL_OpenHaptic`, `SDL_CreateHapticEffect`,
+- **N-013 `CNA::Input::Haptics` (SDL_haptic — the only remaining task).** Force-feedback beyond simple
+  rumble. SDL: `SDL_haptic.h` — `SDL_OpenHapticFromJoystick`/`SDL_OpenHaptic`, `SDL_CreateHapticEffect`,
   `SDL_RunHapticEffect`, `SDL_UpdateHapticEffect`, `SDL_StopHapticEffect`, `SDL_SetHapticGain`,
   `SDL_SetHapticAutocenter`, effect types constant/periodic/ramp/condition/custom (`SDL_HapticEffect`
   union). Shape: `CNA::Input::Haptics` with an effect-builder + play/stop, behind an injectable seam +
-  fake. **Real actuation is manual `[!]`** — the fake verifies the effect-struct building + call
-  plumbing. Platform: Win/Lin ✓, mac ~, Android/Web ✗.
-- **N-012 `CNA::Input::Pen` (stylus — BIG, event-driven).** Unlike the poll-based gamepad EXT, this is
-  **event-sourced** (Pattern: decode in the bridge, accumulate a `PenState` in `InputManager` like
-  mouse/touch). SDL: events `SDL_EVENT_PEN_{DOWN,UP,MOTION,BUTTON_DOWN,BUTTON_UP,AXIS}`, axes
-  pressure/tilt-x/tilt-y/rotation/distance/eraser (`SDL_PenAxis`). Shape:
-  `CNA::Input::Pen::GetState() -> PenStateEXT` (position, pressure, tilt, rotation, buttons, eraser).
-  Test via synthetic pen events through `SdlInputBridge::ProcessEvent` (like the touch tests).
-- **N-014b `TextInputEXT::StartTextInputWithTypeEXT` (small).** Input-type hints for the on-screen
-  keyboard / IME: `StartTextInputWithTypeEXT(TextInputTypeEXT {Text,TextName,TextEmail,TextUsername,
-  TextPassword…,Number,NumberPassword})` via `SDL_StartTextInputWithProperties` +
-  `SDL_PROP_TEXTINPUT_TYPE_NUMBER`. Note: `TextInputEXT` calls SDL **directly** (no seam) and its
-  tests are real-window/Xvfb-gated — testability mirrors the existing `StartTextInput`, so this is
-  more about correct property mapping than a deterministic seam test. Consider a small seam if you
-  want a deterministic mapping test.
+  fake — `N-007`'s new `ISdlJoystickBackend` is a nearby precedent for "own device-scoped seam,
+  separate from the gamepad one" if haptic devices need to be opened from a joystick handle
+  (`SDL_OpenHapticFromJoystick`). **Real actuation is manual `[!]`** — the fake verifies the
+  effect-struct building + call plumbing. Platform: Win/Lin ✓, mac ~, Android/Web ✗.
 
-(`input_noxna.md` §6.1–6.8 / §5.1–5.5 has the full per-feature analysis, platform matrix, and P1–P3
-priorities for all of the above.)
+**Cancelled, not remaining:** N-012 `CNA::Input::Pen` (stylus) — owner cut this from scope
+(2026-07-07); do not implement it even opportunistically.
+
+(`input_noxna.md` §6.2 has the full Haptics analysis, platform matrix, and effect-family breakdown.)
 
 ## 7. Useful commands
 
@@ -186,14 +194,12 @@ etc. Name new suites so one of those globs matches.
 
 ## 8. Order to resume (input_noxna.md)
 
-1. **Read `input_noxna_progress.md`** (task list + Log + notes) and the relevant `input_noxna.md`
-   §6/§5 subsection for the chosen task.
-2. **N-014b** first (smallest, closes the IME story), OR jump to a big one if you prefer momentum.
-3. **N-012 Pen** — highest-value of the big three, and event-driven testing infra already exists
-   (touch tests show the synthetic-event pattern).
-4. **N-007 Joystick** — biggest; new `ISdlJoystickBackend` seam + fake, then `JoystickStateEXT`.
-5. **N-013 Haptics** — last; effect-builder behind a seam, real actuation `[!]`.
-One task = one commit (§5). Split any task that grows (precedent: N-009b, N-010b, N-002b, N-017b).
+1. **Read `input_noxna_progress.md`** (task list + Log + notes) and `input_noxna.md` §6.2 (Haptics).
+2. **N-013 Haptics** — the only task left. Effect-builder behind an injectable seam (Pattern 4-style,
+   own seam per §4), real actuation `[!]`. Split it further if it grows (e.g. rumble/simple effects in
+   one commit, richer effect families in follow-ups) — one task = one commit still applies (§5).
+3. Once N-013 lands, the `input_noxna.md` pass is complete (modulo N-012's cancellation and N-004's
+   skip) — update NEXT.md's header/status to say so and stop looking for more work here.
 
 ## 9. Boundaries / guards that must stay stable
 
@@ -230,15 +236,19 @@ One task = one commit (§5). Split any task that grows (precedent: N-009b, N-010
 Read NEXT.md, then input_noxna_progress.md. You are continuing the input_noxna.md NOXNA/SDL3 input-
 extension pass on branch feature/input (the plan_input.md XNA-completion pass is already done).
 
-- Pick the next task from NEXT.md §8 (start with N-014b, or N-012 Pen for a bigger one). Implement
-  exactly ONE task following the matching reusable pattern in NEXT.md §4.
+- The only remaining task is N-013 Haptics (NEXT.md §6). N-012 Pen was cancelled by the owner — do
+  not implement it. Implement N-013 following Pattern 4 in NEXT.md §4 (own device-scoped seam,
+  separate from the gamepad/joystick seams), splitting into multiple commits if the effect-family
+  surface is too large for one.
 - Follow the per-task discipline in NEXT.md §5: build cmake-build-input-easygl + ASan, keep
   `ctest -L input` 100% green (shuffle x5), pin any EXT-on-XNA member in the signature-freeze test +
-  docs/input-public-api-frozen.md, update input_noxna_progress.md ([x] + Log entry), commit
-  `input(N-xxx): ...` with the standard trailer staging files by explicit name, then push.
+  docs/input-public-api-frozen.md (a whole-class-NOXNA CNA::Input type needs neither), update
+  input_noxna_progress.md ([x] + Log entry), commit `input(N-xxx): ...` with the standard trailer
+  staging files by explicit name, then push.
 - Respect NEXT.md §9 boundaries and §10 do-nots: no SDL in public headers, no CNA::Internal in the
   XNA layer, no merge, no Graphics work, one task = one commit, split a task if it grows.
-- New standalone types go in CNA::Input with a whole-class NOXNA and an injectable ISystemXBackend
-  seam + fake (see the existing SystemPower/SystemMouse/SystemSensor/SystemDevice seams). New test
-  suites must be named CnaInput* so ctest -L input picks them up.
+- New standalone types go in CNA::Input with a whole-class NOXNA and an injectable seam + fake (see
+  the existing SystemPower/SystemMouse/SystemSensor/SystemDevice seams, or the SdlJoystickBackend
+  seam for a device-handle-based precedent). New test suites must be named so a CNA_INPUT_TEST_FILTER
+  glob matches (e.g. CnaInput*, or add a new token like *Joystick* was added for N-007).
 ```

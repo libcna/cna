@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+#include "CNA/CNAHelper.hpp"
+#include "CNA/Input/JoystickCapabilities.hpp"
+#include "CNA/Input/JoystickInfo.hpp"
+#include "CNA/Input/JoystickState.hpp"
+#include "System/MulticastAction.hpp"
+
+#include <cstdint>
+#include <vector>
+
+namespace CNA::Input
+{
+    /**
+     * @brief NOXNA — raw joystick access (flight sticks, wheels, throttles, arbitrary HID
+     *        controllers), backed by SDL3's joystick API.
+     *
+     * XNA 4.0 only ever modeled Xbox-style mapped gamepads (`Microsoft::Xna::Framework::Input::
+     * GamePad`). SDL3's raw joystick API exposes arbitrary axes/buttons/hats/trackballs with no
+     * semantic mapping — essential for flight sims, racing wheels, and HOTAS setups that `GamePad`
+     * cannot represent. A device SDL also maps as a gamepad is visible here too (as
+     * `JoystickTypeEXT::Gamepad`); this is an independent, unmapped view of the same hardware.
+     */
+    NOXNA class Joysticks
+    {
+    public:
+        /** @brief Static-only utility; not instantiable. */
+        Joysticks() = delete;
+
+        /**
+         * @brief Enumerates the connected raw joysticks.
+         * @return A list of joystick id/name/type descriptors (empty if none connected).
+         */
+        NOXNA [[nodiscard]] static std::vector<JoystickInfoEXT> GetJoysticksEXT();
+
+        /**
+         * @brief Returns the static hardware shape and identity of a joystick.
+         * @param id The SDL joystick instance id.
+         * @return The device's capabilities, or a default (disconnected) value if `id` is not connected.
+         */
+        NOXNA [[nodiscard]] static JoystickCapabilitiesEXT GetCapabilitiesEXT(std::uint32_t id);
+
+        /**
+         * @brief Returns the current axis/button/hat/trackball state of a joystick.
+         * @param id The SDL joystick instance id.
+         * @return The device's current state, or all-empty if `id` is not connected.
+         */
+        NOXNA [[nodiscard]] static JoystickStateEXT GetStateEXT(std::uint32_t id);
+
+        /** @brief NOXNA/EXT: fires with the SDL joystick instance id when a joystick is connected. */
+        NOXNA static System::MulticastAction<std::uint32_t> ConnectedEXT;
+
+        /** @brief NOXNA/EXT: fires with the SDL joystick instance id when a joystick is disconnected. */
+        NOXNA static System::MulticastAction<std::uint32_t> DisconnectedEXT;
+
+        /**
+         * @brief Test-only: clears the hot-plug event subscribers.
+         * @note NOXNA — a CNA test-support helper, not part of the XNA 4.0 API.
+         */
+        NOXNA static void ResetForTests();
+    };
+}
