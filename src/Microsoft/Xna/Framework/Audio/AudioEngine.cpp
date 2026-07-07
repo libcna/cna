@@ -43,6 +43,29 @@ namespace Microsoft::Xna::Framework::Audio
         std::unordered_map<std::string, float> globalVariables;
     };
 
+    namespace
+    {
+        // P12-CATEGORY-001: matches FACT.c's FACT_INTERNAL_IsInCategory exactly -- true if
+        // `cueCategory` (a cue's own, exact category) IS `target`, or `target` is any ancestor of
+        // `cueCategory` in the parent-category chain (XgsCategory::parentIndex, 0xFFFF = root/no
+        // parent). This is what lets Pause/Resume/Stop on a PARENT category reach cues belonging
+        // to any of its DESCENDANT categories too, not just cues in that exact category.
+        bool IsInCategory(
+            const std::vector<CNA::Internal::Audio::XgsCategory>& categories,
+            uint16_t cueCategory, uint16_t target)
+        {
+            if (cueCategory == target) return true;
+
+            uint16_t idx = cueCategory;
+            while (idx < categories.size() && categories[idx].parentIndex != 0xFFFF)
+            {
+                idx = categories[idx].parentIndex;
+                if (idx == target) return true;
+            }
+            return false;
+        }
+    }
+
     // ── Constructors ──────────────────────────────────────────────────────────
 
     AudioEngine::AudioEngine(const std::string& settingsFile)
@@ -312,7 +335,19 @@ namespace Microsoft::Xna::Framework::Audio
     void AudioEngine::SetCategoryVolumeInternal(unsigned short idx, float vol)
     {
         if (!xactImpl_ || idx >= xactImpl_->categoryVolumes.size()) return;
-        xactImpl_->categoryVolumes[idx] = vol;
+
+        // P12-CATEGORY-001: matches FACTAudioEngine_SetVolume exactly (FACT.c) -- `vol` is a
+        // MULTIPLIER on this category's own authored base volume (XgsCategory::volume), not a
+        // raw overwrite (the bug this task fixes: the old code discarded the authored base
+        // entirely). Cascades to every DIRECT child category (parentIndex == idx), recursively,
+        // passing each child's own PRE-cascade categoryVolumes value as the new "vol" parameter
+        // -- this is FACT's own real formula, not a simplification: a repeated SetVolume on an
+        // ancestor compounds a descendant's own authored volume against itself on every cascade,
+        // which looks unusual but is genuinely what real FACT does (replicated here rather than
+        // "fixed", matching this project's established behavior-fidelity precedent for other
+        // upstream FAudio quirks, e.g. handle_instance_limit's QUEUE/REPLACE_OLDEST collapse).
+        xactImpl_->categoryVolumes[idx] = xactImpl_->xgs.categories[idx].volume * vol;
+
         // P9-CATEGORY-001: snapshot before iterating -- ApplyCategoryVolume() itself never
         // mutates activeCues today, but this stays consistent with the other three category
         // operations below (one of which has a real reentrant-mutation bug) rather than relying
@@ -320,16 +355,24 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<Cue*> cues = xactImpl_->activeCues;
         for (auto* cue : cues)
             if (cue && cue->categoryIdx_ == idx)
-                cue->ApplyCategoryVolume(vol);
+                cue->ApplyCategoryVolume(xactImpl_->categoryVolumes[idx]);
+
+        for (std::size_t i = 0; i < xactImpl_->xgs.categories.size(); ++i)
+            if (xactImpl_->xgs.categories[i].parentIndex == idx)
+                SetCategoryVolumeInternal(static_cast<unsigned short>(i), xactImpl_->categoryVolumes[i]);
     }
 
     void AudioEngine::PauseCategoryInternal(unsigned short idx)
     {
         if (!xactImpl_ || idx >= xactImpl_->categoryPaused.size()) return;
         xactImpl_->categoryPaused[idx] = true;
+        // P12-CATEGORY-001: matches FACTAudioEngine_Pause exactly (FACT.c) -- reaches every cue
+        // whose OWN category is `idx` OR a DESCENDANT of `idx` (FACT_INTERNAL_IsInCategory walks
+        // the cue's category up its parent chain), not just cues in the exact category `idx`.
         std::vector<Cue*> cues = xactImpl_->activeCues; // P9-CATEGORY-001, see SetCategoryVolumeInternal
         for (auto* cue : cues)
-            if (cue && cue->categoryIdx_ == idx && cue->getIsPlayingProperty())
+            if (cue && IsInCategory(xactImpl_->xgs.categories, cue->categoryIdx_, idx)
+                    && cue->getIsPlayingProperty())
                 cue->Pause();
     }
 
@@ -337,9 +380,11 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!xactImpl_ || idx >= xactImpl_->categoryPaused.size()) return;
         xactImpl_->categoryPaused[idx] = false;
+        // P12-CATEGORY-001: see PauseCategoryInternal above -- same category-hierarchy reach.
         std::vector<Cue*> cues = xactImpl_->activeCues; // P9-CATEGORY-001, see SetCategoryVolumeInternal
         for (auto* cue : cues)
-            if (cue && cue->categoryIdx_ == idx && cue->getIsPausedProperty())
+            if (cue && IsInCategory(xactImpl_->xgs.categories, cue->categoryIdx_, idx)
+                    && cue->getIsPausedProperty())
                 cue->Resume();
     }
 
@@ -355,9 +400,10 @@ namespace Microsoft::Xna::Framework::Audio
         // category this reliably skips stopping at least one of them (verified by hand-tracing
         // std::remove's element shifts, and by a real regression test -- see
         // StopStopsAllActiveCuesInCategoryNotJustSomeOfThem in AudioCategoryTests.cpp).
+        // P12-CATEGORY-001: see PauseCategoryInternal above -- same category-hierarchy reach.
         std::vector<Cue*> cues = xactImpl_->activeCues;
         for (auto* cue : cues)
-            if (cue && cue->categoryIdx_ == idx)
+            if (cue && IsInCategory(xactImpl_->xgs.categories, cue->categoryIdx_, idx))
                 cue->Stop(opt);
     }
 

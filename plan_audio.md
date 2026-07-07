@@ -4995,8 +4995,56 @@ context-free agents, explicitly instructed not to modify any files):
   `INTERNAL_calculatePitchRatio`, and the existing `SoundEffectTest.PlayClampsPitchInsteadOfThrowing`
   test already confirms this code path runs without crashing for extreme pitch values.
 
-* [ ] P12-CATEGORY-001: implement XACT category parent/child hierarchy cascading for
-  `SetVolume`/`Pause`/`Resume`/`Stop` (`P12-AUDIT-003` finding 1). Not started.
+* [x] P12-CATEGORY-001: implement XACT category parent/child hierarchy cascading for
+  `SetVolume`/`Pause`/`Resume`/`Stop` (`P12-AUDIT-003` finding 1).
+  *Status:* Fixed. Independently re-read `FACT.c`'s `FACTAudioEngine_SetVolume`/`_Pause`/`_Stop`/
+  `FACT_INTERNAL_IsInCategory` line-by-line before implementing anything.
+  *`Pause`/`Resume`/`Stop`:* added a new `IsInCategory(categories, cueCategory, target)` helper
+  (anonymous namespace, `AudioEngine.cpp`) matching `FACT_INTERNAL_IsInCategory` exactly -- true
+  if `cueCategory == target`, or `target` is found by walking `cueCategory`'s own
+  `XgsCategory::parentIndex` chain (`0xFFFF` = root/no parent, matches the parser's own
+  already-documented sentinel, `XactTypes.hpp:23`). `PauseCategoryInternal`/
+  `ResumeCategoryInternal`/`StopCategoryInternal`'s cue filters changed from
+  `cue->categoryIdx_ == idx` to `IsInCategory(xgs.categories, cue->categoryIdx_, idx)`, so an
+  operation on a parent category now reaches cues in any descendant category too.
+  *`SetVolume`:* this one needed more care -- FACT's real formula is
+  `categories[nCategory].currentVolume = categories[nCategory].volume * volume` (the argument is
+  a MULTIPLIER on the category's own authored base volume, not a raw overwrite -- CNA's old code
+  did a raw overwrite, silently discarding the authored base on every explicit `SetVolume()`
+  call, a real bug independent of hierarchy). The recursive cascade to child categories passes
+  each child's own PRE-cascade `currentVolume` as the new "volume" argument -- verified this is
+  FACT's actual formula, not a simplification: a repeated `SetVolume()` on an ancestor compounds
+  a descendant's own authored volume against itself each cascade, an unusual but genuine FAudio
+  quirk, replicated here rather than "fixed" (matches this project's established behavior-fidelity
+  precedent for other upstream FAudio quirks). CNA's existing `categoryVolumes[i]` seeding at
+  `Init()` time (`= xgs.categories[i].volume`, i.e. "authored value applied by default with no
+  explicit `SetVolume()` call needed") was deliberately KEPT as-is rather than switched to FAudio's
+  own literal `currentVolume = 1.0f`-until-first-`SetVolume()` default -- that would be a much
+  wider, riskier behavior change (a category's authored volume would stop applying at all until a
+  game explicitly calls `SetVolume()` at least once) entirely orthogonal to this task's actual
+  scope (hierarchy cascading), and CNA's existing default is arguably more useful anyway. The two
+  are consistent at the boundary: `SetVolume(1.0)` reproduces the authored default either way.
+  *Fixed 2 precision tests broken by the multiply-not-overwrite correction*
+  (`SetVolumeReappliesToAlreadyPlayingCueInstance`, `SetVolumeAppliesToAllActivePlayingCueInstancesInCategory`,
+  `AudioCategoryTests.cpp`): both used `SharedEngine()`'s "Default" category (authored volume byte
+  `0xFF`, amplitude ~1.9977) combined with `SetVolume(0.5f)`, previously expecting `~0.99887`
+  (raw-overwrite math); with the multiply fix, `SetVolume(0.5)` now correctly produces `~1.9977 *
+  0.5 ≈ 0.9989` as the *category's own* stored volume, which combined with the sound's own
+  ~1.9977 amplitude saturates to `1.0` -- no longer discriminating. Changed both tests to
+  `SetVolume(0.2f)` instead (`~1.9977*0.2 ≈ 0.39955` category volume, `~0.79819` final, still
+  comfortably below the `[0,1]` clamp), recomputed the expected values by hand and via Python,
+  updated the explanatory comments in place.
+  *New tests* (`AudioCategoryTests.cpp`, new `BuildCategoryHierarchyXgsFixtureBytes`/`Xwb`/`Xsb`
+  fixture: "HierParent" index 0 no-parent, "HierChild" index 1 `parentIndex=0`, one cue in
+  "HierChild"): `PauseOnParentCategoryPausesCueInChildCategory`,
+  `StopOnParentCategoryStopsCueInChildCategory`,
+  `SetVolumeOnParentCategoryCascadesToChildCategory` (exact-value, via a new
+  `AudioEngineTestAccess::GetCategoryVolume` test hook, since real XNA's `AudioCategory` has no
+  volume getter at all -- command-only property, matched here too).
+  `git stash`-verified (stashing `AudioEngine.cpp` alone: the 3 new hierarchy tests fail against
+  the pre-fix code, everything else still compiles and passes since no header/ABI surface
+  changed). Full suite 3382/3384 pass (was 3379/3381; +3 new tests), same 2 pre-existing
+  hardware-only skips.
 
 * [ ] P12-VAR-001: enforce global-variable PUBLIC/CUE/READONLY accessibility and min/max clamping
   in `AudioEngine::GetGlobalVariable`/`SetGlobalVariable`, and fix `XactTypes.hpp`'s mislabeled

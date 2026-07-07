@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
+#include "AudioEngineTestAccess.hpp"
 #include "CueTestAccess.hpp"
 
 #include <chrono>
@@ -21,6 +22,7 @@
 
 using Microsoft::Xna::Framework::Audio::AudioCategory;
 using Microsoft::Xna::Framework::Audio::AudioEngine;
+using Microsoft::Xna::Framework::Audio::AudioEngineTestAccess;
 using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
 using Microsoft::Xna::Framework::Audio::CueTestAccess;
@@ -833,6 +835,224 @@ namespace
             "cna_audio_category_limit_test", "fixture.xsb", BuildCategoryLimitXsbFixtureBytes()));
         return bank;
     }
+
+    // ── P12-CATEGORY-001: category parent/child hierarchy fixture ────────────────────────────
+    //
+    // Two categories: "HierParent" (index 0, no parent) and "HierChild" (index 1,
+    // parentIndex=0). One cue, "HierChildCue", belongs to "HierChild" -- used to verify that
+    // SetVolume/Pause/Resume/Stop on the PARENT category ("HierParent") reaches a cue whose own
+    // category is a DESCENDANT ("HierChild"), matching FACT.c's real
+    // FACTAudioEngine_SetVolume/_Pause/_Stop + FACT_INTERNAL_IsInCategory behavior.
+
+    void AppendHierarchyCategory(std::vector<uint8_t>& buf, uint16_t parentIndex, uint8_t volumeByte)
+    {
+        AppendU8(buf, 0xFF);         // instanceLimit (unlimited)
+        AppendU16(buf, 0);           // fadeInMS
+        AppendU16(buf, 0);           // fadeOutMS
+        AppendU8(buf, 0);            // maxInstanceBehavior (skip, FAIL)
+        AppendU16(buf, parentIndex);
+        AppendU8(buf, volumeByte);
+        AppendU8(buf, 0);            // visibility
+    }
+
+    std::vector<uint8_t> BuildCategoryHierarchyXgsFixtureBytes()
+    {
+        constexpr uint32_t headerSize       = 65;
+        constexpr uint32_t categoryDataSize = 10;
+        constexpr uint32_t categoryCount    = 2;
+
+        const uint32_t categoryOffset     = headerSize;
+        const uint32_t variableOffset     = categoryOffset + categoryCount * categoryDataSize;
+        const uint32_t categoryNameOffset = variableOffset;
+        const std::string name0 = "HierParent";
+        const std::string name1 = "HierChild";
+        const uint32_t variableNameOffset =
+            categoryNameOffset + static_cast<uint32_t>(name0.size()) + 1 +
+            static_cast<uint32_t>(name1.size()) + 1;
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'X', 'G', 'S', 'F' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // unknown
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 3);   // platform
+
+        AppendU16(data, categoryCount);
+        AppendU16(data, 0); // variableCount
+        AppendU16(data, 0); // blob1Count
+        AppendU16(data, 0); // blob2Count
+        AppendU16(data, 0); // rpcCount
+        AppendU16(data, 0); // dspPresetCount
+        AppendU16(data, 0); // dspParameterCount
+
+        AppendU32(data, categoryOffset);
+        AppendU32(data, variableOffset);
+        AppendU32(data, 0); // blob1Offset
+        AppendU32(data, 0); // categoryNameIndexOffset
+        AppendU32(data, 0); // blob2Offset
+        AppendU32(data, 0); // variableNameIndexOffset
+        AppendU32(data, categoryNameOffset);
+        AppendU32(data, variableNameOffset);
+
+        AppendHierarchyCategory(data, 0xFFFF, 0xFF); // "HierParent", no parent
+        AppendHierarchyCategory(data, 0,      0xFF); // "HierChild", parent = HierParent
+
+        AppendCStr(data, name0);
+        AppendCStr(data, name1);
+
+        return data;
+    }
+
+    constexpr const char* kHierarchyWaveBankName = "HierarchyWaveBank";
+
+    // Same layout as BuildVolXwbFixtureBytes above -- one mono 16-bit PCM entry, 200 bytes of
+    // silence.
+    std::vector<uint8_t> BuildCategoryHierarchyXwbFixtureBytes()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 200;
+        constexpr uint32_t alignment         = 4;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, kHierarchyWaveBankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u)            // format tag: PCM
+            | (1u << 2)       // channels: mono
+            | (44100u << 5)   // sample rate
+            | (2u << 23)      // wBlockAlign: 2 bytes/sample
+            | (1u << 31);     // 16-bit
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        AppendU32(data, 0u); // entry 0: offset=0, deviation=0 (last/only entry)
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(0x00); // 16-bit silence
+
+        return data;
+    }
+
+    // Same layout as BuildVolXsbFixtureBytes above, but the sound's categoryIndex is 1
+    // ("HierChild") instead of 0.
+    std::vector<uint8_t> BuildCategoryHierarchyXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        const uint32_t cueSimpleOffset    = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "HierChildCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "HierarchySoundBank", bankNameSize);
+        AppendPadded(data, kHierarchyWaveBankName, 64);
+
+        // Sound: simple, categoryIndex=1 ("HierChild").
+        AppendU8(data, 0);    // flags
+        AppendU16(data, 1);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+
+        // Simple cue "HierChildCue", pointing at the sound above.
+        AppendU8(data, 0);
+        AppendU32(data, soundOffset);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    AudioEngine& CategoryHierarchyEngine()
+    {
+        static const std::string path =
+            WriteFixture("cna_audio_category_hierarchy_test", "fixture.xgs",
+                         BuildCategoryHierarchyXgsFixtureBytes());
+        static AudioEngine engine(path);
+        return engine;
+    }
+
+    WaveBank& CategoryHierarchyWaveBank()
+    {
+        static WaveBank wb(&CategoryHierarchyEngine(), WriteFixture(
+            "cna_audio_category_hierarchy_test", "fixture.xwb", BuildCategoryHierarchyXwbFixtureBytes()));
+        return wb;
+    }
+
+    SoundBank& CategoryHierarchyBank()
+    {
+        (void)CategoryHierarchyWaveBank(); // must be registered before GetCue()/Play()
+        static SoundBank bank(&CategoryHierarchyEngine(), WriteFixture(
+            "cna_audio_category_hierarchy_test", "fixture.xsb", BuildCategoryHierarchyXsbFixtureBytes()));
+        return bank;
+    }
 }
 
 // ===================== Name =====================
@@ -1025,16 +1245,24 @@ TEST(AudioCategoryTest, SetVolumeReappliesToAlreadyPlayingCueInstance)
                             "could not create a real SoundEffectInstance";
         }
 
-        EXPECT_NO_THROW(cat.SetVolume(0.5f));
+        EXPECT_NO_THROW(cat.SetVolume(0.2f));
         const auto volumesAfterSetVolume = CueTestAccess::ActiveInstanceVolumes(*cue);
         ASSERT_EQ(volumesAfterSetVolume.size(), volumesAtPlay.size());
-        // P11-TEST-001: exact values, not just "decreased" -- VolCue's sound volume byte (0xFF,
-        // amplitude ~1.9977) combined with category volume 1.0 saturates the [0,1] clamp to
-        // exactly 1.0; combined with category volume 0.5 (~0.9989) does not saturate.
+        // P12-CATEGORY-001: exact values, not just "decreased" -- SetVolume() multiplies its
+        // argument by the category's own authored base volume (matches FACT.c's real
+        // FACTAudioEngine_SetVolume formula, `currentVolume = categories[n].volume * volume`,
+        // not a raw overwrite). "Default"'s own authored volume byte is 0xFF (amplitude
+        // ~1.9977), same as VolCue's own sound volume byte -- SetVolume(1.0) gives
+        // categoryVolume ~1.9977, which combined with the sound's own ~1.9977 saturates the
+        // [0,1] clamp to exactly 1.0. SetVolume(0.2) gives categoryVolume ~0.39955 (1.9977*0.2),
+        // which combined with the sound's ~1.9977 is ~0.79819 -- still comfortably below 1.0, so
+        // this is the smallest round SetVolume() argument that stays discriminating (doesn't
+        // saturate) against this fixture; 0.5 or even 0.3 both still saturate to 1.0 with this
+        // formula and wouldn't prove SetVolume's new value took effect.
         for (std::size_t i = 0; i < volumesAtPlay.size(); ++i)
         {
             EXPECT_FLOAT_EQ(volumesAtPlay[i], 1.0f);
-            EXPECT_NEAR(volumesAfterSetVolume[i], 0.99887f, 1e-4f);
+            EXPECT_NEAR(volumesAfterSetVolume[i], 0.79819f, 1e-4f);
         }
 
         cue->Stop(AudioStopOptions::Immediate);
@@ -1073,23 +1301,24 @@ TEST(AudioCategoryTest, SetVolumeAppliesToAllActivePlayingCueInstancesInCategory
                             "could not create a real SoundEffectInstance";
         }
 
-        EXPECT_NO_THROW(cat.SetVolume(0.5f));
+        EXPECT_NO_THROW(cat.SetVolume(0.2f));
 
         const auto volAAfter = CueTestAccess::ActiveInstanceVolumes(*cueA);
         const auto volBAfter = CueTestAccess::ActiveInstanceVolumes(*cueB);
         ASSERT_EQ(volAAfter.size(), volAAtPlay.size());
         ASSERT_EQ(volBAfter.size(), volBAtPlay.size());
-        // P11-TEST-001: exact values (see SetVolumeReappliesToAlreadyPlayingCueInstance's
-        // identical fixture/derivation) -- 1.0 (clamped) before, ~0.9989 (unclamped) after.
+        // P12-CATEGORY-001: exact values (see SetVolumeReappliesToAlreadyPlayingCueInstance's
+        // identical fixture/derivation, updated the same way for the same reason) -- 1.0
+        // (clamped) before, ~0.79819 (unclamped) after.
         for (std::size_t i = 0; i < volAAtPlay.size(); ++i)
         {
             EXPECT_FLOAT_EQ(volAAtPlay[i], 1.0f);
-            EXPECT_NEAR(volAAfter[i], 0.99887f, 1e-4f);
+            EXPECT_NEAR(volAAfter[i], 0.79819f, 1e-4f);
         }
         for (std::size_t i = 0; i < volBAtPlay.size(); ++i)
         {
             EXPECT_FLOAT_EQ(volBAtPlay[i], 1.0f);
-            EXPECT_NEAR(volBAfter[i], 0.99887f, 1e-4f);
+            EXPECT_NEAR(volBAfter[i], 0.79819f, 1e-4f);
         }
 
         cueA->Stop(AudioStopOptions::Immediate);
@@ -1339,4 +1568,112 @@ TEST(AudioCategoryTest, InstanceLimitReplaceLowestPriorityEvictsLowestPriorityRe
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not exercise real playback";
     }
+}
+
+// ===================== P12-CATEGORY-001: category parent/child hierarchy =====================
+//
+// FACT.c's FACTAudioEngine_Pause/_Stop use FACT_INTERNAL_IsInCategory (walks a cue's own
+// category up its parent chain), and FACTAudioEngine_SetVolume recursively cascades to every
+// DIRECT child category -- so an operation on "HierParent" must reach a cue whose own category
+// is "HierChild" (a child of "HierParent"), even though the cue was never directly assigned to
+// "HierParent" itself.
+
+TEST(AudioCategoryTest, PauseOnParentCategoryPausesCueInChildCategory)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cue(CategoryHierarchyBank().GetCue("HierChildCue"));
+        cue->Play();
+        if (!CueTestAccess::ActiveInstance(*cue, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        ASSERT_TRUE(cue->getIsPlayingProperty());
+        ASSERT_FALSE(cue->getIsPausedProperty());
+
+        AudioCategory parent = CategoryHierarchyEngine().GetCategory("HierParent");
+        parent.Pause();
+
+        EXPECT_TRUE(cue->getIsPlayingProperty()); // P9-LIFECYCLE-013: independent flags
+        EXPECT_TRUE(cue->getIsPausedProperty());
+
+        parent.Resume();
+        EXPECT_FALSE(cue->getIsPausedProperty());
+
+        cue->Stop(AudioStopOptions::Immediate);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+TEST(AudioCategoryTest, StopOnParentCategoryStopsCueInChildCategory)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        std::unique_ptr<Cue> cue(CategoryHierarchyBank().GetCue("HierChildCue"));
+        cue->Play();
+        if (!CueTestAccess::ActiveInstance(*cue, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        ASSERT_TRUE(cue->getIsPlayingProperty());
+
+        AudioCategory parent = CategoryHierarchyEngine().GetCategory("HierParent");
+        parent.Stop(AudioStopOptions::Immediate);
+
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_FALSE(cue->getIsPlayingProperty());
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
+// SetVolume's own cascade is exact-value verifiable (unlike Pause/Stop, which are boolean state):
+// FACTAudioEngine_SetVolume(parent, 0.5) sets categoryVolumes[parent] = authored(parent)*0.5,
+// then recursively calls SetVolume(child, categoryVolumes[child]_old) -- so
+// categoryVolumes[child]_new = authored(child) * categoryVolumes[child]_old. Both "HierParent"
+// and "HierChild" have authored volume byte 0xFF (amplitude ~1.9977); before any SetVolume call,
+// categoryVolumes[child] == its own authored value (~1.9977, seeded at Init()), so after
+// SetVolume(parent, 0.5): categoryVolumes[child] = 1.9977 * 1.9977 = ~3.99091, clamped later at
+// the per-cue mix stage. Combined with HierChildCue's own sound volume byte (also 0xFF,
+// ~1.9977), the final live instance volume is clamp(1.9977*3.99091, 0, 1) = 1.0 (saturates) --
+// still enough to prove the cascade *reached* the child (its categoryVolumes entry changed at
+// all), verified indirectly via GetCategoryVolume since AudioCategory itself has no volume
+// getter (matches real XNA -- Volume is a command-only property in FNA's own AudioCategory.cs).
+TEST(AudioCategoryTest, SetVolumeOnParentCategoryCascadesToChildCategory)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    AudioEngine& engine = CategoryHierarchyEngine();
+    // "HierChild" is authored as category index 1 in BuildCategoryHierarchyXgsFixtureBytes above
+    // (index 0 = "HierParent", index 1 = "HierChild") -- known and fixed by this test's own
+    // fixture, no name->index lookup needed.
+    constexpr unsigned short kHierChildIdx = 1;
+
+    const float childVolBefore = AudioEngineTestAccess::GetCategoryVolume(engine, kHierChildIdx);
+
+    AudioCategory parent = engine.GetCategory("HierParent");
+    parent.SetVolume(0.5f);
+
+    const float childVolAfter = AudioEngineTestAccess::GetCategoryVolume(engine, kHierChildIdx);
+
+    // The cascade must have changed the child's own stored category volume -- before this fix,
+    // SetVolume never touched anything outside the exact target category index at all.
+    EXPECT_NE(childVolAfter, childVolBefore);
+    // Exact value: authored("HierChild") * childVolBefore = 1.9977355869281581^2.
+    EXPECT_NEAR(childVolAfter, 1.9977355869281581f * childVolBefore, 1e-4f);
+
+    parent.SetVolume(1.0f); // restore a known baseline for any other test sharing this engine
 }
