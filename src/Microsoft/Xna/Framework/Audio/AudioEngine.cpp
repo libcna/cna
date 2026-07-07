@@ -45,6 +45,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     namespace
     {
+        // P12-VAR-001: matches FACT_internal.h's ACCESSIBILITY_* bit values exactly
+        // (PUBLIC=0x1, READONLY=0x2, CUE=0x4, RESERVED=0x8 unused here).
+        constexpr uint8_t kAccessibilityPublic   = 0x1;
+        constexpr uint8_t kAccessibilityReadOnly = 0x2;
+        constexpr uint8_t kAccessibilityCue      = 0x4;
+
         // P12-CATEGORY-001: matches FACT.c's FACT_INTERNAL_IsInCategory exactly -- true if
         // `cueCategory` (a cue's own, exact category) IS `target`, or `target` is any ancestor of
         // `cueCategory` in the parent-category chain (XgsCategory::parentIndex, 0xFFFF = root/no
@@ -179,13 +185,21 @@ namespace Microsoft::Xna::Framework::Audio
         if (isDisposed_)
             throw System::ObjectDisposedException("AudioEngine");
 
+        // P12-VAR-001: matches FACTAudioEngine_GetGlobalVariableIndex exactly (FACT.c) --
+        // PUBLIC must be set AND CUE must be clear. A CUE-scoped variable is a genuinely
+        // different domain (only reachable via Cue::GetVariable/SetVariable, GetCueVariableInfo
+        // below), not just a stricter check on the same one.
+        const auto* v = FindVariable(name);
+        if (!v || !(v->accessibility & kAccessibilityPublic) || (v->accessibility & kAccessibilityCue))
+            throw System::InvalidOperationException("Invalid variable name!");
+
         if (xactImpl_)
         {
             auto it = xactImpl_->globalVariables.find(name);
             if (it != xactImpl_->globalVariables.end())
                 return it->second;
         }
-        throw System::InvalidOperationException("Invalid variable name!");
+        return v->initialValue;
     }
 
     void AudioEngine::SetGlobalVariable(const std::string& name, float value)
@@ -195,13 +209,21 @@ namespace Microsoft::Xna::Framework::Audio
         if (isDisposed_)
             throw System::ObjectDisposedException("AudioEngine");
 
+        // P12-VAR-001: same name-validity gate as GetGlobalVariable above.
+        const auto* v = FindVariable(name);
+        if (!v || !(v->accessibility & kAccessibilityPublic) || (v->accessibility & kAccessibilityCue))
+            throw System::InvalidOperationException("Invalid variable name!");
+
+        // Matches FACTAudioEngine_SetGlobalVariable's own READONLY rejection (FACT.c) -- FNA's
+        // C# wrapper (AudioEngine.cs SetGlobalVariable) never checks this native call's return
+        // code, so in real XNA a READONLY variable's SetGlobalVariable() call is a silent no-op,
+        // not an exception.
+        if (v->accessibility & kAccessibilityReadOnly)
+            return;
+
+        // Matches FACT's own `FAudio_clamp(nValue, var->minValue, var->maxValue)`.
         if (xactImpl_)
-        {
-            auto it = xactImpl_->globalVariables.find(name);
-            if (it == xactImpl_->globalVariables.end())
-                throw System::InvalidOperationException("Invalid variable name!");
-            it->second = value;
-        }
+            xactImpl_->globalVariables[name] = std::clamp(value, v->minValue, v->maxValue);
     }
 
     const std::string* AudioEngine::GetVariableNameByIndex(SharpRuntime::shortcs index) const
@@ -560,9 +582,49 @@ namespace Microsoft::Xna::Framework::Audio
         v.erase(std::remove(v.begin(), v.end(), cue), v.end());
     }
 
+    const CNA::Internal::Audio::XgsVariable* AudioEngine::FindVariable(const std::string& name) const
+    {
+        if (!xactImpl_) return nullptr;
+        auto it = xactImpl_->xgs.variableNameMap.find(name);
+        if (it == xactImpl_->xgs.variableNameMap.end()) return nullptr;
+        return &xactImpl_->xgs.variables[it->second];
+    }
+
     bool AudioEngine::IsValidVariableName(const std::string& name) const
     {
-        return xactImpl_ && xactImpl_->globalVariables.find(name) != xactImpl_->globalVariables.end();
+        const auto* v = FindVariable(name);
+        return v && (v->accessibility & kAccessibilityPublic) && (v->accessibility & kAccessibilityCue);
+    }
+
+    AudioEngine::CueVariableInfo AudioEngine::GetCueVariableInfo(const std::string& name) const
+    {
+        const auto* v = FindVariable(name);
+        if (!v || !(v->accessibility & kAccessibilityPublic) || !(v->accessibility & kAccessibilityCue))
+            return {};
+        return CueVariableInfo{
+            true,
+            (v->accessibility & kAccessibilityReadOnly) != 0,
+            v->minValue, v->maxValue, v->initialValue
+        };
+    }
+
+    bool AudioEngine::TryGetGlobalVariableValue(const std::string& name, float& outValue) const
+    {
+        const auto* v = FindVariable(name);
+        if (!v || !(v->accessibility & kAccessibilityPublic) || (v->accessibility & kAccessibilityCue))
+            return false;
+
+        if (xactImpl_)
+        {
+            auto it = xactImpl_->globalVariables.find(name);
+            if (it != xactImpl_->globalVariables.end())
+            {
+                outValue = it->second;
+                return true;
+            }
+        }
+        outValue = v->initialValue;
+        return true;
     }
 
     std::size_t AudioEngine::ActiveCueCountForTest() const

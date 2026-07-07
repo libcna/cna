@@ -47,7 +47,13 @@ namespace CNA::Internal::Audio
         float       minValue;
         /** @brief Maximum allowed value. */
         float       maxValue;
-        /** @brief Accessibility flags: bit0=public, bit1=global, bit2=read-only. */
+        /**
+         * @brief Accessibility flags, matching FAudio's ACCESSIBILITY_* bit values exactly
+         * (FACT_internal.h): 0x1=public, 0x2=read-only, 0x4=cue-scoped. A variable is either
+         * engine-global (public, cue-scoped bit clear -- AudioEngine::GetGlobalVariable/
+         * SetGlobalVariable) or cue-scoped (public and cue-scoped bits both set --
+         * Cue::GetVariable/SetVariable), never both; read-only only blocks writes, not reads.
+         */
         uint8_t     accessibility;
     };
 

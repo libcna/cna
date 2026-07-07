@@ -155,8 +155,15 @@ namespace
         AppendU8(data, 0xFF);
         AppendU8(data, 0);
 
-        // Variable: accessibility, initialValue, minValue, maxValue
-        AppendU8(data, 0x03);
+        // Variable: accessibility, initialValue, minValue, maxValue.
+        // P12-VAR-001: PUBLIC|CUE (0x5) -- this "Volume" variable is exercised via Cue-level
+        // GetVariable/SetVariable AND per-cue RPC curves throughout this file, both of which
+        // require the CUE accessibility bit set (matches FACTCue_GetVariableIndex, FACT.c) --
+        // an engine-global (PUBLIC, non-CUE) variable is a different, mutually-exclusive domain,
+        // never reachable via Cue::GetVariable in real XNA/FACT. Previously 0x03 (PUBLIC|
+        // READONLY, CUE clear), an arbitrary nonzero byte chosen before this project enforced
+        // accessibility semantics at all.
+        AppendU8(data, 0x05);
         AppendF32(data, 0.5f);
         AppendF32(data, 0.0f);
         AppendF32(data, 1.0f);
@@ -1976,8 +1983,11 @@ namespace
         AppendU8(data, 0xFF);
         AppendU8(data, 0);
 
-        // Variable: accessibility, initialValue, minValue, maxValue
-        AppendU8(data, 0x03);
+        // Variable: accessibility, initialValue, minValue, maxValue.
+        // P12-VAR-001: PUBLIC|CUE (0x5) -- see BuildXgsFixtureBytes's identical "Volume" fix
+        // above for the full rationale; this "FilterFreq" variable is exercised the same way
+        // (Cue::SetVariable + a per-cue RPC curve).
+        AppendU8(data, 0x05);
         AppendF32(data, 0.0f);
         AppendF32(data, 0.0f);
         AppendF32(data, 1.0f);

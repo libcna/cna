@@ -67,22 +67,22 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P12-CATEGORY-001`, on top of
+- **Build:** clean, rebuilt and reverified this pass (`P12-VAR-001`, on top of `P12-CATEGORY-001`,
   `P12-PAUSE-001`, `P12-DOC-001`, `P12-PITCH-001`, `P11-PAN-001`, `P11-XACT-003/004/002`,
   `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`, and everything in
   Phase 10). EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer linked. Required a
   one-line unrelated unblock first (`GamerProfile.cpp`'s `RegionInfo::CurrentRegion()` call,
   renamed upstream in sharp-runtime -- see §3). `cna_demo_sound`/`cna_demo_2d` example targets not
   rebuilt this pass (no Audio *public XNA* API surface touched by any Phase 12 work so far --
-  `P12-CATEGORY-001`'s new `AudioEngineTestAccess::GetCategoryVolume` is `NOXNA`/test-only).
-- **Tests:** `CnaTests` whole-suite count is **3382 / 3384 pass** (2 skipped:
+  `P12-VAR-001`'s new `AudioEngine`/`Cue` methods are all `NOXNA`/private).
+- **Tests:** `CnaTests` whole-suite count is **3396 / 3398 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected — not Audio; the 3-test increase since the last sync is
-  `P12-CATEGORY-001`'s new category-hierarchy-cascade coverage, see §3). Prior sync's 1-test
-  increase was `P12-PAUSE-001`'s new `InstanceLimitStillCountsAPausedCue` regression lock. The
-  audio-scoped subset (§7's `--gtest_filter` list) was reverified under a **fresh one-off
-  ThreadSanitizer build** during `P11-PAN-001` (497/497 pass, zero `WARNING: ThreadSanitizer`
-  reports); not re-run for `P12-PITCH-001`/`P12-PAUSE-001`/`P12-CATEGORY-001` (none touch
+  hardware-dependent, expected — not Audio; the 14-test increase since the last sync is
+  `P12-VAR-001`'s new variable-accessibility/clamping coverage, see §3). Prior sync's 3-test
+  increase was `P12-CATEGORY-001`'s new category-hierarchy-cascade coverage. The audio-scoped
+  subset (§7's `--gtest_filter` list) was reverified under a **fresh one-off ThreadSanitizer
+  build** during `P11-PAN-001` (497/497 pass, zero `WARNING: ThreadSanitizer` reports); not
+  re-run for `P12-PITCH-001`/`P12-PAUSE-001`/`P12-CATEGORY-001`/`P12-VAR-001` (none touch
   threading/ownership surface). A fresh dedicated ASan+UBSan build (466/466 pass at the time) was
   last run during the post-Phase-10 sweep.
 - **Known flaky tests (pre-existing, not Audio regressions):**
@@ -138,6 +138,32 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12" s
   extremely recent Phase 9-11 work there), and `Microphone`/the 3 exception classes. Follow-up
   tasks (`P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`, `P12-DOC-001`, plus
   the pre-existing `P11-PAN-002`) tracked in `plan_audio.md`, being worked one at a time.
+- **`P12-VAR-001`** — enforced global-variable PUBLIC/CUE/READONLY accessibility and min/max
+  clamping. Independently re-read `FACT.c`'s two variable-index resolvers first, which surfaced
+  a deeper finding than the audit originally described: `AudioEngine::GetGlobalVariable`/
+  `SetGlobalVariable` and `Cue::GetVariable`/`SetVariable` are two genuinely SEPARATE variable
+  domains in real FACT (`FACTAudioEngine_GetGlobalVariableIndex` requires PUBLIC+non-CUE;
+  `FACTCue_GetVariableIndex` requires PUBLIC+CUE -- a variable is one or the other, never both),
+  not "the same global set, individually overridable per cue" the way CNA's old code treated
+  them. Fixed both: `AudioEngine` gained `FindVariable`/`GetCueVariableInfo`/
+  `TryGetGlobalVariableValue`, `GetGlobalVariable`/`SetGlobalVariable` now correctly reject a
+  CUE-scoped or non-PUBLIC name, clamp to `[min,max]`, and silently no-op on `READONLY` (matching
+  FNA's C# wrapper, which never checks the native call's own READONLY-rejection return code).
+  `Cue::GetVariable`/`SetVariable` now correctly REJECT an engine-global-only variable name (a
+  real, previously-wrong permissiveness) instead of transparently falling through to
+  `GetGlobalVariable`. New private `Cue::GetVariableForRpc` preserves the *old*, both-domain
+  fallback for the two purely-internal callers that genuinely need it (RPC curve evaluation,
+  INTERACTIVE variation-table selection) -- real FACT itself has this exact asymmetry
+  (`get_active_variation_index` dispatches by the CUE bit; `FACT_INTERNAL_UpdateRPCs` reads a
+  cue's per-variable array unconditionally, bypassing the public accessibility gate entirely).
+  Fixed 4 test fixtures whose variable accessibility bytes were arbitrary/uninformed by these
+  semantics (predating this project enforcing them at all) so each still means what its own
+  tests need. Also fixed `XactTypes.hpp`'s mislabeled accessibility-bit doxygen. 14 new tests
+  (new 4-variable fixture spanning every PUBLIC/READONLY/CUE combination). `git stash`-verified
+  (11 of 15 new/changed assertions fail against the pre-fix code). Full suite 3396/3398 pass (was
+  3382/3384), no regressions. **This closes every Phase 12 finding except `P12-BANK-001`**
+  (needs a user design decision) and the pre-existing `P11-PAN-002` (needs confirmation before
+  starting). See `plan_audio.md`.
 - **`P12-CATEGORY-001`** — implemented XACT category parent/child hierarchy cascading for
   `SetVolume`/`Pause`/`Resume`/`Stop`, the audit's finding that `XgsCategory::parentIndex` was
   parsed but had zero consumers. Independently re-read `FACT.c`'s `FACTAudioEngine_SetVolume`/
@@ -669,23 +695,23 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 **Phase 11 is fully closed.** `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly
 **rejected** by the user 2026-07-07 -- staying on SDL3_mixer (see §9).
 
-**Phase 12 (fresh logic-correctness audit, user-requested 2026-07-07) found 6 candidate gaps.**
-Status: `P12-PITCH-001` fixed (real bug); `P12-DOC-001` fixed (docs); `P12-CATEGORY-001` fixed
-(real bug, category hierarchy + a SetVolume raw-overwrite bug found along the way); `P12-PAUSE-001`
-investigated and found to be a **false positive** -- `Cue::state_` already stays `Playing`
-throughout a pause (the independent `paused_` bool, `P9-LIFECYCLE-013`), so the audit's finding
-did not reproduce; a new passing regression test (`InstanceLimitStillCountsAPausedCue`) locks in
-the already-correct behavior with zero code change (see §3). Two remain, being worked one at a
-time per the user's own explicit instruction to do so autonomously:
+**Phase 12 (fresh logic-correctness audit, user-requested 2026-07-07) found 6 candidate gaps --
+5 are closed:** `P12-PITCH-001` fixed (real bug); `P12-DOC-001` fixed (docs); `P12-CATEGORY-001`
+fixed (real bug, category hierarchy + a SetVolume raw-overwrite bug found along the way);
+`P12-VAR-001` fixed (real bug -- AudioEngine/Cue variable accessibility were conflated into one
+domain when real FACT has two separate ones, see §3); `P12-PAUSE-001` investigated and found to
+be a **false positive** -- `Cue::state_` already stays `Playing` throughout a pause (the
+independent `paused_` bool, `P9-LIFECYCLE-013`), so the audit's finding did not reproduce; a new
+passing regression test (`InstanceLimitStillCountsAPausedCue`) locks in the already-correct
+behavior with zero code change. **One remains, and it needs the user, not autonomous
+self-selection:**
 
-1. **`P12-VAR-001`** -- enforce global-variable PUBLIC/CUE/READONLY accessibility + min/max
-   clamping in `GetGlobalVariable`/`SetGlobalVariable`, and fix `XactTypes.hpp`'s mislabeled
-   accessibility-bit doxygen. Real feature work, touches `AudioEngine` and likely `Cue`. Good next
-   pick.
-2. **`P12-BANK-001`** -- `SoundBank`/`WaveBank::Dispose()` doesn't force-stop cues still using the
+1. **`P12-BANK-001`** -- `SoundBank`/`WaveBank::Dispose()` doesn't force-stop cues still using the
    bank, unlike real FACT. **Needs a design decision, not just an implementation** (a `GetCue()`'d
-   `Cue*` is currently documented as caller-owned) -- candidate for user input rather than
-   autonomous self-selection; see `plan_audio.md` P12-AUDIT-004 for the full tension.
+   `Cue*` is currently documented as caller-owned) -- see `plan_audio.md` P12-AUDIT-004 for the
+   full tension.
+
+**With `P12-BANK-001` needing user input, Phase 12 has no further self-selectable Audio work.**
 
 Also still open, spawned by `P11-PAN-001` (not part of Phase 12's audit, but same "confirm before
 starting" caveat):

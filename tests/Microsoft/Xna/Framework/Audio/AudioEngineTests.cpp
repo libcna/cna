@@ -136,8 +136,14 @@ namespace
         AppendU8(data, 0xFF);
         AppendU8(data, 0);
 
-        // Variable: accessibility, initialValue, minValue, maxValue
-        AppendU8(data, 0x03);
+        // Variable: accessibility, initialValue, minValue, maxValue.
+        // P12-VAR-001: PUBLIC only (0x1) -- FACT_internal.h's real bit values are PUBLIC=0x1,
+        // READONLY=0x2, CUE=0x4; this variable must be plain engine-global (PUBLIC set, CUE
+        // clear) and writable (READONLY clear) for GetGlobalVariable/SetGlobalVariable's tests
+        // below to mean what they say. Previously 0x03 (PUBLIC|READONLY), an arbitrary nonzero
+        // byte chosen before this project enforced accessibility semantics at all -- silently
+        // made SetGlobalVariableValidUpdatesValue test a no-op-writable variable by accident.
+        AppendU8(data, 0x01);
         AppendF32(data, 0.5f);
         AppendF32(data, 0.0f);
         AppendF32(data, 1.0f);
@@ -156,6 +162,102 @@ namespace
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xgs";
             const auto bytes = BuildXgsFixtureBytes();
+            std::ofstream f(file, std::ios::binary);
+            f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            return file.string();
+        }();
+        return path;
+    }
+
+    // P12-VAR-001: dedicated fixture with 4 variables spanning every combination of the
+    // PUBLIC/READONLY/CUE accessibility bits this project now enforces (FACT_internal.h:
+    // PUBLIC=0x1, READONLY=0x2, CUE=0x4):
+    //   "GlobalVar"   -- PUBLIC only (0x1): plain engine-global, readable+writable via
+    //                    GetGlobalVariable/SetGlobalVariable.
+    //   "ReadOnlyVar" -- PUBLIC|READONLY (0x3): engine-global, readable but SetGlobalVariable is
+    //                    a silent no-op (FNA's C# wrapper never checks
+    //                    FACTAudioEngine_SetGlobalVariable's native return code).
+    //   "CueVar"      -- PUBLIC|CUE (0x5): cue-scoped -- GetGlobalVariable/SetGlobalVariable must
+    //                    reject it outright, a different/mutually-exclusive domain.
+    //   "PrivateVar"  -- 0x0 (neither bit set): unreachable via either the engine-global or
+    //                    cue-scoped API.
+    // All four share min=0.0/max=10.0/initial=5.0 so the same clamp bounds cover every case.
+    std::vector<uint8_t> BuildVarAccessibilityXgsFixtureBytes()
+    {
+        constexpr uint32_t headerSize       = 65;
+        constexpr uint32_t categoryDataSize = 10;
+        constexpr uint32_t variableDataSize = 13;
+        constexpr uint32_t variableCount    = 4;
+
+        const uint32_t categoryOffset     = headerSize;
+        const uint32_t variableOffset     = categoryOffset + categoryDataSize;
+        const uint32_t categoryNameOffset = variableOffset + variableDataSize * variableCount;
+        const std::string categoryName    = "Default";
+        const std::string name0 = "GlobalVar";
+        const std::string name1 = "ReadOnlyVar";
+        const std::string name2 = "CueVar";
+        const std::string name3 = "PrivateVar";
+        const uint32_t variableNameOffset =
+            categoryNameOffset + static_cast<uint32_t>(categoryName.size()) + 1;
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'X', 'G', 'S', 'F' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // unknown
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 3);   // platform
+
+        AppendU16(data, 1); // categoryCount
+        AppendU16(data, variableCount);
+        AppendU16(data, 0); // blob1Count
+        AppendU16(data, 0); // blob2Count
+        AppendU16(data, 0); // rpcCount
+        AppendU16(data, 0); // dspPresetCount
+        AppendU16(data, 0); // dspParameterCount
+
+        AppendU32(data, categoryOffset);
+        AppendU32(data, variableOffset);
+        AppendU32(data, 0); // blob1Offset
+        AppendU32(data, 0); // categoryNameIndexOffset
+        AppendU32(data, 0); // blob2Offset
+        AppendU32(data, 0); // variableNameIndexOffset
+        AppendU32(data, categoryNameOffset);
+        AppendU32(data, variableNameOffset);
+
+        // Category: instanceLimit, fadeInMS, fadeOutMS, maxInstanceBehavior(skip), parentIndex, volume, visibility
+        AppendU8(data, 0xFF);
+        AppendU16(data, 0);
+        AppendU16(data, 0);
+        AppendU8(data, 0);
+        AppendU16(data, 0xFFFF);
+        AppendU8(data, 0xFF);
+        AppendU8(data, 0);
+
+        // Variables: accessibility, initialValue, minValue, maxValue.
+        AppendU8(data, 0x01); AppendF32(data, 5.0f); AppendF32(data, 0.0f); AppendF32(data, 10.0f); // GlobalVar
+        AppendU8(data, 0x03); AppendF32(data, 5.0f); AppendF32(data, 0.0f); AppendF32(data, 10.0f); // ReadOnlyVar
+        AppendU8(data, 0x05); AppendF32(data, 5.0f); AppendF32(data, 0.0f); AppendF32(data, 10.0f); // CueVar
+        AppendU8(data, 0x00); AppendF32(data, 5.0f); AppendF32(data, 0.0f); AppendF32(data, 10.0f); // PrivateVar
+
+        AppendCStr(data, categoryName);
+        AppendCStr(data, name0);
+        AppendCStr(data, name1);
+        AppendCStr(data, name2);
+        AppendCStr(data, name3);
+
+        return data;
+    }
+
+    const std::string& VarAccessibilityFixturePath()
+    {
+        static const std::string path = []() -> std::string
+        {
+            auto dir = std::filesystem::temp_directory_path() / "cna_audio_engine_test";
+            std::filesystem::create_directories(dir);
+            auto file = dir / "var_accessibility.xgs";
+            const auto bytes = BuildVarAccessibilityXgsFixtureBytes();
             std::ofstream f(file, std::ios::binary);
             f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
             return file.string();
@@ -655,6 +757,128 @@ TEST(AudioEngineTest, SetGlobalVariableAfterDisposeThrowsObjectDisposed)
     AudioEngine engine(XgsFixturePath());
     engine.Dispose();
     EXPECT_THROW(engine.SetGlobalVariable("Volume", 1.0f), System::ObjectDisposedException);
+}
+
+// ===================== P12-VAR-001: accessibility/clamping =====================
+
+TEST(AudioEngineTest, GetGlobalVariableRejectsCueScopedVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_THROW((void)engine.GetGlobalVariable("CueVar"), System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, SetGlobalVariableRejectsCueScopedVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_THROW(engine.SetGlobalVariable("CueVar", 1.0f), System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, GetGlobalVariableRejectsNonPublicVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_THROW((void)engine.GetGlobalVariable("PrivateVar"), System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, SetGlobalVariableRejectsNonPublicVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_THROW(engine.SetGlobalVariable("PrivateVar", 1.0f), System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, GetGlobalVariableOnReadOnlyVariableStillReadable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_FLOAT_EQ(engine.GetGlobalVariable("ReadOnlyVar"), 5.0f);
+}
+
+// Matches FACTAudioEngine_SetGlobalVariable's own READONLY rejection (FACT.c) -- FNA's C#
+// wrapper never checks this native call's return code, so a READONLY variable's
+// SetGlobalVariable() is a silent no-op in real XNA, not an exception.
+TEST(AudioEngineTest, SetGlobalVariableOnReadOnlyVariableIsSilentNoOp)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    EXPECT_NO_THROW(engine.SetGlobalVariable("ReadOnlyVar", 9.0f));
+    EXPECT_FLOAT_EQ(engine.GetGlobalVariable("ReadOnlyVar"), 5.0f);
+}
+
+TEST(AudioEngineTest, SetGlobalVariableClampsAboveMaximum)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    engine.SetGlobalVariable("GlobalVar", 999.0f);
+    EXPECT_FLOAT_EQ(engine.GetGlobalVariable("GlobalVar"), 10.0f);
+}
+
+TEST(AudioEngineTest, SetGlobalVariableClampsBelowMinimum)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    engine.SetGlobalVariable("GlobalVar", -999.0f);
+    EXPECT_FLOAT_EQ(engine.GetGlobalVariable("GlobalVar"), 0.0f);
+}
+
+TEST(AudioEngineTest, SetGlobalVariableWithinRangeIsNotClamped)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    engine.SetGlobalVariable("GlobalVar", 7.0f);
+    EXPECT_FLOAT_EQ(engine.GetGlobalVariable("GlobalVar"), 7.0f);
+}
+
+// "Volume" in XgsFixturePath()'s own fixture is PUBLIC-only (accessibility 0x1, engine-global)
+// -- Cue::GetVariable/SetVariable must reject it (matches FACTCue_GetVariableIndex's PUBLIC+CUE
+// requirement, FACT.c): an engine-global variable is a different, mutually-exclusive domain,
+// never reachable via the cue-level API in real XNA/FACT.
+TEST(AudioEngineTest, CueGetVariableRejectsEngineGlobalOnlyVariable)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wb(&engine, WriteFixture("var_reject.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("var_reject.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+
+    EXPECT_THROW((void)cue->GetVariable("Volume"), System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, CueSetVariableRejectsEngineGlobalOnlyVariable)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wb(&engine, WriteFixture("var_reject2.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("var_reject2.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+
+    EXPECT_THROW(cue->SetVariable("Volume", 1.0f), System::InvalidOperationException);
+}
+
+// "CueVar" in VarAccessibilityFixturePath()'s fixture IS PUBLIC|CUE -- unlike "Volume" above,
+// this one must be reachable via the cue-level API, reading back its authored initial value
+// since this fresh cue has never explicitly SetVariable()-d it (matches real FACT's per-cue
+// variableValues[i], initialized from the declared variable's own initialValue at cue creation).
+TEST(AudioEngineTest, CueGetVariableReadsCueScopedVariableInitialValue)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    WaveBank wb(&engine, WriteFixture("var_cue.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("var_cue.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+
+    EXPECT_FLOAT_EQ(cue->GetVariable("CueVar"), 5.0f);
+}
+
+TEST(AudioEngineTest, CueSetVariableClampsCueScopedVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    WaveBank wb(&engine, WriteFixture("var_cue2.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("var_cue2.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+
+    cue->SetVariable("CueVar", 999.0f);
+    EXPECT_FLOAT_EQ(cue->GetVariable("CueVar"), 10.0f);
+}
+
+TEST(AudioEngineTest, CueGetVariableRejectsPrivateVariable)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    WaveBank wb(&engine, WriteFixture("var_private.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank sb(&engine, WriteFixture("var_private.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
+
+    EXPECT_THROW((void)cue->GetVariable("PrivateVar"), System::InvalidOperationException);
 }
 
 // ===================== Update =====================

@@ -446,7 +446,7 @@ namespace Microsoft::Xna::Framework::Audio
                 }
                 else
                 {
-                    value = GetVariable(*varName);
+                    value = GetVariableForRpc(*varName);
                 }
 
                 const float result = EvaluateRpcCurve(*rpc, value);
@@ -699,9 +699,18 @@ namespace Microsoft::Xna::Framework::Audio
         if (IsBuiltInCueVariable(name))
             return 0.0f;
 
+        // P12-VAR-001: matches FACTCue_GetVariableIndex exactly (FACT.c) -- only a variable with
+        // BOTH the PUBLIC and CUE accessibility bits set is reachable through the cue-level API
+        // at all; an engine-GLOBAL (PUBLIC, non-CUE) variable is a genuinely different domain,
+        // never reachable via Cue::GetVariable in real XNA/FACT (see GetVariableForRpc for the
+        // one place that DOES need to read either domain, internal RPC/variation evaluation).
         AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
-        if (eng && eng->IsValidVariableName(name))
-            return eng->GetGlobalVariable(name);
+        if (eng)
+        {
+            auto info = eng->GetCueVariableInfo(name);
+            if (info.valid)
+                return info.initialValue; // never explicitly SetVariable()-d on this cue yet
+        }
 
         throw System::InvalidOperationException("Invalid variable name!");
     }
@@ -714,14 +723,58 @@ namespace Microsoft::Xna::Framework::Audio
         if (name.empty())
             throw System::ArgumentNullException("name");
 
-        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
-        bool valid = variables_.find(name) != variables_.end()
-                  || IsBuiltInCueVariable(name)
-                  || (eng && eng->IsValidVariableName(name));
-        if (!valid)
-            throw System::InvalidOperationException("Invalid variable name!");
+        if (IsBuiltInCueVariable(name))
+        {
+            variables_[name] = value;
+            return;
+        }
 
-        variables_[name] = value;
+        // P12-VAR-001: matches FACTCue_SetVariable exactly (FACT.c) -- same PUBLIC+CUE gate as
+        // GetVariable above, plus a READONLY rejection and authored [minValue,maxValue] clamp
+        // (FAudio's `FAudio_clamp(nValue, var->minValue, var->maxValue)`). Unlike
+        // SetGlobalVariable's READONLY case (a silent no-op, since FNA's C# wrapper discards the
+        // native call's error code), FACTCue_SetVariable's caller in FNA -- Cue.SetVariable --
+        // ALSO never checks its return code, so this is a silent no-op here too, not a throw.
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        if (eng)
+        {
+            auto info = eng->GetCueVariableInfo(name);
+            if (info.valid)
+            {
+                if (!info.readOnly)
+                    variables_[name] = std::clamp(value, info.minValue, info.maxValue);
+                return;
+            }
+        }
+
+        // Preserves this class's own established precedent (P9-LIFECYCLE-015 etc.) of throwing
+        // rather than silently no-op-ing for a name that was never valid at all, matching the
+        // FACTVARIABLEINDEX_INVALID case FNA's C# SetVariable() itself does check and throw for.
+        throw System::InvalidOperationException("Invalid variable name!");
+    }
+
+    float Cue::GetVariableForRpc(const std::string& name) const
+    {
+        auto it = variables_.find(name);
+        if (it != variables_.end())
+            return it->second;
+
+        if (IsBuiltInCueVariable(name))
+            return 0.0f;
+
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        if (eng)
+        {
+            auto cueInfo = eng->GetCueVariableInfo(name);
+            if (cueInfo.valid)
+                return cueInfo.initialValue;
+
+            float globalValue = 0.0f;
+            if (eng->TryGetGlobalVariableValue(name, globalValue))
+                return globalValue;
+        }
+
+        return 0.0f;
     }
 
     // ── 3D ───────────────────────────────────────────────────────────────────
@@ -810,13 +863,14 @@ namespace Microsoft::Xna::Framework::Audio
                 // [varMin, varMax] range contains the current value of the table's bound
                 // variable (FAudio's get_active_variation_index, VARIATION_TABLE_TYPE_INTERACTIVE
                 // branch) -- first matching entry in file order wins, matching FAudio's forward
-                // linear scan. GetVariable() already implements the right cue-local-then-global
-                // fallback FACT uses to resolve a variable's current value, so it's reused here
-                // instead of duplicating that logic (P9-XACT-003).
+                // linear scan. get_active_variation_index itself explicitly dispatches to
+                // FACTCue_GetVariable or FACTAudioEngine_GetGlobalVariable depending on the
+                // variable's ACCESSIBILITY_CUE bit (FACT_internal.c) -- GetVariableForRpc
+                // reproduces exactly that dual dispatch (P9-XACT-003, P12-VAR-001).
                 const std::string* varName = eng ? eng->GetVariableNameByIndex(var.variable) : nullptr;
                 if (varName && !varName->empty())
                 {
-                    const float value = GetVariable(*varName);
+                    const float value = GetVariableForRpc(*varName);
                     for (const auto& e : var.entries)
                     {
                         if (value >= e.varMin && value <= e.varMax)

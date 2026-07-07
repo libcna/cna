@@ -254,6 +254,19 @@ namespace Microsoft::Xna::Framework::Audio
         // StopInternal() (explicit Stop()/Dispose(), or SoundBank's fire-and-forget sweep).
         void ReconcileState() const;
 
+        // P12-VAR-001: internal-only variable resolution for RPC curve evaluation and
+        // INTERACTIVE variation-table selection (EvaluateRpc()/Play() below) -- matches FAudio's
+        // own asymmetry here (FACT_internal.c): unlike the PUBLIC GetVariable()/SetVariable()
+        // below, which reject a non-cue-scoped name outright (FACTCue_GetVariableIndex requires
+        // PUBLIC+CUE), internal engine bookkeeping reads a variable's current value regardless of
+        // which domain (cue-scoped or engine-global) it belongs to -- FACT_internal.c's
+        // get_active_variation_index explicitly dispatches to FACTCue_GetVariable or
+        // FACTAudioEngine_GetGlobalVariable depending on the ACCESSIBILITY_CUE bit, exactly what
+        // this reproduces. Falls back to 0.0f for a name that resolves to neither domain (should
+        // not happen for a real RPC/variation-table variable index, but stays defensive rather
+        // than throwing from deep inside tick-driven internal evaluation).
+        [[nodiscard]] float GetVariableForRpc(const std::string& name) const;
+
         // P9-XACT-016/P10-FILTER-002/003: result of evaluating every curve in rpcCodes_ against
         // each curve's bound variable's *current* value -- volumeMultiplier is an amplitude ratio
         // (1.0f == no-op), pitch is already in XNA's [-1,1] range (CentsToPitch already applied).

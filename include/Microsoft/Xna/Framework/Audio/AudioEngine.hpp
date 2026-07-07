@@ -15,7 +15,7 @@
 #include "System/TimeSpan.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
-namespace CNA::Internal::Audio { struct XgsRpc; }
+namespace CNA::Internal::Audio { struct XgsRpc; struct XgsVariable; }
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -185,10 +185,47 @@ namespace Microsoft::Xna::Framework::Audio
         void RegisterCue(Cue* cue);
         void UnregisterCue(Cue* cue);
 
-        // Used by Cue::GetVariable/SetVariable to validate a per-cue-instance variable
-        // name against the engine's parsed global variable set (XACT per-cue variables
-        // are the same named global variables, just individually overridable per cue).
+        // P12-VAR-001: true only for a variable whose authored XgsVariable::accessibility has
+        // BOTH the PUBLIC and CUE bits set -- matches FACTCue_GetVariableIndex exactly (FACT.c).
+        // This is a genuinely SEPARATE variable domain from GetGlobalVariable/SetGlobalVariable
+        // below (which require PUBLIC set and CUE clear, matching the complementary
+        // FACTAudioEngine_GetGlobalVariableIndex) -- a variable is either engine-global or
+        // cue-scoped, never both, in real XACT/FACT. Used by Cue::GetVariable/SetVariable's
+        // fallback (via GetCueVariableInfo below), not GetGlobalVariable/SetGlobalVariable.
         bool IsValidVariableName(const std::string& name) const;
+
+        // P12-VAR-001: everything Cue::GetVariable/SetVariable need to correctly fall back to a
+        // cue-scoped (PUBLIC+CUE) variable declared in the engine's XGS data, without exposing
+        // XgsVariable's definition to Cue.cpp (XactEngineImpl, and therefore the parsed
+        // CNA::Internal::Audio::XgsVariable objects it holds, is only fully defined in
+        // AudioEngine.cpp). `valid` is false for anything that isn't a PUBLIC+CUE variable
+        // (matches IsValidVariableName above). `initialValue` is what a fresh Cue instance that
+        // has never explicitly SetVariable()-d this name should read back -- matches real FACT's
+        // per-cue `variableValues[i]` array, which every FACTCue_Create initializes to
+        // `engine->variables[i].initialValue` (FACT.c) -- CNA's own `Cue::variables_` is a sparse
+        // override map instead of a dense per-variable array, so this is the fallback for "not
+        // yet overridden on this specific cue instance" rather than a literal port of that array.
+        struct CueVariableInfo
+        {
+            bool  valid        = false;
+            bool  readOnly     = false;
+            float minValue     = 0.0f;
+            float maxValue     = 0.0f;
+            float initialValue = 0.0f;
+        };
+        CueVariableInfo GetCueVariableInfo(const std::string& name) const;
+
+        // P12-VAR-001: non-throwing counterpart to GetGlobalVariable above, used internally by
+        // Cue::GetVariableForRpc for the one case GetCueVariableInfo doesn't cover -- an RPC
+        // curve or INTERACTIVE variation table bound to an engine-GLOBAL (not cue-scoped)
+        // variable. Returns false (leaving outValue untouched) for anything that isn't a valid
+        // PUBLIC, non-CUE variable name -- same gate as GetGlobalVariable, just non-throwing.
+        bool TryGetGlobalVariableValue(const std::string& name, float& outValue) const;
+
+        // P12-VAR-001: resolves a name to its parsed XgsVariable (accessibility/min/max/initial),
+        // or nullptr if not declared at all. Shared lookup behind IsValidVariableName/
+        // GetCueVariableInfo/GetGlobalVariable/SetGlobalVariable above.
+        const CNA::Internal::Audio::XgsVariable* FindVariable(const std::string& name) const;
 
         // Resolves an interactive variation table's variable index (XsbVariation::variable,
         // parsed straight from the .xsb) to its declared name in the engine's XGS variable

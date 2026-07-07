@@ -5046,9 +5046,79 @@ context-free agents, explicitly instructed not to modify any files):
   changed). Full suite 3382/3384 pass (was 3379/3381; +3 new tests), same 2 pre-existing
   hardware-only skips.
 
-* [ ] P12-VAR-001: enforce global-variable PUBLIC/CUE/READONLY accessibility and min/max clamping
+* [x] P12-VAR-001: enforce global-variable PUBLIC/CUE/READONLY accessibility and min/max clamping
   in `AudioEngine::GetGlobalVariable`/`SetGlobalVariable`, and fix `XactTypes.hpp`'s mislabeled
-  accessibility-bit doxygen comment (`P12-AUDIT-003` finding 2). Not started.
+  accessibility-bit doxygen comment (`P12-AUDIT-003` finding 2).
+  *Status:* Fixed. Independently re-read `FACT.c`'s `FACTAudioEngine_GetGlobalVariableIndex`/
+  `SetGlobalVariable`/`GetGlobalVariable` AND `FACTCue_GetVariableIndex`/`SetVariable`/
+  `GetVariable` AND `FACT_internal.c`'s `get_active_variation_index`/`FACT_INTERNAL_UpdateRPCs`
+  before implementing anything -- this task turned out to need more than the audit's original
+  finding described, because a real design tension only surfaced during that reading.
+  *The real finding underneath the audit's finding:* `AudioEngine::GetGlobalVariable`/
+  `SetGlobalVariable` and `Cue::GetVariable`/`SetVariable` are two GENUINELY SEPARATE domains in
+  real FACT, not "the same global set, individually overridable per cue" (CNA's old
+  `IsValidVariableName` doc comment's own words, now corrected) -- `FACTAudioEngine_
+  GetGlobalVariableIndex` requires `PUBLIC && !CUE`; the complementary `FACTCue_
+  GetVariableIndex` requires `PUBLIC && CUE`. A variable is either engine-global or cue-scoped,
+  never both, and a cue-scoped variable has its own PER-CUE storage (`FACTCue_Create` seeds
+  every cue's `variableValues[i] = engine->variables[i].initialValue`), never touching the
+  engine's shared `globalVariableValues`. CNA's old `Cue::GetVariable`/`SetVariable` fell back to
+  `eng->IsValidVariableName`+`eng->GetGlobalVariable` for ANY variable name found at all --
+  meaning it could (incorrectly) read/write an engine-global variable through the cue-level API,
+  something real FACT can never do.
+  *Fix, `AudioEngine`:* new `FindVariable(name)` (resolves via the already-existing but
+  previously-unused `xgs.variableNameMap`) backs `GetGlobalVariable`/`SetGlobalVariable`
+  (require `PUBLIC && !CUE`, matching `FACTAudioEngine_GetGlobalVariableIndex`),
+  `IsValidVariableName` (repurposed to require `PUBLIC && CUE`, matching `FACTCue_
+  GetVariableIndex` -- its only two callers are both in `Cue.cpp`, so this was a safe,
+  contained repurposing) and two new methods `GetCueVariableInfo`/`TryGetGlobalVariableValue`
+  that expose accessibility/min/max/initial without leaking `XgsVariable`'s definition into
+  `Cue.cpp` (`XactEngineImpl` is only fully defined in `AudioEngine.cpp`).
+  `SetGlobalVariable` now clamps its argument to `[minValue, maxValue]`
+  (matching FACT's `FAudio_clamp`) and silently no-ops on a `READONLY` variable (matching FNA's
+  C# `AudioEngine.SetGlobalVariable` never checking `FACTAudioEngine_SetGlobalVariable`'s native
+  return code -- a real, deliberate-looking FNA behavior, not a bug worth "fixing").
+  *Fix, `Cue`:* `GetVariable`/`SetVariable` now use `GetCueVariableInfo` instead of the old
+  `IsValidVariableName`+`GetGlobalVariable` fallback -- correctly REJECTING an engine-global-only
+  variable name with `InvalidOperationException` (a real, previously-wrong permissiveness this
+  task fixes), and clamping/no-op-on-READONLY the same way `SetGlobalVariable` does (matching
+  `FACTCue_SetVariable`'s own identical clamp+READONLY-reject-silently formula). New private
+  `Cue::GetVariableForRpc(name)` preserves the OLD (both-domain) fallback behavior for the two
+  purely-internal callers that genuinely need it -- RPC curve evaluation and INTERACTIVE
+  variation-table selection -- because `FACT_internal.c`'s `get_active_variation_index` itself
+  explicitly dispatches to `FACTCue_GetVariable` or `FACTAudioEngine_GetGlobalVariable` depending
+  on the `ACCESSIBILITY_CUE` bit (an asymmetry real FACT itself has: `FACT_INTERNAL_UpdateRPCs`
+  reads a cue's per-variable array completely unconditionally, bypassing the public accessibility
+  gate entirely, since it's internal engine bookkeeping, not the public API surface those gates
+  protect). This preserves 100% of the existing, tested RPC/variation-table behavior while fixing
+  the two PUBLIC methods' real contract violation.
+  Also fixed `XactTypes.hpp:50`'s mislabeled accessibility-bit doxygen (previously "bit0=public,
+  bit1=global, bit2=read-only" -- real values are `PUBLIC=0x1, READONLY=0x2, CUE=0x4`,
+  `FACT_internal.h:33-35`).
+  *Fixed 4 test fixtures broken by the new (correct) domain separation*
+  (`AudioEngineTests.cpp`'s `BuildXgsFixtureBytes` "Volume" variable: `0x03`→`0x01`, PUBLIC-only,
+  since its own `GetGlobalVariable`/`SetGlobalVariable` tests need an engine-global variable;
+  `CueTests.cpp`'s `BuildXgsFixtureBytes` "Volume" and `BuildFilterFreqRpcXgsFixtureBytes`
+  "FilterFreq": both `0x03`→`0x05`, PUBLIC|CUE, since both are exercised via `Cue::GetVariable`/
+  `SetVariable` and per-cue RPC curves throughout `CueTests.cpp`) -- all four were previously an
+  arbitrary nonzero byte chosen before this project enforced accessibility semantics at all, not
+  a deliberate accessibility choice; recomputing them to actually mean what each test needs is a
+  fixture-accuracy fix, not a scope change. `AttackTime`/`ReleaseTime` fixtures (also `0x03`)
+  needed no change -- both are built-in cue variables (`IsBuiltInCueVariable`), special-cased
+  before either accessibility path is ever reached.
+  *New tests* (`AudioEngineTests.cpp`, new 4-variable `BuildVarAccessibilityXgsFixtureBytes`
+  fixture spanning every PUBLIC/READONLY/CUE combination): `GetGlobalVariableRejectsCueScoped
+  Variable`, `SetGlobalVariableRejectsCueScopedVariable`, `GetGlobalVariableRejectsNonPublic
+  Variable`, `SetGlobalVariableRejectsNonPublicVariable`, `GetGlobalVariableOnReadOnlyVariable
+  StillReadable`, `SetGlobalVariableOnReadOnlyVariableIsSilentNoOp`, `SetGlobalVariableClamps
+  AboveMaximum`/`BelowMinimum`, `SetGlobalVariableWithinRangeIsNotClamped`,
+  `CueGetVariableRejectsEngineGlobalOnlyVariable`, `CueSetVariableRejectsEngineGlobalOnly
+  Variable`, `CueGetVariableReadsCueScopedVariableInitialValue`,
+  `CueSetVariableClampsCueScopedVariable`, `CueGetVariableRejectsPrivateVariable` (14 total).
+  `git stash`-verified (stashing all 4 production files: 11 of the 15 new/changed assertions fail
+  against the pre-fix code -- the other 4 happened to already hold, e.g. reading an
+  already-in-range value, confirming they're not false confirmations). Full suite 3396/3398 pass
+  (was 3382/3384; +14 new tests), same 2 pre-existing hardware-only skips.
 
 * [x] P12-PAUSE-001: include Paused cues in category/cue instance-limit live-count and victim
   eligibility, matching FACT's non-mutually-exclusive Playing/Paused state (`P12-AUDIT-003`
