@@ -33,6 +33,21 @@ namespace CNA::Internal::Backends::Vulkan
     // Helpers
     // =========================================================================
 
+    // Task 878/879: numeric sample count corresponding to a VkSampleCountFlagBits, for reporting
+    // IRenderTargetBackend::GetMultiSampleCount()'s real applied value.
+    static int SampleCountToInt(VkSampleCountFlagBits s)
+    {
+        switch (s) {
+            case VK_SAMPLE_COUNT_2_BIT:  return 2;
+            case VK_SAMPLE_COUNT_4_BIT:  return 4;
+            case VK_SAMPLE_COUNT_8_BIT:  return 8;
+            case VK_SAMPLE_COUNT_16_BIT: return 16;
+            case VK_SAMPLE_COUNT_32_BIT: return 32;
+            case VK_SAMPLE_COUNT_64_BIT: return 64;
+            default:                     return 0;
+        }
+    }
+
     static int VertexCountForPrimitives(PrimitiveType pt, int n)
     {
         switch (pt) {
@@ -231,12 +246,24 @@ namespace CNA::Internal::Backends::Vulkan
 
     VulkanRenderTargetBackend::VulkanRenderTargetBackend(int w, int h, bool /*hasDepth*/,
                                                           bool preserveContents,
-                                                          VulkanGraphicsBackend* owner)
+                                                          VulkanGraphicsBackend* owner,
+                                                          int requestedMultiSampleCount)
         : width_(w), height_(h), hasDepth_(true), preserveContents_(preserveContents), owner_(owner)
     {
         VkDevice dev = owner_->device_;
         const uint32_t uw = static_cast<uint32_t>(w);
         const uint32_t uh = static_cast<uint32_t>(h);
+
+        // Task 878/879: this RT engages real MSAA only if it was asked for AND the backend
+        // itself was constructed with backbuffer MSAA enabled (sampleCount_ > 1) -- see the
+        // "piggyback on the backend's own sampleCount_" scope decision in plan_graphics.md.
+        // Reusing the backend's single already-lazily-created MSAA pipeline/render-pass
+        // infrastructure avoids threading an independent numeric sample count through every
+        // pipeline cache key. If the backend has no MSAA infrastructure at all, a RT-only MSAA
+        // request honestly reports MultiSampleCount == 0 (via appliedMultiSampleCount_ staying
+        // 0 below) rather than silently no-oping.
+        const bool wantsMsaa = requestedMultiSampleCount > 0 &&
+                               owner_->sampleCount_ > VK_SAMPLE_COUNT_1_BIT;
 
         // --- Color image (must use swapchainFormat_ for pipeline compatibility) ---
         VkImageCreateInfo colorInfo{};
@@ -274,7 +301,10 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkCreateImageView(dev, &colorView, nullptr, &colorView_) != VK_SUCCESS)
             throw std::runtime_error("VulkanRenderTargetBackend: vkCreateImageView (color) failed");
 
-        // --- Depth image (always created to match the 2-attachment rtRenderPass_) ---
+        // --- Depth image (always created to match the 2-attachment rtRenderPass_; promoted
+        // in-place to MSAA samples when this RT engages MSAA -- depthView_ is never sampled
+        // externally by anything in this codebase, so there is no separate single-sample
+        // depth-resolve path to keep in sync, unlike colorImage_). ---
         VkImageCreateInfo depthInfo{};
         depthInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         depthInfo.imageType     = VK_IMAGE_TYPE_2D;
@@ -282,7 +312,7 @@ namespace CNA::Internal::Backends::Vulkan
         depthInfo.extent        = { uw, uh, 1 };
         depthInfo.mipLevels     = 1;
         depthInfo.arrayLayers   = 1;
-        depthInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+        depthInfo.samples       = wantsMsaa ? owner_->sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         depthInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
         depthInfo.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         depthInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
@@ -310,22 +340,90 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkCreateImageView(dev, &depthView, nullptr, &depthView_) != VK_SUCCESS)
             throw std::runtime_error("VulkanRenderTargetBackend: vkCreateImageView (depth) failed");
 
-        // Lazily create shared RT render pass if not yet done
-        if (owner_->rtRenderPass_ == VK_NULL_HANDLE)
+        if (wantsMsaa)
+        {
+            // --- MSAA color image: the actual attached render target. TRANSIENT_ATTACHMENT
+            // only (never sampled directly) -- resolved automatically into colorImage_ at
+            // vkCmdEndRenderPass via the render pass's pResolveAttachments mechanism, mirroring
+            // VulkanGraphicsBackend::CreateMsaaColorResources' backbuffer counterpart exactly. ---
+            VkImageCreateInfo msaaColorInfo{};
+            msaaColorInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+            msaaColorInfo.imageType     = VK_IMAGE_TYPE_2D;
+            msaaColorInfo.format        = owner_->swapchainFormat_;
+            msaaColorInfo.extent        = { uw, uh, 1 };
+            msaaColorInfo.mipLevels     = 1;
+            msaaColorInfo.arrayLayers   = 1;
+            msaaColorInfo.samples       = owner_->sampleCount_;
+            msaaColorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+            msaaColorInfo.usage         = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+                                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            msaaColorInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+            msaaColorInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (vkCreateImage(dev, &msaaColorInfo, nullptr, &msaaColorImage_) != VK_SUCCESS)
+                throw std::runtime_error("VulkanRenderTargetBackend: vkCreateImage (MSAA color) failed");
+
+            VkMemoryRequirements msaaColorReq;
+            vkGetImageMemoryRequirements(dev, msaaColorImage_, &msaaColorReq);
+            VkMemoryAllocateInfo msaaColorAlloc{};
+            msaaColorAlloc.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            msaaColorAlloc.allocationSize  = msaaColorReq.size;
+            msaaColorAlloc.memoryTypeIndex = owner_->FindMemoryType(msaaColorReq.memoryTypeBits,
+                                                                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            if (vkAllocateMemory(dev, &msaaColorAlloc, nullptr, &msaaColorMemory_) != VK_SUCCESS)
+                throw std::runtime_error("VulkanRenderTargetBackend: vkAllocateMemory (MSAA color) failed");
+            vkBindImageMemory(dev, msaaColorImage_, msaaColorMemory_, 0);
+
+            VkImageViewCreateInfo msaaColorView{};
+            msaaColorView.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            msaaColorView.image    = msaaColorImage_;
+            msaaColorView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            msaaColorView.format   = owner_->swapchainFormat_;
+            msaaColorView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+            if (vkCreateImageView(dev, &msaaColorView, nullptr, &msaaColorView_) != VK_SUCCESS)
+                throw std::runtime_error("VulkanRenderTargetBackend: vkCreateImageView (MSAA color) failed");
+        }
+
+        // Lazily create the shared RT render pass (DiscardContents-shaped non-MSAA, or the
+        // 3-attachment MSAA variant) if not yet done.
+        if (wantsMsaa) {
+            if (owner_->rtRenderPassMsaa_ == VK_NULL_HANDLE)
+                owner_->CreateRTRenderPassMsaa();
+        } else if (owner_->rtRenderPass_ == VK_NULL_HANDLE) {
             owner_->CreateRTRenderPass();
+        }
 
         // --- Framebuffer ---
-        VkImageView fbAtts[] = { colorView_, depthView_ };
-        VkFramebufferCreateInfo fbInfo{};
-        fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass      = owner_->rtRenderPass_;
-        fbInfo.attachmentCount = 2;
-        fbInfo.pAttachments    = fbAtts;
-        fbInfo.width           = uw;
-        fbInfo.height          = uh;
-        fbInfo.layers          = 1;
-        if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &framebuffer_) != VK_SUCCESS)
-            throw std::runtime_error("VulkanRenderTargetBackend: vkCreateFramebuffer failed");
+        if (wantsMsaa)
+        {
+            // att0=MSAA color, att1=resolve (colorImage_/colorView_), att2=MSAA depth --
+            // mirrors CreateRenderPassMsaa()'s/rtRenderPassMsaa_'s attachment order exactly.
+            VkImageView fbAtts[] = { msaaColorView_, colorView_, depthView_ };
+            VkFramebufferCreateInfo fbInfo{};
+            fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            fbInfo.renderPass      = owner_->rtRenderPassMsaa_;
+            fbInfo.attachmentCount = 3;
+            fbInfo.pAttachments    = fbAtts;
+            fbInfo.width           = uw;
+            fbInfo.height          = uh;
+            fbInfo.layers          = 1;
+            if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &msaaFramebuffer_) != VK_SUCCESS)
+                throw std::runtime_error("VulkanRenderTargetBackend: vkCreateFramebuffer (MSAA) failed");
+            appliedMultiSampleCount_ = SampleCountToInt(owner_->sampleCount_);
+        }
+        else
+        {
+            VkImageView fbAtts[] = { colorView_, depthView_ };
+            VkFramebufferCreateInfo fbInfo{};
+            fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            fbInfo.renderPass      = owner_->rtRenderPass_;
+            fbInfo.attachmentCount = 2;
+            fbInfo.pAttachments    = fbAtts;
+            fbInfo.width           = uw;
+            fbInfo.height          = uh;
+            fbInfo.layers          = 1;
+            if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &framebuffer_) != VK_SUCCESS)
+                throw std::runtime_error("VulkanRenderTargetBackend: vkCreateFramebuffer failed");
+        }
 
         // Transition color image to SHADER_READ_ONLY_OPTIMAL (initial state before first RT use)
         owner_->TransitionImageLayout(colorImage_,
@@ -366,13 +464,18 @@ namespace CNA::Internal::Backends::Vulkan
             vkFreeDescriptorSets(dev, owner_->descriptorPool_, 1, &descriptorSet_);
             descriptorSet_ = VK_NULL_HANDLE;
         }
-        if (framebuffer_ != VK_NULL_HANDLE)  { vkDestroyFramebuffer(dev, framebuffer_, nullptr);  framebuffer_ = VK_NULL_HANDLE; }
+        if (framebuffer_     != VK_NULL_HANDLE) { vkDestroyFramebuffer(dev, framebuffer_, nullptr);     framebuffer_     = VK_NULL_HANDLE; }
+        if (msaaFramebuffer_ != VK_NULL_HANDLE) { vkDestroyFramebuffer(dev, msaaFramebuffer_, nullptr); msaaFramebuffer_ = VK_NULL_HANDLE; }
         if (colorView_   != VK_NULL_HANDLE)  { vkDestroyImageView(dev, colorView_, nullptr);       colorView_   = VK_NULL_HANDLE; }
         if (colorImage_  != VK_NULL_HANDLE)  { vkDestroyImage(dev, colorImage_, nullptr);          colorImage_  = VK_NULL_HANDLE; }
         if (colorMemory_ != VK_NULL_HANDLE)  { vkFreeMemory(dev, colorMemory_, nullptr);           colorMemory_ = VK_NULL_HANDLE; }
+        if (msaaColorView_   != VK_NULL_HANDLE) { vkDestroyImageView(dev, msaaColorView_, nullptr); msaaColorView_   = VK_NULL_HANDLE; }
+        if (msaaColorImage_  != VK_NULL_HANDLE) { vkDestroyImage(dev, msaaColorImage_, nullptr);    msaaColorImage_  = VK_NULL_HANDLE; }
+        if (msaaColorMemory_ != VK_NULL_HANDLE) { vkFreeMemory(dev, msaaColorMemory_, nullptr);     msaaColorMemory_ = VK_NULL_HANDLE; }
         if (depthView_   != VK_NULL_HANDLE)  { vkDestroyImageView(dev, depthView_, nullptr);       depthView_   = VK_NULL_HANDLE; }
         if (depthImage_  != VK_NULL_HANDLE)  { vkDestroyImage(dev, depthImage_, nullptr);          depthImage_  = VK_NULL_HANDLE; }
         if (depthMemory_ != VK_NULL_HANDLE)  { vkFreeMemory(dev, depthMemory_, nullptr);           depthMemory_ = VK_NULL_HANDLE; }
+        appliedMultiSampleCount_ = 0;
     }
 
     VulkanRenderTargetBackend::~VulkanRenderTargetBackend()
@@ -385,9 +488,15 @@ namespace CNA::Internal::Backends::Vulkan
         ReleaseVulkanResources();
     }
 
+    VkFramebuffer VulkanRenderTargetBackend::GetFramebuffer() const
+    {
+        return (msaaFramebuffer_ != VK_NULL_HANDLE) ? msaaFramebuffer_ : framebuffer_;
+    }
+
     VkRenderPass VulkanRenderTargetBackend::GetRenderPass() const
     {
         if (!owner_) return VK_NULL_HANDLE;
+        if (msaaFramebuffer_ != VK_NULL_HANDLE) return owner_->rtRenderPassMsaa_;
         return preserveContents_ ? owner_->rtRenderPassLoad_ : owner_->rtRenderPass_;
     }
 
@@ -866,6 +975,7 @@ namespace CNA::Internal::Backends::Vulkan
         if (renderPassMsaa_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPassMsaa_, nullptr); renderPassMsaa_ = VK_NULL_HANDLE; }
         if (rtRenderPass_     != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, rtRenderPass_,     nullptr); rtRenderPass_     = VK_NULL_HANDLE; }
         if (rtRenderPassLoad_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, rtRenderPassLoad_, nullptr); rtRenderPassLoad_ = VK_NULL_HANDLE; }
+        if (rtRenderPassMsaa_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, rtRenderPassMsaa_, nullptr); rtRenderPassMsaa_ = VK_NULL_HANDLE; }
         if (renderPass_       != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_,       nullptr); renderPass_       = VK_NULL_HANDLE; }
         for (auto& [n, rp] : mrtRenderPasses_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
@@ -1300,24 +1410,42 @@ namespace CNA::Internal::Backends::Vulkan
         sub.pColorAttachments       = &colorRef;
         sub.pDepthStencilAttachment = &depthRef;
 
-        // Entry: wait for the previous frame's texture sample before writing.
+        // Entry: wait for the previous frame's texture sample AND the previous frame's
+        // depth-buffer writes (shared depth image) before this frame clears/tests depth.
+        // Task 901: this must match renderPass_'s (CreateRenderPass()) dependencies exactly --
+        // not just a "wait for shader reads" subset -- because GetOrCreatePipeline3D() (and
+        // every other GetOrCreatePipelineXxx3D) creates its msaa=false pipeline variant against
+        // renderPass_, and that same pipeline is reused to draw into rtRenderPass_/
+        // rtRenderPassLoad_ whenever a 3D primitive is drawn into a RenderTarget2D. Render-pass
+        // "compatibility" (VUID-vkCmdDraw-renderPass-02684) requires matching subpass dependency
+        // stage/access masks too, not just attachment descriptions/subpass shape -- confirmed via
+        // live Vulkan validation errors from a depth-tested 3D draw into a non-MSAA RT before this
+        // fix (see plan_graphics.md Task 901; the previous narrower deps[] here pre-dates Task
+        // 878/879 and was never actually exercised by an existing test until Task 878/879's new
+        // RT-MSAA differential test happened to also cover the non-MSAA RT comparison case).
         VkSubpassDependency deps[2]{};
-        deps[0].srcSubpass    = VK_SUBPASS_EXTERNAL;
-        deps[0].dstSubpass    = 0;
-        deps[0].srcStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        deps[0].dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        deps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
+        deps[0].dstSubpass      = 0;
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                  VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-        // Exit: make color writes visible to the fragment shader in the next pass.
-        deps[1].srcSubpass    = 0;
-        deps[1].dstSubpass    = VK_SUBPASS_EXTERNAL;
-        deps[1].srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        deps[1].dstStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        // Exit: make color writes visible to the fragment shader AND transfer reads (the
+        // deferred GetBackBufferData copy path) in the next pass.
+        deps[1].srcSubpass      = 0;
+        deps[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
+        deps[1].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        deps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                  VK_PIPELINE_STAGE_TRANSFER_BIT;
+        deps[1].srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        deps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
         deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         VkAttachmentDescription atts[] = { colorAtt, depthAtt };
@@ -1342,6 +1470,103 @@ namespace CNA::Internal::Backends::Vulkan
         atts[1] = depthAtt;
         if (vkCreateRenderPass(device_, &ci, nullptr, &rtRenderPassLoad_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateRenderPass (RT load) failed");
+    }
+
+    void VulkanGraphicsBackend::CreateRTRenderPassMsaa()
+    {
+        // Task 878/879: 3-attachment MSAA RT render pass, shared by every MSAA-enabled
+        // RenderTarget2D. Same attachment formats/sample-counts/subpass shape AND (see the
+        // deps[] comment below) the same subpass dependency stage/access masks as
+        // CreateRenderPassMsaa()'s backbuffer pass, so pipelines already created against
+        // renderPassMsaa_ remain render-pass-compatible here -- but with the resolve
+        // attachment's finalLayout = SHADER_READ_ONLY_OPTIMAL (like rtRenderPass_) instead of
+        // PRESENT_SRC_KHR, since this resolves into an RT's sampleable colorImage_, never
+        // presented (attachment initial/final layouts don't affect pipeline compatibility).
+        // DiscardContents-shaped only (LOAD_OP_CLEAR): PreserveContents + MSAA is not given its
+        // own LOAD_OP_LOAD variant here (see VulkanRenderTargetBackend's constructor comment) --
+        // an intentionally narrower scope than the non-MSAA rtRenderPass_/rtRenderPassLoad_ split.
+        VkAttachmentDescription colorAtt{};
+        colorAtt.format         = swapchainFormat_;
+        colorAtt.samples        = sampleCount_;
+        colorAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAtt.finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentDescription resolveAtt{};
+        resolveAtt.format         = swapchainFormat_;
+        resolveAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
+        resolveAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        resolveAtt.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+        resolveAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        resolveAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        resolveAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        resolveAtt.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkAttachmentDescription depthAtt{};
+        depthAtt.format         = depthFormat_;
+        depthAtt.samples        = sampleCount_;
+        depthAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference colorRef   { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        VkAttachmentReference resolveRef { 1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        VkAttachmentReference depthRef   { 2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
+        VkSubpassDescription sub{};
+        sub.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        sub.colorAttachmentCount    = 1;
+        sub.pColorAttachments       = &colorRef;
+        sub.pResolveAttachments     = &resolveRef;
+        sub.pDepthStencilAttachment = &depthRef;
+
+        // Task 878/879 empirical finding: Vulkan's validation layer treats a pipeline's
+        // originally-bound render pass and the render pass it's actually recorded against as
+        // "compatible" only if their subpass dependency stage/access masks match too, not just
+        // attachment descriptions/subpass shape as the basic spec text on render-pass
+        // compatibility implies (confirmed via VUID-vkCmdDraw-renderPass-02684 validation errors
+        // when this render pass's own initially-narrower deps[] -- CreateRTRenderPass()'s simpler
+        // shape -- didn't exactly match renderPassMsaa_'s). Since pipelines with msaa=true are
+        // created against renderPassMsaa_ (see GetOrCreatePipeline3D et al.), this render pass's
+        // dependencies must exactly mirror CreateRenderPassMsaa()'s, including the transfer-read
+        // scope that (semantically) only matters for the backbuffer's GetBackBufferData path.
+        VkSubpassDependency deps[2]{};
+        deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
+        deps[0].dstSubpass      = 0;
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                  VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+        deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        deps[1].srcSubpass      = 0;
+        deps[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
+        deps[1].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        deps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                  VK_PIPELINE_STAGE_TRANSFER_BIT;
+        deps[1].srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        deps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+        deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+        VkAttachmentDescription atts[] = { colorAtt, resolveAtt, depthAtt };
+        VkRenderPassCreateInfo ci{};
+        ci.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        ci.attachmentCount = 3; ci.pAttachments  = atts;
+        ci.subpassCount    = 1; ci.pSubpasses    = &sub;
+        ci.dependencyCount = 2; ci.pDependencies = deps;
+        if (vkCreateRenderPass(device_, &ci, nullptr, &rtRenderPassMsaa_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateRenderPass (RT MSAA) failed");
     }
 
     VkRenderPass VulkanGraphicsBackend::GetOrCreateMRTRenderPass(uint32_t colorAttachmentCount)
@@ -4632,7 +4857,13 @@ namespace CNA::Internal::Backends::Vulkan
                                 draw.instVbData.data(), draw.instVbData.size());
 
                 const uint32_t nColor = targetRT ? targetRT->GetColorAttachmentCount() : 1u;
-                const bool drawMsaa = (targetRT == nullptr) && (sampleCount_ > VK_SAMPLE_COUNT_1_BIT);
+                // Task 878/879: MSAA-aware for RT passes too, not just the backbuffer -- an RT
+                // draw uses the MSAA pipeline variant when this specific RT actually engaged
+                // MSAA (VulkanRTSource::WantsMsaa(), true only when the backend itself has MSAA
+                // infrastructure AND the RT requested it; see the "piggyback on sampleCount_"
+                // scope decision in plan_graphics.md).
+                const bool drawMsaa = (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) &&
+                                      (targetRT == nullptr || targetRT->WantsMsaa());
                 VkPipeline pipe;
                 if (draw.useAlphaTest) {
                     pipe = GetOrCreatePipelineAlphaTest3D(draw.stride, draw.topology,
@@ -4831,10 +5062,20 @@ namespace CNA::Internal::Backends::Vulkan
 
         for (auto* rt : usedRTs) {
             const uint32_t nColor = rt->GetColorAttachmentCount();
-            std::vector<VkClearValue> rtCv(nColor + 1);
-            for (uint32_t ci = 0; ci < nColor; ++ci)
-                rtCv[ci].color = { { clearR_, clearG_, clearB_, clearA_ } };
-            rtCv[nColor].depthStencil = { 1.0f, 0 };
+            const bool rtMsaa = rt->WantsMsaa();
+            // MSAA RT render pass: att0=MSAA color, att1=resolve (unused clear value, DONT_CARE
+            // loadOp), att2=depth — 3 clear values, mirroring Phase 2's hasMsaa handling below.
+            // Non-MSAA: nColor color attachments + 1 depth, as before (Task 878/879).
+            std::vector<VkClearValue> rtCv(rtMsaa ? 3u : (nColor + 1));
+            if (rtMsaa) {
+                rtCv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
+                rtCv[1].color        = {};
+                rtCv[2].depthStencil = { 1.0f, 0 };
+            } else {
+                for (uint32_t ci = 0; ci < nColor; ++ci)
+                    rtCv[ci].color = { { clearR_, clearG_, clearB_, clearA_ } };
+                rtCv[nColor].depthStencil = { 1.0f, 0 };
+            }
             VkRenderPassBeginInfo rtRp{};
             rtRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
             rtRp.renderPass      = rt->GetRenderPass();
@@ -5174,12 +5415,15 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     std::unique_ptr<IRenderTargetBackend> VulkanGraphicsBackend::CreateRenderTarget2D(
-        int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/, int /*multiSampleCount*/)
+        int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/, int multiSampleCount)
     {
         // mipMap not yet implemented on Vulkan (Task 336/878) — accepted and ignored, matching
         // this backend's existing hasDepth-ignored gap for the same reason.
-        // multiSampleCount not yet implemented on Vulkan (Task 337/879) — accepted and ignored.
-        return std::make_unique<VulkanRenderTargetBackend>(w, h, hasDepth, preserveContents, this);
+        // multiSampleCount is honored on a "piggyback on the backend's own sampleCount_" basis
+        // (Task 878/879) — see VulkanRenderTargetBackend's constructor comment and
+        // plan_graphics.md for the exact scope decision.
+        return std::make_unique<VulkanRenderTargetBackend>(w, h, hasDepth, preserveContents, this,
+                                                            multiSampleCount);
     }
 
     void VulkanGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
@@ -5793,7 +6037,15 @@ namespace CNA::Internal::Backends::Vulkan
     std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, bool /*mipMap*/, int /*multiSampleCount*/)
     {
         // mipMap not yet implemented on Vulkan (Task 336/878) — accepted and ignored.
-        // multiSampleCount not yet implemented on Vulkan (Task 337/879) — accepted and ignored.
+        // multiSampleCount: FNA's real RenderTargetCube(GraphicsDevice, size, mipMap,
+        // preferredFormat, preferredDepthFormat, preferredMultiSampleCount, usage) constructor
+        // DOES have a multiSampleCount parameter (confirmed against FNA source), so this is not
+        // moot the way it would be if RenderTargetCube had no such parameter at all — but wiring
+        // it up needs the same per-face MSAA render-pass/framebuffer treatment
+        // VulkanRenderTargetBackend just got for RenderTarget2D (Task 878/879), applied 6× across
+        // VulkanRenderTargetCubeBackend's per-face framebuffers. Deliberately out of scope for
+        // this pass (RenderTarget2D MSAA only, per the task's own test-file list) — accepted and
+        // ignored here, tracked as a follow-up in plan_graphics.md.
         return std::make_unique<VulkanRenderTargetCubeBackend>(this, size);
     }
 
@@ -5834,6 +6086,12 @@ namespace CNA::Internal::Backends::Vulkan
         renderPass_ = owner->GetOrCreateMRTRenderPass(count);
 
         // Build attachment view array: [colorView0, colorView1, ..., depthView_of_rt0].
+        // Known narrow edge case (Task 878/879): GetOrCreateMRTRenderPass's depth attachment is
+        // always declared VK_SAMPLE_COUNT_1_BIT; if rts[0] individually engaged per-RT MSAA
+        // (see VulkanRenderTargetBackend::wantsMsaa), its depthView_ image is multisampled and
+        // this framebuffer creation would mismatch. Not exercised by any current test (per-RT
+        // MSAA combined with a multi-target SetRenderTargets call is not supported) and not
+        // addressed here.
         std::vector<VkImageView> atts;
         atts.reserve(count + 1);
         for (uint32_t i = 0; i < count; ++i)

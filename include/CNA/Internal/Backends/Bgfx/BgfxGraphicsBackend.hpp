@@ -86,7 +86,24 @@ namespace CNA::Internal::Backends::Bgfx
         [[nodiscard]] int  PixelCount() const override;
     };
 
-    class BgfxTextureBackend : public ITextureBackend
+    // -------------------------------------------------------------------------
+    // IBgfxSamplable — common interface for any Bgfx object that can be bound as
+    // a sampled texture (regular Texture2D and RenderTarget2D). Task 878/879 fix
+    // (closes Task 873): BgfxSpriteBatchBackend::Draw previously did an unsafe
+    // static_cast<const BgfxTextureBackend&> on whatever ITextureBackend it was
+    // handed, which silently read BgfxRenderTargetBackend::fbo (a framebuffer-pool
+    // handle) where BgfxTextureBackend::textureHandle (a texture-pool handle) was
+    // expected whenever the argument was actually a render target. This accessor
+    // lets each concrete backend report its own real sampleable texture handle.
+    // -------------------------------------------------------------------------
+
+    struct IBgfxSamplable
+    {
+        virtual ~IBgfxSamplable() = default;
+        virtual bgfx::TextureHandle GetBgfxTextureHandle() const = 0;
+    };
+
+    class BgfxTextureBackend : public ITextureBackend, public IBgfxSamplable
     {
     public:
         bgfx::TextureHandle textureHandle = BGFX_INVALID_HANDLE;
@@ -98,6 +115,7 @@ namespace CNA::Internal::Backends::Bgfx
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
+        bgfx::TextureHandle GetBgfxTextureHandle() const override { return textureHandle; }
     };
 
     /// bgfx-backed cube map texture.
@@ -129,7 +147,7 @@ namespace CNA::Internal::Backends::Bgfx
     };
 
     /// bgfx-backed 2D render target (bgfx framebuffer with color + depth textures).
-    class BgfxRenderTargetBackend : public IRenderTargetBackend
+    class BgfxRenderTargetBackend : public IRenderTargetBackend, public IBgfxSamplable
     {
     public:
         bgfx::FrameBufferHandle fbo = BGFX_INVALID_HANDLE;
@@ -137,8 +155,13 @@ namespace CNA::Internal::Backends::Bgfx
         int  width            = 0;
         int  height           = 0;
         bool preserveContents = false;
+        // Task 878/879: real, backend-clamped applied MultiSampleCount (0 = no MSAA). bgfx
+        // resolves an RT_MSAA_Xn color attachment into a sampleable single-sample image
+        // internally -- no explicit resolve step is needed on this backend.
+        int  multiSampleCount = 0;
 
-        BgfxRenderTargetBackend(int w, int h, bool hasDepth, bool preserveContents = false);
+        BgfxRenderTargetBackend(int w, int h, bool hasDepth, bool preserveContents = false,
+                                 int requestedMultiSampleCount = 0);
         ~BgfxRenderTargetBackend() override;
 
         int GetWidth()  const override { return width; }
@@ -146,6 +169,8 @@ namespace CNA::Internal::Backends::Bgfx
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override {}
         void BindGL() const override {}
+        int GetMultiSampleCount() const override { return multiSampleCount; }
+        bgfx::TextureHandle GetBgfxTextureHandle() const override { return colorTex; }
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
@@ -237,6 +262,11 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ViewId currentViewId_ = 0;  ///< Active view (0=backbuffer, 1=RT0, etc.)
         uint16_t cachedWidth = 0;
         uint16_t cachedHeight = 0;
+        // Task 878/879 fix: the currently-bound RT's own size (0 when targeting the backbuffer),
+        // so EnsureViewState() can preserve BindAsRenderTarget()'s RT-sized viewport/ortho instead
+        // of always stomping it back to the full window size. See EnsureViewState()'s comment.
+        uint16_t currentRtWidth_ = 0;
+        uint16_t currentRtHeight_ = 0;
         uint32_t clearRgba = 0x000000ff;
         bool initialized = false;
         uint32_t resetFlags_ = BGFX_RESET_VSYNC;
@@ -394,7 +424,11 @@ namespace CNA::Internal::Backends::Bgfx
                                        int instanceCount,
                                        const GpuDrawParams& params) override;
 
-        void SubmitSprite(const BgfxTextureBackend& texture,
+        // Task 878/879 (closes Task 873): takes the already-resolved bgfx texture handle +
+        // dimensions rather than a concrete BgfxTextureBackend, so callers can supply either a
+        // BgfxTextureBackend's or a BgfxRenderTargetBackend's real sampleable texture (via
+        // IBgfxSamplable::GetBgfxTextureHandle()) without an unsafe cast between unrelated types.
+        void SubmitSprite(bgfx::TextureHandle textureHandle, int texWidth, int texHeight,
                           const Rectangle& destinationRectangle,
                           const Rectangle& sourceRectangle,
                           const Color& color,

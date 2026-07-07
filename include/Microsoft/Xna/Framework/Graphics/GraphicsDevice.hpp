@@ -729,6 +729,29 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA void SetPresentationParameters(const PresentationParameters& pp);
 
+        /**
+         * @brief Test-only: tears down and rebuilds the active graphics backend (same window)
+         * with a new PresentationParameters.MultiSampleCount, so a backend-level property
+         * (e.g. Vulkan's own backbuffer sampleCount_, picked once at backend-construction time)
+         * can be changed after the device already exists.
+         *
+         * This exists because GraphicsDeviceManager.PreferMultiSampling/ApplyChanges() does NOT
+         * reach here: Game's own GraphicsDevice member is unconditionally default-constructed
+         * (MultiSampleCount=0) before any derived Game subclass or GraphicsDeviceManager code can
+         * run, and SetPresentationParameters() (the only thing GraphicsDeviceManager's existing
+         * apply path calls) deliberately does not trigger a full device reset either — real
+         * mid-game device reset/recreation (FNA's GraphicsDevice.Reset) is a separate, not-yet-
+         * implemented feature (see the commented-out Reset() call in
+         * GraphicsDeviceManager::applyToExistingBackend). This method is a narrow, test-scoped
+         * substitute for that missing feature: safe only when called before any GPU resources
+         * (textures, buffers, render targets) have been created against the current backend, since
+         * it destroys and replaces backend_ outright rather than performing a real, resource-
+         * preserving device reset.
+         *
+         * @param multiSampleCount The new preferred MultiSampleCount to request from the backend.
+         */
+        NOXNA void RecreateBackendForMultiSampleCount(int multiSampleCount);
+
     private:
         SDL_Window* window_;
         bool ownsWindow_;

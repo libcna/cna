@@ -30,6 +30,12 @@ namespace CNA::Internal::Backends::Vulkan
         virtual int           GetWidth()                   const = 0;
         virtual int           GetHeight()                  const = 0;
         virtual uint32_t      GetColorAttachmentCount()    const = 0;
+        /// True if this RT source's actual bound framebuffer/render pass this frame is the
+        /// 3-attachment MSAA variant (MSAA color + resolve + MSAA depth) rather than the plain
+        /// single-sample one. Default false; overridden by VulkanRenderTargetBackend when it
+        /// actually engaged MSAA (Task 878/879 — see the "piggyback on the backend's own
+        /// sampleCount_" scope decision in plan_graphics.md).
+        virtual bool          WantsMsaa()                   const { return false; }
         virtual ~VulkanRTSource() = default;
     };
 
@@ -97,7 +103,8 @@ namespace CNA::Internal::Backends::Vulkan
                                       public IVulkanSamplable
     {
     public:
-        VulkanRenderTargetBackend(int w, int h, bool hasDepth, bool preserveContents, VulkanGraphicsBackend* owner);
+        VulkanRenderTargetBackend(int w, int h, bool hasDepth, bool preserveContents,
+                                   VulkanGraphicsBackend* owner, int requestedMultiSampleCount = 0);
         ~VulkanRenderTargetBackend() override;
 
         int GetWidth()  const override { return width_; }
@@ -107,9 +114,14 @@ namespace CNA::Internal::Backends::Vulkan
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
 
-        VkFramebuffer   GetFramebuffer()          const override { return framebuffer_; }
+        VkFramebuffer   GetFramebuffer()          const override;
         VkRenderPass    GetRenderPass()            const override;
         uint32_t        GetColorAttachmentCount()  const override { return 1; }
+        // Task 878/879: true once this instance actually engaged MSAA (msaaFramebuffer_ created).
+        bool            WantsMsaa()                const override { return msaaFramebuffer_ != VK_NULL_HANDLE; }
+        // Real, backend-clamped applied MultiSampleCount (0 if MSAA wasn't engaged — see the
+        // "piggyback on the backend's own sampleCount_" scope decision in plan_graphics.md).
+        int             GetMultiSampleCount()      const override { return appliedMultiSampleCount_; }
         VkDescriptorSet GetDescriptorSet()         const { return descriptorSet_; }
         VkImageView     GetColorView()             const { return colorView_; }
         VkImageView     GetDepthView()             const { return depthView_; }
@@ -131,6 +143,17 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceMemory          depthMemory_  = VK_NULL_HANDLE;
         VkImageView             depthView_    = VK_NULL_HANDLE;
         VkFramebuffer           framebuffer_  = VK_NULL_HANDLE;
+        // --- MSAA resources (Task 878/879), only created when MSAA was actually engaged: an
+        // MSAA color image (attached, never sampled directly) resolved automatically into
+        // colorImage_ at vkCmdEndRenderPass, plus a dedicated 3-attachment framebuffer against
+        // the owner's shared rtRenderPassMsaa_. depthImage_/depthView_ above are reused in-place
+        // as the MSAA depth attachment (promoted to owner_->sampleCount_ samples) rather than
+        // duplicated, since depthView_ is never sampled externally by anything in this codebase.
+        VkImage                 msaaColorImage_  = VK_NULL_HANDLE;
+        VkDeviceMemory          msaaColorMemory_ = VK_NULL_HANDLE;
+        VkImageView             msaaColorView_   = VK_NULL_HANDLE;
+        VkFramebuffer           msaaFramebuffer_ = VK_NULL_HANDLE;
+        int                     appliedMultiSampleCount_ = 0;
         VkDescriptorSet         descriptorSet_ = VK_NULL_HANDLE;
         VulkanGraphicsBackend*  owner_        = nullptr;
     };
@@ -597,6 +620,12 @@ namespace CNA::Internal::Backends::Vulkan
         VkRenderPass               renderPass_       = VK_NULL_HANDLE;
         VkRenderPass               rtRenderPass_     = VK_NULL_HANDLE;  // LOAD_OP_CLEAR, color → SHADER_READ_ONLY_OPTIMAL
         VkRenderPass               rtRenderPassLoad_ = VK_NULL_HANDLE;  // LOAD_OP_LOAD,  color → SHADER_READ_ONLY_OPTIMAL
+        // Task 878/879: shared 3-attachment (MSAA color/resolve/MSAA depth) RT render pass, lazily
+        // created the first time a VulkanRenderTargetBackend actually engages MSAA. Reused by every
+        // MSAA-enabled RT instance's own per-instance framebuffer (mirrors rtRenderPass_'s existing
+        // lazy-shared-singleton pattern). DiscardContents-shaped only — see VulkanRenderTargetBackend
+        // constructor comment for why PreserveContents+MSAA doesn't get its own LOAD_OP_LOAD variant.
+        VkRenderPass               rtRenderPassMsaa_ = VK_NULL_HANDLE;
         std::vector<VkFramebuffer> swapchainFramebuffers_;
 
         // --- Depth buffer (recreated with swapchain) ---
@@ -893,6 +922,9 @@ namespace CNA::Internal::Backends::Vulkan
         void CreateInstance();
         void SetupDebugMessenger();
         void CreateRTRenderPass();
+        // Task 878/879: lazily-created 3-attachment (MSAA color/resolve/MSAA depth) RT render
+        // pass, shared by every MSAA-enabled RenderTarget2D. See rtRenderPassMsaa_ comment.
+        void CreateRTRenderPassMsaa();
         void CreateSurface();
         void PickPhysicalDevice();
         void CreateLogicalDevice();

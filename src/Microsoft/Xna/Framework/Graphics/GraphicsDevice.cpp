@@ -1226,6 +1226,14 @@ namespace Microsoft::Xna::Framework::Graphics
             backend_->SetSwapInterval(toSwapInterval(pp.getPresentationIntervalProperty()));
     }
 
+    void GraphicsDevice::RecreateBackendForMultiSampleCount(int multiSampleCount)
+    {
+        presentationParameters_.setMultiSampleCountProperty(multiSampleCount);
+        backend_.reset();
+        createBackend();
+        UpdateViewportFromWindow();
+    }
+
     SDL_Renderer* GraphicsDevice::GetRendererInternal() const
     {
         return backend_ != nullptr ? backend_->GetRendererInternal() : nullptr;

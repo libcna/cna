@@ -428,21 +428,46 @@ namespace CNA::Internal::Backends::Bgfx
 
     // --- BgfxRenderTargetBackend ---
 
-    BgfxRenderTargetBackend::BgfxRenderTargetBackend(int w, int h, bool hasDepth, bool preserve)
+    // Task 878/879: BGFX_TEXTURE_RT_MSAA_X2/X4/X8/X16 occupy the same 4-bit field as
+    // BGFX_TEXTURE_RT (see bgfx/defines.h's BGFX_TEXTURE_RT_MASK/RT_SHIFT) -- they are mutually
+    // exclusive alternatives, not flags to OR alongside it. requestedMultiSampleCount arrives
+    // already rounded to a power of two (or 0) by RenderTarget2D's/RenderTargetCube's own
+    // ClosestMSAAPower step before it ever reaches the backend, so this only needs to pick the
+    // matching bgfx constant and clamp down to bgfx's max of 16x.
+    static uint64_t BgfxMsaaRtFlag(int requestedMultiSampleCount, int& appliedOut)
+    {
+        if (requestedMultiSampleCount >= 16) { appliedOut = 16; return BGFX_TEXTURE_RT_MSAA_X16; }
+        if (requestedMultiSampleCount >= 8)  { appliedOut = 8;  return BGFX_TEXTURE_RT_MSAA_X8;  }
+        if (requestedMultiSampleCount >= 4)  { appliedOut = 4;  return BGFX_TEXTURE_RT_MSAA_X4;  }
+        if (requestedMultiSampleCount >= 2)  { appliedOut = 2;  return BGFX_TEXTURE_RT_MSAA_X2;  }
+        appliedOut = 0;
+        return BGFX_TEXTURE_RT;
+    }
+
+    BgfxRenderTargetBackend::BgfxRenderTargetBackend(int w, int h, bool hasDepth, bool preserve,
+                                                      int requestedMultiSampleCount)
         : width(w), height(h), preserveContents(preserve)
     {
-        // Create color texture with render target flag
+        int appliedMsaa = 0;
+        const uint64_t msaaFlag = BgfxMsaaRtFlag(requestedMultiSampleCount, appliedMsaa);
+        multiSampleCount = appliedMsaa;
+
+        // Create color texture with render target flag (Task 878/879: an MSAA variant when
+        // requested -- bgfx resolves the multisampled content into this same texture handle
+        // internally; no explicit vkCmdResolveImage-style step or separate resolve texture is
+        // needed on this backend, unlike EasyGL/Vulkan).
         colorTex = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h),
             false, 1, bgfx::TextureFormat::RGBA8,
-            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+            msaaFlag | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
         bgfx::TextureHandle attachments[2] = { colorTex, BGFX_INVALID_HANDLE };
         int numAttachments = 1;
 
         if (hasDepth)
         {
+            // Depth attachment must share the color attachment's sample count.
             attachments[1] = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h),
-                false, 1, bgfx::TextureFormat::D24S8, BGFX_TEXTURE_RT);
+                false, 1, bgfx::TextureFormat::D24S8, msaaFlag);
             numAttachments = 2;
         }
 
@@ -472,11 +497,11 @@ namespace CNA::Internal::Backends::Bgfx
 
     // ---
 
-    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/, int /*multiSampleCount*/)
+    std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents, bool /*mipMap*/, int multiSampleCount)
     {
         // mipMap not yet implemented on Bgfx (Task 336/878) — accepted and ignored.
-        // multiSampleCount not yet implemented on Bgfx (Task 337/879) — accepted and ignored.
-        return std::make_unique<BgfxRenderTargetBackend>(w, h, hasDepth, preserveContents);
+        // multiSampleCount: BGFX_TEXTURE_RT_MSAA_Xn (Task 878/879) — see BgfxRenderTargetBackend.
+        return std::make_unique<BgfxRenderTargetBackend>(w, h, hasDepth, preserveContents, multiSampleCount);
     }
 
     void BgfxGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
@@ -487,12 +512,15 @@ namespace CNA::Internal::Backends::Bgfx
             rt->BindAsRenderTarget();
             currentViewId_ = 1;
             spriteViewId = 1;
+            currentRtWidth_  = static_cast<uint16_t>(rt->GetWidth());
+            currentRtHeight_ = static_cast<uint16_t>(rt->GetHeight());
         }
         else
         {
             bgfx::setViewFrameBuffer(0, BGFX_INVALID_HANDLE);
             currentViewId_ = 0;
             spriteViewId = 0;
+            currentRtWidth_ = currentRtHeight_ = 0;
         }
     }
 
@@ -522,6 +550,8 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setViewFrameBuffer(1, mrtFbo_);
         currentViewId_ = 1;
         spriteViewId = 1;
+        currentRtWidth_  = static_cast<uint16_t>(rts[0]->GetWidth());
+        currentRtHeight_ = static_cast<uint16_t>(rts[0]->GetHeight());
     }
 
     // --- BgfxRenderTargetCubeBackend ---
@@ -561,7 +591,13 @@ namespace CNA::Internal::Backends::Bgfx
     std::unique_ptr<IRenderTargetCubeBackend> BgfxGraphicsBackend::CreateRenderTargetCube(int size, bool /*mipMap*/, int /*multiSampleCount*/)
     {
         // mipMap not yet implemented on Bgfx (Task 336/878) — accepted and ignored.
-        // multiSampleCount not yet implemented on Bgfx (Task 337/879) — accepted and ignored.
+        // multiSampleCount: FNA's real RenderTargetCube constructor DOES have a
+        // preferredMultiSampleCount parameter (confirmed against FNA source), so this is not
+        // moot -- but wiring it up needs the same per-face BGFX_TEXTURE_RT_MSAA_Xn treatment
+        // BgfxRenderTargetBackend just got for RenderTarget2D (Task 878/879), applied across
+        // BgfxRenderTargetCubeBackend's per-face framebuffers. Deliberately out of scope for this
+        // pass (RenderTarget2D MSAA only, per the task's own test-file list) — accepted and
+        // ignored here, tracked as a follow-up in plan_graphics.md.
         return std::make_unique<BgfxRenderTargetCubeBackend>(size);
     }
 
@@ -582,11 +618,13 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
     {
-        const auto& bgfxTex = static_cast<const BgfxTextureBackend&>(texture);
+        // Task 878/879 (closes Task 873): use ITextureBackend's own virtual GetWidth()/
+        // GetHeight() instead of an unsafe static_cast<const BgfxTextureBackend&> -- texture may
+        // be a BgfxRenderTargetBackend (an unrelated sibling class), not just BgfxTextureBackend.
         Draw(
             texture,
-            Rectangle(static_cast<int>(x), static_cast<int>(y), bgfxTex.width, bgfxTex.height),
-            Rectangle(0, 0, bgfxTex.width, bgfxTex.height),
+            Rectangle(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()),
+            Rectangle(0, 0, texture.GetWidth(), texture.GetHeight()),
             Color::White
         );
     }
@@ -614,8 +652,16 @@ namespace CNA::Internal::Backends::Bgfx
             throw std::runtime_error("BgfxSpriteBatchBackend::Draw called before Begin().");
         }
 
-        const auto& bgfxTex = static_cast<const BgfxTextureBackend&>(texture);
-        graphicsBackend.SubmitSprite(bgfxTex, destinationRectangle, sourceRectangle, color, rotation, origin, effects,
+        // Task 878/879 (closes Task 873): texture may be a BgfxTextureBackend OR a
+        // BgfxRenderTargetBackend (RenderTarget2D sampled after unbinding) -- both implement
+        // IBgfxSamplable, so query the real handle through that instead of an unsafe
+        // static_cast<const BgfxTextureBackend&> that silently read the wrong pooled handle
+        // type whenever texture was actually a render target.
+        const auto* samplable = dynamic_cast<const IBgfxSamplable*>(&texture);
+        bgfx::TextureHandle handle = BGFX_INVALID_HANDLE;
+        if (samplable) handle = samplable->GetBgfxTextureHandle();
+        graphicsBackend.SubmitSprite(handle, texture.GetWidth(), texture.GetHeight(),
+                                     destinationRectangle, sourceRectangle, color, rotation, origin, effects,
                                      layerDepth);
     }
 
@@ -897,10 +943,23 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::reset(cachedWidth, cachedHeight, resetFlags_);
         }
 
-        bgfx::setViewRect(spriteViewId, 0, 0, cachedWidth, cachedHeight);
+        // Task 878/879 fix: when spriteViewId is currently bound to a RenderTarget2D
+        // (spriteViewId != 0), use that RT's own size for the view rect/2D-ortho-projection
+        // instead of always stomping it back to the full window size. Previously this
+        // unconditionally overwrote BindAsRenderTarget()'s correctly RT-sized
+        // bgfx::setViewRect() call on every single Clear()/SubmitSprite() call, silently
+        // corrupting all rendering (3D and 2D) into any RenderTarget2D smaller than the window
+        // (the 3D/2D pipelines share spriteViewId/currentViewId_ -- see ApplyViewportOverride()'s
+        // comment). Never caught before because no earlier test both rendered into a
+        // differently-sized RT AND could pixel-verify the result (blocked by the separate Task
+        // 873 SpriteBatch RT-sampling cast bug, fixed alongside this one).
+        const uint16_t viewWidth  = (spriteViewId != 0 && currentRtWidth_  > 0) ? currentRtWidth_  : cachedWidth;
+        const uint16_t viewHeight = (spriteViewId != 0 && currentRtHeight_ > 0) ? currentRtHeight_ : cachedHeight;
+
+        bgfx::setViewRect(spriteViewId, 0, 0, viewWidth, viewHeight);
 
         float ortho[16];
-        bx::mtxOrtho(ortho, 0.0f, static_cast<float>(cachedWidth), static_cast<float>(cachedHeight), 0.0f, 0.0f,
+        bx::mtxOrtho(ortho, 0.0f, static_cast<float>(viewWidth), static_cast<float>(viewHeight), 0.0f, 0.0f,
                      1000.0f, 0.0f,
                      bgfx::getCaps()->homogeneousDepth);
         bgfx::setViewTransform(spriteViewId, nullptr, ortho);
@@ -944,7 +1003,7 @@ namespace CNA::Internal::Backends::Bgfx
         return std::make_unique<BgfxSpriteBatchBackend>(*this);
     }
 
-    void BgfxGraphicsBackend::SubmitSprite(const BgfxTextureBackend& texture,
+    void BgfxGraphicsBackend::SubmitSprite(bgfx::TextureHandle textureHandle, int texWidth, int texHeight,
                                            const Rectangle& destinationRectangle,
                                            const Rectangle& sourceRectangle,
                                            const Color& color,
@@ -955,7 +1014,7 @@ namespace CNA::Internal::Backends::Bgfx
     {
         (void)layerDepth;
 
-        if (!bgfx::isValid(texture.textureHandle))
+        if (!bgfx::isValid(textureHandle))
         {
             return;
         }
@@ -966,10 +1025,10 @@ namespace CNA::Internal::Backends::Bgfx
 
         EnsureViewState();
 
-        float u1 = static_cast<float>(sourceRectangle.X) / static_cast<float>(texture.width);
-        float v1 = static_cast<float>(sourceRectangle.Y) / static_cast<float>(texture.height);
-        float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width) / static_cast<float>(texture.width);
-        float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / static_cast<float>(texture.height);
+        float u1 = static_cast<float>(sourceRectangle.X) / static_cast<float>(texWidth);
+        float v1 = static_cast<float>(sourceRectangle.Y) / static_cast<float>(texHeight);
+        float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width) / static_cast<float>(texWidth);
+        float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / static_cast<float>(texHeight);
 
         if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0)
         {
@@ -1042,7 +1101,7 @@ namespace CNA::Internal::Backends::Bgfx
         indices[4] = 3;
         indices[5] = 0;
 
-        bgfx::setTexture(0, textureSampler, texture.textureHandle, samplerFlags_[0]);
+        bgfx::setTexture(0, textureSampler, textureHandle, samplerFlags_[0]);
         bgfx::setVertexBuffer(0, &vertexBuffer);
         bgfx::setIndexBuffer(&indexBuffer);
         if (scissorW_ > 0 && scissorH_ > 0)
