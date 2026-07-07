@@ -86,6 +86,21 @@ namespace CNA::Internal::Backends::Bgfx
             return ToAbgr(color.getRProperty(), color.getGProperty(), color.getBProperty(), color.getAProperty());
         }
 
+        // Normal matrix = transpose(inverse(world3x3)), via the cofactor/det shortcut, so
+        // non-uniform-scale World transforms don't skew the transformed normal (Task 398 fix;
+        // multiplying by World directly is only correct for rotation/uniform-scale/translation).
+        void ComputeNormalMatrix3x3(const float* w, float out[9])
+        {
+            const float a = w[0], d = w[1], g = w[2];
+            const float b = w[4], e = w[5], h = w[6];
+            const float c = w[8], f = w[9], i = w[10];
+            const float det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+            const float invDet = (det != 0.0f) ? (1.0f / det) : 0.0f;
+            out[0] = (e * i - f * h) * invDet; out[1] = -(b * i - c * h) * invDet; out[2] = (b * f - c * e) * invDet;
+            out[3] = -(d * i - f * g) * invDet; out[4] = (a * i - c * g) * invDet; out[5] = -(a * f - c * d) * invDet;
+            out[6] = (d * h - e * g) * invDet; out[7] = -(a * h - b * g) * invDet; out[8] = (a * e - b * d) * invDet;
+        }
+
         const char* RendererTypeName(bgfx::RendererType::Enum type)
         {
             switch (type)
@@ -743,6 +758,7 @@ namespace CNA::Internal::Backends::Bgfx
                 vpInstanced3DUnif_  = bgfx::createUniform("u_vp",            bgfx::UniformType::Mat4);
 
                 world3DUnif_         = bgfx::createUniform("u_world",          bgfx::UniformType::Mat4);
+                normalMatrix3DUnif_  = bgfx::createUniform("u_normalMatrix",   bgfx::UniformType::Mat3);
                 eyePos3DUnif_        = bgfx::createUniform("u_eyePos",         bgfx::UniformType::Vec4);
                 emissiveColor3DUnif_ = bgfx::createUniform("u_emissiveColor",  bgfx::UniformType::Vec4);
                 envMapAmountUnif_    = bgfx::createUniform("u_envMapAmount",   bgfx::UniformType::Vec4);
@@ -810,6 +826,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyU(bonesUnif_);
         destroyU(vpInstanced3DUnif_);
         destroyU(world3DUnif_);
+        destroyU(normalMatrix3DUnif_);
         destroyU(eyePos3DUnif_);
         destroyU(emissiveColor3DUnif_);
         destroyU(envMapAmountUnif_);
@@ -1540,6 +1557,9 @@ namespace CNA::Internal::Backends::Bgfx
         {
             bgfx::setUniform(diffuseColor3DUnif_,  params.diffuseColor);
             bgfx::setUniform(world3DUnif_,          params.worldColMajor);
+            float normalMatrix[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrix);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrix);
             float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
                                  params.eyePositionWorld[2], 0.0f };
             bgfx::setUniform(eyePos3DUnif_, eyePos);

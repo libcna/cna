@@ -290,6 +290,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::UniformHandle vpInstanced3DUnif_  = BGFX_INVALID_HANDLE;
         // EnvironmentMapEffect-specific uniforms
         bgfx::UniformHandle world3DUnif_        = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle normalMatrix3DUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle eyePos3DUnif_       = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle emissiveColor3DUnif_= BGFX_INVALID_HANDLE;
         bgfx::UniformHandle envMapAmountUnif_   = BGFX_INVALID_HANDLE;

@@ -2696,11 +2696,23 @@ void main()
         if (p.loc_wvp >= 0)
             p.prog.set_uniform_matrix4(p.loc_wvp, wvp_col);
 
-        // Normal matrix — upper-left 3x3 of world column-major
+        // Normal matrix — transpose(inverse(world3x3)), via the cofactor/det shortcut, so
+        // non-uniform-scale World transforms don't skew the transformed normal (Task 398 fix;
+        // the raw upper-left 3x3 used before was only correct for rotation/uniform-scale/
+        // translation World matrices).
         if (p.loc_normalmat >= 0)
         {
             const float* w = params.worldColMajor;
-            float nm[9] = { w[0],w[1],w[2], w[4],w[5],w[6], w[8],w[9],w[10] };
+            const float a = w[0], d = w[1], g = w[2];
+            const float b = w[4], e = w[5], h = w[6];
+            const float c = w[8], f = w[9], i = w[10];
+            const float det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+            const float invDet = (det != 0.0f) ? (1.0f / det) : 0.0f;
+            float nm[9] = {
+                (e * i - f * h) * invDet, -(b * i - c * h) * invDet, (b * f - c * e) * invDet,
+                -(d * i - f * g) * invDet, (a * i - c * g) * invDet, -(a * f - c * d) * invDet,
+                (d * h - e * g) * invDet, -(a * h - b * g) * invDet, (a * e - b * d) * invDet,
+            };
             p.prog.set_uniform_matrix3(p.loc_normalmat, nm);
         }
 
