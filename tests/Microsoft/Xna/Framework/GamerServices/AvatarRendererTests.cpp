@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -11,6 +12,7 @@
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
 TEST(AvatarRendererTest, BoneCountIs71) {
     EXPECT_EQ(AvatarRenderer::BoneCount, 71);
@@ -206,4 +208,24 @@ TEST(AvatarRendererTest, SetAppearanceDoesNotThrowWithoutRealRendering) {
     AvatarRenderer renderer(nullptr);
     AvatarAppearanceEXT appearance;
     EXPECT_NO_THROW(renderer.SetAppearanceEXT(appearance));
+}
+
+// Task 11.6: unlike DrawRealEXT/Draw/getStateProperty/getBindPoseProperty (which all already
+// threw ObjectDisposedException), EnableRealRenderingEXT/SetAppearanceEXT used to silently
+// succeed after Dispose() - EnableRealRenderingEXT even re-populated realDevice_/realModel_/
+// realEffect_, effectively "undisposing" the object.
+TEST(AvatarRendererTest, EnableRealRenderingThrowsAfterDispose) {
+    GraphicsDevice device;
+    AvatarRenderer renderer(nullptr);
+    renderer.Dispose();
+    EXPECT_THROW(
+        renderer.EnableRealRenderingEXT(device, nullptr),
+        System::ObjectDisposedException);
+}
+
+TEST(AvatarRendererTest, SetAppearanceThrowsAfterDispose) {
+    AvatarRenderer renderer(nullptr);
+    renderer.Dispose();
+    AvatarAppearanceEXT appearance;
+    EXPECT_THROW(renderer.SetAppearanceEXT(appearance), System::ObjectDisposedException);
 }

@@ -2321,7 +2321,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   simplified code path works end-to-end in practice, not just in a unit test) — all unaffected.
   Full suite: 3375/3375 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 11.6** — Add `isDisposed_` checks to `AvatarRenderer::EnableRealRenderingEXT`/
+- [x] **Task 11.6** — Add `isDisposed_` checks to `AvatarRenderer::EnableRealRenderingEXT`/
   `SetAppearanceEXT`. Confirmed (`AvatarRenderer.cpp`, ~lines 121-137): unlike `DrawRealEXT`/`Draw`/
   `getStateProperty`/`getBindPoseProperty` (which all throw `ObjectDisposedException`), these two
   EXT methods silently succeed after `Dispose()` — `EnableRealRenderingEXT` even re-populates
@@ -2329,6 +2329,17 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `isDisposed_` check to both, for consistency with the rest of the class's own `IDisposable`
   contract. Add tests for both methods called after `Dispose()`, asserting `ObjectDisposedException`
   (mirroring the existing `DrawRealThrowsAfterDispose` test's pattern).
+
+  Added the same `if (isDisposed_) throw System::ObjectDisposedException("AvatarRenderer");` guard
+  to both methods, at the very top before either touches any state. Added
+  `EnableRealRenderingThrowsAfterDispose` and `SetAppearanceThrowsAfterDispose` (this doubles as
+  Task 13.4's test half — done together as that task suggests). For
+  `EnableRealRenderingThrowsAfterDispose`, confirmed a plain default-constructed `GraphicsDevice`
+  (the same headless-safe pattern already used by `Texture2DTests.cpp` and this session's own
+  `SkinnedModelEXTPartTest`) is fine to pass here, since the disposed check throws before the
+  method ever touches the device or model argument. **Revert-verify:** removed both new checks,
+  rebuilt, confirmed both new tests failed ("it throws nothing"); restored, rebuilt, confirmed
+  green. Full suite: 3377/3377 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 11.7** — Add bounds checking to `ContentManager`'s `BinReaderEXT::Read<T>()`. Confirmed
   (`ContentManager.cpp`, ~lines 585-592): `std::memcpy(&value, Data.data() + Pos, sizeof(T)); Pos +=

@@ -121,6 +121,13 @@ namespace Microsoft::Xna::Framework::GamerServices
     void AvatarRenderer::EnableRealRenderingEXT(Graphics::GraphicsDevice& device,
                                                  std::shared_ptr<Graphics::SkinnedModelEXT> model)
     {
+        // Task 11.6: unlike DrawRealEXT/Draw/getStateProperty/getBindPoseProperty (which all
+        // throw ObjectDisposedException), this used to silently succeed after Dispose() - even
+        // re-populating realDevice_/realModel_/realEffect_, effectively "undisposing" the object.
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("AvatarRenderer");
+        }
         realDevice_ = &device;
         realModel_ = std::move(model);
         realEffect_ = std::make_unique<Graphics::SkinnedEffect>(device);
@@ -133,6 +140,11 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void AvatarRenderer::SetAppearanceEXT(const AvatarAppearanceEXT& appearance)
     {
+        // Task 11.6: same consistency fix as EnableRealRenderingEXT above.
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("AvatarRenderer");
+        }
         appearance_ = appearance;
     }
 
