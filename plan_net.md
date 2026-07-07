@@ -1869,13 +1869,26 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Pure test-coverage addition for already-correct code, no revert-verify applies. Full suite:
   **3346/3348 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 9.4** — Add ordinal-value assertions to `GamerPresenceModeTest` and sibling enum tests
+- [x] **Task 9.4** — Add ordinal-value assertions to `GamerPresenceModeTest` and sibling enum tests
   (`GamerPrivilegeSettingTest`, `GamerZoneTest`, `ControllerSensitivityTest`, `GameDifficultyTest`,
   `LeaderboardKeyTest`, `LeaderboardOutcomeTest`), not just tautological self-equality checks.
   Confirmed `GamerPresence::setPresenceModeProperty` indexes a 60-entry string table directly by the
   enum's ordinal, so a future accidental reordering of `GamerPresenceMode` would silently break
   presence strings with nothing to catch it (unlike the already-correct `AvatarBodyType`/`AvatarBone`
   tests in the same file, which do check exact ordinal values).
+
+  Added an `OrdinalValuesMatchXna` test to each of the 7 enum test suites in
+  `GamerServicesEnumsTests.cpp`, asserting `static_cast<int>(...)` against the real FNA reference
+  ordinals (`FNA.NetStub/src/GamerServices/*.cs`). Confirmed every one of CNA's `enum class`
+  declarations is a contiguous, unmodified 0-based transcription of the real XNA enum member order —
+  no reordering bug currently exists — so this is a pure regression-guard addition, not a bug fix.
+  While drafting `GamerPresenceModeTest.OrdinalValuesMatchXna` I initially miscounted several interior
+  ordinals by hand (off by 1-2 for `DifficultyEasy`/`Winning`/`Losing`/`WaitingInLobby`); the test
+  itself caught my own arithmetic mistake immediately on first run (expected-vs-actual gtest output),
+  which was corrected before commit — a small live demonstration of exactly the kind of silent-drift
+  protection this task exists to add. No revert-verify applies (pure test-coverage addition guarding
+  already-correct code). Full suite: 3355/3355 passing (2 expected accelerometer/gyroscope skips), no
+  regressions.
 
 - [ ] **Task 9.5** — Add an out-of-range int-index test for `AchievementCollection::operator[](int)`
   (only the string-key-not-found case is currently tested) — add alongside Task 7.9's exception-type
