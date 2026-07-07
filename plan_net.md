@@ -1345,12 +1345,39 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
   **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 6.6** — Investigate and fix (in `sharp-runtime`, coordinating per that repo's own
+- [x] **Task 6.6** — Investigate and fix (in `sharp-runtime`, coordinating per that repo's own
   modification rule) the endianness asymmetry between `BinaryWriter::Write(Single/double)` (raw
   native-order `memcpy`) and `BinaryReader::ReadSingle/ReadDouble` (explicit little-endian
   reconstruction). Confirmed unreachable through this repo's own ENet wire messages today (none use
   float/double fields), but a real latent bug for ordinary game code writing `Vector2`/`Vector3`/etc.
   through `PacketWriter` on a big-endian host. Cross-cutting into `sharp-runtime`.
+
+  **Fixed in `sharp-runtime`** (`621eaad`, `develop`): `Write(Single)`/`Write(double)` now extract
+  the IEEE-754 bit pattern into a same-width, same-endianness integer (a pure same-host `memcpy`,
+  not a wire-format concern) and serialize it through the already-portable
+  `Write(uint32_t)`/`Write(uint64_t)`, made symmetric with how `ReadSingle()`/`ReadDouble()`
+  already reconstruct via `ReadUInt32()`/`ReadUInt64()` first, rather than writing raw host-native
+  bytes straight to the wire buffer.
+
+  **Added `WriteSingle_ProducesExactLittleEndianByteSequence`/
+  `WriteDouble_ProducesExactLittleEndianByteSequence`** to `sharp-runtime`'s own
+  `IOStreamTests.cpp`, asserting the exact expected IEEE-754 little-endian byte sequence for a
+  known value (`1.0f`/`1.0`) directly, rather than relying on the existing roundtrip tests (which
+  cannot distinguish the two implementations on a little-endian host, since `ReadSingle`/
+  `ReadDouble` already always reconstruct assuming little-endian regardless of what `Write` wrote).
+
+  **Honest note on revert-verify for this specific fix**: stashed just the source fix and
+  rebuilt — the 2 new byte-sequence tests *still passed*, confirming empirically (not just by
+  argument) that on this little-endian development machine, the old raw-`memcpy` implementation
+  and the new explicit-little-endian implementation produce byte-identical output for every value
+  — exactly matching this task's own original framing ("confirmed unreachable... today... a real
+  latent bug... on a big-endian host"). This is the one fix in the whole `plan_net.md` effort
+  where a genuine "would fail without the fix" *execution* proof is not obtainable in this
+  environment at all (no big-endian host available); the proof here is necessarily the source-level
+  contrast against `Write(shortcs)`/`Write(intcs)`/`Write(longcs)`'s own already-correct explicit
+  little-endian pattern, confirmed by direct code reading before the fix, not by a failing test.
+  Restored the fix regardless, since it is still the objectively correct, portable behavior going
+  forward. Full `sharp-runtime` suite: **10584/10584 passing**, no regressions.
 
 - [x] **Task 6.7** — Investigate the possible null-dereference in `ReplyToQuery` if it's ever reached
   before a host gamer exists (`WireGamertagFor(registeredHost_->getHostProperty())` has no
@@ -1418,11 +1445,8 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
   **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-  **Phase 6 complete** — Tasks 6.1-6.5 and 6.7-6.9 done (8 of 9); Task 6.6 requires modifying an
-  existing `sharp-runtime` file and per this repo's own convention needs the user's approval
-  first — skipped for now, consistent with Tasks 4.4/4.5 being deferred for the same reason. Task
-  6.10 (added mid-session, logged under Phase 6 above) likewise requires a `sharp-runtime` change
-  and remains open for the same reason.
+  **Phase 6 complete — 10/10** (Tasks 6.1-6.10, including Task 6.6 and the mid-session-added Task
+  6.10, both `sharp-runtime` changes made after the user's explicit go-ahead).
 
 - [x] **Task 6.10** — Investigate and fix (in `sharp-runtime`, coordinating per that repo's own
   modification rule — see Task 4.4) `BinaryReader::ReadBytes` throwing plain
