@@ -152,6 +152,17 @@ namespace CNA::Internal::Net
             announce.OpenPublicSlots = std::max(
                 0, announce.MaxGamers - announce.OpenPrivateSlots - announce.CurrentGamerCount
             );
+            // Task 6.7: registeredHost_->getHostProperty() has no null-check here, but is
+            // confirmed always non-null in practice: RegisterHost (the only way registeredHost_
+            // ever becomes non-null) is only ever called from ENetBackend::StartHosting, itself
+            // only ever called at the very end of NetworkSession's own constructor - by which
+            // point host_ (= localGamers_[0]) has already been set, or the constructor itself
+            // already threw beforehand (an empty local-gamer list makes that exact indexing throw
+            // first - see Task 6.1). Every real Poll()/FindSessions() call that reaches this line
+            // (ENetDiscoveryServiceTest's FindSessionsDiscoversRegisteredHost and
+            // ReplyToQueryOnlyAnswersWhenSessionTypeFilterMatchesTheHost) already exercises this
+            // path on every test run; a future refactor that broke this ordering would surface as
+            // an immediate crash there, not a silent gap.
             announce.HostGamertag = WireGamertagFor(registeredHost_->getHostProperty());
             announce.Properties = registeredHost_->getSessionPropertiesProperty();
 

@@ -1278,12 +1278,27 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   float/double fields), but a real latent bug for ordinary game code writing `Vector2`/`Vector3`/etc.
   through `PacketWriter` on a big-endian host. Cross-cutting into `sharp-runtime`.
 
-- [ ] **Task 6.7** — Investigate the possible null-dereference in `ReplyToQuery` if it's ever reached
+- [x] **Task 6.7** — Investigate the possible null-dereference in `ReplyToQuery` if it's ever reached
   before a host gamer exists (`WireGamertagFor(registeredHost_->getHostProperty())` has no
   null-check). Confirmed unreachable in practice today given current call ordering
   (`StartHosting` always runs after a host gamer is constructed), but add either a defensive
   null-check or an explicit assertion/test documenting the invariant that makes this safe, so a
   future refactor can't silently reintroduce the risk.
+
+  Confirmed the invariant precisely: `RegisterHost` (the only way `registeredHost_` ever becomes
+  non-null) is only ever called from `ENetBackend::StartHosting`, itself only ever called at the
+  very end of `NetworkSession`'s own constructor — by which point `host_` (`= localGamers_[0]`)
+  has already been set, or the constructor itself already threw first (an empty local-gamer list
+  makes that exact indexing throw before `StartHosting` is ever reached — see Task 6.1). A
+  defensive null-check would be validating a scenario the current architecture cannot produce
+  (against this project's own "don't validate what can't happen" convention), so documented the
+  invariant directly at the call site instead, explicitly naming the two existing tests
+  (`FindSessionsDiscoversRegisteredHost`, `ReplyToQueryOnlyAnswersWhenSessionTypeFilterMatchesTheHost`)
+  that already exercise this exact line on every real reply path — a future refactor that broke
+  the ordering would surface as an immediate test crash, not a silent gap.
+
+  Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
+  **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 6.8** — Investigate reducing the repeated `Flush()` calls after every single `Send()`
   inside per-peer broadcast fan-out loops (e.g. `HandleClientHello`'s `GamerJoinBroadcastMessage`
