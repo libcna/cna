@@ -1962,11 +1962,21 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   correct `PlayerIndex::Two` and confirmed green again. Full suite: 3366/3366 passing (2 expected
   accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 9.9** — Add a populated-collection test for `SignedInGamerCollectionTest::operator[](PlayerIndex)`.
+- [x] **Task 9.9** — Add a populated-collection test for `SignedInGamerCollectionTest::operator[](PlayerIndex)`.
   Confirmed the existing test only covers the empty-collection case (returns `nullptr` for any
   index). Add a test with a populated (2-4 gamer) collection verifying: correct gamer returned at a
   valid index, boundary case `index == size()` returns `nullptr`, and iteration with >1 element
   works correctly.
+
+  Added `PlayerIndexOperatorOnPopulatedCollection` with 3 gamers, verifying `col[One]`/`col[Two]`/
+  `col[Three]` each return the correct gamer, `col[Four]` (== size()) returns `nullptr`, and a
+  range-for over the collection visits exactly 3 elements. Confirmed against FNA's own real
+  indexer (`return collection[(int)index];`, bounds-checked only against `Count`) that this
+  operator indexes the underlying collection directly by the enum's ordinal position — not a
+  lookup by each gamer's own `PlayerIndex` property — documented this in the test's own comment
+  since it's an easy behavior to misread from the parameter name alone. No revert-verify applies
+  (pure test-coverage addition for already-correct code, matching FNA exactly). Full suite:
+  3367/3367 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 9.10** — Add message-content assertions to all 6 GamerServices exception types'
   `DefaultCtor` tests. Confirmed every existing `*Test.DefaultCtor` only checks `dynamic_cast`
