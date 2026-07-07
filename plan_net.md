@@ -1364,7 +1364,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
 
 ## Phase 7 — GamerServices: Bugs
 
-- [ ] **Task 7.1** — Fix `SignedInGamer::GetAchievements()` hanging forever once GamerServices is
+- [x] **Task 7.1** — Fix `SignedInGamer::GetAchievements()` hanging forever once GamerServices is
   actually initialized — the same class of bug as the already-fixed `NetworkSession` hang (Task
   12.1 in the prior plan). Confirmed (`SignedInGamer.cpp`, ~lines 88-111): `BeginGetAchievements()`
   never marks its `GamerAction` completed (unlike `BeginAwardAchievement`, ~line 79, which
@@ -1381,6 +1381,25 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   regression test analogous to `tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp`
   that runs in a genuinely separate process with `Initialize()` actually called, proving
   `GetAchievements()` returns promptly instead of hanging.
+
+  Fixed: `BeginGetAchievements` now calls `statReceiveAction_->setIsCompletedProperty(true);`
+  immediately after construction, matching `BeginAwardAchievement`'s already-correct pattern —
+  `GetAchievements()`'s polling loop now sees `IsCompleted == true` from the start and never
+  enters its body.
+
+  Extended the existing `tools/net/gamerservices_dispatcher_harness.cpp` (rather than a new
+  executable) with a `--mode=get-achievements` flag (defaulting to `network-session`, so the
+  existing DEFERRED.md item #19 test needed no changes), and added
+  `GamerServicesDispatcherHangRegressionTest.GetAchievementsDoesNotHangWhenGamerServicesIsInitialized`,
+  spawning the harness with that mode — same process-isolation reasoning as the existing test
+  (`GamerServicesDispatcher::Initialize()`'s process-lifetime static with no reset hook would
+  otherwise contaminate every other test in this binary).
+
+  Revert-verify-restore: reverting just the fix (keeping the new test/harness code) reproduced
+  the hang exactly — the harness never exited, was `SIGKILL`ed by the test's own 10-second
+  watchdog, and the test failed with exit code -1. Restored the fix; both regression tests now
+  pass promptly (~50ms each). Full suite: **3302/3304 passing** (2 expected accelerometer/
+  gyroscope skips), no regressions.
 
 - [ ] **Task 7.2** — Audit every other `SignedInGamer` `Begin*` method (`BeginGetFriends`,
   `BeginGetProfile`, and any others in the same file) for the identical "never marks itself

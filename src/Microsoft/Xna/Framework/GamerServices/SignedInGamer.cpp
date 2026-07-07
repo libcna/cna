@@ -107,6 +107,14 @@ namespace Microsoft::Xna::Framework::GamerServices
             throw System::InvalidOperationException();
         }
         statReceiveAction_ = new GamerAction(std::move(asyncState), std::move(callback));
+        // Task 7.1: there is no real deferred work to wait on (matching BeginAwardAchievement's
+        // own already-correct pattern just above) - GetAchievements()'s polling loop only ever
+        // completes the action itself via GamerServicesDispatcher::UpdateAsync() returning false,
+        // which never happens once a real GamerServicesComponent exists (isInitialized_ becomes
+        // permanently true, matching this project's own established "no reset hook" pattern) -
+        // making that loop spin forever at 100% CPU for any real game. Mark it complete
+        // immediately instead.
+        statReceiveAction_->setIsCompletedProperty(true);
         return statReceiveAction_;
     }
 

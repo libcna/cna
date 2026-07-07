@@ -63,3 +63,28 @@ TEST(GamerServicesDispatcherHangRegressionTest, CreateDoesNotHangWhenGamerServic
                              "this is exactly the DEFERRED.md item #19 hang regressing";
     EXPECT_EQ(exitCode, 0) << "harness exited with unexpected code " << exitCode;
 }
+
+// Task 7.1: SignedInGamer::BeginGetAchievements had the identical "never marks itself completed"
+// bug as DEFERRED.md item #19 above, independently discovered - GetAchievements()'s own polling
+// loop only ever completes the action via GamerServicesDispatcher::UpdateAsync() returning false,
+// which never happens once GamerServicesDispatcher::Initialize() has run (i.e. whenever a real
+// GamerServicesComponent exists). Needs the exact same process isolation as the test above, for
+// the same reason (see this file's own top comment and the harness's own top comment).
+TEST(GamerServicesDispatcherHangRegressionTest, GetAchievementsDoesNotHangWhenGamerServicesIsInitialized) {
+    pid_t pid = -1;
+    char* argv[] = {
+        const_cast<char*>(CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH),
+        const_cast<char*>("--mode=get-achievements"),
+        nullptr
+    };
+    int rc = posix_spawn(&pid, CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH, nullptr, nullptr, argv, environ);
+    ASSERT_EQ(rc, 0) << "posix_spawn(" << CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH << ") failed: " << strerror(rc);
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
+    int exitCode = -1;
+    bool finished = WaitWithWatchdog(pid, deadline, &exitCode);
+
+    EXPECT_TRUE(finished) << "harness did not exit before the watchdog deadline and was killed — "
+                             "this is exactly the Task 7.1 GetAchievements() hang regressing";
+    EXPECT_EQ(exitCode, 0) << "harness exited with unexpected code " << exitCode;
+}
