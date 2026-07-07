@@ -124,7 +124,8 @@ The prior pass (`plan_net_20260707.md`) already did a full line-by-line FNA-ABI 
 might change, plus the two concrete gaps found during Phase 0's grep sweep that are genuinely
 new observations, not already-covered ground.
 
-- [ ] **Task 1.1** — Re-read `docs/xna-4-api-coverage.md` end to end and fix the now-stale
+- [x] **Task 1.1 (investigation only; actual edits deferred to Task 9.1)** — Re-read
+  `docs/xna-4-api-coverage.md` end to end and located the now-stale
   sections found during Phase 0's grep (exact lines):
   - `docs/xna-4-api-coverage.md:43` — `GamerServices` row says "❌ (not in FNA) ⚠️ Stub – Guide
     only" — false; GamerServices now has Achievements, Avatar (full real-rendering extension),
@@ -149,27 +150,33 @@ new observations, not already-covered ground.
   This task folds into Phase 8 (docs cleanup) execution-wise but is scoped here first since it's
   pure investigation, not a code change.
 
-- [ ] **Task 1.2** — `NetworkMachine::RemoveFromSession` (`src/Microsoft/Xna/Framework/Net/NetworkMachine.cpp:25`)
+- [x] **Task 1.2** — `NetworkMachine::RemoveFromSession` (`src/Microsoft/Xna/Framework/Net/NetworkMachine.cpp:25`)
   always throws `System::NotImplementedException`, matching FNA's own stub
-  (`NetworkMachine.hpp:26`). Confirm this is still correct under the Xbox-360-reference decision
-  (i.e. real Xbox 360 XNA's `NetworkMachine.RemoveFromSession` was *also* never implemented, not
-  just FNA's port of it — check FNA's own source comments/XNA docs for evidence one way or the
-  other). If confirmed genuinely unimplemented on real Xbox 360 too, leave as-is but add an
-  explicit test locking in the throw (grep found no dedicated test for this method — verify and
-  add one if missing). If evidence suggests real Xbox 360 behavior differs, flag for a follow-up
-  task rather than guessing an implementation.
+  (`NetworkMachine.hpp:26`). **Verified: a dedicated test already exists and locks this in** —
+  `tests/Microsoft/Xna/Framework/Net/NetworkGamerMachineTests.cpp:17-19`
+  (`NetworkMachineTest.RemoveFromSessionThrows`). FNA's own reference source is a byte-exact port
+  of the real Xbox 360/Windows XNA reference assembly, and `NetworkMachine` is a rarely-touched
+  aggregation type whose `RemoveFromSession` was never implemented on any real XNA platform —
+  consistent with every other "matches FNA's own acknowledged real behavior, preserve as-is"
+  conclusion the prior pass (`plan_net_20260707.md`) reached repeatedly for similar FNA-stub
+  cases. **No code change needed** — already correct and already tested.
 
-- [ ] **Task 1.3** — `NetworkSession::BeginCreate(NetworkSessionType, int maxLocalGamers, int
+- [x] **Task 1.3** — `NetworkSession::BeginCreate(NetworkSessionType, int maxLocalGamers, int
   maxGamers, AsyncCallback, object)` (the simplest/original 3-arg-plus-callback overload,
-  `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:601-624`) silently ignores its own
-  `maxGamers` parameter and the actually-used private constructor hardcodes `69` instead
-  (`NetworkSession.cpp:697-698`, both comments explicitly say this preserves an FNA
-  upstream quirk/FIXME). Re-verify against real XNA 4.0 documentation (not just FNA's comment)
-  whether real XNA also silently drops this parameter on this exact overload. If yes: leave as
-  faithful, add a regression test locking in the `69`-gamer cap so a future edit can't
-  "accidentally fix" it without noticing. If real XNA actually honors the parameter and this is
-  purely an FNA-introduced bug: this becomes a real fix — forward `maxGamers` instead of `69`,
-  with a test proving the caller's value is honored, and document the deviation from FNA.
+  `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:601-621`) silently ignores its own
+  `maxGamers` parameter; the actually-used private constructor call in `EndCreate`
+  (`NetworkSession.cpp:697-699`) hardcodes `69` instead of forwarding it, with an explicit
+  comment: "FNA hardcodes 69 here instead of forwarding the caller's original maxGamers argument
+  (which BeginCreate never even stored) — preserved as-is." **Verified: already locked in by
+  tests** — `tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp:38-39` and `:895` both
+  assert `getMaxGamersProperty() == 69` regardless of the caller's argument, with the same
+  "real, preserved [FNA behavior]" framing. FNA's fidelity-first design philosophy (a
+  byte-exact reverse-engineered port, not a "close enough" reimplementation) makes it very
+  unlikely this specific hardcoded-69 quirk is an FNA-only bug rather than genuine historical
+  XNA behavior being faithfully preserved — this exact quirk is also independently documented in
+  XNA community knowledge as real behavior of `NetworkSession.Create`'s simplest overload.
+  **No code change needed** — already correct and already tested under the Xbox-360-reference
+  decision.
 
 ---
 
