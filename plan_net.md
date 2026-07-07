@@ -1431,7 +1431,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   No revert-verify applies (no code change). Full suite unaffected (no source change made) —
   **3302/3304 passing** (2 expected accelerometer/gyroscope skips), same baseline as Task 7.1.
 
-- [ ] **Task 7.3** — Fix `GameDefaults`'s constructor initializing `GameDifficulty`/`ControllerSensitivity`
+- [x] **Task 7.3** — Fix `GameDefaults`'s constructor initializing `GameDifficulty`/`ControllerSensitivity`
   to the wrong stub default values. Confirmed: FNA's `internal GameDefaults()` constructor is
   genuinely empty (an upstream "FIXME: This is one huge joke" — the field is just left at C#'s
   `default(T)`, which is the enum's ordinal-0 value). `GameDifficulty`'s ordinal-0 value is `Easy`
@@ -1443,6 +1443,21 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   144-145) asserts the *wrong* values too, self-consistently hiding the bug. Fix both field
   initializers to their correct ordinal-0 values and correct the two `EXPECT_EQ` lines in the
   existing test to match the fix (not to keep asserting the old, wrong values).
+
+  Fixed both field initializers (`GameDifficulty::Easy`, `ControllerSensitivity::Low`) and
+  corrected `GamerServicesDataTests.cpp`'s `GameDefaultsTest.DefaultValues`. While rebuilding,
+  found a **second, previously-undiscovered self-consistently-wrong test** in a different file:
+  `GamerServicesGamerTests.cpp`'s `SignedInGamerTest.GameDefaultsPresencePrivilegesDefaults` also
+  asserted `GameDifficulty::Normal` — missed by the plan's own original grep, which only checked
+  `GamerServicesDataTests.cpp`. Fixed that assertion too. Confirmed no other hardcoded
+  `GameDifficulty::Normal`/`ControllerSensitivity::Medium` references exist anywhere else in the
+  codebase (the only other 2 hits, in `GamerServicesEnumsTests.cpp`, are trivial enum
+  self-equality checks, unrelated to `GameDefaults`).
+
+  Revert-verify-restore: reverting just the header fix (keeping both corrected tests) reproduced
+  the exact predicted failure in `GameDefaultsTest.DefaultValues` (`Which is: 4-byte object
+  <01-00 00-00>` — the wrong, ordinal-1 value, for both fields). Restored the fix; full suite:
+  **3302/3304 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 7.4** — Fix `PropertyDictionary`'s mutable `operator[]` auto-vivifying missing keys
   instead of throwing, matching the const overload's already-correct behavior. Confirmed: FNA's

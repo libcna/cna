@@ -380,9 +380,11 @@ TEST(SignedInGamerTest, PartySizeSet) {
     EXPECT_EQ(4, gamer.getPartySizeProperty());
 }
 
+// Task 7.3: FNA's own internal GameDefaults() constructor is empty, leaving GameDifficulty at
+// C#'s implicit default(T) - the ordinal-0 value, GameDifficulty::Easy, not Normal.
 TEST(SignedInGamerTest, GameDefaultsPresencePrivilegesDefaults) {
     auto gamer = SignedInGamer::CreateInternal("tag1");
-    EXPECT_EQ(GameDifficulty::Normal, gamer.getGameDefaultsProperty().getGameDifficultyProperty());
+    EXPECT_EQ(GameDifficulty::Easy, gamer.getGameDefaultsProperty().getGameDifficultyProperty());
     EXPECT_EQ(GamerPresenceMode::None, gamer.getPresenceProperty().getPresenceModeProperty());
     EXPECT_EQ(GamerPrivilegeSetting::Everyone, gamer.getPrivilegesProperty().getAllowCommunicationProperty());
 }

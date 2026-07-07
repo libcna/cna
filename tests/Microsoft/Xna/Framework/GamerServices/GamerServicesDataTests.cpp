@@ -139,10 +139,13 @@ TEST(GamerPrivilegesTest, DefaultsAllPermissive) {
 
 // --- GameDefaults ---
 
+// Task 7.3: FNA's own internal GameDefaults() constructor is empty, leaving every property at
+// C#'s implicit default(T) - the ordinal-0 enum value (GameDifficulty::Easy,
+// ControllerSensitivity::Low), not Normal/Medium.
 TEST(GameDefaultsTest, DefaultValues) {
     auto d = GameDefaults::CreateInternal();
-    EXPECT_EQ(GameDifficulty::Normal, d.getGameDifficultyProperty());
-    EXPECT_EQ(ControllerSensitivity::Medium, d.getControllerSensitivityProperty());
+    EXPECT_EQ(GameDifficulty::Easy, d.getGameDifficultyProperty());
+    EXPECT_EQ(ControllerSensitivity::Low, d.getControllerSensitivityProperty());
     EXPECT_FALSE(d.getPrimaryColorProperty().has_value());
     EXPECT_FALSE(d.getSecondaryColorProperty().has_value());
     EXPECT_FALSE(d.getAutoAimProperty());
