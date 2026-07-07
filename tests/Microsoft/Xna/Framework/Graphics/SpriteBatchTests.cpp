@@ -491,3 +491,43 @@ TEST(SpriteBatchSortModeTest, DeferredDoesNotFlushBeforeEnd)
     batch.End();
     EXPECT_EQ(rec->drawCalls.size(), 1u);
 }
+
+// -----------------------------------------------------------------------
+// Task 413: complete tests for SpriteSortMode::Deferred (Task 162 dependency)
+//
+// FNA/XNA's contract for the default SpriteSortMode::Deferred is: no sort at all, sprites are
+// delivered to the backend in exactly their original Draw() submission order. flushBatch() only
+// applies std::stable_sort for BackToFront/FrontToBack/Texture -- Deferred deliberately skips
+// straight to iterating spriteQueue_ in insertion order. Task 412's DeferredDoesNotFlushBeforeEnd
+// already covers the "not flushed before End()" half of Deferred's contract; this covers the
+// "preserves submission order" half.
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchSortModeTest, DeferredPreservesSubmissionOrder)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend backendA(1, 1), backendB(2, 2), backendC(3, 3);
+    Texture2D texA = Texture2D::CreateWithBackendForTests(1, 1,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendA, [](auto*) {}));
+    Texture2D texB = Texture2D::CreateWithBackendForTests(2, 2,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendB, [](auto*) {}));
+    Texture2D texC = Texture2D::CreateWithBackendForTests(3, 3,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendC, [](auto*) {}));
+
+    // Deliberately submitted in an order that does NOT match any sort key (not sorted by
+    // texture pointer, not sorted by any layerDepth since none is set here) -- if flushBatch()
+    // accidentally applied a sort for Deferred, this submission order would very likely change.
+    batch.Begin(); // default: SpriteSortMode::Deferred
+    batch.Draw(texC, 0.0f, 0.0f);
+    batch.Draw(texA, 0.0f, 0.0f);
+    batch.Draw(texB, 0.0f, 0.0f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 3u);
+    EXPECT_EQ(rec->drawCalls[0].texture, &backendC);
+    EXPECT_EQ(rec->drawCalls[1].texture, &backendA);
+    EXPECT_EQ(rec->drawCalls[2].texture, &backendB);
+}

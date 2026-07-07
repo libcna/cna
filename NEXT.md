@@ -28,7 +28,10 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   verified `SpriteSortMode::Immediate` flushes each sprite inside `Draw()` itself, strictly
   before `End()`, independently confirming discriminating power by temporarily breaking the
   dispatch and watching both new tests fail exactly as predicted while a `Deferred` negative
-  control kept passing. Tasks 413–416 (the remaining per-`SpriteSortMode` assertions) are next.
+  control kept passing. **Task 413 fulfilled Task 162's ask — zero bugs found**: confirmed
+  `SpriteSortMode::Deferred` preserves original submission order (no sort at all), independently
+  confirmed by temporarily reversing the flush order and watching the test fail exactly as
+  predicted. Tasks 414–416 (the remaining per-`SpriteSortMode` assertions) are next.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -106,14 +109,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 412.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 413.
 
-### Test status (last verified: Task 412)
-- **EasyGL, full `ctest -j1`:** 3617/3620 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 413)
+- **EasyGL, full `ctest -j1`:** 3618/3621 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3537/3550 pass. 13 documented pre-existing failures (see §5),
+- **Vulkan, full `ctest -j1`:** 3538/3551 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3521/3521 pass — 100%, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3522/3522 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -273,7 +276,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 412 | **Verify-only, zero bugs found**: fulfills Task 161 — confirmed `SpriteSortMode::Immediate` flushes each sprite inside `Draw()` itself, strictly before `End()`, using Task 411's `RecordingSpriteBatchBackend`. Independently verified discriminating power: temporarily forced `pushSprite()` to always queue (breaking the Immediate branch) and confirmed both new tests fail exactly as predicted, while a `Deferred` negative control kept passing. |
+| — | 413 | **Verify-only, zero bugs found**: fulfills Task 162 — confirmed `SpriteSortMode::Deferred` preserves original `Draw()` submission order (no sort at all). Independently verified discriminating power: temporarily added an unconditional `std::reverse()` before the flush loop and confirmed the test fails exactly as predicted (recorded order came back reversed). |
+| `a79f4091` | 412 | **Verify-only, zero bugs found**: fulfills Task 161 — confirmed `SpriteSortMode::Immediate` flushes each sprite inside `Draw()` itself, strictly before `End()`, using Task 411's `RecordingSpriteBatchBackend`. Independently verified discriminating power: temporarily forced `pushSprite()` to always queue (breaking the Immediate branch) and confirmed both new tests fail exactly as predicted, while a `Deferred` negative control kept passing. |
 | `93a725b8` | 411 | **Opens Phase 47. Infrastructure task, 2 real gaps found and fixed**: `SpriteBatch` had no way to inject a custom backend without a real `GraphicsDevice`, and `Texture2D::CreateCpuOnlyForTests()`'s null backend would crash `flushSingle()` the moment a sprite is flushed. Fixed both with new `NOXNA` test-only constructors/factories, then built `RecordingSpriteBatchBackend`/`DummyTextureBackend` (new shared `tests/.../RecordingSpriteBatchBackend.hpp`) and 5 tests proving Begin/End/Draw dispatch and multi-texture discrimination work end-to-end, headlessly. |
 | `fe509dbd` | 410 | **Doc, closes Phase 46.** Wrote `docs/skinnedeffect-support.md` synthesizing Tasks 401–409 (mirrors `docs/basiceffect-support.md`/`docs/alphatesteffect-support.md`/`docs/dualtextureeffect-support.md`/`docs/environmentmapeffect-support.md`'s style) — per-task summaries, full 3-backend support matrix, "Open, tracked follow-up work" listing Tasks 893/894/895. No code changed. |
 | `aa9aa8a3` | 409 | **Capstone, zero new bugs found**: combined Tasks 406–408's pieces (identity no-op, single-bone translation, 2-bone weighted blend) into one scene, one bone-palette upload, one draw call covering 3 quads distinguished only by per-vertex weight/index data. All 3 backends produced the exact predicted output on the first attempt, each byte-identical across all 3 quads within itself and matching each backend's own Task 406–408 single-quad values exactly — proving the pieces compose correctly within a single draw, not just in isolation. |
@@ -508,21 +512,22 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 47 (Task 413 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 47 (Task 414 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 413 — complete tests for `SpriteSortMode::Deferred` (Task 162 dependency)**
-   - Goal: using the same `RecordingSpriteBatchBackend` infrastructure, verify Task 162's exact
-     ask: sprites submitted under the default `SpriteSortMode::Deferred` are delivered to the
-     backend in their original `Draw()` call order (no reordering), all at `End()` — the mirror
-     image of Task 412's Immediate test. Concretely: queue 3+ `Draw()` calls with distinct,
-     identifiable textures in a specific order, call `End()`, then assert
-     `rec->drawCalls[i].texture` matches the original call order exactly. Task 412's own
-     `DeferredDoesNotFlushBeforeEnd` negative control already covers the "not flushed before
-     End()" half of Deferred's contract — this task's job is the "preserves submission order"
-     half.
+1. **Task 414 — complete tests for `SpriteSortMode::Texture` (Task 163 dependency)**
+   - Goal: verify sprites are sorted by texture pointer (grouped by texture, minimizing GPU state
+     changes) — draw 3 sprites alternating between 2 distinct textures (e.g. A, B, A submission
+     order) and assert the recorded backend calls arrive grouped by texture rather than in raw
+     submission order. Needs `std::stable_sort`'s stability to be respected too: 2 sprites sharing
+     the *same* texture should retain their relative submission order within their group (a
+     `stable_sort`, not a plain `sort`, is what `flushBatch()` actually uses — worth asserting
+     explicitly since `Texture2D*` comparison gives no natural secondary key). Task 411's own
+     `DistinctTexturesProduceDistinctRecordedPointers` test already established the precondition
+     (2 distinct `Texture2D` instances are observable as 2 distinct backend pointers); this task
+     builds the actual grouping assertion on top of it.
    - Files: extend `tests/Microsoft/Xna/Framework/Graphics/SpriteBatchTests.cpp` with the
-     `SpriteSortMode::Deferred` order-preservation case.
+     `SpriteSortMode::Texture` grouping case.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -646,7 +651,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 413).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 414).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -695,11 +700,24 @@ tests failed exactly as predicted (count read 0 instead of 1 before End()), whil
 negative control correctly kept passing; reverted and reconfirmed all 8 SpriteBatch mock-backend
 tests green. No production code changed.
 
-Task 413 (NEXT) is the natural next step: complete tests for SpriteSortMode::Deferred (Task 162
-dependency) -- verify sprites submitted under the default Deferred mode are delivered to the
-backend in their original Draw() call order (no reordering), all at End(). Queue 3+ Draw() calls
-with distinct, identifiable textures in a specific order, call End(), then assert
-rec->drawCalls[i].texture matches the original call order exactly.
+Task 413 fulfilled Task 162's exact ask -- verify-only, zero bugs found. FNA/XNA's contract for
+the default SpriteSortMode::Deferred is: no sort at all, sprites delivered in exactly their
+original Draw() submission order. Read flushBatch() directly: it stable_sorts for
+BackToFront/FrontToBack/Texture only, Deferred deliberately falls through to plain insertion-order
+iteration with no else branch at all. Added DeferredPreservesSubmissionOrder: 3 distinct textures
+drawn in an order (C, A, B) deliberately chosen not to coincide with any plausible accidental sort
+key, asserting the recorded calls arrive in that exact order after End(). Independently verified
+discriminating power: temporarily added an unconditional std::reverse(spriteQueue_.begin(),
+spriteQueue_.end()) right before the flush loop and rebuilt -- the test failed exactly as
+predicted (recorded order came back reversed, B,A,C instead of C,A,B); reverted and reconfirmed
+all 9 SpriteBatch mock-backend tests green. No production code changed.
+
+Task 414 (NEXT) is the natural next step: complete tests for SpriteSortMode::Texture (Task 163
+dependency) -- verify sprites are sorted by texture pointer (grouped by texture to minimize GPU
+state changes): draw 3 sprites alternating between 2 distinct textures (A, B, A submission order)
+and assert the recorded backend calls arrive grouped by texture rather than in raw submission
+order. Also worth asserting flushBatch()'s stable_sort preserves relative order within a group
+(2 sprites sharing the same texture keep their submission order among themselves).
 
 Phase 46 ("SkinnedEffect exactness", Tasks 401-410) CLOSED with Task 410
 (docs/skinnedeffect-support.md, full synthesis of Tasks 401-409). Summary of what it found/fixed:
@@ -777,14 +795,14 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 47's tasks.
 
-Last full 3-backend regression (Task 412 — verify-only, 3 new tests per backend, no production
+Last full 3-backend regression (Task 413 — verify-only, 1 new test per backend, no production
 code changed):
-EasyGL 3617/3620 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3537/3550 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3521/3521 pass (100%, no flakes this run).
+EasyGL 3618/3621 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3538/3551 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3522/3522 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-412) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-413) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
