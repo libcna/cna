@@ -2095,11 +2095,42 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   and its reasoning for future readers, rather than force a test that adds no real value. No
   behavior change; build-verified only (comment-only edit).
 
-- [ ] **Task 10.4** — Assess real-world reachability/priority of the double-`Initialize()` leak
+- [x] **Task 10.4** — Assess real-world reachability/priority of the double-`Initialize()` leak
   (Task 7.5). FNA's own `GamerServicesDispatcher.Initialize()` has the identical
   no-op-if-already-initialized gap — confirm whether any current/planned caller (a game re-adding a
   second `GamerServicesComponent`, or a multi-`Game`-instance test harness) can trigger this today,
   to properly gauge priority relative to other Phase 7 bugs.
+
+  Traced `Game.cpp`'s actual component-initialization sequence to find every path that could call
+  `GamerServicesComponent::Initialize()` (and therefore `GamerServicesDispatcher::Initialize()`)
+  more than once: `Game::DoInitialize()` calls `Initialize()` (which loops over every
+  already-registered component and calls `component->Initialize()`) *before* wiring up
+  `Components_.ComponentAdded += ...` a few lines later — so a `GamerServicesComponent` added the
+  standard way (in the game's own constructor, before `Run()`/`DoInitialize()` ever executes) is
+  initialized exactly once, via that explicit loop, not via `OnComponentAdded` too. **The standard
+  single-component, single-`Game`-instance path is safe** — this is not a bug reachable by normal
+  XNA usage.
+
+  However, confirmed 2 concretely reachable triggers, not merely hypothetical ones: (1) a game
+  (mistakenly, but not preventably — no duplicate-type guard exists in `GameComponentCollection`,
+  matching FNA's own real behavior) constructing and adding a **second**
+  `GamerServicesComponent` instance to `Game.Components`, whether at startup or later at runtime
+  via `OnComponentAdded`'s auto-init path; and (2) — more relevant to this specific codebase —
+  `GamerServicesDispatcher`'s statics (`isInitialized_`, and `Gamer::signedInGamers_` which it
+  replaces) are **process-wide**, not per-`Game`-instance, so **any two `Game` instances
+  constructed in the same process**, each with its own `GamerServicesComponent`, would trigger
+  this path against the same shared statics — exactly the kind of process-wide-static hazard this
+  very phase already had to build dedicated out-of-process isolation infrastructure for
+  (`gamerservices_dispatcher_harness.cpp`) because of a *different* member of this same static
+  group.
+
+  **Conclusion: Task 7.5's fix was correctly prioritized, not over- or under-prioritized** — the
+  scenario is realistically reachable (a plausible game-authoring mistake, or a multi-`Game`
+  process such as a future test harness or in-process "restart the game" utility), not purely
+  theoretical, and the already-landed fix (explicit free-before-replace loop, verified via
+  revert-verify in Task 7.5's own write-up) is cheap and low-risk enough that no further work or
+  priority change is warranted. Pure investigation/documentation task — no code change, no test
+  needed beyond what Task 7.5 already added.
 
 - [ ] **Task 10.5** — Decide whether `GamerCollection<T>` needs a virtual destructor. Confirmed not
   currently exploited (all current code deletes via the concrete derived pointer type, e.g.
