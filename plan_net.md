@@ -2066,7 +2066,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   once, confirmed to pass in isolation and on a clean rerun — not caused by this change), no
   regressions.
 
-- [ ] **Task 10.3** — Investigate whether a lightweight fake-`Game`/mock-`IServiceProvider` test
+- [x] **Task 10.3** — Investigate whether a lightweight fake-`Game`/mock-`IServiceProvider` test
   double could allow direct unit testing of `GamerServicesComponent::Initialize()`/`Update()`
   forwarding, without needing a full SDL window. Currently `GamerServicesComponent` has no direct
   unit tests (documented precedent, consistent with `GameComponentTests.cpp`'s similar situation),
@@ -2074,6 +2074,26 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   already-fixed `NetworkSession` one, and Task 7.1's `GetAchievements` one), a real, direct test of
   this pairing's forwarding logic would add real value beyond what integration-level tests can
   catch.
+
+  Investigated and decided against pursuing a fake-`Game` double. Confirmed: (1) `Game::Game()`
+  unconditionally stands up a real `GraphicsDevice`/backend/window
+  (`Window_.setWindowInternal(GraphicsDevice_.GetBackend().GetWindowInternal());`) — there is no
+  genuinely "lightweight" `Game` to fake; constructing *any* `Game` needs a real backend
+  regardless, which is exactly why `GameCrashTest.cpp` is left entirely commented out and
+  `GameComponentTests.cpp` has no tests at all. (2) `GamerServicesComponent`'s public constructor
+  signature (`GamerServicesComponent(Game& game)`) must match FNA's real API exactly, so it can't
+  be changed to accept an injectable fake/interface instead without violating this project's own
+  API-fidelity rule. (3) `Initialize()`/`Update()` are two trivial one-line forwards to
+  `GamerServicesDispatcher::Initialize()`/`Update()` with no independent branching or state — both
+  targets are already extensively, directly unit-tested (`GamerServicesDispatcherTest`,
+  `GamerServicesDispatcherHangRegressionTest.cpp`). (4) Both real hang bugs this task cites were
+  actually caught by out-of-process harnesses calling `GamerServicesDispatcher::Initialize()`
+  directly — exactly simulating "a `GamerServicesComponent` exists" — not by any hypothetical
+  component-level unit test; a `GamerServicesComponent` unit test would add zero coverage beyond
+  what those harnesses already exercise. **Decision: re-affirm the existing no-direct-tests
+  stance** — expanded the comment in `GamerServicesServiceTests.cpp` to record this investigation
+  and its reasoning for future readers, rather than force a test that adds no real value. No
+  behavior change; build-verified only (comment-only edit).
 
 - [ ] **Task 10.4** — Assess real-world reachability/priority of the double-`Initialize()` leak
   (Task 7.5). FNA's own `GamerServicesDispatcher.Initialize()` has the identical

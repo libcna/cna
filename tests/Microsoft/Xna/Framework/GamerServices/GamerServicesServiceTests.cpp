@@ -13,6 +13,29 @@
 // No tests for GamerServicesComponent: like GameComponent (see GameComponentTests.cpp), it
 // requires a live Game reference (SDL/graphics backend) to construct.
 //
+// Task 10.3 investigated whether a lightweight fake-Game/mock-IServiceProvider test double could
+// avoid that requirement - confirmed not feasible, and not valuable enough to justify diverging
+// from the real XNA API to force it:
+//   1. Game's own constructor unconditionally stands up a real GraphicsDevice/backend/window
+//      (`Window_.setWindowInternal(GraphicsDevice_.GetBackend().GetWindowInternal());` in
+//      Game::Game()) - there is no "lightweight" Game to fake; any Game instance needs a real
+//      backend regardless.
+//   2. GamerServicesComponent's public constructor signature (`GamerServicesComponent(Game&
+//      game)`) must match FNA's real API exactly, so it cannot be changed to accept an injectable
+//      fake/interface instead.
+//   3. GamerServicesComponent::Initialize()/Update() are two trivial one-line forwards to
+//      GamerServicesDispatcher::Initialize()/Update() with no independent branching or state of
+//      their own - both targets are already extensively, directly unit-tested elsewhere
+//      (GamerServicesDispatcherTest above, GamerServicesDispatcherHangRegressionTest.cpp).
+//   4. Both real hang bugs this task's own framing cites (the NetworkSession hang and Task 7.1's
+//      GetAchievements hang) were caught by out-of-process harnesses calling
+//      GamerServicesDispatcher::Initialize() directly - exactly simulating "a
+//      GamerServicesComponent exists" - not by any hypothetical direct component-level test. A
+//      GamerServicesComponent unit test would add no coverage beyond what those harnesses already
+//      exercise.
+// Decision: re-affirm the existing no-direct-tests stance; the forwarding logic has no
+// remaining untested risk to catch.
+//
 // GamerServicesDispatcher::Initialize() is intentionally never called from this suite: it sets
 // a process-lifetime static (IsInitialized = true) with no way to reset it, which would change
 // the behavior of GamerServicesDispatcher::UpdateAsync() for every other test in this binary
