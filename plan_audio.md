@@ -5004,5 +5004,11 @@ context-free agents, explicitly instructed not to modify any files):
   deviation instead (`P12-AUDIT-004` finding). Needs a design decision, not just an implementation
   -- candidate for user input rather than autonomous self-selection. Not started.
 
-* [ ] P12-DOC-001: fix `AUDIT.md` line 88's stale claim that `NoAudioHardwareException` is never
-  thrown (`P12-AUDIT-005` finding). Trivial one-line docs fix. Not started.
+* [x] P12-DOC-001: fix `AUDIT.md` line 88's stale claim that `NoAudioHardwareException` is never
+  thrown (`P12-AUDIT-005` finding).
+  *Status:* Fixed. `AUDIT.md`'s row said "never actually thrown by the audio backend" -- stale
+  since `P9-HARDWARE-002` made `SoundEffect.cpp:83`/`DynamicSoundEffectInstance.cpp:40` throw it
+  for real at the actual SDL3_mixer-device-won't-open failure point. Reworded to match
+  `CHECKLIST.md`'s already-accurate corresponding row exactly: thrown for real at the point of
+  failure; only `AudioEngine`'s own constructor never throws it (a real, narrower, still-accepted
+  deviation, `XA-9`). Docs-only, no code/test change, no build needed.

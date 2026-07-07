@@ -85,7 +85,7 @@ and corrected or confirmed as expected C++ adaptations.
 | InstancePlayLimitException | ✅ | Complete |
 | Microphone | ✅ | API complete — real SDL3 capture (enumeration, Start/Stop, GetData/GetQueuedBytes); GetSampleDuration/GetSampleSizeInBytes delegates to SoundEffect (plan_audio.md MC-1, done); `CheckBuffer()` is private, matching FNA's `internal` (`MC-6`) |
 | MicrophoneState (enum) | ✅ | Complete |
-| NoAudioHardwareException | ✅ | Type complete; never actually thrown by the audio backend (accepted deviation, `CP-18`/`XA-9`, consulted with the user) |
+| NoAudioHardwareException | ✅ | Type complete; thrown at the actual point of failure when the SDL3_mixer device won't open (`SoundEffect`/`DynamicSoundEffectInstance`'s `GetMixerOrThrowXna()`, `plan_audio.md` P9-HARDWARE-002); `AudioEngine`'s own constructor never throws it, since CNA always reports exactly one renderer (accepted deviation, `CHECKLIST.md`, `plan_audio.md` XA-9) |
 | NoMicrophoneConnectedException | ✅ | Complete |
 | RendererDetail | ✅ | API complete |
 | SoundBank | ✅ | API complete; real `IsInUse` (treats `IsPlaying \|\| IsPaused` as alive, `XA-7`) and `GetCue` (throws on invalid name); 3D `PlayCue` forwards to `Cue::Apply3D` (`T-4B`) — uses the real listener/emitter, doesn't ignore them; registers with `AudioEngine` for the `Dispose()` cascade (`XA-8`) |
