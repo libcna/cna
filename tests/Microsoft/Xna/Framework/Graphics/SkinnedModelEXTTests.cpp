@@ -317,6 +317,71 @@ protected:
     GraphicsDevice gd;
 };
 
+// Task 13.3: AddPartEXT's own bookkeeping had zero coverage in the plain unit-test tree before
+// now (only ever exercised inside 3 GPU-dependent examples/ integration tests) - this and the
+// tests below it in this fixture close that gap using a plain, headless GraphicsDevice rather
+// than a separate GPU integration test binary. Covers both the texture-ownership branch
+// (HasBackend() true vs. false) and growth of all 4 private ownership vectors.
+TEST_F(SkinnedModelEXTPartTest, AddPartWithTextureRecordsOwnershipAndPartFields)
+{
+    SkinnedModelEXT model;
+    auto* vbPtr = new VertexBuffer(gd, 1);
+    auto* ibPtr = new IndexBuffer(gd, 1);
+    auto* partPtr = new ModelMeshPart();
+    model.AddPartEXT("WithTexture",
+                      std::unique_ptr<VertexBuffer>(vbPtr),
+                      std::unique_ptr<IndexBuffer>(ibPtr),
+                      std::unique_ptr<ModelMeshPart>(partPtr),
+                      Texture2D(gd, 4, 4));
+
+    ASSERT_EQ(1u, model.Parts.size());
+    EXPECT_EQ("WithTexture", model.Parts[0].Name);
+    EXPECT_EQ(partPtr, model.Parts[0].Part);
+    ASSERT_NE(nullptr, model.Parts[0].Texture);
+    EXPECT_EQ(1u, model.GetOwnedPartCountForTesting());
+    EXPECT_EQ(1u, model.GetOwnedVertexBufferCountForTesting());
+    EXPECT_EQ(1u, model.GetOwnedIndexBufferCountForTesting());
+    EXPECT_EQ(1u, model.GetOwnedTextureCountForTesting());
+}
+
+// Task 13.3: a default-constructed Texture2D() (HasBackend() == false, the "no texture supplied"
+// case) must leave PartEXT::Texture null and add nothing to the owned texture vector, rather than
+// taking ownership of a backend-less placeholder.
+TEST_F(SkinnedModelEXTPartTest, AddPartWithoutTextureLeavesTextureNullAndOwnsNoTexture)
+{
+    SkinnedModelEXT model;
+    model.AddPartEXT("NoTexture",
+                      std::make_unique<VertexBuffer>(gd, 1),
+                      std::make_unique<IndexBuffer>(gd, 1),
+                      std::make_unique<ModelMeshPart>());
+
+    ASSERT_EQ(1u, model.Parts.size());
+    EXPECT_EQ("NoTexture", model.Parts[0].Name);
+    EXPECT_EQ(nullptr, model.Parts[0].Texture);
+    EXPECT_EQ(1u, model.GetOwnedPartCountForTesting());
+    EXPECT_EQ(1u, model.GetOwnedVertexBufferCountForTesting());
+    EXPECT_EQ(1u, model.GetOwnedIndexBufferCountForTesting());
+    EXPECT_EQ(0u, model.GetOwnedTextureCountForTesting());
+}
+
+// Each AddPartEXT call grows all 4 private ownership vectors by exactly one, independent of
+// whether earlier parts had a texture or not.
+TEST_F(SkinnedModelEXTPartTest, RepeatedAddPartGrowsOwnershipVectorsByOneEachTime)
+{
+    SkinnedModelEXT model;
+    for (int i = 0; i < 3; ++i)
+    {
+        model.AddPartEXT("Part" + std::to_string(i),
+                          std::make_unique<VertexBuffer>(gd, 1),
+                          std::make_unique<IndexBuffer>(gd, 1),
+                          std::make_unique<ModelMeshPart>());
+        EXPECT_EQ(static_cast<std::size_t>(i + 1), model.Parts.size());
+        EXPECT_EQ(static_cast<std::size_t>(i + 1), model.GetOwnedPartCountForTesting());
+        EXPECT_EQ(static_cast<std::size_t>(i + 1), model.GetOwnedVertexBufferCountForTesting());
+        EXPECT_EQ(static_cast<std::size_t>(i + 1), model.GetOwnedIndexBufferCountForTesting());
+    }
+}
+
 // Task 11.4: AttachPartEXT unconditionally appended every part with no duplicate/slot-replace
 // handling - both shipped wardrobe pieces use the identical part name "CNAAvatarHair", so
 // swapping hairstyles at runtime used to leave two overlapping parts both rendered.

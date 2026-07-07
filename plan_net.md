@@ -2532,12 +2532,26 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   theoretical. Restored the fix, rebuilt, confirmed green. Full suite: 3391/3391 passing (2
   expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 13.3** — Add a plain (non-GPU-dependent) unit test for `SkinnedModelEXT::AddPartEXT`'s
+- [x] **Task 13.3** — Add a plain (non-GPU-dependent) unit test for `SkinnedModelEXT::AddPartEXT`'s
   own bookkeeping. Confirmed currently only exercised inside 3 GPU-dependent integration tests
   (zero references in the plain `tests/` unit-test tree). Cover the texture-ownership branch
   (`texture.HasBackend()` true vs. false, ~lines 61-66) and growth of the four private ownership
   vectors, independent of a real `GraphicsDevice` if at all feasible (may need a lightweight
   fake/mock graphics device — investigate what's available/precedented elsewhere in the test suite).
+
+  Largely already covered incidentally by Task 11.4/11.5's `SkinnedModelEXTPartTest` fixture
+  (confirmed a plain, default-constructed `GraphicsDevice` works headlessly in this environment —
+  no fake/mock needed), but that fixture's own tests were framed around `AttachPartEXT`/
+  `RemovePartEXT`, not `AddPartEXT` in isolation. Added 3 more tests directly targeting
+  `AddPartEXT`'s own bookkeeping: `AddPartWithTextureRecordsOwnershipAndPartFields` (asserts
+  `PartEXT::Name`/`Part`/`Texture` are all populated correctly, plus all 4 ownership counts reach
+  1), `AddPartWithoutTextureLeavesTextureNullAndOwnsNoTexture` (the `HasBackend() == false`
+  branch — `PartEXT::Texture` stays null, `GetOwnedTextureCountForTesting()` stays 0), and
+  `RepeatedAddPartGrowsOwnershipVectorsByOneEachTime` (3 sequential calls, asserting all 4 vectors
+  grow by exactly one per call). No revert-verify applies (pure test-coverage addition for
+  already-correct code, confirmed by Task 11.4/11.5's own earlier revert-verify passes exercising
+  this same code path). Full suite: 3394/3394 passing (2 expected accelerometer/gyroscope skips),
+  no regressions.
 
 - [ ] **Task 13.4** — Add a test for `EnableRealRenderingEXT`/`SetAppearanceEXT` called after
   `Dispose()` — see Task 11.6 (this is the test half of that fix; do them together).
