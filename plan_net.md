@@ -3164,12 +3164,48 @@ done — "it compiles" is not sufficient.
   passing (2 expected accelerometer/gyroscope skips), no regressions (demo-only files, no library
   changes).
 
-- [ ] **Task 15.10** — `cna_demo_leaderboard_viewer`: `LeaderboardReader` (`PageUp`/`PageDown`,
+- [x] **Task 15.10** — `cna_demo_leaderboard_viewer`: `LeaderboardReader` (`PageUp`/`PageDown`,
   `CanPageUp/Down`, `Entries`, `PageStart`, `TotalLeaderboardSize`) plus an explicit demonstration of
   `LeaderboardWriter::GetLeaderboard`'s always-throws-`NotSupportedException` platform boundary. A
   scrolling table of fabricated `LeaderboardEntry` rows (via `CreateInternal`) with Up/Down paging;
   a status line also attempts the real throwing calls once and prints "threw NotSupportedException
   as expected". Single process.
+
+  **Re-scoped after checking the API before writing any demo code**: the plan's premise ("Up/Down
+  paging") implies `PageUp()`/`PageDown()` do real work — but both are already confirmed, tested
+  no-ops (`LeaderboardReaderTest.PageUpThrows`/`PageDownThrows`, pre-existing): they always throw
+  `NotSupportedException`, exactly like `LeaderboardWriter::GetLeaderboard`. So the demo's real
+  page-to-page navigation discards the current `LeaderboardReader` and constructs a fresh one via
+  `CreateInternal` at a different `pageStart` — the same workaround any real CNA/FNA caller would
+  need today, since there is no working paging implementation to call.
+
+  New files: `examples/demo_leaderboard_viewer/src/{LeaderboardGame.hpp,LeaderboardGame.cpp,
+  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
+  gate as `cna_demo_avatar`. Builds 20 fixed local `LeaderboardEntry` rows (ranks 1-20, descending
+  rating) at `Initialize()`, then once, calls the 3 real always-throwing APIs
+  (`reader.PageDown()`, `reader.PageUp()`, `LeaderboardWriter{}.GetLeaderboard(identity)`) inside
+  try/catch, printing the plan's own suggested "threw NotSupportedException as expected" line for
+  each. Up/Down page through 5-entry pages by rebuilding the reader (only when the current
+  reader's real `CanPageUp`/`CanPageDown` getter allows it).
+
+  **Confirmed the `pageSize` parameter's real, non-obvious semantics before designing the
+  rebuild helper**: `LeaderboardReader`'s constructor loop bound is `i < size` (an *absolute*
+  upper index, not a page length) — already investigated and locked in by Task 10.6 and
+  `LeaderboardReaderTest.EntriesLoopBoundMatchesFNAExactly`. So each page's `CreateInternal` call
+  passes the *full* 20-entry list plus `start = page*5, size = start+5` (not just `size=5`) to
+  correctly slice out that page's 5 real entries — confirmed empirically by checking
+  `getEntriesProperty().Count` per page during manual testing before finalizing the demo.
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 180`, one
+  deterministic page-down every 30 frames while `CanPageDown` allows it): all 3 real API calls
+  printed their expected "threw NotSupportedException as expected" line. Paging correctly walked
+  pages 0-3 (5 real entries each), then advanced once more to page 4 (`pageStart=20`) where
+  `entriesOnPage=0` — an honest, direct demonstration that `CanPageDown`'s own formula for a
+  non-friend board (`pageStart < entryCache.size()`) doesn't itself guard against the *next* page
+  having zero real entries; `CanPageDown` correctly read `false` once actually on page 4, matching
+  the getter's own real, if imprecise, formula rather than a demo bug. Exit code `0`. Full suite:
+  3398/3398 passing (2 expected accelerometer/gyroscope skips), no regressions (demo-only files,
+  no library changes).
 
 - [ ] **Task 15.11** — `cna_demo_guide_overlay_console`: the full `Guide` static API surface —
   `ShowSignIn`, `BeginShowKeyboardInput`/`EndShowKeyboardInput` (completes instantly with an empty

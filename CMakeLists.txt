@@ -783,6 +783,36 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         endif()
     endif()
 
+    # Task 15.10: cna_demo_leaderboard_viewer - LeaderboardReader (CanPageUp/Down, Entries,
+    # PageStart) plus LeaderboardWriter::GetLeaderboard's always-throws boundary. Needs
+    # CNA_GamerServices and windowing (SpriteBatch/SpriteFont HUD) - same gating as
+    # cna_demo_avatar above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_leaderboard_viewer
+            examples/demo_leaderboard_viewer/src/Main.cpp
+            examples/demo_leaderboard_viewer/src/LeaderboardGame.cpp
+        )
+        target_include_directories(cna_demo_leaderboard_viewer PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_leaderboard_viewer/src
+        )
+        target_link_libraries(cna_demo_leaderboard_viewer PRIVATE CNA_GamerServices)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_leaderboard_viewer PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_leaderboard_viewer PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_leaderboard_viewer PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_leaderboard_viewer PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_leaderboard_viewer)
+        endif()
+    endif()
+
     # EasyGL integration tests (Task 85, 86, 87)
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
