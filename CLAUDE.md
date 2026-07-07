@@ -405,14 +405,17 @@ Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
 
 ## WebGPU Is Forbidden For Now
 
-**Do not implement, plan, or work on any WebGPU-related task, in `plan_graphics.md` or otherwise,
+**Do not implement, plan, or work on any WebGPU-related task, in `plan_webgpu.md` or otherwise,
 until the project owner explicitly lifts this restriction.**
 
-- This applies to all WebGPU tasks tracked in `plan_graphics.md` (Phases 56–69, Tasks 10001+),
-  including CMake scaffolding, the `CNA_BACKEND_WEBGPU` backend, `wgpu-native` vendoring, WGSL
-  shaders, and the Emscripten/WASM target (Phase 69).
-- If asked to work through `plan_graphics.md` autonomously, **skip every WebGPU task entirely** —
-  do not start it, do not stub it, do not create WebGPU-related files or CMake options.
+- All WebGPU tasks live in their own dedicated file, **`plan_webgpu.md`** (Phases 56–69,
+  `WEBGPU-1`–`WEBGPU-123` — moved out of `plan_graphics.md` and renumbered 2026-07-07; previously
+  Tasks 10001–10161 inline in `plan_graphics.md`), including CMake scaffolding, the
+  `CNA_BACKEND_WEBGPU` backend, `wgpu-native` vendoring, WGSL shaders, and the Emscripten/WASM
+  target (Phase 69).
+- If asked to work through `plan_graphics.md` autonomously, **`plan_webgpu.md` is entirely out of
+  scope** — do not open it, do not start any item in it, do not stub it, do not create
+  WebGPU-related files or CMake options.
 - This is a hard project-wide prohibition, not a priority/ordering note. It stays in force even
   though `plan_graphics.md`'s own "Execution order" section separately describes WebGPU as
   deprioritized — treat this section as authoritative if the two ever seem to disagree.

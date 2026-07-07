@@ -2,9 +2,10 @@
 
 ---
 
-> ⛔ **WebGPU is forbidden for now** — do not work on any WebGPU task (Phases 56–69, Tasks
-> 10001+ in `plan_graphics.md`) until the project owner explicitly lifts this restriction. See
-> `CLAUDE.md` ("WebGPU Is Forbidden For Now").
+> ⛔ **WebGPU is forbidden for now** — do not work on any WebGPU task (Phases 56–69,
+> `WEBGPU-1`–`WEBGPU-123` in `plan_webgpu.md`, moved out of `plan_graphics.md` 2026-07-07) until
+> the project owner explicitly lifts this restriction. See `CLAUDE.md` ("WebGPU Is Forbidden For
+> Now").
 
 ## 1. Project summary
 

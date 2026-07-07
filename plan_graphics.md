@@ -9,15 +9,16 @@
 > **Task numbering:** 1–663 = original core plan (Phases 1–55, all non-WebGPU work).
 > 664+ = additions made after the original plan was written (session 2026-07-02 onward),
 > including the full Phase 70–73 backend-perfection wave below.
-> **10001+ = WebGPU** (Phases 56–69, renumbered 2026-07-02 from their original 501–661 to
-> free up the low range for further core-plan growth; WebGPU is deliberately deprioritized —
-> see "Execution order" below).
+> **WebGPU (Phases 56–69) lives in a separate file, [`plan_webgpu.md`](plan_webgpu.md)**,
+> numbered `WEBGPU-1`–`WEBGPU-123` — moved out of this file entirely (2026-07-07) to keep the
+> parked WebGPU work fully separate from this active backlog; WebGPU is deliberately
+> deprioritized regardless — see "Execution order" below.
 
-> ⛔ **WEBGPU IS FORBIDDEN FOR NOW.** Do not work on any Phase 56–69 / Task 10001+ item —
-> do not start, stub, scaffold, or plan implementation — until the project owner explicitly
-> lifts this restriction. This is a hard prohibition, not just a priority/ordering note; see
-> `CLAUDE.md` ("WebGPU Is Forbidden For Now"), which is authoritative. When working through
-> this file autonomously, skip every WebGPU task entirely.
+> ⛔ **WEBGPU IS FORBIDDEN FOR NOW.** Do not work on anything in `plan_webgpu.md` — do not
+> start, stub, scaffold, or plan implementation — until the project owner explicitly lifts this
+> restriction. This is a hard prohibition, not just a priority/ordering note; see `CLAUDE.md`
+> ("WebGPU Is Forbidden For Now"), which is authoritative. When working through this file
+> autonomously, `plan_webgpu.md` is entirely out of scope.
 
 ## Execution order (priority, not document order)
 
@@ -36,11 +37,12 @@
    done than Bgfx (per-slot samplers, instancing, wireframe, MSAA, RenderTargetCube, stock-effect
    SPIR-V shaders), so this phase is gap-closure sized, not a full replication — plus the two
    SpriteBatch bugs found 2026-07-02 (multi-batch, dropped `SamplerState`).
-6. **Phases 56–69 (WebGPU, Tasks 10001+)** — parked. Revisit only after 1–5 above are done.
+6. **WebGPU** (`plan_webgpu.md`, Phases 56–69, `WEBGPU-1`+) — parked. Revisit only after 1–5
+   above are done.
 
-> Phases 70–73 physically appear after Phase 69 in this document (append-only, to avoid
-> renumbering existing WebGPU content) but run **before** it — see the priority order above,
-> not the phase numbers, for actual execution sequence.
+> Phases 70–73 physically appear after Phase 55 (Task 663) in this document (append-only) but
+> run **before** the now-relocated WebGPU work — see the priority order above, not the phase
+> numbers, for actual execution sequence.
 
 ---
 
@@ -654,7 +656,7 @@ All 100 original tasks addressed.
 | #   | Task                                                                          | Status | Notes                                       |
 | --- | ----------------------------------------------------------------------------- | ------ | ------------------------------------------- |
 | 351 | Audit `Effect` base class against FNA                                         | ✅      | **Opens Phase 41.** Read FNA's `Graphics/Effect/Effect.cs` line-by-line against CNA's `Effect.hpp`/`.cpp`. **2 real, fixed findings**: (1) `GetTypeName()` returned bare `"Effect"` instead of the fully-qualified `"Microsoft.Xna.Framework.Graphics.Effect"` every other `GraphicsResource` subclass uses (`RenderTarget2D`, `Texture3D`, `BasicEffect`, …) — a `CLAUDE.md` violation, fixed. (2) `Effect`'s public `void Apply()` — a CNA invention with no FNA equivalent (FNA only has protected/internal `OnApply()` plus a separate `EffectPass.Apply()`) — was not wrapped in `NOXNA`; fixed. **A third, more serious real bug found and fixed while writing tests**: `Effect` declares `void Dispose(bool disposing) override;` with no `using GraphicsResource::Dispose;` — this **hides** the public zero-arg `IDisposable::Dispose()` inherited from `GraphicsResource` (C++ name-hiding), meaning `effect.Dispose()` **failed to compile** on any concrete effect (`BasicEffect`, `ShaderEffect`, all 7 stock effects — none of them redeclare `Dispose` themselves) unless called through a base-class pointer/reference. `Texture`/`Texture2D`/`RenderTarget2D` already carry the correct `using X::Dispose;` fix for this exact pattern; `Effect` was missing it — confirmed via grep that no existing test or production code anywhere called `.Dispose()` directly on a graphics `Effect` object, so this was a real, live, previously-undiscovered gap, not a hypothetical. Fixed by adding `using GraphicsResource::Dispose;`. **Verified genuine discriminating power**: the `Dispose` fix is directly proven by the new test file failing to *compile* without it (confirmed live during this task); the `GetTypeName()` fix was proven by temporarily reverting to `"Effect"` and confirming `EffectTest.GetTypeNameIsFullyQualified` fails, then reverting back. **Confirmed correct, not touched**: `Parameters`/`Techniques` construction, `CurrentTechnique`'s zero-validation setter (FNA's own setter is equally permissive — accepts any `EffectTechnique*`, including ones not in `Techniques`, confirmed via FNA source, not a bug), `GraphicsDevice` resource-reference registration (via the shared `GraphicsResource` constructor path, already proven correct by dozens of other resource classes' audits). **Real findings deliberately deferred, not fixed here** (narrow task scope): (a) FNA's `Effect` has a public `Effect(GraphicsDevice, byte[] effectCode)` bytecode constructor and a protected `Effect(Effect cloneSource)` clone constructor + public virtual `Clone()`; **none exist in CNA** — root cause is architectural: CNA's `Effect::OnApply()` is pure virtual (CNA has no MojoShader/.fx-bytecode-parsing pipeline at the base-class level; every concrete effect builds its own parameters/techniques programmatically), so FNA's exact base-class pattern can't be ported as-is. The bytecode-constructor question is explicitly Task 352's job. The `Clone()` gap is deferred to new **Task 883** — a correct implementation needs (1) an ownership-transfer model decision in C++ (FNA returns a GC-managed `Effect`; CNA needs e.g. `std::unique_ptr<Effect>`), (2) fixing a real aliasing hazard discovered while investigating this: `EffectPass::Apply()` calls `owner_->Apply()` where `owner_` is bound to the *original* `Effect*` at construction time — a naive default-copy `Clone()` would leave the clone's passes silently mutating/reading the *original* effect's state instead of its own, since ownership must be re-bound to the new clone (`this`), not copied verbatim, and (3) `Clone()` overrides + copy constructors in all 7 concrete stock-effect subclasses (mirroring FNA's own per-subclass `Clone()` overrides), which is too large in scope for this base-class-only audit. (b) FNA's `EffectPass.Apply()` throws `InvalidOperationException` if the pass being applied isn't part of the effect's current `CurrentTechnique`; CNA's `EffectPass::Apply()` has no such validation — this is explicitly Task 355's own dedicated scope ("Verify `EffectPass::Apply` updates current effect state consistently"), left untouched here. New `tests/Microsoft/Xna/Framework/Graphics/EffectTests.cpp` (13 tests, previously zero direct base-class coverage existed): construction (single "Default" technique, `CurrentTechnique` defaults to it, empty `Parameters`), const/mutable accessor parity, permissive `CurrentTechnique` setter, `Apply()` → `OnApply()` dispatch and making the effect current (verified indirectly via `GraphicsDevice::DrawPrimitives`'s "no effect has been applied" guard), `Apply()` after `Dispose()` throwing `ObjectDisposedException`, `GetTypeName()`, and `Dispose()` setting `IsDisposed`. Full 3-backend rebuild + regression pass: EasyGL ctest 3365/3369 (3 pre-existing + 1 reconfirmed-flaky `CueTest`, unchanged). Vulkan ctest 3289/3302 (13 pre-existing, unchanged, no flake this run). Bgfx ctest 3272/3272 (100%, no flakes this run). |
-| 352 | Decide explicit support policy for XNA `.fx` / compiled effect bytecode       | ✅      | **Decision (made by the project owner, not inferred): full support.** Confirmed via FNA source (`Graphics/Effect/Effect.cs`) that FNA's bytecode constructor/clone-constructor are thin wrappers delegating everything — container parsing, parameter/technique/pass reflection, and D3D9 Shader Model 2/3 bytecode translation — to FNA3D/MojoShader; FNA3D's own local checkout (`/rv/data/library/github.com/FNA-XNA/FNA3D`) is an uninitialized submodule (empty), so FNA3D's exact Vulkan-side MojoShader integration could not be verified line-by-line — noted as a knowledge gap, not asserted as fact. **Real, load-bearing discovery**: MojoShader's full C source (zlib-licensed, compatible with this project's MS-PL) is already present locally and readable at `/rv/data/library/github.com/u3d-community/U3D/Source/ThirdParty/MojoShader` — `mojoshader_effects.c` already implements exactly the XNA compiled-effect container parser this project would otherwise have to write from scratch; `mojoshader.c`/`mojoshader.h` transpile D3D9 SM2/3 bytecode to `GLSL`/`GLSL120`/`ARB1`/`NV2`-`NV4` profiles — **no SPIR-V profile exists**, so a Vulkan path needs a second GLSL→SPIR-V hop (`glslang` is present locally only as Android-NDK/Flatpak build tooling, not a repo-vendorable checkout — a real, tracked blocker, not assumed solved). This is the same scale of work as the WebGPU backend (Phases 56–69: new vendored native dependency, per-backend GPU-shader-translation paths, Bgfx feasibility unknown, real test-fixture sourcing with no XNA Content Pipeline tooling available) — **opened new Phase 74** (Tasks 10200–10208, dedicated task-number block mirroring WebGPU's `10000`+ convention) rather than trying to fit it into Phase 41. Full research + reasoning + phased breakdown written up in new `docs/fx-bytecode-support-plan.md` (do not duplicate its content here — see that file for the authoritative walkthrough). **Re-scoped Tasks 353/354** (see their own rows) to fit "full support is the target, not yet built" instead of the original unsupported/throw framing they were written under. No production code touched (pure decision/planning task); no rebuild needed. |
+| 352 | Decide explicit support policy for XNA `.fx` / compiled effect bytecode       | ✅      | **Decision (made by the project owner, not inferred): full support.** Confirmed via FNA source (`Graphics/Effect/Effect.cs`) that FNA's bytecode constructor/clone-constructor are thin wrappers delegating everything — container parsing, parameter/technique/pass reflection, and D3D9 Shader Model 2/3 bytecode translation — to FNA3D/MojoShader; FNA3D's own local checkout (`/rv/data/library/github.com/FNA-XNA/FNA3D`) is an uninitialized submodule (empty), so FNA3D's exact Vulkan-side MojoShader integration could not be verified line-by-line — noted as a knowledge gap, not asserted as fact. **Real, load-bearing discovery**: MojoShader's full C source (zlib-licensed, compatible with this project's MS-PL) is already present locally and readable at `/rv/data/library/github.com/u3d-community/U3D/Source/ThirdParty/MojoShader` — `mojoshader_effects.c` already implements exactly the XNA compiled-effect container parser this project would otherwise have to write from scratch; `mojoshader.c`/`mojoshader.h` transpile D3D9 SM2/3 bytecode to `GLSL`/`GLSL120`/`ARB1`/`NV2`-`NV4` profiles — **no SPIR-V profile exists**, so a Vulkan path needs a second GLSL→SPIR-V hop (`glslang` is present locally only as Android-NDK/Flatpak build tooling, not a repo-vendorable checkout — a real, tracked blocker, not assumed solved). This is the same scale of work as the WebGPU backend (Phases 56–69: new vendored native dependency, per-backend GPU-shader-translation paths, Bgfx feasibility unknown, real test-fixture sourcing with no XNA Content Pipeline tooling available) — **opened new Phase 74** (Tasks 10200–10208, dedicated task-number block mirroring the same dedicated-numbering-block pattern `plan_webgpu.md`'s own WebGPU plan uses) rather than trying to fit it into Phase 41. Full research + reasoning + phased breakdown written up in new `docs/fx-bytecode-support-plan.md` (do not duplicate its content here — see that file for the authoritative walkthrough). **Re-scoped Tasks 353/354** (see their own rows) to fit "full support is the target, not yet built" instead of the original unsupported/throw framing they were written under. No production code touched (pure decision/planning task); no rebuild needed. |
 | 353 | Interim safety net: until Phase 74 lands, any `.fx` bytecode-accepting constructor added to `Effect` must throw a clear, documented not-yet-implemented exception — no silent fake/broken effect | ✅      | Re-scoped by Task 352 from a permanent "unsupported" policy to a temporary guard pending Phase 74's real implementation. Added the missing `Effect(GraphicsDevice&, const std::vector<SharpRuntime::bytecs>&)` constructor matching FNA's `Effect(GraphicsDevice, byte[] effectCode)` signature (FNA has no separate offset/count overload for this constructor — confirmed via grep, only the one signature exists) — CNA previously had **no** bytecode-accepting constructor at all, not even a throwing one. Body immediately `throw System::NotImplementedException(...)` with a message naming Phase 74/`docs/fx-bytecode-support-plan.md` and pointing at the real alternatives available today (`ShaderEffect`, stock effects) — mirrors this project's existing `System::NotImplementedException` usage (`BoundingFrustum::Intersects(Ray)`, `NetworkMachine`, `Achievement`). Full Doxygen block added per `CLAUDE.md`. Byte-array parameter uses `std::vector<SharpRuntime::bytecs>`, matching `SoundEffect`'s established raw-buffer convention (not a new ad-hoc type). Note: `Effect::OnApply()` is pure virtual (Task 351 finding), so `Effect` itself is abstract in C++ unlike FNA's concrete `Effect` — this constructor is only reachable through a concrete subclass's constructor delegation, an existing, already-documented architectural divergence, not something this task changes. New tests in `EffectTests.cpp` (added a matching bytecode-forwarding constructor to the file's existing `TestEffect` fixture): `BytecodeConstructorThrowsNotImplementedException`, `BytecodeConstructorMessageMentionsPhase74Roadmap`. **Verified genuine discriminating power**: temporarily replaced the throw with the same programmatic "Default"-technique setup the no-bytecode constructor uses and confirmed both new tests fail (one on "throws nothing", one with an explicit `FAIL()`), then reverted. Full 3-backend rebuild + regression pass: EasyGL ctest 3368/3371 (3 pre-existing, unchanged, no flake this run). Vulkan ctest 3290/3304 (13 pre-existing + 1 reconfirmed order-dependent `Vulkan_RenderTargetUsage` flake, unchanged). Bgfx ctest 3274/3274 (100%, no flakes this run). |
 | 354 | Add developer-facing documentation covering: (1) what's supported today (`ShaderEffect`, hand-written GLSL/SPIR-V), (2) Task 353's interim throw-on-bytecode guard, (3) the Phase 74 roadmap for full compiled-bytecode support | ✅      | Wrote new `docs/shader-effect-vs-fx-bytecode.md`, the developer-facing counterpart to `docs/fx-bytecode-support-plan.md` (that doc records the internal decision/research; this one tells a game developer what to actually do today). Confirmed the exact real usage patterns from source rather than inventing syntax: `ShaderEffect(device, vertSrc, fragSrc)` on EasyGL takes raw GLSL strings (`examples/easygl_shader_effect_test.cpp`); on Vulkan the same two-string constructor instead takes pre-compiled SPIR-V bytes packed into `std::string` via `reinterpret_cast<const char*>` (`examples/vulkan_shader_effect_test.cpp`) — documented both exactly as used, not as separate overloads (there's only one constructor; the parameter *content* differs by backend). Quoted Task 353's real thrown message verbatim, read directly from `Effect.cpp`'s `Effect(GraphicsDevice&, const std::vector<SharpRuntime::bytecs>&)` constructor (not reconstructed from memory), to guarantee the doc doesn't drift from the actual exception text. Lists all 6 stock effects with one-line descriptions, states Bgfx's `ShaderEffect` backend is a no-op stub (per `docs/xna-4-api-coverage.md` §7, not overclaimed), gives concrete "hand-port the original HLSL to GLSL/SPIR-V today" guidance for porting real games, and summarizes Phase 74's 8-step roadmap without duplicating `docs/fx-bytecode-support-plan.md`'s full reasoning. **Does not close Phase 41** — Tasks 355–360 (EffectPass/EffectTechnique/parameter-lookup verification) remain open; this only closes out the `.fx`-bytecode-policy sub-thread (Tasks 351–354). No production code touched, no rebuild needed (pure docs task, matching Task 340/350's precedent). |
 | 355 | Verify `EffectPass::Apply` updates current effect state consistently          | ✅      | Read FNA's `Graphics/Effect/EffectPass.cs` line-by-line: `Apply()` throws `InvalidOperationException("Applied a pass not in the current technique!")` if `parentTechnique != parentEffect.CurrentTechnique.TechniquePointer` (an opaque native handle comparison), then calls `OnApply()` + `INTERNAL_applyEffect(pass)`. Confirmed Task 351's finding for real: CNA's `EffectPass::Apply()` had **zero** such validation — `EffectPass` didn't even track which technique it belonged to. **Fixed**: gave `EffectTechnique` a stable identity token (`getIdInternal()`, a monotonically-increasing `std::uint64_t` assigned via a private static counter, mirroring FNA's opaque `TechniquePointer` handle without depending on C++ object addresses) and a new `EffectPass` constructor parameter `techniqueId` (default `0` = untracked, preserving every existing 2-arg test call site's compilation). `EffectPass::Apply()` now checks `owner_->getCurrentTechniqueProperty()->getIdInternal() == techniqueId_` before delegating to `owner_->Apply()`, throwing `System::InvalidOperationException` on mismatch — including when `CurrentTechnique` is null (FNA dereferences it unconditionally and crashes with a `NullReferenceException`; CNA maps that to this same defined exception instead of UB, a deliberate, documented deviation). **A second, more serious real bug found and fixed while writing the interleaved-technique-switch test**: `EffectTechniqueCollection` stored `EffectTechnique` **by value** in a `std::vector`, so `Effect`'s own `currentTechnique_ = &techniques_[0]` (captured at construction) would dangle the moment a second technique was ever added (`vector`'s capacity-1→2 growth guarantees reallocation) — the exact same class of bug as Task 345's `DefaultAdapter` dangling reference. Confirmed via C++ vector-growth semantics (guaranteed reallocation, not empirically reproduced via revert-and-observe — a freed 1-element buffer's bytes often survive unclobbered long enough to make such a revert test misleadingly pass, so this was reasoned from the standard's guarantees instead). Fixed by switching `EffectTechniqueCollection`'s backing storage to `std::vector<std::unique_ptr<EffectTechnique>>` (this project's established idiom for this exact problem, per `GraphicsAdapter::adapters_`), with a small custom `iterator`/`const_iterator` pair so `begin()`/`end()` still dereference to `EffectTechnique&` for range-for support — `EffectPassCollection` has the identical latent by-value-vector hazard but is deliberately left as-is (no current or new test exercises taking an `EffectPass&` across an `Add()` call), documented as new **Task 884**. New tests in `EffectTests.cpp`'s `EffectApplyTest` fixture (reusing Task 351's `TestEffect` mock, per this task's own "Unit test with mock effect" hint): `ApplyOnPassOfCurrentTechniqueSucceedsAndInvokesOnApply`, `ApplyOnPassNotInCurrentTechniqueThrowsInvalidOperationException`, `ApplyWithNullCurrentTechniqueThrowsInvalidOperationException`, and `ApplyIsConsistentAcrossInterleavedTechniqueSwitches` (adds a real second technique via the `NOXNA Add()` method, then proves `Apply()` correctly flips which pass succeeds/fails as `CurrentTechnique` is switched back and forth, with no stale state lingering from the previously-current technique). **Verified genuine discriminating power**: temporarily short-circuited the validation (`if (false && ...)`) and confirmed 3 of the 4 new tests fail with the exact expected assertions (the "succeeds" test correctly kept passing), then reverted. Full 3-backend rebuild + regression pass (header change touches everything that includes `EffectTechnique.hpp`/`EffectPass.hpp`): EasyGL ctest 3370/3375 (3 pre-existing + 2 reconfirmed-flaky `CueTest`, unchanged). Vulkan ctest 3294/3308 (13 pre-existing + 1 reconfirmed order-dependent `Vulkan_FillMode_WireFrame` flake, unchanged). Bgfx ctest 3278/3278 (100%, no flakes this run). |
@@ -906,238 +908,11 @@ All 100 original tasks addressed.
 
 ---
 
-## Phase 56 — WebGPU backend: infrastructure and CMake setup
+## Phases 56–69 — WebGPU backend
 
-> **⛔ FORBIDDEN as of 2026-07-06** (previously just "deprioritized" as of 2026-07-02). Do not
-> work on this phase or Phases 57–69 at all — not started, not stubbed — until the project owner
-> explicitly lifts this restriction. See `CLAUDE.md` ("WebGPU Is Forbidden For Now"). Task numbers
-> were moved to 10001+ (from 501–661) to free up numbering space for the Phase 70–73 wave; no
-> other content changed.
->
-> WebGPU backend uses **wgpu-native v29** (C API header `webgpu.h` + `wgpu.h`).
-> Installed at `vendor/wgpu-native/`. Shaders are written in **WGSL** (not SPIR-V).
-> Push constants do not exist in WebGPU — replaced by uniform buffers (bind group 0, binding 0).
-> Backend selection: `-DCNA_GRAPHICS_BACKEND=WEBGPU`, build dir `cmake-build-webgpu`.
->
-> Strategy: mirror the Vulkan backend structure, adapt to WebGPU API differences.
-> Estimated total effort: ~4–6 weeks (Tasks 501–750).
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10001 | Add `CNA_GRAPHICS_BACKEND=WEBGPU` CMake option; find `vendor/wgpu-native` headers + libs; define `CNA_BACKEND_WEBGPU` | ⬜ | Mirror VULKAN block in CMakeLists.txt |
-| 10002 | Create `include/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp` — class skeleton, all IGraphicsBackend sub-interfaces declared | ⬜ | ~12 nested backend classes |
-| 10003 | Create `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` — stub all methods (throw not-implemented) | ⬜ | Compiles clean, no functionality yet |
-| 10004 | SDL3 surface creation: obtain `WGPUSurface` via `SDL_GetProperty(SDL_PROP_WINDOW_WGPU_SURFACE_POINTER)` or `wgpuInstanceCreateSurface` | ⬜ | Prerequisite for all rendering |
-| 10005 | `WGPUInstance` + `WGPUAdapter` + `WGPUDevice` + `WGPUQueue` initialization via `wgpuCreateInstance` / `wgpuInstanceRequestAdapter` / `wgpuAdapterRequestDevice` | ⬜ | All synchronous in wgpu-native |
-| 10006 | Swap chain: `WGPUSurface` configure + `wgpuSurfaceGetCurrentTexture` + `wgpuTextureCreateView` for backbuffer | ⬜ | Replaces `vkAcquireNextImageKHR` |
-| 10007 | Command encoder: `wgpuDeviceCreateCommandEncoder` + `wgpuCommandEncoderFinish` + `wgpuQueueSubmit` per frame | ⬜ | Replaces Vulkan command buffer recording |
-| 10008 | Render pass: `wgpuCommandEncoderBeginRenderPass` with color attachment (backbuffer view) + depth attachment | ⬜ | Equivalent to `vkCmdBeginRenderPass` |
-| 10009 | `Clear()`: set clear color in `WGPURenderPassColorAttachment.clearValue`; implement depth clear in pass descriptor | ⬜ | |
-| 10010 | `Present()`: `wgpuSurfacePresent()` after queue submit | ⬜ | |
-
----
-
-## Phase 57 — WebGPU backend: uniform buffer system (replaces push constants)
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10011 | Design `GpuUniforms` struct (128 bytes = 32 floats) matching Vulkan push constant layout; upload via `wgpuQueueWriteBuffer` | ⬜ | Central UBO for MVP + effect params |
-| 10012 | Create `WGPUBuffer` (uniform, size=128) per frame (or ring buffer of 3); map on CPU side via `wgpuBufferGetMappedRange` | ⬜ | |
-| 10013 | `WGPUBindGroupLayout` for slot 0 binding 0 (uniform buffer) — shared across all 3D pipelines | ⬜ | |
-| 10014 | `WGPUBindGroup` creation and per-draw update for MVP matrix | ⬜ | |
-| 10015 | `WGPUBindGroupLayout` for slot 1 binding 0 (texture sampler) — for textured pipelines | ⬜ | |
-| 10016 | `WGPUSampler` creation mapping `SamplerState` (filter, address mode) → WGPU descriptor | ⬜ | |
-| 10017 | `WGPUPipelineLayout` combining UBO bind group layout + texture bind group layout | ⬜ | |
-
----
-
-## Phase 58 — WebGPU backend: WGSL shaders
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10020 | Write `sprite2d.wgsl` — 2D sprite vertex + fragment shader (pos + UV + RGBA tint); embed as C++ string literal | ⬜ | Equivalent to `sprite2d.vert/frag.glsl` |
-| 10021 | Write `colored3d.wgsl` — 3D vertex shader (float3 pos + ubyte4 color), flat fragment; UBO for MVP | ⬜ | stride=16 |
-| 10022 | Write `textured3d.wgsl` — 3D vertex (float3 pos + float2 UV); texture2D sampler in fragment | ⬜ | stride=20 |
-| 10023 | Write `colored_textured3d.wgsl` — float3 + ubyte4 color + float2 UV; multiply tex×color in fragment | ⬜ | stride=24 |
-| 10024 | Write `lit_textured3d.wgsl` — float3 pos + float3 normal + float2 UV; Blinn-Phong lighting in fragment | ⬜ | stride=32 |
-| 10025 | Write `alpha_test3d.wgsl` — per-pixel alpha discard matching XNA AlphaTestEffect semantics | ⬜ | |
-| 10026 | Write `dual_texture3d.wgsl` — two texture samplers, multiply/blend in fragment | ⬜ | |
-| 10027 | Write `env_map3d.wgsl` — cube map sampler + reflection vector from normal | ⬜ | |
-| 10028 | Write `skinned3d.wgsl` — bone palette as uniform array (max 72 mat4); blend 4 weights+indices | ⬜ | |
-| 10029 | Write `instanced3d.wgsl` — per-instance mat4 world transform in second vertex buffer binding | ⬜ | |
-| 10030 | Compile-time validation: embed all WGSL as `constexpr const char*` in `webgpu_shaders.hpp`; validate via `wgpuDeviceCreateShaderModule` at startup | ⬜ | Catch WGSL errors early |
-
----
-
-## Phase 59 — WebGPU backend: render pipeline creation
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10035 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | ⬜ | Reusable for all pipelines |
-| 10036 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ⬜ | Mirror Vulkan MakeKey / GetOrCreate* |
-| 10037 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | ⬜ | |
-| 10038 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ⬜ | |
-| 10039 | `GetOrCreatePipelineExt3D()` — stride 20/24/32 dispatch matching Vulkan | ⬜ | |
-| 10040 | `GetOrCreatePipelineAlphaTest3D()` — alpha discard variant | ⬜ | |
-| 10041 | `GetOrCreatePipelineDualTex3D()` — two-texture variant | ⬜ | |
-| 10042 | `GetOrCreatePipelineEnvMap3D()` — cube map variant | ⬜ | |
-| 10043 | `GetOrCreatePipelineSkinned3D()` — bone palette variant | ⬜ | |
-| 10044 | `GetOrCreatePipelineInstanced3D()` — per-instance binding variant | ⬜ | |
-| 10045 | Depth-stencil: `WGPUDepthStencilState` mapping `DepthFormat` + `CompareFunction` + `StencilOperation` | ⬜ | |
-| 10046 | Blend state: `WGPUBlendState` mapping `BlendFunction` + `BlendFactor` (Opaque, AlphaBlend, Additive, NonPremultiplied) | ⬜ | |
-| 10047 | Rasterizer: `WGPUPrimitiveState` mapping `CullMode`, `FillMode` (WireFrame via `topology=LineStrip` fallback or unsupported) | ⬜ | |
-
----
-
-## Phase 60 — WebGPU backend: vertex and index buffers
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10050 | `WebGPUVertexBufferBackend`: create `WGPUBuffer` (vertex, size=capacity×stride) with `COPY_DST` usage | ⬜ | |
-| 10051 | `SetData()`: upload via `wgpuQueueWriteBuffer(queue, buffer, 0, data, byteSize)` | ⬜ | Simpler than Vulkan staging |
-| 10052 | `SetDataWithOptions()`: `Discard` = reallocate buffer; `NoOverwrite` = `wgpuQueueWriteBuffer` at offset | ⬜ | |
-| 10053 | `WebGPUIndexBufferBackend`: 16-bit and 32-bit index buffers via `WGPUIndexFormat` | ⬜ | |
-| 10054 | `SetData16()` / `SetData32()`: `wgpuQueueWriteBuffer` | ⬜ | |
-| 10055 | Disposed guard in all SetData methods (throw `ObjectDisposedException`) | ⬜ | Match Task 240 pattern |
-| 10056 | `SetVertexBuffer(wgpuRenderPassSetVertexBuffer)` + `SetIndexBuffer(wgpuRenderPassSetIndexBuffer)` in draw dispatch | ⬜ | |
-
----
-
-## Phase 61 — WebGPU backend: textures
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10060 | `WebGPUTextureBackend`: `WGPUTexture` (2D, RGBA8Unorm, COPY_DST + TEXTURE_BINDING) + `WGPUTextureView` | ⬜ | |
-| 10061 | `SetData()`: `wgpuQueueWriteTexture()` with `WGPUImageCopyTexture` + `WGPUTextureDataLayout` | ⬜ | |
-| 10062 | `GetData()`: `WGPUBuffer` (MAP_READ) + `wgpuCommandEncoderCopyTextureToBuffer` + `wgpuBufferMapAsync` + poll | ⬜ | Async → synchronous via polling |
-| 10063 | Mip levels: generate via `wgpuCommandEncoderCopyTextureToTexture` per level or leave as mip=1 (document) | ⬜ | |
-| 10064 | `WebGPURenderTargetBackend`: `WGPUTexture` (RENDER_ATTACHMENT + TEXTURE_BINDING) + depth texture | ⬜ | |
-| 10065 | `SetRenderTarget(rt)` / `SetRenderTarget(nullptr)`: switch render pass target between RT and swapchain view | ⬜ | |
-| 10066 | `GetBackBufferData()`: readback via MAP_READ buffer + `wgpuCommandEncoderCopyTextureToBuffer` | ⬜ | |
-| 10067 | `WebGPUTextureCubeBackend`: `WGPUTexture` (dimension=2D, arrayLayerCount=6, CUBE_COMPATIBLE) | ⬜ | |
-| 10068 | `WebGPUTexture3DBackend`: `WGPUTexture` (dimension=3D) | ⬜ | |
-| 10069 | MSAA: `WGPUTexture` with `sampleCount=4`; resolve in render pass via `resolveTarget` | ⬜ | |
-
----
-
-## Phase 62 — WebGPU backend: 2D rendering (SpriteBatch)
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10075 | `WebGPUSpriteBatchBackend`: dynamic vertex buffer ring (3 frames) for sprite quads | ⬜ | |
-| 10076 | Upload sprite quads via `wgpuQueueWriteBuffer` per batch | ⬜ | |
-| 10077 | Per-batch draw: set pipeline, bind groups (UBO + texture), vertex buffer, draw | ⬜ | |
-| 10078 | Viewport UBO (2 floats: width, height) in sprite UBO slot | ⬜ | Replaces Vulkan sprite push constants |
-| 10079 | Sprite sort modes: Immediate, Deferred, Texture, FrontToBack, BackToFront — mirror Vulkan implementation | ⬜ | |
-
----
-
-## Phase 63 — WebGPU backend: 3D draw dispatch
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10085 | `DrawPrimitives()`: bind colored3d pipeline + UBO + vertex buffer + `wgpuRenderPassEncoderDraw` | ⬜ | |
-| 10086 | `DrawIndexedPrimitives()`: bind index buffer + `wgpuRenderPassEncoderDrawIndexed` | ⬜ | |
-| 10087 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | ⬜ | Mirror Vulkan dispatch logic |
-| 10088 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ⬜ | |
-| 10089 | `DrawInstancedPrimitivesEx()`: second vertex buffer binding (per-instance mat4 world transforms) | ⬜ | |
-| 10090 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | ⬜ | |
-| 10091 | `vertexStart` / `startIndex` / `baseVertex` support in draw calls | ⬜ | Match Task 110 |
-
----
-
-## Phase 64 — WebGPU backend: Effects
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10095 | `WebGPUEffectBackend`: `BasicEffect` wires to `FillGpuDrawParams` → UBO upload | ⬜ | |
-| 10096 | `AlphaTestEffect`: UBO alpha test params (function, reference) | ⬜ | |
-| 10097 | `DualTextureEffect`: second texture bind group | ⬜ | |
-| 10098 | `EnvironmentMapEffect`: cube map bind group + reflection UBO params | ⬜ | |
-| 10099 | `SkinnedEffect`: bone palette as large UBO (72 × mat4 = 4608 bytes) in separate bind group | ⬜ | WebGPU min UBO size: 65536 bytes — fits |
-| 10100 | `ShaderEffect` (custom WGSL): `wgpuDeviceCreateShaderModule` from user-provided WGSL source string | ⬜ | NOXNA extension |
-
----
-
-## Phase 65 — WebGPU backend: state management
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10105 | `SetDepthTestEnabled()` / `SetDepthWriteEnabled()`: bake into pipeline key | ⬜ | WebGPU requires pipeline rebuild on change |
-| 10106 | `SetBlendState()`: map `BlendState` preset → `WGPUBlendState` | ⬜ | |
-| 10107 | `SetRasterizerState()`: `CullMode` → `WGPUCullMode`; `FillMode::WireFrame` unsupported (log warning) | ⬜ | WebGPU has no polygon mode |
-| 10108 | `SetScissorRectangle()`: `wgpuRenderPassEncoderSetScissorRect` | ⬜ | |
-| 10109 | `SetViewport()`: `wgpuRenderPassEncoderSetViewport` | ⬜ | |
-| 10110 | `SetSamplerState()`: per-slot `WGPUSampler` cache (filter + address mode key) | ⬜ | |
-| 10111 | `SetDepthStencilState()`: stencil ops → `WGPUStencilFaceState` | ⬜ | |
-| 10112 | `OcclusionQuery`: `WGPUQuerySet` (type=Occlusion) + `wgpuRenderPassEncoderBeginOcclusionQuery` | ⬜ | |
-
----
-
-## Phase 66 — WebGPU backend: Multiple Render Targets
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10115 | MRT render pass: `WGPURenderPassDescriptor` with array of `WGPURenderPassColorAttachment` (up to 4) | ⬜ | |
-| 10116 | `GetOrCreateMRTRenderPipeline(colorAttachmentCount)`: pipeline with matching `targetCount` in fragment state | ⬜ | |
-| 10117 | `SetRenderTargets(vector<RenderTarget2D*>)`: configure MRT pass descriptor | ⬜ | |
-
----
-
-## Phase 67 — WebGPU backend: integration tests
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10120 | `cmake-build-webgpu` directory; `cna_webgpu_test` macro in CMakeLists.txt | ⬜ | Mirror `cna_vulkan_test` |
-| 10121 | Smoke test: init device, clear to blue, `GetBackBufferData`, assert pixel | ⬜ | `webgpu_smoke_test.cpp` |
-| 10122 | 2D sprite test: `SpriteBatch` draw white 1×1 texture → assert pixel | ⬜ | |
-| 10123 | 3D colored quad: stride=16 VPC, red quad, assert center pixel | ⬜ | `webgpu_vertex_format_test.cpp` |
-| 10124 | 3D textured quad: stride=20 VPT, green texture, assert center pixel | ⬜ | |
-| 10125 | 3D colored+textured: stride=24 VPCT, blue vertex + white tex | ⬜ | |
-| 10126 | 3D lit textured: stride=32 VPNT, magenta tex, no lighting | ⬜ | |
-| 10127 | `AlphaTestEffect`: draw with alpha < threshold → pixel transparent | ⬜ | |
-| 10128 | `DualTextureEffect`: two textures → multiply blend | ⬜ | |
-| 10129 | `EnvironmentMapEffect`: emissive color only (envAmount=0) → red pixel | ⬜ | |
-| 10130 | `SkinnedEffect`: identity bone palette → same as lit textured | ⬜ | |
-| 10131 | Instanced draw: 3 instances at different positions, assert 3 pixels | ⬜ | |
-| 10132 | RenderTarget2D: draw red into RT, blit to backbuffer → assert red | ⬜ | |
-| 10133 | MSAA 4x: draw red quad with MSAA, resolve, assert pixel | ⬜ | |
-| 10134 | OcclusionQuery: draw occluded geometry, assert query result = 0 | ⬜ | |
-| 10135 | VertexBuffer dispose guard: assert `ObjectDisposedException` after `Dispose()` | ⬜ | |
-| 10136 | Dynamic buffer stress: 12 frames × None/Discard/NoOverwrite | ⬜ | |
-| 10137 | WebGPU vertex format mapping table test (mirror Task 248 for WebGPU) | ⬜ | `WGPUVertexFormat` enum |
-
----
-
-## Phase 68 — WebGPU backend: advanced and parity
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10140 | `SetStringMarkerEXT()`: no-op (WebGPU has no debug labels in wgpu-native C API yet) | ⬜ | Document deviation |
-| 10141 | `DebugSimulateContextLoss()`: destroy and recreate device (wgpu-native supports `wgpuDeviceDestroy`) | ⬜ | |
-| 10142 | `PresentationInterval` → vsync: `wgpuSurfaceConfigure.presentMode` (Fifo=VSync, Immediate=no VSync, Mailbox=adaptive) | ⬜ | |
-| 10143 | `IsFullScreen` via `SDL_SetWindowFullscreen` — same as other backends | ⬜ | |
-| 10144 | `BackBufferWidth/Height` changes: reconfigure swap chain via `wgpuSurfaceConfigure` | ⬜ | |
-| 10145 | DXT1/DXT3/DXT5 compressed texture upload: `WGPUTextureFormat_BC1RGBAUnorm` etc. | ⬜ | Requires `wgpuAdapterHasFeature(BC_texture_compression)` |
-| 10146 | Texture3D: `WGPUTextureDimension_3D` + layered upload | ⬜ | |
-| 10147 | TextureCube: `WGPUTexture` arrayLayerCount=6 + `WGPUTextureViewDimension_Cube` | ⬜ | |
-| 10148 | RenderTargetCube: `WGPUTexture` cube + per-face `WGPUTextureView` as render attachment | ⬜ | |
-| 10149 | `FillMode::WireFrame`: document as unsupported in WebGPU (no polygon mode); add to deviations doc | ⬜ | |
-| 10150 | WebGPU vertex format helper: `WGPUVertexFormat WebGPUVertexFormatFromVEF(VertexElementFormat)` (mirror Task 248) | ⬜ | |
-
----
-
-## Phase 69 — WebGPU: documentation and future (Emscripten/WASM)
-
-| #   | Task                                                                                                          | Status | Notes                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| 10155 | `docs/webgpu-backend.md`: architecture, deviations from Vulkan, WGSL shader map, UBO layout | ⬜ | |
-| 10156 | `docs/webgpu-vs-vulkan-deviations.md`: push constants → UBO, no wireframe, async→sync strategy | ⬜ | |
-| 10157 | Emscripten target: configure CNA for `emcc` build with `-sUSE_WEBGPU=1`; WebGPU backend routes to browser `navigator.gpu` | ⬜ | True browser WASM target |
-| 10158 | Emscripten: SDL3 Emscripten port + WebGPU surface via `emscripten_webgpu_get_device()` | ⬜ | |
-| 10159 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | ⬜ | |
-| 10160 | Emscripten: run 2D smoke test in headless Chrome via `--headless=new --enable-features=WebGPU` | ⬜ | CI-friendly |
-| 10161 | Cross-backend pixel comparison: same scene rendered on EasyGL/Vulkan/Bgfx/WebGPU — assert pixel-level parity | ⬜ | |
+Moved to [`plan_webgpu.md`](plan_webgpu.md) (2026-07-07), renumbered `WEBGPU-1`–`WEBGPU-123`.
+**Still hard-forbidden** — see `CLAUDE.md` ("WebGPU Is Forbidden For Now") and that file's own
+header. No task content changed, only the file location and numbering.
 
 ---
 
