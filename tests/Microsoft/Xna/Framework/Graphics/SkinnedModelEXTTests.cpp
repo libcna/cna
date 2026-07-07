@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <chrono>
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -81,6 +82,28 @@ TEST(SkinnedModelEXTTest, WrapsPastEndWhenLooping)
     std::vector<Matrix> bones;
     // 1.5s with a 1s clip loops to 0.5s -> interpolated midpoint again.
     model.ComputeBoneTransformsEXT("Move", System::TimeSpan::FromSeconds(1.5), true, bones);
+    EXPECT_NEAR(bones[0].getTranslationProperty().X, 1.0f, 1e-4f);
+}
+
+// Task 11.1: the old wraparound reduced an out-of-range position by subtracting/adding one
+// Duration at a time - an unbounded per-frame cost proportional to position/Duration. Using pure
+// integer tick arithmetic (not FromSeconds' floating-point path) to keep the expected result
+// exact: 1,000,000,000.5 clip-durations in, which would have looped ~1 billion times under the
+// old algorithm.
+TEST(SkinnedModelEXTTest, WrapsHugePositionInBoundedTime)
+{
+    auto model = MakeTwoBoneModel();
+    std::vector<Matrix> bones;
+
+    const auto durationTicks = System::TimeSpan::FromSeconds(1.0).getTicksProperty();
+    const auto hugePos = System::TimeSpan::FromTicks(durationTicks * 1'000'000'000LL + durationTicks / 2);
+
+    const auto start = std::chrono::steady_clock::now();
+    model.ComputeBoneTransformsEXT("Move", hugePos, true, bones);
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+
+    EXPECT_LT(elapsed, std::chrono::milliseconds(100))
+        << "took too long - looks like the old proportional-to-position loop regressed";
     EXPECT_NEAR(bones[0].getTranslationProperty().X, 1.0f, 1e-4f);
 }
 

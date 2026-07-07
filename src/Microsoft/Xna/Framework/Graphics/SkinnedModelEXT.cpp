@@ -113,8 +113,16 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (loop)
             {
-                while (pos > clip.Duration) { pos = pos - clip.Duration; }
-                while (pos < System::TimeSpan::Zero) { pos = pos + clip.Duration; }
+                // Task 11.1: was an iterative subtract/add-one-Duration-at-a-time wraparound -
+                // a real unbounded per-frame cost proportional to position/Duration for a
+                // long-running session with a short clip. TimeSpan has no modulo operator, so
+                // compute it via raw ticks instead: C++'s `%` truncates toward zero (sign follows
+                // the dividend), so a single `+= durationTicks` normalizes a negative remainder
+                // into `[0, durationTicks)` - equivalent to floor-mod, without ever looping.
+                const auto durationTicks = clip.Duration.getTicksProperty();
+                auto posTicks = pos.getTicksProperty() % durationTicks;
+                if (posTicks < 0) { posTicks += durationTicks; }
+                pos = System::TimeSpan::FromTicks(posTicks);
             }
             else
             {

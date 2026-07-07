@@ -2179,7 +2179,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
 
 ## Phase 11 — Avatar: Bugs (faithful API + real-rendering EXT engine layer)
 
-- [ ] **Task 11.1** — Fix the unbounded iterative loop-wraparound in
+- [x] **Task 11.1** — Fix the unbounded iterative loop-wraparound in
   `SkinnedModelEXT::ComputeBoneTransformsEXT`. Confirmed (`SkinnedModelEXT.cpp`, ~lines 114-118):
   `while (pos > clip.Duration) { pos = pos - clip.Duration; }` (and the symmetric negative-direction
   loop) subtracts/adds `Duration` one clip-length at a time instead of computing a single modulo
@@ -2189,6 +2189,25 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   via a single division/multiply (`pos - Duration * floor(pos/Duration)`). Add a test with a large
   accumulated position and a short clip duration, asserting correct results and (via a call-count or
   timing bound) that the fix doesn't iterate proportionally to `position`.
+
+  Fixed via raw-tick integer arithmetic instead of a `TimeSpan`-level modulo (which doesn't exist):
+  `posTicks = pos.getTicksProperty() % durationTicks`, then a single `+= durationTicks` if negative
+  (C++'s `%` truncates toward zero, so at most one correction is ever needed to land in
+  `[0, durationTicks)` — true floor-mod, O(1) regardless of `position`'s magnitude). This is a
+  NOXNA/EXT engine feature CNA authored itself (no FNA/XNA reference exists for this method), so
+  "correctness" here is defined by this engine's own intended semantics, not an external spec —
+  confirmed no existing test depended on the old loop's incidental boundary quirk (an exact
+  multiple of `Duration` used to land on `Duration` itself rather than `0`, an artifact of using
+  `>`/`<` instead of `>=`/`<=`, not an intentional feature).
+
+  Added `WrapsHugePositionInBoundedTime`: constructs a position ~1,000,000,000.5 clip-durations in
+  via pure integer tick arithmetic (avoiding `FromSeconds`'s floating-point path, which loses
+  precision at that magnitude), asserts the call completes in under 100ms and produces the
+  correct interpolated result (0.5s into the clip). **Revert-verify:** temporarily restored the
+  old iterative loop (`git stash`) and reran just this test under a 20s wall-clock `timeout` —
+  took **12.24 seconds** (proportional to the ~1 billion iterations, as predicted) and failed the
+  100ms assertion exactly as expected. Restored the fix and reran — passes in under 1ms. Full
+  suite: 3369/3369 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 11.2** — Add validation that `ParentBoneIndices` is topologically ordered in
   `ComputeBoneTransformsEXT`. Confirmed (~lines 140-149): the code comments "bones are stored in
