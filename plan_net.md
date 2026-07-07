@@ -2470,12 +2470,24 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
 
 ## Phase 12 — Avatar: API Gaps
 
-- [ ] **Task 12.1** — Add `FindPartEXT`/`RemovePartEXT` (or equivalent) API to `SkinnedModelEXT`.
+- [x] **Task 12.1** — Add `FindPartEXT`/`RemovePartEXT` (or equivalent) API to `SkinnedModelEXT`.
   Confirmed callers currently have to reach into the public `Parts` vector directly with
   `std::remove_if`/`erase` (see `AvatarDemo.cpp`, ~lines 90-94), which is both undocumented as a
   supported pattern and the direct cause of Tasks 11.4/11.5. This task may be fully subsumed by
   Task 11.5's fix if scoped together — check before starting whether a separate task is still
   needed once 11.4/11.5 land.
+
+  Fully subsumed by Tasks 11.4/11.5, as anticipated. `RemovePartEXT(name)` (the exact name this
+  task itself suggests) now exists and is used internally by `AttachPartEXT`'s own replace-by-name
+  logic; `AvatarDemo.cpp`'s manual `Parts.erase(std::remove_if(...))` workaround was already
+  removed as part of that fix. Checked whether a separate `FindPartEXT` (lookup-by-name without
+  removing) is still needed: grepped `AvatarRenderer.cpp`, `AvatarDemo.cpp`, and the attach-part
+  integration test for any `find`/lookup-by-name need — none exists; `Parts` is already a public,
+  directly-iterable vector, so any future caller needing an existence check can already do so
+  without a dedicated API. No additional API added. Pure investigation, no code change beyond what
+  Task 11.4/11.5 already landed.
+
+**Phase 12 complete — 1/1.**
 
 ---
 
