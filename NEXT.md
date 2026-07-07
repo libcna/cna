@@ -364,7 +364,8 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - `Effect`/`EffectTechnique`/`EffectPass`/`EffectParameterCollection` base-class contract now
   matches FNA closely (Phase 41, Tasks 351–360): technique/pass validation, lookup-by-name/semantic
   semantics, enumeration order, and dispose/lifecycle behavior all verified or fixed to match FNA.
-  `Effect::Clone()` still doesn't exist (Task 883).
+  `Effect::Clone()` is now a real polymorphic contract, implemented on all 8 concrete subclasses
+  (Task 883).
 - `BasicEffect` (Phase 42, Tasks 361–370, **complete** — see `docs/basiceffect-support.md` for the
   full synthesis): all 22 property defaults verified/correct against FNA (2 real default-value bugs
   fixed in Task 361, 1 more in Task 362). `EnableDefaultLighting()`'s exact constants confirmed
@@ -505,6 +506,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `TBD` | 883 | **Closed — `Effect::Clone()` made a real polymorphic base contract; found 5 of 8 concrete subclasses already had a working `Clone()` from an earlier, undocumented pass (this row was stale).** Made `Clone()` a pure-virtual base method (previously not even declared on `Effect`, so the 5 existing `Clone()`s were silently non-polymorphic despite the hierarchy), added `override` to those 5, and implemented the 3 that were genuinely missing: `BasicEffect` (the real gap this row's title meant), `EffectMaterial` (hit a real C++ overload-resolution gotcha — needed an explicit `static_cast<Effect&>` since the compiler prefers the deleted implicit copy ctor over the real `Effect&`-taking one), and `ShaderEffect` (a NOXNA extension outside the "7 stock effects" count — its `Clone()` deliberately recompiles from cached GLSL source rather than sharing the compiled program, since it uniquely owns a per-instance backend handle unlike the other 7). The aliasing hazard this row originally worried about (clone's `EffectPass::owner_`/`techniqueId_` pointing at the original) turns out not to happen with the established pattern — every `Clone()` builds a **fresh** Default technique/pass via the normal base constructor, never copies the original's. New tests: 3 in `EffectTests.cpp` (base-contract polymorphic dispatch, technique independence, clone-after-dispose), `BasicEffectDefaultsTest.CloneCopiesAllProperties` (all 22 properties + bidirectional independence), plus first-ever test files for `SpriteEffect`, `EffectMaterial`, `ShaderEffect` (none had any test coverage before). Verified: clean full build on all 3 backends including every example executable; `CnaTests` EasyGL 3501/2 skipped and Bgfx 3505/2 skipped both 0-failed; Vulkan under `Xvfb`+`llvmpipe` (see §4's new environment note) showed non-reproducible unrelated flakiness across 3 runs, zero Clone-related failures in any run. |
 | `d1018384`/`6d077140` | 878/879 (MSAA), 873, 901–905 | **`RenderTarget2D` MSAA now genuinely implemented and pixel-verified on Vulkan and Bgfx** (`RenderTargetCube` split to new Task 903; mip half of 878 remains untouched, still open). Vulkan piggybacks per-RT MSAA on the backend's own already-picked `sampleCount_` (documented scope decision — real independent-per-RT sample counts would need threading a new dimension through ~10 pipeline cache keys); a new shared `rtRenderPassMsaa_` 3-attachment render pass reuses the exact same lazily-created MSAA pipeline variants the backbuffer path already builds. A real Vulkan validation-layer subtlety was found empirically: render-pass "compatibility" here requires matching subpass *dependency* masks, not just attachment descriptions. Bgfx just needed `BGFX_TEXTURE_RT_MSAA_X{2,4,8,16}` instead of plain `BGFX_TEXTURE_RT` (bgfx resolves internally). **Verifying the Bgfx test found and fixed 2 more real, previously-invisible, pre-existing bugs as hard prerequisites**: Task 873 (`BgfxSpriteBatchBackend::Draw`'s wrong-handle-type cast sampling `RenderTarget2D`s) and a new one, Task 901 (`EnsureViewState()` clobbering a bound RT's own viewport back to full window size on every `Clear()`, silently corrupting all rendering into any RT smaller than the window). **A genuinely deep, separate architectural gap was found (not fixed) while wiring up the Vulkan test**: `GraphicsDeviceManager.PreferMultiSampling` has never actually reached the Vulkan backend at all (`Game`'s `GraphicsDevice` member is unconditionally default-constructed before any derived-class code can set preferences) — meaning `vulkan_msaa_test.cpp` (Task 147) has been a false positive its entire existence; tracked as new Task 902, worked around here with a narrow `NOXNA` test-only `GraphicsDevice::RecreateBackendForMultiSampleCount()` hook. Also found (not fixed, Task 904) a sibling Vulkan pipeline (`GetOrCreatePipelineFogTex3D`, `textured3d`/`colored_textured3d`) missing the same msaa-aware render-pass check this task had to add elsewhere — dormant, not exercised by any current test. `git stash` revert-and-rebuild confirmed both new tests fail exactly as predicted (Vulkan: compile error; Bgfx: purely-binary `MultiSampleCount=8` row). **Independent review of this diff (separately, before merging) found and fixed one more real bug, Task 905**: `CreateRTRenderPass()`'s subpass dependencies didn't actually match `CreateRenderPass()`'s despite a comment claiming they did, producing live `VUID-vkCmdDraw-renderPass-02684` validation errors (correct pixel output regardless, but a genuine spec violation) the moment a depth-tested 3D primitive was drawn into a plain non-MSAA `RenderTarget2D` — pre-existing, outside every hunk of the original diff, invisible until this task's own new `MultiSampleCount=0` comparison call was the first to exercise it. Fixed by widening `CreateRTRenderPass()`'s `deps[]` to match `CreateRenderPass()`'s exactly. Full regression: Vulkan `ctest -R Vulkan` 68/80 (same 12 pre-existing failures), `CnaTests` 3493/2 skipped (exact baseline match, re-confirmed after the Task 905 fix); Bgfx `ctest -R Bgfx` 48/48 (100%), `CnaTests` 3497 passed/2 skipped, 0 failed (independently re-confirmed). EasyGL `CNA` target sanity-rebuilt clean. |
 | `6a91d11b` | 899 (`env_map3d` leftover) | **Closes out the last open fog gap Task 899 ever touched.** Vulkan's `env_map3d` pipeline had ~160 spare bytes in its existing `EnvMapParams` UBO (96 of 256 used) — packed `fogColorEnabled`/`fogStartEnd` into `[24..31]` of the now-`float[32]` `envMapUboData`, mirroring `lit_textured3d`'s identical "fog in an existing UBO's spare tail" pattern. New `vulkan_environmentmapeffect_fog_test.cpp` passed 3/3 first try; `git stash` revert-and-rebuild confirmed it fails 1/3 exactly as predicted pre-fix. Full regression: `ctest -R Vulkan` 67/79 (same 12 pre-existing failures, zero new), `CnaTests` 3493/3495 unchanged. |
 | `beb83b20` | 899 (Vulkan core) | **Real feature implemented on Vulkan, closing out Task 899's originally-scoped title.** `colored3d`/`textured3d`/`colored_textured3d` unified into one new "Bundle A" descriptor-set-layout/pool/pipeline-layout/UBO-ring-buffer/descriptor-set-cache (mirroring `descriptorSetLayoutLitTextured_`'s shape); `dual_texture3d` got a split-off dedicated vertex shader plus a 3rd descriptor binding; `skinned3d` got a 3rd descriptor binding (dedicated fog UBO, `BoneBlock` has zero spare capacity) — exactly matching the prior research pass's predicted fix shape. **Found and fixed a 2nd shared-shader landmine the research pass missed**: `Instanced3D` and the legacy no-`GpuDrawParams` `DrawColoredPrimitives` path both silently reused `kColored3dVertSpv`/`kColored3dFragSpv`, which broke once those shaders grew a fog descriptor binding — caught as a genuine `Vulkan_DrawInstanced_3Instances` regression on the first full-suite run, root-caused and fixed with 2 new trivial dedicated shader files rather than left as a landmine. Also deleted the now-fully-unreachable old `GetOrCreatePipelineExt3D`/`pipelinesExt3D_`. 5 new tests, one per fixed pipeline; `git stash` revert-and-rebuild (plus manually moving aside 3 new shader files) confirmed all 5 fail 1/3 exactly as predicted pre-fix. Full regression: `ctest -R Vulkan` 66/78 (same pre-existing 12 failures, zero new), `CnaTests` 3493/3495 (2 pre-existing skips, unchanged). |
@@ -615,11 +617,26 @@ command or test is tied to this — it manifests as a compile-time impossibility
 The most significant *silent-failure* gaps (compile and run without error, wrong or no data):
 Vulkan's `BlendState`/`DepthStencilState` support (Tasks 868/870), `TextureCube::DDSFromStreamEXT`
 (Task 663), `Texture3D`/`TextureCube::GetData` on Vulkan/Bgfx (Task 865), `RenderTarget2D`'s
-mip/MSAA params accepted but not wired on Vulkan/Bgfx (Tasks 878/879), and `BasicEffect`'s
-lit-path missing `+EmissiveColor`/unforwarded specular+extra-lights terms (found Task 366, fixed
-for the no-lighting path in Task 369, lit path tracked as Tasks 885/886).
+mip param accepted but not wired on Vulkan/Bgfx (Task 878 — MSAA closed by Task 879), and
+`BasicEffect`'s lit-path missing `+EmissiveColor`/unforwarded specular+extra-lights terms (found
+Task 366, fixed for the no-lighting path in Task 369, lit path tracked as Tasks 885/886).
 None have a test that currently fails loudly — they're only visible via dedicated pixel tests or
 direct code reading.
+
+**Environment note (2026-07-07):** GPU/window-creating test binaries (`CnaTests`, the
+`cna_test_*`/`easygl_*`/`vulkan_*`/`bgfx_*` example executables) must **not** be run against the
+real display (`DISPLAY=:0`) — doing so pops real windows on the developer's actual desktop and
+was genuinely disruptive mid-session (repeated window/keyboard-focus stealing). Use a virtual
+display instead: `Xvfb :99 -screen 0 1280x1024x24 &`, then `SDL_VIDEODRIVER=x11 DISPLAY=:99 ./CnaTests`
+(or the individual example binary directly). **`ctest` cannot be used for the GPU pixel-test
+suites as-is** — `CMakeLists.txt` hardcodes `ENVIRONMENT "...;DISPLAY=:0"` on every
+`Vulkan_*`/`Bgfx_*`/`EasyGL_*` GPU test (265 occurrences), which overrides any `DISPLAY` already
+exported in the shell; this was not fixed (out of scope, large mechanical find-replace across the
+whole file, needs its own task/decision on the right default). Vulkan's `CnaTests` under
+`Xvfb`+software rendering (`llvmpipe`, since Xvfb has no real GPU/DRI3) shows non-deterministic,
+low-single-digit-count test flakiness unrelated to any specific change (different tests fail each
+run) — a known limitation of this fallback environment, not a regression signal. EasyGL and Bgfx
+both ran fully clean (0 failures) under the same `Xvfb` setup.
 
 ---
 
@@ -654,7 +671,7 @@ direct code reading.
 | Confirmed, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. | — |
 | Confirmed, pre-existing, flaky | `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage`: order-dependent, only one fails per full-suite run. | — |
 | Confirmed, architectural, not fixed | `GraphicsDevice`'s default `RasterizerState` is never pushed to any backend's actual GPU state at construction; Bgfx's hardcoded default happens to be the only one matching FNA's, so it alone silently culls standard-winding quads unless `CullNone` is set explicitly. Fixing this correctly has a large, unaudited blast radius (~128 EasyGL/Vulkan example files never set `RasterizerState` and rely on those backends' incorrect no-culling default) — needs a scoping decision before it can land. | Task 896 |
-| Confirmed, architectural, not fixed | `Effect::Clone()` doesn't exist — needs an ownership-model decision plus fixing an `EffectPass::Apply()` owner-aliasing hazard plus `Clone()` overrides in all 7 stock effects. | Task 883 |
+| Fixed, all 8 concrete subclasses | `Effect::Clone()` is now a real pure-virtual base contract; 5 of 8 concrete subclasses already had a working (but non-polymorphic) `Clone()`, the other 3 (`BasicEffect`, `EffectMaterial`, `ShaderEffect`) implemented here. | Task 883 (done) |
 | Fixed, all 3 backends | `BasicEffect::FillGpuDrawParams()` now forwards `SpecularColor`/`SpecularPower` and renders real half-vector Blinn-Phong specular highlights on all 3 backends. | Task 886 (done) |
 | Fixed, all 3 backends | `AlphaTestEffect.VertexColorEnabled` now works on Vulkan/Bgfx — a new stride-24-only sibling vertex shader reads the vertex color attribute and gates it, dispatched alongside the existing alpha-test pipeline. Was correct on EasyGL from the start (reuses `BasicEffect`'s already-fixed stride-24 shader). | Task 887 (done) |
 | Fixed, all 3 backends, every pipeline | Fog now works everywhere: Bgfx for all 7 applicable pipelines, Vulkan for all 8 (`alpha_test3d`/`alpha_test_colored3d`/`lit_textured3d` via Task 888's spare UBO/push-constant capacity; `colored3d`/`textured3d`/`colored_textured3d`/`dual_texture3d`/`skinned3d` via Task 899's new "Bundle A"/extended-descriptor-set infrastructure; `env_map3d` via Task 899's own noted cheap leftover, fog packed into `EnvMapParams`' spare tail bytes). | Task 888 (done)/899 (fully done) |
@@ -783,56 +800,52 @@ VertexColorEnabled` ignored on Vulkan/Bgfx), Task 888 (real fog on Bgfx + Vulkan
 fog forwarding on EasyGL), Task 881 (`SetRenderTargets`'s `MAX_RENDERTARGET_BINDINGS=4` cap),
 Task 880 (`GraphicsDevice.Viewport` GPU wiring on all 3 backends), Task 899 (Vulkan fog, all 5
 pipelines + Bgfx bonus + `env_map3d` leftover), Task 879 (`RenderTarget2D` MSAA on Vulkan/Bgfx),
-Task 873 (Bgfx `SpriteBatch` RT-sampling cast bug), and Task 901/905 (2 more real bugs found while
-verifying Task 878/879) are all done. The design-blocking decisions for Task 883/896 were both
-resolved by the user earlier this session (see `plan_graphics.md`'s own rows for the exact
-answers) — both are unblocked and ready to implement directly, no further questions needed. In
-priority order, the rest are the accumulated backlog from earlier phases plus this task's new
-findings (Tasks 825–828, 863–882, 889–896, 902–904).
+Task 873 (Bgfx `SpriteBatch` RT-sampling cast bug), Task 901/905 (2 more real bugs found while
+verifying Task 878/879), and Task 883 (`Effect::Clone()`, plus discovering 5 of its 8 concrete
+subclasses already had a working `Clone()` from an earlier, undocumented pass) are all done. Task
+896's design-blocking decision was resolved by the user earlier this session (see
+`plan_graphics.md`'s own row for the exact answer) — unblocked and ready to implement directly, no
+further questions needed. In priority order, the rest are the accumulated backlog from earlier
+phases plus this task's new findings (Tasks 825–828, 863–882, 889–896, 902–904).
 
-1. **Task 883 — implement `Effect::Clone()`** (decision already made: clone shares the GPU shader,
-   deep-copies parameter values with re-pointed `owner_` back-pointers). Needs: fixing the
-   `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
-   effects. Files: `Effect.hpp`/`.cpp` + all 7 stock-effect pairs.
-
-2. **Task 896 — fix the `RasterizerState`-default GPU-sync gap** (decision already made: full
+1. **Task 896 — fix the `RasterizerState`-default GPU-sync gap** (decision already made: full
    upfront audit of all ~128 potentially-affected `examples/*.cpp` files, not a lighter reactive
    fix). Files: `GraphicsDevice.cpp` (ctor), the ~128 audited `examples/*.cpp` files.
 
-3. **Task 878 — implement real mip-chain support for `RenderTarget2D`/`RenderTargetCube` on
+2. **Task 878 — implement real mip-chain support for `RenderTarget2D`/`RenderTargetCube` on
    Vulkan and Bgfx** (MSAA half already done under Task 879 — this is mip only now). Vulkan needs
    real `mipLevels`/mip-aware views + a `vkCmdBlitImage` cascade at resolve time; Bgfx needs
    `hasMips=true` on the RT texture creation call. Mirrors Task 336's EasyGL fix shape exactly.
 
-4. **Task 904 — fix `GetOrCreatePipelineFogTex3D`'s missing `msaa`-aware render-pass check**
+3. **Task 904 — fix `GetOrCreatePipelineFogTex3D`'s missing `msaa`-aware render-pass check**
    (Vulkan, `textured3d`/`colored_textured3d`). Small, mechanical, same one-line fix shape as the
    sibling pipelines already have — needs a new discriminating test (backbuffer MSAA + a textured
    `BasicEffect`/`DualTextureEffect` draw) first.
 
-5. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
+4. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
     attachments** on all 3 backends (currently hardcoded/coarse choices).
 
-6. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
+5. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
     (875); `RenderTargetCube` via `EnvironmentMapEffect` renders black after unbind, root cause not
     isolated (876, needs isolation before a fix is attempted — see §9).
 
-7. **Task 874 — fix Bgfx's wrong-handle-type `static_cast`** for `RenderTargetCube` sampling via
+6. **Task 874 — fix Bgfx's wrong-handle-type `static_cast`** for `RenderTargetCube` sampling via
     `EnvironmentMapEffect` (Task 873's `RenderTarget2D`/`SpriteBatch` sibling is already fixed).
     Files: `BgfxGraphicsBackend.hpp`/`.cpp`.
 
-8. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
+7. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
     test fixture *first*, then implement against it).
 
-9. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
+8. **Task 865 — implement real Vulkan `GetData` readback for `Texture3D`/`TextureCube`**
     (`vkCmdCopyImageToBuffer` + staging buffer, mirroring the existing upload path in reverse).
 
-10. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
+9. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
     `Texture3D`/`TextureCube` (confirm with a failing test first, per Task 276's methodology).
 
-11. **Task 903 — implement `RenderTargetCube` MSAA on Vulkan and Bgfx** (split out of Task 879 —
+10. **Task 903 — implement `RenderTargetCube` MSAA on Vulkan and Bgfx** (split out of Task 879 —
     real XNA API surface, needs the same per-RT MSAA treatment applied per cube face).
 
-12. **Task 902 — implement a real `GraphicsDevice.Reset()`** so `GraphicsDeviceManager` preference
+11. **Task 902 — implement a real `GraphicsDevice.Reset()`** so `GraphicsDeviceManager` preference
     changes (e.g. `PreferMultiSampling`) actually reach backend construction, not just window
     size/fullscreen. Large, architecturally risky (touches `Game`/`GraphicsDeviceManager`/
     `GraphicsDevice`'s core lifecycle, needs `DeviceResetting`/`DeviceReset` events on every live
@@ -882,9 +895,6 @@ findings (Tasks 825–828, 863–882, 889–896, 902–904).
   patch.
 - **No opportunistic fix for Task 145 (`EasyGL_MRT_TwoAttachments`)** bundled into any MRT-adjacent
   task — it needs its own dedicated root-cause investigation.
-- **No implementing `Effect::Clone()` (Task 883) as a side effect of an unrelated Phase 42 task** —
-  it needs its own dedicated task given the ownership-model decision and the `owner_`-aliasing fix
-  it requires.
 
 ---
 

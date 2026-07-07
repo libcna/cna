@@ -8,6 +8,8 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -48,8 +50,11 @@ namespace
         explicit TestEffect(GraphicsDevice& device) : Effect(device) {}
         TestEffect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& effectCode)
             : Effect(device, effectCode) {}
+        explicit TestEffect(const TestEffect& src) : Effect(src.getGraphicsDeviceInternal()) {}
 
         int applyCount = 0;
+
+        Effect* Clone() override { return new TestEffect(*this); }
 
     protected:
         void OnApply() override { ++applyCount; }
@@ -251,9 +256,6 @@ TEST_F(EffectApplyTest, ApplyAfterDisposeThrowsObjectDisposedException)
 // confirmed, beneficial CNA-specific safety improvement over FNA's silent
 // UB here, not a bug to match — same category of intentional divergence as
 // GraphicsAdapter::DeviceId/VendorId (Task 345).
-// Effect::Clone() does not exist in CNA yet (deferred to Task 883), so a
-// "clone after dispose" sub-case is not testable today; see plan_graphics.md
-// Task 360 for the deferral note.
 // -----------------------------------------------------------------------
 
 TEST_F(EffectApplyTest, DisposeIsIdempotentAndDoesNotThrow)
@@ -396,4 +398,63 @@ TEST(EffectTest, DisposeSetsIsDisposed)
     EXPECT_FALSE(fx.getIsDisposedProperty());
     fx.Dispose();
     EXPECT_TRUE(fx.getIsDisposedProperty());
+}
+
+// -----------------------------------------------------------------------
+// Task 883: Effect::Clone() — base-class virtual dispatch contract. The
+// concrete deep-copy shape (which fields get copied) is exercised per stock
+// effect in each of their own test files; this file only covers what the
+// pure-virtual base contract itself guarantees for any subclass.
+// -----------------------------------------------------------------------
+
+TEST(EffectTest, CloneThroughBasePointerDispatchesToDerivedOverride)
+{
+    GraphicsDevice gd;
+    TestEffect fx(gd);
+
+    Effect& baseRef = fx;
+    std::unique_ptr<Effect> clone(baseRef.Clone());
+
+    ASSERT_NE(clone, nullptr);
+    EXPECT_NE(dynamic_cast<TestEffect*>(clone.get()), nullptr);
+    EXPECT_NE(static_cast<Effect*>(clone.get()), static_cast<Effect*>(&fx));
+}
+
+TEST(EffectTest, CloneGetsIndependentTechniqueNotAliasedToOriginal)
+{
+    GraphicsDevice gd;
+    TestEffect fx(gd);
+    std::unique_ptr<Effect> clone(fx.Clone());
+
+    // The clone's own Default technique/pass must be distinct objects from the
+    // original's, so EffectPass::Apply()'s owner_/techniqueId_ check on either
+    // side can never accidentally resolve against the other effect's state.
+    EXPECT_NE(clone->getCurrentTechniqueProperty(), fx.getCurrentTechniqueProperty());
+    EXPECT_NE(&clone->getTechniquesProperty()[0].getPassesProperty()[0],
+              &fx.getTechniquesProperty()[0].getPassesProperty()[0]);
+
+    // Applying the clone's pass must not affect the original's apply count, and
+    // vice versa — confirms there is no shared/aliased state between the two.
+    auto& clonedTestFx = static_cast<TestEffect&>(*clone);
+    clone->getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+    EXPECT_EQ(clonedTestFx.applyCount, 1);
+    EXPECT_EQ(fx.applyCount, 0);
+}
+
+TEST(EffectTest, CloneAfterDisposeDoesNotThrow)
+{
+    // Unlike Apply() (which CNA deliberately guards with ObjectDisposedException,
+    // a documented safety improvement over FNA's UB), Clone() touches no backend
+    // GPU handle at all in CNA's implementation — there is nothing for disposal
+    // to invalidate, so cloning a disposed effect is well-defined and safe.
+    // Matches every currently-shipped concrete Clone() (none of which guard on
+    // IsDisposed either); if a future Clone() implementation starts touching
+    // backend state, this expectation should be revisited.
+    GraphicsDevice gd;
+    TestEffect fx(gd);
+    fx.Dispose();
+
+    std::unique_ptr<Effect> clone;
+    EXPECT_NO_THROW(clone.reset(fx.Clone()));
+    EXPECT_NE(clone, nullptr);
 }

@@ -28,6 +28,13 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         explicit BasicEffect(GraphicsDevice& device);
 
+        /**
+         * @brief Creates a clone of this effect.
+         *
+         * @return Pointer to the cloned Effect.
+         */
+        [[nodiscard]] Effect* Clone() override;
+
         /** @brief The world matrix applied to drawn geometry. */
         Matrix World      = Matrix::getIdentityProperty();
         /** @brief The view matrix representing the camera transform. */
@@ -333,6 +340,8 @@ namespace Microsoft::Xna::Framework::Graphics
         void OnApply() override;
 
     private:
+        explicit BasicEffect(const BasicEffect& cloneSource);
+
         Vector3 diffuseColor_           = Vector3{1.0f, 1.0f, 1.0f};
         Vector3 emissiveColor_          = Vector3::Zero;
         Vector3 specularColor_          = Vector3{1.0f, 1.0f, 1.0f};

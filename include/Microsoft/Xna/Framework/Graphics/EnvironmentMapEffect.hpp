@@ -33,7 +33,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return Pointer to the cloned Effect.
          */
-        [[nodiscard]] Effect* Clone();
+        [[nodiscard]] Effect* Clone() override;
 
         /** @brief Returns the fully qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;

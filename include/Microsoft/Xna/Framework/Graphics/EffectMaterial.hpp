@@ -29,6 +29,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the fully-qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
+        /**
+         * @brief Creates a clone of this effect.
+         *
+         * @return Pointer to the cloned Effect.
+         */
+        [[nodiscard]] Effect* Clone() override;
+
     protected:
         /** @brief Applies effect parameters to the GPU before each draw pass. */
         void OnApply() override;

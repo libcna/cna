@@ -9,8 +9,12 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
@@ -18,7 +22,9 @@ using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::DirectionalLight;
+using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 namespace
 {
@@ -268,4 +274,70 @@ TEST_F(BasicEffectDefaultsTest, EnableDefaultLightingSetsBackLightExactConstants
     EXPECT_NEAR(specular.X, 0.3231373f, kEps);
     EXPECT_NEAR(specular.Y, 0.3607844f, kEps);
     EXPECT_NEAR(specular.Z, 0.3937255f, kEps);
+}
+
+// -----------------------------------------------------------------------
+// Task 883: Clone() — copies every property; mutating the clone must not
+// affect the original and vice versa (matches the established per-stock-
+// -effect Clone test pattern, e.g. AlphaTestEffectTests.cpp).
+
+TEST_F(BasicEffectDefaultsTest, CloneCopiesAllProperties)
+{
+    Texture2D tex(gd, 4, 4);
+
+    fx.World      = Matrix::getIdentityProperty() * 2.0f;
+    fx.View       = Matrix::getIdentityProperty() * 3.0f;
+    fx.Projection = Matrix::getIdentityProperty() * 4.0f;
+    fx.VertexColorEnabled = true;
+    fx.setDiffuseColorProperty(Vector3(0.1f, 0.2f, 0.3f));
+    fx.setEmissiveColorProperty(Vector3(0.4f, 0.5f, 0.6f));
+    fx.setSpecularColorProperty(Vector3(0.7f, 0.8f, 0.9f));
+    fx.setSpecularPowerProperty(32.0f);
+    fx.setAmbientLightColorProperty(Vector3(0.11f, 0.22f, 0.33f));
+    fx.setAlphaProperty(0.5f);
+    fx.setLightingEnabledProperty(true);
+    fx.setPreferPerPixelLightingProperty(true);
+    fx.setTextureEnabledProperty(true);
+    fx.setTextureProperty(&tex);
+    fx.setFogEnabledProperty(true);
+    fx.setFogColorProperty(Vector3(0.9f, 0.8f, 0.7f));
+    fx.setFogStartProperty(1.5f);
+    fx.setFogEndProperty(9.5f);
+    fx.DirectionalLight1.setEnabledProperty(true);
+    fx.DirectionalLight2.setEnabledProperty(true);
+
+    std::unique_ptr<Effect> cloned(fx.Clone());
+    auto* clone = dynamic_cast<BasicEffect*>(cloned.get());
+    ASSERT_NE(clone, nullptr);
+    EXPECT_NE(static_cast<Effect*>(clone), static_cast<Effect*>(&fx));
+
+    EXPECT_EQ(clone->World, fx.World);
+    EXPECT_EQ(clone->View, fx.View);
+    EXPECT_EQ(clone->Projection, fx.Projection);
+    EXPECT_TRUE(clone->VertexColorEnabled);
+    EXPECT_EQ(clone->getDiffuseColorProperty(), Vector3(0.1f, 0.2f, 0.3f));
+    EXPECT_EQ(clone->getEmissiveColorProperty(), Vector3(0.4f, 0.5f, 0.6f));
+    EXPECT_EQ(clone->getSpecularColorProperty(), Vector3(0.7f, 0.8f, 0.9f));
+    EXPECT_FLOAT_EQ(clone->getSpecularPowerProperty(), 32.0f);
+    EXPECT_EQ(clone->getAmbientLightColorProperty(), Vector3(0.11f, 0.22f, 0.33f));
+    EXPECT_FLOAT_EQ(clone->getAlphaProperty(), 0.5f);
+    EXPECT_TRUE(clone->getLightingEnabledProperty());
+    EXPECT_TRUE(clone->getPreferPerPixelLightingProperty());
+    EXPECT_TRUE(clone->getTextureEnabledProperty());
+    EXPECT_EQ(clone->getTextureProperty(), &tex);
+    EXPECT_TRUE(clone->getFogEnabledProperty());
+    EXPECT_EQ(clone->getFogColorProperty(), Vector3(0.9f, 0.8f, 0.7f));
+    EXPECT_FLOAT_EQ(clone->getFogStartProperty(), 1.5f);
+    EXPECT_FLOAT_EQ(clone->getFogEndProperty(), 9.5f);
+    EXPECT_TRUE(clone->getDirectionalLight1Property().getEnabledProperty());
+    EXPECT_TRUE(clone->getDirectionalLight2Property().getEnabledProperty());
+
+    // Independence: mutating the clone must not affect the original, and vice versa.
+    clone->setAlphaProperty(0.9f);
+    clone->setDiffuseColorProperty(Vector3::Zero);
+    EXPECT_FLOAT_EQ(fx.getAlphaProperty(), 0.5f);
+    EXPECT_EQ(fx.getDiffuseColorProperty(), Vector3(0.1f, 0.2f, 0.3f));
+
+    fx.setAlphaProperty(0.05f);
+    EXPECT_FLOAT_EQ(clone->getAlphaProperty(), 0.9f);
 }

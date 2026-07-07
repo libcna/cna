@@ -109,6 +109,23 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA void Apply();
 
         /**
+         * @brief Creates an independent clone of this effect.
+         *
+         * The clone gets its own Parameters/Techniques collections (built fresh against the
+         * clone's own identity, not copied from the original), with the same current values;
+         * mutating a parameter on either the clone or the original never affects the other.
+         *
+         * @return Owning pointer to the cloned effect, with the same concrete runtime type as
+         * this object. Caller takes ownership.
+         *
+         * @note NOXNA return-type deviation — FNA's Clone() returns a GC-managed Effect
+         * reference; CNA has no garbage collector, so ownership is transferred to the caller
+         * via a raw owning pointer instead, matching this codebase's established pattern for
+         * factory-shaped methods that hand off a new heap object.
+         */
+        [[nodiscard]] virtual Effect* Clone() = 0;
+
+        /**
          * @brief Returns the fully-qualified .NET type name of this object.
          *
          * @return The string "Microsoft.Xna.Framework.Graphics.Effect".

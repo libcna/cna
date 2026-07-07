@@ -11,6 +11,37 @@ namespace Microsoft::Xna::Framework::Graphics
         DirectionalLight0.setEnabledProperty(true);
     }
 
+    BasicEffect::BasicEffect(const BasicEffect& cloneSource)
+        : Effect(*cloneSource.device_)
+        , World(cloneSource.World)
+        , View(cloneSource.View)
+        , Projection(cloneSource.Projection)
+        , VertexColorEnabled(cloneSource.VertexColorEnabled)
+        , DirectionalLight0(cloneSource.DirectionalLight0)
+        , DirectionalLight1(cloneSource.DirectionalLight1)
+        , DirectionalLight2(cloneSource.DirectionalLight2)
+        , diffuseColor_(cloneSource.diffuseColor_)
+        , emissiveColor_(cloneSource.emissiveColor_)
+        , specularColor_(cloneSource.specularColor_)
+        , specularPower_(cloneSource.specularPower_)
+        , ambientLightColor_(cloneSource.ambientLightColor_)
+        , alpha_(cloneSource.alpha_)
+        , lightingEnabled_(cloneSource.lightingEnabled_)
+        , preferPerPixelLighting_(cloneSource.preferPerPixelLighting_)
+        , textureEnabled_(cloneSource.textureEnabled_)
+        , texture_(cloneSource.texture_)
+        , fogEnabled_(cloneSource.fogEnabled_)
+        , fogColor_(cloneSource.fogColor_)
+        , fogStart_(cloneSource.fogStart_)
+        , fogEnd_(cloneSource.fogEnd_)
+    {
+    }
+
+    Effect* BasicEffect::Clone()
+    {
+        return new BasicEffect(*this);
+    }
+
     void BasicEffect::OnApply()
     {
         // SetCurrentEffect is now called by Effect::Apply() after OnApply() returns.

@@ -82,4 +82,9 @@ namespace Microsoft::Xna::Framework::Graphics
         static const std::string name = "CNA.ShaderEffect";
         return name;
     }
+
+    Effect* ShaderEffect::Clone()
+    {
+        return new ShaderEffect(*device_, vertSrc_, fragSrc_);
+    }
 }

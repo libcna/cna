@@ -80,6 +80,21 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the fully qualified CNA type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
+        /**
+         * @brief Creates a clone of this effect.
+         *
+         * Recompiles a new backend program from the same GLSL source strings rather than
+         * sharing the original's compiled program object — deliberate deviation from the other
+         * concrete Effect subclasses' Clone() (which share GPU state implicitly, since CNA's
+         * stock-effect pipelines are cached globally by state, not per-instance):
+         * ShaderEffect uniquely owns a per-instance compiled program
+         * (`std::unique_ptr<IEffectBackend>`), so genuine sharing would need a reference-counted
+         * backend-ownership model, out of scope for this NOXNA extension.
+         *
+         * @return Pointer to the cloned Effect.
+         */
+        [[nodiscard]] Effect* Clone() override;
+
     protected:
         /**
          * @brief Applies the GLSL shaders to the graphics device before drawing.
