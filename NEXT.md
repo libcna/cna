@@ -45,7 +45,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   confirmed `SpriteBatch::Draw`'s rotation genuinely pivots around the caller's `origin` point,
   matching FNA's real formula term-for-term — zero bugs found**, independently confirmed by
   temporarily hardcoding `origin=(0,0)` in EasyGL's `Draw()` and watching 2 of 3 checks fail
-  exactly as predicted. Task 418 (scale overloads) is next.
+  exactly as predicted. **Task 418 verified `SpriteBatch::Draw`'s scalar and `Vector2` scale
+  overloads produce the exact expected destination size, including non-uniform `Vector2` scale
+  — zero bugs found**, independently confirmed twice by temporarily forcing each axis-mixing bug
+  (`scale.X`-for-both and `scale.Y`-for-both) and watching the corresponding check fail exactly
+  as predicted each time. Task 419 (source rectangle cropping) is next.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -123,11 +127,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 417
-  (EasyGL only — no shared code changed, Vulkan/Bgfx untouched and unverified this task).
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 418
+  (EasyGL only — net production-code diff is zero, Vulkan/Bgfx untouched and unverified this task).
 
-### Test status (last verified: Task 417 for EasyGL; Task 416 for Vulkan/Bgfx)
-- **EasyGL, full `ctest -j1`:** 3622/3625 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 418 for EasyGL; Task 416 for Vulkan/Bgfx)
+- **EasyGL, full `ctest -j1`:** 3623/3626 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
 - **Vulkan, full `ctest -j1`:** 3541/3554 pass (as of Task 416). 13 documented pre-existing
   failures (see §5), exact-name match, no flakes.
@@ -291,7 +295,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 417 | **Verify-only, zero bugs found (EasyGL).** First real GPU pixel test in Phase 47: confirmed `SpriteBatch::Draw`'s rotation genuinely pivots around the caller's `origin` point, matching FNA's real `GenerateVertexInfo` formula term-for-term. Independently verified discriminating power: temporarily hardcoded `origin=(0,0)` in EasyGL's `Draw()` and confirmed 2 of 3 checks fail exactly as predicted. |
+| — | 418 | **Verify-only, zero bugs found (EasyGL).** Confirmed `SpriteBatch::Draw`'s scalar and `Vector2` scale overloads produce exact expected destination sizes, including non-uniform `Vector2` scale. Independently verified discriminating power twice: temporarily forced each axis-mixing bug (`scale.X`-for-both, `scale.Y`-for-both) and confirmed the corresponding check fails exactly as predicted each time. |
+| `a643fc25` | 417 | **Verify-only, zero bugs found (EasyGL).** First real GPU pixel test in Phase 47: confirmed `SpriteBatch::Draw`'s rotation genuinely pivots around the caller's `origin` point, matching FNA's real `GenerateVertexInfo` formula term-for-term. Independently verified discriminating power: temporarily hardcoded `origin=(0,0)` in EasyGL's `Draw()` and confirmed 2 of 3 checks fail exactly as predicted. |
 | `1294cd32` | 416 | **Verify-only, zero bugs found, closes the per-`SpriteSortMode` test arc (Tasks 412–416)**: fulfills Task 165 — confirmed `SpriteSortMode::BackToFront` sorts by descending `layerDepth`, the mirror image of Task 415, reusing its exact test shape with sort mode and expected order reversed. Independently verified discriminating power the same way. |
 | `39e4d62b` | 415 | **Verify-only, zero bugs found**: fulfills Task 164 — confirmed `SpriteSortMode::FrontToBack` sorts by ascending `layerDepth`, using the task's own example depths (0.5, 0.1, 0.9). Independently verified discriminating power: temporarily disabled the `FrontToBack` sort branch and confirmed the test fails exactly as predicted (order reverted to raw submission order). |
 | `b00ed8ba` | 414 | **Verify-only, zero bugs found**: fulfills Task 163 — confirmed `SpriteSortMode::Texture` groups draws by texture pointer (adjacency, not a predicted order since that depends on runtime addresses) while preserving `stable_sort`'s within-group submission order. Independently verified discriminating power: temporarily disabled the `Texture` sort branch and confirmed the test fails exactly as predicted (interleaved draw stayed un-grouped). |
@@ -531,19 +536,18 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 47 (Task 418 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 47 (Task 419 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 418 — pixel test: scalar and Vector2 scale overloads produce expected size (EasyGL)**
-   - Goal: verify `SpriteBatch::Draw`'s scale-taking overloads (`Draw(texture, position,
-     sourceRectangle, color, rotation, origin, scale, effects, layerDepth)` — both the scalar
-     `float scale` and `Vector2 scale` variants) actually scale the drawn sprite's on-screen size
-     by the given factor relative to the source rectangle, for both uniform and non-uniform
-     (`Vector2`) scale. A simple test texture with a distinguishable marker plus pixel reads at
-     the sprite's expected scaled edges (e.g. just inside vs. just outside the scaled bounding
-     box) should discriminate a correct implementation from one that ignores scale or applies it
-     incorrectly (e.g. only to one axis).
-   - Files: new `examples/easygl_spritebatch_scale_test.cpp`, registered in `CMakeLists.txt`.
+1. **Task 419 — pixel test: source rectangle cropping (EasyGL)**
+   - Goal: verify `SpriteBatch::Draw`'s `sourceRectangle` parameter correctly crops which region
+     of the texture is sampled, rather than always sampling the whole texture (or sampling the
+     wrong region). Use a multi-color test texture (e.g. a 2×2 or 4×4 grid of distinct colors)
+     and draw with a `sourceRectangle` selecting only one cell; verify via pixel readback that
+     only that cell's color appears in the drawn sprite, at the correct position, with correct
+     stretching to the destination rectangle size.
+   - Files: new `examples/easygl_spritebatch_sourcerect_test.cpp`, registered in
+     `CMakeLists.txt`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -667,7 +671,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 418).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 419).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -783,10 +787,27 @@ ox=oy=0 in EasyGLGraphicsBackend.cpp (simulating origin-ignored-during-pivot bug
 Added examples/easygl_spritebatch_rotation_test.cpp. EasyGL-only task, no shared code touched,
 Vulkan/Bgfx unaffected/unverified.
 
-Task 418 (NEXT) is the natural next step: pixel test verifying the scalar and Vector2 scale
-overloads of SpriteBatch::Draw produce the expected on-screen sprite size (uniform and
-non-uniform scale), using pixel reads just inside vs. just outside the scaled bounding box to
-discriminate correct scaling from ignored/wrong-axis-only scaling.
+Task 418 verified SpriteBatch::Draw's scalar and Vector2 scale overloads -- verify-only, zero
+bugs found. Both compute destRect=(position.X, position.Y, sourceRect.Width*scale.X,
+sourceRect.Height*scale.Y) (scalar overload forwards Vector2(scale,scale)). Designed a
+discriminating test: 20x20 solid-Red texture drawn twice against Green -- scalar overload
+(pos=(50,50), scale=3.0 -> expected 60x60, x:[50,110) y:[50,110)) and Vector2 overload with
+NON-UNIFORM scale (pos=(200,50), scale=(2,4) -> expected 40x80, x:[200,240) y:[50,130)). Check
+points chosen to discriminate 2 axis-mixing bugs: (220,110) is inside the correct 40x80 box but
+would read background under a "scale.X for both axes" bug (40x40, edge y=90); (245,70) is
+outside the correct box's right edge (240) but would read Red under a "scale.Y for both axes"
+bug (80x80, edge x=280). All 5 checks passed with exact predicted values on the first attempt.
+Independently verified discriminating power TWICE: temporarily forced dh=dh*scale.X (X-for-both
+bug) -- (220,110) failed exactly as predicted; separately forced both dims to scale.Y
+(Y-for-both bug) -- (245,70) failed exactly as predicted; reverted both times, net production
+diff zero. No production code changed. Added examples/easygl_spritebatch_scale_test.cpp.
+EasyGL-only, Vulkan/Bgfx unaffected/unverified.
+
+Task 419 (NEXT) is the natural next step: pixel test verifying SpriteBatch::Draw's
+sourceRectangle parameter correctly crops which region of the texture is sampled. Use a
+multi-color test texture (e.g. a 2x2 or 4x4 grid of distinct colors) and draw with a
+sourceRectangle selecting only one cell; verify via pixel readback that only that cell's color
+appears in the drawn sprite, correctly stretched to the destination rectangle size.
 
 Phase 46 ("SkinnedEffect exactness", Tasks 401-410) CLOSED with Task 410
 (docs/skinnedeffect-support.md, full synthesis of Tasks 401-409). Summary of what it found/fixed:
@@ -864,13 +885,14 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 47's tasks.
 
-Last full regression: Task 417 was EasyGL-only (no shared code touched) --
-EasyGL 3622/3625 pass (3 documented pre-existing failures, no flakes this run, +1 new test).
+Last full regression: Task 418 was EasyGL-only (net production-code diff zero after
+discriminating-power verification) --
+EasyGL 3623/3626 pass (3 documented pre-existing failures, no flakes this run, +1 new test).
 Vulkan/Bgfx last verified at Task 416: Vulkan 3541/3554 pass (13 documented pre-existing
 failures, exact-name match, no flakes); Bgfx 3525/3525 pass (100%, no flakes).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-417) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-418) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
