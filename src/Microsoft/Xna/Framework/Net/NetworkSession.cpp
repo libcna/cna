@@ -199,6 +199,18 @@ namespace Microsoft::Xna::Framework::Net
     // type here, where ownedGamers_'s std::vector<std::unique_ptr<NetworkGamer>> is destroyed.
     NetworkSession::~NetworkSession()
     {
+        // Task 2.1: a caller that `delete`s a NetworkSession* without calling Dispose() first
+        // (a real risk - Create()/Find()/Join() all hand back a caller-owned raw pointer, per
+        // this class's own ownership-contract doc comment above) used to leave activeSession_
+        // dangling at the just-freed `this`, and ENetBackend::TeardownSession never ran. Every
+        // subsequent BeginCreate/BeginFind/BeginJoin checks `activeSession_ != nullptr` and
+        // throws, so one mismanaged delete permanently bricked session creation for the rest of
+        // the process and leaked the transport (ENet host socket, discovery advertisement).
+        // Standard IDisposable safety net: fall back to Dispose() here if it was never called.
+        if (!isDisposed_)
+        {
+            Dispose();
+        }
         --instanceCount_; // Task 3.3
     }
 

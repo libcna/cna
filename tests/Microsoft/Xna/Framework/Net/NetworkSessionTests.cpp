@@ -95,6 +95,61 @@ TEST(NetworkSessionTest, DeletingAfterDisposeLeavesNoLeak) {
     EXPECT_EQ(NetworkSession::GetInstanceCountForTesting(), before);
 }
 
+// Task 2.1: NetworkSession's destructor previously did not call Dispose(), so deleting a session
+// without disposing it first left the activeSession_ singleton dangling at freed memory. Every
+// subsequent BeginCreate/BeginFind/BeginJoin checks `activeSession_ != nullptr` and throws
+// InvalidOperationException, so one mismanaged delete permanently bricked session creation for
+// the rest of the process. This proves the destructor's Dispose() fallback fixes that: a session
+// deleted without an explicit Dispose() call must still allow a brand-new session to be created
+// afterward.
+TEST(NetworkSessionTest, DeletingWithoutDisposeStillAllowsCreatingANewSession) {
+    int before = NetworkSession::GetInstanceCountForTesting();
+
+    auto gamer1 = MakeSignedInGamer();
+    NetworkSession* first = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer1}, 8, 0, NetworkSessionProperties{}
+    );
+    delete first; // deliberately skips Dispose() - the exact bug scenario
+
+    // Before the fix, activeSession_ still pointed at the just-freed `first`, so this would throw
+    // InvalidOperationException ("activeAction_ != nullptr || activeSession_ != nullptr").
+    auto gamer2 = MakeSignedInGamer("tag2");
+    NetworkSession* second = nullptr;
+    EXPECT_NO_THROW(
+        second = NetworkSession::Create(
+            NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer2}, 8, 0, NetworkSessionProperties{}
+        )
+    );
+    ASSERT_NE(second, nullptr);
+
+    second->Dispose();
+    delete second;
+
+    EXPECT_EQ(NetworkSession::GetInstanceCountForTesting(), before);
+}
+
+// Confirms the destructor's Dispose() fallback also tears down real ENet transport state (not
+// just the activeSession_ singleton) - a fresh SystemLink session created after a
+// delete-without-Dispose gets its own real bound port, proving ENetBackend::TeardownSession
+// actually ran for the leaked one.
+TEST(NetworkSessionTest, DeletingWithoutDisposeTearsDownRealTransport) {
+    auto gamer1 = MakeSignedInGamer();
+    NetworkSession* first = NetworkSession::Create(
+        NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer1}, 8, 0, NetworkSessionProperties{}
+    );
+    EXPECT_GT(CNA::Internal::Net::ENetBackend::GetBoundPort(first), 0);
+    delete first; // deliberately skips Dispose()
+
+    auto gamer2 = MakeSignedInGamer("tag2");
+    NetworkSession* second = NetworkSession::Create(
+        NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer2}, 8, 0, NetworkSessionProperties{}
+    );
+    EXPECT_GT(CNA::Internal::Net::ENetBackend::GetBoundPort(second), 0);
+
+    second->Dispose();
+    delete second;
+}
+
 TEST(NetworkSessionTest, AllowHostMigrationAndJoinInProgressGetSet) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(

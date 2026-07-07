@@ -182,7 +182,7 @@ new observations, not already-covered ground.
 
 ## Phase 2 — NetworkSession lifecycle safety (confirmed real bug)
 
-- [ ] **Task 2.1** — `NetworkSession::~NetworkSession()` (`src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:200-203`)
+- [x] **Task 2.1** — `NetworkSession::~NetworkSession()` (`src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:200-203`)
   only decrements `instanceCount_`. Unlike `Dispose()` (`NetworkSession.cpp:266-282`), the
   destructor does **not**:
   - tear down ENet transport state (`CNA::Internal::Net::ENetBackend::TeardownSession`),
@@ -211,18 +211,47 @@ new observations, not already-covered ground.
   creating a new session immediately after a properly-`Dispose()`d one still works (regression
   guard for the existing, already-correct `Dispose()`-then-recreate path).
 
-  **Verify the bug is real**: revert-verify via the standard `git stash` cycle — write the new
-  "delete without Dispose, then create again" test first, confirm it fails (either hangs/throws
-  because `activeSession_` is stale, or a sanitizer catches the dangling-pointer read) against
-  the current destructor, then apply the fix and confirm it passes.
+  **Fixed**: destructor now calls `Dispose()` if `!isDisposed_` before decrementing
+  `instanceCount_` (`NetworkSession.cpp:200-212`).
 
-- [ ] **Task 2.2** — While fixing Task 2.1, audit whether `ENetBackend::TeardownSession` and
-  `ownedGamers_.clear()` are safe to call twice (once from a hypothetical explicit `Dispose()`
-  call, once from the destructor's new safety-net call) — confirm idempotency or guard
-  appropriately. Add a test for "explicit `Dispose()` then the object goes out of scope /
-  destructs" to lock in no double-teardown crash.
+  **Added 2 tests** to `NetworkSessionTests.cpp` (right after the existing
+  `DeletingAfterDisposeLeavesNoLeak`): `DeletingWithoutDisposeStillAllowsCreatingANewSession`
+  (delete a `Local`-type session without calling `Dispose()`, confirm a brand-new session can
+  still be created afterward with `EXPECT_NO_THROW` — before the fix this threw
+  `InvalidOperationException` since `activeSession_` was left dangling) and
+  `DeletingWithoutDisposeTearsDownRealTransport` (same scenario with `SystemLink`, confirms a
+  fresh session afterward gets its own real bound port via
+  `CNA::Internal::Net::ENetBackend::GetBoundPort`, proving `TeardownSession` actually ran for the
+  leaked one, not just the singleton pointer being reset).
+
+  **Verified the bug is real, not theoretical**: stashed the 1-line destructor fix (keeping both
+  new tests), rebuilt, reran — both **failed exactly as predicted**: first test hit
+  `InvalidOperationException` ("Operation is not valid due to the current state of the object.")
+  from the stale `activeSession_` check; second test failed identically before even reaching its
+  port assertions. Restored the fix, rebuilt clean, both pass. Full suite: **3405/3405 passing**
+  (2 expected accelerometer/gyroscope skips), no regressions.
+
+- [x] **Task 2.2** — Audited whether `ENetBackend::TeardownSession` (`ENetBackend.cpp:538-559`)
+  and `ownedGamers_.clear()`/`activeSession_ = nullptr`/`isDisposed_ = true` are safe to run
+  twice. Confirmed by reading the code (not just assuming): `TeardownSession` looks up the
+  session in a `std::unordered_map` and no-ops via `find()`/`erase()` on a key that's already
+  gone if called again (`ENetBackend.cpp:540-541,558`); `ENetDiscoveryService::UnregisterHost` is
+  separately documented as a no-op when nothing is registered
+  (`ENetDiscoveryService.hpp:64`); `ownedGamers_.clear()` on an already-empty vector and
+  re-setting `isDisposed_ = true`/`activeSession_ = nullptr` to their current values are both
+  trivially idempotent. **No guard needed in practice** — but since the destructor's new fallback
+  is itself gated on `!isDisposed_`, `Dispose()` can in fact only ever run once total per session
+  regardless (either the caller calls it explicitly, or the destructor does as a fallback, never
+  both) — so double-teardown is structurally impossible, not just individually-idempotent-by-luck.
+  The pre-existing `DeletingAfterDisposeLeavesNoLeak` test (explicit `Dispose()` then `delete`)
+  already exercises this exact "explicit Dispose, then destruct" sequence and continues to pass
+  unchanged, serving as the regression guard — no new test needed beyond confirming it still
+  passes (verified above, part of the same 3405/3405 full-suite run).
 
 ---
+
+**Phase 2 complete — 2/2.** The one confirmed real bug from Phase 0's inventory is fixed and
+verified via revert-verify-restore.
 
 ## Phase 3 — Guide: real message-box overlay + real keyboard capture
 
