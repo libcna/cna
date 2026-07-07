@@ -282,6 +282,12 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::UniformHandle light1Diff3DUnif_   = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle light2Dir3DUnif_    = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle light2Diff3DUnif_   = BGFX_INVALID_HANDLE;
+        /// BasicEffect specular (lit-textured shader only, Task 886).
+        bgfx::UniformHandle light0Spec3DUnif_       = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle light1Spec3DUnif_       = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle light2Spec3DUnif_       = BGFX_INVALID_HANDLE;
+        /// xyz = material SpecularColor, w = SpecularPower.
+        bgfx::UniformHandle specularColorPower3DUnif_ = BGFX_INVALID_HANDLE;
         /// BasicEffect.VertexColorEnabled gate for the no-texture colored3D path (Task 364).
         bgfx::UniformHandle vertexColorEn3DUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle texColor3DSampler_  = BGFX_INVALID_HANDLE;

@@ -51,30 +51,50 @@ namespace Microsoft::Xna::Framework::Graphics
         // must happen here.
         const bool    light0On = DirectionalLight0.getEnabledProperty();
         const Vector3 ld  = light0On ? DirectionalLight0.getDiffuseColorProperty() : Vector3::Zero;
+        const Vector3 ls  = light0On ? DirectionalLight0.getSpecularColorProperty() : Vector3::Zero;
         const Vector3 dir = DirectionalLight0.getDirectionProperty();
         p.light0Dir[0]     = dir.X; p.light0Dir[1]     = dir.Y; p.light0Dir[2]     = dir.Z;
         p.light0Diffuse[0] = ld.X;  p.light0Diffuse[1] = ld.Y;  p.light0Diffuse[2] = ld.Z;
+        p.light0Specular[0]= ls.X;  p.light0Specular[1]= ls.Y;  p.light0Specular[2]= ls.Z;
 
         const bool    light1On = DirectionalLight1.getEnabledProperty();
         const Vector3 ld1  = light1On ? DirectionalLight1.getDiffuseColorProperty() : Vector3::Zero;
+        const Vector3 ls1  = light1On ? DirectionalLight1.getSpecularColorProperty() : Vector3::Zero;
         const Vector3 dir1 = DirectionalLight1.getDirectionProperty();
         p.light1Dir[0]     = dir1.X; p.light1Dir[1]     = dir1.Y; p.light1Dir[2]     = dir1.Z;
         p.light1Diffuse[0] = ld1.X;  p.light1Diffuse[1] = ld1.Y;  p.light1Diffuse[2] = ld1.Z;
+        p.light1Specular[0]= ls1.X;  p.light1Specular[1]= ls1.Y;  p.light1Specular[2]= ls1.Z;
 
         const bool    light2On = DirectionalLight2.getEnabledProperty();
         const Vector3 ld2  = light2On ? DirectionalLight2.getDiffuseColorProperty() : Vector3::Zero;
+        const Vector3 ls2  = light2On ? DirectionalLight2.getSpecularColorProperty() : Vector3::Zero;
         const Vector3 dir2 = DirectionalLight2.getDirectionProperty();
         p.light2Dir[0]     = dir2.X; p.light2Dir[1]     = dir2.Y; p.light2Dir[2]     = dir2.Z;
         p.light2Diffuse[0] = ld2.X;  p.light2Diffuse[1] = ld2.Y;  p.light2Diffuse[2] = ld2.Z;
+        p.light2Specular[0]= ls2.X;  p.light2Specular[1]= ls2.Y;  p.light2Specular[2]= ls2.Z;
 
         // Lit path only: EmissiveColor is added after the ambient/light sum is multiplied by
         // DiffuseColor (see each backend's lit shader formula) — the disabled-lighting path
-        // already bakes EmissiveColor into the forwarded diffuse color above instead.
+        // already bakes EmissiveColor into the forwarded diffuse color above instead. Specular is
+        // likewise lit-path only: FNA's Lighting.fxh only ever computes it inside the lit branch,
+        // and the material SpecularColor is applied once to the summed per-light contribution
+        // (not per-light, unlike each light's own SpecularColor which enters the sum individually).
         if (lightingEnabled_)
         {
             p.emissiveColor[0] = emissiveColor_.X * alpha_;
             p.emissiveColor[1] = emissiveColor_.Y * alpha_;
             p.emissiveColor[2] = emissiveColor_.Z * alpha_;
+
+            p.specularColor[0] = specularColor_.X;
+            p.specularColor[1] = specularColor_.Y;
+            p.specularColor[2] = specularColor_.Z;
+            p.specularPower     = specularPower_;
+
+            const Matrix  viewInverse = Matrix::Invert(View);
+            const Vector3 eyePos      = viewInverse.getTranslationProperty();
+            p.eyePositionWorld[0] = eyePos.X;
+            p.eyePositionWorld[1] = eyePos.Y;
+            p.eyePositionWorld[2] = eyePos.Z;
         }
 
         World.ToColumnMajor(p.worldColMajor);

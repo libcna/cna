@@ -328,7 +328,19 @@ namespace CNA::Internal::Backends
         /// EnvironmentMapEffect: specular tint from env map, RGB 0..1.
         float envMapSpecular[3] = {0,0,0};
         /// EnvironmentMapEffect: camera world-space position for reflection vector.
+        /// BasicEffect (lit path only): camera world-space position for specular half-vector.
         float eyePositionWorld[3] = {0,0,0};
+        /// BasicEffect: DirectionalLight0/1/2's SpecularColor, zeroed when that light is disabled
+        /// (mirrors the light*Diffuse zeroing — FNA's DirectionalLight.Enabled setter zeroes both).
+        float light0Specular[3] = {0,0,0};
+        float light1Specular[3] = {0,0,0};
+        float light2Specular[3] = {0,0,0};
+        /// BasicEffect: material SpecularColor, applied once to the summed per-light specular
+        /// contribution (not per-light, unlike DiffuseColor which multiplies the light-sum then
+        /// is applied once too — both are single material-level multiplies, matching FNA).
+        float specularColor[3] = {1,1,1};
+        /// BasicEffect: Blinn-Phong specular exponent.
+        float specularPower = 16.0f;
         /// EnvironmentMapEffect: blend amount for the env map contribution [0,1].
         float envMapAmount = 0.0f;
         /// EnvironmentMapEffect: when true, the env-map blend factor is Fresnel-weighted

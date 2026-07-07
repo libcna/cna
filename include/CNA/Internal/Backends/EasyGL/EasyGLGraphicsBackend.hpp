@@ -390,6 +390,11 @@ namespace CNA::Internal::Backends::EasyGL
             int loc_l1diff        = -1;
             int loc_l2dir         = -1;  ///< BasicEffect.DirectionalLight2 (lit shader only)
             int loc_l2diff        = -1;
+            int loc_l0spec        = -1;  ///< BasicEffect.DirectionalLight0/1/2.SpecularColor (lit shader only, Task 886)
+            int loc_l1spec        = -1;
+            int loc_l2spec        = -1;
+            int loc_specularcolor = -1;  ///< BasicEffect.SpecularColor (material, applied once to the light sum)
+            int loc_specularpower = -1;  ///< BasicEffect.SpecularPower (Blinn-Phong exponent)
             int loc_texture       = -1;
             int loc_texture2      = -1;  ///< second sampler (DualTextureEffect only)
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)

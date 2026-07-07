@@ -920,6 +920,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 886: BasicEffect pixel test — real specular highlights
+        cna_easygl_test(cna_test_easygl_basiceffect_specular
+                        examples/easygl_basiceffect_specular_test.cpp)
+        add_test(NAME EasyGL_BasicEffect_Specular
+                 COMMAND cna_test_easygl_basiceffect_specular)
+        set_tests_properties(EasyGL_BasicEffect_Specular PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 168: transformMatrix in SpriteBatch::Begin — translation pixel readback
         cna_easygl_test(cna_test_easygl_transform_matrix
                         examples/easygl_transform_matrix_test.cpp)
@@ -2345,6 +2354,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 886: BasicEffect pixel test — real specular highlights
+        cna_vulkan_test(cna_test_vulkan_basiceffect_specular
+                        examples/vulkan_basiceffect_specular_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_Specular
+                 COMMAND cna_test_vulkan_basiceffect_specular)
+        set_tests_properties(Vulkan_BasicEffect_Specular PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
         cna_vulkan_test(cna_test_vulkan_basiceffect_emissive
                         examples/vulkan_basiceffect_emissive_test.cpp)
@@ -2652,6 +2670,24 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_BasicEffect_MultiLightEmissive
              COMMAND cna_test_bgfx_basiceffect_multilight_emissive)
     set_tests_properties(Bgfx_BasicEffect_MultiLightEmissive PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 886: BasicEffect pixel test — real specular highlights
+    cna_bgfx_test(cna_test_bgfx_basiceffect_specular
+                  examples/bgfx_basiceffect_specular_test.cpp)
+    add_test(NAME Bgfx_BasicEffect_Specular
+             COMMAND cna_test_bgfx_basiceffect_specular)
+    set_tests_properties(Bgfx_BasicEffect_Specular PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 892: BasicEffect lit-textured normal transform under a real camera (Bgfx)
+    cna_bgfx_test(cna_test_bgfx_basiceffect_normaltransform
+                  examples/bgfx_basiceffect_normaltransform_test.cpp)
+    add_test(NAME Bgfx_BasicEffect_NormalTransform
+             COMMAND cna_test_bgfx_basiceffect_normaltransform)
+    set_tests_properties(Bgfx_BasicEffect_NormalTransform PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

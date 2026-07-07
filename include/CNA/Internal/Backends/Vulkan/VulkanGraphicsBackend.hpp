@@ -755,7 +755,10 @@ namespace CNA::Internal::Backends::Vulkan
             std::vector<float>      boneMatrices;              // up to 72 mat4s = 1152 floats
             VkDescriptorSet         skinnedDescSet    = VK_NULL_HANDLE;
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
-            float                   litUboData[20]    = {};    // 5×vec4 = 80 bytes: light1/2 dir+diffuse, emissive
+            // Layout (floats): [0..19]=light1/2 dir+diffuse+emissive (5 vec4, Task 897),
+            // [20..35]=world mat4, [36..39]=eyePos, [40..51]=light0/1/2 specular (3 vec4),
+            // [52..55]=specularColor+specularPower (Task 886/898). 224 bytes total.
+            float                   litUboData[56]    = {};
             VkDescriptorSet         litTexturedDescSet = VK_NULL_HANDLE;
             int32_t                 baseVertex        = 0;     // vertexOffset for vkCmdDrawIndexed
             bool                    useInstanced      = false; // true = Instanced3D pipeline

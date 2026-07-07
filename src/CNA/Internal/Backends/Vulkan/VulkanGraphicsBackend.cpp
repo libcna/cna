@@ -3315,7 +3315,9 @@ namespace CNA::Internal::Backends::Vulkan
     {
         if (descriptorSetLayoutLitTextured_ != VK_NULL_HANDLE) return;
 
-        // binding=0: sampler2D (fragment), binding=1: light1/2+emissive UBO dynamic (fragment).
+        // binding=0: sampler2D (fragment), binding=1: light1/2+emissive+world+specular UBO
+        // dynamic. Vertex stage needs it too (Task 898: world matrix, for a correct world-space
+        // position/normal instead of the wrong MVP-based transform).
         VkDescriptorSetLayoutBinding bindings[2]{};
         bindings[0].binding         = 0;
         bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -3324,7 +3326,7 @@ namespace CNA::Internal::Backends::Vulkan
         bindings[1].binding         = 1;
         bindings[1].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings[1].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
         VkDescriptorSetLayoutCreateInfo li{};
         li.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -3389,7 +3391,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = litTexturedUBO_[frameIdx];
         bufInfo.offset = 0;
-        bufInfo.range  = 80;  // size of one LitLightParams block in the shader
+        bufInfo.range  = 224;  // size of one LitLightParams block in the shader (Task 886/898)
 
         VkWriteDescriptorSet writes[2]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -4409,9 +4411,9 @@ namespace CNA::Internal::Backends::Vulkan
                     if (draw.litTexturedDescSet != VK_NULL_HANDLE && litTexturedUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = litTexturedUBOSlot++;
                         const uint32_t uboOff = slot * kLitTexturedUBOStride;
-                        if (uboOff + 80 <= kLitTexturedUBOStride * kLitTexturedUBOMaxDraws) {
+                        if (uboOff + 224 <= kLitTexturedUBOStride * kLitTexturedUBOMaxDraws) {
                             std::memcpy(static_cast<uint8_t*>(litTexturedUBOPtr_[currentFrame_]) + uboOff,
-                                        draw.litUboData, 80);
+                                        draw.litUboData, 224);
                         }
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 pipelineLayoutLitTextured3D_, 0, 1,
@@ -5046,6 +5048,19 @@ namespace CNA::Internal::Backends::Vulkan
             d.litUboData[14] = params.light2Diffuse[2]; d.litUboData[15] = 0.f;
             d.litUboData[16] = params.emissiveColor[0]; d.litUboData[17] = params.emissiveColor[1];
             d.litUboData[18] = params.emissiveColor[2]; d.litUboData[19] = 0.f;
+            // World matrix (Task 898: needed by the vertex shader for a correct world-space
+            // position/normal, since the 128-byte PC has no spare room for it).
+            for (int wi = 0; wi < 16; ++wi) d.litUboData[20 + wi] = params.worldColMajor[wi];
+            d.litUboData[36] = params.eyePositionWorld[0]; d.litUboData[37] = params.eyePositionWorld[1];
+            d.litUboData[38] = params.eyePositionWorld[2]; d.litUboData[39] = 0.f;
+            d.litUboData[40] = params.light0Specular[0]; d.litUboData[41] = params.light0Specular[1];
+            d.litUboData[42] = params.light0Specular[2]; d.litUboData[43] = 0.f;
+            d.litUboData[44] = params.light1Specular[0]; d.litUboData[45] = params.light1Specular[1];
+            d.litUboData[46] = params.light1Specular[2]; d.litUboData[47] = 0.f;
+            d.litUboData[48] = params.light2Specular[0]; d.litUboData[49] = params.light2Specular[1];
+            d.litUboData[50] = params.light2Specular[2]; d.litUboData[51] = 0.f;
+            d.litUboData[52] = params.specularColor[0]; d.litUboData[53] = params.specularColor[1];
+            d.litUboData[54] = params.specularColor[2]; d.litUboData[55] = params.specularPower;
         } else {
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
@@ -5162,6 +5177,19 @@ namespace CNA::Internal::Backends::Vulkan
             d.litUboData[14] = params.light2Diffuse[2]; d.litUboData[15] = 0.f;
             d.litUboData[16] = params.emissiveColor[0]; d.litUboData[17] = params.emissiveColor[1];
             d.litUboData[18] = params.emissiveColor[2]; d.litUboData[19] = 0.f;
+            // World matrix (Task 898: needed by the vertex shader for a correct world-space
+            // position/normal, since the 128-byte PC has no spare room for it).
+            for (int wi = 0; wi < 16; ++wi) d.litUboData[20 + wi] = params.worldColMajor[wi];
+            d.litUboData[36] = params.eyePositionWorld[0]; d.litUboData[37] = params.eyePositionWorld[1];
+            d.litUboData[38] = params.eyePositionWorld[2]; d.litUboData[39] = 0.f;
+            d.litUboData[40] = params.light0Specular[0]; d.litUboData[41] = params.light0Specular[1];
+            d.litUboData[42] = params.light0Specular[2]; d.litUboData[43] = 0.f;
+            d.litUboData[44] = params.light1Specular[0]; d.litUboData[45] = params.light1Specular[1];
+            d.litUboData[46] = params.light1Specular[2]; d.litUboData[47] = 0.f;
+            d.litUboData[48] = params.light2Specular[0]; d.litUboData[49] = params.light2Specular[1];
+            d.litUboData[50] = params.light2Specular[2]; d.litUboData[51] = 0.f;
+            d.litUboData[52] = params.specularColor[0]; d.litUboData[53] = params.specularColor[1];
+            d.litUboData[54] = params.specularColor[2]; d.litUboData[55] = params.specularPower;
         } else {
             const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;

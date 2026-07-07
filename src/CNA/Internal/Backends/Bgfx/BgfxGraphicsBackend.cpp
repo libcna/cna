@@ -754,6 +754,10 @@ namespace CNA::Internal::Backends::Bgfx
                 light1Diff3DUnif_   = bgfx::createUniform("u_light1Diffuse",  bgfx::UniformType::Vec4);
                 light2Dir3DUnif_    = bgfx::createUniform("u_light2Dir",      bgfx::UniformType::Vec4);
                 light2Diff3DUnif_   = bgfx::createUniform("u_light2Diffuse",  bgfx::UniformType::Vec4);
+                light0Spec3DUnif_   = bgfx::createUniform("u_light0Specular", bgfx::UniformType::Vec4);
+                light1Spec3DUnif_   = bgfx::createUniform("u_light1Specular", bgfx::UniformType::Vec4);
+                light2Spec3DUnif_   = bgfx::createUniform("u_light2Specular", bgfx::UniformType::Vec4);
+                specularColorPower3DUnif_ = bgfx::createUniform("u_specularColorPower", bgfx::UniformType::Vec4);
                 vertexColorEn3DUnif_= bgfx::createUniform("u_vertexColorEnabled3D", bgfx::UniformType::Vec4);
                 texColor3DSampler_  = bgfx::createUniform("s_texColor",       bgfx::UniformType::Sampler);
                 alphaTestUnif_      = bgfx::createUniform("u_alphaTest",      bgfx::UniformType::Vec4);
@@ -826,6 +830,10 @@ namespace CNA::Internal::Backends::Bgfx
         destroyU(light1Diff3DUnif_);
         destroyU(light2Dir3DUnif_);
         destroyU(light2Diff3DUnif_);
+        destroyU(light0Spec3DUnif_);
+        destroyU(light1Spec3DUnif_);
+        destroyU(light2Spec3DUnif_);
+        destroyU(specularColorPower3DUnif_);
         destroyU(vertexColorEn3DUnif_);
         destroyU(lightingEn3DUnif_);
         destroyU(texColor3DSampler_);
@@ -1654,6 +1662,26 @@ namespace CNA::Internal::Backends::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            // Task 892 fix: correct inverse-transpose normal matrix, not the raw World/WVP.
+            float normalMatrixLit[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixLit);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrixLit);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            float spec0[4] = { params.light0Specular[0], params.light0Specular[1],
+                                params.light0Specular[2], 0.0f };
+            bgfx::setUniform(light0Spec3DUnif_, spec0);
+            float spec1[4] = { params.light1Specular[0], params.light1Specular[1],
+                                params.light1Specular[2], 0.0f };
+            bgfx::setUniform(light1Spec3DUnif_, spec1);
+            float spec2[4] = { params.light2Specular[0], params.light2Specular[1],
+                                params.light2Specular[2], 0.0f };
+            bgfx::setUniform(light2Spec3DUnif_, spec2);
+            float specColorPower[4] = { params.specularColor[0], params.specularColor[1],
+                                         params.specularColor[2], params.specularPower };
+            bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
 
             if (bgfx::isValid(texColor3DSampler_))
             {

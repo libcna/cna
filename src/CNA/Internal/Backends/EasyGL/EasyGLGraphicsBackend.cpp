@@ -2397,6 +2397,7 @@ void main()
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec2 aUV;\n"
 "uniform mat4 uWVP;\n"
+"uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
 "uniform float uFogEnabled;\n"
 "uniform float uFogStart;\n"
@@ -2404,11 +2405,13 @@ void main()
 "out vec3 vNormal;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
+"out vec3 vWorldPos;\n"
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vNormal=uNormalMatrix*aNormal;\n"
 "    vUV=aUV;\n"
 "    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+"    vWorldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2416,6 +2419,7 @@ void main()
 "in vec3 vNormal;\n"
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
+"in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uAmbientColor;\n"
@@ -2425,18 +2429,30 @@ void main()
 "uniform vec3 uLight1Diffuse;\n"
 "uniform vec3 uLight2Dir;\n"
 "uniform vec3 uLight2Diffuse;\n"
+"uniform vec3 uLight0Specular;\n"
+"uniform vec3 uLight1Specular;\n"
+"uniform vec3 uLight2Specular;\n"
+"uniform vec3 uSpecularColor;\n"
+"uniform float uSpecularPower;\n"
+"uniform vec3 uEyePosition;\n"
 "uniform vec3 uEmissiveColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
-"    float NdotL0=max(dot(N,-uLight0Dir),0.0);\n"
-"    float NdotL1=max(dot(N,-uLight1Dir),0.0);\n"
-"    float NdotL2=max(dot(N,-uLight2Dir),0.0);\n"
+"    vec3 E=normalize(uEyePosition-vWorldPos);\n"
+"    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
+"    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
+"    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
 "    vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
 "    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
+"    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
+"    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
+"    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
+"    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
 "    FragColor=texture(uTexture,vUV)*vec4(litRGB,uDiffuseColor.a);\n"
+"    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -2444,6 +2460,7 @@ void main()
 
         CompileAndLink(prog_lit_textured_.prog, vsrc, fsrc, "lit+textured");
         prog_lit_textured_.loc_wvp         = prog_lit_textured_.prog.uniform_location("uWVP");
+        prog_lit_textured_.loc_world       = prog_lit_textured_.prog.uniform_location("uWorld");
         prog_lit_textured_.loc_normalmat   = prog_lit_textured_.prog.uniform_location("uNormalMatrix");
         prog_lit_textured_.loc_diffuse     = prog_lit_textured_.prog.uniform_location("uDiffuseColor");
         prog_lit_textured_.loc_ambient     = prog_lit_textured_.prog.uniform_location("uAmbientColor");
@@ -2453,6 +2470,12 @@ void main()
         prog_lit_textured_.loc_l1diff      = prog_lit_textured_.prog.uniform_location("uLight1Diffuse");
         prog_lit_textured_.loc_l2dir       = prog_lit_textured_.prog.uniform_location("uLight2Dir");
         prog_lit_textured_.loc_l2diff      = prog_lit_textured_.prog.uniform_location("uLight2Diffuse");
+        prog_lit_textured_.loc_l0spec      = prog_lit_textured_.prog.uniform_location("uLight0Specular");
+        prog_lit_textured_.loc_l1spec      = prog_lit_textured_.prog.uniform_location("uLight1Specular");
+        prog_lit_textured_.loc_l2spec      = prog_lit_textured_.prog.uniform_location("uLight2Specular");
+        prog_lit_textured_.loc_specularcolor = prog_lit_textured_.prog.uniform_location("uSpecularColor");
+        prog_lit_textured_.loc_specularpower = prog_lit_textured_.prog.uniform_location("uSpecularPower");
+        prog_lit_textured_.loc_eyepos      = prog_lit_textured_.prog.uniform_location("uEyePosition");
         prog_lit_textured_.loc_emissive    = prog_lit_textured_.prog.uniform_location("uEmissiveColor");
         prog_lit_textured_.loc_texture     = prog_lit_textured_.prog.uniform_location("uTexture");
         prog_lit_textured_.loc_alphatest   = prog_lit_textured_.prog.uniform_location("uAlphaTest");
@@ -2768,6 +2791,21 @@ void main()
                 if (p.loc_l2diff >= 0)
                     p.prog.set_uniform(p.loc_l2diff,
                         params.light2Diffuse[0], params.light2Diffuse[1], params.light2Diffuse[2]);
+                // BasicEffect specular (Task 886) -- lit shader only.
+                if (p.loc_l0spec >= 0)
+                    p.prog.set_uniform(p.loc_l0spec,
+                        params.light0Specular[0], params.light0Specular[1], params.light0Specular[2]);
+                if (p.loc_l1spec >= 0)
+                    p.prog.set_uniform(p.loc_l1spec,
+                        params.light1Specular[0], params.light1Specular[1], params.light1Specular[2]);
+                if (p.loc_l2spec >= 0)
+                    p.prog.set_uniform(p.loc_l2spec,
+                        params.light2Specular[0], params.light2Specular[1], params.light2Specular[2]);
+                if (p.loc_specularcolor >= 0)
+                    p.prog.set_uniform(p.loc_specularcolor,
+                        params.specularColor[0], params.specularColor[1], params.specularColor[2]);
+                if (p.loc_specularpower >= 0)
+                    p.prog.set_uniform(p.loc_specularpower, params.specularPower);
             }
             else
             {
@@ -2779,6 +2817,11 @@ void main()
                 if (p.loc_l1diff >= 0) p.prog.set_uniform(p.loc_l1diff, 0.0f,  0.0f, 0.0f);
                 if (p.loc_l2dir  >= 0) p.prog.set_uniform(p.loc_l2dir,  0.0f, -1.0f, 0.0f);
                 if (p.loc_l2diff >= 0) p.prog.set_uniform(p.loc_l2diff, 0.0f,  0.0f, 0.0f);
+                // No lighting: zero every light's specular color regardless of its own
+                // Enabled/SpecularColor forwarding, matching the diffuse-zeroing above.
+                if (p.loc_l0spec >= 0) p.prog.set_uniform(p.loc_l0spec, 0.0f, 0.0f, 0.0f);
+                if (p.loc_l1spec >= 0) p.prog.set_uniform(p.loc_l1spec, 0.0f, 0.0f, 0.0f);
+                if (p.loc_l2spec >= 0) p.prog.set_uniform(p.loc_l2spec, 0.0f, 0.0f, 0.0f);
             }
         }
 

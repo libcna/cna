@@ -6,8 +6,9 @@ layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inUV;
 
 layout(location = 0) out vec2  fragUV;
-layout(location = 1) out vec3  fragNormal;  // world-space (approximated from MVP upper-3x3)
+layout(location = 1) out vec3  fragNormal;  // world-space
 layout(location = 2) out vec4  fragTint;
+layout(location = 3) out vec3  fragWorldPos;
 
 // 128-byte push constant block (all 3D variants share this layout).
 layout(push_constant) uniform PC {
@@ -21,13 +22,34 @@ layout(push_constant) uniform PC {
     float vertexColorEnabled;// offset 124
 } pc;                        // total: 128 bytes
 
+// Task 897/886/898: DirectionalLight1/2 + EmissiveColor + specular data, forwarded via a small
+// UBO since the 128-byte push constant above is already fully packed. `world` is here (not in
+// the PC) purely so this vertex shader can compute a correct world-space position/normal.
+layout(set = 0, binding = 1) uniform LitLightParams {
+    vec4 light1Dir_pad;
+    vec4 light1Diffuse_pad;
+    vec4 light2Dir_pad;
+    vec4 light2Diffuse_pad;
+    vec4 emissiveColor_pad;
+    mat4 world;
+    vec4 eyePos_pad;
+    vec4 light0Specular_pad;
+    vec4 light1Specular_pad;
+    vec4 light2Specular_pad;
+    vec4 specularColorPower;
+} lp;
+
 void main() {
     vec4 pos = pc.mvp * vec4(inPos, 1.0);
     pos.y = -pos.y;
     gl_Position = pos;
     fragUV     = inUV;
-    // Approximate world-space normal using upper-left 3x3 of MVP.
-    // Valid when world transform has no non-uniform scaling.
-    fragNormal = normalize(mat3(pc.mvp) * inNormal);
-    fragTint   = pc.diffuseColor;
+    // Task 898 fix: transform by World's inverse-transpose upper-left 3x3, not the full MVP
+    // (mirrors EnvironmentMapEffect's own already-correct env_map3d.vert.glsl pattern) -- an
+    // MVP-based transform bakes View/Projection into the normal, wrong under any non-identity
+    // camera, not just non-uniform World scale.
+    mat3 normalMatrix = transpose(inverse(mat3(lp.world)));
+    fragNormal   = normalize(normalMatrix * inNormal);
+    fragWorldPos = (lp.world * vec4(inPos, 1.0)).xyz;
+    fragTint     = pc.diffuseColor;
 }
