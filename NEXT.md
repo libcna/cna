@@ -4,940 +4,276 @@
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model
 (`Microsoft::Xna::Framework`), built on SDL3 with a pluggable graphics backend
-(EasyGL/OpenGL ES 3.2, Vulkan, Bgfx, SDL_Renderer, selected via `CNA_GRAPHICS_BACKEND`). It is a
-framework/runtime, not a game — the goal is full XNA 4.0 API coverage with behavior fidelity to
-FNA (`/rv/data/library/github.com/FNA-XNA/FNA`), backed by unit tests plus pixel-readback
-integration tests for graphics.
+(EasyGL/OpenGL ES, Vulkan, Bgfx, SDL_Renderer — selected via the `CNA_GRAPHICS_BACKEND` CMake
+option). It is a framework/runtime, not a game — the goal is XNA 4.0 API coverage with behavior
+fidelity to FNA (`/rv/data/library/github.com/FNA-XNA/FNA` for most namespaces,
+`/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/GamerServices/` for GamerServices), backed by
+unit tests.
 
-**Current phase:** `plan_net.md`'s original plan (Phases 0-9: Net/GamerServices/Avatar port) is
-done. Phase 10 (a CNA-original "Avatar real-rendering" NOXNA/EXT extension — real GPU-skinned-mesh
-rendering engine/pipeline) is also done and merged. Phase 11 (Procedural Avatar Asset Generator,
-a Blender-scripted pipeline) is done except two optional/deferred items (Task 11.16, Task 11.25) —
-see section 3/8 for detail. **Phase 12 (cna-samples-driven networking fixes) is done in full (all four tasks)** —
-the sibling `../cna-samples` repo found three real `NetworkSession`/`GamerServices` bugs while
-porting a real sample; all three are now fixed (Task 12.3 needed a `sharp-runtime` change, which
-the user reviewed and approved), and `ClientServerSample` no longer needs any of its three original
-workarounds — see section 3's top entry for the full account.
+**Current phase:** a fresh second-pass hardening plan, `plan_net.md` ("2026-07-07 Re-Audit and
+Hardening"), covering `Net`, `GamerServices`, and Avatar. The prior first-implementation pass
+(132/132 tasks) is complete and archived at `plan_net_20260707.md`. The new plan has 11 phases;
+**Phase 1 is in progress** (2 of 6 tasks remain), Phase 2 is done, Phases 3-11 have not started.
 
-**Phase 11a (Tasks 11.1-11.9, "one male + one female avatar that draws") and Phase 11b
-(Tasks 11.10-11.12, real C++ engine integration) are both complete.** Real,
-procedurally-generated, animated avatars (both genders) render correctly through the
-real engine on a real window (`examples/demo_avatar --gender male|female`). Getting
-there found and fixed four real bugs along the way (three in Phase 11b's Task 11.11,
-none in Task 11.12) — see `plan_net.md`'s Phase 11 section for the full history, not
-re-narrated here.
-
-**Phase 11c (procedural variety) is now complete: Tasks 11.13-11.15 are all done.**
-Three independent script parameters — `height_scale`, `shoulder_width_scale`,
-`head_scale` — drive real proportion differences at geometry-generation time (Task
-11.13). Two hair styles and two styles each for the Shirt/Pants garment slots now exist,
-selectable per-avatar or exportable as their own standalone `.glb` via the new
-`generate_wardrobe.py` (Task 11.14) — proven to convert cleanly through the existing,
-unmodified `convert_avatar.py`, though the C++ engine has no runtime support yet to
-actually attach a separately-loaded piece onto a running avatar (real, deferred future
-work, not this task). Three new animations — `Stand1`, `Clap`, `Celebrate` — join
-`Stand0`/`Wave` (Task 11.15), bringing total coverage to 5/31 `AvatarAnimationPreset`
-values; getting the two-armed gestures right surfaced a real, non-obvious empirical
-finding about mirroring bone rotations between `.L`/`.R` (see section 3). A real
-elbow/sleeve tearing artifact under bending, plus a handful of zero-weight/
-over-4-influence vertices, remain confirmed-but-not-fixed (documented in
-`tools/avatar_builder/README.md`) — out of scope for 11a/11b/11c.
-
-**Phase 11d is optional/not scheduled (Task 11.16 only). Phase 11e ("Rendering Fidelity
-& Coverage Hardening") is now DONE IN FULL: Tasks 11.17-11.24 are all complete,
-including Task 11.20b, a critical fix.** Opened after a hands-on interactive test
-session (running `examples/demo_avatar` for real, not just headless pixel-readback)
-found the avatar rendered as a uniform skin-tone mannequin with no visible hair/clothing
-color. Task 11.17 fixed `AvatarRenderer::DrawRealEXT`'s `isHair` check (compared
-`part.Name == "hair"`, which never matched real part names) and added
-`ShirtColor`/`PantsColor`/`ShoesColor` to `AvatarAppearanceEXT`. Task 11.18 wired up all 5
-then-existing clips. Task 11.19 added real (if neutral-placeholder) per-part textures.
-Task 11.20 weight-painted the confirmed elbow/sleeve tear. Task 11.21/11.22 added and
-wired up a real runtime wardrobe-attach API. **Task 11.23 brought animation coverage
-to 31/31 `AvatarAnimationPreset` values** (was 5/31) across three batches. Task 11.24
-added a pixel-readback regression test for the Task 11.17 tint-routing bug class.
-
-**Task 11.20b — found and fixed while verifying Task 11.20 — was the session's most
-significant discovery: `SkinnedModelEXT::ComputeBoneTransformsEXT`'s final skinning
-matrix multiplication was in the wrong order** (`worldTransforms[i] *
-InverseBindPoseGlobal[i]` instead of `InverseBindPoseGlobal[i] * worldTransforms[i]`),
-causing any bone with both a nontrivial bind-pose offset *and* a real rotation (i.e. any
-bent limb) to render as a dramatically elongated, partially-detached shape through the
-real GPU-skinned engine — while looking completely correct in Blender, since both
-multiplication orders coincidentally reduce to the identity at rest pose, and every prior
-check (Task 11.11's sanity tests, the existing single-bone integration test, every unit
-test) used only pure translations, which commute regardless of order. Fixed with a
-one-line swap plus a new regression-guarding unit test; confirmed live via
-`examples/demo_avatar`'s `Wave`/`Celebrate` poses, which now show a normal, coherent
-raised arm instead of the "elongated blade" artifact. See `plan_net.md`'s Phase 11e
-section for full task-by-task detail, and section 3 for the session's own narrative.
-
-Only Phase 11d (Task 11.16, optional) and Task 11.25 (speculative, not yet scoped)
-remain open for Phase 11 overall — see section 8.
-
-**Architectural decisions that matter for future work:**
-- `CNA_GamerServices` and `CNA_Net` are separate CMake static libraries (gated by
-  `CNA_ENABLE_NET`), excluded from the main `CNA` GLOB. Avatar types live inside
-  `CNA_GamerServices`.
-- `GamerServices`/`Net`/`Avatar` are XNA-API-shape-compatible but **not** binary-compatible with
-  Xbox Live: `Net` is backed by real ENet (reliable UDP); the faithful `Avatar` port is inert
-  off-Xbox, matching the real reference assembly's own behavior (section 6).
-- Phase 10's real-rendering extension is entirely additive (`NOXNA`/`*EXT`-tagged); it never
-  changes faithful XNA-spec Avatar behavior. Its `NOXNA` marker-macro convention is unrelated to
-  the separate `CNA_NOXNA` CMake option described in `NOXNA.md` — don't conflate them.
-- Phase 11's planned skeleton is a **new, CNA-original bone hierarchy**, authored by the same
-  scripts that author its animations — deliberately not the real Xbox 71-bone hierarchy (Phase 8)
-  and not any external rig convention (Mixamo/Rigify), specifically to avoid the bone-retargeting
-  problems that stopped the prior MakeHuman/CharMorph attempts.
-- `sharp-runtime` (sibling repo, `../sharp-runtime/`) supplies all `System.*` types. It is
-  maintained by a separate, concurrent session — only add new files there; never modify existing
-  files or commit/push without asking the user first, **for every single commit**.
-
----
+**Key architectural decisions (see `CLAUDE.md` for the full rules):**
+- Strict separation: `Microsoft::Xna::Framework::*` types must match real XNA/FNA behavior exactly.
+  `CNA::*` / `NOXNA`-marked / `*EXT`-suffixed members are CNA-original extensions, opt-in only,
+  never required by XNA-compatible code paths.
+- `sharp-runtime` (sibling repo, `../sharp-runtime/`) supplies all `System.*` types via a direct
+  filesystem include path, not a git submodule. Never modify existing `sharp-runtime` files
+  without asking the user first, for every commit.
+- Real networking is ENet-backed (`CNA::Internal::Net::ENetBackend`), star topology only — clients
+  connect directly to the host, never to each other. This matters for the planned host-migration
+  work (Phase 5).
+- Avatar has two parallel surfaces: the faithful XNA `AvatarRenderer` API (intentionally a
+  no-op-by-design, matching real XNA/FNA), and a CNA-original real-rendering extension
+  (`EnableRealRenderingEXT`/`DrawRealEXT`, backed by `SkinnedModelEXT`). The current avatar art
+  pipeline is Blender-script-based (`tools/avatar_builder/`); this pass is planning (not yet
+  started) a shift to author body/head *shape* geometry in the sibling `../mesh-craft` tool
+  (a constructive `.mc3.xml` scene editor, `mc3togltf` exports to glTF) feeding into the existing
+  Blender rig/skin/animation stages — mesh-craft itself has no skeletal-skinning concept.
 
 ## 2. Current status
 
-### Build / test
-Freshly re-verified this session (native Linux, `cmake-build-debug`, clean build + full
-run) after Phase 11e's full Tasks 11.17-11.24 + 11.20b: `CnaTests` — **3225/3227**
-passing, 2 skipped (same two documented hardware-dependent skips,
-`AccelerometerTests`/`GyroscopeTests` `GetCurrentValuePropertyDoesNotThrowWhenSupported`
-— no accelerometer/gyroscope in this container). No regressions. All 3 GPU integration
-tests re-run clean: `cna_test_avatar_real_render` `[PASS]`, and two new ones added this
-session — `cna_test_avatar_attach_part` (Task 11.21) and `cna_test_avatar_tint_routing`
-(Task 11.24), both `[PASS]`. One transient unrelated failure seen mid-session,
-`CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`, confirmed to be a
-pre-existing flaky statistical test (passes 4/5 repeats in isolation), not caused by any
-Avatar work.
-**Updated this session (Phase 12, Tasks 12.1-12.3, all fixed):** native Linux `CnaTests`
-re-verified clean after each task — **3232/3234 passing**, same 2 expected skips, no
-regressions. Two new standalone (non-GTest) executables added:
-`cna_net_gamerservices_dispatcher_harness` (Task 12.1's hang-regression reproduction) and
-the pre-existing `cna_net_two_process_harness`, both still building/passing. Windows/Web/
-Android numbers below were not re-verified this session (Phase 12 only touched
-`Microsoft::Xna::Framework::Net`/`CNA::Internal::Net` source, no platform-specific code) —
-treat as "last known good, from an earlier session," not freshly confirmed:
-- **Windows cross-build** (Wine): clean, **2190/2190**.
-- **Web/Emscripten cross-build** (Node): clean, **Net/Gamer/ENet/Packet/Avatar/Skinned filter:
-  343/343**, 1 intentionally skipped (documented Emscripten platform limit).
-- **Android NDK cross-build**: build compiles cleanly. On-device test run currently impossible —
-  no `/dev/kvm` in this environment (infrastructure limitation, not a code issue).
-
-### What works
-- Real ENet-backed `SystemLink` networking end-to-end on Linux/Windows/Web/Android.
-- Full faithful XNA 4.0 Avatar API port (byte-exact match of the real Microsoft reference
-  assembly's behavior, including its off-Xbox no-op quirks) — Phase 8.
-- **A real, procedurally-generated, animated avatar renders correctly end-to-end, for
-  both genders**: Blender generation (`tools/avatar_builder/`) → glTF export →
-  `convert_avatar.py` → `ContentManager::Load<shared_ptr<SkinnedModelEXT>>` →
-  `AvatarRenderer::EnableRealRenderingEXT`/`DrawRealEXT` → real GPU skinning → a real
-  X11/OpenGL window (`examples/demo_avatar --gender male|female`) — confirmed with actual
-  screenshots, not just "it compiled." `AvatarBodyTypeToContentNameEXT` (Task 11.12) maps
-  `AvatarBodyType::Male`/`Female` to the right generated content. Task 11.13 replaced the
-  old coarse female-only whole-armature scale with three independent, per-call
-  `height_scale`/`shoulder_width_scale`/`head_scale` parameters usable for either gender.
-- Blender 4.3.2 is installed system-wide and confirmed to run fully headless
-  (`blender --background --python script.py`) in this environment.
-- **(Task 11.17)** `AvatarRenderer::DrawRealEXT` now tints each part correctly: hair,
-  shirt, pants, and shoes each get their own `AvatarAppearanceEXT` color instead of every
-  part silently falling back to skin color. `examples/demo_avatar` (Task 11.18) cycles
-  through all 5 baked animation clips.
-
-### What does not work / does not exist yet
-- The procedural rig has a confirmed elbow/sleeve tear under bending and some
-  zero-weight/over-4-influence vertices (see section 5) — not fixed, out of scope for
-  Phase 11a/11b/11c; confirmed (Task 11.18) to be visibly worse on `Stand1`/`Celebrate`
-  than on `Stand0`/`Wave` when rendered through the real engine.
-- No real per-part textures — `avatar.skinnedmodel.json` never emits a texture reference,
-  so solid-color tint (Task 11.17) is the only color signal that reaches the GPU (Task 11.19).
-- No runtime wardrobe attach — a standalone-converted wardrobe piece (Task 11.14) can be
-  converted but never actually worn by an already-loaded, running avatar; `SkinnedModelEXT`
-  has no compose/attach API, only load-time `AddPartEXT` (Task 11.21).
-- Only 5/31 `AvatarAnimationPreset` values have real baked clips (Task 11.23).
-- FFmpeg-backed video decoding unavailable on Windows/Emscripten/Android cross-builds.
-- A real browser tab can never be a `NetworkSession` host; LAN broadcast discovery doesn't exist
-  on Web at all. Both permanent platform constraints.
-- `AvatarDescription::BeginGetFromGamer`'s disposed-`Gamer` throw path has no test.
-- Android's `TitleContainer::OpenStream` `SDL_LoadFile` fallback segfaults without a real
-  JNI/Activity context.
-
----
+- **Build status:** last known-good build is at commit `77beeeed` (2026-07-07 19:07), configured
+  with `-DCNA_GRAPHICS_BACKEND=EASYGL` in `cmake-build-debug/` (confirmed via `CMakeCache.txt`).
+  The one commit since (`f6b74020`) is docs-only — no source changed, so the build should still be
+  current, but it has not been re-verified.
+- **Test status:** full `CnaTests` suite was **3405/3405 passing** (2 expected skips —
+  `AccelerometerTests`/`GyroscopeTests`, hardware-dependent) as of `77beeeed`. Not rerun since.
+- **Tools/apps available:** 24+ demo executables build directly under `cmake-build-debug/` (e.g.
+  `cna_demo_avatar`, `cna_demo_avatar_animation_gallery`, `cna_demo_net_avatar_sync`).
+  `tools/avatar_builder/` (Blender/`bpy` procedural avatar generator, offline, produces
+  body+skeleton+animations). `tools/avatar_asset_pipeline/convert_avatar.py` (MakeHuman body +
+  Mixamo animation clips → CNA's own `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin`).
+- **Recently implemented:** `NetworkSession`'s destructor now falls back to `Dispose()` if not
+  already disposed (fixes a real bug — see section 3).
+- **Confirmed-correct, left unchanged:** `NetworkMachine::RemoveFromSession`,
+  `NetworkSession::BeginCreate`'s hardcoded-69 `maxGamers` quirk, and
+  `PropertyDictionary::CopyTo`'s always-throw are all genuine, source-verified FNA fidelity, not
+  bugs.
+- **Known working demo:** `cna_demo_avatar --gender male|female [--wardrobe-hair Cap|Ponytail]`
+  renders a real, procedurally-generated, animated avatar through the real engine (confirmed
+  working as of the prior 132-task pass; not re-verified this session).
+- **Does NOT work yet:** `Guide.BeginShowMessageBox` (always throws `NotSupportedException`),
+  `Guide.BeginShowKeyboardInput` (always returns an empty string), achievement/leaderboard
+  persistence (in-memory only, not confirmed to survive process exit), `AllowHostMigration`
+  (stored, no effect — host disconnect always ends the session immediately), `SimulatedLatency`/
+  `SimulatedPacketLoss` (stored, no effect on real traffic), and avatar mesh quality (a confirmed
+  elbow/sleeve tear and vertex-weight gaps — see section 5 — are the actual root cause of the
+  "avatars look like monsters" complaint that triggered this whole re-audit pass, not yet fixed).
 
 ## 3. Recent changes
 
-- **Phase 12 fully resolved (this session) — cna-samples-driven networking fixes, all
-  four tasks done.** The sibling `../cna-samples` repo ported `ClientServerSample`
-  (#091), the first real caller of `NetworkSession`/`GamerServices` outside CNA's own
-  unit tests, and found three real bugs (`DEFERRED.md` items #19-21) that no existing
-  test caught. Also did a full retroactive audit of `plan_net.md`'s Phases 0-7: their
-  checkboxes had been left unchecked despite the underlying work being complete (same
-  stale-checkbox issue already fixed once for Phase 8) — confirmed via direct file
-  inspection and checked off to match reality.
-  - **Task 12.1 (fixed):** `GamerServicesDispatcher::Update()` is a permanently empty
-    no-op (confirmed true in real FNA too, not just CNA), so `NetworkSession::Create`/
-    `Find`/`Join` spun forever (99% CPU) whenever a `GamerServicesComponent` existed —
-    i.e. whenever any real sample's own constructor matched its C# original. Fixed by
-    initializing `NetworkSessionAction::isCompleted_` to `true` instead of the prior
-    `false` default (every `Begin*` action already does all its real work synchronously
-    inside `End*`, so there's no real pending operation to wait on). Regression test runs
-    as a genuinely separate OS process (`tools/net/gamerservices_dispatcher_harness.cpp`
-    + `GamerServicesDispatcherHangRegressionTest.cpp`), since
-    `GamerServicesDispatcher::Initialize()` sets an unresettable process-lifetime static.
-  - **Task 12.2 (fixed):** `NetworkGamer::IsHost`/`Id` were hardcoded `true`/`0` stubs, so
-    `NetworkSession.IsHost` was always true everywhere and `FindGamerById` always
-    resolved to the first gamer regardless of the id requested. Discovered that
-    `ENetBackend.cpp` already had a complete, real, cross-machine-consistent per-gamer
-    "wire-id" system that just wasn't surfaced through the public API — added
-    `NetworkGamer::SetId`/`SetIsHost` (NOXNA) and wired them through `NetworkSession`'s
-    constructor (gained a `bool isHost` param: `true` from `EndCreate`, `false` from
-    `EndJoin`/`EndJoinInvited`) and `ENetBackend.cpp`'s wire-id assignment sites. Scoped,
-    documented limitation: a remote gamer representing the actual host machine still
-    reports `IsHost == false` from a non-host client's view (the wire roster carries no
-    host flag) — a strict improvement over today (every gamer used to say `true`), not a
-    full fix.
-  - **Task 12.3 (fixed, in two stages):** traced the "initial `GamerJoined` fires a
-    frame late" bug against the real `ClientServerGame.cs` reference source and first
-    found BOTH originally-proposed fixes (raise in the constructor; drain the queue
-    before `Create()`/`Join()` return) couldn't work, and either would have actively
-    regressed the sample — subscription (`HookSessionEvents()`) always happens strictly
-    *after* `Create()`/`Join()` already returned, so anything fired before that point
-    fires into zero subscribers. Real XNA's `GamerJoined` is documented to replay itself
-    immediately upon `+=` subscription for every already-present gamer —
-    `System::EventHandler<T>` (`sharp-runtime`) had no hook for that. **Presented this
-    exact analysis to the user, including a concrete proposed fix (a generic, opt-in
-    `SetReplayHook()` on `EventHandler<T>`); the user approved it.** Implemented in
-    `sharp-runtime` (`develop` commit `69661c2`, 4 new tests, full 9086-test suite
-    re-run clean) and wired into `NetworkSession`'s constructor (`feature/net` commit
-    `ab05395`) — its former "queue a GamerJoin event per initial gamer" loop was
-    removed (would have double-fired otherwise); `AddRemoteGamer`'s own queuing for
-    genuinely live, mid-session joins is untouched. Updated/added `NetworkSessionTests.cpp`
-    cases and fixed two `ENetBackendTests.cpp` cases that needed a `joinCount` reset
-    after subscribing; verified the new tests catch a real regression by reverting the
-    fix and confirming they fail, then restoring.
-  - Full suite after all of 12.1-12.3: **3232/3234 passing**, 2 expected skips
-    (unchanged accelerometer/gyroscope). All commits pushed to `feature/net`
-    (`08171ac`, `81f10b5`, `f0b0499`, `ab05395`).
-  - **Task 12.4 (DONE, in two rounds, same session):** in `../cna-samples`, removed all
-    three of `ClientServerSample`'s original workarounds — round 1 (omitted
-    `GamerServicesComponent`; local `isHost_` tracking) right after Tasks 12.1/12.2
-    landed, round 2 (the extra `Update()` call after `HookSessionEvents()`) right after
-    Task 12.3's real fix landed. `../cna-samples` builds against a *separate* checkout
-    of this repo (`../cna` relative to it, not this `cna_net` working copy) — that
-    checkout was on stale `develop`, so temporarily checked out `feature/net` there
-    (local only, not merged/pushed to `develop` — a separate decision for whoever
-    manages that branch) and fast-forwarded it as each fix landed; `cna`'s own
-    `../sharp-runtime` reference resolves to the same real `sharp-runtime` checkout, so
-    no separate syncing was needed for Task 12.3's library change.
-    Live-verified both rounds: round 1 with real `xdotool` keypresses (no hang, real
-    `"Stub Gamer (server)"` label, tank moves); round 2's `xdotool` was flaky instead
-    (confirmed environmental via a real-desktop retry *and* a fully isolated `Xvfb`
-    display with no window manager, both failing identically) — fell back to
-    `cna-samples`' own established debug-auto-trigger pattern (temporary, removed
-    before commit) and confirmed the fix live that way: no crash, no manual `Update()`
-    needed. A genuine two-instance host+client test hit a separate, pre-existing
-    `ENetDiscoveryService` two-process discovery limitation on this container (not a
-    regression, in either round). `ClientServerSample` now has **zero** of its original
-    three workarounds. Updated `ClientServerSample/missing.md` and `DEFERRED.md` (items
-    #19/#20/#21 all ✅ resolved) in `cna-samples`, committed and pushed to its `develop`
-    (`3197b06`, `8a8300d`, `ef1e930`, `afb7cd0`). **Not done:** re-attempting to port
-    NetworkPrediction (#100)/PeerToPeer (#103) — a separate, larger task than
-    "cleanup," left for the user to request explicitly.
+Since the prior 132-task pass closed out (`a3f1c618`), in order:
 
-- **Tasks 11.17-11.18 done (this session) — Phase 11e opened.** A hands-on interactive
-  test of `examples/demo_avatar` (actually running it under X11 and screenshotting, not
-  just confirming it launches) found the avatar rendered as a uniform tan mannequin with
-  no visible hair/clothing color. Root cause (Task 11.17): `AvatarRenderer::DrawRealEXT`
-  computed `const bool isHair = part.Name == "hair"`, but real part names are
-  `CNAAvatarBody`/`Hair`/`Shirt`/`Pants`/`Shoes` — the comparison never matched, so every
-  part (including actual hair) rendered in skin color. Fixed with a new private
-  `AvatarRenderer::PartTintEXT(name)` helper that substring-matches
-  Hair/Shirt/Pants/Shoes, and `AvatarAppearanceEXT` grew `ShirtColor`/`PantsColor`/
-  `ShoesColor` (defaults mirror `generate_materials.py`'s placeholder palette) so
-  clothing has its own tint instead of an implicit skin-color fallback. Added 6 new
-  `AvatarAppearanceEXTTest` cases. Verified visually: before the fix a uniform tan
-  mannequin, after it a mannequin with distinct dark-brown hair / blue shirt / navy
-  pants / near-black shoes — screenshotted both states.
-  Task 11.18 regenerated the demo's committed `Content/avatar/{male,female}/` (via
-  `generate_avatar.py` → `convert_avatar.py --embedded-clips`) so all 5 baked clips
-  (`Stand0`/`Stand1`/`Wave`/`Clap`/`Celebrate`) are present — previously the shipped demo
-  content only had `Stand0`/`Wave`, even though the other 3 existed in the pipeline since
-  Task 11.15. Female content was additionally rebaked with the `Ponytail`/`LongSleeve`/
-  `Shorts` wardrobe variant to visually prove Task 11.14's baked-in styling. Extended
-  `AvatarDemo` so `Space` cycles through all 5 clips (previously toggled only 2) and the
-  window title shows the active clip. This was also the first time `Stand1`/`Clap`/
-  `Celebrate` were rendered through the real GPU-skinning path (previously validated only
-  via Blender-side pose-bone dumps, per Task 11.15) — confirmed the already-documented
-  elbow/sleeve tear is visibly worse on these two-arm poses than on `Stand0`/`Wave`.
-  Full `CnaTests` re-run clean after both changes: 3216/3218 passing (unchanged), plus
-  the 6 new `AvatarAppearanceEXTTest` cases. Opened Phase 11e in `plan_net.md` with Tasks
-  11.17-11.25 (11.17/11.18 done; 11.19 real textures, 11.20 elbow/sleeve tear fix, 11.21
-  runtime wardrobe attach, 11.22 wiring the demo to it, 11.23a/b/c the remaining 26/31
-  animation presets in batches, 11.24 a tint-routing regression test, 11.25 speculative
-  future appearance-model work — not started).
+- `eefaeea3` — archived `plan_net.md` → `plan_net_20260707.md` (132/132 done); wrote a fresh
+  `plan_net.md` for this second-pass hardening plan.
+- `f7daecea` — Phase 1 investigation only: confirmed `NetworkMachine::RemoveFromSession` and
+  `BeginCreate`'s hardcoded `maxGamers=69` are genuine FNA fidelity. No code change.
+- `77beeeed` — **fix**: `NetworkSession::~NetworkSession()` now calls `Dispose()` if not already
+  disposed. Previously, deleting a session without an explicit `Dispose()` call left the
+  `activeSession_` process-wide singleton dangling and skipped ENet transport teardown —
+  permanently blocking any new session for the rest of the process. 2 new tests added
+  (`NetworkSessionTests.cpp`); verified via revert-verify-restore (tests fail without the fix).
+  Full suite 3405/3405.
+- `f6b74020` — docs only: confirmed `PropertyDictionary::CopyTo`'s always-throw is genuine,
+  source-verified FNA fidelity (checked FNA's real `PropertyDictionary.cs` directly), not a bug —
+  a "fix" was implemented, then fully reverted after verification.
 
-- **Task 11.15 done (an earlier session) — Phase 11c complete:** three new
-  Blender Actions in `generate_animations.py` — `Stand1` (a second idle: `Hips` X-sway +
-  `Spine1` Y-axis twist, deliberately shaped differently from `Stand0`'s Z-bob + X-rock),
-  `Clap` (both arms raise to chest height, both forearms oscillate their fold four times
-  in sync — a crude, symmetric, non-IK approximation of clapping), and `Celebrate` (both
-  arms raise to Wave's own already-verified 80° magnitude and hold, with a double `Hips`
-  bounce) — join `Stand0`/`Wave`, for 5/31 `AvatarAnimationPreset` values covered (still
-  a small fraction, not a claim of full coverage). New `_raise_upper_arm`/
-  `_fold_lower_arm` helpers encapsulate the sign conventions for mirroring an arm gesture
-  from `.R` onto `.L`. No C++ changes needed — `AvatarAnimationPresetToClipNameEXT`
-  already mapped all three preset names to clip-name strings from Phase 8/10.
-  **Found a real, two-layered empirical gotcha, the hard way, through two wrong
-  intermediate attempts:** mirroring `Wave`'s `UpperArm.R`/`LowerArm.R` convention onto
-  `.L` does not follow one consistent sign rule, and testing each joint in isolation
-  gives a wrong answer for one of the two. `UpperArm`'s raise axis (local Z) needs an
-  opposite-signed angle between `.L`/`.R` for the same physical motion, confirmed
-  consistently whether tested alone or combined with a forearm fold — but `LowerArm`'s
-  fold axis (local X), which *also* tests as opposite-signed **if posed alone** (upper
-  arm at rest), needs the *same* sign once the upper arm is *actually raised* — because a
-  child bone's local rotation composes with its parent's current (already-rotated) world
-  transform, not its rest transform, so an isolated single-bone test silently assumes a
-  resting parent that stops being true the moment the arm is raised. A first `Celebrate`
-  attempt also used an untested, bigger raise angle (150°) that looked plausible from one
-  camera angle but was clearly wrong from a better one (elevated, angled down at the
-  figure) — fixed by reusing Wave's own 80°. **Verified well beyond "the actions exist
-  with a nonzero frame range":** rendered every new animation's key pose on the clothed
-  avatar from multiple camera angles and numerically dumped pose-bone values at every
-  keyframe to confirm exact, correctly-mirrored angles. Ran the full pipeline
-  (`generate_avatar.py` both genders → `validate_gltf.py`, extended to require all 5
-  animations → `convert_avatar.py --embedded-clips`, unmodified) and confirmed all 5
-  clips convert cleanly with correct track/duration counts. Confirmed `Clap`'s peak fold
-  shows the same already-known elbow/sleeve tear as `Wave`'s — consistent, not a new
-  regression. Confirmed `generate_animations.py`'s own standalone run still produces
-  byte-identical `Stand0`/`Wave` values — full backward compatibility. `plan_net.md` Task
-  11.15 checked off — **this completes Phase 11c (Tasks 11.13-11.15) in full**; only
-  Phase 11d (Task 11.16, optional/future) remains for Phase 11 overall.
-- **Task 11.14 done:** two new hair styles/clothing-slot variants and a
-  new standalone-piece exporter. `generate_hair.HAIRSTYLES` now offers `Cap` (the
-  original Task 11.5 helmet shape, still the default) and a new `Ponytail` (same cap plus
-  a tapered `bmesh`-cone tail drooping down the back of the head); `build_hair()` gained
-  a `style=` parameter. `generate_clothes.GARMENT_STYLES` now offers two styles each for
-  the `Shirt` (`TShirt`/`LongSleeve`) and `Pants` (`Pants`/`Shorts`) slots (`Shoes` keeps
-  its one style); `build_clothes()` gained a `styles=` parameter, defaulting to
-  `DEFAULT_STYLES` which reproduces the exact pre-Task-11.14 bone lists — the built
-  object is always named after its *slot*, never its style. `generate_avatar.py` gained
-  `--hair-style`/`--shirt-style`/`--pants-style` CLI flags (all defaulting to prior
-  behavior). New `generate_wardrobe.py` builds and exports exactly ONE hair style or
-  clothing variant as its own standalone `.glb` (armature + that one piece only) — the
-  "separate attachable GLB piece" the task asks for. **No changes were needed to
-  `tools/avatar_asset_pipeline/convert_avatar.py` or any C++ code**: the converter
-  already accepts any GLB with one skin and N meshes (no "body must be present"
-  assumption), confirmed by converting a standalone `hair_ponytail.glb` and getting a
-  clean `avatar.skinnedmodel.json` (19 bones, 1 part) with the unmodified script;
-  `AvatarRenderer`/`SkinnedModelEXT` load/draw exactly one model today, so actually
-  attaching a separately-loaded piece onto a running avatar at draw time is real, future
-  engine work, explicitly out of scope here. **Verified well beyond "the script accepts
-  a style argument":** rendered `Ponytail` from the side (a clearly distinct drooping
-  tail vs. `Cap`'s plain dome) and rendered `LongSleeve`/`Shorts` on a full-body avatar
-  (sleeve visibly reaches the wrist; pant leg visibly stops above the knee). Reopened
-  three example wardrobe-piece exports in a fresh Blender session each: one real mesh
-  object parented to one 19-bone `CNAAvatarSkeleton` (plus the same cosmetic
-  `neutral_bone`/`Icosphere` widget already documented under Task 11.7, when that piece
-  has its own zero-weight vertices). Confirmed every touched script's own standalone run
-  still produces the exact pre-Task-11.14 vertex counts (25 hair, 348/290/116
-  Shirt/Pants/Shoes, 6-object combined export) — full backward compatibility. Found and
-  documented one real nuance: two independently-converted pieces for the same avatar can
-  get different total bone counts in their own `skeleton.bin` (each exporter's synthetic
-  `neutral_bone` joint depends on that mesh's own zero-weight vertices), though both
-  always agree on the shared 19-bone canonical prefix. `plan_net.md` Task 11.14 checked
-  off; `tools/avatar_builder/README.md` updated with a new "Wardrobe pieces" section and
-  refreshed hair/clothes/CLI text.
-- **Task 11.13 done — Phase 11c underway:** replaced the old,
-  coarse `if gender == "female": armature_obj.scale = (0.93,)*3` post-build hack with
-  three independent, real geometry-generation-time parameters:
-  `height_scale` (uniform, all bone positions), `shoulder_width_scale` (X-axis only, arm
-  chain bones only — `Shoulder.L/R` through `Hand.L/R`), and `head_scale` (the `Head`
-  bone's own flesh/hair/morph radius, independent of `height_scale`). Threaded an
-  optional `bones=` parameter (default `None` → falls back to the canonical
-  `generate_skeleton.BONES`, preserving exact backward compatibility) through every
-  consumer: `generate_skeleton.build_bones()` (new — produces a scaled bone list),
-  `generate_body.build_body()`, `generate_clothes.build_clothes()`/`_build_garment()`,
-  `generate_hair.build_hair()`, `generate_morphs.build_morphs()` (the latter two also
-  gained a shared `_head_center_and_radius(bones, head_scale)` helper, replacing
-  module-level `HEAD_CENTER`/`HEAD_RADIUS` constants that couldn't vary per call).
-  `generate_avatar.py`'s `GENDER_PRESETS` dict (`male`: all `1.0`; `female`: `0.93`/
-  `0.85`/`0.97`) now supplies `build_avatar()`'s starting point, with new
-  `--height-scale`/`--shoulder-width-scale`/`--head-scale` CLI flags overriding any of
-  the three individually regardless of `--gender`. Conceptually echoes
-  `AvatarDescription`'s customization intent (height, build) without attempting to
-  reconstruct its real, undocumented byte format. **Verified well beyond "the scripts
-  accept new arguments":** rendered 4 parameter combinations (default male, default
-  female, an exaggerated "big head/narrow shoulders" combo, an exaggerated "tall and
-  wide" combo) and visually confirmed each parameter changes exactly its intended part of
-  the body, independently of the others. Also re-ran `validate_gltf.py`,
-  `convert_avatar.py --embedded-clips`, and the Task 11.11 exact-math rest-pose identity
-  check (`ComputeBoneTransformsEXT` output bit-for-bit identity at rest pose) against a
-  custom-parameter export at non-unit scale — all still pass, confirming the scaling
-  doesn't disturb the bind-pose math. Confirmed every touched script's own standalone
-  `if __name__ == "__main__"` run still produces byte-identical output to before this
-  refactor (no default-behavior regression). `plan_net.md` Task 11.13 checked off;
-  `tools/avatar_builder/README.md` updated with a new "Parametric body variation" section
-  and refreshed CLI/status text.
-- **Task 11.12 done — Phase 11b complete:** new NOXNA
-  `AvatarBodyTypeToContentNameEXT(AvatarBodyType)`
-  (`include`/`src/.../GamerServices/AvatarBodyTypeNamesEXT.hpp`/`.cpp`, mirroring
-  `AvatarAnimationPresetToClipNameEXT`'s existing pattern) maps `Male`/`Female` to
-  `"avatar/male/avatar"`/`"avatar/female/avatar"` — the single, explicit call-site
-  convention. Confirmed (by reading `AvatarDescription.cpp`) that
-  `getBodyTypeProperty()` really never carries usable data (permanently lazy-inits to
-  `Female`), so deriving this from `AvatarDescription` genuinely wasn't an option, not
-  just an assumption. 4 new unit tests
-  (`tests/.../GamerServices/AvatarBodyTypeNamesEXTTests.cpp`). `examples/demo_avatar`'s
-  `AvatarDemo` now takes an `AvatarBodyType` constructor argument (default `Male`);
-  `Main.cpp` parses a new `--gender male|female` CLI flag. Generated and committed real
-  female content into `examples/demo_avatar/Content/avatar/female/` (Task 11.10's
-  converter, unchanged). **Verified beyond "the function returns the right string":**
-  ran `cna_demo_avatar --gender female` on a real X11 window and screenshotted it —
-  renders the distinct, correctly-scaled female body (0.93× overall), proving the
-  mapping drives real content selection end to end. Full regression: all 3216
-  non-skipped `CnaTests` pass (3212 + 4 new). `plan_net.md` Task 11.12 checked off.
-  **This completes Phase 11b (Tasks 11.10-11.12) in full.**
-- **Task 11.11 done:** new `examples/demo_avatar/` (`cna_demo_avatar`,
-  gated like `cna_test_avatar_real_render` on `CNA_ENABLE_NET` + EasyGL/Vulkan) loads
-  real Task 11.10 content (`Content/avatar/male/avatar.skinnedmodel.json`, committed
-  into the demo's own `Content/`) via `ContentManager`, calls
-  `EnableRealRenderingEXT`/`SetAppearanceEXT`, and calls `DrawRealEXT("Stand0"/"Wave",
-  ...)` every frame (Space toggles clips, arrows orbit the camera). **Verified with
-  actual screenshots** (`import`/`xwininfo` against a real X11 window, not just "it
-  compiled"): a complete, correctly-proportioned, animated humanoid renders; `Wave`
-  visibly bends the arm.
-  Getting a recognizable figure on screen took **three rounds of real bug-hunting**,
-  none catchable by re-reading code — each only surfaced once real camera matrices, a
-  real multi-bone skeleton, and real file-sourced quaternions were involved, none of
-  which Phase 10's synthetic fixture (identity view/projection, one hand-built bone,
-  `Quaternion::Identity` constructed directly in C++) ever exercised:
-  1. `ContentManager.cpp`'s `SkinnedModelTypeReader` resolved manifest paths
-     (`skeleton`/`vertices`/`indices`/`texture`/`clip`) against the content root instead
-     of the manifest's own directory — content in a subdirectory failed to load at all.
-     Fixed: resolve relative to `fs::path(path).parent_path()`.
-  2. `convert_avatar.py`'s Task 11.10 "fix" (transposing `bind_pose_local` to convert
-     glTF column-major to CNA row-major) was itself backwards — the two are actually
-     byte-identical for the same transform (transposing the matrix and swapping major
-     order cancel out). Also found: `inverseBindMatrices`/vertex `JOINTS_0` indices
-     needed the same topological-order remap as Task 11.10's part-vertex fix, just
-     missed for these two. `bind_pose_local` is now derived directly from
-     `inverse_bind_global` via a small dependency-free `_invert4x4()` — correct by
-     construction. Diagnosed via a forced-identity-bones render (proving camera/mesh/
-     shader were already fine) then dumping `ComputeBoneTransformsEXT`'s own output at
-     exact rest pose, which must be identity for every bone by definition.
-  3. **The real show-stopper:** `ContentManager.cpp` itself relied on left-to-right
-     evaluation of `Quaternion(clipReader.Read<float>(), clipReader.Read<float>(), ...)`'s
-     four arguments — unspecified in C++, and the compiler evaluated them in a different
-     order, scrambling which bytes landed in which quaternion component (confirmed via a
-     raw hex dump: true bytes were identity `(0,0,0,1)`; constructed value came out
-     `(1,0,0,0)` — exactly reversed). Fixed by reading each float into its own named
-     local, sequentially, before constructing `Vector3`/`Quaternion` (same latent bug
-     existed for `Translation`/`Scale` too, just invisible for `Translation` by
-     coincidence).
-  All three verified by exact math, not "looks right": at rest pose,
-  `ComputeBoneTransformsEXT`'s output is now bit-for-bit identity for all 20 bones
-  (confirmed via a standalone C++ diagnostic AND independent Python replication against
-  the actual binary files). Full regression check: all 3212 non-skipped `CnaTests` pass,
-  `cna_test_avatar_real_render` (Phase 10's own synthetic test) still passes unmodified.
-  `plan_net.md` Task 11.11 checked off — see it for the complete blow-by-blow.
-- **Task 11.10 done:** ran
-  `tools/avatar_asset_pipeline/convert_avatar.py` against real `male_avatar.glb`/
-  `female_avatar.glb` for the first time (previously only tested against a synthetic
-  fixture). Found and fixed two real bugs, as the plan anticipated:
-  1. Part names in `avatar.skinnedmodel.json` came from the exported mesh's
-     **data-block** name, not its object name — `generate_body.py`/`generate_clothes.py`
-     (Tasks 11.2/11.5) only renamed the Blender object, leaving auto-generated
-     `Cylinder`/`Cylinder.024`-style names to leak through. Fixed at the source: both
-     scripts now also set `obj.data.name`.
-  2. `convert_avatar.py`'s CLI assumed the MakeHuman/Mixamo layout (one body file,
-     separate single-animation clip files); CNA's own pipeline bundles body+skeleton+
-     both clips in one file. Refactored the per-animation logic into a shared
-     `_tracks_from_animation()` helper, added `convert_embedded_clip()` and a new
-     `--embedded-clips` CLI flag (the original `--body`/`--clip` path is unchanged).
-  Verified well beyond "doesn't crash": for both genders, confirmed `skeleton.bin` has
-  valid parent indices and no truncation, every part's vertex/index buffer size divides
-  evenly by its stride, both `.clip.bin` files have consistent track/key counts with no
-  trailing bytes. Cross-checking clip durations (`Stand0` 3.75s, `Wave` 2.5s) against
-  Blender's actual scene fps (24, confirmed via `bpy`) also caught a stale doc bug:
-  `generate_animations.py`'s docstrings claimed "30fps", an assumption from Task 11.6
-  never actually checked. Fixed. `plan_net.md` Task 11.10 checked off.
-- **Task 11.9 done:** documentation coherence pass on
-  `tools/avatar_builder/README.md` — not new code. Most content already existed,
-  written incrementally across Tasks 11.1-11.8; re-read the whole file top to bottom as
-  a newcomer would. Added a new top-of-file "Usage" section (quick start for the
-  top-level driver + validator, plus an explicit standalone-vs-driver explanation —
-  previously only inferable by piecing together each section's own "Verify:" line).
-  Found and fixed two now-stale passages: the body section described the Task 11.6
-  bend-artifact check as still-future (it's done, and found a real tear — rewritten to
-  point at the finding); the materials section implied `Hair`/`Shirt`/`Pants`/`Shoes`
-  had nothing assigning them (Task 11.5 now does — rewritten). Added Task 11.9 to the
-  Status checklist and a "Phase 11a complete" note. `plan_net.md` Task 11.9 checked off,
-  including its own top-of-Phase-11 status line (was still "Not started" — now "11a
-  complete; 11b not started"). **This completes Phase 11a in full.**
-- **Task 11.8 done:** `tools/avatar_builder/validate_gltf.py` (plain
-  `python3`, no Blender) runs 4 checks against a `.glb` via `pygltflib`: non-empty mesh;
-  skin joints cover all 19 canonical bone names; `Stand0`/`Wave` animations present;
-  `Smile`/`Blink` present in some mesh's `extras["targetNames"]`. Fails loudly (nonzero
-  exit, specific `FAIL:` message) rather than silently passing a hollow export.
-  **Required a real prerequisite fix:** `generate_skeleton.py` unconditionally imported
-  `bpy` at module level, which would `sys.exit()` immediately under plain `python3` —
-  moved that import inside `build_skeleton()` (lazy), since `BONES`/`ARMATURE_NAME` are
-  pure data with no bpy dependency and `validate_gltf.py` needs to import them directly
-  rather than duplicate the bone list. Verified beyond the happy path: ran the validator
-  against a nonexistent file, a garbage file, a copy missing the `Wave` animation, and a
-  copy missing the `Blink` shape key — each failed with a distinct, correct message and
-  exit code 1. Both real `male_avatar.glb`/`female_avatar.glb` validate clean. `plan_net.md`
-  Task 11.8 checked off — **Phase 11a's "one male + one female avatar that draws"
-  milestone (Tasks 11.1-11.8) is functionally complete.**
-- **Task 11.7 done:** `tools/avatar_builder/export_gltf.py`'s
-  `export_avatar(output_path, objects)` selects exactly the given objects and calls
-  Blender's glTF2 exporter (GLB, `use_selection=True`, `export_animation_mode="ACTIONS"`
-  so `Stand0`/`Wave` export as separate glTF animations, morphs/skins/Y-up on).
-  `tools/avatar_builder/generate_avatar.py`'s `build_avatar(gender)` clears the scene and
-  runs every Task 11.1-11.6 builder in order; `--gender female` applies a coarse overall
-  `armature_obj.scale = (0.93, 0.93, 0.93)` (explicitly not real proportion
-  differentiation — deferred to Task 11.13). CLI: `blender --background --python
-  generate_avatar.py -- --gender male --out FILE.glb`.
-  Verified beyond the plan's bar: both genders reopen cleanly in Blender with correct
-  objects/parenting/actions/shape keys; running the male export twice gives
-  byte-identical JSON and a binary buffer differing by exactly 1 float32 ULP (Blender
-  solver rounding noise, not a real difference) — satisfies the plan's explicit
-  "byte-identical or near-identical" allowance. Also confirmed by direct inspection: 24
-  `CNAAvatarShirt` vertices exceed glTF's 4-joint-influence limit (trimmed/renormalized
-  by the exporter), and 32 `CNAAvatarBody` vertices have zero bone weight (covered by a
-  synthetic `neutral_bone` joint the exporter adds; reopening in Blender shows this as a
-  cosmetic `Icosphere` widget that isn't actually in the exported file). None of this
-  breaks anything; documented as known gaps for a future weight-painting pass alongside
-  the Task 11.6 elbow tear. `plan_net.md` Task 11.7 checked off.
-- **Task 11.6 done:** `tools/avatar_builder/generate_animations.py`
-  builds `Stand0` (idle: subtle `Hips` bob + `Spine1` rock, looping over 90 frames) and
-  `Wave` (right-arm raise + elbow-fold oscillation, 60 frames) as Blender Actions via
-  `build_animations()`, named to match `AvatarAnimationPreset` exactly. The first `Wave`
-  attempt keyframed `LowerArm.R`'s rotation on its own length axis — an invisible twist
-  on a round cylinder — caught only by rendering it and seeing no visible change;
-  switched to a different local axis, confirmed visible via render. Verified headless
-  (both actions exist with nonzero frame range) and visually (render sequence shows a
-  real raise/fold). **Also finally did the bend-artifact visual check deferred since
-  Task 11.2:** posed the clothed avatar through `Wave`'s peak fold and confirmed a real,
-  visible tear — the forearm/hand separate from the shirt sleeve at the elbow. This is
-  the expected automatic-weights limitation, now confirmed rather than assumed; a manual
-  weight-painting correction pass is still needed and explicitly not done (out of scope
-  for this "functional, not polished" milestone — see
-  `tools/avatar_builder/README.md`). `plan_net.md` Task 11.6 checked off.
-- **Task 11.5 done:** `tools/avatar_builder/generate_clothes.py` builds
-  `CNAAvatarShirt`/`CNAAvatarPants`/`CNAAvatarShoes` as offset-shell meshes (cylinder+
-  joint-sphere per covered bone, at `generate_body.BONE_RADII` plus outward padding),
-  each its own object, parented to the skeleton with `ARMATURE_AUTO` weights and its
-  matching material assigned. `tools/avatar_builder/generate_hair.py` builds
-  `CNAAvatarHair`, a literal helmet-like cap (a `bmesh` hemisphere, open at the bottom)
-  sized just outside the head, likewise auto-weighted and materialed. Promoted
-  `generate_body.py`'s `_add_cylinder_segment`/`_add_joint_sphere` to public
-  `add_cylinder_segment`/`add_joint_sphere` so both new scripts can reuse them. Verified
-  headless (vertex groups/materials correct for all 4 new objects) and with a manual
-  full-avatar render combining Tasks 11.1-11.5 — a recognizable, if crude, clothed
-  figure (hair, short-sleeve shirt, pants, shoes all visually distinct). `plan_net.md`
-  Task 11.5 checked off.
-- **Task 11.4 done:** `tools/avatar_builder/generate_morphs.py` adds
-  `Smile`/`Blink` shape keys to the Task 11.2 body mesh via `build_morphs()`. Since the
-  head is a single low-poly UV sphere with no separate eye/mouth geometry, vertex
-  selection is done by the sphere's fixed latitude-ring `z/radius` ratios and
-  forward-facing (`+Y`) position, not real facial topology — an explicitly crude,
-  documented placeholder (`tools/avatar_builder/README.md`'s "Adding more morphs"
-  section explains why this approach should be replaced, not refined, once a real head
-  exists). Verified headless (both shape keys exist, each displaces at least one vertex
-  by a non-trivial amount) and with a manual render at `value=1.0` showing a visibly
-  different, if crude, head shape. `plan_net.md` Task 11.4 checked off.
-- **Task 11.3 done:** `tools/avatar_builder/generate_materials.py` builds
-  5 flat-color Principled BSDF materials (`CNAAvatarSkin/Hair/Shirt/Pants/Shoes`, no
-  texture maps) via `build_materials()`, and assigns `Skin` as the Task 11.2 body mesh's
-  sole material slot via `assign_body_material()`. `Hair`/`Shirt`/`Pants`/`Shoes` exist
-  but aren't assigned anywhere yet — no hair/clothing geometry until Task 11.5. Verified
-  headless (all 5 materials exist, `Skin` is the body's only slot) and with a manual
-  `BLENDER_WORKBENCH` material-preview render confirming the skin tone actually renders.
-  `plan_net.md` Task 11.3 checked off.
-- **Task 11.2 done:** `tools/avatar_builder/generate_body.py` builds one
-  cylinder+joint-sphere "flesh" primitive per bone directly from Task 11.1's own `BONES`
-  head/tail positions, joins them into a single `CNAAvatarBody` mesh, and parents it to
-  the skeleton via `parent_set(type='ARMATURE_AUTO')`. Verified headless: all 19 bones
-  get a non-empty vertex group (1086 vertices). A manual `BLENDER_WORKBENCH` render
-  (T-pose) plus a pose-mode elbow/knee bend test showed reasonable proportions and no
-  mesh tearing — **not** the plan's full bend-artifact check, which needs Task 11.6's
-  real test animations and is still pending; automatic weights will very likely still
-  need manual correction once those exist. `plan_net.md` Task 11.2 checked off.
-- **Task 11.1 done:** `tools/avatar_builder/generate_skeleton.py` builds
-  `CNAAvatarSkeleton`, a new CNA-original 19-bone biped armature, via `bpy` edit-mode bone
-  creation (`Hips, Spine, Spine1, Neck, Head, Shoulder.L/R, UpperArm.L/R, LowerArm.L/R,
-  Hand.L/R, UpperLeg.L/R, LowerLeg.L/R, Foot.L/R`). Exposes `build_skeleton()`/`BONES` for
-  reuse by later scripts (`generate_avatar.py`, Task 11.7). Full bone/parent/head/tail table
-  documented in `tools/avatar_builder/README.md` as the single source of truth. Verified:
-  `blender --background --python tools/avatar_builder/generate_skeleton.py` runs clean and
-  asserts every bone name/parent against the documented table. `plan_net.md` Task 11.1 checked
-  off.
-- **Fixed a content bug from the prior session:** the commit that renamed `NEXTnet.md` to
-  `NEXT.md` had accidentally overwritten it with stale `Devices`-branch content instead of this
-  file's actual Net/Avatar handoff content. Restored from git history (`NEXTnet.md`'s last
-  version before deletion, commit `83999f0~1`).
-- **`plan_net.md` updated** (docs-only, no code): Phase 8 (Avatar) and Phase 9 (docs/audit)
-  checkboxes were checked off retroactively — they were never maintained live in this file even
-  after completion, which made the plan look unstarted despite being done. Added **Phase 10**
-  (Avatar real-rendering NOXNA/EXT extension — marked complete, matching what was actually built
-  and merged) and **Phase 11** (Procedural Avatar Asset Generator — new, not started, with a full
-  task breakdown, Tasks 11.1–11.16). Committed and pushed (`13e068a`).
-- **`NEXT.md` rewritten** as a concise handoff (this file), replacing an earlier, much longer
-  version that had accumulated a full session-by-session narrative. Committed and pushed
-  (`0be2e45`, and this update).
-- **Phase 10 (Avatar real-rendering NOXNA/EXT extension) — committed and pushed** in a prior
-  session (`2b653bc`, `7b56eab`, `1cc42d1`). New types: `Graphics::VertexPositionNormalTextureSkinned`,
-  `Graphics::SkinnedModelEXT`, `GamerServices::AvatarAppearanceEXT`,
-  `AvatarAnimationPresetNamesEXT`. New members: `AvatarRenderer::EnableRealRenderingEXT/
-  IsRealRenderingEnabledEXT/SetAppearanceEXT/DrawRealEXT`, `AvatarAnimation::SetRealClipNameEXT/
-  GetRealClipNameEXT`. New content-pipeline reader (`SkinnedModelTypeReader`). New integration
-  test (`examples/avatar_real_render_integration_test.cpp`, passing). Full detail:
-  `docs/avatar-real-rendering-ext.md`.
-- **A real, unrelated `sharp-runtime` bug was found and fixed** in the same prior session:
-  `String::GetHashCode`'s `h >> 32` shifted by the full width of `std::size_t` on Emscripten's
-  32-bit wasm target. Fixed and pushed (`sharp-runtime@e400f92`) with the user's explicit
-  go-ahead.
-- **Asset-acquisition attempts (MakeHuman, then CharMorph/Blender) were tried and abandoned** in
-  the same prior session — both hit Claude Code permission-classifier stops around
-  downloading/executing third-party tooling or cloning external code. This directly motivated the
-  decision to build Phase 11's fully original, procedural pipeline instead. Nothing from those
-  attempts is part of this repo; a clone of CharMorph exists at `/rv/tmp/charmorph_work/`
-  (outside the repo, untouched, not needed for Phase 11).
-
----
+Two Phase 1 tasks are written into the plan but **not yet implemented**: `AvatarRenderer::Draw`
+and `AvatarRenderer::EnableRealRenderingEXT` both have missing null-argument checks (found by a
+separate read-only inventory pass, confirmed by direct code reading, not yet fixed).
 
 ## 4. Current blocker / main problem
 
-**No technical blocker. Phase 11a (Tasks 11.1-11.9), Phase 11b (Tasks 11.10-11.12), and
-now Phase 11c (Tasks 11.13-11.15) are all complete.** A real, procedurally-generated,
-animated avatar renders correctly in a real window via `examples/demo_avatar --gender
-male|female` — the whole content pipeline (Blender generation → glTF export →
-`convert_avatar.py` → `ContentManager` → `AvatarRenderer::DrawRealEXT`) is proven
-end-to-end for **both** bodies, each confirmed with an actual screenshot. Task 11.13
-replaced the old coarse whole-armature female scale with three independent, real
-proportion parameters (`height_scale`, `shoulder_width_scale`, `head_scale`) applied at
-geometry-generation time. Task 11.14 added a second hair style (`Ponytail`) and a second
-style each for the Shirt/Pants slots (`LongSleeve`/`Shorts`), plus `generate_wardrobe.py`
-to export any one piece as its own standalone, attachable `.glb` — proven to convert
-cleanly through the existing, unmodified `convert_avatar.py`, though runtime attachment
-of a separately-loaded piece onto a running avatar needs new C++ engine support that
-doesn't exist yet (out of scope for this task). Task 11.15 added three new animations
-(`Stand1`/`Clap`/`Celebrate`, 5/31 `AvatarAnimationPreset` values now covered), surfacing
-a real, two-layered empirical gotcha about mirroring bone rotations between `.L`/`.R`
-that isn't a single consistent sign rule. See section 3 for the full account,
-`plan_net.md` Tasks 11.11-11.15 for the exhaustive one.
+**There is no failing build or failing test right now.** The nearest thing to a blocker is scope,
+not a crash:
 
-Confirmed, not-fixed defects so far (all documented in `tools/avatar_builder/README.md`,
-none of them blocking, all still reported as "OK" by `validate_gltf.py` since they don't
-make the file invalid): a real elbow/sleeve tear under bending (`Wave`'s peak fold, Task
-11.6, also confirmed present under `Clap`'s peak fold, Task 11.15 — consistent, not a new
-regression); 32 zero-bone-weight vertices on the body and 24 over-4-influence vertices on
-the shirt (Task 11.7, confirmed by direct per-vertex inspection, silently handled by the
-glTF exporter's own `neutral_bone`/4-joint-trim mechanisms). Both automatic-weights
-consequences to fix together in a future weight-painting pass, explicitly out of scope
-for Phase 11a/11b/11c. The next session's job is, if the user wants it, Phase 11d (Task
-11.16 — optional/future, not scheduled, requires fresh explicit sign-off) — or a
-different phase/task entirely; Phase 11 has no more required work — see section 8.
-
----
+- Phase 1 has 2 small unfinished tasks before it can close out (see section 8, tasks 1-2).
+- The larger, structural open problem is **Phase 7 (avatar asset quality)** — the actual reason
+  this re-audit was requested. It requires prototyping a new pipeline stage (author body/head
+  shape in the sibling `../mesh-craft` tool, export via `mc3togltf`, feed into the existing
+  Blender rig/skin stage) that has not been prototyped at all yet, only planned on paper
+  (`plan_net.md` Phase 7, Task 7.4).
+- **Phase 5 (real host migration)** has an explicitly-unresolved design question written into the
+  plan itself (Task 5.1): in this star-topology transport, a promoted host has no pre-existing
+  connections to the surviving peers, so migration needs a genuine reconnect, not a live socket
+  handoff. This needs to be confirmed as acceptable "simple" scope before implementing anything.
+- **Process note:** earlier in this pass, a background research agent was unintentionally given
+  too much autonomy (it inherited broader "work autonomously" instructions from its parent
+  context) and pushed 3 commits — archiving the plan, writing the new plan, and the
+  `NetworkSession` destructor fix — without the review checkpoint that was intended. Those commits
+  were reviewed afterward and are correct/kept, but it's why Phase 0-2 finished before Phase 1's
+  remaining 2 small tasks did.
 
 ## 5. Known bugs and limitations
 
-| Status | Issue |
-|---|---|
-| Design constraint | Only one real `NetworkSession` can exist per OS process (`activeSession_` static gate). |
-| Confirmed bug (upstream FNA, preserved) | `NetworkSession::EndCreate`/`EndJoin`/`EndJoinInvited` null `activeAction` *after* constructing the session — a constructor throw strands it non-null. |
-| Confirmed bug (upstream FNA, preserved) | `NetworkSession::EndJoin`/`EndJoinInvited` hardcode session type to `PlayerMatch`. |
-| Confirmed bug (upstream FNA, preserved) | `NetworkGamer::getIsHostProperty()` always returns `true`. |
-| Deviation (documented) | `PacketWriter::Write(Color)` writes 4 bytes; `PacketReader::ReadColor()` reads 4 floats — asymmetric upstream, preserved. |
-| Deviation (documented) | `PacketReader`/`PacketWriter`'s `capacity` constructor argument is discarded. |
-| Incomplete | Some event-args tests use `nullptr` stand-ins for `NetworkGamer*` instead of real instances. |
-| Confirmed bug (graphics) | `SpriteBatch` multiple `Begin()`/`End()` per frame on Vulkan: only the last batch renders. |
-| Suspected bug (graphics, unaudited) | `DrawUserIndexedPrimitives` typed overloads likely share the silent-return-on-missing-effect bug. |
-| Platform limitation | FFmpeg video decoding unavailable on Windows/Emscripten/Android cross-builds. |
-| Permanent platform limitation (Web) | No LAN broadcast discovery; a browser tab can never host a `NetworkSession`; ephemeral port readback is broken (fixed port used instead). |
-| Confirmed bug (Android, out of scope) | `TitleContainer::OpenStream`'s `SDL_LoadFile` fallback segfaults without a real JNI/Activity context. |
-| Intentional stub (not a bug) | Every faithful `Avatar*` no-op/inert behavior (`Draw()` no-op, `State` always `Unavailable`, `CreateRandom()` not randomizing) — matches the real reference assembly exactly; never "fix" this. |
-| Resolved (Phase 11a) | Real avatar body/skeleton/animation content now exists: `tools/avatar_builder/` procedurally generates and exports `male_avatar.glb`/`female_avatar.glb` (skeleton, body, materials, morphs, hair/clothes, `Stand0`/`Wave` animations). |
-| Resolved (Phase 11b, Task 11.10) | `tools/avatar_asset_pipeline/convert_avatar.py` now converts both real `.glb`s to `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin` cleanly (`--embedded-clips` flag, new). |
-| Resolved (Phase 11b, Task 11.11) | The converted content is now proven to load and render correctly through the real C++ engine — `examples/demo_avatar/` renders a real, animated, correctly-proportioned humanoid on a real window. |
-| Resolved (Phase 11b, Task 11.12) | Both `AvatarBodyType::Male`/`Female` are now wired to their generated bodies via `AvatarBodyTypeToContentNameEXT` and `examples/demo_avatar --gender male|female`; both confirmed rendering correctly with real screenshots (female is visibly smaller, 0.93× overall). Phase 11b (Tasks 11.10-11.12) is complete. |
-| Resolved (Phase 11c, Task 11.13) | Real, independent `height_scale`/`shoulder_width_scale`/`head_scale` parameters now drive proportion differences at geometry-generation time (`generate_skeleton.build_bones()` and every downstream consumer), replacing the old coarse whole-armature post-scale hack. `GENDER_PRESETS` supplies defaults per `--gender`; new CLI flags override any of the three individually. Verified with 4 rendered parameter combinations plus a re-run of the Task 11.11 exact-math rest-pose identity check at non-unit scale. |
-| Resolved (Phase 11c, Task 11.14) | A second hair style (`Ponytail`) and a second style each for the Shirt/Pants garment slots (`LongSleeve`/`Shorts`) now exist (`generate_hair.HAIRSTYLES`/`generate_clothes.GARMENT_STYLES`), selectable per full-avatar build or exportable alone via new `generate_wardrobe.py` as a standalone, attachable `.glb` (armature + one piece). Verified: converts cleanly through the unmodified `convert_avatar.py`; renders confirm each new style is visibly, independently distinct from its default. No C++ engine changes made or needed — runtime attachment of a separately-loaded piece is real, deferred future work (`AvatarRenderer`/`SkinnedModelEXT` load/draw exactly one model today). |
-| Resolved (Phase 11c, Task 11.15) | Three new animations (`Stand1`/`Clap`/`Celebrate`) join `Stand0`/`Wave`, covering 5/31 `AvatarAnimationPreset` values (`generate_animations.py`'s new `_raise_upper_arm`/`_fold_lower_arm` helpers). No C++ changes needed (`AvatarAnimationPresetToClipNameEXT` already mapped these names). Found and documented a real, two-layered empirical gotcha: mirroring `Wave`'s arm-raise convention from `.R` onto `.L` needs an opposite-signed angle, but mirroring its elbow-fold convention needs the *same* sign once the upper arm is actually raised (opposite of what an isolated single-bone test suggests) — a child bone's local rotation composes with its parent's current, not rest, transform. Verified with multi-angle renders, numeric pose-bone dumps, and a full `generate_avatar.py` → `validate_gltf.py` (extended to require all 5) → `convert_avatar.py --embedded-clips` pipeline run, both genders. **This completes Phase 11c (Tasks 11.13-11.15) in full.** |
-| Confirmed bug, fixed (Task 11.11) | `ContentManager.cpp`'s `SkinnedModelTypeReader` resolved every manifest-referenced path against the content root instead of the manifest's own directory — content in a subdirectory (e.g. `Content/avatar/male/`) failed to load at all. Fixed: resolve relative to the manifest file's own parent directory. |
-| Confirmed bug, fixed (Task 11.11) | `ContentManager.cpp`'s clip-keyframe reading relied on unspecified C++ function-argument evaluation order across multiple side-effecting `Read<float>()` calls (`Quaternion(Read<float>(), Read<float>(), Read<float>(), Read<float>())`), silently scrambling which bytes landed in which component — confirmed via a raw hex dump (true bytes were identity `(0,0,0,1)`, constructed value came out `(1,0,0,0)`, exactly reversed). Fixed by reading each float into its own named local first, sequentially, before constructing `Vector3`/`Quaternion`. This was the real show-stopper behind Task 11.11's "huge nonsensical close-up" symptom, not the two `convert_avatar.py` bugs below (which were real, but not the root cause). |
-| Confirmed bug, fixed (Task 11.11) | `convert_avatar.py`'s Task 11.10 "fix" (transposing `bind_pose_local` from glTF column-major to CNA row-major) was itself backwards — the two are byte-identical for the same transform. Also found: `inverseBindMatrices`/vertex `JOINTS_0` indices needed the same topological bone-order remap as Task 11.10's part-vertex fix. `bind_pose_local` is now derived directly from `inverse_bind_global` via matrix inversion (correct by construction). |
-| Confirmed bug (automatic weights, not fixed) | The procedural body/clothes rig (Task 11.2/11.5) has a real, confirmed elbow/sleeve tear under bending (posed through `Wave`'s peak fold, Task 11.6) — the forearm/hand visibly separate from the shirt sleeve. A manual weight-painting correction pass is needed and not yet done; out of scope for Phase 11a/11b. |
-| Confirmed limitation (automatic weights, not fixed) | 32 of the body mesh's 1086 vertices have zero total bone weight; 24 shirt vertices exceed glTF's 4-joint-influence limit (Task 11.7, confirmed by direct per-vertex inspection). Both are silently handled (a synthetic `neutral_bone` joint; glTF's own trim/renormalize), don't break the export, but are real gaps for the same future weight-painting pass as the elbow tear. |
-| Verified (Phase 11a, was a risky assumption) | Blender's `bpy.ops.export_scene.gltf` does cleanly export a script-built armature + shape keys + per-Action animations in one pass — confirmed by reopening both `male_avatar.glb`/`female_avatar.glb` in Blender and validating with `validate_gltf.py`. Export is deterministic to within 1 float32 ULP across repeated runs. |
-
----
+- **Confirmed bug, not fixed:** `AvatarRenderer::Draw(IAvatarAnimation* animation)`
+  (`src/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.cpp:101-105`) has no null check —
+  passing `nullptr` is undefined behavior (crash), not a catchable exception.
+- **Confirmed bug, not fixed:** `AvatarRenderer::EnableRealRenderingEXT(GraphicsDevice&,
+  shared_ptr<SkinnedModelEXT>)` (`AvatarRenderer.cpp:121-134`) does not validate its `model`
+  argument is non-null — a null model crashes later, inside `DrawRealEXT`, not at the call site.
+- **Confirmed bug, fixed:** `NetworkSession` destructor not calling `Dispose()` — see section 3.
+- **Confirmed bug, not fixed** (pre-existing, from the prior Avatar-generation pass, not touched
+  this session): the procedural avatar body/clothes rig has a real elbow/sleeve tear under bending
+  (visible at the `Wave` animation's peak fold) — the forearm/hand visibly separates from the
+  shirt sleeve. Root cause: automatic Blender weight-painting, never hand-corrected.
+- **Confirmed limitation, not fixed** (same root cause): 32 of 1086 body-mesh vertices have zero
+  total bone weight; 24 shirt vertices exceed glTF's 4-joint-influence limit. Both are silently
+  handled (a synthetic `neutral_bone` joint; glTF's own trim/renormalize) rather than crashing or
+  failing export, but are real visual-quality gaps.
+- **Confirmed, intentional — verified against real FNA source, not bugs:**
+  `PropertyDictionary::CopyTo` always throws `NotImplementedException`;
+  `NetworkMachine::RemoveFromSession` always throws `NotImplementedException`;
+  `NetworkSession::BeginCreate`'s simplest overload hardcodes `maxGamers=69` regardless of the
+  caller's argument.
+- **Incomplete (planned, Phase 3):** `Guide.BeginShowMessageBox`/`BeginShowKeyboardInput` have no
+  real overlay/text-capture implementation.
+- **Incomplete (planned, Phase 4):** achievement/leaderboard state has no disk persistence.
+  Exactly how "earned" state is populated today needs re-confirming (`plan_net.md` Task 4.1) —
+  not fully nailed down yet.
+- **Incomplete (planned, Phase 5):** `AllowHostMigration` is stored but inert.
+- **Incomplete (planned, Phase 6):** `SimulatedLatency`/`SimulatedPacketLoss` are stored but have
+  no effect on real traffic.
+- **Incomplete (planned, Phase 7):** avatar mesh-craft integration not started.
+- **Stale docs, not fixed (planned, Task 9.1):** `docs/xna-4-api-coverage.md` has multiple
+  sections still claiming Net/GamerServices/Avatar are unimplemented or intentionally excluded —
+  false, per Task 1.1's own line-by-line citations in `plan_net.md`.
+- **Needs verification:** whether all 24 demos still build cleanly after the `NetworkSession`
+  destructor fix (not re-tested since; the fix is Net-side and unlikely to affect unrelated
+  demos, but unconfirmed).
+- **Risky assumption, flagged in the plan itself (Task 5.1):** the "simple" host-migration design
+  assumes surviving peers can just reconnect fresh to a promoted host. Not yet confirmed as
+  acceptable scope.
 
 ## 6. Architecture notes
 
-### Module map
-
-| Layer | Location | Notes |
-|---|---|---|
-| XNA public API (graphics) | `include/Microsoft/Xna/Framework/...` | Must match XNA 4.0/FNA exactly |
-| XNA public API (GamerServices incl. Avatar) | `include/Microsoft/Xna/Framework/GamerServices/` | Complete, including Phase 8 Avatar and Phase 10 EXT additions |
-| XNA public API (Net) | `include/Microsoft/Xna/Framework/Net/` | Complete API surface; public shapes are a fixed point |
-| ENet backend | `include/CNA/Internal/Net/`, `src/CNA/Internal/Net/` | `ENetHostHandle`, `ENetBackend`, `ENetDiscoveryService` (disabled on Emscripten only) |
-| Avatar real-rendering extension (Phase 10, NOXNA/EXT) | `Graphics::{VertexPositionNormalTextureSkinned,SkinnedModelEXT}`, `GamerServices::{AvatarAppearanceEXT,AvatarAnimationPresetNamesEXT}`, `AvatarRenderer`/`AvatarAnimation` EXT members | Opt-in, additive; see `docs/avatar-real-rendering-ext.md` |
-| Existing asset converter (Phase 10) | `tools/avatar_asset_pipeline/convert_avatar.py` | assimp+pygltflib based, converts glTF2 → CNA's `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin`. Structurally verified against a synthetic fixture only — Phase 11 will be its first real input. |
-| Procedural avatar generator (Phase 11, planned) | `tools/avatar_builder/` (not yet created) | Blender-scripted: skeleton, body, materials, morphs, hair/clothes, animations, GLB export, validation — see `plan_net.md` Phase 11 |
-| sharp-runtime | `../sharp-runtime/` (sibling repo) | `System.*` types; only add new files; ask before every commit |
-
-### Avatar — three layers, don't confuse them
-
-1. **Faithful XNA port** (Phase 8: `AvatarRenderer`, `AvatarAnimation`, `AvatarDescription`):
-   byte-exact match of the real Microsoft reference assembly (decompiled via `monodis`; FNA has
-   no Avatar implementation at all). Its no-op/inert behavior is correct and must never be
-   "fixed."
-2. **Real-rendering extension** (Phase 10: `*EXT` members, `SkinnedModelEXT`): a separate,
-   additive, opt-in rendering path with its own independent bone hierarchy — never conflate with
-   layer 1's real 71-bone Xbox arrays. Engine-complete; has no content behind it yet.
-3. **Procedural content generator** (Phase 11, planned): will produce the actual body/skeleton/
-   animation content that layer 2 renders, via original Blender Python scripts. Its skeleton is a
-   **third, independent** bone naming/hierarchy convention (not Xbox's 71 bones, not Mixamo, not
-   Rigify) — chosen specifically because the same scripts author both the skeleton and its
-   animations, eliminating any bone-retargeting step.
-
-### Key invariants
-
-- `NOXNA` macro tags every non-XNA extension in public headers; `*EXT` suffixes non-XNA methods
-  on otherwise-faithful classes. Unrelated to the separate `CNA_NOXNA` CMake option in `NOXNA.md`.
-- C# properties → `getXProperty()`/`setXProperty()`. `System::Exception` is the base for all
-  GamerServices/Net exceptions, never `std::runtime_error`.
-- ENet code lives entirely under `CNA::Internal::Net`; `enet/enet.h` must never leak into a
-  public XNA-facing header.
-- Doxygen `/** @brief ... */` required on every public member in every `.hpp`.
-- sharp-runtime: only add new files; never modify existing ones or commit/push without asking
-  first, for every commit.
-- Phase 11 scripts belong under `tools/avatar_builder/` (a new, non-CMake-built Python tool
-  directory, mirroring the existing `tools/avatar_asset_pipeline/` and `tools/net/` precedent) —
-  not inside the C++ build.
-
----
+- **Namespace split:** `Microsoft::Xna::Framework::*` = must match real XNA/FNA behavior exactly —
+  **check the real FNA source before assuming any `NotImplementedException`/stub is a bug**
+  (`FNA` for most namespaces, `FNA.NetStub/src/GamerServices/` for GamerServices). A near-miss on
+  `PropertyDictionary::CopyTo` (section 3) is the concrete lesson here. `CNA::*`/`NOXNA`/`*EXT` =
+  CNA-original, opt-in extensions.
+- **`sharp-runtime`:** sibling repo (`../sharp-runtime/`), included via direct filesystem path
+  (not a submodule) — any local change there is immediately visible to this build. Never modify
+  existing `sharp-runtime` files without asking the user first, for every commit.
+- **Real networking:** `CNA::Internal::Net::ENetBackend` wraps ENet. Star topology only. Key
+  state: `SessionState::WireIdToGamer`/`WireIdToPeer`/`PeerWireIds`/`HostPeer`. Wire protocol:
+  `NetPacketCodec` — opcode `0x05` (`HostChangeBroadcast`) is reserved but unimplemented, the
+  natural hook for Phase 5.
+- **`NetworkSession`** is a process-wide singleton (`activeSession_`) — only one active session
+  per game, enforced by `BeginCreate`/`BeginFind`/`BeginJoin` throwing if already set.
+  `Create`/`Find`/`Join` hand back a caller-owned raw pointer (documented ownership contract); the
+  destructor is now a `Dispose()` safety net, but callers should still prefer explicit `Dispose()`.
+- **Avatar pipeline today:** `tools/avatar_builder/` (Blender/`bpy` script, offline) →
+  `tools/avatar_asset_pipeline/convert_avatar.py` (MakeHuman+Mixamo → CNA's own
+  `.skinnedmodel.json`+`.skeleton.bin`+`.clip.bin`) → loaded at runtime via
+  `SkinnedModelTypeReader`. Planned change (Phase 7, not started): author body/head *shape*
+  geometry in `../mesh-craft` (`.mc3.xml` → `mc3togltf` → `.glb`), which has no skinning concept,
+  so rig/skin/animation stays in the existing Blender stage.
+- **Demos:** 24 executables under `examples/`, each building to a standalone binary directly under
+  `cmake-build-debug/` (e.g. `cmake-build-debug/cna_demo_avatar`). No shared `examples/common/`
+  library exists — a `MakeSimpleFont`/rectangle-drawing SpriteBatch helper is duplicated verbatim
+  across 11 demos already (established convention: copy-paste per demo).
+- **Testing scope for this hardening pass (explicit user decision, do not deviate without
+  asking):** EASYGL graphics backend, `cmake-build-debug` only.
+- **Invariant to preserve:** one task = one commit; every behavior change needs a test that
+  provably fails without the fix (revert-verify-restore discipline used throughout this project).
 
 ## 7. Useful commands
 
-```bash
-cd /rv/data/development/github.com/openeggbert/cna_net
+```sh
+# Confirm/configure build (already configured for EASYGL as of the last build)
+cmake -S . -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL
 
-# Native Linux build + full test suite
-cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
-cmake-build-debug/CnaTests
+# Build the main test target
+cmake --build cmake-build-debug --target CnaTests -j$(nproc)
 
-# Just Net/GamerServices/Avatar tests
-cmake-build-debug/CnaTests --gtest_filter="*Network*:*Gamer*:*ENet*:*Packet*:*Avatar*"
+# Run the full test suite
+./cmake-build-debug/CnaTests
 
-# Avatar real-rendering EasyGL integration test (synthetic fixture, Phase 10)
-cmake --build cmake-build-debug --target cna_test_avatar_real_render -j"$(nproc)"
-SDL_VIDEODRIVER=x11 DISPLAY=:0 cmake-build-debug/cna_test_avatar_real_render
+# Run a filtered subset, e.g. just NetworkSession tests
+./cmake-build-debug/CnaTests --gtest_filter="NetworkSessionTest.*"
 
-# Real windowed avatar demo (Task 11.11) — real content, real engine, real window
-cmake --build cmake-build-debug --target cna_demo_avatar -j"$(nproc)"
-SDL_VIDEODRIVER=x11 DISPLAY=:0 cmake-build-debug/cna_demo_avatar
-# Space toggles Stand0/Wave, Left/Right arrows orbit the camera, Esc quits.
-# To screenshot it headlessly (what this session used to verify it):
-#   DISPLAY=:0 xwininfo -root -tree | grep cna_demo_avatar   # find the window id
-#   DISPLAY=:0 import -window <id> /tmp/screenshot.png
+# Run just the Avatar tests relevant to Phase 1's remaining tasks (1.5, 1.6)
+./cmake-build-debug/CnaTests --gtest_filter="AvatarRendererTest.*"
 
-# Regenerate examples/demo_avatar/'s committed Content/ from scratch
-blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out /tmp/male_avatar.glb
-python3 tools/avatar_asset_pipeline/convert_avatar.py --body /tmp/male_avatar.glb --out examples/demo_avatar/Content/avatar/male --embedded-clips
+# Build and run the primary avatar demo
+cmake --build cmake-build-debug --target cna_demo_avatar -j$(nproc)
+./cmake-build-debug/cna_demo_avatar --gender male
+./cmake-build-debug/cna_demo_avatar --gender female --wardrobe-hair Ponytail
 
-# Validate a .glb export (plain python3, no Blender) — checks bones/animations/shape keys
-python3 tools/avatar_builder/validate_gltf.py /tmp/male_avatar.glb
-
-# Build a custom-proportioned avatar with non-default hair/clothing styles (Tasks 11.13/11.14)
-blender --background --python tools/avatar_builder/generate_avatar.py -- --gender female --head-scale 1.1 --hair-style Ponytail --shirt-style LongSleeve --out /tmp/female_variant.glb
-
-# Export ONE hair/clothing piece as its own standalone attachable .glb (Task 11.14)
-blender --background --python tools/avatar_builder/generate_wardrobe.py -- --piece hair --style Ponytail --out /tmp/hair_ponytail.glb
-
-# Blender — confirmed installed and headless-capable this session
-blender --version   # Blender 4.3.2
-blender --background --python some_script.py
-
-# Windows cross-build
-cmake -B cmake-build-windows -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-      -DCNA_GRAPHICS_BACKEND=SDL_RENDERER -DCNA_ENABLE_NET=ON
-cmake --build cmake-build-windows --target CnaTests -j"$(nproc)"
-wine cmake-build-windows/CnaTests.exe
-
-# Web/Emscripten cross-build
-source /home/robertvokac/Downloads/emsdk/emsdk_env.sh
-cmake --build cmake-build-web --target CnaTests -j"$(nproc)"
-node cmake-build-web/CnaTests.js --gtest_filter="*Network*:*Gamer*:*ENet*:*Packet*"
-
-# Android NDK cross-build (on-device run needs /dev/kvm, currently unavailable)
-cmake --build cmake-build-android --target CnaTests -j"$(nproc)"
-
-# sharp-runtime — check status before touching it
-cd ../sharp-runtime && git status
+# Graphics smoke/pixel-readback tests (separate from CnaTests, via ctest)
+ctest --test-dir cmake-build-debug
 ```
 
-Builds can time out on this shared machine if another session is compiling concurrently — retry
-with a reduced `-j` and a longer timeout rather than assuming a real compile error.
-
----
+No `.clang-format` or other lint/format config was found in the repo — none is currently enforced.
 
 ## 8. Next smallest tasks
 
-**Phase 11a (Tasks 11.1-11.9) is done in full** — canonical skeleton, procedural body,
-placeholder materials, facial morphs, hair/clothes, `Stand0`/`Wave` animations, glTF
-export (both genders), a `pygltflib` validator, and a coherent
-`tools/avatar_builder/README.md`. Full step-by-step detail for all nine (including what
-each verification actually checked and every confirmed finding, e.g. the elbow/sleeve
-tear and the zero-weight/over-4-influence vertices) is preserved in `plan_net.md`'s
-Phase 11 section and `tools/avatar_builder/README.md` itself — not re-narrated here to
-keep this file readable; see section 5 for the short version of the confirmed,
-not-yet-fixed defects.
+1. **Add a null check to `AvatarRenderer::Draw(IAvatarAnimation* animation)`.**
+   Goal: throw `System::ArgumentNullException("animation")` instead of crashing on `nullptr`.
+   Files: `include/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp`,
+   `src/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.cpp`,
+   `tests/Microsoft/Xna/Framework/GamerServices/AvatarRendererTests.cpp`.
+   Verify: `./cmake-build-debug/CnaTests --gtest_filter="AvatarRendererTest.*"`, then full suite.
 
-**Phase 11b (Tasks 11.10-11.12) is done in full** — `convert_avatar.py` converts both
-real `.glb`s cleanly, `examples/demo_avatar` renders both bodies correctly through the
-real engine on a real window, and `AvatarBodyTypeToContentNameEXT` maps
-`AvatarBodyType::Male`/`Female` to them. Four real bugs were found and fixed along the
-way (three in Task 11.11, none in Task 11.12's own mapping code). Full step-by-step
-detail is preserved in `plan_net.md`'s Phase 11 section (Tasks 11.10-11.12) — not
-re-narrated here; see section 5 for the short version of what was found, and section 3
-for this session's own account.
+2. **Add a null check to `AvatarRenderer::EnableRealRenderingEXT(GraphicsDevice&,
+   shared_ptr<SkinnedModelEXT>)`.**
+   Goal: throw `System::ArgumentNullException("model")` at the call site instead of deferring the
+   crash to a later `DrawRealEXT` call.
+   Files: same as task 1.
+   Verify: same as task 1.
 
-**Phase 11c (Tasks 11.13-11.15) is done in full** — parametric body variation, hair/
-clothing style variants + standalone attachable pieces, and additional animation
-presets. Full step-by-step detail is preserved in `plan_net.md`'s Phase 11 section
-(Tasks 11.13-11.15) — not re-narrated here; see section 5 for the short version of what
-was found, and section 3 for this session's own account.
+3. **Close out Phase 1 in `plan_net.md`** once tasks 1-2 land (mark `[x]`, write up, commit,
+   push) — this finishes Phase 1 (6/6 tasks).
+   Files: `plan_net.md`.
+   Verify: `git log --oneline -5` shows the closing commit; full suite still passing.
 
-**Phase 11e is DONE IN FULL — Tasks 11.17-11.24 (including the critical Task 11.20b
-matrix-order fix) are all complete.** Full detail on each is in `plan_net.md`'s Phase
-11e section — not re-narrated here. Only two items remain for Phase 11 overall, both
-explicitly optional/deferred, not a default next step:
+4. **Phase 3, Task 3.1 — investigate before coding.** Read
+   `src/Microsoft/Xna/Framework/GamerServices/Guide.cpp:116-142` to confirm the exact current
+   `BeginShowMessageBox`/`EndShowMessageBox` signatures and behavior before designing the overlay.
+   No code change in this step — pure investigation, matching the plan's own Task 3.1 checklist.
+   Files: `src/Microsoft/Xna/Framework/GamerServices/Guide.cpp`.
+   Verify: n/a (investigation only).
 
-1. **Task 11.16 (optional, not scheduled, requires fresh explicit user sign-off) —
-   revisit MakeHuman or CharMorph/Blender** as a higher-quality body *source*, only if
-   the user explicitly wants to invest in resolving the automation/permission questions
-   from the original attempt (see section 3's history).
-   - Files/modules: none decided yet — scope depends entirely on what the user
-     authorizes; do not start any download/execution of third-party tooling without a
-     specific, fresh go-ahead for the exact action.
-   - Verify: not applicable until scoped.
-
-2. **Task 11.25 (speculative, lowest priority, scope not yet designed) — a richer
-   appearance/customization model**: per-part texture atlases (builds on Task 11.19's
-   neutral-placeholder textures), a wider skin-tone/hair-color preset palette, and
-   revisiting whether `AvatarAppearanceEXT` should grow beyond simple named-slot tints.
-   Do not start without a fresh scoping pass with the user first.
-
-If neither of these is what the user wants, the next task likely comes from a different
-phase/track entirely (e.g. Graphics/Vulkan parity, Audio Fáze 9 hardening — see a prior
-cross-project survey in this conversation, not repeated in this file) — ask rather than
-assume.
-
----
+5. **Phase 4, Task 4.1 — re-confirm achievement state population.** Read
+   `AchievementCollection`'s constructor(s) and `examples/demo_achievement_showcase` to determine
+   whether "earned" state is currently in-memory-only or already touches disk anywhere.
+   Files: `include/Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp`,
+   `examples/demo_achievement_showcase/`.
+   Verify: n/a (investigation only).
 
 ## 9. Do not do yet
 
-- No re-attempting MakeHuman or CharMorph/Blender automation from a general instruction — both
-  were tried and hit Claude Code permission-classifier stops in the prior session; Phase 11's
-  whole point is to avoid needing them. If ever revisited (Task 11.16, explicitly optional/future),
-  get fresh, specific user sign-off for the exact action, not a general "try it."
-- ~~No changes to `Microsoft::Xna::Framework::Net` public class shapes~~ — **superseded by
-  Phase 12** (this session): the user explicitly asked for `NetworkGamer`/`NetworkSession` fixes,
-  done in Tasks 12.1/12.2. The underlying intent still holds outside a deliberate task like
-  Phase 12: don't casually change `Net`/`GamerServices` API shapes as a side effect of unrelated
-  (e.g. Avatar) work.
-- No "fixing" any documented FNA-preserved bug or Avatar quirk (section 5) — all are verified-real
-  behavior, not defects.
-- No modifications to existing `sharp-runtime` files, and no commit/push there without asking the
-  user first, for every commit.
-- No touching the real Xbox 71-bone `AvatarRenderer::ParentBones` arrays (Phase 8) to try to
-  "unify" them with Phase 11's new skeleton — they are deliberately separate, unrelated systems.
-- No skipping straight to polish (hair quality, clothing fit, facial detail, the confirmed
-  elbow/sleeve tear) — Phase 11b's end-to-end proof (Tasks 11.10-11.12, both genders) is
-  fully done, but a manual weight-painting pass is still explicitly out of scope for
-  Phase 11a/b/c; don't start it without the user asking.
-- No opening or executing anything in `/rv/tmp/charmorph_work/` (leftover from the abandoned
-  CharMorph attempt, outside this repo) — not needed for Phase 11.
-- No broad refactors, unrelated cleanup, or API changes without checking compatibility.
-
----
+- Do not modify any existing `sharp-runtime` file without asking the user first — for every
+  single commit, no exceptions.
+- Do not start Phase 7 (mesh-craft avatar pipeline integration) or Phase 5 (host migration) before
+  Phases 1-4 are done — both are large and design-heavy, and Phase 5 has an explicitly-unconfirmed
+  scope question (Task 5.1) that needs a decision first.
+- Do not refactor the 11-demo `MakeSimpleFont` copy-paste pattern into a shared
+  `examples/common/` header as a side effect of Phase 8 — the plan explicitly defers that as a
+  possible future cleanup, out of scope for this pass.
+- Do not "fix" any `NotImplementedException`/`NotSupportedException`/stub-looking code without
+  first checking the real FNA source (`FNA`/`FNA.NetStub`) — Task 1.4 already cost real time on
+  exactly this mistake once.
+- Do not build or test against any backend other than EASYGL, or any build directory other than
+  `cmake-build-debug`, for this pass (explicit user decision).
+- Do not delete or rewrite `plan_net_20260707.md` — it's archived, not deleted, and referenced by
+  file/line throughout the current `plan_net.md`.
+- No mass rewrites, no speculative architecture changes, no unrelated cleanup.
 
 ## 10. Resume prompt
 
-```
-Read NEXT.md first, in full, before doing anything else. Phases 11a/11b/11c/11e are
-fully done (see plan_net.md's Phase 11 section for that history — none of it needs
-redoing). Only two Phase 11 items remain, BOTH optional/deferred, NOT a default next
-step: Task 11.16 (MakeHuman/CharMorph revisit, needs fresh explicit sign-off) and Task
-11.25 (speculative appearance-model work, not yet scoped).
-
-**Phase 12 (cna-samples-driven networking fixes) is DONE IN FULL - all four tasks.**
-The sibling ../cna-samples repo ported ClientServerSample and found three real
-NetworkSession/GamerServices bugs (DEFERRED.md items #19-21) no existing test caught;
-all three are now fixed:
-- Task 12.1 (FIXED): GamerServicesDispatcher::Update() no-op hung Create/Find/Join
-  forever whenever a GamerServicesComponent existed (confirmed a real bug in FNA's own
-  reference source too). Fixed by having NetworkSessionAction default to
-  isCompleted_ = true (every Begin* action already does its real work synchronously).
-- Task 12.2 (FIXED): NetworkGamer.IsHost/Id were hardcoded true/0 stubs. ENetBackend.cpp
-  already had a real, cross-machine-consistent wire-id system that just wasn't surfaced
-  through the public API - wired NetworkGamer::SetId/SetIsHost through it. Scoped
-  limitation: a remote gamer representing the actual host still reports IsHost == false
-  from a client's view (no host flag on the wire roster) - documented, not silently left.
-- Task 12.3 (FIXED, via an approved sharp-runtime change): the "GamerJoined fires a
-  frame late" issue first looked genuinely blocked inside cna_net alone - traced against
-  the real ClientServerGame.cs source and confirmed subscription always happens strictly
-  after Create()/Join() return, so the two originally-proposed fixes (raise in the
-  constructor; drain the queue early) would have fired into zero subscribers or actively
-  regressed the sample. Real XNA's GamerJoined replays itself on subscribe;
-  System::EventHandler<T> (sharp-runtime) had no hook for that. Presented this exact
-  analysis plus a concrete proposed fix to the user, who approved it: sharp-runtime's
-  EventHandler<T> gained a generic, opt-in SetReplayHook() (develop commit 69661c2,
-  every other EventHandler<T> unaffected), and NetworkSession's constructor now uses it
-  (feature/net commit ab05395) - its own former "queue GamerJoin for initial gamers"
-  loop was removed (would double-fire otherwise). Verified the fix and its tests by
-  reverting and confirming failure, then restoring.
-
-Full suite after 12.1-12.3: 3232/3234 passing (2 expected accelerometer/gyroscope
-skips), including the real two-process ENet loopback test. All work committed and
-pushed to feature/net (08171ac, 81f10b5, f0b0499, ab05395).
-
-**Task 12.4 is DONE (same session, in two rounds):** removed ALL THREE of
-ClientServerSample's original workarounds in ../cna-samples - round 1 (omitted
-GamerServicesComponent; local isHost_ tracking) after Tasks 12.1/12.2 landed, round 2
-(the extra Update() call after HookSessionEvents()) after Task 12.3's real fix landed.
-ClientServerSample now needs ZERO of its original networking workarounds.
-Note: ../cna-samples builds against a SEPARATE checkout of this repo at ../cna
-(relative to cna-samples, not this cna_net working copy) - that checkout was stale
-(develop, missing feature/net's commits), so it was temporarily switched to
-feature/net locally (not merged/pushed to develop - that's a separate decision for
-whoever manages cna's develop branch) and fast-forwarded as each fix landed. If you're
-resuming and ../cna-samples builds fail to find these fixes, check that ../cna
-(relative to cna-samples) is still on feature/net (or has since been merged into
-develop) and that its own ../sharp-runtime is on a develop including commit 69661c2.
-Round 1 was live-verified with real xdotool keypresses; round 2's xdotool was flaky
-instead (confirmed environmental, not a regression, via both a real-desktop retry and
-a fully isolated Xvfb display with no window manager - both failed identically) - fell
-back to cna-samples' own established debug-auto-trigger pattern (temporary, removed
-before commit) to verify live instead. A genuine two-instance test hit a separate,
-pre-existing ENetDiscoveryService discovery limitation in both rounds (not a
-regression). Committed/pushed to cna-samples' develop (3197b06, 8a8300d, ef1e930,
-afb7cd0).
-
-Phase 12 has no remaining items. The only optional next step: porting
-NetworkPrediction (#100)/PeerToPeer (#103) in cna-samples (a separate, larger task,
-not done this session - left for the user to request explicitly; both should now need
-zero networking-related workarounds). If the user doesn't want that next, ask what
-they want instead - it may come from a different phase/track entirely (Task
-11.16/11.25, or a different track like Graphics/Vulkan parity surveyed in a prior
-session). Do not assume; confirm first.
-
-Build: cmake --build cmake-build-debug --target CnaTests
-Test:  cmake-build-debug/CnaTests
-Blender: blender --background --python tools/avatar_builder/generate_avatar.py -- --gender male --out /tmp/male_avatar.glb
-Run demo (either gender): cmake --build cmake-build-debug --target cna_demo_avatar && SDL_VIDEODRIVER=x11 DISPLAY=:0 cmake-build-debug/cna_demo_avatar --gender female
+```text
+Read NEXT.md first. Inspect only the files needed for the first unfinished task in section 8
+(currently: adding a null check to AvatarRenderer::Draw). Do not refactor unrelated code. Make one
+small, verified improvement: implement the fix, add a test that fails without it (revert-verify-
+restore), then restore the fix. Run:
+  cmake --build cmake-build-debug --target CnaTests -j$(nproc)
+  ./cmake-build-debug/CnaTests --gtest_filter="AvatarRendererTest.*"
+followed by the full suite (./cmake-build-debug/CnaTests) to confirm no regressions. Commit with a
+message referencing the plan_net.md task ID, then update NEXT.md's sections 2, 3, 4, and 8 to
+reflect the new state before finishing.
 ```
