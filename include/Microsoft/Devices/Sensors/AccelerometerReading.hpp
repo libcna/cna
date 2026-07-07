@@ -57,32 +57,53 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Returns true if both readings have equal Acceleration and Timestamp.
          *
+         * Task DEV-API-004: a CNA extension, not real XNA/WP7 API — the real
+         * `AccelerometerReading` structure's own archived MSDN reference page
+         * (`ff403534(v=vs.105)`) lists no equality operator at all;
+         * `Equals(Object)` is inherited unmodified from `System.ValueType`
+         * (field-reflection based). C++ `struct`/`class` types have no such
+         * automatic equality, so this operator is a useful, deliberate CNA
+         * convenience, not an attempt to mimic undocumented real behavior.
+         *
          * @param other The reading to compare against.
          * @return true if equal; otherwise false.
          */
-        bool operator==(const AccelerometerReading& other) const;
+        NOXNA bool operator==(const AccelerometerReading& other) const;
 
         /**
          * @brief Returns true if the readings differ in Acceleration or Timestamp.
          *
+         * See operator==()'s doc comment — same CNA-extension rationale.
+         *
          * @param other The reading to compare against.
          * @return true if not equal; otherwise false.
          */
-        bool operator!=(const AccelerometerReading& other) const;
+        NOXNA bool operator!=(const AccelerometerReading& other) const;
 
         /**
          * @brief Returns a string representation of the reading.
          *
+         * Task DEV-API-004: a CNA extension, not real XNA/WP7 API — the real
+         * structure's `ToString()` is inherited unmodified from
+         * `System.ValueType.ToString()`, which returns only the fully
+         * qualified type name (`"Microsoft.Devices.Sensors.AccelerometerReading"`),
+         * not field values. This format is a more useful CNA convenience.
+         *
          * @return String in the format "Acceleration:{X:0 Y:0 Z:0}".
          */
-        [[nodiscard]] std::string ToString() const;
+        NOXNA [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Returns a hash code for this reading.
          *
+         * Task DEV-API-004: a CNA extension, not real XNA/WP7 API — the real
+         * structure's `GetHashCode()` is inherited unmodified from
+         * `System.ValueType.GetHashCode()`. See operator==()'s doc comment
+         * for the same CNA-extension rationale.
+         *
          * @return Hash derived from Acceleration and Timestamp.
          */
-        [[nodiscard]] std::size_t GetHashCode() const;
+        NOXNA [[nodiscard]] std::size_t GetHashCode() const;
 
         /**
          * @brief Returns the fully-qualified .NET type name of this class.

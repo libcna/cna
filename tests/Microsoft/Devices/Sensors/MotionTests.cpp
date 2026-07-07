@@ -4,21 +4,79 @@
 #include <thread>
 #include <vector>
 
+#include "Microsoft/Devices/Sensors/AttitudeReading.hpp"
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
+#include "Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp"
 #include "Microsoft/Devices/Sensors/Motion.hpp"
 #include "Microsoft/Devices/Sensors/MotionReading.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/TimeSpan.hpp"
 
+using Microsoft::Devices::Sensors::AttitudeReading;
 using Microsoft::Devices::Sensors::CalibrationEventArgs;
 using Microsoft::Devices::Sensors::Motion;
 using Microsoft::Devices::Sensors::MotionReading;
 using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
+using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Quaternion;
+using Microsoft::Xna::Framework::Vector3;
+using System::TimeSpan;
+
+namespace
+{
+    // Task DEVICES-0113: a fake IMotionBackend (not Detail::AndroidMotionBackend,
+    // which is #ifdef __ANDROID__-only and cannot compile on this host) —
+    // lets these tests exercise Motion::Start()/CurrentValueChanged's
+    // delegation to any backend without needing real Android hardware.
+    class FakeMotionBackend final : public Microsoft::Devices::Sensors::Detail::IMotionBackend
+    {
+    public:
+        bool SupportedResult = true;
+        bool StartResult = true;
+        bool StopCalled = false;
+        int StartCallCount = 0;
+        int SetSampleIntervalCallCount = 0;
+        System::TimeSpan LastSetSampleInterval;
+        ReadingCallback CapturedOnReading;
+
+        [[nodiscard]] bool IsSupported() override
+        {
+            return SupportedResult;
+        }
+
+        bool Start(const System::TimeSpan&, ReadingCallback onReading) override
+        {
+            ++StartCallCount;
+            if (!StartResult)
+            {
+                return false;
+            }
+            CapturedOnReading = std::move(onReading);
+            return true;
+        }
+
+        void Stop() override
+        {
+            StopCalled = true;
+        }
+
+        void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override
+        {
+            ++SetSampleIntervalCallCount;
+            LastSetSampleInterval = timeBetweenUpdates;
+        }
+    };
+} // namespace
 
 TEST(MotionTests, GetIsSupportedPropertyIsFalse)
 {
@@ -28,6 +86,15 @@ TEST(MotionTests, GetIsSupportedPropertyIsFalse)
 TEST(MotionTests, ConstructorSucceedsUnderInstanceLimit)
 {
     EXPECT_NO_THROW({ const Motion m; (void)m; });
+}
+
+// Task SENSORBASE-002: see AccelerometerTests.cpp's identical test for the
+// full rationale (MonoGame cross-check confirms the real WP7 SensorBase<T>'s
+// single shared 2ms default, not a per-sensor-class override).
+TEST(MotionTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
+{
+    const Motion m;
+    EXPECT_EQ(m.getTimeBetweenUpdatesProperty(), TimeSpan::FromMilliseconds(2.0));
 }
 
 TEST(MotionTests, GetStatePropertyReturnsNotSupported)
@@ -57,6 +124,24 @@ TEST(MotionTests, DisposeSucceedsAndSecondDisposeThrows)
     EXPECT_THROW(m.Dispose(), System::ObjectDisposedException);
 }
 
+// Task SENSORBASE-006: mirrors CompassTests.
+// DisposeWhileStartedCallsBackendStopWithoutExplicitStopFirst -- see that
+// test for the full rationale.
+TEST(MotionTests, DisposeWhileStartedCallsBackendStopWithoutExplicitStopFirst)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    ASSERT_FALSE(fake->StopCalled);
+
+    EXPECT_NO_THROW(m.Dispose());
+
+    EXPECT_TRUE(fake->StopCalled);
+}
+
 // Task P3-11: Stop()-after-Dispose() is a distinct, separately guarded code
 // path (ObjectDisposedException::ThrowIf at the top of Stop()).
 TEST(MotionTests, StopAfterDisposeThrows)
@@ -64,6 +149,18 @@ TEST(MotionTests, StopAfterDisposeThrows)
     Motion m;
     m.Dispose();
     EXPECT_THROW(m.Stop(), System::ObjectDisposedException);
+}
+
+// Task DEVICES-0056: no test anywhere asserted Start()-after-Dispose()
+// throws ObjectDisposedException specifically — Start()'s own disposed-check
+// (Motion.cpp, top of Start()) runs before the always-throws-
+// SensorFailedException stub body, but that ordering wasn't confirmed by a
+// test; a regression could silently swap the exception type.
+TEST(MotionTests, StartAfterDisposeThrows)
+{
+    Motion m;
+    m.Dispose();
+    EXPECT_THROW(m.Start(), System::ObjectDisposedException);
 }
 
 TEST(MotionTests, EleventhSimultaneousInstanceThrows)
@@ -191,9 +288,13 @@ TEST(MotionTests, GetTypeName)
     EXPECT_EQ(m.GetTypeName(), "Microsoft.Devices.Sensors.Motion");
 }
 
-// Task P3-6: CurrentValueChanged subscription. Motion is a permanent
-// NotSupported stub (requires Compass), so the event can never actually
-// fire in this environment; this only confirms subscribing doesn't crash.
+// Task P3-6: CurrentValueChanged subscription. On this (non-Android)
+// platform Motion is still a permanent NotSupported stub — no backend is
+// selected here — so the event can't fire in this environment; this only
+// confirms subscribing doesn't crash. See
+// CurrentValueChangedFiresFromBackendReading below for the case where a
+// backend genuinely delivers readings (via a fake, since Android's real
+// Detail::AndroidMotionBackend can't run on this host).
 TEST(MotionTests, CurrentValueChangedSubscriptionDoesNotThrow)
 {
     Motion m;
@@ -207,9 +308,12 @@ TEST(MotionTests, CurrentValueChangedSubscriptionDoesNotThrow)
     EXPECT_THROW(m.Start(), SensorFailedException);
 }
 
-// Task P3-8: Calibrate subscription. Same permanent-stub limitation as
-// above — Motion.Calibrate is never raised by this implementation, so this
-// only confirms subscribing doesn't crash.
+// Task P3-8: Calibrate subscription. Motion.Calibrate is never raised by
+// this implementation on any platform — Detail::IMotionBackend has no
+// calibration callback at all (unlike ICompassBackend), since
+// AndroidMotionBackend never detects a calibration-needed condition itself
+// (docs/devices-native-backend-design.md) — so this only confirms
+// subscribing doesn't crash, on every platform, not just this one.
 TEST(MotionTests, CalibrateSubscriptionDoesNotThrow)
 {
     Motion m;
@@ -221,4 +325,320 @@ TEST(MotionTests, CalibrateSubscriptionDoesNotThrow)
     (void)invoked;
 
     EXPECT_THROW(m.Start(), SensorFailedException);
+}
+
+// Task DEVICES-0113: with a supported fake backend injected, Start() must
+// actually succeed (not throw) and transition to Ready.
+TEST(MotionTests, WithInjectedSupportedBackendStartSucceeds)
+{
+    Motion m;
+    m.SetBackendForTesting(std::make_unique<FakeMotionBackend>());
+
+    EXPECT_NO_THROW(m.Start());
+    EXPECT_EQ(m.getStateProperty(), SensorState::Ready);
+}
+
+TEST(MotionTests, WithInjectedUnsupportedBackendStartStillThrows)
+{
+    Motion m;
+    auto fake = std::make_unique<FakeMotionBackend>();
+    fake->SupportedResult = false;
+    m.SetBackendForTesting(std::move(fake));
+
+    EXPECT_THROW(m.Start(), SensorFailedException);
+    EXPECT_EQ(m.getStateProperty(), SensorState::NotSupported);
+}
+
+// Confirms CurrentValueChanged actually fires with the backend's own
+// reading data once Start() has wired the callback through.
+TEST(MotionTests, CurrentValueChangedFiresFromBackendReading)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    bool invoked = false;
+    MotionReading received;
+    m.CurrentValueChanged += [&invoked, &received](
+        System::Object*, const SensorReadingEventArgs<MotionReading>& args)
+    {
+        invoked = true;
+        received = args.getSensorReadingProperty();
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        System::DateTimeOffset::getUtcNowProperty());
+    const MotionReading synthetic(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        System::DateTimeOffset::getUtcNowProperty());
+    fake->CapturedOnReading(synthetic);
+
+    ASSERT_TRUE(invoked);
+    EXPECT_EQ(received.getDeviceRotationRateProperty(), Vector3(0.01f, 0.02f, 0.03f));
+    EXPECT_TRUE(m.getIsDataValidProperty());
+}
+
+// Task READINGS-003 (2026-07-06): the real timestamp-setting logic for
+// Motion lives entirely in Detail::AndroidSensorBridge.cpp/
+// AndroidMotionBackend.cpp (Android-only, #ifdef __ANDROID__, not reachable
+// on this host), which this codebase's own wall-clock timestamp policy
+// documents as always using System::DateTimeOffset::getUtcNowProperty()
+// (AndroidSensorSample::Timestamp, propagated into MotionReading.Timestamp
+// per Task MOTION-006's fix). What *is* testable here, and was not
+// previously covered by any test in this file, is that Motion::Start()'s
+// callback lambda forwards whatever MotionReading the backend hands it
+// through to CurrentValueChanged/CurrentValue completely unmodified -- a
+// fixed, deliberately-distinguishable timestamp (not a fresh
+// getUtcNowProperty() call at test time) proves exact passthrough rather
+// than a loose "close enough" bracket check.
+TEST(MotionTests, CurrentValueChangedPropagatesBackendTimestampExactly)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    System::DateTimeOffset receivedTimestamp;
+    m.CurrentValueChanged += [&receivedTimestamp](
+        System::Object*, const SensorReadingEventArgs<MotionReading>& args)
+    {
+        receivedTimestamp = args.getSensorReadingProperty().getTimestampProperty();
+    };
+
+    const System::DateTimeOffset fixedTimestamp(System::DateTime(637000000000000000LL), System::TimeSpan::Zero);
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(), fixedTimestamp);
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const MotionReading synthetic(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        fixedTimestamp);
+    fake->CapturedOnReading(synthetic);
+
+    EXPECT_EQ(receivedTimestamp, fixedTimestamp);
+    EXPECT_EQ(m.getCurrentValueProperty().getTimestampProperty(), fixedTimestamp);
+}
+
+// Task SENSORBASE-005: mirrors AccelerometerTests.
+// CurrentValueAndIsDataValidRetainLastReadingAfterStop -- see that test for
+// the full rationale. Motion::Stop() only clears started_/state_ (confirmed
+// by reading Motion::Stop() directly), so the last known reading and its
+// validity are expected to persist.
+TEST(MotionTests, CurrentValueAndIsDataValidRetainLastReadingAfterStop)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        System::DateTimeOffset::getUtcNowProperty());
+    const MotionReading synthetic(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        System::DateTimeOffset::getUtcNowProperty());
+    fake->CapturedOnReading(synthetic);
+    ASSERT_TRUE(m.getIsDataValidProperty());
+
+    m.Stop();
+
+    EXPECT_TRUE(m.getIsDataValidProperty());
+    EXPECT_EQ(m.getCurrentValueProperty().getDeviceRotationRateProperty(), Vector3(0.01f, 0.02f, 0.03f));
+}
+
+// Task SENSORBASE-003: see CompassTests.cpp's identical test for the full
+// rationale -- unlike Accelerometer/Gyroscope, this exact reentrancy
+// scenario had never been tested for Motion at all before this task.
+// Proves Motion's own ClaimDisposalOnce()/Stop() reentrancy handling doesn't
+// deadlock via the fake-backend seam; does NOT prove the deeper question of
+// tearing down the real Detail::AndroidMotionBackend/AndroidSensorBridge
+// chain mid-callback, which is Android-only and unverified here (see
+// plan_devices.md's SENSORBASE-003 closing note).
+TEST(MotionTests, DisposeFromWithinOwnCallbackDoesNotDeadlock)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    bool handlerRan = false;
+    m.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<MotionReading>&)
+    {
+        handlerRan = true;
+        m.Dispose();
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        System::DateTimeOffset::getUtcNowProperty());
+    const MotionReading synthetic(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        System::DateTimeOffset::getUtcNowProperty());
+    EXPECT_NO_THROW(fake->CapturedOnReading(synthetic));
+    EXPECT_TRUE(handlerRan);
+
+    EXPECT_THROW(m.Dispose(), System::ObjectDisposedException);
+}
+
+// Confirms Stop() actually calls through to the backend's own Stop().
+TEST(MotionTests, StopCallsBackendStop)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    m.Stop();
+
+    EXPECT_TRUE(fake->StopCalled);
+    EXPECT_EQ(m.getStateProperty(), SensorState::Disabled);
+}
+
+// Task ANDROID-BRIDGE-002: see CompassTests.cpp's identical pair of tests
+// for the full rationale — SensorBase<T>::TimeBetweenUpdatesChanged is wired
+// (Motion::Motion()) to forward the new value to the live backend.
+TEST(MotionTests, SetTimeBetweenUpdatesPropertyForwardsToBackend)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    m.setTimeBetweenUpdatesProperty(System::TimeSpan::FromMilliseconds(50.0));
+
+    EXPECT_EQ(fake->SetSampleIntervalCallCount, 1);
+    EXPECT_EQ(fake->LastSetSampleInterval, System::TimeSpan::FromMilliseconds(50.0));
+}
+
+TEST(MotionTests, SetTimeBetweenUpdatesPropertyToSameValueDoesNotForwardToBackend)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+
+    const System::TimeSpan current = m.getTimeBetweenUpdatesProperty();
+    m.setTimeBetweenUpdatesProperty(current);
+
+    EXPECT_EQ(fake->SetSampleIntervalCallCount, 0);
+}
+
+// Task DEVICES-0114: confirms Motion does not require constructing a live
+// Accelerometer/Compass/Gyroscope instance to work — its (fake) backend is
+// entirely self-contained.
+TEST(MotionTests, DoesNotRequireOtherSensorInstancesToBeConstructed)
+{
+    Motion m;
+    m.SetBackendForTesting(std::make_unique<FakeMotionBackend>());
+
+    EXPECT_NO_THROW(m.Start());
+}
+
+// Stabilization pass, Task 1 (repeated Start/Stop safety): see
+// CompassTests.cpp's identical test for the full rationale -- calling
+// Start() a second time while already started must not call through to the
+// backend again, and must throw rather than misreport state.
+TEST(MotionTests, StartTwiceThrowsWithoutCallingBackendAgain)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+
+    m.Start();
+    ASSERT_EQ(fake->StartCallCount, 1);
+
+    EXPECT_THROW(m.Start(), SensorFailedException);
+    EXPECT_EQ(fake->StartCallCount, 1);
+    EXPECT_EQ(m.getStateProperty(), SensorState::Ready);
+}
+
+TEST(MotionTests, StartAfterStopSucceedsAndCallsBackendAgain)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+
+    m.Start();
+    m.Stop();
+    EXPECT_NO_THROW(m.Start());
+    EXPECT_EQ(fake->StartCallCount, 2);
+}
+
+// Stabilization pass, Task 6 (SetBackendForTesting() contract): see
+// CompassTests.cpp's identical test for the full rationale, including why
+// the second (attempted-replacement) backend cannot be inspected after the
+// throwing call -- std::move() transfers ownership into the call before
+// the exception unwinds and destroys it.
+TEST(MotionTests, SetBackendForTestingAfterStartThrowsAndDoesNotReplaceBackend)
+{
+    Motion m;
+    auto firstOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* first = firstOwned.get();
+    m.SetBackendForTesting(std::move(firstOwned));
+    m.Start();
+
+    EXPECT_THROW(
+        m.SetBackendForTesting(std::make_unique<FakeMotionBackend>()),
+        SensorFailedException);
+
+    m.Stop();
+    EXPECT_TRUE(first->StopCalled);
+}
+
+// ConcurrentStartStopFromMultipleThreadsDoesNotCrash -- Motion is
+// structurally identical to Compass, which a real devices-tsan run confirmed
+// had an unguarded data race between Start()/Stop() writing started_/state_
+// and getStateProperty() reading state_ (unlike Accelerometer/Gyroscope,
+// whose equivalent fields are guarded by their shared
+// Detail::SdlSensorSubsystem<TSensor>'s subsystem.mutex_). This test
+// empirically confirms the same race exists for Motion and that Motion's own
+// mutex_ (Task SENSORBASE-004) fixes it.
+TEST(MotionTests, ConcurrentStartStopFromMultipleThreadsDoesNotCrash)
+{
+    Motion m;
+    m.SetBackendForTesting(std::make_unique<FakeMotionBackend>());
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 20;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&m]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                try
+                {
+                    m.Start();
+                }
+                catch (const SensorFailedException&)
+                {
+                    // Expected: another thread already started it first.
+                }
+
+                m.Stop();
+                (void)m.getStateProperty();
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
 }

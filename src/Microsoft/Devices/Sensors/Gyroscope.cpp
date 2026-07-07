@@ -3,6 +3,7 @@
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -173,6 +174,11 @@ namespace Microsoft::Devices::Sensors
         started_ = true;
         state_ = SensorState::Ready;
 
+        // Task GYRO-004: see Accelerometer::Start()'s identical fix for the
+        // full rationale — a fresh Start() must always deliver an immediate
+        // first sample.
+        ResetUpdateThrottle();
+
         subsystem.RegisterStartedInstanceLocked(this);
         subsystem.RegisterEventWatchIfNeededLocked();
     }
@@ -298,9 +304,16 @@ namespace Microsoft::Devices::Sensors
     /**
      * Converts raw SDL3 gyroscope data (portrait device frame) to the XNA Windows
      * Phone landscape coordinate convention, for both allowed landscape rotations
-     * (sensorLandscape = ROTATION_90 or ROTATION_270). Mirrors the equivalent
+     * (ROTATION_90 or ROTATION_270 — not an `android:screenOrientation` manifest
+     * attribute; see `Detail::AndroidSensorLandscapeOrientation`'s doc comment,
+     * corrected Task ACCEL-004, for the actual mechanism). Mirrors the equivalent
      * accelerometer remap in Accelerometer.cpp; see that file for the full
      * coordinate-system rationale.
+     *
+     * Task ACCEL-008: this whole remap is a deliberate **CNA convenience
+     * deviation** from real WP7 behavior, not part of the XNA 4.0 contract —
+     * kept enabled by default for existing CNA games/demos; see
+     * `Detail::SetAndroidLandscapeRemapEnabled()` for the opt-out.
      *
      * @param rawX  SDL gyroscope X, in radians/second.
      * @param rawY  SDL gyroscope Y, in radians/second.
@@ -357,6 +370,15 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
+        // Task GYRO-004/SDL-SENSOR-002: see Accelerometer::ProcessSensorUpdateEvent()'s
+        // identical fix for the full rationale. std::chrono::steady_clock,
+        // not wall-clock time (2026-07-06 stabilization pass) -- see
+        // ShouldAcceptUpdateAt()'s own doc comment.
+        if (!ShouldAcceptUpdateAt(std::chrono::steady_clock::now()))
+        {
+            return;
+        }
+
         DispatchSensorReading(x, y, z);
     }
 
@@ -364,6 +386,33 @@ namespace Microsoft::Devices::Sensors
     {
         GyroscopeReading gyroscopeReading;
 
+        // Task GYRO-002 (re-verified 2026-07-06): no unit conversion here,
+        // deliberately -- SDL3 documents its own SDL_SENSOR_GYRO output as
+        // "the current rate of rotation in radians per second"
+        // (third_party/SDL/include/SDL3/SDL_sensor.h), and the real WP7
+        // GyroscopeReading.RotationRate is documented identically: "Gets
+        // the rotational velocity around each axis of the device, in
+        // radians per second" (archived MSDN `hh239090(v=vs.105)`). Both
+        // sides already agree on the same unit, so a straight pass-through
+        // is correct.
+        //
+        // Task SDL-SENSOR-001 (2026-07-06): axis convention for the raw
+        // x/y/z parameters is documented directly above `SDL_SensorType`
+        // (third_party/SDL/include/SDL3/SDL_sensor.h, "Gyroscope sensor
+        // notes"): values[0]/[1]/[2] are angular speed around the
+        // x/y/z axes (pitch/yaw/roll) of a device in natural (portrait)
+        // orientation, positive = counter-clockwise viewed from a positive
+        // point on that axis, and "the gyroscope axis data is not changed
+        // when the device is rotated" -- raw, device-frame axes, exactly
+        // what ConvertAndroidGyroscopeToXnaLandscape() below assumes it is
+        // remapping *from*. Confirmed by reading both real backends this
+        // project targets: SDL_androidsensor.c passes the NDK
+        // ASensorEvent's raw values through with no axis reordering;
+        // SDL_windowssensor.c maps Windows' own
+        // SENSOR_DATA_TYPE_ANGULAR_VELOCITY_{X,Y,Z}_DEGREES_PER_SECOND
+        // values to values[0]/[1]/[2] in the same X/Y/Z order, only scaling
+        // degrees-per-second to radians-per-second -- neither backend
+        // reorders or negates axes.
         const bool valid = true;
         setIsDataValidProperty(valid);
 
@@ -371,9 +420,14 @@ namespace Microsoft::Devices::Sensors
         {
 #ifdef __ANDROID__
             // On Android, remap raw SDL portrait-frame axes to the XNA landscape
-            // convention so that the game layer remains platform-agnostic.
+            // convention so that the game layer remains platform-agnostic -- unless
+            // Task ACCEL-008's opt-out has been used to request real WP7's raw,
+            // unremapped, device-fixed axes instead (see
+            // Detail::SetAndroidLandscapeRemapEnabled()'s own doc comment).
             const Microsoft::Xna::Framework::Vector3 rotationRate =
-                ConvertAndroidGyroscopeToXnaLandscape(x, y, z);
+                Detail::IsAndroidLandscapeRemapEnabled()
+                    ? ConvertAndroidGyroscopeToXnaLandscape(x, y, z)
+                    : Microsoft::Xna::Framework::Vector3(x, y, z);
 #else
             const Microsoft::Xna::Framework::Vector3 rotationRate(x, y, z);
 #endif
@@ -384,7 +438,9 @@ namespace Microsoft::Devices::Sensors
             // from SDL_GetTicksNS() (monotonic ns since SDL init) fed into a
             // DateTime(ticks) constructor that expects ticks since the .NET
             // epoch (0001-01-01) — always produced a bogus near-year-1 value,
-            // never the actual reading time.
+            // never the actual reading time. Re-confirmed as this project's
+            // one consistent cross-sensor-class policy, Task READINGS-003 —
+            // see docs/devices-api-coverage.md's "Timestamp policy" section.
             gyroscopeReading.setTimestampProperty(System::DateTimeOffset::getUtcNowProperty());
         }
 

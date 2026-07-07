@@ -129,6 +129,7 @@ void DevicesDemo::Update(GameTime& gameTime)
 
     HandleVibrationInput(kb);
     HandleSensorToggleInput(kb);
+    HandleTimeBetweenUpdatesInput(kb);
     previousKeyboardState_ = kb;
 
     ++accelFramesSinceEvent_;
@@ -228,31 +229,112 @@ void DevicesDemo::HandleSensorToggleInput(const KbState& kb)
     }
 }
 
+// Task DEMO-001: Numpad +/- double/halve timeBetweenUpdates_ (clamped to
+// [1ms, 1000ms], a range comfortably spanning "as fast as this codebase
+// will ever allow" to "clearly visibly throttled"), applied to all four
+// sensors identically via their own SensorBase<T>::setTimeBetweenUpdatesProperty()
+// -- a safe call whether or not each sensor is currently started
+// (ACCEL-005/GYRO-004/ANDROID-BRIDGE-002's own contract: forwarded live to
+// a running backend, or simply stored for the next Start() otherwise).
+void DevicesDemo::HandleTimeBetweenUpdatesInput(const KbState& kb)
+{
+    auto justPressed = [&](Keys key)
+    {
+        return kb.IsKeyDown(key) && !previousKeyboardState_.IsKeyDown(key);
+    };
+
+    constexpr double MinMs = 1.0;
+    constexpr double MaxMs = 1000.0;
+
+    bool changed = false;
+    double ms = timeBetweenUpdates_.getTotalMillisecondsProperty();
+
+    if (justPressed(Keys::Add))
+    {
+        ms = std::min(ms * 2.0, MaxMs);
+        changed = true;
+    }
+    else if (justPressed(Keys::Subtract))
+    {
+        ms = std::max(ms / 2.0, MinMs);
+        changed = true;
+    }
+
+    if (changed)
+    {
+        timeBetweenUpdates_ = System::TimeSpan::FromMilliseconds(ms);
+        accelerometer_.setTimeBetweenUpdatesProperty(timeBetweenUpdates_);
+        gyroscope_.setTimeBetweenUpdatesProperty(timeBetweenUpdates_);
+        compass_.setTimeBetweenUpdatesProperty(timeBetweenUpdates_);
+        motion_.setTimeBetweenUpdatesProperty(timeBetweenUpdates_);
+    }
+}
+
 void DevicesDemo::UpdateWindowTitle()
 {
-    const Vector3& accel = latestAccelReading_.getAccelerationProperty();
-    const Vector3& rot    = latestGyroReading_.getRotationRateProperty();
+    const Vector3& accel        = latestAccelReading_.getAccelerationProperty();
+    const Vector3& rot          = latestGyroReading_.getRotationRateProperty();
+    const Vector3& magnetometer = latestCompassReading_.getMagnetometerReadingProperty();
+    const Vector3& deviceAccel  = latestMotionReading_.getDeviceAccelerationProperty();
+    const Vector3& deviceRot    = latestMotionReading_.getDeviceRotationRateProperty();
+    const Vector3& gravity      = latestMotionReading_.getGravityProperty();
+    const auto& attitude        = latestMotionReading_.getAttitudeProperty();
 
     // Task P9-6: added IsDataValid for Accelerometer/Gyroscope (previously
     // shown nowhere — only the underlying SensorState indicator square,
     // which doesn't distinguish "started but no reading has arrived yet"
     // from "the last reading is/isn't trustworthy"), the VibrateController
     // NOXNA device name diagnostic (getDeviceNameProperty(), previously
-    // queried nowhere in this demo), and an explicit Compass/Motion
-    // "not supported by SDL backend" note — this demo deliberately has no
-    // SpriteFont/Content dependency (see this class's own header comment),
-    // so the window title remains its one text-output channel for all of
-    // this, not a crash or silent blank reading.
+    // queried nowhere in this demo), and a Compass/Motion support note —
+    // this demo deliberately has no SpriteFont/Content dependency (see this
+    // class's own header comment), so the window title remains its one
+    // text-output channel for all of this, not a crash or silent blank
+    // reading. Task DEVICES-0137: the Compass/Motion note is now dynamic,
+    // not a hardcoded "not supported by SDL backend" claim — both are real,
+    // Detail::AndroidCompassBackend/AndroidMotionBackend-backed on Android
+    // (this demo's constructor already calls compass_.Start()/motion_.Start(),
+    // see the try/catch there), still an honest SDL3-has-no-magnetometer
+    // stub everywhere else.
+    //
+    // Task DEMO-001 (2026-07-06): added Compass/Motion IsDataValid (only
+    // Accelerometer/Gyroscope had this before — a real, previously-unnoticed
+    // gap in "show every sensor's ... data validity"), every field of
+    // CompassReading/MotionReading (previously only MagneticHeading/
+    // TrueHeading were visible anywhere, via the on-screen bars — the raw
+    // MagnetometerReading vector and HeadingAccuracy were not shown at all;
+    // Motion's DeviceRotationRate and Attitude were not shown at all, and
+    // DeviceAcceleration/Gravity only showed their X component via the
+    // on-screen bars), and the current TimeBetweenUpdates value (so a
+    // tester can see what HandleTimeBetweenUpdatesInput()'s Numpad +/-
+    // controls actually changed it to). The on-screen bars remain a partial
+    // "at a glance" view (unchanged by this task); this title bar is the
+    // one channel that must carry literally everything, per this class's
+    // own established rationale above and per Task DEMO-001's "enough data
+    // to write a useful bug report from its output alone" requirement.
     std::ostringstream title;
     title.setf(std::ios::fixed);
-    title.precision(2);
+    title.precision(3);
     title << "CNA Devices Demo | "
-          << "[A/G toggle sensors, 1-6 vibrate, Space stop] | "
-          << "Accel(" << accel.X << "," << accel.Y << "," << accel.Z << ") #" << accelEventCount_
+          << "[A/G toggle sensors, Numpad +/- rate, 1-6 vibrate, Space stop] | "
+          << "TBU=" << timeBetweenUpdates_.getTotalMillisecondsProperty() << "ms"
+          << " | Accel(" << accel.X << "," << accel.Y << "," << accel.Z << ") #" << accelEventCount_
           << " valid=" << (accelerometer_.getIsDataValidProperty() ? "Y" : "N")
           << " | Gyro(" << rot.X << "," << rot.Y << "," << rot.Z << ") #" << gyroEventCount_
           << " valid=" << (gyroscope_.getIsDataValidProperty() ? "Y" : "N")
-          << " | Compass/Motion: not supported by SDL backend"
+          << " | Compass " << (Compass::getIsSupportedProperty() ? "supported" : "unsupported")
+          << " valid=" << (compass_.getIsDataValidProperty() ? "Y" : "N")
+          << " magHeading=" << latestCompassReading_.getMagneticHeadingProperty()
+          << " trueHeading=" << latestCompassReading_.getTrueHeadingProperty()
+          << " accuracy=" << latestCompassReading_.getHeadingAccuracyProperty()
+          << " mag(" << magnetometer.X << "," << magnetometer.Y << "," << magnetometer.Z << ")"
+          << " | Motion " << (Motion::getIsSupportedProperty() ? "supported" : "unsupported")
+          << " valid=" << (motion_.getIsDataValidProperty() ? "Y" : "N")
+          << " devAccel(" << deviceAccel.X << "," << deviceAccel.Y << "," << deviceAccel.Z << ")"
+          << " gravity(" << gravity.X << "," << gravity.Y << "," << gravity.Z << ")"
+          << " devRotRate(" << deviceRot.X << "," << deviceRot.Y << "," << deviceRot.Z << ")"
+          << " attitude(pitch=" << attitude.getPitchProperty()
+          << ",roll=" << attitude.getRollProperty()
+          << ",yaw=" << attitude.getYawProperty() << ")"
           << " | Vibrate " << (vibrateController_->getIsSupportedProperty() ? "supported" : "unsupported")
           << " (" << vibrateController_->getDeviceNameProperty() << ")";
 
@@ -377,8 +459,10 @@ void DevicesDemo::DrawCompassSection(int ox, int oy)
     DrawStateIndicator(ox + 30, oy, compass_.getStateProperty());
     DrawEventFlash(ox + 60, oy, compassFramesSinceEvent_);
 
-    // Permanent NotSupported stub today (see Compass.hpp) — always draws at 0,
-    // demonstrating the code path faithfully rather than being an oversight.
+    // Task DEVICES-0137: real on Android (Detail::AndroidCompassBackend) —
+    // draws whatever compass_ actually reports there; still an honest
+    // NotSupported stub everywhere else (see Compass.hpp), so these bars
+    // draw at 0 on non-Android platforms, faithfully, not as an oversight.
     DrawUnsignedBar(ox, oy + 34, 360, 18, latestCompassReading_.getMagneticHeadingProperty(), 360.0f);
     DrawUnsignedBar(ox, oy + 56, 360, 18, latestCompassReading_.getTrueHeadingProperty(), 360.0f);
 }
@@ -402,8 +486,11 @@ void DevicesDemo::DrawMotionSection(int ox, int oy)
     DrawStateIndicator(ox + 30, oy, motion_.getStateProperty());
     DrawEventFlash(ox + 60, oy, motionFramesSinceEvent_);
 
-    // Permanent NotSupported stub today (see Motion.hpp, depends on Compass) —
-    // DeviceAcceleration/Gravity always draw at 0 for the same reason as Compass.
+    // Task DEVICES-0137: real on Android (Detail::AndroidMotionBackend, which
+    // does not depend on a live Compass instance — see Motion.hpp's updated
+    // comment) — draws whatever motion_ actually reports there; still an
+    // honest NotSupported stub everywhere else, so DeviceAcceleration/Gravity
+    // draw at 0 on non-Android platforms, faithfully, not as an oversight.
     const Vector3& deviceAccel = latestMotionReading_.getDeviceAccelerationProperty();
     const Vector3& gravity     = latestMotionReading_.getGravityProperty();
     constexpr float MaxG = 2.0f;

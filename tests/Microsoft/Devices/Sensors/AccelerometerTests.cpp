@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include "CNA/Platform.hpp"
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
@@ -20,6 +21,7 @@
 #include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/TimeSpan.hpp"
 
 using Microsoft::Devices::Sensors::Accelerometer;
 using Microsoft::Devices::Sensors::AccelerometerFailedException;
@@ -29,6 +31,7 @@ using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
 using Microsoft::Xna::Framework::Vector3;
+using System::TimeSpan;
 
 // NOTE: Unlike Compass/Motion, the Accelerometer sensor can genuinely be
 // supported on platforms/devices that expose SDL_SENSOR_ACCEL. These tests
@@ -40,6 +43,29 @@ TEST(AccelerometerTests, GetIsSupportedPropertyDoesNotCrash)
 {
     const bool supported = Accelerometer::getIsSupportedProperty();
     (void)supported;
+}
+
+// Task ACCEL-007: pins down the desktop-support policy decision itself,
+// not just its consequence. This test host is a desktop Linux container
+// (CNA::getCurrentPlatform() == Platform::Desktop) with no real
+// accelerometer hardware -- getIsSupportedProperty() must reach the real
+// SDL hardware probe (and correctly return false here) rather than being
+// short-circuited to an unconditional false purely because the platform is
+// "Desktop". This is the automated, platform-detection-level counterpart
+// to RepeatedSupportProbingDoesNotChangeSubsequentBehavior below, which
+// only proves probing is stable, not that Desktop reaches the real probe
+// at all.
+TEST(AccelerometerTests, DesktopPlatformReachesRealHardwareProbeRatherThanBeingHardcodedUnsupported)
+{
+    ASSERT_EQ(CNA::getCurrentPlatform(), CNA::Platform::Desktop);
+
+    // Not asserting a specific true/false value -- this container may or
+    // may not have real SDL-visible accelerometer hardware -- only that
+    // reaching this line didn't require any Desktop-specific short-circuit
+    // in getIsSupportedProperty() itself (confirmed by reading it, Task
+    // ACCEL-007: Desktop is listed alongside Android/iOS in the allowed-
+    // platform check, not excluded).
+    EXPECT_NO_THROW((void)Accelerometer::getIsSupportedProperty());
 }
 
 // Task P5-1: getIsSupportedProperty() previously called
@@ -80,6 +106,21 @@ TEST(AccelerometerTests, RepeatedSupportProbingDoesNotChangeSubsequentBehavior)
 TEST(AccelerometerTests, ConstructorSucceedsUnderInstanceLimit)
 {
     EXPECT_NO_THROW({ const Accelerometer a; (void)a; });
+}
+
+// Task SENSORBASE-002: confirmed via a MonoGame source cross-check (Medium
+// confidence, no direct MSDN Remarks stating a default -- see
+// plan_devices.md's SENSORBASE-002 closing note) that the real WP7
+// SensorBase<T>'s single shared 2ms default (not a per-sensor-class
+// override) is architecturally correct: MonoGame's own SensorBase()
+// constructor sets exactly `TimeSpan.FromMilliseconds(2)` at the shared base
+// class level, matching CNA's identical choice. Asserted here at the
+// concrete Accelerometer level specifically, not just the generic
+// SensorBase<T> level SensorBaseTests.cpp already covers.
+TEST(AccelerometerTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
+{
+    const Accelerometer a;
+    EXPECT_EQ(a.getTimeBetweenUpdatesProperty(), TimeSpan::FromMilliseconds(2.0));
 }
 
 TEST(AccelerometerTests, GetStatePropertyReflectsSupportStatus)
@@ -158,6 +199,18 @@ TEST(AccelerometerTests, StopAfterDisposeThrows)
     EXPECT_THROW(a.Stop(), System::ObjectDisposedException);
 }
 
+// Task DEVICES-0056: despite the neighboring comment above implying this was
+// once covered, no test anywhere actually asserted Start()-after-Dispose()
+// throws — only Stop()-after-Dispose() and Dispose()-after-Dispose() were.
+// Start()'s own ObjectDisposedException::ThrowIf() guard (Accelerometer.cpp,
+// top of Start()) was untested by name.
+TEST(AccelerometerTests, StartAfterDisposeThrows)
+{
+    Accelerometer a;
+    a.Dispose();
+    EXPECT_THROW(a.Start(), System::ObjectDisposedException);
+}
+
 // Task P3-11: DisposeSucceedsAndSecondDisposeThrows above disposes a
 // never-started instance. This covers the separate started-then-disposed
 // cleanup path (Dispose(bool) calls Stop() internally when started_).
@@ -173,6 +226,26 @@ TEST(AccelerometerTests, StartThenDisposeDoesNotCrash)
     {
         EXPECT_THROW(a.Start(), AccelerometerFailedException);
     }
+
+    EXPECT_NO_THROW(a.Dispose());
+}
+
+// Task SENSORBASE-006: StartThenDisposeDoesNotCrash above only exercises the
+// real started_ cleanup path inside Dispose(bool) when genuine sensor
+// hardware is present -- getIsSupportedProperty() is false in this
+// container, so it silently takes the else branch instead and never
+// actually reaches that code. SetStartedForTesting(true) forces the same
+// wasStarted-true branch deterministically, regardless of hardware,
+// confirming Stop()'s own subsystem bookkeeping
+// (UnregisterStartedInstanceLocked()/UnregisterEventWatchIfNeededLocked())
+// tolerates an instance that was never actually registered with the real
+// subsystem -- both are safe no-ops in that case (verified here, not just
+// reasoned about from reading the code).
+TEST(AccelerometerTests, DisposeWhileStartedForTestingDoesNotCrash)
+{
+    Accelerometer a;
+    a.SetSupportedForTesting(true);
+    a.SetStartedForTesting(true);
 
     EXPECT_NO_THROW(a.Dispose());
 }
@@ -497,6 +570,100 @@ TEST(AccelerometerTests, ReadingChangedSubscriptionDoesNotThrow)
 // requirement; getCurrentValueProperty() is deliberately not asserted
 // here since it independently throws when the platform is genuinely
 // unsupported (Task P3-1), orthogonal to what this test verifies.
+// Task DEVICES-0058: SetStartedForTesting(false) is the same gate Stop()
+// itself sets — confirms no further dispatch occurs once "stopped", even
+// though the instance is neither disposed nor destroyed.
+TEST(AccelerometerTests, NoDispatchAfterStop)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    int invokeCount = 0;
+    a.CurrentValueChanged += [&invokeCount](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        ++invokeCount;
+    };
+
+    a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+    ASSERT_EQ(invokeCount, 1);
+
+    a.SetStartedForTesting(false); // Same gate Stop() itself clears.
+    a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+    EXPECT_EQ(invokeCount, 1); // No new dispatch.
+}
+
+// Task DEVICES-0059: InjectSyntheticSensorUpdate() itself checks
+// getIsDisposedProperty() first (mirrors the real event path) — confirms no
+// dispatch AND no crash/use-after-free once disposed.
+TEST(AccelerometerTests, NoDispatchAfterDispose)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    int invokeCount = 0;
+    a.CurrentValueChanged += [&invokeCount](
+        System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        ++invokeCount;
+    };
+
+    a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f);
+    ASSERT_EQ(invokeCount, 1);
+
+    a.Dispose();
+    EXPECT_NO_THROW(a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+    EXPECT_EQ(invokeCount, 1); // No new dispatch.
+}
+
+// Task DEVICES-0057: System::EventHandler<T>::Raise() (sharp-runtime)
+// iterates its live handlers_ vector directly (`for (auto& entry : handlers_)`)
+// rather than over a snapshot/copy — Add()/Remove() called reentrantly from
+// within a handler mutate that same vector while Raise()'s loop is still
+// using cached begin()/end() iterators over it. This is a sharp-runtime
+// concern, not something Microsoft::Devices can fix (see NEXT.md's "do not
+// fix bugs discovered in sharp-runtime" rule) — this test exists only to
+// confirm whether the specific pattern a real sensor callback might
+// plausibly do (unsubscribe a handler that hasn't run yet, from within an
+// earlier handler in the same dispatch) is actually reachable/dangerous in
+// this namespace's own usage, not to fix EventHandler<T> itself.
+TEST(AccelerometerTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchDoesNotThrow)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    using Args = SensorReadingEventArgs<AccelerometerReading>;
+    using Token = System::EventHandler<Args>::Token;
+
+    // Declared before either Add() call and captured by reference in the
+    // first handler — by the time Raise() actually invokes that handler,
+    // secondToken already holds handler2's real token (both Add() calls
+    // complete before any dispatch happens).
+    Token secondToken{};
+    bool secondHandlerInvoked = false;
+
+    a.CurrentValueChanged.Add(
+        [&a, &secondToken](System::Object*, const Args&)
+        {
+            a.CurrentValueChanged.Remove(secondToken); // Removes the not-yet-invoked handler below.
+        });
+
+    secondToken = a.CurrentValueChanged.Add(
+        [&secondHandlerInvoked](System::Object*, const Args&)
+        {
+            secondHandlerInvoked = true;
+        });
+
+    EXPECT_NO_THROW(a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+
+    // Documents, rather than asserts a specific "correct" outcome: whether
+    // the removed handler still ran depends on sharp-runtime's
+    // EventHandler<T>::Raise() iterator-invalidation behavior, which this
+    // test does not fix. Recorded here as an honest observation for
+    // whoever reads this test next, not a pass/fail contract.
+    (void)secondHandlerInvoked;
+}
+
 TEST(AccelerometerTests, CurrentValueChangedReceivesExpectedReading)
 {
     Accelerometer a;
@@ -552,6 +719,32 @@ TEST(AccelerometerTests, InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarke
 
     EXPECT_TRUE(a.getIsDataValidProperty());
     const Vector3 expectedAcceleration(rawX / StandardGravity, rawY / StandardGravity, rawZ / StandardGravity);
+    EXPECT_EQ(a.getCurrentValueProperty().getAccelerationProperty(), expectedAcceleration);
+}
+
+// Task SENSORBASE-005: Stop() only clears started_/state_ bookkeeping
+// (confirmed by reading Accelerometer::Stop() directly) -- the real WP7 API
+// documents no Stop()-time reset for CurrentValue/IsDataValid at all, so the
+// last known reading and its validity are expected to persist. This is the
+// real, existing behavior already shared identically by all four sensor
+// classes; this test just locks it in for Accelerometer with an explicit
+// assertion, since nothing previously did.
+TEST(AccelerometerTests, CurrentValueAndIsDataValidRetainLastReadingAfterStop)
+{
+    Accelerometer a;
+    a.SetSupportedForTesting(true);
+    a.SetStartedForTesting(true);
+
+    constexpr float StandardGravity = 9.80665f;
+    a.InjectSyntheticSensorUpdate(0.0f, StandardGravity, 0.0f);
+
+    ASSERT_TRUE(a.getIsDataValidProperty());
+    const Vector3 expectedAcceleration(0.0f, 1.0f, 0.0f);
+    ASSERT_EQ(a.getCurrentValueProperty().getAccelerationProperty(), expectedAcceleration);
+
+    a.Stop();
+
+    EXPECT_TRUE(a.getIsDataValidProperty());
     EXPECT_EQ(a.getCurrentValueProperty().getAccelerationProperty(), expectedAcceleration);
 }
 
@@ -629,6 +822,36 @@ TEST(AccelerometerTests, ReadingChangedReceivesMatchingXYZ)
     EXPECT_DOUBLE_EQ(receivedArgs.getXProperty(), static_cast<double>(rawX / StandardGravity));
     EXPECT_DOUBLE_EQ(receivedArgs.getYProperty(), static_cast<double>(rawY / StandardGravity));
     EXPECT_DOUBLE_EQ(receivedArgs.getZProperty(), static_cast<double>(rawZ / StandardGravity));
+}
+
+// Task ACCEL-002: pins down the exact firing order between the two events,
+// not just that both eventually fire with matching content
+// (ReadingChangedReceivesMatchingXYZ above). Confirmed by reading
+// DispatchSensorReading() (Accelerometer.cpp): it calls
+// setCurrentValueProperty() (which raises CurrentValueChanged, via
+// SensorBase<T>) first, then raises ReadingChanged directly afterward —
+// so CurrentValueChanged always fires strictly before ReadingChanged for
+// the same reading, never the reverse and never interleaved.
+TEST(AccelerometerTests, CurrentValueChangedFiresBeforeReadingChanged)
+{
+    Accelerometer a;
+    a.SetStartedForTesting(true);
+
+    std::vector<std::string> firedOrder;
+    a.CurrentValueChanged += [&firedOrder](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        firedOrder.emplace_back("CurrentValueChanged");
+    };
+    a.ReadingChanged += [&firedOrder](System::Object*, const AccelerometerReadingEventArgs&)
+    {
+        firedOrder.emplace_back("ReadingChanged");
+    };
+
+    a.InjectSyntheticSensorUpdate(1.0f, 2.0f, 3.0f);
+
+    ASSERT_EQ(firedOrder.size(), 2u);
+    EXPECT_EQ(firedOrder[0], "CurrentValueChanged");
+    EXPECT_EQ(firedOrder[1], "ReadingChanged");
 }
 
 // Task P4-6: confirms Stop() actually disables further synthetic-event

@@ -1,0 +1,112 @@
+name: Devices and Sensors Tests
+
+# DEV-BUILD-003 (plan_devices.md): builds CnaTests and runs the full
+# Microsoft::Devices / Microsoft::Devices::Sensors gtest suite on a desktop
+# Linux runner. Every test run here executes without any physical sensor or
+# haptic hardware present — the two tests that genuinely require real hardware
+# (AccelerometerTests.GetCurrentValuePropertyDoesNotThrowWhenSupported,
+# GyroscopeTests.GetCurrentValuePropertyDoesNotThrowWhenSupported) are not
+# excluded from the filter; they are written to self-skip via
+# GTEST_SKIP() when getIsSupportedProperty() is false, which is always the
+# case on a CI runner with no accelerometer/gyroscope, so they show up as
+# "SKIPPED" rather than needing a separate hardware-only filter.
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'include/Microsoft/Devices/**'
+      - 'src/Microsoft/Devices/**'
+      - 'tests/Microsoft/Devices/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'cmake/**'
+      - '.github/workflows/devices-tests.yml'
+  pull_request:
+    paths:
+      - 'include/Microsoft/Devices/**'
+      - 'src/Microsoft/Devices/**'
+      - 'tests/Microsoft/Devices/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'cmake/**'
+      - '.github/workflows/devices-tests.yml'
+  workflow_dispatch: {}
+
+env:
+  # Exact-suite-name filter, kept in sync with docs/devices-build.md Section 2/6
+  # (DEV-BUILD-002) — every TEST(...) under tests/Microsoft/Devices/, no more
+  # and no fewer. Update both places together if a suite is added/renamed.
+  DEVICES_GTEST_FILTER: "AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
+
+jobs:
+  build-and-test:
+    name: Build + test (devices-ubsan preset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # Sibling repos (sharp-runtime, easy-gl, meta-gl) are plain sibling
+      # checkouts referenced via add_subdirectory(../x) in CMakeLists.txt, not
+      # git submodules of this repo (DEV-BUILD-001) — check each out next to
+      # this repo's own checkout so the relative paths resolve.
+      - name: Checkout cna_devices
+        uses: actions/checkout@v4
+        with:
+          path: cna_devices
+          submodules: true # non-recursive on purpose (DEV-BUILD-001) — avoids
+                            # ~19 unneeded nested SDL_image/SDL_mixer codec
+                            # submodules this project's own CMake args disable
+
+      - name: Checkout sharp-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+
+      - name: Checkout easy-gl
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/easy-gl
+          path: easy-gl
+
+      - name: Checkout meta-gl
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/meta-gl
+          path: meta-gl
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ninja-build pkg-config \
+            libasound2-dev libpulse-dev libaudio-dev libfribidi-dev libjack-dev \
+            libsndio-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev \
+            libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
+            libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
+            libthai-dev libwayland-dev libdecor-0-dev \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
+
+      # Vendored SDL3/SDL_image/SDL_mixer are built from source on first
+      # configure (~6-7 minutes, DEV-BUILD-001) into .sdl-prebuilt-Linux-x86_64/;
+      # every later configure/build reuses that cache. Key it off the exact
+      # submodule commits so a submodule bump invalidates it automatically.
+      - name: Cache vendored SDL prebuilt tree
+        uses: actions/cache@v4
+        with:
+          path: cna_devices/.sdl-prebuilt-Linux-x86_64
+          key: sdl-prebuilt-linux-x86_64-${{ hashFiles('cna_devices/third_party/SDL/**', 'cna_devices/third_party/SDL_image/**', 'cna_devices/third_party/SDL_mixer/**') }}
+
+      - name: Configure (devices-ubsan preset)
+        working-directory: cna_devices
+        run: cmake --preset devices-ubsan
+
+      - name: Build CnaTests
+        working-directory: cna_devices
+        run: cmake --build --preset devices-ubsan --parallel
+
+      - name: Run Devices/Sensors test suite
+        working-directory: cna_devices
+        run: |
+          ./cmake-build-devices-ubsan/CnaTests --gtest_filter="${DEVICES_GTEST_FILTER}"

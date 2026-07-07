@@ -18,6 +18,7 @@ endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
 option(CNA_NOXNA "Enable CNA NOXNA extended graphics layer (beyond XNA 4.0)" OFF)
+option(CNA_DEVICES "Enable CNA-specific device/sensor extensions beyond XNA 4.0 (battery, camera, clipboard, ...)" OFF)
 option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
 
 include(cmake/ThirdPartySDL.cmake)
@@ -29,6 +30,19 @@ if(CNA_ENABLE_NET)
 endif()
 
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
+# sharp-runtime is a SIBLING repository checkout, not a git submodule of this
+# repo (Task DEV-BUILD-001) -- `git submodule update --init` cannot fetch it.
+# It must be cloned next to this repo's own directory, so that
+# "${CMAKE_SOURCE_DIR}/../sharp-runtime" resolves to a real checkout.
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/../sharp-runtime/CMakeLists.txt")
+    message(FATAL_ERROR
+        "CNA: Missing sibling repository 'sharp-runtime' at "
+        "${CMAKE_SOURCE_DIR}/../sharp-runtime -- this is a separate git "
+        "checkout expected next to this repo's own directory, not a git "
+        "submodule (git submodule update --init will not fetch it). Fix: "
+        "cd ${CMAKE_SOURCE_DIR}/.. && "
+        "git clone https://github.com/openeggbert/sharp-runtime.git")
+endif()
 add_subdirectory(../sharp-runtime SHARP_RUNTIME)
 
 #find_package(SDL3_ttf REQUIRED)
@@ -80,6 +94,18 @@ endif()
 if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
         message(WARNING "CNA: EASYGL backend is primarily tested on Linux. Other platforms may require additional setup.")
+    endif()
+    # easy-gl is a SIBLING repository checkout, not a git submodule of this
+    # repo (Task DEV-BUILD-001) -- see sharp-runtime's identical check above
+    # for the full rationale.
+    if(NOT EXISTS "${CMAKE_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
+        message(FATAL_ERROR
+            "CNA: Missing sibling repository 'easy-gl' at "
+            "${CMAKE_SOURCE_DIR}/../easy-gl -- this is a separate git "
+            "checkout expected next to this repo's own directory, not a git "
+            "submodule (git submodule update --init will not fetch it). Fix: "
+            "cd ${CMAKE_SOURCE_DIR}/.. && "
+            "git clone https://github.com/openeggbert/easy-gl.git")
     endif()
     add_subdirectory(../easy-gl easy-gl)
 endif()
@@ -212,6 +238,7 @@ target_compile_definitions(CNA
         SOUND_ENABLED
         XNA5
         $<$<BOOL:${CNA_NOXNA}>:CNA_NOXNA>
+        $<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>
 )
 
 target_link_libraries(CNA
@@ -224,6 +251,15 @@ target_link_libraries(CNA
         SDL3_mixer::SDL3_mixer
 #        SDL3_ttf::SDL3_ttf
 )
+
+if(ANDROID)
+    # Detail::AndroidSensorBridge (Microsoft::Devices::Sensors) calls the NDK's
+    # ASensorManager_*/ASensorEventQueue_*/ALooper_* API directly (no JNI) --
+    # those symbols live in libandroid.so, not libc/libc++. PUBLIC so any
+    # executable linking CNA (e.g. cna_demo_devices) picks up the transitive
+    # dependency automatically (plan_devices.md Task DEVICES-0121).
+    target_link_libraries(CNA PUBLIC android)
+endif()
 
 if(CNA_FFMPEG_AVAILABLE)
     target_link_libraries(CNA PRIVATE
@@ -427,6 +463,20 @@ if(CNA_BUILD_EXAMPLES)
     endif()
 
     # ---- Devices (Sensors/VibrateController) demo (works with all backends) --
+    # Desktop/Emscripten only: NOT ANDROID (Task DEV-BUILD-004). A plain
+    # add_executable() cannot be a valid Android app target at all --
+    # <SDL3/SDL_main.h> #defines main to SDL_main on Android
+    # (SDL_MAIN_NEEDED, so SDLActivity.java's dlsym("SDL_main") lookup on a
+    # shared library finds a real symbol), which leaves no literal `main`
+    # symbol for a plain ELF executable's C runtime startup
+    # (crtbegin_dynamic.o) to link against -- confirmed via a real Android
+    # cross-compile attempt: FAILS at the *link* step with "undefined
+    # symbol: main", not at compile time. The real, working Android build of
+    # this same demo is the entirely separate Gradle/CMake project under
+    # examples/demo_devices/android/ (docs/devices-build.md Section 4.1),
+    # which compiles Main.cpp/DevicesDemo.cpp into a genuine shared library
+    # ("main") via its own app/jni/src/CMakeLists.txt -- not this target.
+    if(NOT ANDROID)
     add_executable(cna_demo_devices
         examples/demo_devices/src/Main.cpp
         examples/demo_devices/src/DevicesDemo.cpp
@@ -453,6 +503,21 @@ if(CNA_BUILD_EXAMPLES)
         else()
             target_link_libraries(cna_demo_devices PRIVATE CNA SHARP_RUNTIME)
         endif()
+        # examples/demo_devices/src/Main.cpp includes <SDL3/SDL_main.h>
+        # directly (needed on Android so SDLActivity.java's dlsym("SDL_main")
+        # lookup finds a real symbol) -- unlike every other demo target,
+        # which never touches an SDL3 header directly and only goes through
+        # CNA's own abstraction layer. CNA links SDL3::SDL3 PRIVATE (line
+        # ~222 above), so that include path does not propagate transitively
+        # to any executable that only links CNA. On desktop this went
+        # unnoticed because the host compiler's own default system include
+        # path (e.g. /usr/local/include on this container) happens to carry
+        # a coincidentally-installed system SDL3 dev package -- cross-
+        # compiling for Android has no such host-path fallback, and fails
+        # with "SDL3/SDL_main.h file not found". Link SDL3::SDL3 directly so
+        # this target gets its own real include path on every platform,
+        # independent of host-system luck.
+        target_link_libraries(cna_demo_devices PRIVATE SDL3::SDL3)
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_devices PRIVATE SDL3::SDL3main)
         endif()
@@ -461,6 +526,7 @@ if(CNA_BUILD_EXAMPLES)
             cna_copy_sdl_runtime(cna_demo_devices)
         endif()
     endif()
+    endif() # NOT ANDROID
 endif()
 
 # ---- Combined input smoke sample: Keyboard+Mouse+GamePad+Touch+TextInput -----
@@ -3731,6 +3797,23 @@ if(CNA_BUILD_TESTS)
         CNA
         SHARP_RUNTIME
     )
+endif()
+
+# --- Task VERIFY-003/DEV-API-002: strict XNA API surface compile check ---
+# Compiles tools/devices/StrictXnaApiSurfaceCheck.cpp with CNA_STRICT_XNA_API
+# defined (turns the NOXNA macro into [[deprecated]], see CNAHelper.hpp) and
+# -Werror=deprecated-declarations, so this target fails to build if that file
+# ever calls a NOXNA-tagged Microsoft::Devices/Sensors member. A standalone
+# executable, not a gtest binary — same tools/ precedent as
+# cna_net_two_process_harness above, for the same reason (its own main()).
+if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+    add_executable(cna_strict_xna_api_check
+        tools/devices/StrictXnaApiSurfaceCheck.cpp
+    )
+    target_link_libraries(cna_strict_xna_api_check PRIVATE CNA)
+    target_compile_definitions(cna_strict_xna_api_check PRIVATE CNA_STRICT_XNA_API)
+    target_compile_options(cna_strict_xna_api_check PRIVATE -Werror=deprecated-declarations)
+    add_test(NAME StrictXnaApiSurfaceCheck_Compile_Run COMMAND cna_strict_xna_api_check)
 endif()
 
 if(CNA_BUILD_TESTS)

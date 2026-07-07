@@ -6,6 +6,7 @@
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -41,6 +42,25 @@ namespace Microsoft::Devices::Sensors
 
     bool Accelerometer::getIsSupportedProperty()
     {
+        // Task ACCEL-007 (desktop support policy, decided 2026-07-06):
+        // Desktop is deliberately treated the same as Android/iOS here —
+        // if SDL genuinely detects a real SDL_SENSOR_ACCEL device (e.g. a
+        // 2-in-1 laptop with a hardware accelerometer), this returns true
+        // and Start() actually works, exactly like a phone. There is no
+        // XNA/WP7-specific reason to special-case or fake-disable desktop
+        // hardware that genuinely exists — XNA itself never ran on a
+        // desktop with a real accelerometer, so there is no compatibility
+        // *requirement* either way; "fully supported wherever SDL exposes
+        // hardware" was chosen over a permanent desktop no-op because it's
+        // strictly more useful and costs nothing extra (the real SDL probe
+        // below already reports false on desktops with no such hardware).
+        // `Platform::Web` (Emscripten) is excluded even though SDL itself
+        // has a real `SDL_SENSOR_EMSCRIPTEN` backend
+        // (third_party/SDL/src/sensor/emscripten/) — this exclusion
+        // predates this task and was not re-examined here; a future task
+        // wanting to support browser accelerometer access should treat that
+        // as its own separate decision, not an implied consequence of this
+        // one.
         const CNA::Platform currentPlatform = CNA::getCurrentPlatform();
 
         if (!(currentPlatform == CNA::Platform::Android ||
@@ -221,6 +241,11 @@ namespace Microsoft::Devices::Sensors
         started_ = true;
         state_ = SensorState::Ready;
 
+        // Task ACCEL-005: a fresh Start() must always deliver an immediate
+        // first sample, not stay throttled by a stale last-accepted-update
+        // timestamp left over from a previous Start()/Stop() cycle.
+        ResetUpdateThrottle();
+
         subsystem.RegisterStartedInstanceLocked(this);
         subsystem.RegisterEventWatchIfNeededLocked();
     }
@@ -370,7 +395,7 @@ namespace Microsoft::Devices::Sensors
     /**
      * Converts raw SDL3 accelerometer data (portrait device frame) to the XNA Windows
      * Phone landscape coordinate convention expected by the game, for both allowed
-     * landscape rotations (sensorLandscape = ROTATION_90 or ROTATION_270).
+     * landscape rotations (ROTATION_90 or ROTATION_270).
      *
      * --- SDL3 / Android raw sensor coordinate system ---
      * SDL3 on Android always delivers accelerometer values in the device's NATURAL
@@ -380,9 +405,14 @@ namespace Microsoft::Devices::Sensors
      *   +Z  out of screen (toward the user)
      * Values are already normalised to fractions of g before this function is called.
      *
-     * --- sensorLandscape display orientation ---
-     * AndroidManifest.xml uses android:screenOrientation="sensorLandscape", which
-     * allows two rotations:
+     * --- landscape-only display orientation ---
+     * Corrected 2026-07-06 (Task ACCEL-004): this is not an
+     * `android:screenOrientation` manifest attribute (the demo's manifest sets
+     * none, confirmed by inspection) — see
+     * `Detail::AndroidSensorLandscapeOrientation`'s own doc comment for the
+     * actual mechanism (SDL's runtime `SDL_HINT_ORIENTATIONS`-driven
+     * `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` request). Whatever the exact
+     * mechanism, only two rotations are modeled here:
      *
      *   ROTATION_90  (SDL_ORIENTATION_LANDSCAPE):
      *     Device rotated 90° CCW from portrait — portrait-top points landscape-LEFT.
@@ -403,6 +433,14 @@ namespace Microsoft::Devices::Sensors
      *   Acceleration.Z      →  perpendicular to screen
      *
      * To fix a reversed tilt direction, adjust only the signs here — NOT in game code.
+     *
+     * Task ACCEL-008: this whole remap is a deliberate **CNA convenience
+     * deviation** from real WP7 behavior, not part of the XNA 4.0 contract — the
+     * real WP7 `Accelerometer` never remaps axes based on display orientation at
+     * all (archived MSDN Magazine article, "Touch and Go - Getting Oriented with
+     * the Windows Phone Compass"; SDL3's own docs agree raw axes are never
+     * display-orientation-relative). Kept enabled by default for existing CNA
+     * games/demos; see `Detail::SetAndroidLandscapeRemapEnabled()` for the opt-out.
      *
      * @param rawX  SDL accelerometer X normalised to g.
      * @param rawY  SDL accelerometer Y normalised to g.
@@ -435,7 +473,7 @@ namespace Microsoft::Devices::Sensors
             ? "LANDSCAPE_FLIPPED(ROTATION_270)"
             : "LANDSCAPE(ROTATION_90)";
     SDL_Log (
-"[SpeedyBlupi][Accelerometer] displayRotation=%s raw=(%.3f,%.3f,%.3f) converted=(%.3f,%.3f,%.3f) orientation=sensorLandscape",
+"[CNA][Accelerometer] displayRotation=%s raw=(%.3f,%.3f,%.3f) converted=(%.3f,%.3f,%.3f)",
     orientName, rawX, rawY, rawZ, converted.X, converted.Y, converted.Z);
 #endif
 
@@ -474,6 +512,20 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
+        // Task ACCEL-005/SDL-SENSOR-002: honor TimeBetweenUpdates by
+        // dropping events that arrive too soon after the last accepted one.
+        // Scoped to this instance alone (ShouldAcceptUpdateAt() reads/writes
+        // only this object's own fields), so two Accelerometer instances
+        // with different TimeBetweenUpdates values throttle independently.
+        // std::chrono::steady_clock, not wall-clock time (2026-07-06
+        // stabilization pass) -- see ShouldAcceptUpdateAt()'s own doc
+        // comment for why a throttle decision must use a clock immune to
+        // NTP steps/clock changes.
+        if (!ShouldAcceptUpdateAt(std::chrono::steady_clock::now()))
+        {
+            return;
+        }
+
         DispatchSensorReading(x, y, z);
     }
 
@@ -481,8 +533,40 @@ namespace Microsoft::Devices::Sensors
     {
         AccelerometerReading accelerometerReading;
 
+        // Task ACCEL-003 (re-verified 2026-07-06): SDL3 documents its own
+        // `SDL_STANDARD_GRAVITY` macro (third_party/SDL/include/SDL3/SDL_sensor.h)
+        // as "The accelerometer returns the current acceleration in SI meters
+        // per second squared" -- a cross-platform contract, not a
+        // per-backend guess. Confirmed this is actually implemented
+        // consistently, not just documented, by reading two real platform
+        // backends directly: Android's (SDL_androidsensor.c) passes NDK
+        // ASensorEvent data through completely unconverted (correct, since
+        // ASENSOR_TYPE_ACCELEROMETER already reports m/s^2 natively);
+        // Windows' (SDL_windowssensor.c) explicitly multiplies its native
+        // Sensor API's g-unit values by SDL_STANDARD_GRAVITY before handing
+        // them to SDL_SendSensorUpdate() -- i.e. SDL itself does the
+        // necessary per-platform conversion so every backend ends up
+        // reporting the same SI m/s^2 unit this constant assumes.
         constexpr float StandardGravity = 9.80665f;
 
+        // Task SDL-SENSOR-001 (2026-07-06): axis convention for the raw x/y/z
+        // this method receives is documented directly above `SDL_SensorType`
+        // (third_party/SDL/include/SDL3/SDL_sensor.h, "Accelerometer sensor
+        // notes"): for a device in natural (portrait) orientation,
+        // -X..+X = left..right, -Y..+Y = bottom..top, -Z..+Z = farther..closer,
+        // and "the accelerometer axis data is not changed when the device is
+        // rotated" -- i.e. these are raw, device-frame axes, never
+        // display-orientation-aware, exactly what ConvertAndroidAccelerometerToXnaLandscape()
+        // below assumes it is remapping *from*. Confirmed this is what SDL
+        // actually delivers, not just documents, by reading both real
+        // backends this project targets: SDL_androidsensor.c passes the NDK
+        // ASensorEvent's raw values through with no axis reordering at all
+        // (only ACCEL-003's unit passthrough); SDL_windowssensor.c maps
+        // Windows' own SENSOR_DATA_TYPE_ACCELERATION_{X,Y,Z}_G values to
+        // values[0]/[1]/[2] in the same X/Y/Z order, only scaling by
+        // SDL_STANDARD_GRAVITY -- neither backend reorders or negates axes,
+        // so this method's x/y/z parameters are exactly SDL's documented
+        // natural-orientation axes on every platform this project builds for.
         const bool valid = true;
         setIsDataValidProperty(valid);
 
@@ -490,12 +574,20 @@ namespace Microsoft::Devices::Sensors
         {
 #ifdef __ANDROID__
             // On Android, remap raw SDL portrait-frame axes to the XNA landscape
-            // convention so that the game layer remains platform-agnostic.
+            // convention so that the game layer remains platform-agnostic -- unless
+            // Task ACCEL-008's opt-out has been used to request real WP7's raw,
+            // unremapped, device-fixed axes instead (see
+            // Detail::SetAndroidLandscapeRemapEnabled()'s own doc comment).
             const Microsoft::Xna::Framework::Vector3 acceleration =
-                ConvertAndroidAccelerometerToXnaLandscape(
-                    x / StandardGravity,
-                    y / StandardGravity,
-                    z / StandardGravity);
+                Detail::IsAndroidLandscapeRemapEnabled()
+                    ? ConvertAndroidAccelerometerToXnaLandscape(
+                          x / StandardGravity,
+                          y / StandardGravity,
+                          z / StandardGravity)
+                    : Microsoft::Xna::Framework::Vector3(
+                          x / StandardGravity,
+                          y / StandardGravity,
+                          z / StandardGravity);
 #else
             const Microsoft::Xna::Framework::Vector3 acceleration(
                 x / StandardGravity,
@@ -509,7 +601,9 @@ namespace Microsoft::Devices::Sensors
             // from SDL_GetTicksNS() (monotonic ns since SDL init) fed into a
             // DateTime(ticks) constructor that expects ticks since the .NET
             // epoch (0001-01-01) — always produced a bogus near-year-1 value,
-            // never the actual reading time.
+            // never the actual reading time. Re-confirmed as this project's
+            // one consistent cross-sensor-class policy, Task READINGS-003 —
+            // see docs/devices-api-coverage.md's "Timestamp policy" section.
             accelerometerReading.setTimestampProperty(System::DateTimeOffset::getUtcNowProperty());
         }
 

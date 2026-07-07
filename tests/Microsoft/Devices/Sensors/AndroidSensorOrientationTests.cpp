@@ -6,7 +6,34 @@
 
 using Microsoft::Devices::Sensors::Detail::AndroidSensorLandscapeOrientation;
 using Microsoft::Devices::Sensors::Detail::ConvertAndroidPortraitToXnaLandscape;
+using Microsoft::Devices::Sensors::Detail::IsAndroidLandscapeRemapEnabled;
+using Microsoft::Devices::Sensors::Detail::SetAndroidLandscapeRemapEnabled;
 using Microsoft::Xna::Framework::Vector3;
+
+namespace
+{
+    // Task ACCEL-008: SetAndroidLandscapeRemapEnabled() is process-wide state, so
+    // every test that touches it must restore the default (true) afterward, or a
+    // change here would leak into unrelated tests run later in the same process --
+    // mirrors this codebase's established ScopedFake*Backend RAII-restore pattern
+    // (see e.g. FileDialogTests.cpp) applied to a plain flag instead of a backend.
+    class ScopedAndroidLandscapeRemapSetting
+    {
+    public:
+        explicit ScopedAndroidLandscapeRemapSetting(bool enabled)
+        {
+            SetAndroidLandscapeRemapEnabled(enabled);
+        }
+
+        ~ScopedAndroidLandscapeRemapSetting()
+        {
+            SetAndroidLandscapeRemapEnabled(true);
+        }
+
+        ScopedAndroidLandscapeRemapSetting(const ScopedAndroidLandscapeRemapSetting&) = delete;
+        ScopedAndroidLandscapeRemapSetting& operator=(const ScopedAndroidLandscapeRemapSetting&) = delete;
+    };
+} // namespace
 
 // Task P5-7: Accelerometer.cpp's/Gyroscope.cpp's #ifdef __ANDROID__ axis-remap
 // code was previously untestable off-Android — it called
@@ -195,4 +222,29 @@ TEST(AndroidSensorOrientationTests, ForwardBackwardSignConventionIntentionallyFl
 
     EXPECT_GT(rotation90Result.X, 0.0f);
     EXPECT_LT(rotation270Result.X, 0.0f);
+}
+
+// Task ACCEL-008: the remap is a deliberate CNA-only deviation from real WP7
+// behavior (see Detail::SetAndroidLandscapeRemapEnabled()'s own doc comment) --
+// defaults to enabled, preserving this codebase's existing behavior unchanged.
+TEST(AndroidSensorOrientationTests, LandscapeRemapIsEnabledByDefault)
+{
+    EXPECT_TRUE(IsAndroidLandscapeRemapEnabled());
+}
+
+TEST(AndroidSensorOrientationTests, SetAndroidLandscapeRemapEnabledFalseDisablesIt)
+{
+    ScopedAndroidLandscapeRemapSetting scoped(false);
+
+    EXPECT_FALSE(IsAndroidLandscapeRemapEnabled());
+}
+
+TEST(AndroidSensorOrientationTests, SetAndroidLandscapeRemapEnabledTrueReEnablesIt)
+{
+    ScopedAndroidLandscapeRemapSetting scoped(false);
+    ASSERT_FALSE(IsAndroidLandscapeRemapEnabled());
+
+    SetAndroidLandscapeRemapEnabled(true);
+
+    EXPECT_TRUE(IsAndroidLandscapeRemapEnabled());
 }

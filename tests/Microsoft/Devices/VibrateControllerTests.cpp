@@ -1,15 +1,106 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "Microsoft/Devices/Detail/IVibrateBackend.hpp"
 #include "Microsoft/Devices/VibrateController.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/TimeSpan.hpp"
 
 using Microsoft::Devices::VibrateController;
 using System::TimeSpan;
+
+namespace
+{
+    // Task VIB-002/VIB-009: fake Detail::IVibrateBackend, so tests can
+    // exercise VibrateController's own forwarding/validation/clamping logic
+    // deterministically, without depending on whatever haptic hardware (or
+    // lack of it) happens to be present in the test environment.
+    class FakeVibrateBackend final : public Microsoft::Devices::Detail::IVibrateBackend
+    {
+    public:
+        bool SupportedResult = true;
+        std::string DeviceNameResult;
+
+        int StartCallCount = 0;
+        TimeSpan LastStartDuration = TimeSpan::Zero;
+        float LastStartIntensity = -1.0f;
+
+        int StopCallCount = 0;
+
+        int StartLeftRightCallCount = 0;
+        TimeSpan LastStartLeftRightDuration = TimeSpan::Zero;
+        float LastLargeMotor = -1.0f;
+        float LastSmallMotor = -1.0f;
+
+        void Start(const System::TimeSpan& duration, float intensity) override
+        {
+            ++StartCallCount;
+            LastStartDuration = duration;
+            LastStartIntensity = intensity;
+        }
+
+        void Stop() override
+        {
+            ++StopCallCount;
+        }
+
+        [[nodiscard]] bool IsSupported() override
+        {
+            return SupportedResult;
+        }
+
+        [[nodiscard]] std::string GetDeviceName() override
+        {
+            return DeviceNameResult;
+        }
+
+        void StartLeftRight(float largeMotor, float smallMotor, const System::TimeSpan& duration) override
+        {
+            ++StartLeftRightCallCount;
+            LastLargeMotor = largeMotor;
+            LastSmallMotor = smallMotor;
+            LastStartLeftRightDuration = duration;
+        }
+    };
+
+    // RAII helper: installs a fake backend on VibrateController's shared
+    // singleton for the lifetime of one test, and always restores the real
+    // Detail::SdlHapticVibrateBackend afterward. VibrateController has
+    // exactly one process-wide instance (GetDefaultPropertyReturnsSameInstance
+    // below), so a test that installed a fake and forgot to restore it would
+    // silently break every later test in the same process.
+    class ScopedFakeVibrateBackend
+    {
+    public:
+        ScopedFakeVibrateBackend()
+        {
+            auto fake = std::make_unique<FakeVibrateBackend>();
+            fake_ = fake.get();
+            VibrateController::getDefaultProperty()->SetBackendForTesting(std::move(fake));
+        }
+
+        ~ScopedFakeVibrateBackend()
+        {
+            VibrateController::getDefaultProperty()->SetBackendForTesting(nullptr);
+        }
+
+        ScopedFakeVibrateBackend(const ScopedFakeVibrateBackend&) = delete;
+        ScopedFakeVibrateBackend& operator=(const ScopedFakeVibrateBackend&) = delete;
+
+        FakeVibrateBackend* operator->() const
+        {
+            return fake_;
+        }
+
+    private:
+        FakeVibrateBackend* fake_;
+    };
+} // namespace
 
 // NOTE: VibrateController::Start() deliberately skips haptic devices that
 // are also connected joysticks/gamepads, so it never competes with
@@ -30,6 +121,23 @@ TEST(VibrateControllerTests, GetDefaultPropertyIsNeverNull)
 TEST(VibrateControllerTests, GetDefaultPropertyReturnsSameInstance)
 {
     EXPECT_EQ(VibrateController::getDefaultProperty(), VibrateController::getDefaultProperty());
+}
+
+// Task DEVICES-0016: the two-call check above doesn't confirm identity holds
+// across a real Start()/Stop()/StartLeftRight() sequence in between — this
+// class's constructor is only ever run once (function-local static), but the
+// singleton pointer itself must never change no matter what's been called on
+// it.
+TEST(VibrateControllerTests, GetDefaultPropertyReturnsSameInstanceAcrossUsage)
+{
+    VibrateController* first = VibrateController::getDefaultProperty();
+
+    first->Start(TimeSpan::FromMilliseconds(10));
+    first->StartLeftRight(0.5f, 0.5f, TimeSpan::FromMilliseconds(10));
+    first->Stop();
+
+    EXPECT_EQ(VibrateController::getDefaultProperty(), first);
+    EXPECT_EQ(VibrateController::getDefaultProperty(), first);
 }
 
 TEST(VibrateControllerTests, StopBeforeAnyStartDoesNotThrow)
@@ -65,6 +173,49 @@ TEST(VibrateControllerTests, StartWithOverlongDurationThrows)
     // XNA/WP7 max is 5 seconds; anything past it must throw, not clamp.
     EXPECT_THROW(
         VibrateController::getDefaultProperty()->Start(TimeSpan::FromSeconds(5.001)),
+        System::ArgumentOutOfRangeException);
+}
+
+// Task VIB-006: verified against the archived MSDN Start(TimeSpan) page
+// (learn.microsoft.com/en-us/previous-versions/windows/apps/ff403287(v=vs.105)):
+// "duration ... Valid times are between 0 and 5 seconds. Values greater than
+// 5 or less than 0 raise an exception." TimeSpan::MaxValue/MinValue are both
+// far outside that range and must throw cleanly (no overflow/UB when
+// converting to a backend duration), not just "some sufficiently large
+// value."
+TEST(VibrateControllerTests, StartWithMaxTimeSpanValueThrows)
+{
+    EXPECT_THROW(
+        VibrateController::getDefaultProperty()->Start(TimeSpan::MaxValue),
+        System::ArgumentOutOfRangeException);
+}
+
+TEST(VibrateControllerTests, StartWithMinTimeSpanValueThrows)
+{
+    EXPECT_THROW(
+        VibrateController::getDefaultProperty()->Start(TimeSpan::MinValue),
+        System::ArgumentOutOfRangeException);
+}
+
+// Task VIB-006: the archived MSDN Start(TimeSpan) page documents the thrown
+// type as plain "ArgumentException", not "ArgumentOutOfRangeException" --
+// CNA throws the more specific subtype instead (System::ArgumentOutOfRangeException
+// derives from System::ArgumentException, exactly like the real .NET
+// hierarchy), which is compatible: any caller catching the documented
+// ArgumentException still catches this. This test pins that compatibility
+// relationship down explicitly rather than leaving it an implicit,
+// unverified assumption.
+TEST(VibrateControllerTests, OutOfRangeDurationExceptionIsCatchableAsArgumentException)
+{
+    EXPECT_THROW(
+        VibrateController::getDefaultProperty()->Start(TimeSpan::FromSeconds(6)),
+        System::ArgumentException);
+}
+
+TEST(VibrateControllerTests, StartLeftRightWithMaxTimeSpanValueThrows)
+{
+    EXPECT_THROW(
+        VibrateController::getDefaultProperty()->StartLeftRight(0.5f, 0.5f, TimeSpan::MaxValue),
         System::ArgumentOutOfRangeException);
 }
 
@@ -316,4 +467,252 @@ TEST(VibrateControllerTests, RepeatedStartStopSequencesDoNotDegrade)
         EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(1)));
         EXPECT_NO_THROW(controller->Stop());
     }
+}
+
+// Task DEVICES-0028: every prior test above touches one facet of the
+// no-haptic-hardware contract independently (IsSupported, DeviceName, no
+// crash on Start/Stop/StartLeftRight). This test asserts the whole contract
+// together, in one place, as living documentation for whoever next compares
+// this container's behavior against a real-hardware run (see
+// docs/devices-hardware-checklist.md).
+TEST(VibrateControllerTests, UnsupportedEnvironmentFullContract)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    const bool supported = controller->getIsSupportedProperty();
+    const std::string name = controller->getDeviceNameProperty();
+
+    if (supported)
+    {
+        GTEST_SKIP() << "This environment has real haptic hardware; "
+                         "the no-hardware contract this test asserts does not apply here.";
+    }
+
+    EXPECT_TRUE(name.empty());
+    EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(50)));
+    EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(50), 0.5f));
+    EXPECT_NO_THROW(controller->StartLeftRight(0.5f, 0.5f, TimeSpan::FromMilliseconds(50)));
+    EXPECT_NO_THROW(controller->Stop());
+}
+
+// ---------------------------------------------------------------------------
+// Fake-backend tests (Task VIB-002/VIB-009): these exercise
+// VibrateController's own forwarding/validation/clamping logic
+// deterministically via Detail::IVibrateBackend, rather than depending on
+// whatever real haptic hardware (or lack of it) happens to be present.
+// ---------------------------------------------------------------------------
+
+TEST(VibrateControllerTests, StartWithPlainOverloadForwardsDurationAndFullIntensityToBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(123));
+
+    EXPECT_EQ(fake->StartCallCount, 1);
+    EXPECT_EQ(fake->LastStartDuration, TimeSpan::FromMilliseconds(123));
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 1.0f);
+}
+
+TEST(VibrateControllerTests, StartWithIntensityOverloadForwardsExactDurationAndIntensityToBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(250), 0.42f);
+
+    EXPECT_EQ(fake->StartCallCount, 1);
+    EXPECT_EQ(fake->LastStartDuration, TimeSpan::FromMilliseconds(250));
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.42f);
+}
+
+TEST(VibrateControllerTests, StartClampsOutOfRangeIntensityBeforeReachingBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(10), 5.0f);
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 1.0f);
+
+    controller->Start(TimeSpan::FromMilliseconds(10), -5.0f);
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+}
+
+TEST(VibrateControllerTests, StartWithOutOfRangeDurationThrowsAndNeverReachesBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    EXPECT_THROW(controller->Start(TimeSpan::FromSeconds(-1)), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(controller->Start(TimeSpan::FromSeconds(6)), System::ArgumentOutOfRangeException);
+
+    EXPECT_EQ(fake->StartCallCount, 0);
+}
+
+TEST(VibrateControllerTests, StopForwardsToBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Stop();
+
+    EXPECT_EQ(fake->StopCallCount, 1);
+}
+
+TEST(VibrateControllerTests, GetIsSupportedPropertyForwardsBackendResultTrue)
+{
+    ScopedFakeVibrateBackend fake;
+    fake->SupportedResult = true;
+
+    EXPECT_TRUE(VibrateController::getDefaultProperty()->getIsSupportedProperty());
+}
+
+TEST(VibrateControllerTests, GetIsSupportedPropertyForwardsBackendResultFalse)
+{
+    ScopedFakeVibrateBackend fake;
+    fake->SupportedResult = false;
+
+    EXPECT_FALSE(VibrateController::getDefaultProperty()->getIsSupportedProperty());
+}
+
+TEST(VibrateControllerTests, GetDeviceNamePropertyForwardsBackendResult)
+{
+    ScopedFakeVibrateBackend fake;
+    fake->DeviceNameResult = "Fake Haptic Device";
+
+    EXPECT_EQ(VibrateController::getDefaultProperty()->getDeviceNameProperty(), "Fake Haptic Device");
+}
+
+TEST(VibrateControllerTests, StartLeftRightForwardsExactDurationAndMagnitudesToBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->StartLeftRight(0.3f, 0.7f, TimeSpan::FromMilliseconds(77));
+
+    EXPECT_EQ(fake->StartLeftRightCallCount, 1);
+    EXPECT_FLOAT_EQ(fake->LastLargeMotor, 0.3f);
+    EXPECT_FLOAT_EQ(fake->LastSmallMotor, 0.7f);
+    EXPECT_EQ(fake->LastStartLeftRightDuration, TimeSpan::FromMilliseconds(77));
+}
+
+TEST(VibrateControllerTests, StartLeftRightClampsOutOfRangeMagnitudesBeforeReachingBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->StartLeftRight(5.0f, -5.0f, TimeSpan::FromMilliseconds(10));
+
+    EXPECT_FLOAT_EQ(fake->LastLargeMotor, 1.0f);
+    EXPECT_FLOAT_EQ(fake->LastSmallMotor, 0.0f);
+}
+
+TEST(VibrateControllerTests, StartLeftRightWithOutOfRangeDurationThrowsAndNeverReachesBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    EXPECT_THROW(controller->StartLeftRight(0.5f, 0.5f, TimeSpan::FromSeconds(-1)), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(controller->StartLeftRight(0.5f, 0.5f, TimeSpan::FromSeconds(6)), System::ArgumentOutOfRangeException);
+
+    EXPECT_EQ(fake->StartLeftRightCallCount, 0);
+}
+
+TEST(VibrateControllerTests, SetBackendForTestingNullRestoresDefaultBackendBehavior)
+{
+    {
+        ScopedFakeVibrateBackend fake;
+        fake->SupportedResult = true;
+        EXPECT_TRUE(VibrateController::getDefaultProperty()->getIsSupportedProperty());
+    }
+
+    // ScopedFakeVibrateBackend's destructor already called
+    // SetBackendForTesting(nullptr) -- confirm the restored default backend
+    // is a live, working Detail::SdlHapticVibrateBackend, not a null/no-op
+    // stand-in, by exercising the same no-crash contract every other
+    // non-fake test in this file relies on.
+    VibrateController* controller = VibrateController::getDefaultProperty();
+    EXPECT_NO_THROW((void)controller->getIsSupportedProperty());
+    EXPECT_NO_THROW((void)controller->getDeviceNameProperty());
+    EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(10)));
+    EXPECT_NO_THROW(controller->Stop());
+}
+
+TEST(VibrateControllerTests, RepeatedBackendSwapsDoNotLeakOrCrash)
+{
+    for (int i = 0; i < 20; ++i)
+    {
+        ScopedFakeVibrateBackend fake;
+        VibrateController::getDefaultProperty()->Start(TimeSpan::FromMilliseconds(1));
+        EXPECT_EQ(fake->StartCallCount, 1);
+    }
+
+    // Real backend restored after the loop's last ScopedFakeVibrateBackend
+    // destructor ran -- confirm it's still usable.
+    EXPECT_NO_THROW((void)VibrateController::getDefaultProperty()->getIsSupportedProperty());
+}
+
+// ---------------------------------------------------------------------------
+// Task VIB-007: repeated Start()/Stop() behavior, verified via the fake
+// backend. VibrateController itself tracks no "currently vibrating" session
+// state at all -- every call forwards unconditionally to backend_, every
+// time. What "Start() while already vibrating" actually does physically is
+// therefore entirely the active backend's own responsibility. For
+// Detail::SdlHapticVibrateBackend specifically (confirmed by reading
+// third_party/SDL/src/haptic/SDL_haptic.c's SDL_PlayHapticRumble()
+// directly): calling it again while a rumble is already playing calls
+// SDL_UpdateHapticEffect() (applies the new strength/length) followed by
+// SDL_RunHapticEffect() again -- i.e. it restarts the effect with the new
+// parameters from time zero, it does not ignore the new call or queue it
+// behind the still-running one. This isn't independently observable through
+// this fake (the fake has no timing/effect-slot model to restart), so these
+// tests instead pin down the contract VibrateController itself guarantees:
+// every Start()/Stop() call reaches the backend, unconditionally, with the
+// exact arguments given.
+// ---------------------------------------------------------------------------
+
+TEST(VibrateControllerTests, StartWhileAlreadyStartedForwardsANewCallWithLatestParametersEveryTime)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(100), 0.2f);
+    controller->Start(TimeSpan::FromMilliseconds(200), 0.9f);
+
+    EXPECT_EQ(fake->StartCallCount, 2);
+    EXPECT_EQ(fake->LastStartDuration, TimeSpan::FromMilliseconds(200));
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.9f);
+}
+
+TEST(VibrateControllerTests, StopBeforeAnyStartStillForwardsToBackend)
+{
+    ScopedFakeVibrateBackend fake;
+
+    VibrateController::getDefaultProperty()->Stop();
+
+    EXPECT_EQ(fake->StopCallCount, 1);
+}
+
+TEST(VibrateControllerTests, RepeatedStopCallsEachForwardToBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Stop();
+    controller->Stop();
+    controller->Stop();
+
+    EXPECT_EQ(fake->StopCallCount, 3);
+}
+
+TEST(VibrateControllerTests, StopAfterStartForwardsBothCallsIndependently)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(50));
+    controller->Stop();
+
+    EXPECT_EQ(fake->StartCallCount, 1);
+    EXPECT_EQ(fake->StopCallCount, 1);
 }

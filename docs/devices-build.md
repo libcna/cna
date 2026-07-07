@@ -7,30 +7,88 @@ documentation without running it. Where a command's success is asserted, it was
 verified in this repository, on this branch, this session.
 
 **ZIP-export caveat (Task P7-6):** every claim in this document describes a real
-`git clone` of this repository with submodules initialized (Section 0 below) — it
-does **not** describe, and should not be read as implying anything about, a bare
-ZIP/tarball export of this source tree. A raw source snapshot without
-`git submodule update --init --recursive` having been run has empty
+`git clone` of this repository with submodules initialized and the sibling repositories
+below present (Section 0) — it does **not** describe, and should not be read as
+implying anything about, a bare ZIP/tarball export of this source tree. A raw source
+snapshot without `git submodule update --init` having been run has empty
 `third_party/SDL` (and `SDL_image`/`SDL_mixer`, `vendor/googletest`) directories
 and will not configure, let alone build or pass any test below.
 
 ## 0. Fresh clone / submodule setup
 
-This repository vendors SDL3 (and `SDL_image`/`SDL_mixer`) as git submodules under
-`third_party/`, plus `googletest` under `vendor/` — confirmed via `.gitmodules` and
-`cmake/ThirdPartySDL.cmake` (which hard-fails with `FATAL_ERROR` and prints the exact
-fix if a submodule is missing, rather than silently doing something else). A fresh
-clone needs:
+**Re-verified 2026-07-06 (`DEV-BUILD-001`) from an actually fresh clone** — every prior
+version of this section was written and re-confirmed only in environments that already
+had the sibling repositories below pre-provisioned, so the sibling-repo requirement had
+never actually been tested/documented until this pass. All timings below were measured
+directly in this pass, not estimated.
+
+**Step 1 — sibling repositories.** `sharp-runtime` and `easy-gl` (which itself needs
+`meta-gl`) are **separate git repositories that must be cloned next to this repo's own
+directory** — they are plain sibling checkouts referenced via `add_subdirectory(../x)`
+in `CMakeLists.txt`, **not** git submodules of this repo, so `git submodule update
+--init` cannot fetch them. Confirmed by reproducing the failure from a genuinely fresh
+clone with no siblings present: CMake now fails fast with an actionable
+`FATAL_ERROR` naming the missing sibling and the exact fix (previously a generic
+"`add_subdirectory` given source ... which is not an existing directory" with no
+indication this was a required, separate clone at all — Task `DEV-BUILD-001` fixed
+this). From this repo's own parent directory:
 
 ```bash
-git submodule update --init --recursive
+git clone https://github.com/openeggbert/sharp-runtime.git
+git clone https://github.com/openeggbert/easy-gl.git
+git clone https://github.com/openeggbert/meta-gl.git
 ```
 
-`cmake/ThirdPartySDL.cmake` then builds SDL3 into a persistent, cache-backed
-`.sdl-prebuilt/` directory the *first* time any CMake configure runs (outside any
-`cmake-build-*` directory, so deleting a build directory or running `cmake --build
---clean-first` does **not** trigger an SDL rebuild) — this step can take a few minutes
-the very first time, and is a one-time cost per checkout, not per build.
+Layout expected (all four as siblings under one parent directory):
+
+```text
+<parent>/
+├── cna_devices/      (this repo)
+├── sharp-runtime/
+├── easy-gl/
+└── meta-gl/
+```
+
+`meta-gl` has no further sibling or submodule dependencies of its own (confirmed by
+inspecting its `CMakeLists.txt`/`.gitmodules` directly) — this three-repo chain is the
+full transitive closure for an `EASYGL`-backend build. `sharp-runtime` has its own
+separate `vendor/googletest` submodule, handled automatically by its own build, not
+something this repo's setup needs to touch directly.
+
+**Step 2 — this repo's own git submodules.** This repository vendors SDL3 (and
+`SDL_image`/`SDL_mixer`) as git submodules under `third_party/`, plus `googletest`
+under `vendor/` — confirmed via `.gitmodules` and `cmake/ThirdPartySDL.cmake` (which
+hard-fails with `FATAL_ERROR` and prints the exact fix if a submodule is missing,
+rather than silently doing something else). A fresh clone needs:
+
+```bash
+git submodule update --init
+```
+
+**Deliberately non-recursive** (Task `DEV-BUILD-001` corrected this from an earlier,
+misleading `--recursive` suggestion): `SDL_image`/`SDL_mixer` each carry their own
+further nested `external/*` submodules (AVIF, JXL, WebP, libpng, GME, mod_xmp, mpg123,
+FluidSynth-MIDI, Opus, Vorbis — ~19 total), none of which this project's own
+`SDLIMAGE_*`/`SDLMIXER_*` CMake args (see `cmake/ThirdPartySDL.cmake`) actually enable.
+Measured directly: the plain, non-recursive form above took **~6.5 minutes** in this
+environment (network-bound, not CPU-bound — these are large upstream repos cloned at
+full history, no shallow-clone flag currently used); the `--recursive` form additionally
+attempts all ~19 unneeded nested clones and was observed to still be running, unfinished,
+past 2 minutes into just the *extra* nested fetches on top of that.
+
+**Step 3 — first CMake configure.** `cmake/ThirdPartySDL.cmake` then builds SDL3 (and
+`SDL_image`/`SDL_mixer`) into a persistent, cache-backed `.sdl-prebuilt-<platform>/`
+directory the *first* time any CMake configure runs (outside any `cmake-build-*`
+directory, so deleting a build directory or running `cmake --build --clean-first` does
+**not** trigger an SDL rebuild) — this step can take a few minutes the very first time,
+and is a one-time cost per checkout, not per build. Re-verified 2026-07-06: from a fresh
+clone with Steps 1-2 already done, `cmake --preset devices-ubsan` completed the full
+first-time vendored SDL3/SDL_image/SDL_mixer build and configured successfully with no
+errors. `cmake --build --preset devices-ubsan --target CnaTests -j"$(nproc)"` then
+built the full test binary from scratch in **~3m42s** (parallel build, this
+environment's core count) with zero errors — confirmed by actually running both
+commands in a genuinely fresh clone, not assumed from the existing checkout this
+document's other sections use.
 
 ## 1. Desktop debug build (Linux, `EASYGL` backend)
 
@@ -48,23 +106,54 @@ git checkout; see the ZIP-export caveat above for what this does not claim.
 
 ## 2. Devices-only test filter
 
-```bash
-# Via ctest, matching every Devices/Sensors/VibrateController test suite by name
-# (this also matches the Reading/EventArgs/FailedException-type test suites, e.g.
-# AccelerometerReadingTests, SensorFailedExceptionTests — anything with these
-# substrings in its suite name, which is more than just the 9 "main" suites below.
-# Does NOT match SensorBaseTests or ScopeExitTests — add them explicitly to a
-# gtest_filter, or use ctest -R "SensorBase|ScopeExit" separately, if you need
-# those suites too):
-cd cmake-build-debug && ctest --output-on-failure \
-    -R "Accelerometer|SensorFailed|Compass|Gyroscope|Attitude|Motion|VibrateController|SensorSubsystemOwnership|AndroidSensorOrientation|SensorBase|ScopeExit"
-# 226 tests, 100% passing, as of plan_devices_phase8.md Task P8-8 (last verified this way).
+**Re-verified 2026-07-06 (`DEV-BUILD-002`) against the full, current
+`tests/Microsoft/Devices/` tree** — every `.cpp` file under that directory was listed
+and every `TEST(...)` suite name extracted directly (21 suites, 283 `TEST()` cases
+total, confirmed by a plain `grep -rE '^(TEST|TEST_F|TEST_P)\(' tests/Microsoft/Devices`
+count; no `TEST_F`/`TEST_P` fixtures exist in this scope, only plain `TEST`). The
+substring-based filter this section previously documented (e.g. bare `Accelerometer`,
+`Motion`) had **two real problems**, both confirmed by diffing its actual `ctest -N`
+match list against the 283-case ground truth above:
+- **Silently dropped `CalibrationEventArgsTests`** (3 tests) — its suite name contains
+  none of the old filter's substrings.
+- **Matched 2 unrelated false positives outside `Microsoft::Devices`** —
+  `GamePadTest.GetAccelerometerEXTReturnsFalseAndZeroesOutputWhenNoGamePadConnected`
+  (via the bare `Accelerometer` substring) and
+  `SdlInputBridgeTouchGestureTest.FingerMotionThroughProcessEventProducesFlick` (via the
+  bare `Motion` substring).
 
-# Or directly via the test binary's own gtest filter — narrower: only the 9
-# "main" per-class suites, not the Reading/EventArgs/FailedException ones:
-./cmake-build-debug/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:VibrateControllerTests.*:SensorSubsystemOwnershipTests.*:AndroidSensorOrientationTests.*:SensorBaseTests.*:ScopeExitTests.*"
-# 146 tests, 144 passing, as of plan_devices_phase8.md Task P8-8 (last verified this way).
+The corrected filter below uses the 21 full suite names instead of loose substrings —
+this is both complete (matches all 283 cases, confirmed) and precise (zero
+cross-namespace false positives, confirmed by diff):
+
+```bash
+# Via ctest — matches exactly the 283 current Devices/Sensors/VibrateController
+# TEST() cases, nothing more, nothing less (confirmed 2026-07-06):
+cd cmake-build-debug && ctest --output-on-failure \
+    -R "AccelerometerFailedExceptionTests|AccelerometerReadingEventArgsTests|AccelerometerReadingTests|AccelerometerTests|AndroidSensorOrientationTests|AttitudeReadingTests|CalibrationEventArgsTests|CompassReadingTests|CompassTests|AndroidCompassMathTests|AndroidMotionMathTests|AndroidSensorBridgeTests|GyroscopeReadingTests|GyroscopeTests|MotionReadingTests|MotionTests|ScopeExitTests|SensorBaseTests|SensorFailedExceptionTests|SensorSubsystemOwnershipTests|VibrateControllerTests"
+# 283 tests, 281 passing, 2 expected hardware skips, as of 2026-07-06 (feature/devices).
+
+# Or directly via the test binary's own gtest filter — same 21 suites, same coverage:
+./cmake-build-debug/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
+# Same 283 tests, 281 passing, 2 expected hardware skips.
 ```
+
+**Re-verified 2026-07-06 (stabilization pass, same day as the count above but a later
+pass — `ANDROID-BRIDGE-002`/`READINGS-002`/`MOTION-008` and the `ShouldAcceptUpdateAt()`
+monotonic-clock fix all landed test changes in between):** the same 21-suite filter now
+matches **293** tests (281 → 290 passed as tests were added across those tasks, 2
+expected hardware skips throughout) — confirmed by actually running the command above
+again, not assumed. The suite list itself is unchanged (still 21 suites, no new `.cpp`
+file added under `tests/Microsoft/Devices/`); only per-suite test counts grew. If this
+number drifts again, re-run the ground-truth `grep -rE '^(TEST|TEST_F|TEST_P)\('
+tests/Microsoft/Devices` count from the paragraph above rather than trusting either
+number at face value.
+
+If a new file is added under `tests/Microsoft/Devices/` with a new suite name, add that
+suite name to both filters above — re-verify with the same diff technique (compare
+`ctest -N -R "<filter>"`'s match list against a fresh `grep -rE
+'^(TEST|TEST_F|TEST_P)\(' tests/Microsoft/Devices` count) rather than assuming the
+filter still covers everything.
 
 Both commands' 2 skips are the same pair: `AccelerometerTests`/`GyroscopeTests`'
 `GetCurrentValuePropertyDoesNotThrowWhenSupported` — these `GTEST_SKIP()` themselves
@@ -118,15 +207,23 @@ propagating anywhere — it never will.
 cd cmake-build-debug && ctest --output-on-failure
 ```
 
-As of this writing: 2051 tests, 2 failures — both pre-existing, unrelated `EasyGL`/
-`easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
-`easy-gl-resource-smoke-tests`) that this session's environment happens to have a real
+As of `plan_devices_phase8.md`: 2051 tests, 2 failures — both pre-existing, unrelated
+`EasyGL`/`easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
+`easy-gl-resource-smoke-tests`) that that session's environment happened to have a real
 GPU/display to actually run for the first time (previously silently `Not Run`
 headless) — confirmed via direct investigation to be 100% unrelated to
 `Microsoft::Devices` (see `plan_devices_phase5.md` Task P5-1's Resolution for the full
-finding). Not fixed here — out of scope for `Microsoft::Devices` work. Same 2 failures,
-same root cause, every phase since Phase 5 — the test count only grows as
-`Microsoft::Devices` itself gains tests.
+finding).
+
+**As of `plan_devices.md` Phase 10 (2026-07-05):** 3348 tests, 36 failures — same root
+cause category (`EasyGL`/graphics-backend, headless-environment-dependent — this
+session's container has no real GPU/display, so more `EasyGL` cases fail/skip than the
+2 from the session above that did have one), still confirmed 100% unrelated to
+`Microsoft::Devices`: the Devices-only filter (Section 2 above) is separately,
+independently 100% green. Not fixed here — out of scope for `Microsoft::Devices` work,
+and the exact failure count is expected to vary by environment (GPU/display
+availability), not something to chase toward a fixed number. The total test count only
+grows as `Microsoft::Devices` (and the rest of CNA) gains tests.
 
 ## 4. Android cross-compile
 
@@ -170,58 +267,127 @@ landscape symbols still compile — see that task's Resolution for the exact com
 `plan_devices_phase9.md` Task P9-4 re-confirmed the library cross-compile once more
 (no source changes since Task P8-8, so `ninja` correctly reported nothing to rebuild).
 
-### 4.1 APK packaging and emulator/device run — investigated, not available (Task P9-4)
+### 4.1 APK packaging and emulator/device run (`plan_devices.md` Phase 9, 2026-07-05)
 
-**Library cross-compile only, still true.** No `Microsoft::Devices` example
-(`cna_demo_devices` or any other) has ever been packaged into a runnable Android APK in
-this project's history. This subsection documents exactly what was checked and what is
-actually missing, rather than repeating the same "compile-only" caveat without detail.
+**Superseded — `cna_demo_devices` now packages into a real, installable Android APK.**
+Every prior phase (through `plan_devices_phase9.md` Task P9-4) found this "not
+available" for two independent reasons: no Gradle/CMake integration existed, and
+`/dev/kvm` was absent so no emulator could run even if one had. **Both are now
+resolved**, in this exact environment, this session — re-verify both before trusting
+this section if either regresses in a future session (environments do change, as this
+one just did).
 
-**What exists, actually checked this session:**
-- A JDK (`java`/`javac`), Android SDK `build-tools` (33.0.1/34.0.0/36.1.0/37.0.0) and
-  `platforms` (android-34/35/36.1), and the Android emulator binary are all present in
-  `~/Android/Sdk/`.
-- The vendored `third_party/SDL` submodule ships its own complete, ready-to-use
-  Android Studio/Gradle project template (`third_party/SDL/android-project/`, with a
-  working `gradlew` wrapper) and a generator script
-  (`third_party/SDL/build-scripts/create-android-project.py`) that adapts it for a
-  specific native app.
-- An existing AVD, `Medium_Phone` (x86_64, `android-35/google_apis_playstore`), is
-  already configured under `~/.android/avd/`.
+**1. `/dev/kvm` now exists.** `ls -la /dev/kvm` shows a real, openable device node
+(`crw-rw----+ 1 root kvm`), confirmed via a direct `open()` call, not just `stat`. Every
+session since `plan_devices_phase4.md` found this absent. First noticed during
+`plan_devices.md`'s Phase 0 audit (Task DEVICES-0012); exploited for real in Phase 9.
 
-**What does not exist:** `CNA`'s own build system has **zero integration** connecting
-any of this to any CNA CMake target — no copied/adapted `android-project`, no
-`AndroidManifest.xml`, no Gradle `externalNativeBuild` pointing at CNA's own
-`CMakeLists.txt`, no chosen package name/permissions/`SDL_main` entry point wiring for
-`cna_demo_devices` or any other example. Building this integration from scratch is real,
-multi-step engineering work (Gradle/CMake glue is failure-prone even with a working
-emulator to iterate against) — **explicitly out of scope for this phase**, per this
-task's own instruction not to invent a large Android app framework unless separately
-scoped. Not attempted here.
+**2. The Gradle/CMake integration now exists**, built from SDL's own vendored template
+rather than from scratch:
 
-**Emulator run — actually attempted, real hard failure, not a guess:**
+```bash
+# Generate the Android Studio/Gradle project from SDL's template (already done,
+# checked in under examples/demo_devices/android/ — re-run only if regenerating):
+python3 third_party/SDL/build-scripts/create-android-project.py \
+  --variant copy \
+  --output examples/demo_devices/android \
+  com.openeggbert.cna.demodevices \
+  examples/demo_devices/src/Main.cpp examples/demo_devices/src/DevicesDemo.cpp \
+  examples/demo_devices/src/DevicesDemo.hpp
+```
+
+The generated project's own vendored SDL copy (`app/jni/SDL`, ~34MB) was deleted and its
+CMake wiring changed to reuse CNA's own root project instead of building a second,
+separate SDL — see `app/jni/CMakeLists.txt` (`add_subdirectory(<cna-root> cna_build)`
+with `CNA_BUILD_TESTS`/`CNA_BUILD_EXAMPLES` forced `OFF`) and `app/jni/src/CMakeLists.txt`
+(links `main` against `CNA`/`SHARP_RUNTIME` instead of `SDL3::SDL3` directly). This
+avoids configuring/building SDL3 twice and any `SDL3::SDL3` target collision.
+`CMakeLists.txt`'s root `target_link_libraries(CNA ...)` also gained a `PUBLIC android`
+link on `ANDROID`, since `Detail::AndroidSensorBridge`'s NDK `ASensorManager`/`ALooper`
+calls (Phase 6) need `libandroid.so`, which nothing previously linked (the `CNA` library
+target itself never needed it — only an executable/shared-library consumer does, and
+none existed before this phase).
+
+`app/build.gradle` was adjusted to `ndkVersion "30.0.14904198"` and
+`ANDROID_PLATFORM=android-24`/`minSdkVersion 24` to match this project's actual minimum
+(previously the template's own defaults, `28.2.13676358`/`android-21`).
+`AndroidManifest.xml` already ships `android.permission.VIBRATE` uncommented (confirmed
+independently in Phase 0, Task DEVICES-0048) — added `android.hardware.sensor.
+{accelerometer,gyroscope,compass}` as `android:required="false"` `uses-feature`
+declarations (Task DEVICES-0123), so this diagnostic demo still installs on devices
+missing any one sensor.
+
+**Build it:**
+```bash
+cd examples/demo_devices/android/com.openeggbert.cna.demodevices
+echo "sdk.dir=$HOME/Android/Sdk" > local.properties
+export ANDROID_HOME="$HOME/Android/Sdk"
+./gradlew -PBUILD_WITH_CMAKE assembleDebug
+# Output: app/build/outputs/apk/debug/app-debug.apk
+```
+
+`BUILD SUCCESSFUL in 1m 39s` this session, producing a 7.3MB `app-debug.apk` — the first
+Android APK ever built in this project's history. (One fix needed along the way: the
+generator's manifest-comment edit for Task DEVICES-0123 originally used a bare `--`
+inside an XML comment body, which XML forbids — `ManifestMerger2` rejected it with a
+parse error; fixed by rewording, not by removing the comment.)
+
+**3. The emulator now actually boots and runs the app**, end to end (Task DEVICES-0126):
+
 ```bash
 ~/Android/Sdk/emulator/emulator -avd Medium_Phone -no-window -no-audio -gpu swiftshader_indirect -no-snapshot
-```
-Result: the emulator process exits immediately with
-```
-ERROR | x86_64 emulation currently requires hardware acceleration!
-CPU acceleration status: /dev/kvm is not found: VT disabled in BIOS or KVM kernel module not loaded
-```
-`ls /dev/kvm` confirms no KVM device node exists in this container. This is a **hard
-failure, not merely "slow without acceleration"** — the existing `Medium_Phone` AVD is
-an x86_64 system image, and SDL/Android emulators require hardware virtualization for
-x86_64 targets. `adb devices` confirms no device ever attached. **Re-check in a future
-session** (containers/hosts can change, as the Android NDK's own availability did
-between `plan_devices_phase3.md` and `plan_devices_phase4.md` Task P4-11) — an
-ARM-image AVD, or a host with `/dev/kvm` exposed, could change this result.
+# adb devices → emulator-5554  device   (boots in ~1-2 minutes; every prior session
+# hard-failed here on "x86_64 emulation currently requires hardware acceleration!")
 
-**Summary (Task P9-4):**
-- Library cross-compile: **passed** (re-confirmed, no regressions).
-- APK/demo packaging: **not available** — no integration exists; building one is
-  explicitly out of scope for this phase.
-- Emulator/device run: **failed** — attempted for real, hard KVM-acceleration failure,
-  not a theoretical blocker.
+adb install -r app/build/outputs/apk/debug/app-debug.apk   # Success
+adb shell am start -n com.openeggbert.cna.demodevices/com.openeggbert.cna.demodevices.DemodevicesActivity
+```
+
+**First install/launch attempt failed** with a real, specific, now-fixed bug:
+`logcat` showed `nativeRunMain(): Couldn't find function SDL_main in library libmain.so`.
+Root cause: `examples/demo_devices/src/Main.cpp` defines a plain `int main(int, char**)`
+and never included `<SDL3/SDL_main.h>` — on desktop this doesn't matter (Linux needs no
+special entry point), but `SDL_PLATFORM_ANDROID` requires `#define main SDL_main` (via
+`SDL_MAIN_NEEDED`, only applied if that header is actually included) because
+`SDLActivity.java` finds the app's entry point via `dlsym(RTLD_DEFAULT, "SDL_main")`, not
+a normal native `main()`. Fixed by adding `#include <SDL3/SDL_main.h>` to `Main.cpp`
+(a no-op on desktop, confirmed by rebuilding `cna_demo_devices` there — same cached
+build, nothing to recompile, no regression). **Note for anyone regenerating this Android
+project:** `create-android-project.py --variant copy` duplicates source files into
+`app/jni/src/` rather than symlinking them — editing the original
+`examples/demo_devices/src/*` does **not** automatically propagate; re-`cp` (or
+regenerate) after any source change.
+
+After that fix: `adb logcat` showed
+`SDL: Running main function SDL_main from library .../libmain.so` (no error this time),
+`ActivityTaskManager: Displayed .../.DemodevicesActivity for user 0: +1s548ms`, and
+`adb shell pidof com.openeggbert.cna.demodevices` returned a live PID throughout.
+`adb shell screencap` confirmed the demo's actual UI rendering — per-sensor
+supported/state indicator squares and signed-value bars, matching
+`DevicesDemo.cpp`'s real draw layout, not a blank/crashed screen. Injecting synthetic
+sensor values via the emulator console (`sensor set acceleration 0:9.81:3.0`,
+`sensor set magnetic-field 30:5:40`) and re-screenshotting showed the demo's
+`DrawEventFlash()` indicator lighting up bright green between frames — live evidence
+that real sensor events are flowing through the actual Android runtime pipeline (SDL3's
+own Android sensor backend for Accelerometer/Gyroscope — Compass/Motion's own
+`Detail::AndroidSensorBridge` path was not separately exercised this way, since the
+emulator's virtual sensor set doesn't include a virtual rotation-vector/game-rotation
+sensor to inject through the emulator console).
+
+The emulator's own system apps (Pixel Launcher, then SystemUI) intermittently showed
+"isn't responding" ANR dialogs during this session — an emulator/container resource
+constraint (likely `-gpu swiftshader_indirect` software rendering under load), not a bug
+in `cna_demo_devices` itself: the demo's own process (confirmed via `pidof`) stayed alive
+and kept rendering correctly throughout, unaffected by the system-level ANRs layered on
+top of it in the screenshots.
+
+**Net result (Task DEVICES-0125/0126): APK builds, installs, launches, and renders
+correctly on an emulator, for the first time in this project's history.** No physical
+Android device has been tried (see `docs/devices-hardware-checklist.md`), and the
+emulator's own virtual sensors are not the same as real hardware — this closes the
+"software pipeline works end-to-end" gap, not the "physically verified" one.
+
+See Section 4.1.1 below for the actual emulator install/run result.
 
 ## 5. iOS — confirmed still blocked, not attempted
 
@@ -237,6 +403,60 @@ toolchain — not fixable by installing a package in a Linux container. Re-check
 assuming this is still true in a future session (environments can change, as Android's
 did), but don't expect it to resolve the way Android's did.
 
+### 5.1. `VibrateController` iOS backend — plan only (Task VIB-004, 2026-07-06)
+
+**Decision: yes, iOS vibration should eventually be supported, behind
+`Detail::IVibrateBackend` (`VIB-002`), via a `CHHapticEngine`-backed implementation —
+planned here, not implemented, since no Apple toolchain exists in this environment to
+write or compile Objective-C++ against (Section 5 above).**
+
+- **API choice: `CHHapticEngine` (Core Haptics, iOS 13+), not
+  `UIImpactFeedbackGenerator`.** `UIImpactFeedbackGenerator` is UIKit's canned
+  tap/knock feedback API (`.light`/`.medium`/`.heavy`/`.soft`/`.rigid` styles via
+  `impactOccurred()`) — a fundamentally different shape than XNA's
+  `Start(TimeSpan)`/`Start(TimeSpan, float)` contract (an arbitrary caller-chosen
+  duration plus a continuous intensity), and it isn't designed to run for a specified
+  duration at all. `CHHapticEngine` is the correct match: a `CHHapticEvent` of type
+  `.hapticContinuous` takes both `duration` and a `CHHapticEventParameterID.hapticIntensity`
+  value directly, which maps onto `Start(TimeSpan, float)` almost one-to-one.
+- **Hardware availability check:** `CHHapticEngine.capabilitiesForHardware().supportsHaptics`
+  — false on iPad and on iPhones without a Taptic Engine (iPhone 6s and earlier) — this
+  is the natural `IVibrateBackend::IsSupported()` implementation; a future
+  `CoreHapticsVibrateBackend` must check this before ever constructing an engine, not
+  assume every iOS device has one.
+  - **`StartLeftRight()` on iOS:** the Taptic Engine is a single actuator — there is no
+    iOS API surface for two independently-driven motors. A future implementation should
+    fold `largeMotor`/`smallMotor` into one intensity, the same way Android's own SDL3
+    haptic backend already does today for the phone's single vibrator
+    (`docs/devices-android.md`'s "Vibration" section, `large*0.6 + small*0.4`, confirmed
+    by `VIB-003`) — using the identical blend weighting would keep behavior consistent
+    across both real phone platforms, rather than inventing a third, arbitrary formula.
+    This reinforces `StartLeftRight()`'s own doc comment: true independent two-motor
+    output should only be expected from desktop dual-actuator hardware, never from a
+    phone, on either supported mobile platform.
+  - **Permissions:** none required — Core Haptics needs no `Info.plist` entry or
+    runtime permission prompt, unlike `CMMotionManager`'s `NSMotionUsageDescription`
+    (`docs/devices-native-backend-design.md`'s iOS Motion section).
+  - **Lifecycle note for a future implementation:** `CHHapticEngine` instances can stop
+    themselves on audio session interruptions/app backgrounding and must be explicitly
+    restarted (`engine.start()` again) before the next `Start()` call — a real
+    implementation will need to handle `engine.resetHandler`/`stoppedHandler`, not just
+    construct the engine once and assume it stays running, unlike this codebase's
+    SDL-haptic backend which has no equivalent interruption model to handle.
+- **Not planned:** no separate legacy pre-iOS-13 fallback (e.g. `AudioServicesPlaySystemSound`
+  with a vibration system-sound ID) — this project's minimum iOS version has not been
+  decided anywhere in this codebase yet, and speculative-abstracting for an undecided
+  minimum would be premature; a future task should decide the minimum iOS version
+  first, at which point this note should be revisited.
+
+Until an Apple toolchain is available to actually write and compile this,
+`VibrateController` has no iOS-specific backend at all — same permanently-`false`
+`getIsSupportedProperty()`/silent-no-op `Start()`/`Stop()`/`StartLeftRight()` behavior
+as any other platform without a registered `IVibrateBackend` implementation, which is
+itself deterministic and already covered by `VibrateControllerTests.cpp`'s
+no-hardware-present tests (this container has no haptic device either, so the same code
+path is already exercised here).
+
 ## 6. Sanitizer builds (Task P8-4)
 
 **A single green `ctest` run proves neither memory safety nor thread safety.** Section 2
@@ -250,24 +470,28 @@ sanitizer is stronger evidence than either alone.
 (`plan_devices_phase8.md` Task P8-4 — configured, built, and run against the full
 Devices-only test suite, not just written and assumed):
 
+These use the same corrected, exact-suite-name filter as Section 2 above (a bare
+`Accelerometer*`/`Motion*` glob here would pick up the same `GamePadTest`/
+`SdlInputBridgeTouchGestureTest` false positives noted there):
+
 ```bash
 # AddressSanitizer — catches use-after-free, heap corruption, buffer overflows.
 # Does NOT catch data races; use ThreadSanitizer for that.
 cmake --preset devices-asan
 cmake --build --preset devices-asan
-./cmake-build-devices-asan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+./cmake-build-devices-asan/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
 
 # ThreadSanitizer — catches data races. This is the one that actually validates
 # Microsoft::Devices's own locking discipline.
 cmake --preset devices-tsan
 cmake --build --preset devices-tsan
-./cmake-build-devices-tsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+./cmake-build-devices-tsan/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
 
 # UndefinedBehaviorSanitizer — catches signed overflow, misaligned access,
 # invalid enum values, null-pointer-arithmetic UB, etc.
 cmake --preset devices-ubsan
 cmake --build --preset devices-ubsan
-./cmake-build-devices-ubsan/CnaTests --gtest_filter="Accelerometer*:SensorFailed*:Compass*:Gyroscope*:Attitude*:Motion*:VibrateController*:SensorSubsystemOwnership*:AndroidSensorOrientation*:SensorBase*:ScopeExit*"
+./cmake-build-devices-ubsan/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
 ```
 
 **Actual results as of `plan_devices_phase8.md` (2026-07-04), all three presets
@@ -306,6 +530,41 @@ by coverage):
   had been waved away without reading it.
 - **UBSan:** clean (0 issues).
 
+**Re-verified as of `plan_devices.md` Phase 10 (2026-07-05), all three presets
+reconfigured, rebuilt, and re-run against the updated filter above** (271 tests, 269
+passed, 2 expected skips):
+- **ASan:** clean (0 issues) — confirmed on Phases 6-8's new `Detail::AndroidSensorBridge`/
+  `AndroidCompassBackend`/`AndroidMotionBackend` code too (their non-Android inert paths
+  and pure math functions run on this desktop build; the real `#ifdef __ANDROID__` code
+  cannot execute here at all, only compile — see `docs/devices-hardware-checklist.md`
+  §6-8 for what that leaves genuinely unverified).
+- **TSan:** 40 reports, **all confirmed the identical known finding** — checked directly,
+  not assumed: every single report's own `Location is global 'System::TimeSpan::copy_count'`
+  line matches exactly, despite the surrounding call stacks now varying more (e.g. via
+  `SensorBase.hpp:294`, `DateTimeOffset.cpp:71/74` — different construction paths through
+  `Accelerometer`'s constructor and `AccelerometerReading`'s default `Timestamp`, all
+  ultimately copying the same `TimeSpan`/`DateTimeOffset` types that hit the same
+  unsynchronized `sharp-runtime` counter). This re-confirms the "if a future TSan run
+  reports anything other than this one finding, treat it as new" instruction above still
+  holds — verified by actually reading all 40 reports' location lines, not by pattern-matching
+  the call stacks alone (which looked different enough at a glance to warrant checking).
+- **UBSan:** clean (0 issues).
+
+**Re-verified 2026-07-06 (`DEV-BUILD-002`), all three presets rebuilt and re-run against
+the corrected, exact-suite-name filter above** (283 tests, 281 passed, 2 expected
+skips — matches the ground-truth 283 `TEST()` count exactly, unlike every prior
+session's filter):
+- **ASan:** clean (0 issues).
+- **TSan:** 41 reports, all confirmed the identical known finding — every report's
+  `Location is global 'System::TimeSpan::copy_count'` line matches exactly (checked
+  directly, not assumed); this is the same pre-existing, out-of-scope `sharp-runtime`
+  race documented above, not a new `Microsoft::Devices` finding.
+- **UBSan:** 3 reports, all pre-existing and confirmed 0 in any `Microsoft::Devices`
+  file — 2× `Vector3.cpp:117` and 1× `Matrix.cpp:249`, both `GetHashCode()` signed
+  integer overflow, triggered indirectly by `AccelerometerReadingTests`/
+  `AttitudeReadingTests` hashing a `Vector3`/`Matrix` member, not a bug in the reading
+  struct's own code.
+
 **Throwaway, non-preset builds used during development** (e.g.
 `/tmp/cmake-build-asan-check`) are equally valid if you'd rather not create a build
 directory inside the repo — pass the same `CMAKE_CXX_FLAGS`/`CMAKE_EXE_LINKER_FLAGS`
@@ -313,3 +572,70 @@ directly to a plain `cmake -S . -B <dir>` invocation instead of using the preset
 way, remember these are Debug, unoptimized-ish (`-O0`/`-O1`), instrumented builds —
 useful for correctness verification, not for measuring performance, and slower to
 build/run than a plain `cmake-build-debug`.
+
+## 7. Decided against: a native Android vibration backend (`plan_devices.md` Task DEVICES-0031, 2026-07-05)
+
+Do not build a JNI/`Vibrator`/`VibrationEffect` bridge for `VibrateController` on
+Android, and do not build an `IDeviceVibrationBackend` abstraction seam to select one
+in. Both were considered and explicitly rejected: reading SDL3's own Android haptic
+backend (`third_party/SDL/src/haptic/android/SDL_syshaptic.c` and its Java counterpart,
+`third_party/SDL/android-project/app/src/main/java/org/libsdl/app/SDLControllerManager.java`'s
+`SDLHapticHandler`/`SDLHapticHandler_API26`/`SDLHapticHandler_API31`) confirms it already
+queries `Context.VIBRATOR_SERVICE` (the phone's own built-in vibrator, separate from any
+connected-controller vibrator) and already implements amplitude control end to end via
+`VibrationEffect.createOneShot()`/`VibratorManager` — including the exact
+`intensity == 0.0f → stop()` and `intensity * 255` clamped to `[1,255]` mapping a custom
+bridge would have had to reinvent. SDL's own Android manifest template
+(`third_party/SDL/android-project/app/src/main/AndroidManifest.xml`) already declares
+`android.permission.VIBRATE`, uncommented. Building a second (native) backend behind an
+abstraction seam that would only ever have one real implementation would be pure
+speculative abstraction — see `plan_devices.md`'s Task DEVICES-0031 for the full
+evidence trail before reconsidering this.
+
+## 8. Continuous Integration (`DEV-BUILD-003`, 2026-07-06)
+
+`.github/workflows/devices-tests.yml` builds `CnaTests` and runs the exact-suite-name
+Devices/Sensors filter from Section 2 above on every push/PR that touches
+`include/Microsoft/Devices/**`, `src/Microsoft/Devices/**`,
+`tests/Microsoft/Devices/**`, or the top-level CMake files, plus on manual
+`workflow_dispatch`. It runs on a plain `ubuntu-latest` GitHub-hosted runner — no
+physical sensor or haptic hardware is available there, which is the point: the two
+tests that need real hardware
+(`AccelerometerTests.GetCurrentValuePropertyDoesNotThrowWhenSupported`,
+`GyroscopeTests.GetCurrentValuePropertyDoesNotThrowWhenSupported`) are not excluded from
+the CI filter at all — they call `GTEST_SKIP()` internally whenever
+`getIsSupportedProperty()` is false (see their own bodies), so on a hardware-free runner
+they simply report `SKIPPED`, the same way they do in this local development container.
+No separate "hardware-only" CI filter was needed for that reason.
+
+The job:
+- checks out this repo (non-recursive submodules — `third_party/SDL`/`SDL_image`/
+  `SDL_mixer`/`vendor/googletest`, matching the `DEV-BUILD-001`-corrected guidance in
+  Section 0, not `--recursive`), plus the three sibling repos (`sharp-runtime`,
+  `easy-gl`, `meta-gl`) into sibling directories on the runner, since `CMakeLists.txt`
+  resolves them via `add_subdirectory(../x)`, not a submodule path;
+- installs the same Ubuntu SDL3 build dependencies documented in
+  `third_party/SDL/docs/README-linux.md`'s "Ubuntu 18.04, all available features"
+  list (plus `libwayland-dev`/`libdecor-0-dev` from its Ubuntu 22.04+ addendum) and the
+  FFmpeg dev packages from this repo's own `CLAUDE.md` (`CMakeLists.txt` requires
+  `libavcodec`/`libavformat`/`libavutil`/`libswresample` via `pkg-config` unconditionally
+  on Linux, regardless of which target is actually being built — see its
+  `CNA_FFMPEG_AVAILABLE` block);
+- caches `.sdl-prebuilt-Linux-x86_64/` (the vendored SDL3/SDL_image/SDL_mixer
+  from-source build tree, Section 1) keyed on the submodules' own tracked commits, so a
+  submodule bump invalidates the cache automatically and every other push reuses the
+  ~6-7 minute first-time SDL build (`DEV-BUILD-001`);
+- configures and builds with the existing `devices-ubsan` preset (Section 6) rather than
+  a plain, non-sanitized build, so every CI run also gets UndefinedBehaviorSanitizer
+  coverage for free, at no extra job;
+- runs `CnaTests` with the Section 2 filter directly (not through `ctest`, matching this
+  project's own documented reason in the `tests` preset description — `ctest` races
+  several tests that share hardcoded `/tmp` fixture paths across processes).
+
+This CI job has not yet actually executed on GitHub Actions as of this writing (no push
+to a remote branch has triggered it in this session) — the exact commands it runs
+(`cmake --preset devices-ubsan`, `cmake --build --preset devices-ubsan --parallel`, the
+Section 2 filter) were each independently verified locally in this container, and the
+apt package list is `third_party/SDL`'s own documented Ubuntu list, but the *workflow
+file itself* running green on an actual GitHub-hosted runner is not yet confirmed —
+worth checking the Actions tab after the first push that includes it.

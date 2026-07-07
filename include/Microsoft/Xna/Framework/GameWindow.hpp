@@ -89,6 +89,19 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] SharpRuntime::IntPtr getHandleProperty() const;
 
         /**
+         * @brief Gets the underlying native SDL window this instance wraps.
+         *
+         * CNA extension for code that needs to query SDL3 window/display state this
+         * class does not itself expose as a property (e.g.
+         * `CNA::Devices::DisplayInfo`'s content-scale/safe-area queries) — never for
+         * use in the strict XNA-facing API surface itself.
+         *
+         * @return The native SDL_Window pointer, or nullptr if this GameWindow wraps
+         * no SDL window.
+         */
+        NOXNA [[nodiscard]] SDL_Window* GetNativeSdlWindowEXT() const;
+
+        /**
          * @brief Gets the name of the screen/display containing this window.
          * @return A const reference to the screen device name string.
          */

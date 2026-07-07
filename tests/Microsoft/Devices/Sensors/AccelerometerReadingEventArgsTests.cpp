@@ -26,34 +26,15 @@ TEST(AccelerometerReadingEventArgsTests, ParameterizedConstructorStoresValues)
     EXPECT_EQ(e.getTimestampProperty(), ts);
 }
 
-TEST(AccelerometerReadingEventArgsTests, SetX)
-{
-    AccelerometerReadingEventArgs e;
-    e.setXProperty(0.5);
-    EXPECT_EQ(e.getXProperty(), 0.5);
-}
-
-TEST(AccelerometerReadingEventArgsTests, SetY)
-{
-    AccelerometerReadingEventArgs e;
-    e.setYProperty(-0.5);
-    EXPECT_EQ(e.getYProperty(), -0.5);
-}
-
-TEST(AccelerometerReadingEventArgsTests, SetZ)
-{
-    AccelerometerReadingEventArgs e;
-    e.setZProperty(1.5);
-    EXPECT_EQ(e.getZProperty(), 1.5);
-}
-
-TEST(AccelerometerReadingEventArgsTests, SetTimestamp)
-{
-    AccelerometerReadingEventArgs e;
-    const DateTimeOffset ts(System::DateTime(9999LL), System::TimeSpan::Zero);
-    e.setTimestampProperty(ts);
-    EXPECT_EQ(e.getTimestampProperty(), ts);
-}
+// Task READINGS-002: setXProperty()/setYProperty()/setZProperty()/
+// setTimestampProperty() were removed entirely — the real WP7 API has no
+// setter of any visibility for X/Y/Z (confirmed via archived MSDN pages
+// ff707568/ff707712/ff708055, `public double X/Y/Z { get; }`) and only a
+// `private set` for Timestamp (ff707430), which this class already
+// satisfies without a callable method (the constructor assigns the private
+// field directly). These four values are therefore only ever set via the
+// constructor — already covered by DefaultConstructorZeroValues/
+// ParameterizedConstructorStoresValues below.
 
 TEST(AccelerometerReadingEventArgsTests, EqualityOperatorEqualInstances)
 {

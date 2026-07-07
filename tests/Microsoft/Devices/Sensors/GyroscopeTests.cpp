@@ -18,6 +18,7 @@
 #include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/TimeSpan.hpp"
 
 using Microsoft::Devices::Sensors::Gyroscope;
 using Microsoft::Devices::Sensors::GyroscopeReading;
@@ -25,6 +26,7 @@ using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
 using Microsoft::Xna::Framework::Vector3;
+using System::TimeSpan;
 
 // NOTE: Unlike Compass, the Gyroscope sensor can genuinely be supported on
 // platforms/devices that expose SDL_SENSOR_GYRO. These tests branch on the
@@ -70,6 +72,15 @@ TEST(GyroscopeTests, RepeatedSupportProbingDoesNotChangeSubsequentBehavior)
 TEST(GyroscopeTests, ConstructorSucceedsUnderInstanceLimit)
 {
     EXPECT_NO_THROW({ const Gyroscope g; (void)g; });
+}
+
+// Task SENSORBASE-002: see AccelerometerTests.cpp's identical test for the
+// full rationale (MonoGame cross-check confirms the real WP7 SensorBase<T>'s
+// single shared 2ms default, not a per-sensor-class override).
+TEST(GyroscopeTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
+{
+    const Gyroscope g;
+    EXPECT_EQ(g.getTimeBetweenUpdatesProperty(), TimeSpan::FromMilliseconds(2.0));
 }
 
 TEST(GyroscopeTests, GetStatePropertyReflectsSupportStatus)
@@ -135,6 +146,19 @@ TEST(GyroscopeTests, DisposeSucceedsAndSecondDisposeThrows)
     EXPECT_THROW(g.Dispose(), System::ObjectDisposedException);
 }
 
+// Task SENSORBASE-006: mirrors AccelerometerTests.
+// DisposeWhileStartedForTestingDoesNotCrash -- see that test for the full
+// rationale. This exact scenario (Dispose() while started_) had no test at
+// all for Gyroscope before this task, not even a hardware-conditional one.
+TEST(GyroscopeTests, DisposeWhileStartedForTestingDoesNotCrash)
+{
+    Gyroscope g;
+    g.SetSupportedForTesting(true);
+    g.SetStartedForTesting(true);
+
+    EXPECT_NO_THROW(g.Dispose());
+}
+
 // Task P3-11: Stop()-after-Dispose() is a distinct, separately guarded code
 // path (ObjectDisposedException::ThrowIf at the top of Stop()).
 TEST(GyroscopeTests, StopAfterDisposeThrows)
@@ -142,6 +166,15 @@ TEST(GyroscopeTests, StopAfterDisposeThrows)
     Gyroscope g;
     g.Dispose();
     EXPECT_THROW(g.Stop(), System::ObjectDisposedException);
+}
+
+// Task DEVICES-0056: no test anywhere asserted Start()-after-Dispose() throws
+// — only Stop()-after-Dispose() and Dispose()-after-Dispose() were.
+TEST(GyroscopeTests, StartAfterDisposeThrows)
+{
+    Gyroscope g;
+    g.Dispose();
+    EXPECT_THROW(g.Start(), System::ObjectDisposedException);
 }
 
 TEST(GyroscopeTests, EleventhSimultaneousInstanceThrows)
@@ -474,6 +507,27 @@ TEST(GyroscopeTests, InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSup
 
     EXPECT_TRUE(g.getIsDataValidProperty());
     const Vector3 expectedRotationRate(rawX, rawY, rawZ);
+    EXPECT_EQ(g.getCurrentValueProperty().getRotationRateProperty(), expectedRotationRate);
+}
+
+// Task SENSORBASE-005: mirrors AccelerometerTests.
+// CurrentValueAndIsDataValidRetainLastReadingAfterStop -- see that test for
+// the full rationale.
+TEST(GyroscopeTests, CurrentValueAndIsDataValidRetainLastReadingAfterStop)
+{
+    Gyroscope g;
+    g.SetSupportedForTesting(true);
+    g.SetStartedForTesting(true);
+
+    const Vector3 expectedRotationRate(0.5f, -1.25f, 2.0f);
+    g.InjectSyntheticSensorUpdate(0.5f, -1.25f, 2.0f);
+
+    ASSERT_TRUE(g.getIsDataValidProperty());
+    ASSERT_EQ(g.getCurrentValueProperty().getRotationRateProperty(), expectedRotationRate);
+
+    g.Stop();
+
+    EXPECT_TRUE(g.getIsDataValidProperty());
     EXPECT_EQ(g.getCurrentValueProperty().getRotationRateProperty(), expectedRotationRate);
 }
 

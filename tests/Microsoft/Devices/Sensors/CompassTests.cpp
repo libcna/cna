@@ -7,11 +7,15 @@
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/Compass.hpp"
 #include "Microsoft/Devices/Sensors/CompassReading.hpp"
+#include "Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/TimeSpan.hpp"
 
 using Microsoft::Devices::Sensors::CalibrationEventArgs;
 using Microsoft::Devices::Sensors::Compass;
@@ -19,6 +23,56 @@ using Microsoft::Devices::Sensors::CompassReading;
 using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
+using Microsoft::Xna::Framework::Vector3;
+using System::TimeSpan;
+
+namespace
+{
+    // Task DEVICES-0096: a fake ICompassBackend (not Detail::AndroidCompassBackend,
+    // which is #ifdef __ANDROID__-only and cannot compile on this host) —
+    // lets these tests exercise Compass::Start()/CurrentValueChanged/Calibrate's
+    // delegation to *any* backend without needing real Android hardware.
+    class FakeCompassBackend final : public Microsoft::Devices::Sensors::Detail::ICompassBackend
+    {
+    public:
+        bool SupportedResult = true;
+        bool StartResult = true;
+        bool StopCalled = false;
+        int StartCallCount = 0;
+        int SetSampleIntervalCallCount = 0;
+        System::TimeSpan LastSetSampleInterval;
+        ReadingCallback CapturedOnReading;
+        CalibrationCallback CapturedOnCalibrationNeeded;
+
+        [[nodiscard]] bool IsSupported() override
+        {
+            return SupportedResult;
+        }
+
+        bool Start(const System::TimeSpan&, ReadingCallback onReading, CalibrationCallback onCalibrationNeeded) override
+        {
+            ++StartCallCount;
+            if (!StartResult)
+            {
+                return false;
+            }
+            CapturedOnReading = std::move(onReading);
+            CapturedOnCalibrationNeeded = std::move(onCalibrationNeeded);
+            return true;
+        }
+
+        void Stop() override
+        {
+            StopCalled = true;
+        }
+
+        void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override
+        {
+            ++SetSampleIntervalCallCount;
+            LastSetSampleInterval = timeBetweenUpdates;
+        }
+    };
+} // namespace
 
 TEST(CompassTests, GetIsSupportedPropertyDoesNotCrash)
 {
@@ -28,6 +82,15 @@ TEST(CompassTests, GetIsSupportedPropertyDoesNotCrash)
 TEST(CompassTests, ConstructorSucceedsUnderInstanceLimit)
 {
     EXPECT_NO_THROW({ const Compass c; (void)c; });
+}
+
+// Task SENSORBASE-002: see AccelerometerTests.cpp's identical test for the
+// full rationale (MonoGame cross-check confirms the real WP7 SensorBase<T>'s
+// single shared 2ms default, not a per-sensor-class override).
+TEST(CompassTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
+{
+    const Compass c;
+    EXPECT_EQ(c.getTimeBetweenUpdatesProperty(), TimeSpan::FromMilliseconds(2.0));
 }
 
 TEST(CompassTests, GetStatePropertyReturnsNotSupported)
@@ -57,6 +120,29 @@ TEST(CompassTests, DisposeSucceedsAndSecondDisposeThrows)
     EXPECT_THROW(c.Dispose(), System::ObjectDisposedException);
 }
 
+// Task SENSORBASE-006: no test anywhere confirmed that Dispose() itself
+// (without an explicit Stop() call first) actually stops a running backend
+// -- StopCallsBackendStop below only tests an explicit Stop() call.
+// Dispose(bool)'s own wasStarted-then-Stop() branch (Compass.cpp) is
+// exercised here directly via the fake backend, confirming no backend
+// resources are left running across a Start()->Dispose() cycle (this
+// task's acceptance criteria; also covered under devices-asan as part of
+// this task's standard verification pass).
+TEST(CompassTests, DisposeWhileStartedCallsBackendStopWithoutExplicitStopFirst)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    ASSERT_FALSE(fake->StopCalled);
+
+    EXPECT_NO_THROW(c.Dispose());
+
+    EXPECT_TRUE(fake->StopCalled);
+}
+
 // Task P3-11: Stop()-after-Dispose() is a distinct, separately guarded code
 // path (ObjectDisposedException::ThrowIf at the top of Stop()).
 TEST(CompassTests, StopAfterDisposeThrows)
@@ -64,6 +150,18 @@ TEST(CompassTests, StopAfterDisposeThrows)
     Compass c;
     c.Dispose();
     EXPECT_THROW(c.Stop(), System::ObjectDisposedException);
+}
+
+// Task DEVICES-0056: no test anywhere asserted Start()-after-Dispose()
+// throws ObjectDisposedException specifically — Start()'s own disposed-check
+// (Compass.cpp, top of Start()) runs before the always-throws-
+// SensorFailedException stub body, but that ordering wasn't confirmed by a
+// test; a regression could silently swap the exception type.
+TEST(CompassTests, StartAfterDisposeThrows)
+{
+    Compass c;
+    c.Dispose();
+    EXPECT_THROW(c.Start(), System::ObjectDisposedException);
 }
 
 TEST(CompassTests, EleventhSimultaneousInstanceThrows)
@@ -192,10 +290,13 @@ TEST(CompassTests, GetTypeName)
     EXPECT_EQ(c.GetTypeName(), "Microsoft.Devices.Sensors.Compass");
 }
 
-// Task P3-6: CurrentValueChanged subscription. Compass is a permanent
-// NotSupported stub, so the event can never actually fire in this or any
-// other environment until SDL3 gains magnetometer support; this only
-// confirms subscribing doesn't crash.
+// Task P3-6: CurrentValueChanged subscription. On this (non-Android)
+// platform Compass is still a permanent NotSupported stub — SDL3 never
+// gains magnetometer support, and no backend is selected here — so the
+// event can't fire in this environment; this only confirms subscribing
+// doesn't crash. See WithInjectedSupportedBackendStartSucceeds below for
+// the case where a backend genuinely delivers readings (via a fake, since
+// Android's real Detail::AndroidCompassBackend can't run on this host).
 TEST(CompassTests, CurrentValueChangedSubscriptionDoesNotThrow)
 {
     Compass c;
@@ -209,9 +310,11 @@ TEST(CompassTests, CurrentValueChangedSubscriptionDoesNotThrow)
     EXPECT_THROW(c.Start(), SensorFailedException);
 }
 
-// Task P3-8: Calibrate subscription. Same permanent-stub limitation as
-// above — Compass.Calibrate is never raised by this implementation, so
-// this only confirms subscribing doesn't crash.
+// Task P3-8: Calibrate subscription. Same stub limitation on this platform
+// as above — no backend is selected here, so Calibrate can't fire; this
+// only confirms subscribing doesn't crash. See
+// CalibrateFiresFromBackendCalibrationCallback below for the
+// backend-delivers-a-real-calibration-event case.
 TEST(CompassTests, CalibrateSubscriptionDoesNotThrow)
 {
     Compass c;
@@ -223,4 +326,348 @@ TEST(CompassTests, CalibrateSubscriptionDoesNotThrow)
     (void)invoked;
 
     EXPECT_THROW(c.Start(), SensorFailedException);
+}
+
+// Task DEVICES-0096: with a supported fake backend injected, Start() must
+// actually succeed (not throw) and transition to Ready — proving the
+// delegation path itself works, independent of whether a real Android
+// device is available.
+TEST(CompassTests, WithInjectedSupportedBackendStartSucceeds)
+{
+    Compass c;
+    c.SetBackendForTesting(std::make_unique<FakeCompassBackend>());
+
+    EXPECT_NO_THROW(c.Start());
+    EXPECT_EQ(c.getStateProperty(), SensorState::Ready);
+}
+
+// A backend reporting IsSupported() == false must still result in the
+// existing SensorFailedException contract — supported-backend and
+// no-backend cases must be indistinguishable from the caller's perspective.
+TEST(CompassTests, WithInjectedUnsupportedBackendStartStillThrows)
+{
+    Compass c;
+    auto fake = std::make_unique<FakeCompassBackend>();
+    fake->SupportedResult = false;
+    c.SetBackendForTesting(std::move(fake));
+
+    EXPECT_THROW(c.Start(), SensorFailedException);
+    EXPECT_EQ(c.getStateProperty(), SensorState::NotSupported);
+}
+
+// Confirms CurrentValueChanged actually fires with the backend's own
+// reading data once Start() has wired the callback through — proves the
+// C++ delegation plumbing (Compass::Start() -> ICompassBackend::Start() ->
+// setCurrentValueProperty()) end to end, without needing real hardware.
+TEST(CompassTests, CurrentValueChangedFiresFromBackendReading)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    bool invoked = false;
+    CompassReading received;
+    c.CurrentValueChanged += [&invoked, &received](
+        System::Object*, const SensorReadingEventArgs<CompassReading>& args)
+    {
+        invoked = true;
+        received = args.getSensorReadingProperty();
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const CompassReading synthetic(
+        5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 42.0);
+    fake->CapturedOnReading(synthetic);
+
+    ASSERT_TRUE(invoked);
+    EXPECT_EQ(received.getMagneticHeadingProperty(), 42.0);
+    EXPECT_TRUE(c.getIsDataValidProperty());
+    EXPECT_EQ(c.getCurrentValueProperty().getMagneticHeadingProperty(), 42.0);
+}
+
+// Task READINGS-003 (2026-07-06): the real timestamp-setting logic for
+// Compass lives entirely in Detail::AndroidCompassBackend::PublishReading()
+// (Android-only, #ifdef __ANDROID__, not reachable on this host), which
+// this codebase's own wall-clock timestamp policy documents as always using
+// System::DateTimeOffset::getUtcNowProperty() -- see that method's own doc
+// comment. What *is* testable here, and was not previously covered by any
+// test in this file, is that Compass::Start()'s callback lambda forwards
+// whatever CompassReading the backend hands it through to
+// CurrentValueChanged/CurrentValue completely unmodified -- i.e. the
+// propagation path itself introduces no truncation, clamping, or
+// re-timestamping of its own. A fixed, deliberately-distinguishable
+// timestamp (not a fresh getUtcNowProperty() call at test time) proves
+// exact passthrough rather than a loose "close enough" bracket check.
+TEST(CompassTests, CurrentValueChangedPropagatesBackendTimestampExactly)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    System::DateTimeOffset receivedTimestamp;
+    c.CurrentValueChanged += [&receivedTimestamp](
+        System::Object*, const SensorReadingEventArgs<CompassReading>& args)
+    {
+        receivedTimestamp = args.getSensorReadingProperty().getTimestampProperty();
+    };
+
+    const System::DateTimeOffset fixedTimestamp(System::DateTime(637000000000000000LL), System::TimeSpan::Zero);
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const CompassReading synthetic(5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), fixedTimestamp, 42.0);
+    fake->CapturedOnReading(synthetic);
+
+    EXPECT_EQ(receivedTimestamp, fixedTimestamp);
+    EXPECT_EQ(c.getCurrentValueProperty().getTimestampProperty(), fixedTimestamp);
+}
+
+// Task SENSORBASE-005: mirrors AccelerometerTests.
+// CurrentValueAndIsDataValidRetainLastReadingAfterStop -- see that test for
+// the full rationale. Compass::Stop() only clears started_/state_
+// (confirmed by reading Compass::Stop() directly), so the last known
+// reading and its validity are expected to persist.
+TEST(CompassTests, CurrentValueAndIsDataValidRetainLastReadingAfterStop)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const CompassReading synthetic(
+        5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 42.0);
+    fake->CapturedOnReading(synthetic);
+    ASSERT_TRUE(c.getIsDataValidProperty());
+
+    c.Stop();
+
+    EXPECT_TRUE(c.getIsDataValidProperty());
+    EXPECT_EQ(c.getCurrentValueProperty().getMagneticHeadingProperty(), 42.0);
+}
+
+// Confirms Calibrate actually fires when the backend invokes its
+// calibration-needed callback — proves the second delegation path
+// (ICompassBackend's CalibrationCallback -> Compass::Calibrate.Raise()).
+TEST(CompassTests, CalibrateFiresFromBackendCalibrationCallback)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    bool invoked = false;
+    c.Calibrate += [&invoked](System::Object*, const CalibrationEventArgs&) { invoked = true; };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnCalibrationNeeded));
+    fake->CapturedOnCalibrationNeeded();
+
+    EXPECT_TRUE(invoked);
+}
+
+// Task SENSORBASE-003: unlike Accelerometer/Gyroscope, this exact reentrancy
+// scenario (an event handler calling Dispose() on its own sender, from
+// within a callback the sender itself triggered) had never been tested for
+// Compass at all before this task -- confirmed by grep, zero such tests
+// existed. This proves Compass's own ClaimDisposalOnce()/Stop() reentrancy
+// handling (shared with every SensorBase<T> derivative) doesn't deadlock or
+// throw unexpectedly when driven through the fake-backend seam. It does
+// NOT prove the deeper question of what happens if the real
+// Detail::AndroidCompassBackend/AndroidSensorBridge chain is torn down
+// (backend_ destroyed) while still executing one of its own member
+// functions further up the call stack (e.g. AndroidCompassBackend::
+// PublishReading() calling back into a handler that deletes the owning
+// Compass instance, not just Dispose()s it) -- that scenario is Android-only
+// and requires real hardware or an Android ASan build this container cannot
+// run; left explicitly documented as unverified, not silently assumed safe,
+// in plan_devices.md's SENSORBASE-003 closing note.
+TEST(CompassTests, DisposeFromWithinOwnCallbackDoesNotDeadlock)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    bool handlerRan = false;
+    c.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<CompassReading>&)
+    {
+        handlerRan = true;
+        c.Dispose();
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const CompassReading synthetic(
+        5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 42.0);
+    EXPECT_NO_THROW(fake->CapturedOnReading(synthetic));
+    EXPECT_TRUE(handlerRan);
+
+    // The reentrant call above already disposed it; a second, external
+    // Dispose() call must still throw exactly as it would for any other
+    // already-disposed instance.
+    EXPECT_THROW(c.Dispose(), System::ObjectDisposedException);
+}
+
+// Confirms Stop() actually calls through to the backend's own Stop(), not
+// just flipping Compass's own started_/state_ bookkeeping.
+TEST(CompassTests, StopCallsBackendStop)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    c.Stop();
+
+    EXPECT_TRUE(fake->StopCalled);
+    EXPECT_EQ(c.getStateProperty(), SensorState::Disabled);
+}
+
+// Task ANDROID-BRIDGE-002: SensorBase<T>::TimeBetweenUpdatesChanged is wired
+// (Compass::Compass()) to forward the new value to the live backend, so
+// Compass/Motion's Android bridge can honor a TimeBetweenUpdates change
+// while already running, without requiring Stop()/Start().
+TEST(CompassTests, SetTimeBetweenUpdatesPropertyForwardsToBackend)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    c.setTimeBetweenUpdatesProperty(System::TimeSpan::FromMilliseconds(50.0));
+
+    EXPECT_EQ(fake->SetSampleIntervalCallCount, 1);
+    EXPECT_EQ(fake->LastSetSampleInterval, System::TimeSpan::FromMilliseconds(50.0));
+}
+
+// setTimeBetweenUpdatesProperty()'s own contract (SensorBase.hpp) only
+// raises TimeBetweenUpdatesChanged when the value actually changes.
+TEST(CompassTests, SetTimeBetweenUpdatesPropertyToSameValueDoesNotForwardToBackend)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+
+    const System::TimeSpan current = c.getTimeBetweenUpdatesProperty();
+    c.setTimeBetweenUpdatesProperty(current);
+
+    EXPECT_EQ(fake->SetSampleIntervalCallCount, 0);
+}
+
+// Stabilization pass, Task 1 (repeated Start/Stop safety): calling Start()
+// a second time while already started must not call through to the
+// backend a second time (which, for the real AndroidCompassBackend, would
+// crash by reassigning an already-joinable std::thread) -- it must throw a
+// clear, documented failure instead, matching Accelerometer::Start()'s own
+// "already started" convention.
+TEST(CompassTests, StartTwiceThrowsWithoutCallingBackendAgain)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+
+    c.Start();
+    ASSERT_EQ(fake->StartCallCount, 1);
+
+    EXPECT_THROW(c.Start(), SensorFailedException);
+    EXPECT_EQ(fake->StartCallCount, 1); // Not called again.
+    EXPECT_EQ(c.getStateProperty(), SensorState::Ready); // Unchanged by the failed second Start().
+}
+
+// After Stop(), Start() must succeed again (a restart, not a permanent
+// lockout) and does call through to the backend again.
+TEST(CompassTests, StartAfterStopSucceedsAndCallsBackendAgain)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+
+    c.Start();
+    c.Stop();
+    EXPECT_NO_THROW(c.Start());
+    EXPECT_EQ(fake->StartCallCount, 2);
+}
+
+// Stabilization pass, Task 6 (SetBackendForTesting() contract): the header
+// documents "must be called before Start()" -- confirm this is now
+// enforced, not just documented, and that the original backend is left
+// completely untouched (still the one Stop() reaches) rather than silently
+// swapped out.
+TEST(CompassTests, SetBackendForTestingAfterStartThrowsAndDoesNotReplaceBackend)
+{
+    Compass c;
+    auto firstOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* first = firstOwned.get();
+    c.SetBackendForTesting(std::move(firstOwned));
+    c.Start();
+
+    // std::move(second) transfers ownership into the call before
+    // SetBackendForTesting()'s body even runs, so if it throws (as
+    // expected here), the moved-in unique_ptr is destroyed as the
+    // exception unwinds -- do not dereference the raw pointer afterward.
+    EXPECT_THROW(
+        c.SetBackendForTesting(std::make_unique<FakeCompassBackend>()),
+        SensorFailedException);
+
+    // The original backend must still be the one attached -- proven by
+    // Stop() reaching it, not a silently-swapped-in replacement.
+    c.Stop();
+    EXPECT_TRUE(first->StopCalled);
+}
+
+// Task SENSORBASE-004: mirrors AccelerometerTests.
+// ConcurrentStartStopFromMultipleThreadsDoesNotCrash -- unlike Accelerometer/
+// Gyroscope (whose started_/state_ are guarded by their shared
+// Detail::SdlSensorSubsystem<TSensor>'s subsystem.mutex_), Compass has no
+// per-instance mutex guarding started_/state_ at all (confirmed by reading
+// Compass.hpp/.cpp directly -- only a *static* instanceCountMutex_ exists,
+// which guards the shared instance counter, not per-instance state). This
+// test exists specifically to let devices-tsan answer, empirically, whether
+// that's a real, exploitable data race or merely a theoretical one nothing
+// ever actually exercises concurrently.
+TEST(CompassTests, ConcurrentStartStopFromMultipleThreadsDoesNotCrash)
+{
+    Compass c;
+    c.SetBackendForTesting(std::make_unique<FakeCompassBackend>());
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 20;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&c]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                try
+                {
+                    c.Start();
+                }
+                catch (const SensorFailedException&)
+                {
+                    // Expected: another thread already started it first.
+                }
+
+                c.Stop();
+                (void)c.getStateProperty();
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
 }

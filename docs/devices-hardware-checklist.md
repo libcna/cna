@@ -23,6 +23,12 @@ controller attached — to close the gap between "compiles and dispatches correc
 None of the items below can be verified by an AI agent in a headless container. This is
 a plain checklist, not a task with its own build/test cycle.
 
+**Recording results (Task `DEMO-002`, 2026-07-06):** this file is "what to check" —
+`docs/devices_sensor_hardware_qa_template.md` is the companion "how to record a
+specific run's results" template, with one section per numbered section below, plus
+device/OS/commit-hash metadata fields, so results stay comparable across different
+testers, devices, and sessions instead of each tester inventing their own format.
+
 ---
 
 ## Phase 9 (2026-07-04) execution results — honest status per case
@@ -81,6 +87,18 @@ emulator, no APK packaging, no toolchain) — not vague unavailability. This che
 stays the authoritative source for whoever eventually has the missing hardware/toolchain
 available.
 
+**Update (2026-07-05, `plan_devices.md` Phase 9, Tasks DEVICES-0122-0126): the "no working
+emulator"/"no APK packaging" blockers above are resolved** — `/dev/kvm` now exists in this
+container (absent every session above), and a real Gradle/CMake Android app integration
+now exists (`examples/demo_devices/android/`, see `docs/devices-build.md` Section 4.1).
+The `Medium_Phone` AVD boots, `cna_demo_devices` installs, launches, and renders its real
+UI (screenshot-confirmed), and responds to synthetic sensor values injected via the
+emulator console. **This closes the "the software pipeline works end-to-end" gap, not
+the "physically verified" one** — every item below this line is about *real* hardware,
+which an emulator's virtual sensors are explicitly not a substitute for (Section 8 below
+has the emulator's own specific limitations). Case 6 (iOS) is unaffected — still blocked,
+no Apple toolchain exists in this Linux container (re-confirmed this session).
+
 ---
 
 ## 1. Accelerometer axis sign/orientation
@@ -114,10 +132,23 @@ convention on the first pass — see that task's Resolution in `plan_devices_pha
 the full account. This is exactly the kind of mistake this checklist exists to catch
 before it reaches a real device, not after.
 
+**Correction (2026-07-06, Task ACCEL-004):** this section previously said the two-
+rotation restriction came from `AndroidManifest.xml`'s `android:screenOrientation=
+"sensorLandscape"` — that attribute is not actually present in the demo's manifest
+(confirmed by inspection). The real mechanism is SDL's own runtime orientation-lock
+request (`SDLActivity.setOrientationBis()`, `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` for a
+non-resizable, wider-than-tall window with no `SDL_HINT_ORIENTATIONS` hint set) — see
+`Detail::AndroidSensorLandscapeOrientation`'s own doc comment for the full citation.
+Whatever the exact mechanism, the demo's window is expected to only ever reach the two
+landscape rotations, never portrait — so this checklist (and
+`AndroidSensorOrientationTests.cpp`) deliberately does not include separate
+portrait-upright/portrait-upside-down steps; if a future session finds the app *can*
+actually reach a portrait orientation on real hardware, that would itself be a new,
+separate bug to investigate (a missing orientation lock), not a gap in this checklist.
+
 **Steps:**
 1. Run a game (or the Task P4-14 demo screen, once it exists) on a real Android device
-   or emulator with a working virtual/physical accelerometer, `AndroidManifest.xml`
-   `android:screenOrientation="sensorLandscape"`.
+   or emulator with a working virtual/physical accelerometer.
 2. Rotate the device to `ROTATION_90` (`SDL_ORIENTATION_LANDSCAPE`). Tilt the device so
    the physical right edge goes down. Confirm `AccelerometerReading.Acceleration.Y > 0`
    (matching the documented WP7 convention: `Y > 0` means "tilt right").
@@ -136,7 +167,27 @@ before it reaches a real device, not after.
    and remember to update/add a case in `AndroidSensorOrientationTests.cpp` for whatever
    convention turns out to be correct.
 
+**Decision recorded (2026-07-07, Task `ACCEL-008`):** an archived MSDN Magazine article
+plus SDL3's own documentation both state the real WP7 `Accelerometer` never performs this
+remap at all — it always reports the same fixed device-relative frame regardless of
+display orientation. The project maintainer decided to **keep** the existing remap
+(existing CNA games/demos may already depend on it) but mark it explicitly as a
+**deliberate CNA convenience deviation**, not required XNA/WP7 behavior, and add an
+opt-out: `Detail::SetAndroidLandscapeRemapEnabled(false)` makes `Accelerometer`/
+`Gyroscope` report SDL's raw, unremapped, device-fixed axes instead (defaults to `true`).
+If step 2 above is ever re-verified on real hardware and found to disagree with the
+documented convention, that is now a bug in the *opt-in* remap specifically, not evidence
+that the remap should be removed outright — removal was considered and explicitly
+declined. **Not yet applied to `Motion`'s Gravity/DeviceAcceleration/RotationRate**
+(see Section 8, `plan_devices.md` Task `MOTION-012`) — tracked separately since it needs
+its own careful math derivation, not a rushed addition alongside this decision.
+
 ## 2. Gyroscope axis correctness
+
+**Decision recorded (2026-07-07, Task `ACCEL-008`):** same decision as Section 1 above —
+kept enabled by default, now documented as a CNA-only deviation from real WP7 behavior,
+with the same `Detail::SetAndroidLandscapeRemapEnabled(false)` opt-out (shared with
+`Accelerometer`, since both remap through the same `Detail::` function and flag).
 
 **Code under test:** `Gyroscope.cpp`'s `ConvertAndroidGyroscopeToXnaLandscape()` — same
 caveat and same never-physically-verified status as the accelerometer remap above. As
@@ -146,7 +197,9 @@ of Task P5-7, it delegates to the exact same
 angular rate — the raw values represent), also covered by
 `AndroidSensorOrientationTests.cpp`.
 
-**Steps:**
+**Steps (Task GYRO-003, re-confirmed 2026-07-06 — same landscape-only scope as Section 1,
+see `ACCEL-004`'s correction: the demo's window never reaches a portrait orientation, so
+there are no separate portrait rotation cases to test here either):**
 1. Same device/rotation setup as Section 1.
 2. Rotate the physical device around each of its three axes in turn (yaw, pitch, roll)
    and confirm `GyroscopeReading.RotationRate`'s sign for each axis matches an intuitive
@@ -234,9 +287,197 @@ exercised, only reasoned about from SDL3's API documentation.
    re-evaluated per-call (not cached from the first probe), since gamepads can connect
    and disconnect at any time during a running game.
 
+## 5a. Vibration validation matrix (Task VIB-010, 2026-07-06)
+
+Consolidates Sections 3-5 above into one at-a-glance matrix, plus the two cases neither
+section calls out as its own row (desktop with no haptics at all, and desktop with a
+non-gamepad haptic device connected). `Task DEMO-002` plans a separate
+`docs/devices_sensor_hardware_qa_template.md` report template to record an actual run's
+results against — this table is the checklist of *what* to check, not a form for
+recording one specific session's results.
+
+| Device / OS | Backend | Action | Expected — strict XNA | Expected — `NOXNA` extensions | Status |
+|---|---|---|---|---|---|
+| Android phone | `Detail::SdlHapticVibrateBackend` → `Context.VIBRATOR_SERVICE` | `Start(TimeSpan)` | Phone's built-in motor buzzes for the given duration | `Start(TimeSpan, intensity)` scales buzz strength; `getIsSupportedProperty()` true; `getDeviceNameProperty()` non-empty | **NOT RUN** — no Android device in this session (Section 3) |
+| Android phone | same | `StartLeftRight(large, small, duration)` | N/A (not real XNA API) | Blends to one intensity on the phone's single actuator (confirmed via SDL3 source, `VIB-003`) — do **not** expect two independently-felt motors | **NOT RUN**, but the single-actuator-blend *code path* is source-confirmed, not just assumed (`VIB-003`) |
+| iOS phone | none yet (`VIB-004`, plan only) | `Start(TimeSpan)` | Deterministic silent no-op (no backend registered) until a `CHHapticEngine` backend is implemented | Same — `getIsSupportedProperty()` false | **DEFERRED** — no backend exists; nothing to run yet |
+| Desktop, no haptic hardware present | `Detail::SdlHapticVibrateBackend`, no device opens | `Start()`/`Stop()`/`StartLeftRight()`/`getIsSupportedProperty()`/`getDeviceNameProperty()` | Silent no-op for `Start`/`Stop`/`StartLeftRight`; `getIsSupportedProperty()` false; `getDeviceNameProperty()` empty | Same | **VERIFIED, this container** — every `VibrateControllerTests` case exercises exactly this environment live (313→ growing test count, all passing) |
+| Desktop with a connected non-gamepad haptic device (e.g. a USB force-feedback wheel) | same, real device opened | `Start(TimeSpan)`/`Start(TimeSpan, intensity)` | Device actuates for the given duration; `getIsSupportedProperty()` true | Intensity scales strength; `StartLeftRight()` may achieve genuine independent magnitudes if the device/driver supports `SDL_HAPTIC_LEFTRIGHT` natively (unlike the Android single-actuator blend above) | **NOT RUN** — no such hardware available in this session |
+| Desktop with a connected rumble-capable gamepad, no other haptic device | same | `getIsSupportedProperty()`, `Start()`, `GamePad::SetVibration()` | `VibrateController` excludes the gamepad's own haptic ID (`IsConnectedGamepadHapticDevice()`) — behaves as if unsupported; `GamePad::SetVibration()` drives the gamepad normally; neither API fights the other for the same motor | Same | **NOT RUN** — no gamepad connected in this session (full steps: Section 5 above) |
+
+## 6. `Detail::AndroidSensorBridge` lifecycle safety (`plan_devices.md` Task DEVICES-0085)
+
+**Code under test:** `AndroidSensorBridge::Stop()`'s self-join-detects-and-detaches
+logic (`src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`) — confirmed by
+code review and a successful Android NDK cross-compile (`llvm-nm` symbol check) in this
+session, but **never actually run**: this bridge's real (`#ifdef __ANDROID__`) code path
+cannot execute in this headless container at all, only compile.
+
+**Why this needs real hardware:** the claim under test is that stopping/disposing the
+owning `Compass`/`Motion` instance from within its own `CurrentValueChanged` handler
+(running on the bridge's dedicated worker thread) does not deadlock — `Stop()` detects
+`std::this_thread::get_id() == worker_.get_id()` and detaches instead of joining. This
+logic has been reasoned about and cross-compiled, but its actual runtime behavior (does
+the detached thread really exit `Run()`'s loop cleanly afterward? does any Android
+sensor-subsystem resource leak?) has never been observed on a real device.
+
+**Steps (once Compass/Motion's Android backend, Phase 7/8, is wired to this bridge):**
+1. On a real Android device, construct a `Compass`/`Motion` instance, `Start()` it, and
+   subscribe a `CurrentValueChanged` handler that calls `Dispose()` on the same instance.
+2. Confirm the process does not hang or deadlock when a sensor reading arrives.
+3. Confirm no crash/use-after-free on subsequent readings (there should be none, since
+   the instance is disposed) or on process exit.
+
+## 7. `Compass` real Android backend (`plan_devices.md` Phase 7, Tasks DEVICES-0086-0100)
+
+**Code under test:** `Detail::AndroidCompassBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`)
+and `Detail::ConvertRotationVectorToMagneticHeadingDegrees()`
+(`include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp`) — confirmed by code
+review, unit tests of the pure azimuth/accuracy math (self-consistency only), and a
+successful Android NDK cross-compile (`llvm-nm` symbol check). **Never actually run**:
+same reason as Section 6 — no Android device/emulator in this container.
+
+**Why this needs real hardware:** the azimuth formula is derived from first-principles
+quaternion algebra reproducing Android's own documented world-frame axis convention, but
+this project's own history (`Detail::ConvertAndroidPortraitToXnaLandscape()`'s multi-phase
+axis-sign saga for `Accelerometer`/`Gyroscope`) shows this exact kind of math is easy to
+get subtly wrong in a way unit tests against self-derived expected values cannot catch —
+only comparing against a real device's own compass app can.
+
+**Note added 2026-07-06 (`COMPASS-004`/`COMPASS-009`):** the real WP7 `Compass` API
+documents switching which axis it reads based on the phone's physical tilt (upright
+vs. flat, MSDN `hh220912`/`hh202974`) — `Detail::AndroidCompassMath` currently
+implements only one fixed axis extraction, with no tilt-mode switch at all
+(`COMPASS-009`, new, not yet implemented). The steps below should therefore be treated
+as testing whichever single mode the current implementation happens to produce, not
+confirmed to be "flat mode" specifically — re-run once `COMPASS-009` is implemented,
+covering both tilt modes explicitly.
+
+**Steps:**
+1. On a real Android device with a magnetometer, run a game/demo using `Compass`, holding
+   the device flat and facing a known direction (compare against the device's own,
+   already-calibrated compass app).
+2. Confirm `Compass.CurrentValue.MagneticHeading` roughly matches the reference compass
+   app's reading (within a reasonable tolerance — exact hardware calibration will differ).
+3. Rotate the device slowly through a full 360°; confirm `MagneticHeading` increases (or
+   decreases — confirm which direction this implementation actually produces, and note it
+   here) monotonically and wraps correctly at the 0°/360° boundary, matching Section 1's
+   "internal consistency" bar for the Android accelerometer/gyroscope remap.
+4. Perform the classic figure-8 calibration gesture with the device in a low-magnetic-accuracy
+   state (e.g., near a magnet or metal object); confirm `Compass.Calibrate` fires.
+5. Confirm `Compass.CurrentValue.MagnetometerReading` reports plausible raw µT values (Earth's
+   field is roughly 25-65 µT per `ASENSOR_MAGNETIC_FIELD_EARTH_MIN`/`_MAX`) — a reading wildly
+   outside this range without a nearby magnet suggests the raw-vector wiring itself is wrong,
+   not just the heading math.
+6. Confirm `Compass.CurrentValue.TrueHeading` currently equals `MagneticHeading` exactly (the
+   documented, honest limitation — not yet computing real declination) — this is expected,
+   not a bug, until `System.Device.Location` exists.
+
+If step 2 or 3 reveals a wrong sign/zero-point, the fix belongs in
+`ConvertRotationVectorToMagneticHeadingDegrees()` — never in downstream game code — and a
+new self-consistency test case should be added for whatever convention turns out correct,
+matching Section 1's own reporting convention.
+
+## 8. `Motion` real Android backend (`plan_devices.md` Phase 8, Tasks DEVICES-0101-0119)
+
+**Code under test:** `Detail::AndroidMotionBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`)
+and `Detail::ConvertRotationVectorToXnaQuaternion()`/`ExtractYawPitchRollFromQuaternion()`
+(`include/Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp`) — confirmed by code
+review, round-trip unit tests of the yaw/pitch/roll extraction (against CNA's own already-
+tested `Quaternion::CreateFromYawPitchRoll()`), and a successful Android NDK cross-compile
+(`llvm-nm` symbol check). **Never actually run** — same reason as Sections 6/7.
+
+**Why this needs real hardware:** `ExtractYawPitchRollFromQuaternion()` itself is verified
+self-consistent (it round-trips through CNA's own tested math), but
+`ConvertRotationVectorToXnaQuaternion()` — the raw Android quaternion → XNA `Quaternion`
+mapping — is currently a direct, unremapped passthrough, not a rigorously-derived change of
+basis between Android's world frame and XNA's. Whether this needs the same kind of axis
+remap `Detail::ConvertAndroidPortraitToXnaLandscape()` applies to
+`Accelerometer`/`Gyroscope` is genuinely unknown until tested on a real device.
+
+**Cross-reference (2026-07-07, Task `ACCEL-008` → new Task `MOTION-012`):** `ACCEL-008`
+decided to keep (and now explicitly document + make opt-out-able) the landscape remap for
+`Accelerometer`/`Gyroscope`. `Motion.Gravity`/`DeviceAcceleration`/`DeviceRotationRate` are
+plain device-frame vectors of the same shape (gravity/linear-acceleration/angular-rate),
+so the same remap likely applies to them for consistency — but this was deliberately
+**not** implemented as part of `ACCEL-008` itself: it needs its own fresh verification that
+these particular Android sensor outputs are genuinely portrait-frame-fixed the same way
+the raw accelerometer/gyroscope are (not already partially orientation-corrected by
+Android's own sensor fusion), before blindly reusing the same formula. `Motion.Attitude`
+(the quaternion) is a separate, harder question — a quaternion isn't a plain vector, so
+the same sign-flip remap does not apply to it at all; any fix there needs a real change-
+of-basis derivation, tracked as part of the same open question above, not this checklist
+item. See `plan_devices.md` Task `MOTION-012` for the tracked follow-up.
+
+**Steps:**
+1. On a real Android device, run a game/demo using `Motion`, holding the device flat and
+   level. Confirm `Motion.CurrentValue.Attitude.Pitch`/`Roll`/`Yaw` all read approximately
+   zero (or whatever the documented "flat" reference should be — confirm and note here).
+2. Tilt/rotate the device through known pitch, roll, and yaw rotations in turn; confirm each
+   of `Attitude.Pitch`/`Roll`/`Yaw` responds to the correct physical rotation, not a
+   different or swapped axis, and that `Attitude.Quaternion`/`RotationMatrix` visually
+   (e.g. via a rendered 3D model in the demo) track the same physical rotation consistently.
+3. Confirm `Motion.CurrentValue.Gravity` reads approximately `(0, ±1, 0)`-ish (magnitude ~1g)
+   at rest, matching whichever axis this implementation's `Gravity` convention assigns to
+   "down," and `DeviceAcceleration` reads approximately zero at rest.
+4. Shake or throw the device; confirm `DeviceAcceleration` spikes while `Gravity` stays
+   roughly constant — confirms the gravity/linear-acceleration split is wired to the correct
+   sensors, not swapped.
+5. Confirm `DeviceRotationRate` responds to physical rotation consistently with the
+   already-verified `Gyroscope` class's own sign convention (Section 2) — `Motion` registers
+   its own, independent `TYPE_GYROSCOPE` listener, so this is worth checking is consistent,
+   not assumed.
+6. If the device's magnetometer is unavailable or disabled, confirm `Motion` falls back to
+   `TYPE_GAME_ROTATION_VECTOR` (yaw will drift slowly over time with no true-north
+   correction — expected, not a bug, per this backend's own documented drift-difference
+   note) rather than failing entirely.
+
+If any step reveals a wrong sign/axis, the fix belongs in `ConvertRotationVectorToXnaQuaternion()`
+(or `AndroidMotionBackend`'s vector handling for `Gravity`/`DeviceAcceleration`/
+`DeviceRotationRate`) — never in downstream game code — and a new round-trip/self-consistency
+test case should be added for whatever convention turns out correct.
+
+---
+
+## 9. Emulator limitations for Devices testing (`plan_devices.md` Task DEVICES-0129)
+
+An Android emulator (confirmed working this session, `docs/devices-build.md` Section 4.1)
+closes the "does the software pipeline work at all" question, but is **not a substitute**
+for any item above that asks "does this feel/read correct on a real device":
+
+- **No real vibration motor.** `Medium_Phone` (and Android emulators generally) have no
+  physical haptic actuator — `VibrateController::Start()` can be confirmed to run without
+  crashing on an emulator, but Section 3/4's "does it actually buzz" steps are
+  meaningless there and must use a real device.
+- **Virtual, not physical, sensor motion.** The emulator's console (`sensor set
+  acceleration <x>:<y>:<z>`, `sensor set magnetic-field <x>:<y>:<z>`, etc. — confirmed
+  working this session) lets a script inject arbitrary values instantly, which is useful
+  for confirming the C++ dispatch pipeline delivers *whatever value is injected*
+  end-to-end (confirmed working this session via `DevicesDemo`'s `DrawEventFlash()`
+  indicator responding to injected values), but proves nothing about whether a real
+  physical tilt/rotation produces the *correct* value — Sections 1/2/7/8's axis-sign
+  questions still require a real device.
+- **No virtual rotation-vector/game-rotation-vector sensor found in this session's
+  emulator console command set** — `Detail::AndroidSensorBridge`'s `Compass`/`Motion`
+  path (`ASENSOR_TYPE_ROTATION_VECTOR` etc.) was not exercised via emulator-injected
+  values this session, only confirmed to launch/compile/link correctly. Whether the
+  `Medium_Phone` system image's virtual sensor HAL exposes this sensor type at all is
+  unconfirmed — investigate further before assuming an emulator can close Section 7/8's
+  gaps even partially.
+- **The emulator's own system apps can become unresponsive under this container's
+  resource constraints** (observed this session: "Pixel Launcher isn't responding",
+  then "System UI isn't responding" ANR dialogs, likely from `-gpu swiftshader_indirect`
+  software rendering under load) — confirmed to be an emulator/environment issue, not a
+  `cna_demo_devices` bug: the demo's own process stayed alive and kept rendering
+  correctly throughout (`adb shell pidof`), unaffected by the system-level ANRs.
+
 ---
 
 ## Reporting results
+
+Use `docs/devices_sensor_hardware_qa_template.md` to record what you actually observed
+for each section above, in a reusable, comparable format — copy it to a new file per
+test session rather than editing the template in place.
 
 If any item above reveals an actual bug (wrong sign, no vibration, gamepad conflict),
 file it the same way as any other confirmed bug in this project: root-cause it against

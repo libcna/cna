@@ -2,6 +2,7 @@
 
 #include "Microsoft/Devices/Sensors/Motion.hpp"
 
+#include "Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Devices::Sensors
@@ -11,15 +12,22 @@ namespace Microsoft::Devices::Sensors
 
     bool Motion::getIsSupportedProperty()
     {
-        // TODO: wire up real sensor fusion (Accelerometer + Compass + Gyroscope)
-        // once SDL3 gains a magnetometer/compass API and Compass::getIsSupportedProperty()
-        // can return true.
+#if defined(__ANDROID__)
+        // Stateless probe, independent of any Motion instance (matching the
+        // real WP7 API's static IsSupported contract) — cheap, does not
+        // hold any resource open.
+        Detail::AndroidMotionBackend probe;
+        return probe.IsSupported();
+#else
+        // SDL3 exposes no fused-orientation/motion API on any supported platform.
         return false;
+#endif
     }
 
     SensorState Motion::getStateProperty() const
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
+        std::lock_guard<std::mutex> lock(mutex_);
         return state_;
     }
 
@@ -42,9 +50,23 @@ namespace Microsoft::Devices::Sensors
             ++instanceCount_;
         }
 
-        const bool supported = getIsSupportedProperty();
+#if defined(__ANDROID__)
+        backend_ = std::make_unique<Detail::AndroidMotionBackend>();
+#endif
+
+        const bool supported = backend_ ? backend_->IsSupported() : getIsSupportedProperty();
         state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
         setIsSupportedProperty(supported);
+
+        // Task ANDROID-BRIDGE-002: see Compass::Compass()'s identical fix
+        // for the full rationale.
+        TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
+        {
+            if (backend_)
+            {
+                backend_->SetSampleInterval(getTimeBetweenUpdatesProperty());
+            }
+        };
     }
 
     Motion::~Motion()
@@ -59,6 +81,34 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
 
+        // Repeated Start/Stop safety: see Compass::Start()'s identical fix
+        // for the full rationale -- must run before touching backend_ at
+        // all.
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (started_)
+        {
+            throw SensorFailedException("Motion is already started.");
+        }
+
+        if (backend_ && backend_->IsSupported())
+        {
+            const bool started = backend_->Start(
+                getTimeBetweenUpdatesProperty(),
+                [this](const MotionReading& reading)
+                {
+                    setIsDataValidProperty(true);
+                    setCurrentValueProperty(reading);
+                });
+
+            if (started)
+            {
+                started_ = true;
+                state_ = SensorState::Ready;
+                return;
+            }
+        }
+
         state_ = SensorState::NotSupported;
         throw SensorFailedException("Motion is not supported on this platform.");
     }
@@ -66,6 +116,13 @@ namespace Microsoft::Devices::Sensors
     void Motion::Stop()
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
+
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (backend_)
+        {
+            backend_->Stop();
+        }
 
         started_ = false;
         state_ = SensorState::Disabled;
@@ -87,7 +144,13 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        if (started_)
+        bool wasStarted;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            wasStarted = started_;
+        }
+
+        if (wasStarted)
         {
             Stop();
         }
@@ -102,6 +165,22 @@ namespace Microsoft::Devices::Sensors
         }
 
         SensorBase<MotionReading>::Dispose(disposing);
+    }
+
+    void Motion::SetBackendForTesting(std::unique_ptr<Detail::IMotionBackend> backend)
+    {
+        // Enforced, not just documented: see Compass::SetBackendForTesting()'s
+        // identical fix for the full rationale.
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (started_)
+        {
+            throw SensorFailedException(
+                "Cannot replace the motion backend while data acquisition is started. Call Stop() first.");
+        }
+
+        backend_ = std::move(backend);
+        setIsSupportedProperty(backend_ ? backend_->IsSupported() : getIsSupportedProperty());
     }
 
     GetTypeNameCPP(Motion, "Microsoft.Devices.Sensors.Motion")

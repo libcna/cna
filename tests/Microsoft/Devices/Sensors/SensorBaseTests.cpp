@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include <atomic>
+#include <chrono>
 #include <string>
 #include <thread>
 #include <vector>
@@ -91,6 +92,11 @@ namespace
             setCurrentValueProperty(value);
         }
 
+        void SetIsDataValidForTesting(bool value)
+        {
+            setIsDataValidProperty(value);
+        }
+
         void SetTimeBetweenUpdatesForTesting(const TimeSpan& value)
         {
             setTimeBetweenUpdatesProperty(value);
@@ -101,9 +107,77 @@ namespace
             setIsSupportedProperty(value);
         }
 
+        // ShouldAcceptUpdateAt()/ResetUpdateThrottle() are protected (Task
+        // SENSORBASE-001/ACCEL-005/GYRO-004), same reasoning as
+        // TimeBetweenUpdatesChanged above — exercised here via a thin public
+        // wrapper rather than a new NOXNA hook on Accelerometer/Gyroscope.
+        bool ShouldAcceptUpdateForTesting(const std::chrono::steady_clock::time_point& now)
+        {
+            return ShouldAcceptUpdateAt(now);
+        }
+
+        void ResetUpdateThrottleForTesting()
+        {
+            ResetUpdateThrottle();
+        }
+
         std::atomic<int> timeBetweenUpdatesChangedCount{0};
     };
 } // namespace
+
+// Task DEVICES-0053: IsDataValid must start false — no reading has ever
+// arrived yet. This was previously only ever exercised indirectly through a
+// concrete sensor's own tests, never asserted at the SensorBase<T> level
+// directly.
+TEST(SensorBaseTests, IsDataValidDefaultsFalse)
+{
+    const TestSensorBase sensor;
+    EXPECT_FALSE(sensor.getIsDataValidProperty());
+}
+
+// Task DEVICES-0052: getCurrentValueProperty() throwing InvalidOperationException
+// is gated on isSupported_ alone — a *supported* sensor that has simply never
+// had a reading delivered yet (no Start() call, or Start() succeeded but no
+// event has arrived) must NOT throw; it returns a default-constructed reading.
+// This distinction (unsupported vs. not-yet-started) was previously only
+// implicit in the header's own doc comment, never asserted by a test.
+TEST(SensorBaseTests, CurrentValueDoesNotThrowBeforeAnyReadingWhenSupported)
+{
+    TestSensorBase sensor;
+    sensor.SetSupportedForTesting(true);
+
+    TestSensorReading value;
+    EXPECT_NO_THROW(value = sensor.getCurrentValueProperty());
+    EXPECT_EQ(value.getValue(), 0);
+}
+
+// Task SENSORBASE-005: getCurrentValueProperty()/getIsDataValidProperty() are
+// defined once, here on SensorBase<T> itself, and neither checks disposed_ —
+// unlike Start()/Stop() (implemented separately per concrete class, each with
+// its own explicit ObjectDisposedException::ThrowIf(getIsDisposedProperty(),
+// ...) check). This is therefore already guaranteed byte-for-byte identical
+// across Accelerometer/Gyroscope/Compass/Motion (all four inherit this same
+// template code, none override these two getters), satisfying this task's
+// "same base contract across all four" requirement by construction rather
+// than by separately verifying each class. Locking in the current behavior
+// here, not changing it: whether these getters *should* instead throw
+// ObjectDisposedException after Dispose() (matching the conventional .NET
+// IDisposable pattern, and this codebase's own Start()/Stop() precedent) is
+// SENSORBASE-006's question ("Verify Dispose semantics"), not this task's.
+TEST(SensorBaseTests, CurrentValueAndIsDataValidDoNotThrowAfterDispose)
+{
+    TestSensorBase sensor;
+    sensor.SetSupportedForTesting(true);
+    sensor.SetCurrentValueForTesting(TestSensorReading(7));
+    sensor.SetIsDataValidForTesting(true);
+
+    sensor.Dispose();
+
+    TestSensorReading value;
+    EXPECT_NO_THROW(value = sensor.getCurrentValueProperty());
+    EXPECT_EQ(value.getValue(), 7);
+    EXPECT_TRUE(sensor.getIsDataValidProperty());
+}
 
 TEST(SensorBaseTests, DefaultTimeBetweenUpdatesIsTwoMilliseconds)
 {
@@ -140,6 +214,35 @@ TEST(SensorBaseTests, RepeatedSetTimeBetweenUpdatesPropertyToSameValueRaisesOnly
     sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10.0));
 
     EXPECT_EQ(sensor.timeBetweenUpdatesChangedCount, 1);
+}
+
+// Task SENSORBASE-008: confirmed via the archived MSDN pages for
+// SensorBase(TSensorReading).TimeBetweenUpdates (MSDN `hh220884`, vs.110) and
+// the SensorBase(TSensorReading) class overview (MSDN `hh239315`, vs.105)
+// that the real WP7 API's setter is a plain `public TimeSpan
+// TimeBetweenUpdates { get; set; }` with no documented Exceptions section and
+// no Remarks describing a valid range — unlike, e.g.,
+// VibrateController.Start(TimeSpan), which does document an
+// ArgumentOutOfRangeException contract. CNA's setTimeBetweenUpdatesProperty()
+// accepting any value unchanged is therefore not an unvalidated gap but a
+// faithful match to the real, documented (lack of) contract. These two tests
+// lock that in explicitly, distinct from
+// ShouldAcceptUpdateAtWithNegativeTimeBetweenUpdatesNeverThrottles above
+// (which covers the throttle *decision*, not the property setter itself).
+TEST(SensorBaseTests, SetTimeBetweenUpdatesPropertyAcceptsNegativeValueWithoutThrowing)
+{
+    TestSensorBase sensor;
+
+    EXPECT_NO_THROW(sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(-10.0)));
+    EXPECT_EQ(sensor.getTimeBetweenUpdatesProperty(), TimeSpan::FromMilliseconds(-10.0));
+}
+
+TEST(SensorBaseTests, SetTimeBetweenUpdatesPropertyAcceptsMaxValueWithoutThrowing)
+{
+    TestSensorBase sensor;
+
+    EXPECT_NO_THROW(sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::MaxValue));
+    EXPECT_EQ(sensor.getTimeBetweenUpdatesProperty(), TimeSpan::MaxValue);
 }
 
 // Confirms setCurrentValueProperty()'s update-then-notify order at the
@@ -191,6 +294,131 @@ TEST(SensorBaseTests, CurrentValueChangedEventArgsCarryTheNewValue)
 // race, not a specific assertion failure — this test's value is in running clean
 // under real concurrent contention, same as this project's other Start()/Stop()/
 // Dispose() concurrency tests.
+// Task SENSORBASE-001/ACCEL-005/GYRO-004/SDL-SENSOR-002: ShouldAcceptUpdateAt()
+// is the shared throttle decision Accelerometer/Gyroscope now call from their
+// real SDL dispatch path (ProcessSensorUpdateEvent()) to honor
+// TimeBetweenUpdates. Tested here directly, at the SensorBase<T> level, with
+// synthetic std::chrono::steady_clock::time_point values — no real-time
+// sleeps, so these tests are fast and cannot flake under machine load,
+// matching this codebase's existing convention for platform-independent pure
+// math (Detail::ConvertAndroidPortraitToXnaLandscape(),
+// Detail::ExtractYawPitchRollFromQuaternion()). Task (2026-07-06
+// stabilization pass): switched from synthetic DateTimeOffset values to
+// std::chrono::steady_clock::time_point ones, matching ShouldAcceptUpdateAt()'s
+// own signature change (see its doc comment for why the throttle decision
+// itself uses a monotonic clock, not wall-clock time).
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtAcceptsTheVeryFirstCall)
+{
+    TestSensorBase sensor;
+    const auto now = std::chrono::steady_clock::now();
+
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(now));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtRejectsASecondCallTooSoonAfterTheFirst)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10.0));
+
+    const auto first = std::chrono::steady_clock::now();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+
+    const auto tooSoon = first + std::chrono::milliseconds(5);
+    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(tooSoon));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtAcceptsOnceTheIntervalHasFullyElapsed)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10.0));
+
+    const auto first = std::chrono::steady_clock::now();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+
+    const auto exactlyAtInterval = first + std::chrono::milliseconds(10);
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(exactlyAtInterval));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtThrottlesIndependentlyPerInstance)
+{
+    TestSensorBase fast;
+    TestSensorBase slow;
+    fast.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(1.0));
+    slow.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(100.0));
+
+    const auto first = std::chrono::steady_clock::now();
+    ASSERT_TRUE(fast.ShouldAcceptUpdateForTesting(first));
+    ASSERT_TRUE(slow.ShouldAcceptUpdateForTesting(first));
+
+    const auto tenMillisecondsLater = first + std::chrono::milliseconds(10);
+    EXPECT_TRUE(fast.ShouldAcceptUpdateForTesting(tenMillisecondsLater));
+    EXPECT_FALSE(slow.ShouldAcceptUpdateForTesting(tenMillisecondsLater));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtMeasuresFromTheLastAcceptedCallNotTheLastAttempt)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10.0));
+
+    const auto first = std::chrono::steady_clock::now();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+
+    // Rejected attempt at +5ms must not reset the throttle's reference point.
+    ASSERT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(5)));
+
+    // +9ms from the original accepted call is still too soon...
+    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(9)));
+    // ...but +10ms from the original accepted call is not.
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(10)));
+}
+
+TEST(SensorBaseTests, ResetUpdateThrottleForTestingMakesTheNextCallAlwaysAccept)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(1000.0));
+
+    const auto first = std::chrono::steady_clock::now();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    ASSERT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(1)));
+
+    sensor.ResetUpdateThrottleForTesting();
+
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(1)));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtWithZeroTimeBetweenUpdatesAlwaysAccepts)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::Zero);
+
+    const auto first = std::chrono::steady_clock::now();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(1)));
+}
+
+// Task (2026-07-06 stabilization pass): setTimeBetweenUpdatesProperty() does
+// not validate or reject a negative TimeSpan (no dedicated plan_devices.md
+// task exists yet for that minimum/maximum-value validation gap). This test
+// locks in that ShouldAcceptUpdateAt() itself still behaves safely, rather
+// than leaving the case as an untested assumption: a negative interval, once
+// converted to a std::chrono duration, can never be "not yet elapsed" against
+// elapsed time measured from a monotonic, non-decreasing clock (elapsed time
+// is always >= 0, which is always >= any negative interval) — so a negative
+// TimeBetweenUpdates degrades to the same "never throttle" behavior as
+// TimeSpan::Zero, not a crash or an infinite-reject lockup.
+TEST(SensorBaseTests, ShouldAcceptUpdateAtWithNegativeTimeBetweenUpdatesNeverThrottles)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(-10.0));
+
+    const auto first = std::chrono::steady_clock::now();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(1)));
+}
+
 TEST(SensorBaseTests, ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash)
 {
     TestSensorBase sensor;

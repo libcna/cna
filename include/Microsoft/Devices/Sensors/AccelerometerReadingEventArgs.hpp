@@ -46,88 +46,105 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Gets the X-axis acceleration.
          *
+         * Task READINGS-002: get-only, matching the real WP7 API exactly —
+         * confirmed via the archived MSDN page (`ff707568`, `public double X
+         * { get; }`, no setter of any visibility). Only ever set via the
+         * constructor.
+         *
          * @return X-axis acceleration.
          */
         [[nodiscard]] double getXProperty() const;
 
         /**
-         * @brief Sets the X-axis acceleration.
-         *
-         * @param value New X-axis acceleration.
-         */
-        void setXProperty(double value);
-
-        /**
          * @brief Gets the Y-axis acceleration.
+         *
+         * Task READINGS-002: get-only, matching the real WP7 API exactly —
+         * confirmed via the archived MSDN page (`ff707712`, `public double Y
+         * { get; }`, no setter of any visibility). Only ever set via the
+         * constructor.
          *
          * @return Y-axis acceleration.
          */
         [[nodiscard]] double getYProperty() const;
 
         /**
-         * @brief Sets the Y-axis acceleration.
-         *
-         * @param value New Y-axis acceleration.
-         */
-        void setYProperty(double value);
-
-        /**
          * @brief Gets the Z-axis acceleration.
+         *
+         * Task READINGS-002: get-only, matching the real WP7 API exactly —
+         * confirmed via the archived MSDN page (`ff708055`, `public double Z
+         * { get; }`, no setter of any visibility). Only ever set via the
+         * constructor.
          *
          * @return Z-axis acceleration.
          */
         [[nodiscard]] double getZProperty() const;
 
         /**
-         * @brief Sets the Z-axis acceleration.
-         *
-         * @param value New Z-axis acceleration.
-         */
-        void setZProperty(double value);
-
-        /**
          * @brief Gets the timestamp of the sensor reading.
+         *
+         * Task READINGS-002: no public setter, matching the real WP7 API —
+         * confirmed via the archived MSDN page (`ff707430`,
+         * `public DateTimeOffset Timestamp { get; private set; }`). Only
+         * ever set via the constructor; a C++ `private set` equivalent
+         * would add a method nothing in this class currently calls (the
+         * constructor already assigns the private field directly), so none
+         * is declared.
          *
          * @return Timestamp of the reading.
          */
         [[nodiscard]] const System::DateTimeOffset& getTimestampProperty() const;
 
         /**
-         * @brief Sets the timestamp of the sensor reading.
-         *
-         * @param value New timestamp.
-         */
-        void setTimestampProperty(const System::DateTimeOffset& value);
-
-        /**
          * @brief Returns true if both instances have equal X, Y, Z, and Timestamp.
+         *
+         * Task DEV-API-002: a CNA extension, not real XNA/WP7 API — the real
+         * `AccelerometerReadingEventArgs` class's own archived MSDN page
+         * (`ff707998(v=vs.105)`) lists `Equals`/`GetHashCode`/`ToString` all
+         * inherited unmodified from `System.Object` (reference identity),
+         * and no equality operator at all. Same CNA-extension rationale as
+         * the reading structs' identical members (see
+         * `AccelerometerReading::operator==()`'s doc comment, Task
+         * `DEV-API-004`) — useful value-equality for a C++ type that has no
+         * automatic equivalent, not an attempt to mimic undocumented real
+         * behavior.
          *
          * @param other The instance to compare against.
          * @return true if equal; otherwise false.
          */
-        bool operator==(const AccelerometerReadingEventArgs& other) const;
+        NOXNA bool operator==(const AccelerometerReadingEventArgs& other) const;
 
         /**
          * @brief Returns true if the instances differ in X, Y, Z, or Timestamp.
          *
+         * See operator==()'s doc comment — same CNA-extension rationale.
+         *
          * @param other The instance to compare against.
          * @return true if not equal; otherwise false.
          */
-        bool operator!=(const AccelerometerReadingEventArgs& other) const;
+        NOXNA bool operator!=(const AccelerometerReadingEventArgs& other) const;
 
         /**
          * @brief Returns a string representation of the reading.
          *
+         * Task DEV-API-002: a CNA extension, not real XNA/WP7 API — the real
+         * class's `ToString()` is inherited unmodified from
+         * `System.Object.ToString()` (returns just the fully qualified type
+         * name, not field values).
+         *
          * @return String in the format "{X:0 Y:0 Z:0}".
          */
-        [[nodiscard]] std::string ToString() const;
+        NOXNA [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Returns a hash code for this instance.
          *
+         * Task DEV-API-002: a CNA extension, not real XNA/WP7 API — the real
+         * class's `GetHashCode()` is inherited unmodified from
+         * `System.Object.GetHashCode()`.
+         *
          * @return Hash derived from X, Y, Z, and Timestamp.
          */
-        [[nodiscard]] std::size_t GetHashCode() const;
+        NOXNA [[nodiscard]] std::size_t GetHashCode() const;
 
         /**
          * @brief Returns the fully-qualified .NET type name of this class.

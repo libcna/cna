@@ -5,24 +5,34 @@
 
 #pragma once
 
+#include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
+#include <ratio>
 #include <type_traits>
 #include <utility>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
 #include "System/IDisposable.hpp"
 #include "System/EventHandler.hpp"
 #include "System/EventArgs.hpp"
+#include "System/DateTimeOffset.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
 
 namespace Microsoft::Devices::Sensors
 {
-    /** @brief Abstract base class for device sensors; provides current-value and event-notification infrastructure. */
+    /**
+     * @brief Abstract base class for device sensors; provides current-value and event-notification infrastructure.
+     *
+     * See `docs/devices-thread-safety.md` for the full, consolidated
+     * thread-safety contract shared by every derived sensor class.
+     */
     template <typename TSensorReading>
     class SensorBase : public System::Object, public System::IDisposable
     {
@@ -38,6 +48,37 @@ namespace Microsoft::Devices::Sensors
         TSensorReading currentValue_;
 
         /**
+         * True once ShouldAcceptUpdateAt() has accepted at least one update
+         * since construction or the last ResetUpdateThrottle() call (Task
+         * SENSORBASE-001/ACCEL-005/GYRO-004). Guarded by mutex_, same as
+         * lastAcceptedUpdateTime_ below.
+         */
+        bool hasAcceptedUpdate_;
+
+        /**
+         * @brief Monotonic time of the last update ShouldAcceptUpdateAt() accepted. Guarded by mutex_.
+         *
+         * Task (2026-07-06 stabilization pass): deliberately `std::chrono::steady_clock`,
+         * not `System::DateTimeOffset`/wall-clock time. A throttle *interval*
+         * measurement must never be able to go backward or jump — wall-clock
+         * time can (NTP step corrections, manual clock changes, leap-second
+         * slew), which would either wedge the throttle open (a backward
+         * step makes `now - lastAcceptedUpdateTime_` go negative, comparing
+         * as "less than any non-negative interval," so every subsequent
+         * update is rejected until real time catches back up to where it
+         * was) or throw it wide open (a forward step makes the very next
+         * update look like it arrived after an arbitrarily long gap,
+         * defeating the throttle entirely for one event). `steady_clock` is
+         * specified by the C++ standard to never be adjusted, making this
+         * risk structurally impossible rather than just unlikely. Sensor
+         * *reading* timestamps (`AccelerometerReading::Timestamp` etc.)
+         * deliberately stay wall-clock (`DateTimeOffset`, matching the real
+         * WP7 API's `DateTimeOffset`-typed `Timestamp` property) — only this
+         * internal throttle *decision* changed.
+         */
+        std::chrono::steady_clock::time_point lastAcceptedUpdateTime_;
+
+        /**
          * Guards currentValue_/isDataValid_ (Task P5-2): for real,
          * SDL3-backed sensors (Accelerometer/Gyroscope), setCurrentValueProperty()/
          * setIsDataValidProperty() are called from DispatchSensorReading(),
@@ -48,6 +89,9 @@ namespace Microsoft::Devices::Sensors
          * subscriber's handler can legitimately call back into this sensor
          * (e.g. Dispose(), another getter), and raising under a lock risks
          * deadlock.
+         *
+         * See `docs/devices-thread-safety.md` for the full, consolidated
+         * thread-safety contract this member is part of.
          */
         mutable std::mutex mutex_;
 
@@ -63,9 +107,22 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Event raised when TimeBetweenUpdates changes.
          *
-         * In the original .NET version this event is protected.
+         * Task SENSORBASE-007: this is a CNA-only extension, not real XNA/WP7
+         * API — the real `SensorBase(TSensorReading)` class's own archived
+         * MSDN reference page (`hh239315(v=vs.105)`) lists exactly one event,
+         * `CurrentValueChanged`; no `TimeBetweenUpdatesChanged` or equivalent
+         * exists (confirmed by a dedicated web search finding zero hits for
+         * the exact member name anywhere). A prior doc comment here claimed
+         * "In the original .NET version this event is protected" with no
+         * citation — that claim was incorrect and has been removed. This
+         * hook exists purely so `Compass`/`Motion`'s Android backend
+         * (`ANDROID-BRIDGE-002`) can forward a live `TimeBetweenUpdates`
+         * change to the running native sensor queue without requiring
+         * `Stop()`/`Start()`; kept `protected` (not made `public`) since
+         * only a derived sensor class, not game code, needs to subscribe to
+         * it.
          */
-        System::EventHandler<System::EventArgs> TimeBetweenUpdatesChanged;
+        NOXNA System::EventHandler<System::EventArgs> TimeBetweenUpdatesChanged;
 
         /**
          * @brief Gets whether this instance has already been disposed.
@@ -247,6 +304,89 @@ namespace Microsoft::Devices::Sensors
         }
 
         /**
+         * @brief Decides whether an incoming update at monotonic time `now`
+         * should actually be accepted (dispatched), given the current
+         * TimeBetweenUpdates interval and the last accepted update's time
+         * (Task SENSORBASE-001/ACCEL-005/GYRO-004/SDL-SENSOR-002).
+         *
+         * The very first call after construction, or after
+         * ResetUpdateThrottle(), always accepts (there is no prior update to
+         * measure an interval against — matches Start() always delivering an
+         * immediate first sample). A subsequent call accepts only if at
+         * least `getTimeBetweenUpdatesProperty()` has elapsed since the last
+         * accepted call's `now`; the current TimeBetweenUpdates value is read
+         * fresh on every call, so a change while the sensor is running takes
+         * effect on the very next incoming update without requiring
+         * Stop()/Start(). A call that accepts records `now` as the new
+         * last-accepted time; a call that does not accept leaves it
+         * unchanged, so throttling is measured against the last
+         * *dispatched* update, not the last *attempted* one.
+         *
+         * Deliberately takes `now` as a parameter rather than calling
+         * `std::chrono::steady_clock::now()` internally: this keeps the
+         * decision a pure function of its inputs, so it can be unit tested
+         * with synthetic `time_point`s (no real-time sleeps, no test
+         * flakiness) — the same technique this codebase already uses for
+         * Android sensor math (Detail::ConvertAndroidPortraitToXnaLandscape(),
+         * Detail::ExtractYawPitchRollFromQuaternion()). Production call
+         * sites (Accelerometer::ProcessSensorUpdateEvent(),
+         * Gyroscope::ProcessSensorUpdateEvent()) pass
+         * `std::chrono::steady_clock::now()`. Scoped per sensor *instance*
+         * (this method reads/writes only this instance's own fields) — two
+         * instances with different TimeBetweenUpdates values throttle
+         * independently, as required.
+         *
+         * Deliberately `std::chrono::steady_clock`, not `System::DateTimeOffset`
+         * wall-clock time — see `lastAcceptedUpdateTime_`'s own doc comment
+         * for why a throttle *decision* must use a clock the standard
+         * guarantees never steps backward or jumps. `TimeBetweenUpdates`
+         * itself stays a `System::TimeSpan` (matching the real WP7 API);
+         * converted here via `getTicksProperty()` (100ns units, exact
+         * integer conversion, no floating-point rounding) into a
+         * `std::chrono` duration for the comparison.
+         *
+         * Not applied to the NOXNA synthetic-injection test hooks
+         * (InjectSyntheticSensorUpdate(), DispatchToInstancesForTesting())
+         * on either class — those deliberately bypass ProcessSensorUpdateEvent()
+         * entirely (see its own doc comment) so tests can exercise dispatch
+         * behavior without depending on real elapsed time between calls.
+         *
+         * @param now Monotonic time of the incoming update.
+         * @return true if this update should be dispatched; false if it
+         * should be silently dropped (too soon after the last accepted one).
+         */
+        bool ShouldAcceptUpdateAt(const std::chrono::steady_clock::time_point& now)
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+
+            const std::chrono::duration<std::int64_t, std::ratio<1, 10000000>> interval(
+                timeBetweenUpdates_.getTicksProperty());
+
+            if (!hasAcceptedUpdate_ || (now - lastAcceptedUpdateTime_) >= interval)
+            {
+                hasAcceptedUpdate_ = true;
+                lastAcceptedUpdateTime_ = now;
+                return true;
+            }
+
+            return false;
+        }
+
+        /**
+         * @brief Forgets the last accepted-update time, so the next
+         * ShouldAcceptUpdateAt() call always accepts.
+         *
+         * Derived classes call this from Start(), so a fresh Start() always
+         * delivers an immediate first sample rather than staying throttled
+         * by a stale timestamp from a previous Start()/Stop() cycle.
+         */
+        void ResetUpdateThrottle()
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            hasAcceptedUpdate_ = false;
+        }
+
+        /**
          * @brief Derived classes override this method to dispose managed-like
          * and unmanaged/native resources.
          *
@@ -292,7 +432,9 @@ namespace Microsoft::Devices::Sensors
               isDataValid_(false),
               isSupported_(false),
               timeBetweenUpdates_(System::TimeSpan::Zero),
-              currentValue_()
+              currentValue_(),
+              hasAcceptedUpdate_(false),
+              lastAcceptedUpdateTime_()
         {
             setTimeBetweenUpdatesProperty(System::TimeSpan::FromMilliseconds(2.0));
         }
@@ -369,6 +511,21 @@ namespace Microsoft::Devices::Sensors
          * real WP7 `TimeSpan` property is a value type in C# anyway, so
          * this is a more faithful match, not a breaking API change.
          *
+         * @note Task SENSORBASE-001/ACCEL-005/GYRO-004: `Accelerometer` and
+         * `Gyroscope` now honor this value as a real dispatch-rate throttle
+         * via `ShouldAcceptUpdateAt()`, called from each class's own
+         * `ProcessSensorUpdateEvent()` (the real SDL event path only — the
+         * NOXNA synthetic-injection test hooks deliberately bypass it, see
+         * `ShouldAcceptUpdateAt()`'s doc comment). SDL's own underlying
+         * sensor polling rate is not adjusted based on this value — SDL3 has
+         * no public API to do so for `SDL_SENSOR_ACCEL`/`SDL_SENSOR_GYRO` —
+         * so throttling is software-side, dropping events that arrive too
+         * soon after the last accepted one. `Compass`/`Motion`'s Android
+         * backend (Task `ANDROID-BRIDGE-002`, closed) forwards a live change
+         * to `Detail::AndroidSensorBridge::SetSampleInterval()`, which
+         * re-applies `ASensorEventQueue_setEventRate()` on the already-running
+         * queue — no longer applied only once at `Start()` time.
+         *
          * @return Time between updates.
          */
         [[nodiscard]] System::TimeSpan getTimeBetweenUpdatesProperty() const
@@ -403,11 +560,26 @@ namespace Microsoft::Devices::Sensors
                 }
             }
 
+            // Task VERIFY-003/DEV-API-002: this class's own internal use of its
+            // own NOXNA-tagged TimeBetweenUpdatesChanged is not the kind of
+            // "leak into strict XNA API surface" the strict-mode check
+            // (CNA_STRICT_XNA_API, CNAHelper.hpp) exists to catch — only an
+            // *external* caller referencing a NOXNA member is. Suppressed
+            // here so this genuinely-real XNA method (setTimeBetweenUpdatesProperty())
+            // stays callable from tools/devices/StrictXnaApiSurfaceCheck.cpp
+            // without that check flagging this internal implementation detail.
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
             if (changed && !TimeBetweenUpdatesChanged.Empty())
             {
                 System::EventArgs args;
                 TimeBetweenUpdatesChanged.Raise(static_cast<System::Object*>(this), args);
             }
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
         }
 
         /**
