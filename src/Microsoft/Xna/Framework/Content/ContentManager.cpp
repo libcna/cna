@@ -689,6 +689,23 @@ namespace Microsoft::Xna::Framework::Content
                 const auto skelBytes = ReadBinaryFile((manifestDir / skeletonRel).string());
                 BinReaderEXT skelReader{skelBytes};
                 const int boneCount = skelReader.Read<std::int32_t>();
+                // Task 11.8: boneCount is a raw int32_t from file content with no validation
+                // before being cast to std::size_t and used to .resize() 3 vectors below - a
+                // negative value wraps to a huge std::size_t (static_cast<std::size_t>(-1) is
+                // SIZE_MAX), and even a merely-large-but-positive corrupt value could attempt a
+                // huge, wasteful allocation before Task 11.7's own per-Read() bounds check would
+                // ever get a chance to reject it. Reject both cleanly instead of risking
+                // std::length_error/std::bad_alloc (the wrong exception type for this project) or
+                // a crash. kMaxSaneBoneCount is a generous, arbitrary ceiling - real content uses
+                // 19 (avatar) or a handful more per wardrobe piece; nothing plausible ever
+                // approaches five figures.
+                constexpr int kMaxSaneBoneCount = 100000;
+                if (boneCount < 0 || boneCount > kMaxSaneBoneCount)
+                {
+                    throw ContentLoadException(
+                        "SkinnedModel skeleton has an invalid bone count (" + std::to_string(boneCount)
+                            + "): " + path);
+                }
                 model->BoneCount = boneCount;
                 model->ParentBoneIndices.resize(static_cast<std::size_t>(boneCount));
                 for (int i = 0; i < boneCount; ++i)

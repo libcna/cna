@@ -2374,13 +2374,32 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   GPU avatar integration tests to confirm real (non-truncated) content loading is unaffected. Full
   suite: 3379/3379 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 11.8** — Add a sanity check on `boneCount` before `.resize()` in
+- [x] **Task 11.8** — Add a sanity check on `boneCount` before `.resize()` in
   `SkinnedModelTypeReader::Read()`. Confirmed (`ContentManager.cpp`, ~lines 679-681): `boneCount` is
   read as a raw `int32_t` with no validation it's `>= 0` or below some sane cap before
   `static_cast<std::size_t>(boneCount)` is used to `.resize()` three vectors — a corrupted/negative
   value produces a huge `std::size_t` and either an allocation failure or a crash rather than a
   graceful `ContentLoadException`. Add the validation and a test with a deliberately corrupt/negative
   `boneCount`.
+
+  Added `if (boneCount < 0 || boneCount > kMaxSaneBoneCount) throw ContentLoadException(...)`
+  right after reading `boneCount`, before any `.resize()` call — `kMaxSaneBoneCount = 100000`, a
+  generous, arbitrary ceiling (real content uses 19). Added
+  `NegativeBoneCountThrowsContentLoadException` and `AbsurdlyLargeBoneCountThrowsContentLoadException`
+  to `ContentManagerSkinnedModelTests.cpp`.
+
+  **Revert-verify** surfaced two distinct, genuine problems the fix addresses: (1) removed the
+  check, reran — the negative-boneCount test failed with the *wrong exception type entirely*
+  (`std::length_error: vector::_M_default_append`, from `static_cast<std::size_t>(-1)` ==
+  `SIZE_MAX`), exactly the correctness bug described; (2) the absurdly-large-but-positive case
+  still technically passed (Task 11.7's own per-`Read()` bounds check independently catches it
+  once the loop starts) — **but took 4636ms**, actually attempting an 8GB allocation for
+  `ParentBoneIndices` first. Restored the fix and reran: both tests pass, and the large-boneCount
+  case now completes in **27ms** — an ~170x speedup, confirming the fix's real, measurable value
+  is rejecting the huge wasteful allocation attempt *before* Task 11.7's own check would
+  eventually catch it anyway, not just a correctness fix. Full suite: 3381/3381 passing (2
+  expected accelerometer/gyroscope skips), no regressions. Re-ran all 3 GPU avatar integration
+  tests to confirm real content loading is unaffected.
 
 - [ ] **Task 11.9** — Add vertex/index consistency validation in `SkinnedModelTypeReader::Read()`.
   Confirmed (`ContentManager.cpp`, ~lines 712-715): `numVertices = vertBytes.size() / stride`

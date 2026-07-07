@@ -101,3 +101,47 @@ TEST_F(ContentManagerSkinnedModelTest, EmptySkeletonBinThrowsContentLoadExceptio
         cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"),
         ContentLoadException);
 }
+
+namespace
+{
+    void WriteSkeletonWithBoneCount(const std::filesystem::path& path, std::int32_t boneCount)
+    {
+        std::vector<std::uint8_t> bytes(sizeof(boneCount));
+        std::memcpy(bytes.data(), &boneCount, sizeof(boneCount));
+        WriteBytes(path, bytes);
+    }
+}
+
+// Task 11.8: boneCount was cast to std::size_t and used to .resize() 3 vectors with no
+// validation - static_cast<std::size_t>(-1) is SIZE_MAX, so a negative boneCount previously threw
+// an uncontrolled std::length_error/std::bad_alloc (the wrong exception type for this project)
+// instead of a clean ContentLoadException.
+TEST_F(ContentManagerSkinnedModelTest, NegativeBoneCountThrowsContentLoadException)
+{
+    ScratchContentRoot root;
+    WriteFile(root.path() / "avatar.skinnedmodel.json", R"({"skeleton": "skeleton.bin"})");
+    WriteSkeletonWithBoneCount(root.path() / "skeleton.bin", -1);
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    EXPECT_THROW(
+        cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"),
+        ContentLoadException);
+}
+
+// A merely-large-but-positive corrupt boneCount must also be rejected before ever attempting a
+// huge, wasteful allocation - real content uses 19 (avatar) or a handful more per wardrobe piece.
+TEST_F(ContentManagerSkinnedModelTest, AbsurdlyLargeBoneCountThrowsContentLoadException)
+{
+    ScratchContentRoot root;
+    WriteFile(root.path() / "avatar.skinnedmodel.json", R"({"skeleton": "skeleton.bin"})");
+    WriteSkeletonWithBoneCount(root.path() / "skeleton.bin", 2000000000);
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    EXPECT_THROW(
+        cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"),
+        ContentLoadException);
+}
