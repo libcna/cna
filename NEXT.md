@@ -17,9 +17,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   (`/rv/data/library/github.com/FNA-XNA/FNA/src`). Task-by-task progress lives in
   `plan_graphics.md`; per-phase synthesis docs live in `docs/*.md`.
 - **Current development phase:** Phases 1–46 are complete. **Phase 47 ("SpriteBatch renderer
-  correctness", Tasks 411–420) is open** — Task 411 (opener) is next: create a mock/recording
-  `ISpriteBatchBackend` for deterministic unit tests, a prerequisite for the sort-mode test tasks
-  (412–416) that follow it.
+  correctness", Tasks 411–420) is open.** **Task 411 (opener) built the mock/recording
+  `ISpriteBatchBackend` infrastructure Tasks 412–416 depend on.** Found `SpriteBatch` had no
+  injection seam at all (always required a real `GraphicsDevice`/GPU backend) and
+  `Texture2D::CreateCpuOnlyForTests()` leaves `backend_` null (a crash the moment a queued sprite
+  is flushed) — fixed both with new `NOXNA` test-only constructors/factories
+  (`SpriteBatch(unique_ptr<ISpriteBatchBackend>)`, `Texture2D::CreateWithBackendForTests(...)`),
+  then built `RecordingSpriteBatchBackend`/`DummyTextureBackend` and 5 tests proving the whole
+  injection path works end-to-end. Tasks 412–416 (per-`SpriteSortMode` assertions) are next.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -97,15 +102,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 409
-  (Task 410 was documentation-only — no code/test changes, no rebuild needed).
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 411.
 
-### Test status (last verified: Task 409)
-- **EasyGL, full `ctest -j1`:** 3609/3612 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 411)
+- **EasyGL, full `ctest -j1`:** 3614/3617 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3529/3542 pass. 13 documented pre-existing failures (see §5),
+- **Vulkan, full `ctest -j1`:** 3534/3547 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3513/3513 pass — 100%, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3518/3518 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -265,7 +269,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 410 | **Doc, closes Phase 46.** Wrote `docs/skinnedeffect-support.md` synthesizing Tasks 401–409 (mirrors `docs/basiceffect-support.md`/`docs/alphatesteffect-support.md`/`docs/dualtextureeffect-support.md`/`docs/environmentmapeffect-support.md`'s style) — per-task summaries, full 3-backend support matrix, "Open, tracked follow-up work" listing Tasks 893/894/895. No code changed. |
+| — | 411 | **Opens Phase 47. Infrastructure task, 2 real gaps found and fixed**: `SpriteBatch` had no way to inject a custom backend without a real `GraphicsDevice`, and `Texture2D::CreateCpuOnlyForTests()`'s null backend would crash `flushSingle()` the moment a sprite is flushed. Fixed both with new `NOXNA` test-only constructors/factories, then built `RecordingSpriteBatchBackend`/`DummyTextureBackend` (new shared `tests/.../RecordingSpriteBatchBackend.hpp`) and 5 tests proving Begin/End/Draw dispatch and multi-texture discrimination work end-to-end, headlessly. |
+| `fe509dbd` | 410 | **Doc, closes Phase 46.** Wrote `docs/skinnedeffect-support.md` synthesizing Tasks 401–409 (mirrors `docs/basiceffect-support.md`/`docs/alphatesteffect-support.md`/`docs/dualtextureeffect-support.md`/`docs/environmentmapeffect-support.md`'s style) — per-task summaries, full 3-backend support matrix, "Open, tracked follow-up work" listing Tasks 893/894/895. No code changed. |
 | `aa9aa8a3` | 409 | **Capstone, zero new bugs found**: combined Tasks 406–408's pieces (identity no-op, single-bone translation, 2-bone weighted blend) into one scene, one bone-palette upload, one draw call covering 3 quads distinguished only by per-vertex weight/index data. All 3 backends produced the exact predicted output on the first attempt, each byte-identical across all 3 quads within itself and matching each backend's own Task 406–408 single-quad values exactly — proving the pieces compose correctly within a single draw, not just in isolation. |
 | `d0eebe95` | 408 | **Verify-only, zero bugs found**: confirmed genuine 2-bone weighted blending (`skinMat = w0×Bones[i0] + w1×Bones[i1]`) on all 3 backends using a deliberately discriminating bone pair whose blended result differs from either bone's own individual shift. Independently verified discriminating power by temporarily swapping to a `(1,0)` weight split and observing the predicted `-0.5`-shift swap (quad moves to the *left* read-back point instead of centre) before restoring the real `0.5`/`0.5` test. |
 | `8906d776` | 407 | **Verify-only, zero bugs found**: formalized the pre-existing (Task 123) EasyGL-only `skinned_effect_integration_test.cpp` translation-bone scenario into Phase 46's own per-backend naming convention, extending it to Vulkan and Bgfx for the first time. All 3 backends produced the exact predicted output on the first attempt, confirming a real non-identity `Matrix.CreateTranslation` bone correctly shifts the mesh everywhere. Bgfx reused Task 406's `renderAndRead()` helper. |
@@ -498,21 +503,20 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first opens Phase 47 (Task 411 fully scoped in `plan_graphics.md`);
+In priority order — the first continues Phase 47 (Task 412 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 411 — create mock/recording `ISpriteBatchBackend` for deterministic unit tests**
-   - Goal: opens Phase 47 ("SpriteBatch renderer correctness", Tasks 411–420). Build a
-     mock/recording implementation of `ISpriteBatchBackend` that records draw calls (texture,
-     source/dest rects, color, rotation, origin, effects, layer depth) instead of issuing real GPU
-     draws, enabling deterministic unit tests of `SpriteBatch`'s sorting/batching logic without a
-     graphics context. This is an explicit prerequisite for Tasks 412–416 (completing tests for
-     each `SpriteSortMode`), which depend on it per `plan_graphics.md`'s own "Task 161/162/163/
-     164/165 dependency" notes.
-   - Files: likely new `include/CNA/Internal/Backends/Mock/...` + `src/CNA/Internal/Backends/
-     Mock/...` (mirroring the existing `Common`/`SDL`/`EasyGL`/`Vulkan`/`Bgfx` backend directory
-     structure per CLAUDE.md's "Internal (CNA) vs XNA Layer" table), plus a new test file exercising
-     it directly.
+1. **Task 412 — complete tests for `SpriteSortMode::Immediate` (Task 161 dependency)**
+   - Goal: using Task 411's `RecordingSpriteBatchBackend` (`tests/Microsoft/Xna/Framework/Graphics/
+     RecordingSpriteBatchBackend.hpp`) and `SpriteBatch`'s new backend-injecting constructor,
+     verify Task 161's exact ask: a sprite drawn under `SpriteSortMode::Immediate` must be flushed
+     to the backend **inside** `Draw()`, not deferred until `End()`. Concretely: call
+     `batch.Begin(SpriteSortMode::Immediate, ...)`, then `batch.Draw(...)`, then assert
+     `rec->drawCalls.size() == 1` **before** calling `batch.End()` — proving `pushSprite()`'s
+     `sortMode_ == SpriteSortMode::Immediate` branch (`flushSingle(info)` called directly, no
+     queueing) actually takes effect end-to-end, not just in isolated code-reading.
+   - Files: extend `tests/Microsoft/Xna/Framework/Graphics/SpriteBatchTests.cpp` (or a new
+     dedicated test file) with the `SpriteSortMode::Immediate` case.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -636,16 +640,45 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 411).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 412).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
 instruction — do not wait to be asked; one task = one commit = one push).
 
 Current status: Phases 1-46 are FULLY COMPLETE. Phase 47 ("SpriteBatch renderer correctness",
-plan_graphics.md Tasks 411-420) is OPEN: Task 411 (opener, NEXT) creates a mock/recording
-ISpriteBatchBackend for deterministic unit tests, an explicit prerequisite for Tasks 412-416
-(completing tests for each SpriteSortMode) per plan_graphics.md's own dependency notes.
+plan_graphics.md Tasks 411-420) is OPEN. Task 411 (opener) built the mock/recording
+ISpriteBatchBackend infrastructure Tasks 412-416 depend on -- audited SpriteBatch's architecture
+first (it already has a dedicated ISpriteBatchBackend interface; flushBatch()'s stable_sort by
+layerDepth/texture-pointer followed by flushSingle()'s backend_->Draw(s.texture->GetBackend(),...)
+is the single dispatch point every sort-mode test needs to observe). FOUND 2 real gaps blocking
+any mock-based test, both FIXED as infrastructure prerequisites: (1) SpriteBatch had NO injection
+seam -- SpriteBatch(GraphicsDevice&) always requires a real GPU backend, and the existing
+SpriteBatch() default ctor leaves backend_ permanently null with no setter. FIXED by adding a new
+NOXNA constructor SpriteBatch(unique_ptr<ISpriteBatchBackend>) bypassing GraphicsDevice entirely
+(GraphicsResource(nullptr), matching the default ctor's own precedent). (2) flushSingle()
+dereferences Texture2D::GetBackend() (*backend_), but the existing
+Texture2D::CreateCpuOnlyForTests() leaves backend_ null by design -- a crash the moment any
+queued sprite is flushed. FIXED by adding a new NOXNA factory
+Texture2D::CreateWithBackendForTests(w, h, shared_ptr<ITextureBackend>), mirroring
+CreateCpuOnlyForTests's exact established pattern. Built the actual mock:
+tests/Microsoft/Xna/Framework/Graphics/RecordingSpriteBatchBackend.hpp (new shared test-utility
+header, mirrors the project's existing *TestAccess.hpp convention) with DummyTextureBackend
+(minimal ITextureBackend) and RecordingSpriteBatchBackend (records every Begin/End/Draw call, in
+order). Added 5 new tests proving the injection point + mock work end-to-end: construction
+doesn't throw, Begin()/End() dispatch correctly, a Draw() call is recorded with byte-exact
+deliberately-non-default parameters (rotation/origin/color/layerDepth, so the assertion is
+genuinely discriminating), and 2 distinct Texture2D instances produce 2 distinct recorded backend
+pointers (the precondition Task 414's SpriteSortMode::Texture grouping assertion depends on).
+Deliberately left Tasks 412-416's own per-SpriteSortMode assertions (Immediate flush timing,
+Deferred order preservation, Texture grouping, FrontToBack/BackToFront ordering) out of scope --
+this task's job was only proving the shared infrastructure itself works. No existing production
+behavior changed; only new NOXNA test-only injection points added.
+
+Task 412 (NEXT) is the natural next step: complete tests for SpriteSortMode::Immediate (Task 161
+dependency) using Task 411's RecordingSpriteBatchBackend -- verify a sprite drawn under
+SpriteSortMode::Immediate is flushed to the backend INSIDE Draw(), not deferred until End(): call
+Begin(Immediate,...), Draw(...), then assert rec->drawCalls.size()==1 BEFORE calling End().
 
 Phase 46 ("SkinnedEffect exactness", Tasks 401-410) CLOSED with Task 410
 (docs/skinnedeffect-support.md, full synthesis of Tasks 401-409). Summary of what it found/fixed:
@@ -723,14 +756,14 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 47's tasks.
 
-Last full 3-backend regression (Task 409 — capstone, verify-only, 1 new test per backend, no
-production code changed; Task 410 was documentation-only, no rebuild):
-EasyGL 3609/3612 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3529/3542 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3513/3513 pass (100%, no flakes this run).
+Last full 3-backend regression (Task 411 — infrastructure, 5 new tests per backend, 2 new NOXNA
+test-only injection points added, no existing production behavior changed):
+EasyGL 3614/3617 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3534/3547 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3518/3518 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
-For the full history of what each task in Phase 41/42/43/44/45/46 found, read plan_graphics.md
-directly (Tasks 351-410) rather than this file — this file intentionally keeps only a one-line
+For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
+directly (Tasks 351-411) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

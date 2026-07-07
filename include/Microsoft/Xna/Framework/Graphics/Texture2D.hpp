@@ -244,6 +244,20 @@ namespace Microsoft::Xna::Framework::Graphics
                                                      const std::vector<Color>& pixels);
 
         /**
+         * @brief NOXNA test-only: builds a Texture2D wrapping an arbitrary backend (e.g. a
+         *        mock/recording ITextureBackend) without a GraphicsDevice, so callers that
+         *        dereference GetBackend() (such as SpriteBatch::Draw) can be exercised
+         *        headlessly against distinct, identifiable texture instances.
+         *
+         * @param w       Width in pixels.
+         * @param h       Height in pixels.
+         * @param backend Backend to attach; must be non-null.
+         * @return A Texture2D wrapping the given backend, with no GraphicsDevice.
+         */
+        NOXNA static Texture2D CreateWithBackendForTests(int w, int h,
+                                                         std::shared_ptr<ITextureBackend> backend);
+
+        /**
          * @brief Reconstructs a Texture2D from a cached backend and CPU pixel buffer without reloading from disk.
          *
          * @param device    The device to associate with the texture.

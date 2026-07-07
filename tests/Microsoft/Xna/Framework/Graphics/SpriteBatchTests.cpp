@@ -13,6 +13,10 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
+#include "RecordingSpriteBatchBackend.hpp"
+
+#include <memory>
+
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
@@ -21,6 +25,8 @@ using Microsoft::Xna::Framework::Graphics::SpriteEffects;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using CNA::Internal::Backends::DummyTextureBackend;
+using CNA::Internal::Backends::RecordingSpriteBatchBackend;
 
 // -----------------------------------------------------------------------
 // SpriteSortMode — enum values (XNA 4.0 specifies the underlying integers)
@@ -300,4 +306,102 @@ TEST(SpriteBatchTest, BeginEndBeginEndDoesNotThrow)
         batch.Begin();
         batch.End();
     });
+}
+
+// -----------------------------------------------------------------------
+// Task 411: mock/recording ISpriteBatchBackend for deterministic unit tests
+//
+// Proves the new backend-injecting constructor + RecordingSpriteBatchBackend work end-to-end,
+// without a GraphicsDevice or real graphics context. Tasks 412-416 build the actual
+// per-SpriteSortMode assertions (Immediate flush timing, Deferred order preservation, Texture
+// grouping, FrontToBack/BackToFront ordering) on top of this same infrastructure.
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchBackendInjectionTest, ConstructingWithBackendDoesNotThrow)
+{
+    EXPECT_NO_THROW(SpriteBatch batch(std::make_unique<RecordingSpriteBatchBackend>()));
+}
+
+TEST(SpriteBatchBackendInjectionTest, BeginDispatchesToBackend)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    batch.Begin();
+
+    EXPECT_EQ(rec->beginCount, 1);
+    EXPECT_EQ(rec->endCount, 0);
+}
+
+TEST(SpriteBatchBackendInjectionTest, EndDispatchesToBackend)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    batch.Begin();
+    batch.End();
+
+    EXPECT_EQ(rec->beginCount, 1);
+    EXPECT_EQ(rec->endCount, 1);
+}
+
+TEST(SpriteBatchBackendInjectionTest, DrawIsRecordedWithExactParameters)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackend(16, 16);
+    Texture2D tex = Texture2D::CreateWithBackendForTests(16, 16,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+
+    const Rectangle dest(10, 20, 16, 16);
+    const Rectangle src(0, 0, 16, 16);
+    const Color color(1, 2, 3, 4);
+    const Vector2 origin(1.5f, 2.5f);
+
+    batch.Begin();
+    batch.Draw(tex, dest, src, color, 0.75f, origin, SpriteEffects::FlipHorizontally, 0.25f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 1u);
+    const auto& call = rec->drawCalls[0];
+    EXPECT_EQ(call.texture, &texBackend);
+    EXPECT_EQ(call.destinationRectangle, dest);
+    EXPECT_EQ(call.sourceRectangle, src);
+    EXPECT_EQ(call.color, color);
+    EXPECT_FLOAT_EQ(call.rotation, 0.75f);
+    EXPECT_EQ(call.origin, origin);
+    EXPECT_EQ(call.effects, SpriteEffects::FlipHorizontally);
+    EXPECT_FLOAT_EQ(call.layerDepth, 0.25f);
+}
+
+TEST(SpriteBatchBackendInjectionTest, DistinctTexturesProduceDistinctRecordedPointers)
+{
+    // SpriteSortMode::Texture (Task 414) sorts by the Texture2D*, and flushSingle() forwards
+    // the underlying ITextureBackend& — this test proves 2 distinct Texture2D instances are
+    // observable as 2 distinct backend pointers through the recording backend, the precondition
+    // Task 414's grouping assertion depends on.
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend backendA(4, 4);
+    DummyTextureBackend backendB(8, 8);
+    Texture2D texA = Texture2D::CreateWithBackendForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendA, [](auto*) {}));
+    Texture2D texB = Texture2D::CreateWithBackendForTests(8, 8,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendB, [](auto*) {}));
+
+    batch.Begin();
+    batch.Draw(texA, 0.0f, 0.0f);
+    batch.Draw(texB, 0.0f, 0.0f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 2u);
+    EXPECT_EQ(rec->drawCalls[0].texture, &backendA);
+    EXPECT_EQ(rec->drawCalls[1].texture, &backendB);
+    EXPECT_NE(rec->drawCalls[0].texture, rec->drawCalls[1].texture);
 }

@@ -77,6 +77,16 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Creates an empty sprite batch. */
         NOXNA SpriteBatch();
 
+        /**
+         * @brief NOXNA test-only: creates a sprite batch bound directly to an explicit backend,
+         *        bypassing GraphicsDevice entirely. Enables deterministic unit testing of
+         *        Begin/Draw/End batching and sort-mode logic against a mock/recording backend
+         *        without a real graphics context.
+         *
+         * @param backend Backend implementation to receive Begin/End/Draw calls.
+         */
+        NOXNA explicit SpriteBatch(std::unique_ptr<ISpriteBatchBackend> backend);
+
         /** @brief Destructor. */
         NOXNA ~SpriteBatch() override;
 

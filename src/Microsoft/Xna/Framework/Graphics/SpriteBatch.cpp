@@ -29,6 +29,13 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     SpriteBatch::SpriteBatch() = default;
+
+    SpriteBatch::SpriteBatch(std::unique_ptr<ISpriteBatchBackend> backend)
+        : GraphicsResource(nullptr)
+        , backend_(std::move(backend))
+    {
+    }
+
     SpriteBatch::~SpriteBatch() = default;
 
     GetTypeNameCPP(SpriteBatch, "Microsoft.Xna.Framework.Graphics.SpriteBatch")

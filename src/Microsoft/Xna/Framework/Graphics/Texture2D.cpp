@@ -754,6 +754,16 @@ namespace Microsoft::Xna::Framework::Graphics
         return tex;
     }
 
+    Texture2D Texture2D::CreateWithBackendForTests(int w, int h,
+                                                   std::shared_ptr<ITextureBackend> backend)
+    {
+        Texture2D tex;              // default ctor: no GraphicsDevice
+        tex.width   = w;
+        tex.height  = h;
+        tex.backend_ = std::move(backend);
+        return tex;
+    }
+
     Texture2D Texture2D::ReconstructFromCache(GraphicsDevice& device,
                                               int w, int h,
                                               SurfaceFormat fmt,
