@@ -174,6 +174,28 @@ TEST(SkinnedModelEXTTest, UnknownClipThrows)
         System::ArgumentException);
 }
 
+// Task 11.3: ParentBoneIndices/BindPoseLocal/InverseBindPoseGlobal are all indexed up to
+// BoneCount with no check that their .size() actually matches - a corrupt/truncated
+// .skeleton.bin (or, as here, a deliberately size-mismatched hand-built model) must be rejected
+// cleanly instead of causing a real out-of-bounds std::vector::operator[] read.
+TEST(SkinnedModelEXTTest, MismatchedArraySizesThrows)
+{
+    SkinnedModelEXT model;
+    model.BoneCount = 2;
+    model.ParentBoneIndices = {-1}; // only 1 entry, but BoneCount says 2
+    model.BindPoseLocal = {Matrix::getIdentityProperty(), Matrix::getIdentityProperty()};
+    model.InverseBindPoseGlobal = {Matrix::getIdentityProperty(), Matrix::getIdentityProperty()};
+
+    AnimationClipEXT clip;
+    clip.Duration = System::TimeSpan::Zero;
+    model.Clips["Idle"] = clip;
+
+    std::vector<Matrix> bones;
+    EXPECT_THROW(
+        model.ComputeBoneTransformsEXT("Idle", System::TimeSpan::Zero, false, bones),
+        System::ArgumentException);
+}
+
 // Task 11.2: "topological order" is a convention enforced only by the content pipeline, never
 // checked in ComputeBoneTransformsEXT itself - a forward-referenced parent (parent index >= the
 // bone's own index) must be rejected instead of silently reading a not-yet-finalized

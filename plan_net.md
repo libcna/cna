@@ -2237,13 +2237,25 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   unvalidated result). Restored the fix, rebuilt, confirmed green. Full suite: 3371/3371 passing
   (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 11.3** — Add a bounds/size-consistency check between `BoneCount` and
+- [x] **Task 11.3** — Add a bounds/size-consistency check between `BoneCount` and
   `ParentBoneIndices`/`BindPoseLocal`/`InverseBindPoseGlobal` in `SkinnedModelEXT`. Confirmed
   (~lines 143-155): all three arrays are indexed by `i` up to `BoneCount` with no check that
   `.size() == BoneCount`. Since these are populated straight from file content, a corrupt/truncated
   `.skeleton.bin` produces real out-of-bounds `std::vector::operator[]` reads (undefined behavior),
   not a hypothetical. Add the size check (throwing a clear `ArgumentException`/`ContentLoadException`
   instead) and a test with a deliberately size-mismatched skeleton.
+
+  Added the check at the top of `ComputeBoneTransformsEXT`, right after the clip lookup and before
+  any of the three arrays are ever indexed: throws `System::ArgumentException` (matching the
+  exception type already used elsewhere in this method, e.g. the unknown-clip-name and Task 11.2
+  checks) naming `BoneCount` and all 3 actual sizes in the message. Added
+  `MismatchedArraySizesThrows` (`BoneCount = 2` but `ParentBoneIndices` has only 1 entry).
+  **Revert-verify:** removed the check, rebuilt, confirmed the new test failed ("it throws
+  nothing" — the small out-of-bounds read didn't happen to crash in this case, just silently
+  produced an unvalidated result). Restored the fix, rebuilt, confirmed green, and re-ran all 3
+  GPU avatar integration tests (`cna_test_avatar_real_render`, `cna_test_avatar_attach_part`,
+  `cna_test_avatar_tint_routing`) to confirm real content loading is unaffected — all 3 still
+  pass. Full suite: 3372/3372 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 11.4** — Add slot/replace-by-name semantics to `SkinnedModelEXT::AttachPartEXT` (or a
   new `ReplacePartEXT`). Confirmed a real, live problem: `AttachPartEXT` unconditionally appends

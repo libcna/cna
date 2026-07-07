@@ -108,6 +108,23 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         const AnimationClipEXT& clip = it->second;
 
+        // Task 11.3: ParentBoneIndices/BindPoseLocal/InverseBindPoseGlobal are all populated
+        // straight from file content and then indexed up to BoneCount below with no check that
+        // .size() == BoneCount - a corrupt/truncated .skeleton.bin (or a hand-constructed model,
+        // e.g. in a test) previously produced real out-of-bounds std::vector::operator[] reads
+        // instead of a clean, catchable error.
+        if (static_cast<int>(ParentBoneIndices.size()) != BoneCount
+            || static_cast<int>(BindPoseLocal.size()) != BoneCount
+            || static_cast<int>(InverseBindPoseGlobal.size()) != BoneCount)
+        {
+            throw System::ArgumentException(
+                "SkinnedModelEXT's BoneCount (" + std::to_string(BoneCount)
+                    + ") does not match ParentBoneIndices.size() (" + std::to_string(ParentBoneIndices.size())
+                    + "), BindPoseLocal.size() (" + std::to_string(BindPoseLocal.size())
+                    + "), or InverseBindPoseGlobal.size() (" + std::to_string(InverseBindPoseGlobal.size()) + ")"
+            );
+        }
+
         System::TimeSpan pos = position;
         if (clip.Duration > System::TimeSpan::Zero)
         {
