@@ -1818,9 +1818,21 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
 
 ## Phase 9 — GamerServices: Test Coverage
 
-- [ ] **Task 9.1** — Add a test for `Gamer::setSignedInGamersProperty`'s delete-old-then-replace
+- [x] **Task 9.1** — Add a test for `Gamer::setSignedInGamersProperty`'s delete-old-then-replace
   logic — currently only the getter is tested. Cover setting once, setting twice (proving the old
   collection is properly cleaned up per Task 7.5's fix), and setting to the same pointer.
+
+  Added `GamerTest.SetSignedInGamersPropertyReplacesThePreviousCollection`: sets once, sets a
+  second time (must replace, not leak, the first), and sets to the same pointer again (must be a
+  safe no-op, not a self-delete). Uses the established RAII global-swap guard pattern from
+  `NetworkSessionTests.cpp` (install a *fresh, empty* collection on teardown, never reuse a
+  captured "previous" pointer — `setSignedInGamersProperty` unconditionally deletes whatever it
+  replaces, so reusing a captured pointer would double-free, per Task 2.15's own discovery).
+
+  Pure test-coverage addition for already-correct code (no bug found or fixed), no revert-verify
+  applies. Ran the full suite twice in a row to confirm this global-state test doesn't
+  contaminate any other test: **3342/3344 passing** both times (2 expected accelerometer/
+  gyroscope skips), no regressions.
 
 - [ ] **Task 9.2** — Add tests for the 3 untested `FriendGamer` properties: `getInviteReceivedFromProperty()`,
   `getInviteRejectedProperty()`, `getInviteSentToProperty()` — confirmed never referenced anywhere

@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "SignedInGamerTestAccess.hpp"
 
@@ -67,6 +68,37 @@ TEST(GamerTest, ToStringReturnsDisplayName) {
 
 TEST(GamerTest, SignedInGamersStaticNotNull) {
     EXPECT_NE(nullptr, Gamer::getSignedInGamersProperty());
+}
+
+// Task 9.1: setSignedInGamersProperty's delete-old-then-replace logic had zero direct coverage -
+// only the getter (returning a non-null default) was ever tested. Covers setting once, setting
+// twice (the old SignedInGamerCollection wrapper must be replaced cleanly, not merely leaked or
+// left dangling - see Task 7.5's write-up for the adjacent SignedInGamer* leak this same setter
+// exposed inside GamerServicesDispatcher::Initialize()), and setting to the same pointer (a
+// documented no-op via the setter's own `if (signedInGamers_ != value)` guard).
+//
+// Installs a fresh, empty SignedInGamerCollection on teardown rather than restoring a captured
+// "previous" pointer - setSignedInGamersProperty unconditionally deletes whatever it replaces, so
+// reusing a captured previous pointer would double-free (see NetworkSessionTests.cpp's own
+// RestoreGlobalGuard precedent, first established while fixing Task 2.15's double-free).
+TEST(GamerTest, SetSignedInGamersPropertyReplacesThePreviousCollection) {
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    auto* first = new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}));
+    Gamer::setSignedInGamersProperty(first);
+    EXPECT_EQ(first, Gamer::getSignedInGamersProperty());
+
+    auto* second = new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}));
+    Gamer::setSignedInGamersProperty(second); // must replace (and free) `first`, not leak it
+    EXPECT_EQ(second, Gamer::getSignedInGamersProperty());
+
+    // Setting to the same pointer again must be a safe no-op, not a self-delete.
+    Gamer::setSignedInGamersProperty(second);
+    EXPECT_EQ(second, Gamer::getSignedInGamersProperty());
 }
 
 TEST(GamerTest, GetProfileReturnsUsableProfile) {
