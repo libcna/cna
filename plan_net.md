@@ -3244,12 +3244,40 @@ done — "it compiles" is not sufficient.
   in both modes. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
   regressions (new demo-only file, no library changes).
 
-- [ ] **Task 15.12** — `cna_demo_gamerservices_dispatcher_watchdog`: a visual/interactive version of
+- [x] **Task 15.12** — `cna_demo_gamerservices_dispatcher_watchdog`: a visual/interactive version of
   `tools/net/gamerservices_dispatcher_harness.cpp` (proving Task 12.1's/this plan's Task 7.1 hang
   fixes) — calls `GamerServicesDispatcher::Initialize()` then `NetworkSession::Create(...)` (and,
   once Task 7.1 lands, `SignedInGamer::GetAchievements()` too) and shows on-screen ticking text
   "waiting…" followed by "SUCCESS" once each resolves, so a human watching the window can see the
   historical hangs are fixed rather than trusting an exit code. Single process.
+
+  New files: `examples/demo_gamerservices_dispatcher_watchdog/src/{WatchdogGame.hpp,
+  WatchdogGame.cpp,Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND
+  NOT EMSCRIPTEN` gate as `cna_demo_net_client_server_arena`. A 7-state machine renders each of
+  the 3 checks (`GamerServicesDispatcher::Initialize()`, `NetworkSession::Create(Local, 1, 8)`,
+  `SignedInGamer::GetAchievements()`) through a `kWarmupFrames=20`-frame "waiting..." window (long
+  enough for a human watching the window to actually perceive it) before performing the real,
+  once-hanging-forever blocking call and flipping to `SUCCESS (Xms)` with the real measured
+  wall-clock duration (`std::chrono::steady_clock`) — mirroring the existing harness's exact 3
+  checks and call patterns (`NetworkSessionType::Local`, matching the harness's own choice so
+  neither this demo nor the harness ever touches a real socket). Self-terminating: exits
+  automatically ~1 second after all 3 report `SUCCESS`, no `--smoke` flag needed since the whole
+  point is a short, bounded, visible sequence.
+
+  **Found and fixed a real bug in this new demo's own state machine** (not library code) during
+  first-run verification: the `AllDone` case incremented a grace-frame counter and called `Exit()`
+  once it crossed a threshold, but `Exit()` doesn't halt `Update()` immediately — several more
+  frames ran before the game loop actually stopped, so the completion line printed roughly 28
+  times instead of once. Fixed with a one-shot guard (`if (doneGraceFrames_ < 60) { ...
+  }`), matching the pattern every other Phase 15 demo's own smoke-completion check already used
+  (checking the *outer* condition before incrementing, so it can only ever fire once).
+
+  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` with a `timeout` safety net
+  (in case of a genuine regression back to a real hang): all 3 checks completed in well under a
+  millisecond each (`0.03ms`, `0.04ms`, `0.00ms` this run), the completion line printed exactly
+  once after the one-shot-guard fix, and the process exited `0` on its own. Full suite: 3398/3398
+  passing (2 expected accelerometer/gyroscope skips), no regressions (new demo-only files, no
+  library changes).
 
 - [ ] **Task 15.13** — `cna_demo_gamer_profile_privileges`: `GamerProfile` (`GamerScore`,
   `GamerZone`, `Motto`, `Region`, `Reputation`, `TitlesPlayed`, `TotalAchievements`, via

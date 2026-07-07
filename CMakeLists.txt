@@ -823,6 +823,36 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         target_link_libraries(cna_demo_guide_overlay_console PRIVATE CNA_GamerServices SHARP_RUNTIME)
     endif()
 
+    # Task 15.12: cna_demo_gamerservices_dispatcher_watchdog - visual proof that Task 12.1's/Task
+    # 7.1's historical GamerServicesDispatcher/NetworkSession/GetAchievements hangs are fixed.
+    # Needs CNA_GamerServices and CNA_Net, plus windowing for the "waiting.../SUCCESS" HUD - same
+    # gating as cna_demo_net_client_server_arena above.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_demo_gamerservices_dispatcher_watchdog
+            examples/demo_gamerservices_dispatcher_watchdog/src/Main.cpp
+            examples/demo_gamerservices_dispatcher_watchdog/src/WatchdogGame.cpp
+        )
+        target_include_directories(cna_demo_gamerservices_dispatcher_watchdog PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_gamerservices_dispatcher_watchdog/src
+        )
+        target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE CNA_GamerServices CNA_Net)
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            set_target_properties(cna_demo_gamerservices_dispatcher_watchdog PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_copy_sdl_runtime(cna_demo_gamerservices_dispatcher_watchdog)
+        endif()
+    endif()
+
     # EasyGL integration tests (Task 85, 86, 87)
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
