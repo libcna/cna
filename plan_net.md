@@ -1628,12 +1628,21 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   sharp-runtime type. Restored the fixes; full suite: **3311/3313 passing** (2 expected
   accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 7.10** — Add the missing `NOXNA` marker to `LeaderboardEntry::getRankingEXTProperty()`.
+- [x] **Task 7.10** — Add the missing `NOXNA` marker to `LeaderboardEntry::getRankingEXTProperty()`.
   Confirmed against the XNA 4.0 HTML doc spec that real XNA's `LeaderboardEntry` exposes only
   `Columns`, `Gamer`, `Rating` — no ranking property; `RankingEXT` is FNA's own stub extension.
   `LeaderboardEntry.hpp` (~lines 51-56) declares it without `NOXNA`, violating `CLAUDE.md`'s "MUST
   wrap it with NOXNA" rule (contrast with `operator==`/`operator!=` a few lines below, which are
   correctly marked). Add the marker to the declaration and its Doxygen block.
+
+  Confirmed directly against FNA's own real `LeaderboardEntry.cs`: `RankingEXT` is FNA's own
+  addition (not present in real XNA 4.0, which exposes only `Columns`/`Gamer`/`Rating`) — FNA's
+  own author already named it with the "EXT" suffix for exactly this reason. Added `NOXNA` to the
+  declaration and expanded its Doxygen comment to state why.
+
+  Marker-only change (`NOXNA` has no compiled effect), no behavior change, no revert-verify
+  applies. Full suite: **3311/3313 passing** (2 expected accelerometer/gyroscope skips), no
+  regressions.
 
 - [ ] **Task 7.11** — Add the missing `NOXNA` marker to `Guide::ShowAchievementsEXT`. Confirmed this
   is FNA's own addition (not real XNA 4.0 API — the doc comment even says "(FNA extension)"), but
