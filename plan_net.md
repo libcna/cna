@@ -2425,7 +2425,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   confirm real (well-formed) content loading is unaffected. Full suite: 3383/3383 passing (2
   expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 11.10** — Investigate consolidating the vertex-layout-by-magic-stride-number pattern
+- [x] **Task 11.10** — Investigate consolidating the vertex-layout-by-magic-stride-number pattern
   for the Skinned (52-byte) vertex format specifically. Confirmed the same `switch(stride){case
   52: ...}` idiom is independently duplicated in `EasyGLGraphicsBackend.cpp` (~lines 1790-1802),
   `BgfxGraphicsBackend.cpp`'s `MakeBgfxLayout` (~lines 1249-1268), and hardcoded
@@ -2439,6 +2439,32 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   design investigation (is a shared helper feasible without a bigger cross-backend refactor?) rather
   than an immediate rewrite — but the Skinned case has 5 attributes (the most complex instance) and
   is the newest, highest-risk case, so it's worth scoping even if the fix is deferred.
+
+  Investigated feasibility of a shared `VertexElement`-derived layout helper. The canonical data
+  already exists (`VertexPositionNormalTextureSkinned::getVertexDeclarationStatic()`'s 5
+  `VertexElement`s: offset 0 Vector3 Position, 12 Vector3 Normal, 24 Vector2 TextureCoordinate, 32
+  Vector4 BlendWeight, 48 Byte4 BlendIndices — an exact match for all 3 backend copies), but
+  deriving from it isn't a local fix: every backend's API boundary
+  (`ApplyLayout(vao, stride)`/`MakeBgfxLayout(stride)`/Vulkan's hardcoded constant) currently
+  receives only a bare `stride`, never a `VertexDeclaration` — routing the real layout through
+  instead would mean widening `IGraphicsBackend`'s abstract interface across all 4 backends, and
+  doing so consistently for *every* existing magic-stride case (16/32/52), not just Skinned, to
+  avoid leaving two conventions coexisting. Also, Vulkan/Bgfx aren't currently smoke-tested in
+  this environment at all (Task 13.6's own "not yet smoke-tested" caveat), so a refactor touching
+  their pipeline-creation code would be effectively unverifiable beyond compilation here.
+  **Decision: defer the full refactor** (matches the task's own framing), but apply the concrete,
+  zero-risk mitigation available today — added a cross-referencing doc comment at all 3
+  duplicate sites (`EasyGLGraphicsBackend.cpp`'s `case 52`, `BgfxGraphicsBackend.cpp`'s
+  `MakeBgfxLayout`, `VulkanGraphicsBackend.cpp`'s `GetOrCreatePipelineSkinned3D`), each naming the
+  canonical layout and the other 2 copies, so a future person changing
+  `VertexPositionNormalTextureSkinned`'s field order (the one thing the existing `sizeof(...) ==
+  52` `static_assert` in `VertexBuffer.cpp` does *not* already catch) has an explicit,
+  discoverable checklist of what else needs updating. Pure comment additions, no behavior change
+  — build-verified (`CNA`/EasyGL backend; Vulkan/Bgfx aren't built in this environment, so those 2
+  edits were verified by careful manual diff review only). Full suite: 3383/3383 passing (2
+  expected accelerometer/gyroscope skips), no regressions.
+
+**Phase 11 complete — 10/10.**
 
 ---
 

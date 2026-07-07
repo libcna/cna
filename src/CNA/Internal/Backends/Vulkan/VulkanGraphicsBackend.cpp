@@ -3381,6 +3381,11 @@ namespace CNA::Internal::Backends::Vulkan
     {
         EnsureSkinnedResources();
 
+        // Task 11.10: this layout is independently duplicated (magic stride 52) in
+        // EasyGLGraphicsBackend.cpp's ApplyLayout and BgfxGraphicsBackend.cpp's MakeBgfxLayout -
+        // see EasyGLGraphicsBackend.cpp's own comment at its "case 52" for the full cross-
+        // reference to the canonical VertexPositionNormalTextureSkinned::getVertexDeclarationStatic()
+        // layout and why a shared-derivation refactor was investigated but deferred.
         constexpr std::size_t kSkinnedStride = 52;
         uint64_t key = MakeExt3DKey(kSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
         auto it = pipelinesSkinned3D_.find(key);
