@@ -2867,13 +2867,58 @@ done — "it compiles" is not sufficient.
   Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no regressions
   (new demo-only file, no library changes).
 
-- [ ] **Task 15.4** — `cna_demo_simulated_network_conditions`: `NetworkSession.SimulatedLatencyProperty`/
+- [x] **Task 15.4** — `cna_demo_simulated_network_conditions`: `NetworkSession.SimulatedLatencyProperty`/
   `SimulatedPacketLossProperty` — depends on Phase 4's Task 4.3 actually implementing an effect
   first. A ball bounces between two paddles (host/client), each paddle's position sent every frame;
   Up/Down arrows raise/lower simulated latency/packet-loss live, visible stutter/jitter scales with
   the HUD-displayed values. Two real processes ideally; investigate whether a single-process
   `NetworkSessionType::Local` fallback is viable if the simulated values apply to the local event
   queue too.
+
+  **Re-scoped after re-reading Task 4.3's own conclusion**: Task 4.3 explicitly confirmed
+  `SimulatedLatencyProperty`/`SimulatedPacketLossProperty` are stored but **never applied to real
+  traffic anywhere**, deliberately matching FNA's own non-functional reference stub (FNA itself
+  never implemented real delay-queue/packet-drop behavior for these) — a considered decision, not
+  an oversight, with its own regression test
+  (`ENetBackendTest.SimulatedLatencyAndPacketLossHaveNoEffectOnRealTraffic`) already locking in
+  that inertness. This task's original premise ("visible stutter/jitter scales with the HUD
+  values") therefore describes something that provably cannot exist without contradicting Task
+  4.3's own already-verified conclusion — building a demo around a fabricated stutter effect would
+  mean showing something false. Re-scoped to the opposite, honest framing: prove *live* that
+  cranking these dials to their extremes has **zero** observable effect on real traffic, with the
+  HUD showing both the requested simulated values and the real measured RTT side by side so the
+  decoupling is visually obvious. A single-process `NetworkSessionType::Local` fallback was not
+  investigated further, since Task 4.3 already confirmed zero references to either property
+  anywhere in `CNA::Internal::Net` — there is no local-queue effect to fall back to either.
+
+  New files: `examples/demo_simulated_network_conditions/src/{SimGame.hpp,SimGame.cpp,Main.cpp}`,
+  registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
+  `cna_demo_net_client_server_arena`. Real two-process `NetworkSession::Create/Find/Join` (same
+  proven `GamerServicesDispatcher::Initialize()` + const-reference-`AvailableNetworkSessionCollection`
+  pattern from Task 15.1), rendered as a small Pong-style match: two paddles (Up/Down to move,
+  synced every frame via `PacketWriter::Write(Vector2)`/`PacketReader::ReadVector2()`, reusing
+  Task 15.1's `SendData`/`ReceiveData` pattern) and one host-authoritative ball (simple AABB
+  bounce physics against both paddle rectangles and the top/bottom walls, broadcast by the host
+  in the same packet as its own paddle position). Number keys 1/2 lower/raise
+  `SimulatedLatencyProperty` by 100ms per press (clamped 0-2000ms); 3/4 lower/raise
+  `SimulatedPacketLossProperty` by 10 percentage points per press (clamped 0-100%). The HUD and a
+  once-per-second console line both show the current simulated values *and* the real measured
+  `NetworkGamer::RoundtripTime` (Task 4.1) side by side. `--smoke N` deterministically ramps both
+  simulated dials every frame (no real keyboard in smoke mode, matching Task 15.1's convention) to
+  prove the values visibly change without needing interactive input.
+
+  Verified end-to-end with two real OS processes (`--host --smoke 180` / `--join --smoke 180`,
+  one second apart), both exiting `0`. Host log: simulated dial climbed to its clamp
+  (`simulatedLatency=2000ms simulatedPacketLoss=100%`) while the real measured RTT independently
+  read a genuine non-zero value once the client connected (`realMeasuredRTT=1001.0ms` this run —
+  the specific number varies by environment scheduling, as already established in Task 15.3, and
+  is beside the point here); `haveRemotePaddle=true` at smoke-test completion confirms real
+  position sync kept working throughout, *even while the simulated packet loss dial sat at its
+  maximum 100% setting* — direct, live proof the setting drops nothing. Client log: same simulated
+  ramp, `realMeasuredRTT` correctly stayed `0.0ms` throughout (the documented Task 4.1 client-side
+  gap — no direct `ENetPeer` to measure from), plus an incidental `SessionEnded` firing when the
+  host exited first. Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no
+  regressions (new demo-only files, no library changes).
 
 - [ ] **Task 15.5** — `cna_demo_session_browser`: `NetworkSession::Find(...)` returning an
   `AvailableNetworkSessionCollection`, and `Join`. One process hosts/advertises (title "Hosting…");
