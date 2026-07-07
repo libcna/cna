@@ -33,7 +33,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   `SkinnedEffect::MaxBones` (an in-class-initialized `static const int`) had no out-of-line
   definition, causing a linker error the moment any code (here, GTest's comparison machinery)
   took its address — fixed per CLAUDE.md's own "Static Members and Named Constants" convention.
-  Phase 45 ("EnvironmentMapEffect exactness", Tasks
+  **Tasks 403/405 were already fully satisfied by Task 402's own test coverage** (no new code) —
+  marked done directly. **Task 404 verified `GetBoneTransforms` returns a genuinely independent
+  copy, not an alias** — zero bugs found; confirmed `EffectParameter::GetValueMatrixArray()`
+  builds a brand-new `std::vector<Matrix>` from scratch every call, matching FNA's own
+  array-allocating semantics. Phase 45 ("EnvironmentMapEffect exactness", Tasks
   391–400) is
   **CLOSED** — Task 400 wrote `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399:
   property/default audit (zero bugs, Task 391), a real `Clone()`-drops-`FogColor` bug found and
@@ -97,14 +101,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 402.
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 404.
 
-### Test status (last verified: Task 402)
-- **EasyGL, full `ctest -j1`:** 3604/3607 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 404)
+- **EasyGL, full `ctest -j1`:** 3605/3608 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
-- **Vulkan, full `ctest -j1`:** 3524/3537 pass. 13 documented pre-existing failures (see §5),
+- **Vulkan, full `ctest -j1`:** 3525/3538 pass. 13 documented pre-existing failures (see §5),
   exact-name match, no flakes this run.
-- **Bgfx, full `ctest -j1`:** 3508/3508 pass — 100%, no flakes this run.
+- **Bgfx, full `ctest -j1`:** 3509/3509 pass — 100%, no flakes this run.
 - **Caution:** run all 3 backends' full `ctest` suites **sequentially, never concurrently** —
   concurrent runs previously produced transient GPU/driver-contention false failures. If a single
   run shows an anomaly beyond the documented list, re-run that test in isolation before treating it
@@ -264,7 +268,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 403/405 | **Documentation only, no new code**: both tasks already fully satisfied by Task 402's own `SetBoneTransformsAcceptsExactlyMaxBones`/`SetBoneTransformsThrowsWhenExceedingMaxBones` tests. Marked done in `plan_graphics.md`, no test/production changes. |
+| — | 404 | **Verify-only, zero bugs found**: confirmed `GetBoneTransforms` returns a genuinely independent copy (`EffectParameter::GetValueMatrixArray()` builds a brand-new `std::vector<Matrix>` every call, matching FNA's own array-allocating semantics). Added `GetBoneTransformsReturnsIndependentCopy`, discriminating by construction (mutating the first call's result and confirming a second call is unaffected). |
+| `43dcf220` | 403/405 | **Documentation only, no new code**: both tasks already fully satisfied by Task 402's own `SetBoneTransformsAcceptsExactlyMaxBones`/`SetBoneTransformsThrowsWhenExceedingMaxBones` tests. Marked done in `plan_graphics.md`, no test/production changes. |
 | `5b8f1c56` | 402 | **52 new unit tests, regression guard for Task 401's fix**: wrote `SkinnedEffectTests.cpp` from scratch (zero prior coverage). `Clone()` test deliberately sets `SpecularColor`/`SpecularPower` before cloning — `git stash`-confirmed it fails exactly as predicted with Task 401's fix reverted. Also fixed an unrelated build-breaking discovery: `SkinnedEffect::MaxBones` had no out-of-line definition, causing a linker error the moment any code took its address. |
 | `eb68b5bc` | 401 | **Opens Phase 46. Real, confirmed bug found and fixed**: `SkinnedEffect`'s `Clone()` never preserved `SpecularColor`/`SpecularPower` — the identical bug shape Task 392 fixed for `FogColor` across 4 stock effects, undetected here since `SkinnedEffect` had zero prior test coverage. All property defaults, `MaxBones`/bone bounds-checking, and `OnApply()`'s shader-index formula confirmed matching FNA exactly. Opened Tasks 893 (`DirectionalLight1`/`2` unforwarded), 894 (zero specular GPU implementation), and 895 (`WeightsPerVertex` complete GPU no-op on all 3 backends). |
 | `eaf5c852` | 400 | **Documentation only, closes Phase 45.** Wrote `docs/environmentmapeffect-support.md` synthesizing Tasks 391–399: per-task summaries, full 3-backend support matrix, and an "Open, tracked follow-up work" section listing Tasks 890/891/892. No production code or tests changed. |
@@ -490,27 +495,19 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 46 (Task 404 fully scoped in `plan_graphics.md`,
-since Tasks 403/405 are already satisfied by Task 402's own test coverage — see plan_graphics.md);
+In priority order — the first continues Phase 46 (Task 406 fully scoped in `plan_graphics.md`);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 404 — verify `GetBoneTransforms` returns an independent copy, not an alias**
-   - Goal: FNA's `GetBoneTransforms(count)` calls `bonesParam.GetValueMatrixArray(count)`, which
-     allocates a fresh `Matrix[]` each call (not an alias into the parameter's internal storage).
-     CNA's `EffectParameter::GetValueMatrixArray` similarly builds a fresh `std::vector<Matrix>`
-     each call (confirmed by reading `EffectParameter.cpp`), so this is very likely already
-     correct — but Task 402's own test suite never specifically verified it. Write a test that
-     calls `GetBoneTransforms()`, mutates the returned vector, then calls `GetBoneTransforms()`
-     again (or checks a subsequent draw/`FillGpuDrawParams()` call) to confirm the mutation did
-     NOT affect the effect's actual stored bone state — the "independent copy" semantics FNA's
-     own array-allocating implementation guarantees.
-   - Files: extend `tests/Microsoft/Xna/Framework/Graphics/SkinnedEffectTests.cpp`.
-
-   (Task 403 — "verify `SetBoneTransforms` accepts exactly supported bone count" — and Task 405 —
-   "verify too many bones throws correct exception" — were both already fully covered by Task
-   402's own `SetBoneTransformsAcceptsExactlyMaxBones`/`SetBoneTransformsThrowsWhenExceedingMaxBones`
-   tests; mark both ✅ in `plan_graphics.md` with a note pointing to Task 402's existing coverage,
-   no new code needed, before starting Task 404.)
+1. **Task 406 — pixel test: identity bone palette**
+   - Goal: the first real pixel/rendering test for `SkinnedEffect` in this phase (Tasks 401-405
+     were all unit tests / audits, no GPU rendering exercised yet). Render a simple skinned quad
+     with the default identity bone palette (every bone = `Matrix.Identity`, the effect's own
+     constructor default) and confirm the mesh renders with **no deformation at all** — pixel
+     output should exactly match an equivalent `BasicEffect`/un-skinned draw of the same geometry,
+     proving the skinning math correctly degenerates to a no-op when every bone transform is
+     identity (`sum of weights * Identity = Identity` regardless of weight distribution). This is
+     the natural baseline before Tasks 407/408 introduce real bone deformation.
+   - Files: new `examples/{easygl,vulkan,bgfx}_skinnedeffect_identity_bones_test.cpp`.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -634,8 +631,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 404, after
-quickly marking 403/405 as already-satisfied by Task 402 — see §8).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 406).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -682,12 +678,24 @@ machinery) took its address -- fixed per CLAUDE.md's own "Static Members and Nam
 convention (`const int SkinnedEffect::MaxBones;` added to SkinnedEffect.cpp).
 
 Tasks 403 ("verify SetBoneTransforms accepts exactly supported bone count") and 405 ("verify too
-many bones throws correct exception") are BOTH ALREADY FULLY SATISFIED by Task 402's own
+many bones throws correct exception") were BOTH ALREADY FULLY SATISFIED by Task 402's own
 SetBoneTransformsAcceptsExactlyMaxBones/SetBoneTransformsThrowsWhenExceedingMaxBones tests --
-mark both done in plan_graphics.md with a note pointing to Task 402's existing coverage (no new
-code needed) before starting Task 404 (NEXT), which verifies GetBoneTransforms returns an
-independent copy rather than an alias into internal storage -- genuinely not yet covered by any
-existing test.
+marked done in plan_graphics.md with a note pointing to Task 402's existing coverage, no new
+code needed.
+
+Task 404 verified GetBoneTransforms returns an independent copy, not an alias into internal
+storage -- zero bugs found. Read EffectParameter::GetValueMatrixArray()'s implementation
+directly: it builds a brand-new std::vector<Matrix> and push_backs freshly-constructed Matrix
+value objects copied out of floatData_, matching FNA's own array-allocating semantics exactly
+(bonesParam.GetValueMatrixArray(count) likewise allocates a fresh Matrix[] every call). Added a
+test that gets bones once, mutates element [0] of the returned vector to a distinctive
+non-identity transform, then gets bones again and confirms the second call's [0] is still
+Matrix.Identity -- discriminating power confirmed by construction (had GetValueMatrixArray
+returned an alias instead of a copy, the mutation would have corrupted the underlying storage
+and the second call would read back the corrupted value). 1 new test added
+(GetBoneTransformsReturnsIndependentCopy), all 53 tests in SkinnedEffectTests.cpp green. No
+production code changed. Task 406 (NEXT) is the phase's first real pixel/rendering test --
+identity bone palette should produce zero deformation.
 
 Phase 45 ("EnvironmentMapEffect exactness", Tasks 391-400) CLOSED with Task 400
 (docs/environmentmapeffect-support.md, full synthesis of Tasks 391-399). Summary of what it
@@ -743,14 +751,14 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 46's remaining tasks.
 
-Last full 3-backend regression (Task 402 — 52 new tests, plus a MaxBones linker fix touching
-shared SkinnedEffect.cpp, compiled into all 3 backends):
-EasyGL 3604/3607 pass (3 documented pre-existing failures, no flakes this run).
-Vulkan 3524/3537 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
-Bgfx 3508/3508 pass (100%, no flakes this run).
+Last full 3-backend regression (Task 404 — pure verification, 1 new test, no production code
+changed):
+EasyGL 3605/3608 pass (3 documented pre-existing failures, no flakes this run).
+Vulkan 3525/3538 pass (13 documented pre-existing failures, exact-name match, no flakes this run).
+Bgfx 3509/3509 pass (100%, no flakes this run).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46 found, read plan_graphics.md
-directly (Tasks 351-402) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-404) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

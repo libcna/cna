@@ -205,6 +205,19 @@ TEST_F(SkinnedEffectDefaultsTest, BoneTransformsDefaultToIdentity)
         EXPECT_EQ(m, Matrix::getIdentityProperty());
 }
 
+// Task 404: FNA's GetBoneTransforms(count) calls bonesParam.GetValueMatrixArray(count),
+// which allocates a fresh Matrix[] each call rather than aliasing the parameter's internal
+// storage -- mutating the returned array must not affect the effect's actual bone state.
+TEST_F(SkinnedEffectDefaultsTest, GetBoneTransformsReturnsIndependentCopy)
+{
+    std::vector<Matrix> first = fx.GetBoneTransforms(SkinnedEffect::MaxBones);
+    ASSERT_FALSE(first.empty());
+    first[0] = Matrix::CreateTranslation(100.0f, 200.0f, 300.0f);
+
+    const std::vector<Matrix> second = fx.GetBoneTransforms(SkinnedEffect::MaxBones);
+    EXPECT_EQ(second[0], Matrix::getIdentityProperty());
+}
+
 TEST_F(SkinnedEffectDefaultsTest, SetBoneTransformsThrowsOnEmpty)
 {
     EXPECT_THROW(fx.SetBoneTransforms(std::vector<Matrix>{}), std::invalid_argument);
