@@ -21,6 +21,11 @@ option(CNA_NOXNA "Enable CNA NOXNA extended graphics layer (beyond XNA 4.0)" OFF
 option(CNA_DEVICES "Enable CNA-specific device/sensor extensions beyond XNA 4.0 (battery, camera, clipboard, ...)" OFF)
 option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
 
+# DISPLAY value baked into every GPU/window-creating ctest's ENVIRONMENT property (SDL_VIDEODRIVER=x11).
+# Defaults to :0 for backward compatibility; override with e.g. -DCNA_TEST_DISPLAY=:99 to run the full
+# suite against a virtual display (Xvfb) instead of the real desktop.
+set(CNA_TEST_DISPLAY ":0" CACHE STRING "DISPLAY value used by GPU/window-creating ctest tests")
+
 include(cmake/ThirdPartySDL.cmake)
 cna_configure_vendored_sdl()
 
@@ -1258,7 +1263,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_house3d_demo --smoke 3)
         set_tests_properties(EasyGL_House3D_SmokeTest PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 86: textured quad pixel readback
         cna_easygl_test(cna_test_easygl_textured_quad
@@ -1267,7 +1272,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_textured_quad)
         set_tests_properties(EasyGL_TexturedQuad_Readback PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
@@ -1276,7 +1281,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_render_target)
         set_tests_properties(EasyGL_RenderTarget2D_Readback PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 335: RenderTarget2D depth buffer is real and functional (not just a stored property)
         cna_easygl_test(cna_test_easygl_rendertarget2d_depth
@@ -1285,7 +1290,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_rendertarget2d_depth)
         set_tests_properties(EasyGL_RenderTarget2D_DepthBuffer PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 336: RenderTarget2D mip chain is genuinely GL-complete after auto-generation on unbind
         cna_easygl_test(cna_test_easygl_rendertarget2d_mip
@@ -1294,7 +1299,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_rendertarget2d_mip)
         set_tests_properties(EasyGL_RenderTarget2D_MipComplete PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 337: RenderTarget2D MSAA resolve genuinely anti-aliases (not just solid-fill safe)
         cna_easygl_test(cna_test_easygl_rendertarget2d_msaa
@@ -1303,7 +1308,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_rendertarget2d_msaa)
         set_tests_properties(EasyGL_RenderTarget2D_MsaaResolve PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 338: SetRenderTarget(nullptr) resets Viewport/ScissorRectangle to the backbuffer
         cna_easygl_test(cna_test_easygl_rendertarget_viewport_scissor_reset
@@ -1312,7 +1317,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_rendertarget_viewport_scissor_reset)
         set_tests_properties(EasyGL_RenderTarget_ViewportScissorReset PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 22: BasicEffect property tests
         cna_easygl_test(cna_test_basic_effect
@@ -1321,7 +1326,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_basic_effect)
         set_tests_properties(EasyGL_BasicEffect_Properties PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 23: AlphaTestEffect property tests
         cna_easygl_test(cna_test_alpha_test_effect
@@ -1330,7 +1335,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_alpha_test_effect)
         set_tests_properties(EasyGL_AlphaTestEffect_Properties PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 24: SkinnedEffect property tests
         cna_easygl_test(cna_test_skinned_effect
@@ -1339,7 +1344,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_skinned_effect)
         set_tests_properties(EasyGL_SkinnedEffect_Properties PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 27: SpriteFont property and MeasureString tests
         cna_easygl_test(cna_test_sprite_font
@@ -1348,7 +1353,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_sprite_font)
         set_tests_properties(EasyGL_SpriteFont_Properties PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 35: OcclusionQuery begin/end/IsComplete integration test
         cna_easygl_test(cna_test_occlusion_query
@@ -1357,7 +1362,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_occlusion_query)
         set_tests_properties(EasyGL_OcclusionQuery_Cycle PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 122: AlphaTestEffect GPU alpha cutout + pixel readback
         cna_easygl_test(cna_test_alpha_test_integration
@@ -1366,7 +1371,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_alpha_test_integration)
         set_tests_properties(EasyGL_AlphaTestEffect_AlphaCutout PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 123: SkinnedEffect 2-bone GPU transform + mesh deformation
         cna_easygl_test(cna_test_skinned_integration
@@ -1375,7 +1380,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_skinned_integration)
         set_tests_properties(EasyGL_SkinnedEffect_BoneDeformation PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 10.14: AvatarRenderer::EnableRealRenderingEXT/DrawRealEXT real GPU-skinned
         # rendering (Phase 10 — Avatar real-rendering NOXNA/EXT extension). Needs
@@ -1389,7 +1394,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                      COMMAND cna_test_avatar_real_render)
             set_tests_properties(EasyGL_AvatarRenderer_RealRender PROPERTIES
                 TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
             # Task 11.21: SkinnedModelEXT::AttachPartEXT runtime wardrobe-attach real render.
             cna_easygl_test(cna_test_avatar_attach_part
@@ -1399,7 +1404,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                      COMMAND cna_test_avatar_attach_part)
             set_tests_properties(EasyGL_AvatarRenderer_AttachPart PROPERTIES
                 TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
             # Task 11.24: AvatarRenderer::PartTintEXT per-part tint routing regression test.
             cna_easygl_test(cna_test_avatar_tint_routing
@@ -1409,7 +1414,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                      COMMAND cna_test_avatar_tint_routing)
             set_tests_properties(EasyGL_AvatarRenderer_TintRouting PROPERTIES
                 TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # Task 125: DXT1 texture loaded via FromStream, rendered, pixel readback
@@ -1419,7 +1424,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_dxt1_texture)
         set_tests_properties(EasyGL_DXT1_FromStream_Readback PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 132: ShaderEffect (GLSL) with SpriteBatch — red-tint over green background
         cna_easygl_test(cna_test_easygl_shader_effect
@@ -1428,7 +1433,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_shader_effect)
         set_tests_properties(EasyGL_ShaderEffect_GLSL PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
@@ -1437,7 +1442,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_dual_texture)
         set_tests_properties(EasyGL_DualTextureEffect_Blend PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 134: EnvironmentMapEffect — emissive red, envAmount=0, pixel readback
         cna_easygl_test(cna_test_easygl_env_map
@@ -1446,7 +1451,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_env_map)
         set_tests_properties(EasyGL_EnvironmentMapEffect_Readback PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 393: EnvironmentMapEffect EnvironmentMapAmount=0 should ignore the cube map
         cna_easygl_test(cna_test_easygl_environmentmapeffect_amount_zero
@@ -1455,7 +1460,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_environmentmapeffect_amount_zero)
         set_tests_properties(EasyGL_EnvironmentMapEffect_AmountZero PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 900: EnvironmentMapEffect fog fix verification
         cna_easygl_test(cna_test_easygl_environmentmapeffect_fog
@@ -1464,7 +1469,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_environmentmapeffect_fog)
         set_tests_properties(EasyGL_EnvironmentMapEffect_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 394: EnvironmentMapEffect EnvironmentMapAmount=1 should fully replace lit color
         cna_easygl_test(cna_test_easygl_environmentmapeffect_amount_one
@@ -1473,7 +1478,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_environmentmapeffect_amount_one)
         set_tests_properties(EasyGL_EnvironmentMapEffect_AmountOne PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 395: EnvironmentMapEffect EnvironmentMapSpecular should scale by cubemap alpha
         cna_easygl_test(cna_test_easygl_environmentmapeffect_specular
@@ -1482,7 +1487,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_environmentmapeffect_specular)
         set_tests_properties(EasyGL_EnvironmentMapEffect_Specular PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 396: EnvironmentMapEffect Fresnel edge-weighting should suppress head-on reflections
         cna_easygl_test(cna_test_easygl_environmentmapeffect_fresnel
@@ -1491,7 +1496,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_environmentmapeffect_fresnel)
         set_tests_properties(EasyGL_EnvironmentMapEffect_Fresnel PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 397: EnvironmentMapEffect reflection vector should respond to EyePosition
         cna_easygl_test(cna_test_easygl_environmentmapeffect_eyeposition
@@ -1500,7 +1505,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_environmentmapeffect_eyeposition)
         set_tests_properties(EasyGL_EnvironmentMapEffect_EyePosition PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 398: EnvironmentMapEffect normal transform should use inverse-transpose of World
         cna_easygl_test(cna_test_easygl_environmentmapeffect_worldtransform
@@ -1509,7 +1514,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_environmentmapeffect_worldtransform)
         set_tests_properties(EasyGL_EnvironmentMapEffect_WorldTransform PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 399: cross-backend EnvironmentMapEffect capstone (Tasks 393-398 combined)
         cna_easygl_test(cna_test_easygl_environmentmapeffect_combined
@@ -1518,7 +1523,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_environmentmapeffect_combined)
         set_tests_properties(EasyGL_EnvironmentMapEffect_Combined PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 900: SkinnedEffect fog fix verification
         cna_easygl_test(cna_test_easygl_skinnedeffect_fog
@@ -1527,7 +1532,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_skinnedeffect_fog)
         set_tests_properties(EasyGL_SkinnedEffect_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 406: SkinnedEffect identity bone palette should produce zero deformation
         cna_easygl_test(cna_test_easygl_skinnedeffect_identity_bones
@@ -1536,7 +1541,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_skinnedeffect_identity_bones)
         set_tests_properties(EasyGL_SkinnedEffect_IdentityBones PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 407: SkinnedEffect single translation bone should shift the mesh
         cna_easygl_test(cna_test_easygl_skinnedeffect_translation_bone
@@ -1545,7 +1550,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_skinnedeffect_translation_bone)
         set_tests_properties(EasyGL_SkinnedEffect_TranslationBone PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 408: SkinnedEffect two-bone weighted blend should produce midpoint deformation
         cna_easygl_test(cna_test_easygl_skinnedeffect_twobone_blend
@@ -1554,7 +1559,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_skinnedeffect_twobone_blend)
         set_tests_properties(EasyGL_SkinnedEffect_TwoBoneBlend PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 409: cross-backend SkinnedEffect capstone (identity + single-bone + two-bone blend)
         cna_easygl_test(cna_test_easygl_skinnedeffect_combined
@@ -1563,7 +1568,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_skinnedeffect_combined)
         set_tests_properties(EasyGL_SkinnedEffect_Combined PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_easygl_test(cna_test_easygl_rendertargetcube_sample
@@ -1572,7 +1577,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_rendertargetcube_sample)
         set_tests_properties(EasyGL_RenderTargetCube_SampleAfterUnbind PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 144: Model.Draw — 2-bone model, BasicEffect VertexColor, red quad, pixel readback
         cna_easygl_test(cna_test_easygl_model_draw
@@ -1581,7 +1586,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_model_draw)
         set_tests_properties(EasyGL_ModelDraw_RedQuad PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 145: MRT — SetRenderTargets({rt0,rt1}), draw green to attachment0, verify left=green right=blue
         cna_easygl_test(cna_test_easygl_mrt
@@ -1590,7 +1595,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_mrt)
         set_tests_properties(EasyGL_MRT_TwoAttachments PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 146: MSAA 4× — multisampled renderbuffer + resolve on Present
         cna_easygl_test(cna_test_easygl_msaa
@@ -1599,7 +1604,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_msaa)
         set_tests_properties(EasyGL_MSAA_4x_Readback PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 167: SpriteEffects — FlipHorizontally, FlipVertically, FlipHV pixel readback
         cna_easygl_test(cna_test_easygl_sprite_effects
@@ -1608,7 +1613,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_sprite_effects)
         set_tests_properties(EasyGL_SpriteEffects_Flip PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 417: SpriteBatch Draw rotation must pivot around the specified origin
         cna_easygl_test(cna_test_easygl_spritebatch_rotation
@@ -1617,7 +1622,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_spritebatch_rotation)
         set_tests_properties(EasyGL_SpriteBatch_RotationAroundOrigin PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 418: SpriteBatch Draw scalar/Vector2 scale overloads produce expected size
         cna_easygl_test(cna_test_easygl_spritebatch_scale
@@ -1626,7 +1631,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_spritebatch_scale)
         set_tests_properties(EasyGL_SpriteBatch_ScaleOverloads PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 419: SpriteBatch Draw sourceRectangle must crop, not stretch the whole texture
         cna_easygl_test(cna_test_easygl_spritebatch_sourcerect
@@ -1635,7 +1640,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_spritebatch_sourcerect)
         set_tests_properties(EasyGL_SpriteBatch_SourceRectangleCropping PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 420: layerDepth must affect on-screen draw order under FrontToBack
         cna_easygl_test(cna_test_easygl_spritebatch_layerdepth
@@ -1644,7 +1649,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_spritebatch_layerdepth)
         set_tests_properties(EasyGL_SpriteBatch_LayerDepthOrder PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 885: BasicEffect pixel test — DirectionalLight1/2 + EmissiveColor on the lit path
         cna_easygl_test(cna_test_easygl_basiceffect_multilight_emissive
@@ -1653,7 +1658,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_multilight_emissive)
         set_tests_properties(EasyGL_BasicEffect_MultiLightEmissive PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 886: BasicEffect pixel test — real specular highlights
         cna_easygl_test(cna_test_easygl_basiceffect_specular
@@ -1662,7 +1667,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_specular)
         set_tests_properties(EasyGL_BasicEffect_Specular PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 168: transformMatrix in SpriteBatch::Begin — translation pixel readback
         cna_easygl_test(cna_test_easygl_transform_matrix
@@ -1671,7 +1676,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_transform_matrix)
         set_tests_properties(EasyGL_TransformMatrix_Translation PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 169: Texture2D SetData/GetData partial rectangle round-trip
         cna_easygl_test(cna_test_easygl_texture2d_partial_rect
@@ -1680,7 +1685,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture2d_partial_rect)
         set_tests_properties(EasyGL_Texture2D_PartialRect_RoundTrip PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 171: Texture2D mip-level SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texture2d_mip
@@ -1689,7 +1694,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture2d_mip)
         set_tests_properties(EasyGL_Texture2D_Mip_RoundTrip PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 172: TextureCube per-face SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texturecube_faces
@@ -1698,7 +1703,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texturecube_faces)
         set_tests_properties(EasyGL_TextureCube_Faces_RoundTrip PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 276: TextureCube mip-level SetData/GetData round-trip, all six faces
         cna_easygl_test(cna_test_easygl_texturecube_mip
@@ -1707,7 +1712,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texturecube_mip)
         set_tests_properties(EasyGL_TextureCube_Mip_RoundTrip PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 275: TextureCube partial rect + startIndex, all six faces
         cna_easygl_test(cna_test_easygl_texturecube_partial_rect
@@ -1716,7 +1721,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texturecube_partial_rect)
         set_tests_properties(EasyGL_TextureCube_PartialRect_RoundTrip PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 173: Texture3D z-slice SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texture3d_slices
@@ -1725,7 +1730,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture3d_slices)
         set_tests_properties(EasyGL_Texture3D_Slices_RoundTrip PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 273: Texture3D partial box (x/y/z region) SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texture3d_partial_box
@@ -1734,7 +1739,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture3d_partial_box)
         set_tests_properties(EasyGL_Texture3D_PartialBox_RoundTrip PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 274: Texture3D partial box (x/y/z region) GetData readback
         cna_easygl_test(cna_test_easygl_texture3d_partial_box_readback
@@ -1743,7 +1748,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture3d_partial_box_readback)
         set_tests_properties(EasyGL_Texture3D_PartialBox_Readback PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 176: SurfaceFormat validation — unsupported formats throw
         cna_easygl_test(cna_test_easygl_surface_format_throws
@@ -1752,7 +1757,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_surface_format_throws)
         set_tests_properties(EasyGL_SurfaceFormat_Throws PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 177: RenderTargetUsage DiscardContents vs PreserveContents
         cna_easygl_test(cna_test_easygl_render_target_usage
@@ -1761,7 +1766,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_render_target_usage)
         set_tests_properties(EasyGL_RenderTargetUsage PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 180: backbuffer → RT → backbuffer → RT → backbuffer round-trip
         cna_easygl_test(cna_test_easygl_rt_roundtrip
@@ -1770,7 +1775,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_rt_roundtrip)
         set_tests_properties(EasyGL_RT_Roundtrip PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 182: PresentationParameters round-trip via GraphicsDeviceManager
         cna_easygl_test(cna_test_easygl_presentation_parameters
@@ -1779,7 +1784,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_presentation_parameters)
         set_tests_properties(EasyGL_PresentationParameters PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_device_reset_events
                         examples/easygl_device_reset_events_test.cpp)
@@ -1787,7 +1792,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_device_reset_events)
         set_tests_properties(EasyGL_DeviceResetEvents PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_device_validation
                         examples/easygl_device_validation_test.cpp)
@@ -1795,7 +1800,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_device_validation)
         set_tests_properties(EasyGL_DeviceValidation PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_draw_novertexbuffer
                         examples/easygl_draw_novertexbuffer_test.cpp)
@@ -1803,7 +1808,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_draw_novertexbuffer)
         set_tests_properties(EasyGL_DrawNoVertexBuffer PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_draw_noindexbuffer
                         examples/easygl_draw_noindexbuffer_test.cpp)
@@ -1811,7 +1816,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_draw_noindexbuffer)
         set_tests_properties(EasyGL_DrawNoIndexBuffer PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_draw_range_validation
                         examples/easygl_draw_range_validation_test.cpp)
@@ -1819,7 +1824,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_draw_range_validation)
         set_tests_properties(EasyGL_DrawRangeValidation PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_primitivetype_validation
                         examples/easygl_primitivetype_validation_test.cpp)
@@ -1827,7 +1832,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_primitivetype_validation)
         set_tests_properties(EasyGL_PrimitiveTypeValidation PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_clear_overloads
                         examples/easygl_clear_overloads_test.cpp)
@@ -1835,7 +1840,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_clear_overloads)
         set_tests_properties(EasyGL_ClearOverloads PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_viewport_state
                         examples/easygl_viewport_state_test.cpp)
@@ -1843,7 +1848,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_viewport_state)
         set_tests_properties(EasyGL_ViewportState PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_scissor
                         examples/easygl_scissor_test.cpp)
@@ -1851,7 +1856,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_scissor)
         set_tests_properties(EasyGL_Scissor PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 880: Viewport sub-region (split-screen) GPU wiring
         cna_easygl_test(cna_test_easygl_viewport_subregion
@@ -1860,7 +1865,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_viewport_subregion)
         set_tests_properties(EasyGL_Viewport_Subregion PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_disposed_resource
                         examples/easygl_disposed_resource_test.cpp)
@@ -1868,7 +1873,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_disposed_resource)
         set_tests_properties(EasyGL_DisposedResource PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_double_dispose
                         examples/easygl_double_dispose_test.cpp)
@@ -1876,7 +1881,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_double_dispose)
         set_tests_properties(EasyGL_DoubleDispose PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_bound_resource_dispose
                         examples/easygl_bound_resource_dispose_test.cpp)
@@ -1884,7 +1889,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_bound_resource_dispose)
         set_tests_properties(EasyGL_BoundResourceDispose PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_handle_release
                         examples/easygl_handle_release_test.cpp)
@@ -1892,7 +1897,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_handle_release)
         set_tests_properties(EasyGL_HandleRelease PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_move_semantics
                         examples/easygl_move_semantics_test.cpp)
@@ -1900,7 +1905,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_move_semantics)
         set_tests_properties(EasyGL_MoveSemantics PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_resource_events
                         examples/easygl_resource_events_test.cpp)
@@ -1908,7 +1913,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_resource_events)
         set_tests_properties(EasyGL_ResourceEvents PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_device_dispose_order
                         examples/easygl_device_dispose_order_test.cpp)
@@ -1916,7 +1921,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_device_dispose_order)
         set_tests_properties(EasyGL_DeviceDisposeOrder PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_resource_leak
                         examples/easygl_resource_leak_test.cpp)
@@ -1924,7 +1929,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_resource_leak)
         set_tests_properties(EasyGL_ResourceLeak PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_present_interval
                         examples/easygl_present_interval_test.cpp)
@@ -1932,7 +1937,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_present_interval)
         set_tests_properties(EasyGL_PresentInterval PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_fullscreen_field
                         examples/easygl_fullscreen_field_test.cpp)
@@ -1940,7 +1945,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_fullscreen_field)
         set_tests_properties(EasyGL_FullScreenField PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_backbuffer_resize
                         examples/easygl_backbuffer_resize_test.cpp)
@@ -1948,7 +1953,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_backbuffer_resize)
         set_tests_properties(EasyGL_BackbufferResize PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_real_window_resize
                         examples/easygl_real_window_resize_test.cpp)
@@ -1956,7 +1961,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_real_window_resize)
         set_tests_properties(EasyGL_RealWindowResize PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 349: custom Viewport survives Present() with no resize, resets after a real one.
         cna_easygl_test(cna_test_easygl_viewport_reset_after_resize
@@ -1965,7 +1970,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_viewport_reset_after_resize)
         set_tests_properties(EasyGL_ViewportResetAfterResize PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_depth_format
                         examples/easygl_depth_format_test.cpp)
@@ -1973,7 +1978,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_depth_format)
         set_tests_properties(EasyGL_DepthFormat PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_msaa_change
                         examples/easygl_msaa_change_test.cpp)
@@ -1981,7 +1986,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_msaa_change)
         set_tests_properties(EasyGL_MsaaChange PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_vertexbuffer_setdata
                         examples/easygl_vertexbuffer_setdata_test.cpp)
@@ -1989,7 +1994,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_vertexbuffer_setdata)
         set_tests_properties(EasyGL_VbSetData PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_dynamic_buffer_stress
                         examples/easygl_dynamic_buffer_stress_test.cpp)
@@ -1997,7 +2002,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_dynamic_buffer_stress)
         set_tests_properties(EasyGL_DynamicBufferStress PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_buffer_usage
                         examples/easygl_buffer_usage_test.cpp)
@@ -2005,7 +2010,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_buffer_usage)
         set_tests_properties(EasyGL_BufferUsage PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_disposed_buffer
                         examples/easygl_disposed_buffer_test.cpp)
@@ -2013,7 +2018,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_disposed_buffer)
         set_tests_properties(EasyGL_DisposedBuffer PROPERTIES
             TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
@@ -2021,7 +2026,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_effect_clone)
         set_tests_properties(EasyGL_EffectClone PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_effect_current_technique
                         examples/easygl_effect_current_technique_test.cpp)
@@ -2029,7 +2034,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_effect_current_technique)
         set_tests_properties(EasyGL_EffectCurrentTechnique PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_basiceffect_combinations
                         examples/easygl_basiceffect_combinations_test.cpp)
@@ -2037,7 +2042,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_combinations)
         set_tests_properties(EasyGL_BasicEffectCombinations PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
         cna_easygl_test(cna_test_easygl_basiceffect_vertexcolor_disabled
@@ -2046,7 +2051,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_vertexcolor_disabled)
         set_tests_properties(EasyGL_BasicEffect_VertexColorDisabled PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 365: BasicEffect pixel test — VertexColorEnabled=true, no texture, vertex color multiplication
         cna_easygl_test(cna_test_easygl_basiceffect_vertexcolor_enabled
@@ -2055,7 +2060,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_vertexcolor_enabled)
         set_tests_properties(EasyGL_BasicEffect_VertexColorEnabled PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 366: BasicEffect pixel test — TextureEnabled=true, no vertex color
         cna_easygl_test(cna_test_easygl_basiceffect_texture_enabled
@@ -2064,7 +2069,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_texture_enabled)
         set_tests_properties(EasyGL_BasicEffect_TextureEnabled PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 367: BasicEffect pixel test — TextureEnabled=true AND VertexColorEnabled=true
         cna_easygl_test(cna_test_easygl_basiceffect_texture_vertexcolor_enabled
@@ -2073,7 +2078,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_texture_vertexcolor_enabled)
         set_tests_properties(EasyGL_BasicEffect_TextureVertexColorEnabled PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 368: BasicEffect pixel test — LightingEnabled=true, one DirectionalLight
         cna_easygl_test(cna_test_easygl_basiceffect_one_light
@@ -2082,7 +2087,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_one_light)
         set_tests_properties(EasyGL_BasicEffect_OneLight PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
         cna_easygl_test(cna_test_easygl_basiceffect_emissive
@@ -2091,7 +2096,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_emissive)
         set_tests_properties(EasyGL_BasicEffect_Emissive PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42
         cna_easygl_test(cna_test_easygl_basiceffect_combined
@@ -2100,7 +2105,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_combined)
         set_tests_properties(EasyGL_BasicEffect_Combined PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_alphatest_modes
                         examples/easygl_alphatest_modes_test.cpp)
@@ -2108,7 +2113,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_alphatest_modes)
         set_tests_properties(EasyGL_AlphaTestModes PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 373: AlphaTestEffect all CompareFunction modes — threshold sweep (below/at/above)
         cna_easygl_test(cna_test_easygl_alphatest_comparefunction_sweep
@@ -2117,7 +2122,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_alphatest_comparefunction_sweep)
         set_tests_properties(EasyGL_AlphaTest_CompareFunctionSweep PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 377: AlphaTestEffect vertex color x diffuse color interaction
         cna_easygl_test(cna_test_easygl_alphatest_vertexcolor_diffuse
@@ -2126,7 +2131,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_alphatest_vertexcolor_diffuse)
         set_tests_properties(EasyGL_AlphaTest_VertexColorDiffuse PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 378: AlphaTestEffect fog behavior
         cna_easygl_test(cna_test_easygl_alphatest_fog
@@ -2135,7 +2140,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_alphatest_fog)
         set_tests_properties(EasyGL_AlphaTest_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 379: AlphaTestEffect null/no-texture behavior
         cna_easygl_test(cna_test_easygl_alphatest_null_texture
@@ -2144,7 +2149,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_alphatest_null_texture)
         set_tests_properties(EasyGL_AlphaTest_NullTexture PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 383: DualTextureEffect two-texture blend formula, including FNA's color.rgb*=2
         cna_easygl_test(cna_test_easygl_dualtextureeffect_doubling
@@ -2153,7 +2158,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_dualtextureeffect_doubling)
         set_tests_properties(EasyGL_DualTextureEffect_Doubling PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 385: DualTextureEffect Alpha premultiplication, verified via real AlphaBlend
         cna_easygl_test(cna_test_easygl_dualtextureeffect_alpha
@@ -2162,7 +2167,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_dualtextureeffect_alpha)
         set_tests_properties(EasyGL_DualTextureEffect_Alpha PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 386: DualTextureEffect first texture (Texture, slot 0) null behavior
         cna_easygl_test(cna_test_easygl_dualtextureeffect_null_texture0
@@ -2171,7 +2176,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_dualtextureeffect_null_texture0)
         set_tests_properties(EasyGL_DualTextureEffect_NullTexture0 PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 387: DualTextureEffect second texture (Texture2, slot 1) null behavior
         cna_easygl_test(cna_test_easygl_dualtextureeffect_null_texture2
@@ -2180,7 +2185,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_dualtextureeffect_null_texture2)
         set_tests_properties(EasyGL_DualTextureEffect_NullTexture2 PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 388: DualTextureEffect fog behavior
         cna_easygl_test(cna_test_easygl_dualtextureeffect_fog
@@ -2189,7 +2194,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_dualtextureeffect_fog)
         set_tests_properties(EasyGL_DualTextureEffect_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 389: DualTextureEffect cross-backend image comparison suite (closes Phase 44 pixel work)
         cna_easygl_test(cna_test_easygl_dualtextureeffect_combined
@@ -2198,7 +2203,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_dualtextureeffect_combined)
         set_tests_properties(EasyGL_DualTextureEffect_Combined PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_dualtexture
                         examples/easygl_dualtexture_test.cpp)
@@ -2206,7 +2211,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_dualtexture)
         set_tests_properties(EasyGL_DualTexture PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_skinned_effect_bones
                         examples/easygl_skinned_effect_bones_test.cpp)
@@ -2214,7 +2219,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_skinned_effect_bones)
         set_tests_properties(EasyGL_SkinnedBones PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_basiceffect_default_lighting
                         examples/easygl_basiceffect_default_lighting_test.cpp)
@@ -2222,7 +2227,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_default_lighting)
         set_tests_properties(EasyGL_BasicEffectDefaultLighting PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_basiceffect_fog
                         examples/easygl_basiceffect_fog_test.cpp)
@@ -2230,7 +2235,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_fog)
         set_tests_properties(EasyGL_BasicEffectFog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 247: draw quad with each supported VertexElementFormat via VertexBuffer
         cna_easygl_test(cna_test_easygl_vertex_formats
@@ -2239,7 +2244,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_vertex_formats)
         set_tests_properties(EasyGL_VertexFormats_AllStrides PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 255: DrawUserPrimitives<VertexPositionColor> pixel-readback
         cna_easygl_test(cna_test_easygl_draw_user_primitives_vpc
@@ -2248,7 +2253,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_draw_user_primitives_vpc)
         set_tests_properties(EasyGL_DrawUserPrimitives_VPC PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 256: DrawUserPrimitives with explicit VertexDeclaration pixel-readback
         cna_easygl_test(cna_test_easygl_draw_user_primitives_custom
@@ -2257,7 +2262,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_draw_user_primitives_custom)
         set_tests_properties(EasyGL_DrawUserPrimitives_CustomVD PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 257: DrawUserIndexedPrimitives<VertexPositionColor> (16-bit indices) pixel-readback
         cna_easygl_test(cna_test_easygl_draw_user_indexed_primitives_vpc
@@ -2266,7 +2271,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_draw_user_indexed_primitives_vpc)
         set_tests_properties(EasyGL_DrawUserIndexedPrimitives_VPC PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 258: DrawUserIndexedPrimitives<VertexPositionColor> (32-bit indices) pixel-readback
         cna_easygl_test(cna_test_easygl_draw_user_indexed_primitives_32
@@ -2275,7 +2280,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_draw_user_indexed_primitives_32)
         set_tests_properties(EasyGL_DrawUserIndexedPrimitives_32 PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 268: non-power-of-two (3x5) texture upload + GPU-sampled pixel-readback
         cna_easygl_test(cna_test_easygl_npot_texture
@@ -2284,7 +2289,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_npot_texture)
         set_tests_properties(EasyGL_NpotTexture PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 269: SpriteBatch TextureAddressMode (Wrap vs Clamp) edge-sampling pixel-readback
         cna_easygl_test(cna_test_easygl_texture_address_mode
@@ -2293,7 +2298,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture_address_mode)
         set_tests_properties(EasyGL_TextureAddressMode PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0]
         cna_easygl_test(cna_test_easygl_sampler_state_effect
@@ -2302,7 +2307,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_sampler_state_effect)
         set_tests_properties(EasyGL_SamplerState_DualTextureEffect PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 294: TextureAddressMode::Clamp on a 3D stock effect (DualTextureEffect)
         cna_easygl_test(cna_test_easygl_texture_address_mode_clamp_effect
@@ -2311,7 +2316,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture_address_mode_clamp_effect)
         set_tests_properties(EasyGL_TextureAddressMode_Clamp_DualTextureEffect PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 296: TextureAddressMode::Mirror on a 3D stock effect (DualTextureEffect)
         cna_easygl_test(cna_test_easygl_texture_address_mode_mirror_effect
@@ -2320,7 +2325,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture_address_mode_mirror_effect)
         set_tests_properties(EasyGL_TextureAddressMode_Mirror_DualTextureEffect PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 297: TextureFilter::Point vs Linear, magnification and minification
         cna_easygl_test(cna_test_easygl_texture_filter_point_vs_linear
@@ -2329,7 +2334,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture_filter_point_vs_linear)
         set_tests_properties(EasyGL_TextureFilter_PointVsLinear PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 298: mipmap filter behavior (LinearMipPoint selects the correct mip; Point does not)
         cna_easygl_test(cna_test_easygl_texture_mip_filter_effect
@@ -2338,7 +2343,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture_mip_filter_effect)
         set_tests_properties(EasyGL_TextureMipFilter_DualTextureEffect PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 299: anisotropic filtering caps and fallback (extreme MaxAnisotropy must not crash)
         cna_easygl_test(cna_test_easygl_texture_anisotropic_effect
@@ -2347,7 +2352,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture_anisotropic_effect)
         set_tests_properties(EasyGL_TextureAnisotropic_DualTextureEffect PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 303: BlendState::Opaque discards destination + source alpha entirely
         cna_easygl_test(cna_test_easygl_blendstate_opaque
@@ -2356,7 +2361,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_blendstate_opaque)
         set_tests_properties(EasyGL_BlendState_Opaque PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 304: BlendState::AlphaBlend expects premultiplied source colour
         cna_easygl_test(cna_test_easygl_blendstate_alphablend
@@ -2365,7 +2370,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_blendstate_alphablend)
         set_tests_properties(EasyGL_BlendState_AlphaBlend PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 305: BlendState::NonPremultiplied expects a raw (non-premultiplied) source colour
         cna_easygl_test(cna_test_easygl_blendstate_nonpremultiplied
@@ -2374,7 +2379,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_blendstate_nonpremultiplied)
         set_tests_properties(EasyGL_BlendState_NonPremultiplied PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 306: BlendState::Additive saturation + full-destination-add behaviour
         cna_easygl_test(cna_test_easygl_blendstate_additive
@@ -2383,7 +2388,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_blendstate_additive)
         set_tests_properties(EasyGL_BlendState_Additive PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 307: ColorBlendFunction/AlphaBlendFunction operate independently
         cna_easygl_test(cna_test_easygl_blendstate_separate_functions
@@ -2392,7 +2397,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_blendstate_separate_functions)
         set_tests_properties(EasyGL_BlendState_SeparateFunctions PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 308: ColorSourceBlend/ColorDestinationBlend operate independently from Alpha*Blend
         cna_easygl_test(cna_test_easygl_blendstate_separate_factors
@@ -2401,7 +2406,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_blendstate_separate_factors)
         set_tests_properties(EasyGL_BlendState_SeparateFactors PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 309: BlendState.BlendFactor propagates via GraphicsDevice.setBlendStateProperty alone
         cna_easygl_test(cna_test_easygl_blendstate_blendfactor
@@ -2410,7 +2415,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_blendstate_blendfactor)
         set_tests_properties(EasyGL_BlendState_BlendFactor PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 313: DepthStencilState.DepthBufferWriteEnable actually gates depth-buffer writes
         cna_easygl_test(cna_test_easygl_depthstencilstate_write_enable
@@ -2419,7 +2424,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_depthstencilstate_write_enable)
         set_tests_properties(EasyGL_DepthStencilState_WriteEnable PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 314: DepthStencilState.DepthBufferFunction (Always/Never/Less/LessEqual/Greater)
         cna_easygl_test(cna_test_easygl_depthstencilstate_compare_function
@@ -2428,7 +2433,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_depthstencilstate_compare_function)
         set_tests_properties(EasyGL_DepthStencilState_CompareFunction PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 315: DepthStencilState.StencilEnable actually gates the stencil test
         cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_enable
@@ -2437,7 +2442,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_depthstencilstate_stencil_enable)
         set_tests_properties(EasyGL_DepthStencilState_StencilEnable PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 316: DepthStencilState.StencilMask / StencilWriteMask
         cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_mask
@@ -2446,7 +2451,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_depthstencilstate_stencil_mask)
         set_tests_properties(EasyGL_DepthStencilState_StencilMask PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 317: DepthStencilState front-face stencil operations (StencilFail/
         # StencilDepthBufferFail/StencilPass)
@@ -2456,7 +2461,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_depthstencilstate_stencil_ops)
         set_tests_properties(EasyGL_DepthStencilState_StencilOps PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 318: DepthStencilState.TwoSidedStencilMode / back-face (CCW) stencil ops
         cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_twosided
@@ -2465,7 +2470,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_depthstencilstate_stencil_twosided)
         set_tests_properties(EasyGL_DepthStencilState_StencilTwoSided PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 319: GraphicsDevice.ReferenceStencil independent-override behavior (Task 872 -
         # confirmed a universal, not-Vulkan-specific gap; registered as a documented known failure)
@@ -2475,7 +2480,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_graphicsdevice_reference_stencil)
         set_tests_properties(EasyGL_GraphicsDevice_ReferenceStencil PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 323 (+ 324/325 coverage): RasterizerState.CullMode — None/CullClockwiseFace/
         # CullCounterClockwiseFace, contrast-checked with front- and back-winding quads
@@ -2485,7 +2490,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_rasterizerstate_cullmode)
         set_tests_properties(EasyGL_RasterizerState_CullMode PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 326: FillMode::Solid baseline on EasyGL (reuses Task 327's backend-agnostic Vulkan
         # source — its Solid sub-tests 1/3 previously only ran on Vulkan).
@@ -2495,7 +2500,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_fill_mode)
         set_tests_properties(EasyGL_FillMode_Solid PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 331: RenderTarget2D constructor/property audit against FNA.
         cna_easygl_test(cna_test_easygl_rendertarget2d_properties
@@ -2504,7 +2509,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_rendertarget2d_properties)
         set_tests_properties(EasyGL_RenderTarget2D_Properties PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 332: RenderTargetCube constructor/property audit against FNA.
         cna_easygl_test(cna_test_easygl_rendertargetcube_properties
@@ -2513,7 +2518,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_rendertargetcube_properties)
         set_tests_properties(EasyGL_RenderTargetCube_Properties PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     endif()
 
@@ -2543,7 +2548,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_demo_2d --smoke 3)
         set_tests_properties(Vulkan_Demo2D_SmokeTest PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 124: DrawInstancedPrimitives — 3 instances at different X positions
         cna_vulkan_test(cna_test_vulkan_instanced
@@ -2552,7 +2557,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_instanced)
         set_tests_properties(Vulkan_DrawInstanced_3Instances PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 119: ShaderEffect with SPIR-V — SpriteBatch tint via custom push constants
         cna_vulkan_test(cna_test_vulkan_shader_effect
@@ -2561,7 +2566,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_shader_effect)
         set_tests_properties(Vulkan_ShaderEffect_SpirV PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 284: Texture2D Color format mapping — linear vs. sRGB decode on Vulkan
         cna_vulkan_test(cna_test_vulkan_texture_srgb
@@ -2570,7 +2575,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_texture_srgb)
         set_tests_properties(Vulkan_Texture2D_ColorFormat_Linear PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 135: DualTextureEffect — magenta×yellow→red pixel readback on Vulkan
         cna_vulkan_test(cna_test_vulkan_dual_texture
@@ -2579,7 +2584,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_dual_texture)
         set_tests_properties(Vulkan_DualTextureEffect_Blend PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0] on
         # Vulkan too — reuses the backend-agnostic EasyGL test source (public XNA API only).
@@ -2589,7 +2594,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_sampler_state_effect)
         set_tests_properties(Vulkan_SamplerState_DualTextureEffect PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 294: TextureAddressMode::Clamp on a 3D stock effect on Vulkan too (reuses the
         # backend-agnostic EasyGL test source).
@@ -2599,7 +2604,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_texture_address_mode_clamp_effect)
         set_tests_properties(Vulkan_TextureAddressMode_Clamp_DualTextureEffect PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 296: TextureAddressMode::Mirror on a 3D stock effect on Vulkan too (reuses the
         # backend-agnostic EasyGL test source).
@@ -2609,7 +2614,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_texture_address_mode_mirror_effect)
         set_tests_properties(Vulkan_TextureAddressMode_Mirror_DualTextureEffect PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 297: TextureFilter::Point vs Linear on Vulkan too (reuses the backend-agnostic
         # EasyGL test source).
@@ -2619,7 +2624,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_texture_filter_point_vs_linear)
         set_tests_properties(Vulkan_TextureFilter_PointVsLinear PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 298: NOT registered on Vulkan. Texture2D::SetData(level>0) is a silent no-op on
         # Vulkan (UpdatePixelsLevel never overridden — Task 867 finding), which confounds this
@@ -2634,7 +2639,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_texture_anisotropic_effect)
         set_tests_properties(Vulkan_TextureAnisotropic_DualTextureEffect PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 303: BlendState::Opaque on Vulkan too (reuses the backend-agnostic EasyGL source)
         cna_vulkan_test(cna_test_vulkan_blendstate_opaque
@@ -2643,7 +2648,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_blendstate_opaque)
         set_tests_properties(Vulkan_BlendState_Opaque PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 304: BlendState::AlphaBlend on Vulkan too (reuses the backend-agnostic EasyGL source)
         cna_vulkan_test(cna_test_vulkan_blendstate_alphablend
@@ -2652,7 +2657,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_blendstate_alphablend)
         set_tests_properties(Vulkan_BlendState_AlphaBlend PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 305: BlendState::NonPremultiplied on Vulkan too (reuses the backend-agnostic
         # EasyGL source). NOTE: a passing result here does NOT mean Task 868 is fixed — see the
@@ -2663,7 +2668,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_blendstate_nonpremultiplied)
         set_tests_properties(Vulkan_BlendState_NonPremultiplied PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 306: BlendState::Additive on Vulkan too (reuses the backend-agnostic EasyGL source).
         # NOTE: expected to genuinely re-expose Task 868 here, unlike Task 305's coincidental pass.
@@ -2673,7 +2678,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_blendstate_additive)
         set_tests_properties(Vulkan_BlendState_Additive PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 307: ColorBlendFunction/AlphaBlendFunction independence on Vulkan too (reuses the
         # backend-agnostic EasyGL source). NOTE: expect Check A (Subtract) to fail per Task 868 -
@@ -2684,7 +2689,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_blendstate_separate_functions)
         set_tests_properties(Vulkan_BlendState_SeparateFunctions PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 308: ColorSourceBlend/ColorDestinationBlend independence on Vulkan too (reuses the
         # backend-agnostic EasyGL source). NOTE: expect Check A to coincidentally pass and Check B
@@ -2695,7 +2700,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_blendstate_separate_factors)
         set_tests_properties(Vulkan_BlendState_SeparateFactors PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 309: BlendState.BlendFactor propagation (reuses the backend-agnostic EasyGL source).
         # NOTE: expected to FAIL on Vulkan per Task 868 - ApplyBlendState hardcodes a single blend
@@ -2708,7 +2713,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_blendstate_blendfactor)
         set_tests_properties(Vulkan_BlendState_BlendFactor PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 313: DepthStencilState.DepthBufferWriteEnable on Vulkan (reuses the backend-agnostic
         # EasyGL source).
@@ -2718,7 +2723,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_depthstencilstate_write_enable)
         set_tests_properties(Vulkan_DepthStencilState_WriteEnable PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 314: DepthStencilState.DepthBufferFunction on Vulkan (reuses the backend-agnostic
         # EasyGL source). NOTE: expected to FAIL some/all checks per Task 870 - Vulkan hardcodes
@@ -2729,7 +2734,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_depthstencilstate_compare_function)
         set_tests_properties(Vulkan_DepthStencilState_CompareFunction PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 315: DepthStencilState.StencilEnable on Vulkan (reuses the backend-agnostic EasyGL
         # source). NOTE: expected to FAIL Check A per Task 870 - stencil testing is completely
@@ -2740,7 +2745,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_depthstencilstate_stencil_enable)
         set_tests_properties(Vulkan_DepthStencilState_StencilEnable PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 316: DepthStencilState.StencilMask/StencilWriteMask on Vulkan (reuses the
         # backend-agnostic EasyGL source). NOTE: expected to partially fail per Task 870 - stencil
@@ -2751,7 +2756,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_depthstencilstate_stencil_mask)
         set_tests_properties(Vulkan_DepthStencilState_StencilMask PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 317: DepthStencilState front-face stencil operations on Vulkan (reuses the
         # backend-agnostic EasyGL source). NOTE: expected to FAIL all 3 checks per Task 870 -
@@ -2762,7 +2767,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_depthstencilstate_stencil_ops)
         set_tests_properties(Vulkan_DepthStencilState_StencilOps PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 318: DepthStencilState.TwoSidedStencilMode on Vulkan (reuses the backend-agnostic
         # EasyGL source). NOTE: expected to FAIL the contrast check per Task 870 - stencil testing
@@ -2773,7 +2778,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_depthstencilstate_stencil_twosided)
         set_tests_properties(Vulkan_DepthStencilState_StencilTwoSided PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 319: GraphicsDevice.ReferenceStencil independent-override behavior on Vulkan (Task
         # 872, universal gap, reuses the backend-agnostic EasyGL source).
@@ -2783,7 +2788,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_graphicsdevice_reference_stencil)
         set_tests_properties(Vulkan_GraphicsDevice_ReferenceStencil PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 323 (+ 324/325 coverage): RasterizerState.CullMode on Vulkan (reuses the
         # backend-agnostic EasyGL source).
@@ -2793,7 +2798,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_rasterizerstate_cullmode)
         set_tests_properties(Vulkan_RasterizerState_CullMode PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 136: EnvironmentMapEffect — emissive=(1,0,0), envAmount=0 → red pixel on Vulkan
         cna_vulkan_test(cna_test_vulkan_env_map
@@ -2802,7 +2807,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_env_map)
         set_tests_properties(Vulkan_EnvironmentMapEffect_Readback PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 393: EnvironmentMapEffect EnvironmentMapAmount=0 should ignore the cube map
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_amount_zero
@@ -2811,7 +2816,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_environmentmapeffect_amount_zero)
         set_tests_properties(Vulkan_EnvironmentMapEffect_AmountZero PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 394: EnvironmentMapEffect EnvironmentMapAmount=1 should fully replace lit color
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_amount_one
@@ -2820,7 +2825,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_environmentmapeffect_amount_one)
         set_tests_properties(Vulkan_EnvironmentMapEffect_AmountOne PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 395: EnvironmentMapEffect EnvironmentMapSpecular should scale by cubemap alpha
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_specular
@@ -2829,7 +2834,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_environmentmapeffect_specular)
         set_tests_properties(Vulkan_EnvironmentMapEffect_Specular PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 396: EnvironmentMapEffect Fresnel edge-weighting should suppress head-on reflections
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_fresnel
@@ -2838,7 +2843,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_environmentmapeffect_fresnel)
         set_tests_properties(Vulkan_EnvironmentMapEffect_Fresnel PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 397: EnvironmentMapEffect reflection vector should respond to EyePosition
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_eyeposition
@@ -2847,7 +2852,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_environmentmapeffect_eyeposition)
         set_tests_properties(Vulkan_EnvironmentMapEffect_EyePosition PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 398: EnvironmentMapEffect normal transform should use inverse-transpose of World
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_worldtransform
@@ -2856,7 +2861,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_environmentmapeffect_worldtransform)
         set_tests_properties(Vulkan_EnvironmentMapEffect_WorldTransform PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 399: cross-backend EnvironmentMapEffect capstone (Tasks 393-398 combined)
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_combined
@@ -2865,7 +2870,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_environmentmapeffect_combined)
         set_tests_properties(Vulkan_EnvironmentMapEffect_Combined PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 406: SkinnedEffect identity bone palette should produce zero deformation
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_identity_bones
@@ -2874,7 +2879,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_skinnedeffect_identity_bones)
         set_tests_properties(Vulkan_SkinnedEffect_IdentityBones PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 407: SkinnedEffect single translation bone should shift the mesh
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_translation_bone
@@ -2883,7 +2888,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_skinnedeffect_translation_bone)
         set_tests_properties(Vulkan_SkinnedEffect_TranslationBone PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 408: SkinnedEffect two-bone weighted blend should produce midpoint deformation
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_twobone_blend
@@ -2892,7 +2897,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_skinnedeffect_twobone_blend)
         set_tests_properties(Vulkan_SkinnedEffect_TwoBoneBlend PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 409: cross-backend SkinnedEffect capstone (identity + single-bone + two-bone blend)
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_combined
@@ -2901,7 +2906,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_skinnedeffect_combined)
         set_tests_properties(Vulkan_SkinnedEffect_Combined PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_sample
@@ -2910,7 +2915,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_rendertargetcube_sample)
         set_tests_properties(Vulkan_RenderTargetCube_SampleAfterUnbind PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 148: RenderTarget2D full cycle — red quad into RT, blit to backbuffer
         cna_vulkan_test(cna_test_vulkan_rt2d
@@ -2919,7 +2924,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_rt2d)
         set_tests_properties(Vulkan_RenderTarget2D_FullCycle PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 335: RenderTarget2D depth buffer is real and functional (not just a stored property)
         cna_vulkan_test(cna_test_vulkan_rendertarget2d_depth
@@ -2928,7 +2933,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_rendertarget2d_depth)
         set_tests_properties(Vulkan_RenderTarget2D_DepthBuffer PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 178: RenderTargetUsage DiscardContents vs PreserveContents
         cna_vulkan_test(cna_test_vulkan_render_target_usage
@@ -2937,7 +2942,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_render_target_usage)
         set_tests_properties(Vulkan_RenderTargetUsage PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 142: RenderTargetCube — 6-face per-face render passes
         cna_vulkan_test(cna_test_vulkan_rtcube
@@ -2946,7 +2951,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_rtcube)
         set_tests_properties(Vulkan_RenderTargetCube_PerFace PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 147: MSAA 4× — multisampled swapchain + subpass resolve
         cna_vulkan_test(cna_test_vulkan_msaa
@@ -2955,7 +2960,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_msaa)
         set_tests_properties(Vulkan_MSAA_4x_Readback PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_vertex_format
                         examples/vulkan_vertex_format_test.cpp)
@@ -2963,7 +2968,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_vertex_format)
         set_tests_properties(Vulkan_VertexFormat_AllStrides PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_fill_mode
                         examples/vulkan_fill_mode_test.cpp)
@@ -2971,7 +2976,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_fill_mode)
         set_tests_properties(Vulkan_FillMode_WireFrame PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_depth_bias
                         examples/vulkan_depth_bias_test.cpp)
@@ -2979,7 +2984,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_depth_bias)
         set_tests_properties(Vulkan_DepthBias PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 329: ScissorTestEnable + ScissorRectangle pixel-readback test
         cna_vulkan_test(cna_test_vulkan_scissor
@@ -2988,7 +2993,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_scissor)
         set_tests_properties(Vulkan_ScissorTest PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 664: SpriteBatch multiple Begin()/End() cycles per frame must all render
         cna_vulkan_test(cna_test_vulkan_spritebatch_multi_begin_end
@@ -2997,7 +3002,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_spritebatch_multi_begin_end)
         set_tests_properties(Vulkan_SpriteBatch_MultiBeginEnd PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 665: SpriteBatch Begin()'s SamplerState (TextureAddressMode) must take effect
         cna_vulkan_test(cna_test_vulkan_texture_address_mode
@@ -3006,7 +3011,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_texture_address_mode)
         set_tests_properties(Vulkan_TextureAddressMode PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 338: SetRenderTarget(nullptr) resets Viewport/ScissorRectangle to the backbuffer
         cna_vulkan_test(cna_test_vulkan_rendertarget_viewport_scissor_reset
@@ -3015,7 +3020,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_rendertarget_viewport_scissor_reset)
         set_tests_properties(Vulkan_RenderTarget_ViewportScissorReset PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 349: custom Viewport survives Present() with no resize, resets after a real one.
         cna_vulkan_test(cna_test_vulkan_viewport_reset_after_resize
@@ -3024,7 +3029,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_viewport_reset_after_resize)
         set_tests_properties(Vulkan_ViewportResetAfterResize PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 331: RenderTarget2D constructor/property audit against FNA.
         cna_vulkan_test(cna_test_vulkan_rendertarget2d_properties
@@ -3033,7 +3038,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_rendertarget2d_properties)
         set_tests_properties(Vulkan_RenderTarget2D_Properties PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 332: RenderTargetCube constructor/property audit against FNA.
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_properties
@@ -3042,7 +3047,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_rendertargetcube_properties)
         set_tests_properties(Vulkan_RenderTargetCube_Properties PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
         cna_vulkan_test(cna_test_vulkan_basiceffect_vertexcolor_disabled
@@ -3051,7 +3056,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_vertexcolor_disabled)
         set_tests_properties(Vulkan_BasicEffect_VertexColorDisabled PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 365: BasicEffect pixel test — VertexColorEnabled=true, no texture, vertex color multiplication
         cna_vulkan_test(cna_test_vulkan_basiceffect_vertexcolor_enabled
@@ -3060,7 +3065,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_vertexcolor_enabled)
         set_tests_properties(Vulkan_BasicEffect_VertexColorEnabled PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 366: BasicEffect pixel test — TextureEnabled=true, no vertex color
         cna_vulkan_test(cna_test_vulkan_basiceffect_texture_enabled
@@ -3069,7 +3074,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_texture_enabled)
         set_tests_properties(Vulkan_BasicEffect_TextureEnabled PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 367: BasicEffect pixel test — TextureEnabled=true AND VertexColorEnabled=true
         cna_vulkan_test(cna_test_vulkan_basiceffect_texture_vertexcolor_enabled
@@ -3078,7 +3083,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_texture_vertexcolor_enabled)
         set_tests_properties(Vulkan_BasicEffect_TextureVertexColorEnabled PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 368: BasicEffect pixel test — LightingEnabled=true, one DirectionalLight
         cna_vulkan_test(cna_test_vulkan_basiceffect_one_light
@@ -3087,7 +3092,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_one_light)
         set_tests_properties(Vulkan_BasicEffect_OneLight PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 897: BasicEffect pixel test — DirectionalLight1/2 + EmissiveColor on the lit path
         cna_vulkan_test(cna_test_vulkan_basiceffect_multilight_emissive
@@ -3096,7 +3101,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_multilight_emissive)
         set_tests_properties(Vulkan_BasicEffect_MultiLightEmissive PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 886: BasicEffect pixel test — real specular highlights
         cna_vulkan_test(cna_test_vulkan_basiceffect_specular
@@ -3105,7 +3110,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_specular)
         set_tests_properties(Vulkan_BasicEffect_Specular PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 887: AlphaTestEffect.VertexColorEnabled fix verification
         cna_vulkan_test(cna_test_vulkan_alphatest_vertexcolor
@@ -3114,7 +3119,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_alphatest_vertexcolor)
         set_tests_properties(Vulkan_AlphaTest_VertexColor PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 888: BasicEffect fog on the lit_textured3d (stride-32) pipeline
         cna_vulkan_test(cna_test_vulkan_basiceffect_fog
@@ -3123,7 +3128,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_fog)
         set_tests_properties(Vulkan_BasicEffect_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 888: AlphaTestEffect fog on the alpha_test3d pipeline
         cna_vulkan_test(cna_test_vulkan_alphatest_fog
@@ -3132,7 +3137,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_alphatest_fog)
         set_tests_properties(Vulkan_AlphaTest_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
         cna_vulkan_test(cna_test_vulkan_basiceffect_emissive
@@ -3141,7 +3146,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_emissive)
         set_tests_properties(Vulkan_BasicEffect_Emissive PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42
         cna_vulkan_test(cna_test_vulkan_basiceffect_combined
@@ -3150,7 +3155,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_combined)
         set_tests_properties(Vulkan_BasicEffect_Combined PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 374: AlphaTestEffect all CompareFunction modes — threshold sweep
         cna_vulkan_test(cna_test_vulkan_alphatest_comparefunction_sweep
@@ -3159,7 +3164,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_alphatest_comparefunction_sweep)
         set_tests_properties(Vulkan_AlphaTest_CompareFunctionSweep PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 379: AlphaTestEffect null/no-texture behavior
         cna_vulkan_test(cna_test_vulkan_alphatest_null_texture
@@ -3168,7 +3173,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_alphatest_null_texture)
         set_tests_properties(Vulkan_AlphaTest_NullTexture PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 383: DualTextureEffect two-texture blend formula, including FNA's color.rgb*=2
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_doubling
@@ -3177,7 +3182,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_dualtextureeffect_doubling)
         set_tests_properties(Vulkan_DualTextureEffect_Doubling PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 385: DualTextureEffect Alpha forwarding, alpha-channel-only (see file header for
         # why the full RGB-premultiplication check is deliberately not done on Vulkan)
@@ -3187,7 +3192,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_dualtextureeffect_alpha)
         set_tests_properties(Vulkan_DualTextureEffect_Alpha PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 386: DualTextureEffect first texture (Texture, slot 0) null behavior
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_null_texture0
@@ -3196,7 +3201,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_dualtextureeffect_null_texture0)
         set_tests_properties(Vulkan_DualTextureEffect_NullTexture0 PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 387: DualTextureEffect second texture (Texture2, slot 1) null behavior
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_null_texture2
@@ -3205,7 +3210,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_dualtextureeffect_null_texture2)
         set_tests_properties(Vulkan_DualTextureEffect_NullTexture2 PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 389: DualTextureEffect cross-backend image comparison suite (closes Phase 44 pixel work)
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_combined
@@ -3214,7 +3219,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_dualtextureeffect_combined)
         set_tests_properties(Vulkan_DualTextureEffect_Combined PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 880: GraphicsDevice.Viewport GPU wiring — sub-region viewport pixel-readback test
         cna_vulkan_test(cna_test_vulkan_viewport_subregion
@@ -3223,7 +3228,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_viewport_subregion)
         set_tests_properties(Vulkan_Viewport_Subregion PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 899: fog on colored3d/textured3d/colored_textured3d/dual_texture3d/skinned3d
         cna_vulkan_test(cna_test_vulkan_basiceffect_colored3d_fog
@@ -3232,7 +3237,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_colored3d_fog)
         set_tests_properties(Vulkan_BasicEffect_Colored3D_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_basiceffect_textured3d_fog
                         examples/vulkan_basiceffect_textured3d_fog_test.cpp)
@@ -3240,7 +3245,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_textured3d_fog)
         set_tests_properties(Vulkan_BasicEffect_Textured3D_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_basiceffect_coloredtextured3d_fog
                         examples/vulkan_basiceffect_coloredtextured3d_fog_test.cpp)
@@ -3248,7 +3253,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_basiceffect_coloredtextured3d_fog)
         set_tests_properties(Vulkan_BasicEffect_ColoredTextured3D_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_fog
                         examples/vulkan_dualtextureeffect_fog_test.cpp)
@@ -3256,7 +3261,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_dualtextureeffect_fog)
         set_tests_properties(Vulkan_DualTextureEffect_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_fog
                         examples/vulkan_skinnedeffect_fog_test.cpp)
@@ -3264,7 +3269,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_skinnedeffect_fog)
         set_tests_properties(Vulkan_SkinnedEffect_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 899's own noted cheap leftover: env_map3d fog packed into EnvMapParams' spare bytes
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_fog
@@ -3273,7 +3278,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_environmentmapeffect_fog)
         set_tests_properties(Vulkan_EnvironmentMapEffect_Fog PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 878/879: RenderTarget2D MSAA resolve genuinely anti-aliases on Vulkan (piggybacks
         # on the backend's own backbuffer sampleCount_ -- requires PreferMultiSampling=true).
@@ -3283,7 +3288,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_vulkan_rendertarget2d_msaa)
         set_tests_properties(Vulkan_RenderTarget2D_MsaaResolve PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 13.6: the same 3 avatar-rendering GPU integration tests already registered for
         # EasyGL above, reusing the exact same backend-agnostic source files (public
@@ -3298,7 +3303,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                      COMMAND cna_test_vulkan_avatar_real_render)
             set_tests_properties(Vulkan_AvatarRenderer_RealRender PROPERTIES
                 TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
             cna_vulkan_test(cna_test_vulkan_avatar_attach_part
                             examples/avatar_attach_part_integration_test.cpp)
@@ -3307,7 +3312,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                      COMMAND cna_test_vulkan_avatar_attach_part)
             set_tests_properties(Vulkan_AvatarRenderer_AttachPart PROPERTIES
                 TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
             cna_vulkan_test(cna_test_vulkan_avatar_tint_routing
                             examples/avatar_tint_routing_integration_test.cpp)
@@ -3316,7 +3321,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                      COMMAND cna_test_vulkan_avatar_tint_routing)
             set_tests_properties(Vulkan_AvatarRenderer_TintRouting PROPERTIES
                 TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
     endif()
@@ -3358,7 +3363,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_demo_2d --smoke 3)
     set_tests_properties(Bgfx_Demo2D_SmokeTest PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 179: RenderTargetUsage DiscardContents/PreserveContents smoke test
     cna_bgfx_test(cna_test_bgfx_render_target_usage
@@ -3367,7 +3372,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_render_target_usage)
     set_tests_properties(Bgfx_RenderTargetUsage PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 249: Bgfx vertex layout mapping tests — all 12 VertexElementFormat values
     cna_bgfx_test(cna_test_bgfx_vertex_format
@@ -3376,7 +3381,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_vertex_format)
     set_tests_properties(Bgfx_VertexFormatMapping PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 278: EnvironmentMapEffect smoke test (no GPU readback available on Bgfx)
     cna_bgfx_test(cna_test_bgfx_env_map
@@ -3385,7 +3390,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_env_map)
     set_tests_properties(Bgfx_EnvironmentMapEffect_Smoke PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 393: EnvironmentMapEffect EnvironmentMapAmount=0 should ignore the cube map
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_amount_zero
@@ -3394,7 +3399,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_environmentmapeffect_amount_zero)
     set_tests_properties(Bgfx_EnvironmentMapEffect_AmountZero PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 394: EnvironmentMapEffect EnvironmentMapAmount=1 should fully replace lit color
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_amount_one
@@ -3403,7 +3408,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_environmentmapeffect_amount_one)
     set_tests_properties(Bgfx_EnvironmentMapEffect_AmountOne PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 395: EnvironmentMapEffect EnvironmentMapSpecular should scale by cubemap alpha
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_specular
@@ -3412,7 +3417,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_environmentmapeffect_specular)
     set_tests_properties(Bgfx_EnvironmentMapEffect_Specular PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 396: EnvironmentMapEffect Fresnel edge-weighting should suppress head-on reflections
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_fresnel
@@ -3421,7 +3426,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_environmentmapeffect_fresnel)
     set_tests_properties(Bgfx_EnvironmentMapEffect_Fresnel PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 397: EnvironmentMapEffect reflection vector should respond to EyePosition
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_eyeposition
@@ -3430,7 +3435,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_environmentmapeffect_eyeposition)
     set_tests_properties(Bgfx_EnvironmentMapEffect_EyePosition PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 398: EnvironmentMapEffect normal transform should use inverse-transpose of World
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_worldtransform
@@ -3439,7 +3444,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_environmentmapeffect_worldtransform)
     set_tests_properties(Bgfx_EnvironmentMapEffect_WorldTransform PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 399: cross-backend EnvironmentMapEffect capstone (Tasks 393-398 combined)
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_combined
@@ -3448,7 +3453,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_environmentmapeffect_combined)
     set_tests_properties(Bgfx_EnvironmentMapEffect_Combined PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 406: SkinnedEffect identity bone palette should produce zero deformation
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_identity_bones
@@ -3457,7 +3462,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_skinnedeffect_identity_bones)
     set_tests_properties(Bgfx_SkinnedEffect_IdentityBones PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 407: SkinnedEffect single translation bone should shift the mesh
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_translation_bone
@@ -3466,7 +3471,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_skinnedeffect_translation_bone)
     set_tests_properties(Bgfx_SkinnedEffect_TranslationBone PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 408: SkinnedEffect two-bone weighted blend should produce midpoint deformation
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_twobone_blend
@@ -3475,7 +3480,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_skinnedeffect_twobone_blend)
     set_tests_properties(Bgfx_SkinnedEffect_TwoBoneBlend PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 409: cross-backend SkinnedEffect capstone (identity + single-bone + two-bone blend)
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_combined
@@ -3484,7 +3489,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_skinnedeffect_combined)
     set_tests_properties(Bgfx_SkinnedEffect_Combined PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 333: RenderTarget2D sampled as Texture2D via SpriteBatch after unbinding (Bgfx)
     cna_bgfx_test(cna_test_bgfx_render_target_sample
@@ -3493,7 +3498,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_render_target_sample)
     set_tests_properties(Bgfx_RenderTarget2D_SampleAfterUnbind PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding (Bgfx)
     cna_bgfx_test(cna_test_bgfx_render_target_cube_sample
@@ -3502,7 +3507,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_render_target_cube_sample)
     set_tests_properties(Bgfx_RenderTargetCube_SampleAfterUnbind PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
     cna_bgfx_test(cna_test_bgfx_basiceffect_vertexcolor_disabled
@@ -3511,7 +3516,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_vertexcolor_disabled)
     set_tests_properties(Bgfx_BasicEffect_VertexColorDisabled PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 365: BasicEffect pixel test — VertexColorEnabled=true, no texture, vertex color multiplication
     cna_bgfx_test(cna_test_bgfx_basiceffect_vertexcolor_enabled
@@ -3520,7 +3525,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_vertexcolor_enabled)
     set_tests_properties(Bgfx_BasicEffect_VertexColorEnabled PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 366: BasicEffect pixel test — TextureEnabled=true, no vertex color
     cna_bgfx_test(cna_test_bgfx_basiceffect_texture_enabled
@@ -3529,7 +3534,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_texture_enabled)
     set_tests_properties(Bgfx_BasicEffect_TextureEnabled PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 367: BasicEffect pixel test — TextureEnabled=true AND VertexColorEnabled=true
     cna_bgfx_test(cna_test_bgfx_basiceffect_texture_vertexcolor_enabled
@@ -3538,7 +3543,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_texture_vertexcolor_enabled)
     set_tests_properties(Bgfx_BasicEffect_TextureVertexColorEnabled PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 368: BasicEffect pixel test — LightingEnabled=true, one DirectionalLight
     cna_bgfx_test(cna_test_bgfx_basiceffect_one_light
@@ -3547,7 +3552,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_one_light)
     set_tests_properties(Bgfx_BasicEffect_OneLight PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 885: BasicEffect pixel test — DirectionalLight1/2 + EmissiveColor on the lit path
     cna_bgfx_test(cna_test_bgfx_basiceffect_multilight_emissive
@@ -3556,7 +3561,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_multilight_emissive)
     set_tests_properties(Bgfx_BasicEffect_MultiLightEmissive PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 886: BasicEffect pixel test — real specular highlights
     cna_bgfx_test(cna_test_bgfx_basiceffect_specular
@@ -3565,7 +3570,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_specular)
     set_tests_properties(Bgfx_BasicEffect_Specular PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 887: AlphaTestEffect.VertexColorEnabled fix verification
     cna_bgfx_test(cna_test_bgfx_alphatest_vertexcolor
@@ -3574,7 +3579,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_alphatest_vertexcolor)
     set_tests_properties(Bgfx_AlphaTest_VertexColor PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 888: BasicEffect fog on the colored3d (stride-16) pipeline
     cna_bgfx_test(cna_test_bgfx_basiceffect_fog
@@ -3583,7 +3588,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_fog)
     set_tests_properties(Bgfx_BasicEffect_Fog PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 888: BasicEffect fog on the lit_textured3d (stride-32) pipeline
     cna_bgfx_test(cna_test_bgfx_basiceffect_lit_fog
@@ -3592,7 +3597,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_lit_fog)
     set_tests_properties(Bgfx_BasicEffect_LitFog PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 888: AlphaTestEffect fog on the alpha_test3d pipeline
     cna_bgfx_test(cna_test_bgfx_alphatest_fog
@@ -3601,7 +3606,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_alphatest_fog)
     set_tests_properties(Bgfx_AlphaTest_Fog PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 888: DualTextureEffect fog on the dual_texture3d pipeline
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_fog
@@ -3610,7 +3615,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_dualtextureeffect_fog)
     set_tests_properties(Bgfx_DualTextureEffect_Fog PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 892: BasicEffect lit-textured normal transform under a real camera (Bgfx)
     cna_bgfx_test(cna_test_bgfx_basiceffect_normaltransform
@@ -3619,7 +3624,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_normaltransform)
     set_tests_properties(Bgfx_BasicEffect_NormalTransform PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
     cna_bgfx_test(cna_test_bgfx_basiceffect_emissive
@@ -3628,7 +3633,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_emissive)
     set_tests_properties(Bgfx_BasicEffect_Emissive PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42
     cna_bgfx_test(cna_test_bgfx_basiceffect_combined
@@ -3637,7 +3642,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_basiceffect_combined)
     set_tests_properties(Bgfx_BasicEffect_Combined PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 375: AlphaTestEffect all CompareFunction modes — threshold sweep
     cna_bgfx_test(cna_test_bgfx_alphatest_comparefunction_sweep
@@ -3646,7 +3651,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_alphatest_comparefunction_sweep)
     set_tests_properties(Bgfx_AlphaTest_CompareFunctionSweep PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 379: AlphaTestEffect null/no-texture behavior
     cna_bgfx_test(cna_test_bgfx_alphatest_null_texture
@@ -3655,7 +3660,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_alphatest_null_texture)
     set_tests_properties(Bgfx_AlphaTest_NullTexture PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 383: DualTextureEffect two-texture blend formula, including FNA's color.rgb*=2.
     # Also the first-ever Bgfx pixel-integration test for DualTextureEffect.
@@ -3665,7 +3670,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_dualtextureeffect_doubling)
     set_tests_properties(Bgfx_DualTextureEffect_Doubling PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 384: DualTextureEffect magenta × yellow = red (mirrors Task 133/135 EasyGL/Vulkan)
     cna_bgfx_test(cna_test_bgfx_dual_texture
@@ -3674,7 +3679,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_dual_texture)
     set_tests_properties(Bgfx_DualTextureEffect_Blend PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 385: DualTextureEffect Alpha premultiplication, verified via real AlphaBlend
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_alpha
@@ -3683,7 +3688,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_dualtextureeffect_alpha)
     set_tests_properties(Bgfx_DualTextureEffect_Alpha PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 386: DualTextureEffect first texture (Texture, slot 0) null behavior
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_null_texture0
@@ -3692,7 +3697,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_dualtextureeffect_null_texture0)
     set_tests_properties(Bgfx_DualTextureEffect_NullTexture0 PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 387: DualTextureEffect second texture (Texture2, slot 1) null behavior
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_null_texture2
@@ -3701,7 +3706,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_dualtextureeffect_null_texture2)
     set_tests_properties(Bgfx_DualTextureEffect_NullTexture2 PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 389: DualTextureEffect cross-backend image comparison suite (closes Phase 44 pixel work)
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_combined
@@ -3710,7 +3715,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_dualtextureeffect_combined)
     set_tests_properties(Bgfx_DualTextureEffect_Combined PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 880: GraphicsDevice.Viewport GPU wiring — sub-region viewport pixel-readback test
     cna_bgfx_test(cna_test_bgfx_viewport_subregion
@@ -3719,7 +3724,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_viewport_subregion)
     set_tests_properties(Bgfx_Viewport_Subregion PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 899: EnvironmentMapEffect/SkinnedEffect fog on Bgfx (opportunistic bonus scope)
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_fog
@@ -3728,7 +3733,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_environmentmapeffect_fog)
     set_tests_properties(Bgfx_EnvironmentMapEffect_Fog PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_fog
                   examples/bgfx_skinnedeffect_fog_test.cpp)
@@ -3736,7 +3741,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_skinnedeffect_fog)
     set_tests_properties(Bgfx_SkinnedEffect_Fog PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 878/879: RenderTarget2D MSAA resolve genuinely anti-aliases on Bgfx
     # (BGFX_TEXTURE_RT_MSAA_Xn -- also closes Task 873's SpriteBatch RT-sampling cast bug and a
@@ -3756,7 +3761,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_test_bgfx_rendertarget2d_msaa)
     set_tests_properties(Bgfx_RenderTarget2D_MsaaResolve PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0;CNA_BGFX_RENDERER=VULKAN")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=VULKAN")
 
 endif()
 
