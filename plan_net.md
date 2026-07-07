@@ -1,3796 +1,641 @@
-# Plan: XNA 4.0 Net / GamerServices / Avatar — Deep-Dive Audit & Hardening
+# Plan: CNA XNA 4.0 Net / GamerServices / Avatar — 2026-07-07 Re-Audit and Hardening
 
-**This is a fresh plan, written 2026-07-06**, superseding the archived `plan_net_20260706.md`
-(deliberately not read while writing this plan or performing the audit behind it — the goal was an
-independent, unbiased re-examination of the current code against the XNA 4.0 spec, not a
-continuation biased by prior framing of what's "done").
+This is a fresh, second-pass hardening plan. The prior plan (`plan_net_20260707.md`, formerly
+`plan_net.md`) closed out 132/132 tasks and is archived, not deleted — some findings below
+reference it directly where this pass revisits or extends a decision made there.
 
-## Methodology
+This pass is **not** a first-implementation plan. `Net`, `GamerServices`, and the Avatar
+real-rendering extension already have large, working implementations, extensive tests, and 24
+demo applications. This plan is about hardening what exists, closing genuinely-open gaps, and
+implementing a handful of features the user explicitly decided to build out further (real host
+migration, real simulated network conditions, a real Guide message-box overlay, real keyboard
+capture, disk-persisted achievements/leaderboards, and an avatar art-quality pass).
 
-Four independent research passes were run against the current codebase:
-1. A full line-by-line audit of `Microsoft::Xna::Framework::Net` (+ its `CNA::Internal::Net` ENet
-   backend) against the FNA reference source (`/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/Net/`).
-2. A full line-by-line audit of `Microsoft::Xna::Framework::GamerServices` (excluding Avatar)
-   against the FNA reference source (`.../FNA.NetStub/src/GamerServices/`).
-3. A full audit of the Avatar surface — both the faithful XNA `Avatar` API (ported from the real,
-   genuine Microsoft `Microsoft.Xna.Framework.Avatar.dll` reference assembly, since FNA itself has
-   no real Avatar implementation) and the CNA-original "real rendering" `NOXNA`/`*EXT` extension
-   layer built on top of it (`SkinnedModelEXT`, `AvatarRenderer::*EXT`, the content pipeline, the
-   procedural Blender asset generator).
-4. A survey of existing demo/example applications plus proposals for ~20 new ones to showcase
-   currently-undemonstrated Net/GamerServices/Avatar functionality.
+## Rules
 
-Each pass was told to independently re-verify its own highest-severity claims by direct code
-reading (not just trust a sub-pass's report), and to explicitly rule out plausible-sounding but
-false leads rather than report them as bugs. Findings are tagged `[BUG]` (a concrete, verified
-behavioral defect), `[API-GAP]` (a missing member vs. the real API surface), `[TEST-GAP]` (missing
-or weak test coverage), or `[AUDIT]` (needs a deeper investigation pass to confirm one way or the
-other).
+- Work one task at a time.
+- Keep XNA-compatible API behavior (namespace `Microsoft::Xna`) separate from CNA/NOXNA
+  extensions (`NOXNA` macro / `*EXT` suffix), per this repo's own `CLAUDE.md`.
+- Add or extend a test for every behavior change — a test that would fail without the fix.
+- One task = one commit (user-confirmed).
+- Do not use proprietary Xbox Avatar assets, not even as private reference/measurement input
+  (user-confirmed, no exceptions).
+- Document assumptions when a decision is needed and the user is unavailable; use the safest
+  conservative default and keep moving.
+- Testing scope for this pass: **EASYGL graphics backend, `cmake-build-debug` only**
+  (user-confirmed) — other backends/build dirs are out of scope unless something here turns out
+  to be backend-specific.
 
-**Every task below that touches behavior must add or extend a test that would fail without the
-fix** — this is a hard requirement per this repo's own `CLAUDE.md`, not optional polish. Build with
-`cmake --build cmake-build-debug --target CnaTests`, verify with `cmake-build-debug/CnaTests`
-before considering any task done, and commit per-task per this repo's own git conventions (see
-`CLAUDE.md`'s "Git Commits" section — one task, one commit, reference the task ID).
+## User Decisions
 
----
+Full questionnaire was asked interactively, one question at a time, in the conversation that
+produced this plan. Recorded answers:
 
-## Phase 1 — Net: Critical Bugs (Security & Memory Safety)
+| # | Topic | Decision |
+|---|-------|----------|
+| 1a | XNA reference platform | **Xbox 360** — real XNA multiplayer/avatar behavior (not Windows' no-op stubs) is the reference for what "correct" means, since CNA already has its own real avatar/networking implementations. |
+| 1b | Strict XNA/NOXNA convention | Keep as-is: `Microsoft::Xna` stays behaviorally faithful to the (now Xbox-360-reference) XNA API; CNA-only improvements stay behind `NOXNA`/`*EXT`. |
+| 2 (tool) | Networking scope beyond SystemLink | **SystemLink-focused only.** PlayerMatch/Ranked/Invite stay documented, tested-as-unsupported stubs — no synthetic offline approximation work this pass. |
+| 2a | SimulatedLatency/SimulatedPacketLoss | **Implement a real effect** on real ENet traffic (delay queue / probabilistic drop), deterministic under test. |
+| 2b | Transport | ENet remains the real transport; no change. |
+| 3 (tool) | Guide.BeginShowMessageBox | **Build a real CNA overlay implementation** (SpriteBatch-based), not just a no-op/NotSupportedException stub. |
+| 3a | Guide.BeginShowKeyboardInput | **Real captured text** through CNA's existing `TextInputEXT` input layer, not a stub value. |
+| 3b | Achievements/leaderboards | **Persist to disk** (not in-memory-only fake). |
+| 4 (tool) | Avatar visual target | **Toy-like Xbox-Avatar-inspired** stylization, fully original CNA geometry/textures. |
+| 4a | Proprietary Xbox Avatar assets | **Never use them, not even for private reference/measurement.** |
+| 4b | Body types/hair/clothes/colors scope | Improve what `demo_avatar`/the asset pipeline already generates so it looks intentional, not "monsters." Body/head (and other) geometry should be generated as glTF via the sibling `../mesh-craft` tool going forward. |
+| 4c | Phase 7 acceptance criteria | Accepted as originally stated: front/side/back screenshots, male + female, animation gallery, no mesh explosions, no distorted limbs. |
+| 5a | F1 help text | Use the exact default text block (below), verbatim. |
+| 5b | F1 toggle behavior | Press toggles show/hide. |
+| 5c | F1 overlay scope | **All avatar-related demos**, not just `demo_avatar` — needs a small shared demo-only helper. |
+| 5d | F1 overlay styling | Translucent white rectangle, black text, as originally described. |
+| 6a | Plan rename | Yes — done (`plan_net.md` → `plan_net_20260707.md`, no prior file existed at that name). |
+| 6b | If the target name already existed | N/A this time (it didn't) — if it ever does in a future pass, stop and ask rather than auto-backup. |
+| 6c | Commits | One commit per finished task. |
+| 6d | Build/test scope | EASYGL backend, `cmake-build-debug` only. |
+| host migration (tool) | AllowHostMigration | **Implement simple real host migration**, superseding the prior pass's "stored but unsupported" conclusion (`plan_net_20260707.md` Task 2.6). |
 
-These are the highest-severity findings: several are remotely triggerable (a crafted UDP packet
-from any device on the LAN, or from a connected peer) and cause real memory corruption, unbounded
-resource consumption, or a crashed process — not just XNA-fidelity gaps.
+### Still-open micro-decisions (no explicit user answer; conservative default applied)
 
-- [x] **Task 1.1** — Fix out-of-bounds vector write from a crafted negative property index in
-  `NetDiscoveryProtocol::ReadProperties`. Confirmed: `ReadProperties` (`src/CNA/Internal/Net/NetDiscoveryProtocol.cpp`,
-  around lines 38-57) reads `index = reader.ReadInt32()` directly off the wire with no lower-bound
-  check. For a negative `index`, the pre-extend `while (count <= index)` loop never executes (since
-  `0 <= negative` is false), so execution falls straight through to
-  `NetworkSessionProperties::operator[](index)`, whose own `index >= size()` guard is also false for
-  negative values — it falls through to `properties_[static_cast<std::size_t>(index)]`, casting a
-  negative `int` to a huge `std::size_t`: an out-of-bounds `std::vector::operator[]` access
-  (undefined behavior). This is reachable by any LAN device (or a spoofed source) sending a crafted
-  `DiscoveryAnnounceMessage` to port 61190 while any local `Find()`/`FindSessions()` is in flight —
-  no authentication exists on this path.
-  **Fixed:** added a `if (index < 0) throw std::runtime_error(...)` guard right after reading
-  `index` off the wire, before it ever touches `properties_` (matching `BinaryReader`'s own
-  established `std::runtime_error`-on-malformed-input convention elsewhere in this codebase).
-  Added `NetDiscoveryProtocolTest.DecodeAnnounceRejectsNegativePropertyIndex`, hand-crafting a raw
-  wire payload with a negative property index (bypassing the normal `Encode()` path, which could
-  never produce one) and asserting `DecodeAnnounce` throws cleanly.
-  **Verified the bug is real, not theoretical:** reverted the fix and ran the new test directly —
-  confirmed a real, immediate **segmentation fault (exit code 139)**, not just a benign no-op UB;
-  restored the fix and reran — passes, full suite 3233/3235 (2 expected skips), no regressions.
+- **`Achievement::GetPicture()`** currently always throws `System::NotImplementedException`
+  (`src/Microsoft/Xna/Framework/GamerServices/Achievement.cpp:51`). Real Xbox 360 achievement
+  artwork was streamed from Xbox LIVE and is permanently unavailable, same reasoning as the
+  Avatar real-rendering doc's own justification for why faithful XNA Avatar rendering is a no-op.
+  **Default: keep throwing, matching genuine platform unavailability — not a bug.** Documented
+  explicitly in Phase 4 rather than silently left alone.
+- **Achievement/leaderboard disk persistence format/location**: no format was specified.
+  **Default: a small local JSON file under the same user-data-directory convention this repo
+  already uses elsewhere** (see Phase 4 for the concrete path once located).
+- **Host migration's new-host selection rule**: no rule was specified. **Default: deterministic
+  lowest-wire-id remaining gamer becomes the new host** — simplest deterministic rule, matches
+  the "simple" qualifier in the user's decision.
 
-- [x] **Task 1.2** — Fix unbounded-allocation DoS via a huge positive property index in the same
-  `ReadProperties` path (`NetDiscoveryProtocol.cpp`). A crafted `index` near `INT32_MAX` makes the
-  pre-extend `while (count <= index)` loop call `Add()`/`push_back` up to ~2 billion times — a
-  multi-second hang or OOM.
-  **Fixed:** added `constexpr int32_t kMaxPropertyIndex = 256;` (a generous-but-safe ceiling — no
-  real game session plausibly has anywhere near this many custom properties) and a second guard
-  rejecting `index >= kMaxPropertyIndex`, right alongside Task 1.1's negative-index guard. Added
-  `NetDiscoveryProtocolTest.DecodeAnnounceRejectsHugePropertyIndex` feeding `INT32_MAX - 1`.
-  **Verified the bug is real, not theoretical:** reverted just the upper-bound guard and ran the
-  new test under an 8-second `timeout` — confirmed it genuinely hangs (exit code 124, killed by
-  the timeout, not a benign no-op); restored the fix and reran — completes instantly, full suite
-  3234/3236 (2 expected skips), no regressions.
+## F1 Help Overlay — Default Text (verbatim, per decision 5a)
 
-- [x] **Task 1.3** — Fix the dangling-pointer bug in `ENetDiscoveryService::FindSessions` that
-  corrupts memory on the *next* poll after any exception mid-search. Confirmed
-  (`src/CNA/Internal/Net/ENetDiscoveryService.cpp`, around lines 246/260): `currentResults_ = &results`
-  (a stack-local `std::vector` inside `FindSessions`) is set before the poll loop and only reset to
-  `nullptr` *after* the loop completes normally. If `PollOnce → HandleReceived → NetDiscoveryProtocol::DecodeAnnounce`
-  throws mid-loop (e.g. from the very bugs in Tasks 1.1/1.2, or any other malformed packet), the
-  exception unwinds past the `nullptr` reset, leaving `currentResults_` pointing at destroyed stack
-  storage. The *next* `Poll()` call (invoked from every `NetworkSession::Update()`) then writes
-  through the dangling pointer via `currentResults_->push_back(...)`.
-  **Fixed** with a private `CurrentResultsGuard` RAII class whose destructor resets
-  `currentResults_` to `nullptr` unconditionally — runs during exception unwinding too, unlike the
-  old plain post-loop assignment.
-  **Added `ENetDiscoveryServiceTest.MalformedAnnounceDuringSearchDoesNotLeaveADanglingResultsPointer`**
-  (POSIX-only, guarded out on `_WIN32`/`__EMSCRIPTEN__` since it needs a raw UDP socket to simulate
-  an external, untrusted sender): sends a hand-crafted malformed Announce datagram (negative
-  property index, bypassing `Encode()` entirely) directly to the discovery port before
-  `FindSessions()` even starts; confirms `FindSessions()` throws while processing it (Task 1.1's
-  guard); then sends a second, well-formed announce and pumps real `NetworkSession::Update()`
-  calls (exercising the exact production path that drives `Poll()` independent of any
-  `FindSessions()` call in flight) — if `currentResults_` were still dangling, this would write
-  through it right now; finally confirms a completely fresh `FindSessions()` call still finds the
-  real host correctly.
-  **Verified the bug is real and reliably reproducible, not theoretical**: reverted just this
-  fix (back to the old plain assignment) and ran the new test 5 times in a row — **5/5 produced an
-  immediate, consistent segmentation fault (exit code 139)**; restored the fix and reran 3 times —
-  3/3 clean passes, no flakiness either direction. Full suite: 3235/3237 passing (2 expected
-  accelerometer/gyroscope skips).
+```text
+CNA Avatar Demo Help
 
-- [x] **Task 1.4** — Add exception handling around all `Decode*` calls in
-  `ENetBackend::HandleReceive` and `ENetDiscoveryService::HandleReceived` so a single malformed
-  packet from any connected peer (`ENetBackend.cpp`, `HandleReceive`, ~lines 356-387) or any LAN
-  device (`ENetDiscoveryService.cpp`, `HandleReceived`, ~lines 117-163) cannot crash the entire
-  host process. Confirmed: neither file had a single `try`/`catch` anywhere
-  (`grep -n "try\|catch" src/CNA/Internal/Net/*.cpp` returned zero hits), and `BinaryReader::ReadBytes`/`ReadString`
-  throw `std::runtime_error` on underflow, which propagated all the way up through
-  `NetworkSession::Update()` into the caller's own game loop — a real, unauthenticated, remote
-  denial-of-service against any game built on this framework (LAN discovery is unauthenticated
-  broadcast UDP; connected-channel traffic requires no special payload validation either). Also
-  fixed the packet leak in the same code path: when an exception fired inside `PumpSession`,
-  `enet_packet_destroy(evt.packet)` (~line 448) was skipped.
-  **Fixed:** wrapped the whole decode/dispatch `switch` in both `HandleReceive` (`ENetBackend.cpp`)
-  and `HandleReceived` (`ENetDiscoveryService.cpp`) in `try { ... } catch (const std::exception&) { }`
-  — a malformed/truncated packet is now silently dropped instead of throwing out. In
-  `ENetBackend::PumpSession`, replaced the plain post-call `enet_packet_destroy(evt.packet)` with a
-  `ReceivedPacketGuard` RAII type so the destroy always runs, defense-in-depth alongside the
-  try/catch (matching Task 1.3's RAII precedent).
-  **Note:** this changes previously-observed behavior from Task 1.3 — before this task,
-  `ENetDiscoveryService::FindSessions()` propagated a malformed packet's decode exception all the
-  way out to the caller (that was the exact mechanism Task 1.3's regression test relied on to
-  reach the dangling-pointer scenario); after this task, `HandleReceived` catches it internally, so
-  `FindSessions()` no longer throws for a malformed packet at all — it silently ignores it and
-  keeps searching. Updated Task 1.3's test accordingly (renamed
-  `MalformedAnnounceDuringSearchDoesNotLeaveADanglingResultsPointer` →
-  `MalformedAnnounceDuringSearchIsIgnoredAndDoesNotLeaveADanglingResultsPointer`, asserting
-  `EXPECT_NO_THROW` + the real host is still found within the same call, plus a second fresh call
-  to confirm no lingering corruption) — Task 1.3's `CurrentResultsGuard` fix itself is unchanged and
-  kept as defense-in-depth.
-  **Added tests:**
-  `ENetDiscoveryServiceTest.PollIgnoresMalformedAnnounceWhileIdlingAndDiscoveryKeepsWorking`
-  (malformed announce arriving via the passive `Poll()`/`Update()` path, with no `FindSessions()` in
-  flight, doesn't crash and discovery still works afterward) and
-  `ENetBackendTest.HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward` (a connected
-  peer sends a 1-byte truncated `ClientHello` — just the tag byte — confirming `Update()` never
-  throws, then a second, real client connects and completes a normal `ClientHello`/`ServerWelcome`
-  handshake, proving the host keeps functioning fully afterward, not just "didn't crash").
-  **Verified the bug is real, not theoretical:** temporarily reverted just the two `.cpp` fixes
-  (`git stash push` on the two source files only, keeping the new tests) and reran the 3 new/updated
-  tests 3 times — **consistent failures every run**: `HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward`
-  failed with `Update() throws std::runtime_error("Unexpected end of stream.")`, and
-  `MalformedAnnounceDuringSearchIsIgnoredAndDoesNotLeaveADanglingResultsPointer` failed with
-  `FindSessions() throws std::runtime_error("NetDiscoveryProtocol: negative property index")` —
-  exactly the described propagation-out-of-`Update()`/`FindSessions()` DoS, not benign. Restored the
-  fix (`git stash pop`) and reran — all pass; full suite: **3237/3239 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions.
+F1: Show/hide this help
+Esc: Quit
+Space: Next animation
+Left/Right: Rotate camera
 
-- [x] **Task 1.5** — Fix `ReplyToQuery` never actually decoding the incoming `Query` message.
-  Confirmed (`ENetDiscoveryService.cpp`, `HandleReceived`, ~lines 117-167): on a `Query`-tagged
-  datagram, `ReplyToQuery` was called directly without ever calling `NetDiscoveryProtocol::DecodeQuery`
-  — `SessionTypeFilter` was written by clients but completely ignored server-side, so a registered
-  host replied to *any* `Query` datagram regardless of the claimed filter.
-  **Fixed:** `HandleReceived`'s `Query` case now calls `NetDiscoveryProtocol::DecodeQuery(data)` and
-  passes the result into `ReplyToQuery`, which early-returns (no reply sent) if
-  `query.SessionTypeFilter != registeredHost_->getSessionTypeProperty()`.
-  **Added `ENetDiscoveryServiceTest.ReplyToQueryOnlyAnswersWhenSessionTypeFilterMatchesTheHost`**:
-  since the public `FindSessions()` itself early-returns `{}` for any non-`SystemLink` filter before
-  sending anything on the wire (so it can't exercise this path), the test talks to the discovery
-  port directly with its own raw UDP socket — exactly as an external process using a different
-  `NetworkSessionType` would. Sends a `Query` with `SessionTypeFilter = PlayerMatch` against a
-  `SystemLink` host and confirms, over a 300ms window of real `Update()` pumping, no reply ever
-  arrives; then sends a second `Query` on the same socket with a matching `SystemLink` filter and
-  confirms a reply *does* arrive — a sanity check proving the first assertion reflects the actual
-  filter check, not a test harness that could never observe a reply either way.
-  **Verified the bug is real, not theoretical:** temporarily reverted just this fix (`git stash`)
-  and reran the new test — failed with `gotReply` unexpectedly `true` (the host answered the
-  mismatched-filter query); restored the fix and reran — passes. Full suite: **3238/3240 passing**
-  (2 expected accelerometer/gyroscope skips), no regressions.
+Command line:
+--gender male|female
+--wardrobe-hair Cap|Ponytail
 
-- [x] **Task 1.6** — Validate the discovery protocol version field is actually checked. Confirmed
-  (`NetDiscoveryProtocol.hpp`, `kDiscoveryProtocolVersion`): the version was written on the wire by
-  `DecodeQuery`/`DecodeAnnounce` but never compared against the expected value — entirely
-  decorative.
-  **Fixed:** added a `ValidateProtocolVersion(uint8_t)` helper in `NetDiscoveryProtocol.cpp`
-  (throws `std::runtime_error` on a mismatch vs `kDiscoveryProtocolVersion`), called immediately
-  after reading `ProtocolVersion` in both `DecodeQuery` and `DecodeAnnounce`, before any
-  version-format-dependent field is parsed.
-  **Added** `NetDiscoveryProtocolTest.DecodeQueryRejectsMismatchedProtocolVersion` and
-  `NetDiscoveryProtocolTest.DecodeAnnounceRejectsMismatchedProtocolVersion`: since `Encode()` never
-  validates `ProtocolVersion` either, both tests just set `message.ProtocolVersion = kDiscoveryProtocolVersion + 1`
-  on an otherwise well-formed message and encode it normally — simulating a genuinely different
-  protocol version (e.g. a differently-built peer) rather than a hand-crafted malformed payload —
-  and assert `Decode*` throws.
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran both new tests —
-  both failed with "throws nothing" (the mismatched version was silently accepted and the rest of
-  the payload parsed as current-format); restored the fix and reran — both pass. Full suite:
-  **3240/3242 passing** (2 expected accelerometer/gyroscope skips), no regressions.
+This demo uses CNA real avatar rendering extensions.
+XNA-compatible AvatarRenderer.Draw remains a no-op on Windows-like platforms.
+```
+
+Per-demo controls differ (not every demo has `--gender`/`--wardrobe-hair` or the same camera
+scheme) — Phase 2 covers adapting this text per-demo where the literal command-line/control
+lines don't apply, while keeping the header/F1/Esc lines consistent across all of them.
 
 ---
 
-**Phase 1 complete** — all 6 critical Net security/memory-safety bugs (Tasks 1.1-1.6) fixed,
-tested, and verified via revert-verify-restore. Continuing to Phase 2 (Net correctness bugs).
+## Phase 0 — Safety, archive, inventory (this phase)
+
+- [x] `git status --short` at start: clean tree, branch `feature/net`.
+- [x] Renamed `plan_net.md` → `plan_net_20260707.md` (target name did not already exist, no
+  backup needed).
+- [x] Created this fresh `plan_net.md`.
+- [x] Inventoried all public headers/src/tests in `Net`, `GamerServices`, `CNA::Internal::Net`
+  (full file lists gathered; omitted here as pure listings — see `git ls-files` for the
+  authoritative live list, this plan cites specific files/lines per task instead).
+- [x] Grepped `TODO|FIXME|NotImplementedException|NotSupportedException|no-op|placeholder|stub`
+  across all of the above — results folded into the phase tasks below with file:line citations.
+- [x] Investigated the sibling `mesh-craft` repo (`/rv/data/development/github.com/openeggbert/mesh-craft`):
+  a C++23 constructive-scene editor (`.mc3.xml` format — primitives, CSG via Manifold, groups,
+  materials, animation *channels* but **no skeletal/bone-weight concept**) with a CLI exporter
+  `mc3togltf` (`.mc3.xml` → `.gltf`/`.glb`) and a scene-generation system prompt (`gen.md`)
+  suited to scripted/procedural authoring. It has no rigging concept, so it can only replace the
+  **shape** stage of avatar asset generation (bodies, heads, and per user's answer potentially
+  other props), not skeleton binding/skinning/animation — those stay in the existing
+  `tools/avatar_builder/` Blender pipeline (`generate_skeleton.py`, `generate_morphs.py`,
+  `generate_animations.py`). See Phase 7 for the concrete integration plan.
 
 ---
 
-## Phase 2 — Net: Correctness Bugs
+## Phase 1 — API surface parity audit (light-touch this pass)
 
-- [x] **Task 2.1** — Fix `NetworkSession`'s event dispatch always passing `nullptr` as `sender`
-  instead of the session itself. Confirmed: `GamerJoined.Raise(nullptr,...)` /
-  `GamerLeft.Raise(nullptr,...)` / `HostChanged.Raise(nullptr,...)` / `GameStarted.Raise(nullptr,...)` /
-  `GameEnded.Raise(nullptr,...)` / `SessionEnded.Raise(nullptr,...)` (`NetworkSession.cpp`, ~lines
-  294-317), and the `GamerJoined.SetReplayHook` closure also invoked `handler(nullptr, ...)`. Root
-  cause: `NetworkSession` didn't inherit `System::Object`, so there was no `this`-as-`Object*` to
-  pass. Any game code reading the `sender` parameter of a `NetworkSession` event handler got
-  `nullptr` always, unlike real XNA where `sender` is the raising `NetworkSession` instance.
-  **Fixed:** `NetworkSession` now inherits `System::Object` (alongside its existing
-  `System::IDisposable`), with a `NOXNA GetTypeName()` override returning
-  `"Microsoft.Xna.Framework.Net.NetworkSession"` per `CHECKLIST.md`'s convention; every `Raise(nullptr, ...)`
-  call site and the `GamerJoined.SetReplayHook` closure's `handler(nullptr, ...)` now pass `this`.
-  **Extended two existing tests** with a captured `sender` and an assertion it equals the session:
-  `GamerJoinedReplaysImmediatelyOnSubscriptionForConstructionTimeGamers` (`GamerJoined`) and
-  `RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPrevious` (`GamerLeft`).
-  **Verified the bug is real, not theoretical** — and more strongly than the usual runtime
-  revert-check: reverting just the `NetworkSession.hpp`/`.cpp` fix (keeping the updated tests) makes
-  the test file **fail to compile**, not just fail at runtime — `error: comparison between distinct
-  pointer types 'System::Object*' and 'Microsoft::Xna::Framework::Net::NetworkSession*' lacks a
-  cast` on the `EXPECT_EQ(observedSender, session)` line, since old `NetworkSession` had no
-  relationship to `System::Object` at all for the compiler to even attempt the comparison. Restored
-  the fix — compiles and passes again. Full suite: **3240/3242 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions.
+The prior pass (`plan_net_20260707.md`) already did a full line-by-line FNA-ABI audit across all
+132 tasks. This phase is a targeted re-check of anything the Xbox-360-reference decision (1a)
+might change, plus the two concrete gaps found during Phase 0's grep sweep that are genuinely
+new observations, not already-covered ground.
 
-- [x] **Task 2.2** — Fix `NetworkSession::RemoveGamer` never removing a departing gamer from
-  `localGamers_`. Confirmed (`NetworkSession.cpp`, ~lines 407-446): `isLocal` is computed by
-  scanning `localGamers_`, and the gamer is removed from `remoteGamers_`/`allGamers_` and added to
-  `previousGamers_` — but `localGamers_.Remove(gamer)` was never called. Reachable in production via
-  `ENetBackend.cpp`'s `RemoveGamer(locals[0], HostEndedSession)` call (~line 299). This broke the
-  `AllGamers == LocalGamers ∪ RemoteGamers` invariant: a removed local gamer kept appearing in
-  `getLocalGamersProperty()` forever.
-  **Fixed:** added `if (isLocal) { localGamers_.Remove(static_cast<LocalNetworkGamer*>(gamer)); }`
-  right alongside the existing `remoteGamers_`/`allGamers_` removal.
-  **Extended** `RemoveGamerOnLocalGamerRaisesSessionEndedWithReason` (already exercised
-  `RemoveGamer` on a local gamer) with assertions that `getLocalGamersProperty()` and
-  `getAllGamersProperty()` both drop to 0 and `getPreviousGamersProperty()` gains the removed
-  gamer.
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with
-  `getLocalGamersProperty().getCountProperty()` still `1` (expected `0`) — the removed local gamer
-  really did keep appearing forever. Restored the fix and reran — passes. Full suite:
-  **3240/3242 passing** (2 expected accelerometer/gyroscope skips), no regressions.
+- [ ] **Task 1.1** — Re-read `docs/xna-4-api-coverage.md` end to end and fix the now-stale
+  sections found during Phase 0's grep (exact lines):
+  - `docs/xna-4-api-coverage.md:43` — `GamerServices` row says "❌ (not in FNA) ⚠️ Stub – Guide
+    only" — false; GamerServices now has Achievements, Avatar (full real-rendering extension),
+    Friends, Presence, Leaderboards, Privileges, Profile, SignedInGamer, etc.
+  - `docs/xna-4-api-coverage.md:70` — "FNA itself does not implement GamerServices. CNA has only
+    `Guide` (stub)." — same staleness.
+  - `docs/xna-4-api-coverage.md:267` — "All classes listed in §3 under GamerServices fall here.
+    FNA has no implementation for any of them." — false, most are implemented.
+  - `docs/xna-4-api-coverage.md:271` — describes Avatar rendering as "not part of PC XNA 4.0 and
+    never implemented by FNA" with no mention of CNA's own real-rendering extension
+    (`docs/avatar-real-rendering-ext.md`) — needs a cross-reference added.
+  - `docs/xna-4-api-coverage.md:285` — "`Microsoft.Xna.Framework.Net` ... **Intentionally
+    excluded from CNA.**" — false; Net is extensively implemented (24 headers, ENet-backed real
+    transport, 132 tasks of hardening in the prior pass).
+  - `docs/xna-4-api-coverage.md:411` — coverage table row `Framework.Net | 0% | ... intentionally
+    excluded` — needs a real coverage percentage and a "see Net/GamerServices/Avatar sections"
+    pointer instead.
+  - `docs/xna-4-api-coverage.md:451-453` — `GamerServicesComponent`/`GamerServicesNotAvailableException`
+    still marked "stub" — verify current state and correct if outdated.
+  - `docs/xna-4-api-coverage.md:473` — "Xbox Live Networking ... — Xbox Live exclusive" under
+    what reads as a won't-implement list — needs correcting or removing.
+  This task folds into Phase 8 (docs cleanup) execution-wise but is scoped here first since it's
+  pure investigation, not a code change.
 
-- [x] **Task 2.3** — Fix `NetworkSession::AddLocalGamer` never raising `GamerJoined`. Confirmed:
-  `AddLocalGamer` only did `localGamers_.Add(adding); allGamers_.Add(adding);` with no event
-  enqueue, unlike `AddRemoteGamer` (~lines 396-405), which explicitly enqueues a
-  `NetworkEventType::GamerJoin` event. Same class of bug as the earlier-fixed Task 12.3
-  (`GamerJoined` replay-on-subscribe), but for a still-broken code path: a handler already
-  subscribed before `AddLocalGamer` ran never learned about the newly-added local gamer at all (no
-  replay, no queue).
-  **Fixed:** `AddLocalGamer` now enqueues a `NetworkEventType::GamerJoin` event for the newly-added
-  gamer, the same way `AddRemoteGamer` does.
-  **Added `NetworkSessionTest.AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler`.**
-  `AddLocalGamer`'s successful (non-throwing) path had never been exercised at all before this task
-  — every existing fixture using the explicit-local-gamers `Create()`/`JoinInvited()` overloads has
-  zero spare local-gamer capacity by construction (`maxLocalGamers_` == the passed list's exact
-  size), and the `maxLocalGamers`-only overload falls back to the global `Gamer::SignedInGamers`,
-  which defaults to empty in this test binary — an empty list makes the constructor's
-  `host_ = localGamers_[0]` throw, permanently corrupting the process-wide `activeAction_` (a
-  documented "cannot safely be unit-tested" trap, per this file's own NOTE above the
-  Create/BeginCreate/EndCreate family). This test gets spare capacity safely instead: it
-  temporarily installs its own one-gamer global `SignedInGamerCollection` (restored via an RAII
-  guard), then calls `Create(Local, /*maxLocalGamers=*/2, 8)` — only 1 of the 2 slots fills at
-  construction, leaving room for one real `AddLocalGamer` call, whose `GamerJoined` firing (for an
-  already-subscribed handler, after resetting past the construction-time replay) is then asserted.
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with
-  `joinCount` `0` (expected `1`) and `joinedGamer` `nullptr` (expected non-null) — the handler
-  genuinely never learned about the new local gamer. Restored the fix and reran — passes. Full
-  suite: **3241/3243 passing** (2 expected accelerometer/gyroscope skips), no regressions, and no
-  cross-test pollution from the temporary global swap (full `NetworkSessionTest.*` suite — 39 tests
-  — reruns clean).
+- [ ] **Task 1.2** — `NetworkMachine::RemoveFromSession` (`src/Microsoft/Xna/Framework/Net/NetworkMachine.cpp:25`)
+  always throws `System::NotImplementedException`, matching FNA's own stub
+  (`NetworkMachine.hpp:26`). Confirm this is still correct under the Xbox-360-reference decision
+  (i.e. real Xbox 360 XNA's `NetworkMachine.RemoveFromSession` was *also* never implemented, not
+  just FNA's port of it — check FNA's own source comments/XNA docs for evidence one way or the
+  other). If confirmed genuinely unimplemented on real Xbox 360 too, leave as-is but add an
+  explicit test locking in the throw (grep found no dedicated test for this method — verify and
+  add one if missing). If evidence suggests real Xbox 360 behavior differs, flag for a follow-up
+  task rather than guessing an implementation.
 
-- [x] **Task 2.4** — Fix the local-gamer `Id`-collision bug after remove-then-add churn. Confirmed:
-  `NetworkSession`'s constructor assigned sequential local-placeholder ids (a local `nextLocalId`
-  starting at 0), but `AddLocalGamer` derived its new gamer's id from the *live*
-  `allGamers_.getCountProperty()` at the time of the call. Since `RemoveGamer` shrinks that count
-  (once Task 2.2 fixed it to prune `localGamers_` too — before that fix this bug was actually
-  unreachable, since `localGamers_`'s count never shrank either), a remove-then-add sequence could
-  hand out a colliding `Id` — e.g. 3 gamers join with ids 0,1,2; gamer 1 leaves (count now 2);
-  calling `AddLocalGamer` again assigned the new gamer id `2` too, colliding with the still-present
-  gamer that already owns id 2 — corrupting `FindGamerById`.
-  **Fixed:** added a `NOXNA SharpRuntime::bytecs nextLocalGamerId_{0};` member — a real monotonic
-  counter, never derived from any live collection's size — used consistently by both the
-  constructor's initial-gamer loop and `AddLocalGamer`.
-  **Added `NetworkSessionTest.RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision`**: 3 initial
-  local gamers (ids 0,1,2, via a temporary global `SignedInGamerCollection` swap, same RAII
-  technique as Task 2.3's test), remove the middle one (id 1), add a new one, and assert the new
-  gamer gets id 3 (not a collision with id 2) and `FindGamerById` resolves every remaining/new
-  gamer to the correct, distinct instance.
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed exactly
-  as predicted: `newGamer->getIdProperty()` was `2` (colliding with `local2`), and
-  `FindGamerById(3)` returned `nullptr` instead of the new gamer. Restored the fix and reran —
-  passes. Full suite: **3242/3244 passing** (2 expected accelerometer/gyroscope skips), no
-  regressions.
-
-- [x] **Task 2.5** — Add capacity enforcement to `NetworkSession::AddRemoteGamer` against
-  `MaxGamers`. Confirmed (`NetworkSession.cpp`, ~lines 396-405): `AddRemoteGamer` unconditionally
-  added any remote gamer regardless of `maxGamers_`, silently violating the documented "maximum
-  players allowed" contract. No FNA equivalent exists to match — `AddRemoteGamer` is a CNA-internal
-  `NOXNA` extension (real FNA's networking is entirely stubbed out) — so the decision was a
-  sensible design choice, not a fidelity fix.
-  **Fixed:** added `if (allGamers_.getCountProperty() >= maxGamers_) { throw System::InvalidOperationException("Session is full!"); }`
-  at the top of `AddRemoteGamer`, for symmetry with `AddLocalGamer`'s existing max-limit guard.
-  **Added `NetworkSessionTest.AddRemoteGamerThrowsWhenSessionIsAlreadyAtMaxGamers`**: `Create()`
-  hardcodes `MaxGamers` to 69 regardless of the caller's argument (a real, preserved FNA quirk — see
-  `EndCreate`'s own comment), so the test uses the existing public `setMaxGamersProperty` setter
-  directly to force the host's own local gamer to already fill the only slot, then asserts
-  `AddRemoteGamer` throws and neither `RemoteGamers` nor `AllGamers` grow.
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with "throws
-  nothing" and both counts incrementing past capacity. Restored the fix and reran — passes. Full
-  suite: **3243/3245 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 2.6** — Investigate and either implement or explicitly document-as-unsupported real
-  host migration. Confirmed dead/unwired end-to-end: `AllowHostMigration`'s setter
-  (`NetworkSession.cpp`, ~lines 185-186) is plain storage never read anywhere in `ENetBackend.cpp`;
-  `NetworkEventType::HostChange` is never enqueued anywhere in the repo; `ENetBackend::HandleDisconnect`
-  (~lines 288-303) unconditionally ends the session the instant the host peer disconnects, with no
-  election logic at all; the wire tag `0x05` reserved for `HostChangeBroadcast` in
-  `NetPacketCodec.hpp` (~line 31) is explicitly commented "not implemented"; `NetworkGamer::IsHost`
-  is never recomputed on any migration event.
-  **Decision: (b), document as unsupported** — checked the FNA reference: `AllowHostMigration` is
-  itself just a plain C# auto-property in FNA with zero real migration logic anywhere in FNA's
-  entirely-stubbed networking layer, so there is no real FNA behavior to implement parity with
-  here; a `NotSupportedException`-on-`true` guard would actually be a *divergence* from FNA (which
-  accepts the value freely), not a fidelity fix. Instead documented the true current behavior
-  honestly in both the getter's and setter's Doxygen comments: the flag is stored but has no effect
-  — `ENetBackend::HandleDisconnect` unconditionally ends the session regardless of its value.
-  **Extended** `ENetBackendTest.ClientRaisesSessionEndedOnHostDisconnect` with
-  `client.session->setAllowHostMigrationProperty(true)` before the host disconnects, proving the
-  session still ends immediately (not masked/skipped) even with migration nominally "allowed" —
-  so a future reader can't be misled into thinking this silently works.
-  **No behavior change** — this task is documentation + a regression test proving already-existing,
-  unchanged behavior, so there is no fix to revert-verify. Full suite: **3243/3245 passing** (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 2.7** — Enforce `AllowJoinInProgress` in `ENetBackend::HandleClientHello`. Confirmed
-  (`ENetBackend.cpp`, ~lines 132-177): incoming `ClientHello` was unconditionally accepted
-  regardless of `sessionState_`/`AllowJoinInProgress` — a host with `AllowJoinInProgress = false`
-  (the default once hosting) still silently accepted new players mid-`Playing` state.
-  **Fixed:** added a guard at the top of `HandleClientHello` — if
-  `getSessionStateProperty() == NetworkSessionState::Playing && !getAllowJoinInProgressProperty()`,
-  disconnect the peer outright (`state.Host.Disconnect(peer, 0)`) and return, instead of processing
-  the hello. Disconnecting rather than silently dropping the datagram avoids leaving the connecting
-  client hanging forever waiting for a `ServerWelcome` that will never arrive.
-  **Added `ENetBackendTest.HostRejectsClientHelloWhenPlayingAndJoinInProgressDisallowed`**: hosts a
-  session, calls `StartGame()` to reach `Playing` (confirming `AllowJoinInProgress` defaults to
-  `false`), connects a fake client and sends a `ClientHello`, and asserts the peer receives a
-  `DISCONNECT` event and `AllGamers` never grows past the host's own local gamer.
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran (3x, all
-  consistent) — failed with `disconnected == false` and `AllGamers` count `2` (the late joiner was
-  silently accepted). Restored the fix and reran (3x) — passes every time. Full suite:
-  **3244/3246 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 2.8** — Fix `LocalNetworkGamer::ReceiveData(vector&, int offset, sender)` writing past
-  the end of the caller's buffer. Confirmed (`LocalNetworkGamer.cpp`, ~lines 44-47):
-  `int len = std::min(packet.size(), data.size());` ignored `offset` entirely, then
-  `std::copy(packet.begin(), packet.begin()+len, data.begin()+offset)` — concrete repro:
-  `data.size()==10`, `offset==5`, incoming packet `size()==8` → `len=min(8,10)=8` → writes
-  `data[5..13)`, 3 elements past the end of a 10-element buffer (undefined behavior).
-  **Refined the plan's own originally-suggested fix after checking the FNA reference directly**:
-  FNA's real `ReceiveData` computes `len` the *exact same offset-oblivious way*
-  (`Math.Min(packet.Length, data.Length)`), then calls `Array.Copy(packet, 0, data, offset, len)` —
-  and .NET's `Array.Copy` validates `offset + len` against the destination length and throws
-  `ArgumentException` on overflow. So clamping `len` to `data.size() - offset` (this task's
-  originally-written suggestion) would have been a *new* divergence from FNA — silently succeeding
-  with a smaller length where real FNA throws. The faithful fix preserves FNA's exact `len`
-  computation and instead validates the copy bounds before performing it, throwing to match
-  `Array.Copy`'s real behavior.
-  **Fixed:** added `if (offset < 0 || offset + len > static_cast<int>(data.size())) { throw System::ArgumentException("offset"); }`
-  right before the `std::copy` call — after the packet is already popped from the queue, matching
-  FNA's own `Dequeue()`-before-`Array.Copy` ordering (the packet is consumed either way).
-  **Added `LocalNetworkGamerTest.ReceiveDataWithOffsetThrowsInsteadOfWritingPastBufferEnd`**
-  (`tests/.../NetworkSessionTests.cpp`, where the existing `LocalNetworkGamerTest` suite already
-  lives): enqueues a real packet directly via the `NOXNA` `EnqueuePacket` helper (no full ENet
-  round-trip needed) and calls `ReceiveData` with an offset that would overflow a 10-element
-  buffer, asserting `System::ArgumentException`.
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with
-  "throws nothing" (the missing validation meant no exception occurred, though this particular
-  heap layout happened not to crash outright — ASan is not currently configured in this repo's
-  CMake setup, so the exception-based assertion is the direct, deterministic proof rather than a
-  sanitizer trap). Restored the fix and reran — passes. Full suite: **3245/3247 passing** (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 2.9** — Add bounds validation to both `LocalNetworkGamer::SendData(offset, count,
-  ...)` overloads. Confirmed (`LocalNetworkGamer.cpp`, ~lines 96-98, 116-118):
-  `std::vector<bytecs> mem(data.begin()+offset, data.begin()+offset+count)` with no check that
-  `offset + count <= data.size()` — undefined behavior (an out-of-bounds *read* this time, unlike
-  Task 2.8's out-of-bounds write) where FNA's own `Array.Copy(data, offset, mem, 0, mem.Length)`
-  throws for the equivalent misuse.
-  **Fixed:** added `if (offset < 0 || count < 0 || offset + count > static_cast<int>(data.size())) { throw System::ArgumentException("offset"); }`
-  to both the plain and `recipient`-taking `SendData(offset, count, ...)` overloads, before
-  constructing `mem`.
-  **Added `LocalNetworkGamerTest.SendDataThrowsWhenOffsetPlusCountExceedsBuffer`** and
-  **`SendDataToRecipientThrowsWhenOffsetPlusCountExceedsBuffer`**, both feeding `offset=3, count=4`
-  against a 5-element buffer (3+4=7 > 5) and asserting `System::ArgumentException`.
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran both new tests —
-  both failed with "throws nothing" (same class of silent, unproven UB as Task 2.8 — ASan isn't
-  configured in this repo, so this out-of-bounds *read* happened not to crash outright either, but
-  the missing validation is definitively confirmed). Restored the fix and reran — both pass. Full
-  suite: **3247/3249 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 2.10** — Fix `NetworkSessionProperties`'s non-const `operator[]` silently
-  auto-appending on out-of-range *reads*, not just writes. Confirmed: the non-const `operator[]`
-  unconditionally does `if (index >= size()) { push_back(nullopt); return back(); }` — since C++
-  can't distinguish get-intent from set-intent through a plain `operator[]`, *any* out-of-range
-  access through a mutable reference (including a bare read with no assignment) silently grows the
-  list instead of throwing like FNA's getter always does. Only the const accessor (using `.at()`)
-  throws correctly.
-  **Investigated the proxy-object fix and found it's not viable here**: `NetworkSessionProperties::operator[]`
-  (non-const) `override`s a *pure virtual* `IList<T>::operator[]` (`sharp-runtime`'s
-  `System::Collections::Generic::IList<T>`) with a fixed `T& operator[](intcs) = 0` signature — a
-  proxy return type isn't a valid covariant override of `T&`, and changing `IList<T>`'s own
-  interface signature would ripple through every `IList<T>` implementer in the codebase, far
-  beyond this task's scope. Real XNA's C# indexer can split `get`/`set` because C# indexers are
-  full accessor pairs, not a single operator overload — this is a genuine C++/interface-fidelity
-  constraint, not a CNA oversight.
-  **Fixed via documentation instead** (matching Task 2.6's precedent): added a detailed doc-comment
-  on the non-const `operator[]` explaining exactly why this divergence exists, that it's
-  structural (not fixable without breaking `IList<T>` interface-wide), and that callers needing
-  strict bounds-checked reads should go through a `const NetworkSessionProperties&` reference
-  instead (which always resolves to the correctly-throwing const overload).
-  **Added `NetworkSessionPropertiesTest.MutableIndexerBareOutOfRangeReadAlsoAppends`**: a bare
-  read (no assignment) through a non-const reference at an out-of-range index — asserts the list
-  still grows (locking in the documented behavior so a future change can't silently regress it
-  without updating the doc comment) and contrasts it with the const overload correctly throwing
-  `std::out_of_range` for the identical index.
-  **No behavior change** — this task is documentation + a regression test proving already-existing,
-  structurally-unavoidable behavior, so there is no fix to revert-verify. Full suite:
-  **3248/3250 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 2.11** — Fix the wire-id wraparound/collision bug in `ENetBackend`'s
-  `SessionState::NextWireId`. Confirmed: `NextWireId` is a `uint8_t` (`ENetBackend.cpp`, ~line 50),
-  incremented via `state.NextWireId++` in `AssignWireId` and never reclaimed/decremented on a
-  gamer leaving. A long-running lobby with churn (not 256 *simultaneous* gamers, just 256
-  cumulative joins over the session's life) would silently reassign an in-use wire id, corrupting
-  `HandleAppData`'s wire-id-based routing for whichever gamer previously owned that id.
-  **Fixed:** added `std::vector<uint8_t> FreeWireIds;` to `SessionState`; `AssignWireId` now pops
-  from it before ever incrementing `NextWireId`; `HandleDisconnect`'s existing per-departing-gamer
-  cleanup loop now also pushes the freed id back onto `FreeWireIds` right alongside its existing
-  `GamerToWireId`/`WireIdToGamer`/`WireIdToPeer` erasures.
-  **Added `ENetBackendTest.DisconnectedPeerWireIdIsReclaimedAndReusedByTheNextJoiner`**: rather
-  than literally spinning 256+ real ENet connect/disconnect cycles (slow, and it would only
-  demonstrate the wraparound at the very end), this directly proves the fix mechanism — 3
-  sequential connect/`ClientHello`/disconnect cycles, asserting each cycle's assigned wire id
-  equals the previous cycle's (proving reclaim-and-reuse, the actual property that prevents
-  wraparound regardless of how many cumulative join/leave cycles occur — a stronger, more direct
-  test than a slow brute-force 256-iteration loop).
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with
-  ids `1, 2, 3` (ever-incrementing, no reuse) instead of the same id three times. Restored the fix
-  and reran (3x) — passes every time, each cycle completing near-instantly. Full suite:
-  **3249/3251 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 2.12** — Fix list-length wire fields silently truncating past 255 entries. Confirmed
-  pattern in `NetPacketCodec::Encode` (~lines 60, 91, 97, 137, 167): `.size()` was cast down to a
-  single `bytecs` for `LocalGamertags`/`AssignedWireIds`/`ExistingRoster`/`NewGamers`/`WireIds`,
-  while the accompanying loop still serialized the *full*, untruncated collection — if any of these
-  ever exceeded 255 entries, the written count would wrap (e.g. 256→0) while every element was
-  still written, desynchronizing the decoder. Low likelihood given
-  `NetworkSession::MaxSupportedGamers == 31`, but nothing tied the wire format to that invariant.
-  **Fixed:** added an `EncodeCount(std::size_t size, const char* fieldName)` helper (anonymous
-  namespace) that throws `std::runtime_error` if `size` exceeds `bytecs`'s range instead of
-  silently truncating; applied it at all 5 call sites across
-  `Encode(ClientHelloMessage/ServerWelcomeMessage/GamerJoinBroadcastMessage/GamerLeaveBroadcastMessage)`.
-  **Added 5 tests** (one per field): `ClientHelloEncodeThrowsWhenLocalGamertagsExceeds255`,
-  `ServerWelcomeEncodeThrowsWhenAssignedWireIdsExceeds255`,
-  `ServerWelcomeEncodeThrowsWhenExistingRosterExceeds255`,
-  `GamerJoinBroadcastEncodeThrowsWhenNewGamersExceeds255`,
-  `GamerLeaveBroadcastEncodeThrowsWhenWireIdsExceeds255` — each builds a 256-element collection and
-  asserts `Encode()` throws instead of silently wrapping.
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran all 5 — all
-  failed with "throws nothing" (confirming the old code really did accept and silently truncate
-  oversized collections). Restored the fix and reran — all 5 pass. Full suite:
-  **3254/3256 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 2.13** — Fix `SendAppData` silently dropping packets sent before the ENet handshake
-  completes. Confirmed (`ENetBackend.cpp`, ~lines 489-536): a `GamerToWireId` lookup miss did a
-  bare `return;` — a `SendData` call issued immediately after `Join()`/`ConnectToHost()` (before at
-  least one `Update()` call pumps the `ClientHello`/`ServerWelcome` round-trip) was silently
-  discarded with no error, retry, or queuing.
-  **Decision: surface the discard rather than queue-and-flush-once-ready** — a full retry/flush
-  redesign would need to track pending sends across multiple, differently-triggered resolution
-  points (`HandleServerWelcome` for the local sender, `HandleClientHello`/`AddRemoteGamer` for a
-  remote target) with correct ordering; nothing else in this codebase retries a dropped send
-  either, so a much simpler observability fix was chosen for this pass.
-  **Fixed:** added `ENetBackend::GetDroppedAppDataCount()` / `ResetDroppedAppDataCount()` (a
-  process-wide diagnostic counter, `NOXNA`-equivalent — not part of real XNA), incremented at the
-  exact `GamerToWireId` lookup-miss branch. The drop itself is unchanged (still a no-op); it's just
-  no longer totally invisible.
-  **Added `ENetBackendTest.SendAppDataBeforeHandshakeDropsButIsNowObservable`**: connects a client
-  out via `ConnectToHost` and immediately (before any `Update()`) calls `SendData` targeting a
-  `NetworkGamer` the session doesn't officially know about yet — targeting "all gamers" instead
-  (which, this early, resolves to just the sender itself) turned out to take
-  `NetworkSession::Update()`'s purely-local, `ENetBackend`-bypassing delivery path instead of
-  reaching `SendAppData` at all, so an explicit not-yet-known recipient was needed to force the
-  real code path under test. Asserts the counter increments by exactly 1 (delta-based, robust
-  against whatever other tests may have already incremented the process-wide counter).
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran — the test file
-  failed to even **compile** (`'GetDroppedAppDataCount' is not a member of 'CNA::Internal::Net::ENetBackend'`),
-  since the whole point of this fix is a previously-nonexistent API. Restored the fix and reran
-  (3x) — passes every time. Full suite: **3255/3257 passing** (2 expected accelerometer/gyroscope
-  skips), no regressions.
-
-- [x] **Task 2.14** — Add graceful peer disconnect on session teardown. Confirmed:
-  `ENetBackend::TeardownSession` destroyed the ENet host with no prior `enet_peer_disconnect` call
-  for still-connected peers; `ENetHostHandle::Disconnect()` was confirmed never called from
-  production code (only test fixtures used it) — remote peers would wait out ENet's internal
-  timeout instead of receiving an immediate clean disconnect notification.
-  **Fixed:** `TeardownSession` now looks up the session's `SessionState` before erasing it, calls
-  `state.Host.Disconnect(peer, 0)` for every peer in `state.PeerWireIds` (host-side: every peer
-  that completed a handshake) and for `state.HostPeer` if set (client-side: the one peer this
-  session itself connected out to), then `state.Host.Flush()` so the `DISCONNECT` packets actually
-  go out before the host is destroyed.
-  **Added `ENetBackendTest.DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout`**:
-  hosts a session, connects and completes a handshake with a fake client, calls
-  `host.session->Dispose()`, and asserts the fake client observes an `ENET_EVENT_TYPE_DISCONNECT`
-  within a normal, short polling window (not by waiting out a real multi-second-plus ENet
-  timeout, which a unit test can't practically do anyway).
-  **Verified the bug is real, not theoretical:** reverted just this fix and reran — failed with
-  `disconnected == false` (no DISCONNECT event arrived within the polling window). Restored the
-  fix and reran (3x) — passes every time. Full suite: **3256/3258 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 2.15** — Investigate and fix `NetworkSession::Join()`'s real handshake being
-  unreachable from the public API. Confirmed: `BeginJoin`/`EndJoin` hardcoded
-  `NetworkSessionType::PlayerMatch` rather than deriving it from the `AvailableNetworkSession` being
-  joined, and `ENetBackend::RealNetworkingEnabled` only returns `true` for `SystemLink` — so every
-  session produced by the real public `Join()` entry point had real networking permanently
-  *disabled*. Checked the FNA reference: this hardcoding (with an upstream `// FIXME` comment) is
-  genuinely inherited from real FNA, harmless there since FNA's entire networking layer is stubbed
-  out regardless of session type — but a real functional gap in CNA, whose ENet transport is gated
-  specifically on `SystemLink`. Also confirmed a *second*, compounding gap: even with the correct
-  type, nothing in `EndJoin` ever called `ENetBackend::ConnectToHost` — the joined session would
-  start its own ENet host but never actually connect out to the session being joined.
-  **Fixed, in two parts:**
-  1. Added `NetworkSessionType GetSessionType()` to `AvailableNetworkSession` (a new trailing
-     defaulted `NetworkSessionType sessionType = NetworkSessionType::SystemLink` constructor/
-     `CreateInternal` parameter, so every existing call site keeps working unchanged);
-     `ENetDiscoveryService.cpp` now passes `NetworkSessionType::SystemLink` explicitly (the only
-     type `FindSessions()` can ever produce a listing for, since it early-returns `{}` for any
-     other filter before a single byte goes on the wire).
-  2. `BeginJoin` now derives `NetworkSessionType` from `availableSession->GetSessionType()` instead
-     of the hardcoded value, and stashes `GetConnectAddress()`/`GetConnectPort()` in two new
-     `NetworkSession` static members (`pendingJoinAddress_`/`pendingJoinPort_` — a `NetworkSessionAction`
-     field would ripple into `Create`/`Find`/`JoinInvited`'s own call sites for no benefit to them,
-     so these follow the same single-pending-action static pattern as `activeAction_`/`activeSession_`
-     instead). `EndJoin` reads the action's real `SessionType` and, after constructing the session,
-     calls `ENetBackend::ConnectToHost` with the stashed address/port (skipped if empty, e.g. a
-     manually-built `AvailableNetworkSession` with no real discovery-sourced connect info).
-  **Added `NetworkSessionTest.JoinActivatesRealNetworkingForTheCorrectSessionType`**: a real,
-  full-round-trip test of the public `Join()` API (not `ConnectToHost` directly) — installs a
-  one-gamer temporary global (RAII, same technique as Task 2.3/2.4) so `EndJoin`'s
-  fallback-to-global-list constructor path doesn't hit the documented empty-list throw trap, joins
-  a raw fake `ENetHostHandle` host, and confirms: the joined session reports
-  `NetworkSessionType::SystemLink`; it has a real bound ENet port (false under the old
-  hardcoded-`PlayerMatch` bug, since `RealNetworkingEnabled(PlayerMatch)` is false); and — the
-  strongest proof — the fake host actually observes a real `CONNECT` event followed by a decodable
-  `ClientHello` naming the joining gamer, over several pumped `Update()` calls.
-  **Discovered and fixed a real, reproducible double-free while building this test**: the
-  Task 2.3/2.4 global-swap RAII pattern captured `Gamer::getSignedInGamersProperty()`'s return
-  value as "the previous global" and restored it via `setSignedInGamersProperty(previous)` on
-  teardown — but `setSignedInGamersProperty` unconditionally `delete`s whatever it's replacing, so
-  the very first swap already destroyed the object `previous` pointed to; restoring it later
-  handed the global back a dangling pointer, and the *next* test anywhere in the process to touch
-  this global would double-free it. Reproduced deterministically (`double free or corruption (out)`,
-  every run) once this task's test became the next thing in sequence to touch the poisoned global
-  after Tasks 2.3/2.4's tests ran. Fixed all three tests' teardown to install a brand-new empty
-  `SignedInGamerCollection` instead of reusing the captured (and by-then-already-freed) pointer.
-  **Verified the bug is real, not theoretical:** reverted just the 5 source-fix files (keeping the
-  fixed tests) and reran — the test file failed to even **compile**
-  (`no matching function for call to AvailableNetworkSession::CreateInternal(...)`), since the
-  9-argument overload and `GetSessionType()` didn't exist before this fix. Restored the fix and
-  reran — `NetworkSessionTest.*` (42 tests) passes cleanly 3x in a row with no corruption, and the
-  full suite: **3257/3259 passing** (2 expected accelerometer/gyroscope skips), no regressions.
+- [ ] **Task 1.3** — `NetworkSession::BeginCreate(NetworkSessionType, int maxLocalGamers, int
+  maxGamers, AsyncCallback, object)` (the simplest/original 3-arg-plus-callback overload,
+  `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:601-624`) silently ignores its own
+  `maxGamers` parameter and the actually-used private constructor hardcodes `69` instead
+  (`NetworkSession.cpp:697-698`, both comments explicitly say this preserves an FNA
+  upstream quirk/FIXME). Re-verify against real XNA 4.0 documentation (not just FNA's comment)
+  whether real XNA also silently drops this parameter on this exact overload. If yes: leave as
+  faithful, add a regression test locking in the `69`-gamer cap so a future edit can't
+  "accidentally fix" it without noticing. If real XNA actually honors the parameter and this is
+  purely an FNA-introduced bug: this becomes a real fix — forward `maxGamers` instead of `69`,
+  with a test proving the caller's value is honored, and document the deviation from FNA.
 
 ---
 
-**Phase 2 complete** — all 15 Net correctness/gap tasks (Tasks 2.1-2.15) fixed, tested, and
-verified via revert-verify-restore (or documented where a fix wasn't the right call). Continuing
-to Phase 3 (Net memory ownership model).
+## Phase 2 — NetworkSession lifecycle safety (confirmed real bug)
+
+- [ ] **Task 2.1** — `NetworkSession::~NetworkSession()` (`src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:200-203`)
+  only decrements `instanceCount_`. Unlike `Dispose()` (`NetworkSession.cpp:266-282`), the
+  destructor does **not**:
+  - tear down ENet transport state (`CNA::Internal::Net::ENetBackend::TeardownSession`),
+  - clear `ownedGamers_`,
+  - reset the `activeSession_` singleton pointer (`NetworkSession.hpp:883`) to `nullptr`.
+
+  **Confirmed real bug, not theoretical:** if a caller `delete`s a `NetworkSession*` directly
+  (skipping `Dispose()`) — a real risk since `Create`/`Find`/`Join` all return a caller-owned raw
+  pointer per this class's own doc comment (`NetworkSession.hpp:49`) — `activeSession_` is left
+  dangling, pointing at now-freed memory. Every subsequent `BeginCreate`/`BeginFind`/`BeginJoin`
+  call checks `activeAction_ != nullptr || activeSession_ != nullptr` and throws
+  (`NetworkSession.cpp:613,643,669,782,806,868,969,988`) — meaning **no new session can ever be
+  created again for the rest of the process's life** after one mismanaged delete, and any
+  transport resources (ENet host socket, discovery advertisement) leak permanently.
+
+  **Fix:** make the destructor call `Dispose()` if not already disposed (standard C++
+  IDisposable-pattern safety net — `if (!isDisposed_) Dispose();`), matching how other
+  `System::IDisposable` types in this codebase are expected to behave per `CLAUDE.md`'s
+  IDisposable section.
+
+  **Add tests**: (a) delete a session without calling `Dispose()` first, then confirm a *new*
+  session can still be created afterward (`activeSession_` correctly reset); (b) confirm
+  transport teardown actually happened (e.g. a discovery advertisement is no longer found by
+  `FindSessions` after the delete); (c) repeated `Dispose()` calls stay safe (idempotent, already
+  guarded by `isDisposed_` — verify this still holds once the destructor also calls it); (d)
+  creating a new session immediately after a properly-`Dispose()`d one still works (regression
+  guard for the existing, already-correct `Dispose()`-then-recreate path).
+
+  **Verify the bug is real**: revert-verify via the standard `git stash` cycle — write the new
+  "delete without Dispose, then create again" test first, confirm it fails (either hangs/throws
+  because `activeSession_` is stale, or a sanitizer catches the dangling-pointer read) against
+  the current destructor, then apply the fix and confirm it passes.
+
+- [ ] **Task 2.2** — While fixing Task 2.1, audit whether `ENetBackend::TeardownSession` and
+  `ownedGamers_.clear()` are safe to call twice (once from a hypothetical explicit `Dispose()`
+  call, once from the destructor's new safety-net call) — confirm idempotency or guard
+  appropriately. Add a test for "explicit `Dispose()` then the object goes out of scope /
+  destructs" to lock in no double-teardown crash.
 
 ---
 
-## Phase 3 — Net: Memory Ownership Model (cross-cutting)
+## Phase 3 — Guide: real message-box overlay + real keyboard capture
 
-The `Net` namespace currently has no ownership model at all for its heap-allocated objects — every
-class is designed as if a GC were present. This phase is 3 related, cross-cutting leak fixes; a
-single design decision should drive all three (e.g. adopt `std::unique_ptr`/`std::shared_ptr`
-consistently, or introduce a small internal pool/arena with explicit lifetime tied to the owning
-`NetworkSession`, documented clearly either way).
+### Task 3.1 — Guide.BeginShowMessageBox: real CNA overlay
 
-- [x] **Task 3.1** — Fix the permanent leak of every `NetworkGamer`/`LocalNetworkGamer`. Confirmed:
-  `NetworkSession.cpp` and `ENetBackend.cpp` all `new` gamer objects that are only ever stored in
-  `GamerCollection<T>`'s non-owning raw `std::vector<T*>`. Neither `NetworkSession::Dispose()` nor
-  `RemoveGamer` ever `delete`d anything (`grep -rn "delete.*Gamer" src/` returned zero hits). Every
-  join/leave cycle over a session's life permanently leaked at least one object.
-  **Decision:** two separate ownership registries, one per creator, rather than a single unified
-  model — `NetworkSession` creates local gamers (constructor, `AddLocalGamer`) and owns them
-  directly; `ENetBackend` creates remote gamers (`HandleClientHello`/`HandleServerWelcome`/
-  `HandleGamerJoinBroadcast`) and owns those itself. **Critical constraint discovered while
-  implementing this**: `NetworkSession::AddRemoteGamer` could **not** be made to take ownership
-  (the natural-seeming choice, since it's the common funnel all 3 `ENetBackend` creation sites
-  already call) — its established contract, exercised by 3 already-existing tests
-  (`AddRemoteGamerJoinsRostersAndRaisesGamerJoined`, `AddRemoteGamerThrowsWhenSessionIsAlreadyAtMaxGamers`,
-  `RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPrevious`), passes a **stack-allocated**
-  `NetworkGamer` local variable (`&remote`), not a heap one. Wrapping `gamer` in a `unique_ptr`
-  inside `AddRemoteGamer` and freeing it later (or on the capacity-check throw) would `delete`
-  non-heap memory — confirmed by actually trying it and watching those 3 tests crash. Ownership of
-  ENetBackend-created gamers therefore lives in `ENetBackend`'s own `SessionState` instead, freed
-  when that state is torn down (same moment `NetworkSession::Dispose()` frees its own local gamers).
-  **Fixed:**
-  - `NetworkSession`: added `NOXNA std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;`. The
-    constructor and `AddLocalGamer` push into it right alongside `localGamers_`/`allGamers_`.
-    `Dispose()` clears it (after `ENetBackend::TeardownSession`, so `ENetBackend`'s own maps are
-    torn down first and can never end up holding a stale pointer into memory `ownedGamers_` just
-    freed). Declared (but defined out-of-line, in the `.cpp`, where `NetworkGamer.hpp` makes the
-    type complete) `~NetworkSession()`, since a `std::unique_ptr<NetworkGamer>` member can't be
-    destroyed against `NetworkGamer`'s forward declaration in the header.
-  - `ENetBackend`: added `std::vector<std::unique_ptr<NetworkGamer>> OwnedRemoteGamers;` to
-    `SessionState`, populated at all 3 `new NetworkGamer(...)` call sites (before any use, so
-    ownership is captured even if `AddRemoteGamer`'s capacity check subsequently throws), freed
-    automatically when `SessionState` itself is destroyed.
-  - Added `NOXNA` test-only accessors: `NetworkSession::GetOwnedGamerCountForTesting()` and
-    `ENetBackend::GetOwnedRemoteGamerCountForTesting(NetworkSession*)`.
-  **Added `NetworkSessionTest.DisposeFreesEveryGamerTheSessionEverOwned`** (local gamers via
-  constructor + `AddLocalGamer`, using Task 2.3's temporary-global-swap technique for spare
-  capacity) and **`ENetBackendTest.HostFreesOwnedRemoteGamerOnDispose`** (a real remote gamer via a
-  genuine `ClientHello` handshake) — both assert the owned count is non-zero after creation and
-  exactly zero after `Dispose()`.
-  **Verified the bug is real, not theoretical:** reverted the 4 source-fix files (keeping the new
-  tests) and reran — failed to even **compile** (`'GetOwnedGamerCountForTesting' is not a member`,
-  `'GetOwnedRemoteGamerCountForTesting' is not a member`), since these APIs plus the whole
-  ownership registries didn't exist before this fix. Restored the fix and reran — `NetworkSessionTest.*`
-  + `ENetBackendTest.*` combined (63 tests) pass cleanly 3x in a row; full suite:
-  **3259/3261 passing** (2 expected accelerometer/gyroscope skips), no regressions.
+Current state: both overloads (`src/Microsoft/Xna/Framework/GamerServices/Guide.cpp:116-140`)
+unconditionally `throw System::NotSupportedException()`. `EndShowMessageBox` (`Guide.cpp:142`)
+also always throws. No existing SpriteBatch/SpriteFont-based UI helper was found anywhere in the
+codebase to reuse — this needs a small new one.
 
-- [x] **Task 3.2** — Fix the permanent leak of every `NetworkSessionAction` across the `Begin*`/`End*`
-  async family. Confirmed: `new NetworkSessionAction(...)` at every `Begin*`; every `End*`
-  (`EndCreate`, `EndFind`, `EndJoin`, `EndJoinInvited`) only did `activeAction_ = nullptr;` with no
-  prior `delete`.
-  **Fixed:** added `delete activeAction_;` right before the `= nullptr;` reset in all 4 `End*`
-  methods (after any needed fields have already been copied out into locals, matching each
-  method's existing order).
-  **Added an instance counter to `NetworkSessionAction`** (constructor increments, a new
-  out-of-line destructor decrements) and a `GetInstanceCountForTesting()` static accessor —
-  forwarded through a new `NetworkSession::GetActiveActionInstanceCountForTesting()`, since
-  `NetworkSessionAction` itself is a private nested class.
-  **Added `NetworkSessionTest.CreateDoesNotLeakNetworkSessionAction`**: captures the live-instance
-  count before a full `Create()` (`BeginCreate`→`EndCreate`) cycle and asserts it's unchanged
-  afterward — proving the action was actually freed, not just forgotten.
-  **Verified the bug is real, not theoretical, at two levels:** (1) reverted all 4 source-fix files
-  and reran — failed to even **compile** (`GetActiveActionInstanceCountForTesting` didn't exist);
-  (2) restored the fix, then additionally disabled *only* `EndCreate`'s own `delete activeAction_;`
-  line (keeping the counter infrastructure and the other 3 `End*` fixes intact) and reran — this
-  time a genuine **runtime** failure: instance count stayed at `1` instead of returning to the
-  pre-test baseline of `0`, directly observing the leak rather than just a missing API. Restored
-  fully; full suite: **3260/3262 passing** (2 expected accelerometer/gyroscope skips), no
-  regressions.
+- [ ] Design a minimal `NOXNA` message-box overlay: a static-ish rendering + input helper that
+  the game's own draw loop calls (matching how the F1 help overlays in Phase 2's plan area work —
+  no automatic hook into `Game.Draw()`, since `Guide` has no access to the game's own
+  `SpriteBatch`/`GraphicsDevice` today). Reuse the exact same visual language as the F1 overlay
+  (translucent white rectangle, black text) for consistency, per decision 5d's spirit.
+- [ ] `BeginShowMessageBox` stores the requested title/text/buttons/icon and returns a real
+  `IAsyncResult` (the existing `GuideAction`-style pattern already used by
+  `BeginShowKeyboardInput`, `Guide.cpp:14-42`), but — unlike today's other Guide `Begin*`
+  fake-syncs — must **not** synchronously complete, since a message box needs a real user click.
+  Completes when the game explicitly renders the overlay and the user selects a button (needs a
+  small public "pump/render" entry point on the overlay helper that a game's `Draw()` calls).
+- [ ] `EndShowMessageBox` returns the selected button index (`std::optional<int>`, matching the
+  existing signature) instead of always throwing; throws `System::InvalidOperationException` (not
+  `NotSupportedException`) only if called before the async op completes, matching real
+  Begin/End-pair semantics used elsewhere in this codebase.
+- [ ] Add tests: both `BeginShowMessageBox` overloads no longer throw and return a valid
+  `IAsyncResult`; `EndShowMessageBox` throws if called too early; a full synthetic
+  "render frame → simulate click → End" cycle returns the right button index; `focusButton`
+  parameter is honored as the initial default selection; empty `buttons` vector is rejected
+  (matches FNA's own validation if FNA validates this — check first).
+- [ ] Wire the new overlay into at least `examples/demo_guide_overlay_console` (the demo whose
+  name literally suggests this is its purpose — check its current content first, since it may
+  already assume the old no-op/NotSupportedException behavior and need updating, not just
+  extending).
 
-- [x] **Task 3.3** — Fix `NetworkSession` objects themselves never being freed. Confirmed: no code
-  path in `src/` or `tests/` ever `delete`d a `NetworkSession*` — `Dispose()` only flipped
-  `isDisposed_` to `true`.
-  **Decision: caller owns the pointer and must `delete` it separately (typically right after
-  `Dispose()`)** — rejected the alternative ("`Dispose()` calls `delete this`") after checking how
-  the existing test suite actually uses this class: an enormous number of call sites throughout
-  this very codebase legitimately read state (most commonly `getIsDisposedProperty()`) *after*
-  calling `Dispose()` — a completely standard, reasonable `IDisposable` usage pattern. A
-  self-deleting `Dispose()` would turn every one of those into use-after-free. Documented this
-  contract in detail on the class's own doc comment.
-  **Found and fixed an accessibility bug introduced by Task 3.1 itself while implementing this**:
-  Task 3.1's out-of-line `~NetworkSession()` declaration had been placed in the `private:` section
-  (right after the already-private constructor) — meaning no caller could actually `delete` a
-  `NetworkSession*` at all, silently defeating the very ownership contract this task establishes.
-  Moved the destructor declaration to the `public:` section (the constructor itself correctly stays
-  private, preserving the existing factory-method-only construction pattern).
-  **Added an instance counter** (`instanceCount_`, incremented in the constructor, decremented in
-  the now-public `~NetworkSession()`) and a `GetInstanceCountForTesting()` static accessor.
-  **Added `NetworkSessionTest.DeletingAfterDisposeLeavesNoLeak`**: creates a session, asserts the
-  live count increased by one, `Dispose()`s then `delete`s it (the documented contract), and
-  asserts the count returns to baseline — proving the contract, when followed, leaves no leak.
-  Deliberately did **not** retrofit the hundreds of existing tests/call sites that only ever
-  `Dispose()` without a matching `delete` — under the now-documented contract those already-existing
-  calls are simply incomplete cleanup (a pre-existing, out-of-scope-for-this-pass gap in test
-  hygiene, not a new regression), and blanket-editing that many call sites without individual review
-  in an autonomous pass would itself be a real risk.
-  **Verified the bug is real, not theoretical:** reverted both source-fix files (keeping the test)
-  and reran — failed to even **compile**, in two distinct ways: `GetInstanceCountForTesting` didn't
-  exist, *and* separately `delete session;` failed with `'~NetworkSession()' is private within this
-  context` — directly confirming the destructor's accessibility bug was real, not hypothetical.
-  Restored the fix and reran — passes. Full suite: **3261/3263 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions.
+### Task 3.2 — Guide.BeginShowKeyboardInput: real captured text
+
+Current state (`Guide.cpp:81-113`): both overloads call `TextInputEXT::StartTextInput()`, then
+**immediately** set `isCompleted_ = true` on the returned `GuideAction` — a fully synchronous
+fake-async completion, matching `AvatarDescription::BeginGetFromGamer`'s documented pattern
+(`AvatarDescription.hpp:97`). `EndShowKeyboardInput` (`Guide.cpp:107-110`) calls
+`TextInputEXT::StopTextInput()` and unconditionally returns `""` — the callback is invoked
+correctly (per `GuideAction`'s normal machinery) but the captured text itself is always empty,
+regardless of what the user actually types.
+
+`TextInputEXT` (`include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`) already has everything
+needed: `TextInput` is a `std::function<void(charcs)>` fired per UTF-16 code unit as the user
+types (already SDL-backed, already used elsewhere).
+
+**Architecture problem to solve**: real typed text can't be known at `Begin*` call time — it
+accumulates over an unknown number of frames until the user finishes typing. The current
+"complete synchronously at Begin" model is fundamentally incompatible with real capture. This
+needs a real state machine:
+
+- [ ] Add an internal (non-`Begin*`-signature-visible) accumulation buffer that subscribes to
+  `TextInputEXT::TextInput` for the duration between `BeginShowKeyboardInput` and completion,
+  appending each code unit (handling the documented UTF-16 surrogate-pair case, i.e. don't split
+  surrogate pairs when converting to the returned `std::string`).
+- [ ] Define a completion trigger — real XNA/Xbox 360 keyboard input completes when the user
+  presses Enter/confirms on the virtual keyboard. Given this is a native SDL text-input session,
+  the most faithful analog is completing on an Enter keypress. Needs a hook into CNA's existing
+  keyboard-state or SDL event pump — investigate whether `Keyboard`/`Keys::Enter` polling from
+  inside `TextInputEXT` machinery (or a new small internal poll called from `Game.Update`/`Draw`)
+  is the right layer; do not invent a second, parallel input system.
+  `defaultText` (already a parameter) pre-seeds the buffer so a user who presses Enter immediately
+  gets the default, matching real XNA semantics.
+- [ ] `isCompleted_` only flips to `true` once Enter is detected (or, for the `usePasswordMode`
+  overload, same trigger — password mode only affects on-screen masking, not completion timing,
+  matching real XNA).
+- [ ] `EndShowKeyboardInput` returns the actual accumulated string instead of `""`; still calls
+  `StopTextInput()`.
+- [ ] Add tests: simulate `TextInputEXT::TextInput` firing several code units then an Enter
+  signal, confirm `EndShowKeyboardInput` returns exactly what was typed; confirm `defaultText`
+  pre-seeds correctly; confirm a surrogate pair (an emoji) round-trips correctly, matching the
+  existing UTF-16 documentation on `TextInputEXT`; confirm `IsCompleted` stays false until Enter;
+  confirm calling `End*` before completion throws (matching the Begin/End-pair convention used
+  elsewhere — check what the existing pattern throws, e.g. `InvalidOperationException`).
+- [ ] Update any demo/doc that assumed the old always-empty-string behavior.
 
 ---
 
-**Phase 3 complete** — all 3 Net memory-ownership tasks (Tasks 3.1-3.3) fixed, tested, and
-verified via revert-verify-restore. Continuing to Phase 4 (Net API gaps).
+## Phase 4 — Achievements/leaderboards: disk persistence
+
+Current state: `AchievementCollection`/`Achievement` (`include/Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp`,
+`Achievement.hpp`) — confirm exactly how achievement state is populated today (constructor-only,
+no evident load/save path was found in the Phase 0 grep). `LeaderboardReader`/`LeaderboardWriter`
+(`src/Microsoft/Xna/Framework/GamerServices/LeaderboardReader.cpp`,
+`LeaderboardWriter.cpp`) currently throw `System::NotSupportedException` on every real read/write
+path (`LeaderboardReader.cpp:86,91,106,111,155,165,176,181`; `LeaderboardWriter.cpp:9`).
+
+- [ ] **Task 4.1** — Re-confirm current achievement population/storage mechanism with a targeted
+  read of `AchievementCollection`'s constructor(s) and any demo that populates one (start with
+  `examples/demo_achievement_showcase`). Determine whether "earned" state is currently
+  per-process/in-memory-only (expected) or already touches disk anywhere (grep in Phase 0 found
+  none, but confirm before designing the fix).
+- [ ] **Task 4.2** — Design a small local persistence format/location for earned-achievement
+  state and leaderboard entries. Default (no user spec given): plain local JSON file(s), one per
+  gamertag, under whatever local-user-data-directory convention this codebase already uses
+  elsewhere (search for an existing "user data dir"/"save game" path helper before inventing a
+  new one — reuse it if found). Document the chosen path/format explicitly in this plan once
+  decided, since no existing convention was confirmed during Phase 0.
+- [ ] **Task 4.3** — Implement real (not `NotSupportedException`) `LeaderboardWriter::Write`-path
+  behavior: persist a written leaderboard entry to the local store from Task 4.2.
+- [ ] **Task 4.4** — Implement real `LeaderboardReader` read paths (the `BeginRead`/`EndRead`
+  pair and whatever synchronous accessors exist) sourcing from the same local store, instead of
+  every path throwing `NotSupportedException`. Preserve `NotSupportedException` only for
+  operations that are genuinely online-only in real XNA (e.g. friend-leaderboard filtering with no
+  local friends data) — do not blanket-implement everything if some paths have no honest local
+  answer; document any path that stays intentionally unsupported with a one-line reason.
+  Investigate `include/Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp:239-241`'s own
+  doc comment (references `BeginRead`/`EndRead` being an intentional stub today) before deciding
+  scope.
+- [ ] **Task 4.5** — Wire achievement earning to persist to the same local store, and load
+  previously-earned state back on `SignedInGamer`/`AchievementCollection` construction for a
+  returning gamertag.
+- [ ] **Task 4.6** — `Achievement::GetPicture()` (`Achievement.cpp:51`): confirmed still throwing
+  `NotImplementedException` in Phase 0. Per the "still-open micro-decisions" note above, default
+  to **leaving this throwing** (genuine platform unavailability, not a local-persistence
+  question) — add a test locking in the throw plus a doc-comment explanation if one isn't already
+  present, rather than building a placeholder-texture system nobody asked for.
+- [ ] **Task 4.7** — Add tests: write an entry, destroy the in-process objects, re-construct, read
+  it back — proves real disk persistence, not just in-memory state that happens to survive within
+  one test. Add tests for corrupt/missing store file handling (should not crash — start empty).
+- [ ] **Task 4.8** — Update `examples/demo_leaderboard_viewer` and `demo_achievement_showcase` if
+  their current behavior assumed the old unsupported/in-memory-only state.
 
 ---
 
-## Phase 4 — Net: API Gaps
+## Phase 5 — Real host migration
 
-- [x] **Task 4.1** — Wire up `NetworkGamer::RoundtripTime` to real ENet per-peer RTT data. Confirmed
-  permanently dead: backed by `roundtripTime_`, default-constructed and never assigned anywhere
-  (`grep -rn "RoundtripTime"` found zero writes) — ENet natively tracks real per-peer round-trip
-  time (`ENetPeer::roundTripTime`) that was simply never surfaced.
-  **Scope decision:** only the host's view of its directly-connected remote gamers has a genuine,
-  unambiguous `ENetPeer` to read from (`SessionState::WireIdToPeer`, already populated one-to-one
-  with `WireIdToGamer`). A client's view of the host, or of any other client relayed through the
-  host in this star topology, has no equivalent direct peer without further plumbing (the client
-  never tracks "which wire id is the peer at the other end of `HostPeer`") — left as a documented,
-  known gap rather than guessing at an unverified mapping.
-  **Fixed:** added `NOXNA void NetworkGamer::SetRoundtripTime(System::TimeSpan)` (mirroring
-  `SetId`/`SetIsHost`'s existing internal-wiring pattern); `ENetBackend::PumpSession` now updates
-  every host-tracked remote gamer's RTT from its direct `ENetPeer::roundTripTime` at the end of
-  every pump.
-  **Added `ENetBackendTest.HostMeasuresRealRoundtripTimeForRemoteGamer`**: a real host + fake-client
-  ENet connection completing a genuine `ClientHello`/`ServerWelcome` handshake, asserting the
-  resulting remote gamer's `RoundtripTime` is greater than `TimeSpan::Zero` (its untouched default —
-  nothing else in this codebase ever assigns it, so any non-zero value only appears via this fix).
-  **Verified the bug is real, not theoretical:** reverted the 3 source-fix files (keeping the test,
-  which only calls the pre-existing `getRoundtripTimeProperty()` getter, so it still compiled) and
-  reran — a genuine **runtime** failure: `RoundtripTime` stayed at `TimeSpan::Zero`. Restored the
-  fix and reran — passes. Full suite: **3262/3264 passing** (2 expected accelerometer/gyroscope
-  skips), no regressions.
+Supersedes `plan_net_20260707.md` Task 2.6's "stored but unsupported" conclusion — the user has
+now decided to implement this for real.
 
-- [x] **Task 4.2** — Make `QualityOfService` reflect real measurements for real `SystemLink`
-  sessions instead of always being a hardcoded stub. Confirmed:
-  `QualityOfService::CreateInternal()` took zero parameters and always yielded `IsAvailable=true`
-  plus all-zero rates; the only production call site (`ENetDiscoveryService.cpp`) invoked it with
-  no arguments when building a real `AvailableNetworkSession` from a genuine LAN discovery reply.
-  **Checked FNA's own reference first**: FNA's `internal QualityOfService()` constructor is itself
-  an acknowledged stub (`// TODO: Everything below` in its own source) that always sets
-  `IsAvailable = true` with all-zero rates — so the existing parameterless `CreateInternal()`'s
-  behavior is faithful to FNA, not a CNA gap; kept it as-is for callers with nothing real to report.
-  **Scope decision:** at discovery time there is no established `ENetPeer` connection yet to the
-  querying side (discovery is connectionless broadcast UDP query/reply, not a full ENet handshake),
-  so real bandwidth genuinely isn't measurable here (ties to Task 4.1's own RTT-only scope for the
-  same underlying reason) — but the wall-clock round-trip between sending the `Query` and receiving
-  each host's specific `Announce` reply *is* a real, directly measurable RTT sample.
-  **Fixed:** added `QualityOfService::CreateInternal(System::TimeSpan roundtripTime)` (used for both
-  `AverageRoundtripTime` and `MinimumRoundtripTime`, since one query/reply exchange yields exactly
-  one sample, not a running series). `ENetDiscoveryService::FindSessions` records the query's send
-  time (`queryStartTime_`); `HandleReceived`'s `Announce` case computes the elapsed wall-clock time
-  and passes it to the new overload instead of the argument-less stub. Bandwidth fields stay 0/
-  unmeasured either way, honestly documented as out of reach for this specific mechanism.
-  **Added `QualityOfServiceTest.MeasuredOverloadReflectsRealRoundtripTime`** (unit-level: the new
-  overload correctly threads a given `TimeSpan` into both RTT fields, `IsAvailable=true`, bandwidth
-  still 0) and **extended `ENetDiscoveryServiceTest.FindSessionsDiscoversRegisteredHost`** with
-  assertions that a real discovered session's `QualityOfService` is available and reports a
-  genuine non-zero measured RTT (proving the actual `FindSessions()` code path, not just the
-  isolated constructor).
-  **Verified the bug is real, not theoretical:** reverted the 3 source-fix files (keeping the
-  tests) and reran — failed to even **compile**
-  (`no matching function for call to QualityOfService::CreateInternal(TimeSpan&)`), since the
-  measured overload didn't exist before this fix. Restored the fix and reran — passes. Full suite:
-  **3263/3265 passing** (2 expected accelerometer/gyroscope skips), no regressions.
+Current state confirmed in Phase 0:
+- `AllowHostMigration` is a plain stored bool (`NetworkSession.hpp:158-170`, `.cpp:219-220`),
+  read nowhere else.
+- Client-side host disconnect handling (`CNA::Internal::Net::HandleDisconnect`,
+  `src/CNA/Internal/Net/ENetBackend.cpp:359-374`) unconditionally ends the session
+  (`session->RemoveGamer(locals[0], NetworkSessionEndReason::HostEndedSession)`) the instant the
+  host peer disconnects — there is currently no branch point where migration could occur instead.
+- `NetPacketCodec.hpp:31` already reserves wire opcode `0x05` for a future
+  `HostChangeBroadcast`, explicitly noting "not implemented" — this is the natural wire message to
+  build out.
+- Host-side peer bookkeeping (`SessionState::WireIdToGamer`, `WireIdToPeer`, `PeerWireIds`,
+  `HostPeer` — `ENetBackend.cpp:41-58`) exists per-session but is host-centric; a promoted client
+  has none of this and would need to build it from scratch (it only knows the wire ids/gamers
+  that were broadcast to it).
 
-- [x] **Task 4.3** — Implement real effect for `NetworkSession.SimulatedLatency`/`SimulatedPacketLoss`.
-  Confirmed: `grep` finds no reference to either property name anywhere in `CNA::Internal::Net`
-  outside `NetworkSession`'s own plain storage — no delay queue or synthetic packet-drop logic
-  exists anywhere in `ENetBackend`/`ENetHostHandle`.
-  **Checked FNA's own reference first** (same pattern as Task 2.6's `AllowHostMigration`): FNA's
-  `SimulatedLatency`/`SimulatedPacketLoss` are themselves plain get/set auto-properties with zero
-  delay-queue or synthetic-drop logic anywhere in FNA's own source — this is an upstream-inherited
-  gap, not something CNA introduced.
-  **Decision: document as non-functional placeholders, matching FNA** — implementing a real delay
-  queue/probabilistic drop would be a genuine new feature beyond fidelity-with-FNA, not a bug fix
-  (FNA itself never implemented real behavior for these to match).
-  **Fixed:** added detailed doc comments to all 4 accessors explaining the values are stored but
-  never applied to real traffic, explicitly matching FNA's own reference behavior.
-  **Added `ENetBackendTest.SimulatedLatencyAndPacketLossHaveNoEffectOnRealTraffic`**: sets extreme
-  values (5-second simulated latency, 100% simulated packet loss) on a real host session *before*
-  connecting, then confirms a real handshake and `AppData` delivery still complete just as promptly
-  and reliably as the equivalent test with no simulated settings at all — locking in the documented,
-  inert behavior.
-  **No behavior change** — this task is documentation + a regression test proving already-existing,
-  FNA-faithful behavior, so there is no fix to revert-verify. Full suite: **3264/3266 passing** (2
-  expected accelerometer/gyroscope skips), no regressions.
+- [ ] **Task 5.1** — Design the migration protocol (write this up in this plan before coding):
+  on host disconnect, if `AllowHostMigration` is true and at least one other gamer remains, the
+  surviving gamers deterministically agree on a new host **without any additional round-trip**
+  (default rule, per the "still-open micro-decisions" note: lowest remaining wire id becomes
+  host — every peer already has the same roster via existing `ServerWelcomeBroadcast`/
+  `GamerJoinBroadcast` messages, so this needs no negotiation). The new host must:
+  - start listening as a real ENet host (reuse `ENetBackend`'s existing host-start machinery),
+  - every other surviving peer must learn the new host's address/port and reconnect,
+  - the `0x05 HostChangeBroadcast` message (already reserved) carries the new host's identity/
+    endpoint to whichever peers can be reached before the old host's connections all drop.
+  Flag the concrete open engineering question this raises: in a star topology, non-host peers
+  currently only have a connection *to the host*, not to each other — a promoted host has no
+  pre-existing connections to migrate, so surviving clients need a genuine reconnect (a `Connect`
+  call, same code path `JoinInvited`/regular join already uses), not a live migration of existing
+  sockets. Confirm this is acceptable "simple" scope (matches the user's own "simple" qualifier)
+  before building anything fancier.
+- [ ] **Task 5.2** — Implement new-host promotion: the promoted client calls the same
+  `ENetBackend` host-start path a normal `Create` would use, transitions its local gamer's
+  `IsHost` via the existing `SetIsHost` (`NetworkGamer.hpp:97`), and re-registers session
+  discovery advertisement if applicable (SystemLink discovery — check `ENetDiscoveryService`'s
+  `RegisterHost`/`UnregisterHost` for how a mid-session host-address change should be surfaced).
+- [ ] **Task 5.3** — Implement surviving-peer reconnect-to-new-host path, raising
+  `HostChangedEventArgs` (already exists — `include/Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp`,
+  confirm it's currently unused/dead and wire it up here) instead of ending the session, when
+  `AllowHostMigration` is true.
+- [ ] **Task 5.4** — Preserve the existing behavior exactly when `AllowHostMigration` is false
+  (the current immediate-session-end path) — this must stay a pure branch, not a behavior change
+  for the default-off case. Add a test locking in the unchanged false-case behavior alongside the
+  new true-case tests.
+- [ ] **Task 5.5** — Add real two/three-peer integration tests (matching this codebase's existing
+  style of real ENet host+client(s) over loopback, not mocks): host disconnects mid-session with
+  `AllowHostMigration=true` and 2 remaining clients, confirm a real new host emerges, the
+  remaining client reconnects, and both can still exchange `AppData`. Add a 3-peer variant to
+  exercise the deterministic-lowest-wire-id tie-break rule concretely (not just 1-remaining-peer,
+  where there's no real choice to verify).
+- [ ] **Task 5.6** — Verify the bug/gap is real and the fix works via the standard revert-verify
+  cycle. Update `NetworkSession.hpp:158-170`'s doc comment (currently says migration is "not
+  implemented") to describe the real behavior.
+- [ ] **Task 5.7** — Update `examples/demo_session_lifecycle_events` and any other demo whose
+  behavior or comments assumed no migration.
 
 ---
 
-**Tasks 4.1-4.3 done** — fixed, tested, and verified via revert-verify-restore (or documented
-where a fix wasn't the right call). Tasks 4.4-4.6 (below) were added to this phase afterward.
+## Phase 6 — Real SimulatedLatency / SimulatedPacketLoss
 
-- [x] **Task 4.4** — Add `ReadBytes(int count)` (array-returning) and `Write(char)`/`ReadChar()` to
-  `sharp-runtime`'s `System::IO::BinaryReader`/`BinaryWriter`. Confirmed gap vs. FNA's `PacketReader`
-  (which inherits `System.IO.BinaryReader`) that ordinary XNA game code commonly relies on for raw
-  byte-block reads. This is a `sharp-runtime` change — per this repo's own `CLAUDE.md` extension
-  rule, add it there first, then verify `PacketReader`/`PacketWriter` correctly inherit/expose it.
-  Coordinate with whoever drives `sharp-runtime` (this repo's own convention: never modify existing
-  `sharp-runtime` files without asking the user first, for every commit). Add tests in both
-  `sharp-runtime` and this repo's `PacketReaderWriterTests.cpp`.
+Supersedes `plan_net_20260707.md` Task 4.3's "document as non-functional placeholder, matching
+FNA" conclusion for *this specific pair of properties* — the user decided to implement a real
+effect this pass. (`SimulatedLatency`/`SimulatedPacketLoss` getters/setters already exist,
+`NetworkSession.hpp`/`.cpp:258-262`, currently read nowhere else — confirmed in Phase 0.)
 
-  The `ReadBytes(int count)` half arrived already-implemented in the same large `sharp-runtime`
-  merge that fixed Task 6.10: `BinaryReader::ReadBytes(intcs count)` — public, array-returning,
-  `std::vector<bytecs>`, exactly matching real .NET semantics confirmed by reading the merged
-  source directly (trims the result at end-of-stream instead of throwing; throws
-  `ArgumentOutOfRangeException` for a negative count; already has its own `sharp-runtime` tests).
-
-  The `Write(char)`/`ReadChar()` half was deliberately **not** implemented by that same merge, with
-  its own documented rationale directly on `BinaryReader`'s class doc comment: "`.NET's Encoding/
-  Decoder-based char methods (ReadChar, PeekChar, ReadChars, Read(char[])) are not implemented,
-  since this codebase's Stream has no character encoding layer — a deliberate simplification, not
-  a silent gap." Respected this as `sharp-runtime`'s own already-made architectural call rather
-  than overriding it — implementing a from-scratch UTF-8 char encode/decode layer just for this
-  one task would both contradict that documented decision and go beyond "minimal, correctly-named
-  stub sufficient for compilation" (this repo's own `CLAUDE.md` rule for missing dependencies).
-  `PacketWriter`/`PacketReader` have no XNA-required char API of their own to satisfy either
-  (`PacketWriter`'s `NOXNA using ... BinaryWriter::Write;` already brings in whatever
-  `BinaryWriter` offers with zero extra work whenever a `Write(char)` overload does eventually
-  land upstream).
-
-  **Verified `PacketReader` correctly inherits/exposes the new `ReadBytes(int)`** with zero
-  `PacketReader`-side code changes needed (public inheritance from `BinaryReader`, no shadowing
-  declaration of its own) — added `PacketReaderWriterTest.ReadBytesReturnsExactCountRequested`
-  (reads a real 4-byte chunk out of a real `PacketWriter`-produced buffer, confirms exact byte
-  values in the correct little-endian order *and* that the read position genuinely advanced by
-  reading a further byte afterward) and `ReadBytesTrimsResultAtEndOfStreamWithoutThrowing`
-  (requests 10 bytes from a 2-byte buffer, confirms a 2-byte trimmed result rather than a throw —
-  the exact real .NET behavior, contrasted directly against `ReadByte`/`ReadInt32`'s own
-  throwing-at-EOF behavior covered by the neighboring tests). Both exercise the real, concrete
-  `PacketReader` type actual game code uses, not just `sharp-runtime`'s own isolated
-  `BinaryReader` test suite. Full suite: 3400/3400 passing (2 expected accelerometer/gyroscope
-  skips), no regressions.
-
-- [x] **Task 4.5** — Add a `CopyTo` equivalent to `NetworkSessionProperties` (FNA's
-  `ICollection<int?>.CopyTo(array, index)`). Confirmed root cause one level down: `sharp-runtime`'s
-  generic `ICollection<T>` interface never declares `CopyTo` at all (unlike the non-generic
-  `ICollection`, which does) — read `include/System/Collections/Generic/ICollection.hpp` directly
-  to confirm.
-
-  **Decision: implement directly on `NetworkSessionProperties`, zero `sharp-runtime` changes.**
-  Found established precedent already in `sharp-runtime` itself: `ReadOnlyCollection<T>::CopyTo`,
-  `Collection<T>::CopyTo`, and `LinkedList<T>::CopyTo` all implement `CopyTo` directly on the
-  concrete class rather than through the shared generic interface — the same pattern this fix
-  follows. Adding `CopyTo` to the shared `ICollection<T>` interface instead would have added a new
-  pure-virtual member that rippled through every other `ICollection<T>` implementer in
-  `sharp-runtime`, for no benefit this task actually needs.
-
-  **Fixed:** added `void CopyTo(std::vector<std::optional<int>>& destination, int index) const` to
-  `NetworkSessionProperties` (`NetworkSessionProperties.hpp`/`.cpp`), matching real .NET
-  `ICollection<int?>.CopyTo(int?[], int)` semantics: throws `System::ArgumentOutOfRangeException`
-  for a negative index (via `ArgumentOutOfRangeException::ThrowIfNegative`), throws
-  `System::ArgumentException` if `index + Count` exceeds the destination's size, otherwise copies
-  every element in order starting at `index`.
-
-  **Added 3 tests** to `NetworkSessionPropertiesTests.cpp`:
-  `CopyToCopiesAllElementsStartingAtIndex` (3 real values copied into a pre-filled 5-slot
-  destination at offset 1, confirms the untouched slots stay `nullopt` and the copied slots land
-  exactly in order), `CopyToNegativeIndexThrows`, `CopyToDestinationTooSmallThrows`.
-
-  **Verified the bug is real, not theoretical:** stashed the 2 source-fix files (`.hpp`/`.cpp`,
-  keeping the 3 new tests), rebuilt — genuine **compile-time** failure across all 3 new tests
-  (`'class ... NetworkSessionProperties' has no member named 'CopyTo'`), confirming the tests only
-  pass because of the real fix. Restored and rebuilt clean — full suite **3403/3403 passing** (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 4.6** — Extend `NetworkGamer::IsHost` to be correct for remote gamers representing the
-  actual host machine, as seen from a non-host client. Confirmed self-documented gap
-  (`NetworkGamer.hpp`, ~lines 81-90): a remote gamer's `IsHost` is currently always `false`, because
-  the wire roster (`RosterEntry`) carries no host flag. Fix requires extending `NetPacketCodec`'s
-  roster message format to carry a host flag, and wiring it through `HandleServerWelcome`/`HandleGamerJoinBroadcast`
-  in `ENetBackend.cpp` (ties directly into Task 2.6's host-migration work — do them together or in
-  sequence). Add a test (over a real two-peer connection) asserting a client correctly sees
-  `IsHost == true` on the remote gamer representing the actual host.
-
-  Revisited after Phase 15's own Task 15.6 demo surfaced this exact live, still-open gap
-  (`cna_demo_gamer_roster_hud`'s client showed `Host:N` for the row that was actually the host) —
-  confirmed via `cna-samples/DEFERRED.md` item #20's own "still-open, already-scoped" note that
-  this was a real, tracked-but-unfixed limitation, not a new discovery, and picked it up as its
-  own dedicated fix now that Phase 15 is complete.
-
-  **Fixed:** added `bool IsHost{false}` to `RosterEntry` (`NetPacketCodec.hpp`), written/read by
-  the single shared `WriteRosterEntry`/`ReadRosterEntry` helpers used by both `ServerWelcomeMessage`
-  and `GamerJoinBroadcastMessage` — one wire-format change covers both message types.
-  `ENetBackend.cpp`'s `SnapshotRoster` (used to build `ServerWelcomeMessage.ExistingRoster`, sent
-  to a newly-joining client) now forwards each gamer's own real `getIsHostProperty()` — accurate
-  on the host side already, since the host's own local gamer is `IsHost=true` from construction
-  and every remote (client) gamer is explicitly set `false` in `HandleClientHello`.
-  `HandleServerWelcome`/`HandleGamerJoinBroadcast` (the receiving side, on a client) now call
-  `gamer->SetIsHost(entry.IsHost)` for each newly-constructed remote `NetworkGamer`, instead of
-  leaving it at the default `false`. `GamerJoinBroadcastMessage.NewGamers` entries are built with
-  an explicit `false` (a newly-joining client can never be the host). Updated the stale
-  "documented, scoped limitation" comments at all 3 call sites plus `NetworkGamer::SetIsHost`'s
-  own doc comment, since the limitation is now resolved rather than merely explained.
-
-  **Added/extended tests**: `NetPacketCodecTest.ServerWelcomeRoundtrip`/`GamerJoinBroadcastRoundtrip`
-  now assert `IsHost` round-trips correctly (`true` for a host entry, `false` for a non-host one).
-  `ENetBackendTest.ClientSendsClientHelloAndProcessesServerWelcome` (already the established
-  real-client + fake-host integration test for this exact decode path) now marks its
-  `"HostPlayer"` roster entry `IsHost=true` and asserts
-  `EXPECT_TRUE(hostPlayer->getIsHostProperty())` — removing the test's own prior "NOTE: not
-  asserting IsHost here... a documented, scoped limitation" comment block, since it's exactly what
-  this fix now makes provable.
-
-  **Verified the bug is real, not theoretical**: stashed the 4 source-fix files (keeping all test
-  changes), rebuilt — genuine **compile-time** failures across both test files (`RosterEntry`
-  aggregate-inits with a 3rd `true`/`false` argument failing with "too many initializers"/"has no
-  member named IsHost"), confirming the tests only pass because of the real fix. Restored and
-  rebuilt clean — full suite **3398/3398 passing** (2 expected accelerometer/gyroscope skips), no
-  regressions.
-
-  **Additional real-world confirmation beyond the unit tests**: rebuilt and reran Task 15.6's own
-  `cna_demo_gamer_roster_hud` as two genuine real OS processes (`--host --smoke 180` /
-  `--join --smoke 180`) — the client's own roster panel, which previously showed `Host:N` for the
-  row representing the actual host (exactly the gap this task closes), now correctly reads
-  `Host:Y` for that row throughout the run. Both processes exited `0`.
+- [ ] **Task 6.1** — Identify the exact hook points: outbound send (`ENetBackend`'s `SendTo`,
+  `ENetBackend.cpp:170`) and/or inbound receive processing (`PumpSession`'s
+  `ENET_EVENT_TYPE_RECEIVE` branch, `ENetBackend.cpp:579`). Decide whether simulated latency/loss
+  applies per-send (delay when a packet is handed to ENet) or as a receive-side hold-and-release
+  queue (delay when a packet would otherwise be delivered to game code) — the latter is closer to
+  real network jitter and doesn't require faking ENet's own reliability/ack timing, so prefer it
+  unless investigation shows a strong reason not to.
+- [ ] **Task 6.2** — Implement a per-session delayed-delivery queue keyed off `simulatedLatency_`:
+  received packets are timestamped and only handed to game code once
+  `now >= receiveTime + simulatedLatency_`. Implement probabilistic drop keyed off
+  `simulatedPacketLoss_` (a `[0,1]` drop probability per packet, matching the property's
+  documented range — confirm exact documented range in `NetworkSession.hpp` before implementing).
+- [ ] **Task 6.3** — **Determinism for tests is a hard requirement** (explicit user instruction:
+  "implementovat reálný efekt" with no flakiness). Use an injectable/seedable RNG for the drop
+  decision (do not call an unseeded global RNG) and a controllable time source (reuse whatever
+  time abstraction `GameTime`/existing tests already use — do not add `std::chrono::steady_clock`
+  calls directly into test-exercised code paths if an injectable clock exists; if none exists,
+  add a minimal one scoped to this feature only, per `CLAUDE.md`'s minimal-stub rule).
+- [ ] **Task 6.4** — Add tests: zero latency/loss behaves exactly as before (regression guard);
+  a fixed non-zero latency measurably delays delivery by at least that amount, deterministically
+  (using the injectable clock, not a real sleep + flaky timing assertion); a drop probability of
+  1.0 deterministically drops every packet (seeded RNG); a drop probability of 0.0 drops none.
+- [ ] **Task 6.5** — Verify real effect end-to-end over a real loopback ENet connection (not just
+  unit-level queue logic) — send N packets with simulated loss=1.0, confirm zero arrive; send with
+  a fixed latency, confirm none arrive before the expected delay.
+- [ ] **Task 6.6** — Update `examples/demo_simulated_network_conditions` to actually demonstrate
+  the now-real effect (check its current content first — it may currently just set the properties
+  and claim they work, or may already honestly disclaim they're placeholders; either way it needs
+  to now show real, observable behavior).
+- [ ] **Task 6.7** — Revert-verify the fix, run the full suite, update this plan with results.
 
 ---
 
-**Phase 4 complete — 6/6** (Tasks 4.1-4.6, including the 3 API-gap tasks and the 3 tasks added to
-this phase afterward — Task 4.4's `sharp-runtime` half arrived via the user's own large merge and
-was verified rather than re-implemented, Task 4.5 avoided any `sharp-runtime` change by following
-existing per-class `CopyTo` precedent, Task 4.6 fixed the live `IsHost` roster gap).
+## Phase 7 — Avatar asset quality: stop the "monster" avatars
 
-## Phase 5 — Net: Test Coverage
+Goal (per decisions 4/4a/4b/4c): toy-like Xbox-Avatar-inspired look, fully original CNA assets,
+generated via `../mesh-craft` for body/head (and other feasible) geometry, feeding into the
+existing `tools/avatar_builder/` Blender pipeline for skeleton/skinning/animation (mesh-craft has
+no rigging concept — confirmed in Phase 0).
 
-- [x] **Task 5.1** — Add a test for `NetworkSession::AddLocalGamer`'s success (non-throwing) path.
-  Confirmed every currently-constructible test session already has `maxLocalGamers_` pinned to zero
-  spare capacity, so only the throw-at-limit path was exercised — masking Tasks 2.3 and 2.4
-  entirely. **Already satisfied while fixing Task 2.3**: `NetworkSessionTest.AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler`
-  (a new, safe spare-capacity construction technique — a temporary global `SignedInGamerCollection`
-  swap via RAII — was devised specifically to unblock this) exercises exactly this: `AddLocalGamer`
-  succeeding, raising `GamerJoined`, and (per Task 2.4's own test,
-  `RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision`, which reuses the same technique) a
-  correct, non-colliding `Id`.
+- [ ] **Task 7.1** — Capture baseline screenshots: current `demo_avatar` male and female avatars,
+  front/side/back, plus a few animation-gallery poses from `demo_avatar_animation_gallery` that
+  best reveal today's deformation problems. Store under a scratch/docs location (not committed
+  binary bloat unless the repo already commits demo screenshots elsewhere — check convention
+  first).
+- [ ] **Task 7.2** — Write `docs/avatar-art-direction.md`: restate the user-approved acceptance
+  criteria from decision 4c verbatim, plus concrete proportion targets (head/neck/shoulder/torso/
+  limb/hip/foot ratios) derived from *original* reference thinking, not any proprietary asset.
+- [ ] **Task 7.3** — Audit `tools/avatar_builder/generate_body.py`/`generate_skeleton.py`'s
+  current proportion logic against the new art-direction doc; identify concretely where today's
+  generator produces the "monster" look (disproportionate head/limbs, bad joint placement, etc.)
+  — read the actual generator code and baseline screenshots together rather than guessing.
+- [ ] **Task 7.4** — Prototype body/head geometry authored via `mesh-craft`'s `.mc3.xml` format
+  (primitives + CSG, per `gen.md`'s documented capabilities) as a replacement input to
+  `generate_body.py`'s current procedural-Blender body construction. Export via `mc3togltf` to
+  `.glb`, then feed into the existing skeleton/skinning stages. This is a real pipeline
+  integration change — document the new data flow (mesh-craft `.mc3.xml` → `mc3togltf` → `.glb`
+  base mesh → Blender import → `generate_skeleton.py`/rigging/`generate_morphs.py`/
+  `generate_animations.py` → final avatar `.glb`) explicitly once working, since it changes
+  `tools/avatar_builder/README.md`'s documented pipeline.
+- [ ] **Task 7.5** — Iterate on body/head proportions and topology in mesh-craft until baseline
+  deformation problems from Task 7.3 are resolved (shoulders/elbows/knees/wrists/neck/spine no
+  longer distort badly under the existing animation clips — reuse the existing animation set,
+  don't regenerate animations as part of this task unless a specific clip requires new bone
+  layout).
+- [ ] **Task 7.6** — Audit and fix hair mesh intersection with face/neck; audit and fix clothing
+  mesh clipping/explosion under animation, using the same iterate-in-mesh-craft approach where
+  hair/clothes are also good candidates for mesh-craft authoring (per decision 4b's "těla hlavy
+  apod" — bodies/heads/etc. — the "etc." covers this).
+  Investigate `generate_hair.py`/`generate_clothes.py`/`generate_wardrobe.py` current logic first.
+- [ ] **Task 7.7** — Audit normals/tangents/winding/UVs/material assignment on the new
+  mesh-craft-sourced geometry (mesh-craft's own `mc3togltf` exporter should produce correct glTF
+  PBR material data per its own format spec — verify, don't assume).
+- [ ] **Task 7.8** — Audit vertex weights end to end (normalize, cap influence count, reject
+  NaN/Inf, validate bone indices) — this stays in the Blender/`generate_skeleton.py` stage since
+  mesh-craft has no skinning concept; confirm `validate_gltf.py` (already exists,
+  `tools/avatar_builder/validate_gltf.py`) already checks these, extend it if it doesn't.
+- [ ] **Task 7.9** — Make the new pipeline deterministic and documented (same requirement the old
+  pipeline already had per its own `README.md`) — running it twice with the same inputs produces
+  byte-identical (or at least semantically-identical) output.
+- [ ] **Task 7.10** — Extend `validate_gltf.py` (or confirm it already covers) failing loudly on
+  missing skeletons, invalid weights, invalid bounds, or broken references for the new
+  mesh-craft-sourced assets specifically.
+- [ ] **Task 7.11** — Capture after screenshots (same views as Task 7.1) and confirm against the
+  decision-4c acceptance criteria: front/side/back for both genders, animation gallery, no mesh
+  explosions, no distorted limbs.
+- [ ] **Task 7.12** — Confirm no proprietary Xbox Avatar asset was referenced anywhere in this
+  process (decision 4a — zero exceptions); note this explicitly in the task write-up when this
+  phase closes out.
+- [ ] **Task 7.13** — Rebuild and rerun the avatar demos affected (`demo_avatar`,
+  `demo_avatar_animation_gallery`, `demo_avatar_wardrobe_hotswap`, `demo_avatar_dual_compare`,
+  `demo_avatar_appearance_tint_studio`, `demo_avatar_bone_state_boundary`,
+  `demo_avatar_multi_attach_stress`, `demo_net_avatar_sync`) to confirm nothing regressed
+  visually or functionally with the new asset pipeline.
 
-- [x] **Task 5.2** — Add a test for `LocalNetworkGamer::ReceiveData`'s offset-taking overload with a
-  real non-empty queue and a non-zero offset. Confirmed only the empty-queue early-return and the
-  `offset==0` delegating overload were previously exercised — exactly the gap that let Task 2.8's
-  bug ship undetected. **Already satisfied while fixing Task 2.8**:
-  `LocalNetworkGamerTest.ReceiveDataWithOffsetThrowsInsteadOfWritingPastBufferEnd` enqueues a real
-  packet (via the `NOXNA EnqueuePacket` helper) and calls `ReceiveData` with a non-zero offset
-  against a real non-empty queue.
-
-- [x] **Task 5.3** — Add a boundary/overflow test for `LocalNetworkGamer::SendData`'s
-  offset+count overload. Confirmed the existing `SendDataWithOffsetAndCount` test only exercised a
-  safely in-range case — exactly the gap that let Task 2.9's bug ship undetected. **Already
-  satisfied while fixing Task 2.9**: `LocalNetworkGamerTest.SendDataThrowsWhenOffsetPlusCountExceedsBuffer`
-  and `SendDataToRecipientThrowsWhenOffsetPlusCountExceedsBuffer` both feed an out-of-range
-  `offset+count` combination.
-
-- [x] **Task 5.4** — Add ordinal-value assertions to `NetEnumsTests.cpp` for `SendDataOptions` and
-  `NetworkSessionType` specifically (not just tautological self-equality checks). Confirmed both
-  enums are serialized as raw bytes on the wire (`static_cast<SendDataOptions>(reader.ReadByte())` /
-  `static_cast<NetworkSessionType>(reader.ReadByte())` in `NetPacketCodec.cpp`/`NetDiscoveryProtocol.cpp`)
-  — a silent enum reordering would desync wire compatibility with nothing in the test suite to catch
-  it.
-  **Fixed:** added `NetworkSessionTypeTest.OrdinalValuesMatchFNAAndAreWireStable` and
-  `SendDataOptionsTest.OrdinalValuesMatchFNAAndAreWireStable`, asserting each enumerator's
-  `static_cast<int>` value against both the real FNA reference source's declaration order and the
-  wire format's own implicit ordinal dependency. Full suite: **3266/3268 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions. Pure test-coverage addition (no existing behavior
-  changed), so no revert-verify applies — the assertions themselves are the direct proof (would
-  fail immediately on any future reordering).
-
-- [x] **Task 5.5** — Add a test for `NetworkSessionJoinException`'s protected serialization
-  constructor (`SerializationInfo&`, `StreamingContext&`), currently uncovered.
-  **Fixed:** added a small test-only `TestableNetworkSessionJoinException` subclass (the standard
-  way to exercise a `protected` constructor — matching .NET's `ISerializable` pattern, where only a
-  deserializing subclass ever calls it directly) and
-  `NetworkSessionJoinExceptionTest.SerializationConstructorIsCallableByDerivedTypesAndDefaultInitializes`,
-  asserting the constructed instance is catchable as `NetworkException` and `JoinError` defaults to
-  `SessionNotFound` (the constructor only forwards to the base `NetworkException(info, context)`
-  and sets nothing else). Full suite: **3267/3269 passing** (2 expected accelerometer/gyroscope
-  skips), no regressions. Pure test-coverage addition, no revert-verify applies.
-
-- [x] **Task 5.6** — Fix `NetEventArgsTests.cpp` exercising `GamerJoinedEventArgs`/`GamerLeftEventArgs`/
-  `HostChangedEventArgs`/`WriteLeaderboardsEventArgs` exclusively with `nullptr` gamer pointers,
-  which can't catch a constructor-argument-order bug (e.g. `HostChangedEventArgs` accidentally
-  swapping `oldHost`/`newHost`).
-  **Fixed:** rewrote every gamer-carrying test to use real, distinct sentinel `NetworkGamer`
-  instances (via a `MakeSentinelGamer(gamertag)` helper — a `nullptr` `NetworkSession*` is safe
-  since the constructor never dereferences it) instead of `nullptr`, asserting each property
-  returns the correct, distinguishable instance — `HostChangedEventArgsTest.StoresOldAndNewHost`
-  now explicitly asserts `oldHost != newHost` too.
-  **Verified the rewritten test actually catches what it claims to**: temporarily swapped
-  `HostChangedEventArgs`'s constructor body (`oldHost_(newHost), newHost_(oldHost)`) and reran —
-  the test failed exactly as expected, both properties returning the wrong sentinel. Restored the
-  correct constructor and reran — passes. Full suite: **3267/3269 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 5.7** — Add a test proving `AvailableNetworkSessionCollection::Dispose()`'s actual,
-  documented deviation from FNA (FNA clears its collection on `Dispose()`; this port intentionally
-  doesn't). Confirmed the existing `Dispose` test only checked `IsDisposed` becomes `true` on an
-  *empty* collection — 0 items either way regardless of whether `Dispose()` actually clears
-  anything, so the documented behavior had zero real regression coverage.
-  **Added `AvailableNetworkSessionCollectionTest.DisposeDoesNotClearContentsUnlikeFNA`**: a
-  genuinely non-empty (2-entry) collection, disposed, then asserting `Count` and both entries'
-  contents are unchanged. **Incidental finding while writing this test** (not a bug — confirms
-  correct, faithful behavior): a *non-const* `AvailableNetworkSessionCollection`'s `operator[]`
-  resolves to `ReadOnlyCollection<T>`'s non-const overload, which unconditionally throws
-  `System::NotSupportedException("Collection is read-only.")`, matching real .NET's explicit
-  `IList<T>.this[int]` setter — only a `const` reference reaches the real getter (same reason the
-  pre-existing `IndexingAndCount` test above already used `const auto col`). Adjusted the new test
-  to read through a `const&` after disposing via the non-const one. Full suite:
-  **3268/3270 passing** (2 expected accelerometer/gyroscope skips), no regressions. Pure
-  test-coverage addition (`Dispose()` itself is unchanged and already correct), no revert-verify
-  applies.
-
-- [x] **Task 5.8** — Add a test exercising `AvailableNetworkSession::operator==` through
-  `AvailableNetworkSessionCollection`'s `IndexOf`/`Contains` (the entire reason the operator was
-  added, per its own doc comment), not just as an ad hoc standalone equality check. Confirmed no
-  existing test called `IndexOf`/`Contains` at all — every prior equality test called `operator==`
-  directly and standalone. Added `AvailableNetworkSessionCollectionTest.IndexOfAndContainsUseValueEquality`:
-  builds a 2-entry collection, then probes with a *separately-constructed* `AvailableNetworkSession`
-  that is value-equal to entry `[1]` (never stored in the collection) and asserts `IndexOf` returns
-  `1` and `Contains` returns `true` — proving `IndexOf`/`Contains` compare by value, not by
-  reference/pointer identity — plus a not-present probe asserting `IndexOf` returns `-1` and
-  `Contains` returns `false`. Pure test-coverage addition (`IndexOf`/`Contains`/`operator==` are all
-  pre-existing and already correct via `ReadOnlyCollection<T>`'s generic implementation), no
-  revert-verify applies.
-
-- [x] **Task 5.9** — Add a test proving `QualityOfService`/`SessionProperties` are excluded from
-  `AvailableNetworkSession::operator==`, matching the header's own doc comment (which explicitly
-  states this) — currently the only equality test varies `CurrentGamerCount`, never these two
-  fields. Added `AvailableNetworkSessionTest.EqualityExcludesQualityOfServiceAndSessionProperties`:
-  constructs two sessions with identical `CurrentGamerCount`/`HostGamertag`/slot counts/connect
-  address+port but deliberately *different* `NetworkSessionProperties` (one empty-then-`Add(1)`, the
-  other with two different values) and different `QualityOfService` (default vs. a measured
-  500 ms round trip), and asserts they still compare equal — confirming these two fields are
-  genuinely excluded from the comparison, not just untested. Pure test-coverage addition
-  (`operator==`'s field list is unchanged and already correct), no revert-verify applies.
-
-  Both Task 5.8 and 5.9 tests built clean and passed individually
-  (`AvailableNetworkSessionCollectionTest.IndexOfAndContainsUseValueEquality`,
-  `AvailableNetworkSessionTest.EqualityExcludesQualityOfServiceAndSessionProperties`). Full suite:
-  **3270/3272 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 5.10** — Add thorough `PacketReader`/`PacketWriter` round-trip tests beyond math types:
-  `Byte`/`SByte`/`Int16`/`UInt16`/`UInt32`/`Int64`/`UInt64`/`String`, boundary values (`Int64`
-  min/max), multi-byte/Unicode string content, and EOF/underrun behavior verified through
-  `PacketReader` itself (not just relying on `sharp-runtime`'s own separate test suite for the
-  underlying `BinaryReader`/`BinaryWriter`). Added 12 new tests to `PacketReaderWriterTests.cpp`:
-  `ByteRoundtrip`, `SByteRoundtrip`, `Int16Roundtrip`, `UInt16Roundtrip`, `UInt32Roundtrip`,
-  `Int64RoundtripBoundaryValues` (both `INT64_MIN` and `INT64_MAX`), `UInt64Roundtrip`,
-  `StringRoundtripAscii`, `StringRoundtripEmpty`, `StringRoundtripMultiByteUnicodeContent` (Czech
-  diacritics plus a 4-byte emoji, so the 7-bit-encoded length prefix must count encoded UTF-8 bytes
-  rather than code points — confirmed correct), `ReadingPastEndOfBufferThrows` and
-  `ReadingPartialValueAtEndOfBufferThrows` (underrun exactly at the buffer boundary vs. mid-value).
-  All go through `PacketWriter`→`PacketReader` round-trips (or `PacketReader` directly for the
-  underrun cases), not sharp-runtime's own `BinaryReader`/`BinaryWriter` test suite, so a future
-  regression in how `PacketReader`/`PacketWriter` wire up to those bases would be caught here too.
-
-  Confirmed current EOF/underrun behavior: `BinaryReader::ReadBytes` throws
-  `std::runtime_error("Unexpected end of stream.")`, not `System::IO::EndOfStreamException` (which
-  already exists in `sharp-runtime` with its own tests, but is never actually thrown anywhere) —
-  real .NET's `BinaryReader` throws `EndOfStreamException` specifically. This is a `sharp-runtime`
-  change (touches `BinaryReader.cpp`, an existing file) and per this repo's own convention (see
-  Task 4.4) requires asking the user before modifying existing `sharp-runtime` files — logged as
-  **Task 6.10** below instead of fixed here, consistent with Task 4.4/4.5/6.6 being deferred for the
-  same reason. Tests above assert today's actual thrown type (`std::runtime_error`) so they'll
-  force an intentional update (not a silent behavior change) whenever Task 6.10 lands.
-
-  Pure test-coverage addition, no revert-verify applies. Full suite: **3282/3284 passing** (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 5.11** — Add negative-capacity tests for `PacketReader(int)`/`PacketWriter(int)`. Real
-  .NET's `MemoryStream(int capacity)` throws `ArgumentOutOfRangeException` for a negative value
-  regardless of whether preallocation is actually implemented — confirm/fix cna's constructors to
-  match, and add the test. Confirmed a genuine bug: `PacketReaderStream(int capacity)`/
-  `PacketWriterStream(int capacity)` (both entirely within this repo, not `sharp-runtime` — FNA's
-  `PacketReader(int capacity)`/`PacketWriter(int capacity)` construct `new MemoryStream(capacity)`
-  internally) silently discarded a negative `capacity` instead of throwing. Fixed both to call
-  `System::ArgumentOutOfRangeException::ThrowIfNegative(capacity, "capacity")` in their constructor
-  body — preserving the (correct) preallocation-hint-is-otherwise-a-no-op behavior for non-negative
-  values, only adding the negative-value guard. Added
-  `PacketReaderTest.NegativeCapacityThrowsArgumentOutOfRangeException` and
-  `PacketWriterTest.NegativeCapacityThrowsArgumentOutOfRangeException`.
-
-  Revert-verify-restore: reverted both constructor bodies back to `(void) capacity;` (keeping the
-  new tests) — both new tests failed with "it throws nothing", confirming they genuinely exercise
-  the fix. Restored the fix; rebuilt clean. Full suite: **3284/3286 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 5.12** — Create a dedicated `LocalNetworkGamerTests.cpp` file. Confirmed its ~14 test
-  cases currently live embedded in `NetworkSessionTests.cpp` (~lines 504-605), contrary to
-  `CHECKLIST.md`'s per-class test-file convention. Move them (no behavior change, pure test-file
-  reorganization). Actual count was 17 `LocalNetworkGamerTest.*` cases (lines 753-875), plus the
-  `LocalGamerFixture` fixture and its `MakeSignedInGamer` helper — all moved verbatim into the new
-  `tests/Microsoft/Xna/Framework/Net/LocalNetworkGamerTests.cpp`, with only the includes trimmed to
-  what that file actually needs. `NetworkSessionTests.cpp` keeps its own `LocalNetworkGamer.hpp`/
-  `System::ArgumentException` includes since other, unrelated tests in that file still reference
-  both. `CMakeLists.txt` globs test sources recursively, so the new file needed no build-system
-  changes.
-
-  Pure reorganization, no revert-verify applies. Ran `LocalNetworkGamerTest.*` (17/17) and
-  `NetworkSessionTest.*` (44/44) explicitly, then the full suite: **3284/3286 passing** (2 expected
-  accelerometer/gyroscope skips). One transient, unrelated failure
-  (`CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically`, a statistical audio test)
-  appeared on the first run and was confirmed pre-existing flakiness, not a regression — it passed
-  5/5 in isolation and the very next full-suite run was clean.
-
-- [x] **Task 5.13** — Add a multi-peer (3+ node) integration test. Confirmed every existing
-  `ENetBackendTests.cpp` scenario is a single host + at most one client — the fan-out/relay logic
-  built specifically for >1 peer (`HandleClientHello`'s broadcast-to-other-peers loop, ~lines
-  166-176; `HandleDisconnect`'s remaining-peers broadcast, ~lines 330-337; `BroadcastStateChange`'s
-  per-peer loop, ~lines 560-563; `HandleAppData`'s host-relay-between-two-other-peers branch, ~lines
-  258-267, the single most complex routing logic in the file) is never exercised with a genuine
-  third connected party. Add a real 3-peer test (or more) covering at minimum the relay branch.
-  Added `ENetBackendTest.HostRelaysAppDataBetweenTwoNonLocalPeers`: one real `NetworkSession` host
-  plus two independent fake `ENetHostHandle` clients (PeerA, PeerB), both completing a full
-  `ClientHello`/`ServerWelcome` handshake and getting distinct wire ids. PeerA then sends an
-  `AppDataMessage` targeting PeerB's wire id directly (neither is the host's own local gamer),
-  forcing the real host-relay branch (`state.HostPeer == nullptr` and
-  `target->getIsLocalProperty() == false`) rather than the local-delivery or drop paths every prior
-  AppData test exercised. Asserts PeerB receives the relayed message with the correct
-  `SenderWireId`/`Payload`, and that PeerA does not receive an echo of its own packet back
-  (`peerIt->second != fromPeer` guard).
-
-  Pure test-coverage addition (the relay logic itself is pre-existing and already correct), no
-  revert-verify applies. New test passed 5/5 on repeat. Full suite: **3285/3287 passing** (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 5.14** — Add adversarial/malformed-packet tests for `NetPacketCodecTests.cpp` and
-  `NetDiscoveryProtocolTests.cpp`. Confirmed neither file currently exercises a negative/oversized
-  property index (Tasks 1.1/1.2) or a truncated buffer (Task 1.4) — none of the highest-severity
-  bugs found in this audit has any regression coverage today. Add tests for each, asserting clean
-  rejection (post-fix) rather than crash/corruption. Re-confirmed on inspection: the
-  negative/oversized property-index coverage (Tasks 1.1/1.2) **already existed** in
-  `NetDiscoveryProtocolTests.cpp` (`DecodeAnnounceRejectsNegativePropertyIndex`,
-  `DecodeAnnounceRejectsHugePropertyIndex`, added when those tasks were originally fixed) — this
-  task's own text pre-dated that work and was stale by the time it was reached. The genuinely
-  missing piece was truncated-buffer coverage at the codec-unit level: existing integration tests
-  (`ENetBackendTest.HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward`,
-  `ENetDiscoveryServiceTest.PollIgnoresMalformedAnnounceWhileIdlingAndDiscoveryKeepsWorking`) only
-  prove the outer `try`/`catch` resilience layer survives a truncated wire packet, never that each
-  `Decode*` function itself throws cleanly (vs. reading out of bounds) in isolation.
-
-  Added 6 tests to `NetPacketCodecTests.cpp` (`DecodeClientHelloThrowsOnTruncatedBuffer`,
-  `DecodeServerWelcomeThrowsOnTruncatedBuffer`, `DecodeGamerJoinBroadcastThrowsOnTruncatedBuffer`,
-  `DecodeGamerLeaveBroadcastThrowsOnTruncatedBuffer`,
-  `DecodeStateChangeBroadcastThrowsOnTruncatedBuffer`, `DecodeAppDataThrowsOnTruncatedBuffer`) and
-  2 to `NetDiscoveryProtocolTests.cpp` (`DecodeQueryThrowsOnTruncatedBuffer`,
-  `DecodeAnnounceThrowsOnTruncatedBuffer`) — each encodes a well-formed message, truncates the
-  byte vector down to just its tag byte, and asserts the corresponding `Decode*` throws
-  `std::runtime_error` (from `BinaryReader::ReadBytes`' own underflow guard) instead of reading
-  past the buffer.
-
-  Pure test-coverage addition (all decode paths are pre-existing and already correct post-Task
-  1.1/1.2/1.4), no revert-verify applies. New tests: 8/8 passing. Full suite: **3293/3295 passing**
-  (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 5.15** — Add error-path tests for `ENetHostHandle`: `Connect()` with an unresolvable
-  hostname (should throw a clear, catchable exception), `Send()`/`Broadcast()` targeting zero
-  connected peers, and the (currently untested) path where `enet_packet_create` returns null.
-  Added `ConnectWithUnresolvableHostnameThrows` (uses the RFC 2606-reserved `.invalid` TLD, so
-  resolution fails fast and deterministically — 38ms observed — with no real network dependency),
-  `SendToNotYetConnectedPeerDoesNotThrowOrLeak` (sends immediately after `Connect()`, before any
-  `Service()` call — the peer is still `ENET_PEER_STATE_CONNECTING`, so `enet_peer_send` rejects it
-  and `Send()`'s `if (... < 0) enet_packet_destroy(packet);` cleanup branch runs, previously
-  untested), and `BroadcastWithZeroConnectedPeersDoesNotThrow` (a freshly created host with no
-  peers at all).
-
-  The `enet_packet_create` returns null path (real ENet only returns null there on a `malloc()`
-  failure — confirmed by reading `third_party/enet/packet.c`) is intentionally left untested: it
-  cannot be triggered deterministically without replacing the global allocator, which is out of
-  scope. Documented in a comment at the point in the test file where that guard lives, rather than
-  silently skipped.
-
-  Pure test-coverage addition (all three exercised code paths are pre-existing and already
-  correct), no revert-verify applies. New tests: 3/3 passing. Full suite: **3296/3298 passing** (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 5.16** — Add a regression test for the wire-id wraparound/collision scenario fixed in
-  Task 2.11 — e.g. 256+ join/leave cycles on one `SessionState` asserting no misrouting. **Already
-  satisfied while fixing Task 2.11**: `ENetBackendTest.DisconnectedPeerWireIdIsReclaimedAndReusedByTheNextJoiner`
-  proves the actual reclaim-and-reuse mechanism directly (3 connect/disconnect cycles all reusing
-  the same id) rather than brute-forcing 256+ real ENet cycles — see that task's own note on why
-  this is the stronger, more direct test.
-
-- [x] **Task 5.17** — Add a test proving `SimulatedLatency`/`SimulatedPacketLoss` have the effect
-  implemented (or explicitly documented as absent) in Task 4.3. **Already satisfied while fixing
-  Task 4.3**: `ENetBackendTest.SimulatedLatencyAndPacketLossHaveNoEffectOnRealTraffic`.
-
-- [x] **Task 5.18** — Add a dedicated test file for `ENetLibrary` (`EnsureInitialized()`'s
-  double-init idempotency currently only exercised incidentally by other tests, never directly
-  asserted). Added `tests/CNA/Internal/Net/ENetLibraryTests.cpp` with
-  `EnsureInitializedDoesNotThrow` and `EnsureInitializedIsIdempotentAcrossManyCalls` (10 repeated
-  calls) — confirms the function-local-static `InitGuard` pattern (only `enet_initialize()`s once
-  per process) is safe to call repeatedly, directly rather than only incidentally via every other
-  Net test transitively calling it through `ENetHostHandle::CreateHost`/`CreateClient`.
-
-  Pure test-coverage addition, no revert-verify applies. New tests: 2/2 passing. Full suite:
-  **3298/3300 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 5.19** — Add ordinal-value/spelling-lock tests for `WriteArbitratedLeaderboard`/
-  `WriteUnarbitratedLeaderboard`/`WriteTrueSkill` events — currently zero test coverage, not even a
-  subscribe-smoke-test, even though they're correctly never raised (matching FNA). Added
-  `NetworkSessionTest.WriteLeaderboardAndTrueSkillEventsAreNeverRaised`: subscribes a counting
-  handler to all three events, then exercises a full `Create` → `Update` → `StartGame` → `Update` →
-  `EndGame` → `Update` → `Dispose` lifecycle, asserting all three counters stay at 0. Subscribing
-  under each event's exact FNA name is itself a spelling/rename guard (a typo wouldn't compile);
-  the lifecycle exercise locks in that none of them ever actually fires, matching FNA's own
-  never-raised (leaderboards/TrueSkill unimplemented upstream) contract.
-
-  Pure test-coverage addition, no revert-verify applies. New test passing. Full suite:
-  **3299/3301 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-  **Phase 5 complete** — all 19 Net test-coverage tasks (Tasks 5.1-5.19) done.
+This phase is the largest and most open-ended in this plan — expect to split it into several
+commits (one per concrete sub-task group, not one giant commit), consistent with the
+one-task-one-commit rule.
 
 ---
 
-## Phase 6 — Net: Further Investigation
+## Phase 8 — F1 help overlay for all avatar demos
 
-- [x] **Task 6.1** — Investigate and fix `activeAction_` getting permanently stuck if the
-  `NetworkSession` constructor throws mid-`EndCreate`/`EndJoin`/`EndJoinInvited`. Confirmed:
-  `activeAction_` is only cleared *after* successful construction — a throw (e.g. from an empty
-  global-`SignedInGamers` list access) leaves every subsequent `Begin*` call throwing
-  `InvalidOperationException` forever, for the rest of the process's life.
-  `NetworkSessionTests.cpp` (~lines 317-331) explicitly documents *avoiding* this landmine in its
-  own tests rather than fixing the underlying issue. Decide the correct fix (clear `activeAction_`
-  in a `catch`/RAII guard around the constructor call) and add a test proving a failed
-  `Create()`/`Join()` doesn't permanently brick subsequent calls.
+Per decision 5c, rolled out to **all** avatar-related demos (Phase 0 found 8:
+`demo_avatar`, `demo_avatar_animation_gallery`, `demo_avatar_appearance_tint_studio`,
+`demo_avatar_bone_state_boundary`, `demo_avatar_dual_compare`, `demo_avatar_multi_attach_stress`,
+`demo_avatar_wardrobe_hotswap`, `demo_net_avatar_sync` — re-confirm this list at execution time in
+case more exist).
 
-  On inspection, only `EndCreate` actually has this bug — it constructs the new `NetworkSession`
-  (which can throw via `host_ = localGamers_[0]` when the maxLocalGamers-only overload falls back
-  to an empty global `Gamer::SignedInGamers`) **before** clearing `activeAction_`. `EndJoin` and
-  `EndJoinInvited` already clear `activeAction_` *before* their own `new NetworkSession(...)` call
-  (a different code shape, likely written after `EndCreate`), so a throwing constructor there
-  never left `activeAction_` stuck — confirmed by reading both functions; no change needed for
-  either. `EndFind` never constructs a `NetworkSession` at all and was never at risk.
-
-  Fixed `EndCreate` by wrapping the constructor call in a `try`/`catch(...)` that deletes
-  `activeAction_` and sets it to `nullptr` before rethrowing — the same cleanup the pre-existing
-  success path already performed, just also reachable on the throwing path. Added
-  `NetworkSessionTest.FailedCreateDoesNotPermanentlyStrandActiveAction`: exercises the real
-  empty-global-`SignedInGamers` throw directly (rather than routing around it, as documented in
-  the updated NOTE comment above the test), then proves recovery — a fresh `BeginCreate`/
-  `EndCreate` cycle (using the RAII global-swap technique for a real, non-empty local-gamer list)
-  must succeed afterward instead of throwing `InvalidOperationException`.
-
-  Revert-verify-restore: reverting `EndCreate`'s fix (keeping the new test) reproduced the bug
-  exactly as diagnosed — the recovery `BeginCreate` call threw `InvalidOperationException`
-  ("Operation is not valid due to the current state of the object."). Restored the fix; full
-  suite: **3300/3302 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 6.2** — Audit and fix (or explicitly accept and document) the pointer-identity gamer
-  matching in `LocalNetworkGamer.cpp` (`gamer == packet.Gamer`, ~lines 51-52) — a faithfully-preserved
-  FNA "FIXME: bad equality check." Confirmed this poses lower risk than it might initially appear
-  (since `GamerCollection<T>` stores raw non-owning `T*` and container reallocation never moves the
-  pointee), but the risk model changes once Task 3.1's leak fix lands (currently nothing is ever
-  freed, so no address can be coincidentally reused — fixing the leak reintroduces a theoretical
-  use-after-free/aliasing risk here). Re-evaluate this specifically once Task 3.1 lands, and fix or
-  formally document as an accepted, tracked risk.
-
-  Re-confirmed against FNA's real source (`LocalNetworkGamer.cs`): both call sites carry FNA's own
-  verbatim comment ("FIXME: This is a bad equality check!"), so the pointer-identity comparison
-  itself is a faithfully-preserved upstream quirk, not a CNA-introduced gap — per this repo's
-  behavior-fidelity rule, "fixing" it to a value-based comparison FNA itself doesn't have would be
-  the actual deviation.
-
-  Re-evaluated the risk model now that Task 3.1 has landed: confirmed **still safe**, because
-  neither `NetworkSession::ownedGamers_` nor `ENetBackend::SessionState::OwnedRemoteGamers` ever
-  frees an individual gamer — both are pure `emplace_back` accumulators, only ever cleared/
-  destroyed in bulk at whole-session `Dispose()`/`TeardownSession` (confirmed via `grep` — no
-  individual `erase` call exists on either). Every `NetworkEvent` that could carry a stale
-  `Gamer*` lives either in a per-gamer `packetQueue_` member or `NetworkSession`'s own internal
-  event queue, both of which are destroyed together with that same session's gamers at that same
-  `Dispose()` call — so no stale pointer from a torn-down session can ever outlive the objects it
-  would need to be compared against and alias with a new session's freshly-allocated gamer.
-  Documented this finding directly at both call sites in `LocalNetworkGamer.cpp` rather than
-  changing the comparison logic itself — a pure comment update, not a synthetic test dependent on
-  allocator/UB internals that can't be deterministically forced anyway.
-
-  Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
-  **3300/3302 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 6.3** — Investigate and fix the partial-failure state possible in
-  `ENetBackend::StartHosting`. Confirmed: if `ENetDiscoveryService::RegisterHost` throws (e.g. via
-  `EnsureSocket`'s bind/create failure) *after* `sessions.emplace(...)` has already succeeded, the
-  session is left registered with a live, bound ENet host but never registered for LAN discovery —
-  a real host that's permanently undiscoverable via `Find()`, with no rollback. Add proper
-  transactional rollback (or reorder the operations so failure can't leave an inconsistent state)
-  and a test.
-
-  Fixed via reordering: `ENetDiscoveryService::RegisterHost(session, boundPort)` now runs
-  **before** `sessions.emplace(session, std::move(state))`. A throw from `RegisterHost` now just
-  unwinds normally — `state`'s `ENetHostHandle` destructor tears down the half-created host via
-  RAII, and `Sessions()` never learns about the session at all (no manual rollback code needed).
-
-  Added `ENetBackend::GetSessionCountForTesting()` (a `NOXNA` test-only accessor returning
-  `Sessions().size()`) to make the fix's actual invariant — zero sessions registered after a
-  failed `StartHosting` — directly, deterministically observable, rather than relying on whether
-  a later allocation happens to reuse the failed attempt's freed heap address (confirmed via a
-  first draft that this is *not* reliable: a "does a retry work afterward" check passed even
-  with the bug still present, since the retry's `NetworkSession*` didn't happen to reuse the same
-  address).
-
-  Testing this needed a genuinely isolated process, for two independent reasons: (1)
-  `ENetDiscoveryService`'s own discovery socket is a process-wide singleton with no reset hook
-  (matching `ENetLibrary`'s own precedent) — once bound, `EnsureSocket()` never attempts to bind
-  again, so forcing its failure requires a process that has never touched it before, ruling out
-  `CnaTests` itself; and (2) forcing a genuine bind failure by occupying the discovery port with
-  another socket **does not work at all** — this port is deliberately designed so any two
-  `SO_REUSEADDR`-set UDP sockets coexist on it (see Task 6.5), confirmed empirically when a first
-  draft using exactly that approach passed in isolation but failed for the *wrong* reason
-  (`bind()` failure on the test's own blocking socket, not on `EnsureSocket()`) once run as part
-  of the full suite, where `CnaTests`'s own long-lived discovery socket was already bound.
-
-  Added a new `--role=start-hosting-partial-failure` mode to the existing
-  `tools/net/net_two_process_harness.cpp` (reusing its established spawn/CMake wiring rather than
-  standing up a whole new executable) and a matching
-  `TwoProcessLoopbackTest.StartHostingRollsBackCleanlyOnDiscoveryRegistrationFailure` test. The
-  harness forces the failure portably via `setrlimit(RLIMIT_NOFILE, ...)`, lowered to exactly one
-  more than its own baseline open-descriptor count (3, for stdin/stdout/stderr) — the "+1"
-  headroom deliberately allows `ENetHostHandle::CreateHost`'s own real-hosting socket (opened
-  *before* `RegisterHost`'s discovery socket, confirmed via `enet_host_create`'s source) to
-  succeed normally, so the forced `EMFILE` lands specifically on `RegisterHost`'s own
-  `enet_socket_create()` call — exercising the exact reordering this task fixed, rather than
-  failing a step earlier (confirmed via a first draft using no headroom at all: it made
-  `CreateHost` itself throw first, so neither the buggy nor the fixed ordering was ever actually
-  exercised, and the test passed regardless of the fix). Confirms `NetworkSession::Create` throws
-  cleanly, asserts `GetSessionCountForTesting() == 0` immediately after, restores the real
-  descriptor limit, then retries as a secondary sanity check that real hosting still works
-  normally afterward.
-
-  Revert-verify-restore: reverting just the reordering (keeping the new test and the accessor)
-  reproduced the exact predicted symptom — `partial-failure: 1 session(s) left registered after
-  the failed StartHosting attempt`. Restored the fix; full suite (run twice for stability, since
-  this test spawns a real child process): **3301/3303 passing** both times (2 expected
-  accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 6.4** — Investigate whether `ENetBackend::Sessions()`'s function-local static map and
-  `ENetDiscoveryService`'s file-static `registeredHost_`/`socket_`/`currentResults_` need real
-  synchronization, and document the thread-safety contract explicitly either way. Confirmed
-  currently safe only because `PumpSession`/`Poll()` are exclusively driven from
-  `NetworkSession::Update()` in every observed call path (no `std::thread`/`mutex`/`atomic` anywhere
-  in the module) — a future multi-threaded `Update()` caller would race silently. Add an explicit
-  doc comment on the thread-safety contract (single-threaded-only, must be called from the same
-  thread every time) if that remains the design, or add real synchronization if multi-threaded use
-  is ever intended.
-
-  Documented (single-threaded-only remains the correct design, matching real XNA's own
-  single-threaded `Game`/`Update()` loop contract — adding real synchronization here would be
-  solving a problem XNA itself doesn't have). Added an explicit thread-safety paragraph to both
-  `ENetBackend`'s and `ENetDiscoveryService`'s class-level doc comments in their headers, stating
-  the constraint plainly: every method must be called from the same thread, since neither class
-  has any internal synchronization and every real call path reaches them exclusively through
-  `NetworkSession::Update()`.
-
-  Documentation-only change (no behavior modified, no new stub/type needed), no revert-verify
-  applies. Full suite: **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no
-  regressions.
-
-- [x] **Task 6.5** — Investigate whether `SO_REUSEADDR` (used for the shared discovery UDP port
-  61190, which two independent OS processes both bind in `TwoProcessLoopbackTest.cpp`) actually
-  guarantees reliable delivery of unicast datagrams to multiple same-port listeners on all target
-  platforms (Linux/Windows/Web/Android), or whether `SO_REUSEPORT` (or a different design) would be
-  more correct. Document the finding either way (this "apparently works today" per existing test
-  passes, but isn't explicitly audited/documented as reliable).
-
-  Documented at the `ENET_SOCKOPT_REUSEADDR` call site in `ENetDiscoveryService.cpp`. Key
-  findings: confirmed **reliable on Linux** (this project's primary dev/CI target) via two
-  independent pieces of direct evidence — `TwoProcessLoopbackTest.cpp`'s own repeated real
-  two-process runs (both roles independently reach this exact bind via `NetworkSession::Create(
-  SystemLink, ...)`), and Task 6.3's own harness work, where a plain socket **without**
-  `SO_REUSEADDR` was directly observed failing to bind against a `SO_REUSEADDR` socket already
-  holding the port — consistent with POSIX's documented rule that every socket sharing a UDP port
-  must itself set the option. Windows' `SO_REUSEADDR` has different, well-documented (looser)
-  semantics than POSIX; not independently verified in this Linux-only sandbox, but the difference
-  only affects whether `bind()` itself succeeds, not a correctness concern in the direction that
-  matters here. Web (Emscripten) already has this entire class permanently disabled (existing
-  class-level doc comment). Android is Linux-kernel-based, expected to match POSIX, not
-  independently verified here either. `SO_REUSEPORT` isn't used and isn't needed: this is a
-  client-queries/host-replies model with no per-connection load-balancing to distribute.
-
-  Also documented *why* which-socket-receives-which-datagram is inherently OS-arbitrary regardless
-  of the exact option used, and why that's already handled correctly: the existing "Dedup by
-  connect port alone" logic in `PollOnce` (just below the option-setting code) was already written
-  to treat a query/reply arriving more than once, via more than one local path, as an expected case
-  — the real, correct mitigation for this arbitrariness, not a workaround for a bug.
-
-  Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
-  **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 6.6** — Investigate and fix (in `sharp-runtime`, coordinating per that repo's own
-  modification rule) the endianness asymmetry between `BinaryWriter::Write(Single/double)` (raw
-  native-order `memcpy`) and `BinaryReader::ReadSingle/ReadDouble` (explicit little-endian
-  reconstruction). Confirmed unreachable through this repo's own ENet wire messages today (none use
-  float/double fields), but a real latent bug for ordinary game code writing `Vector2`/`Vector3`/etc.
-  through `PacketWriter` on a big-endian host. Cross-cutting into `sharp-runtime`.
-
-  **Fixed in `sharp-runtime`** (`621eaad`, `develop`): `Write(Single)`/`Write(double)` now extract
-  the IEEE-754 bit pattern into a same-width, same-endianness integer (a pure same-host `memcpy`,
-  not a wire-format concern) and serialize it through the already-portable
-  `Write(uint32_t)`/`Write(uint64_t)`, made symmetric with how `ReadSingle()`/`ReadDouble()`
-  already reconstruct via `ReadUInt32()`/`ReadUInt64()` first, rather than writing raw host-native
-  bytes straight to the wire buffer.
-
-  **Added `WriteSingle_ProducesExactLittleEndianByteSequence`/
-  `WriteDouble_ProducesExactLittleEndianByteSequence`** to `sharp-runtime`'s own
-  `IOStreamTests.cpp`, asserting the exact expected IEEE-754 little-endian byte sequence for a
-  known value (`1.0f`/`1.0`) directly, rather than relying on the existing roundtrip tests (which
-  cannot distinguish the two implementations on a little-endian host, since `ReadSingle`/
-  `ReadDouble` already always reconstruct assuming little-endian regardless of what `Write` wrote).
-
-  **Honest note on revert-verify for this specific fix**: stashed just the source fix and
-  rebuilt — the 2 new byte-sequence tests *still passed*, confirming empirically (not just by
-  argument) that on this little-endian development machine, the old raw-`memcpy` implementation
-  and the new explicit-little-endian implementation produce byte-identical output for every value
-  — exactly matching this task's own original framing ("confirmed unreachable... today... a real
-  latent bug... on a big-endian host"). This is the one fix in the whole `plan_net.md` effort
-  where a genuine "would fail without the fix" *execution* proof is not obtainable in this
-  environment at all (no big-endian host available); the proof here is necessarily the source-level
-  contrast against `Write(shortcs)`/`Write(intcs)`/`Write(longcs)`'s own already-correct explicit
-  little-endian pattern, confirmed by direct code reading before the fix, not by a failing test.
-  Restored the fix regardless, since it is still the objectively correct, portable behavior going
-  forward. Full `sharp-runtime` suite: **10584/10584 passing**, no regressions.
-
-- [x] **Task 6.7** — Investigate the possible null-dereference in `ReplyToQuery` if it's ever reached
-  before a host gamer exists (`WireGamertagFor(registeredHost_->getHostProperty())` has no
-  null-check). Confirmed unreachable in practice today given current call ordering
-  (`StartHosting` always runs after a host gamer is constructed), but add either a defensive
-  null-check or an explicit assertion/test documenting the invariant that makes this safe, so a
-  future refactor can't silently reintroduce the risk.
-
-  Confirmed the invariant precisely: `RegisterHost` (the only way `registeredHost_` ever becomes
-  non-null) is only ever called from `ENetBackend::StartHosting`, itself only ever called at the
-  very end of `NetworkSession`'s own constructor — by which point `host_` (`= localGamers_[0]`)
-  has already been set, or the constructor itself already threw first (an empty local-gamer list
-  makes that exact indexing throw before `StartHosting` is ever reached — see Task 6.1). A
-  defensive null-check would be validating a scenario the current architecture cannot produce
-  (against this project's own "don't validate what can't happen" convention), so documented the
-  invariant directly at the call site instead, explicitly naming the two existing tests
-  (`FindSessionsDiscoversRegisteredHost`, `ReplyToQueryOnlyAnswersWhenSessionTypeFilterMatchesTheHost`)
-  that already exercise this exact line on every real reply path — a future refactor that broke
-  the ordering would surface as an immediate test crash, not a silent gap.
-
-  Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
-  **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 6.8** — Investigate reducing the repeated `Flush()` calls after every single `Send()`
-  inside per-peer broadcast fan-out loops (e.g. `HandleClientHello`'s `GamerJoinBroadcastMessage`
-  fan-out, ~lines 168-176). Not a correctness bug, but an avoidable syscall-per-peer cost if
-  fan-out ever scales past a handful of peers — batch the sends and flush once per broadcast instead.
-
-  Confirmed 3 per-peer fan-out loops, all calling the existing `SendTo` helper (which bundled
-  `Send()` + `Flush()` together) once per peer: `HandleClientHello`'s `GamerJoinBroadcastMessage`
-  fan-out, `HandleDisconnect`'s `GamerLeaveBroadcastMessage` fan-out, and
-  `BroadcastStateChange`'s `StateChangeBroadcastMessage` fan-out. Every other `SendTo` call site
-  is a genuine single-recipient send and was left untouched.
-
-  Split `SendTo` into a new `QueueSend` (just the `Send()` call, no flush) plus `SendTo` itself
-  (now `QueueSend` + `Flush()`, unchanged behavior for single-recipient callers). Updated all 3
-  fan-out loops to call `QueueSend` per peer and `state.Host.Flush()` exactly once after the loop
-  — one `enet_host_flush()` per broadcast instead of one per recipient.
-
-  Pure non-functional (syscall-count) refactor with no observable behavioral difference — final
-  delivered packets are identical either way, only timing/syscall count differs, which isn't
-  meaningfully unit-testable without invasive flush-call instrumentation disproportionate to this
-  cleanup (consistent with Task 5.12's precedent for pure refactors: existing full-suite coverage,
-  including the real end-to-end `ENetBackendTest`/`TwoProcessLoopbackTest` traffic tests, is the
-  correct validation here, not a new synthetic test). No revert-verify applies. Full suite:
-  **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 6.9** — Re-verify `LeaderboardReader`-adjacent doc-comment accuracy: confirm the
-  `HasLeftSession` doc-comment in `NetworkGamer.hpp` (~line 30) correctly describes FNA's actual
-  access modifier (`{ get; private set; }`, not `internal`) — a minor doc-accuracy fix, not a
-  behavior change, but worth correcting so future readers don't misunderstand what CNA's `NOXNA
-  SetHasLeftSession()` extension is actually restoring vs. adding.
-
-  Confirmed against FNA's real source (`NetworkGamer.cs`): the property is indeed
-  `public bool HasLeftSession { get; private set; }`, and — more notably — FNA's own
-  `NetworkSession.cs` never actually calls the setter after the constructor's one-time
-  `HasLeftSession = false;`, meaning real XNA's `HasLeftSession` is permanently `false` in
-  practice (an unimplemented stub, like several other `NetworkSession`-adjacent members already
-  found this session). Fixed the doc comment: corrected "internal" to "private", and added why
-  CNA's own `NOXNA SetHasLeftSession()` extension exists at all — this port's own
-  `NetworkSession::RemoveGamer()` (a sibling class, not a subclass, so it couldn't reach a real
-  `private` setter regardless of the exact modifier) needed a way to make this property actually
-  functional, unlike FNA's own dead one.
-
-  Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
-  **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-  **Phase 6 complete — 10/10** (Tasks 6.1-6.10, including Task 6.6 and the mid-session-added Task
-  6.10, both `sharp-runtime` changes made after the user's explicit go-ahead).
-
-- [x] **Task 6.10** — Investigate and fix (in `sharp-runtime`, coordinating per that repo's own
-  modification rule — see Task 4.4) `BinaryReader::ReadBytes` throwing plain
-  `std::runtime_error("Unexpected end of stream.")` on premature end-of-stream instead of
-  `System::IO::EndOfStreamException`, which already exists in `sharp-runtime` (with its own passing
-  tests in `IOTests.cpp`) but is never actually thrown by `BinaryReader` anywhere. Real .NET's
-  `BinaryReader` throws `EndOfStreamException` specifically for this case. Discovered while writing
-  Task 5.10's `PacketReader` underrun tests (`ReadingPastEndOfBufferThrows`,
-  `ReadingPartialValueAtEndOfBufferThrows`), which currently assert the actual (wrong-type)
-  `std::runtime_error` — update those two tests to expect `EndOfStreamException` once this lands.
-
-  The user merged a large, independent batch of `sharp-runtime` work (many commits porting
-  `System.Text.Json`, `System.Security.Cryptography`, `System.Text.RegularExpressions`, and more)
-  that, among many other things, already included this exact fix: `BinaryReader.cpp`'s internal
-  `ReadBytesExact` (renamed from the old private `ReadBytes`) now throws
-  `System::IO::EndOfStreamException()` instead of `std::runtime_error`. Confirmed by reading the
-  current `sharp-runtime` source directly, not assumed from a commit message.
-
-  **cna_net-side fallout, found and fixed**: rebuilding `cna_net` against the merged
-  `sharp-runtime` surfaced two real issues, both fixed here as part of adapting to the merge:
-  1. **Build break**: `System::Globalization::RegionInfo::CurrentRegion()` was renamed to
-     `getCurrentRegionProperty()` (the same merge correctly aligning it with this project's own
-     C# property → C++ convention) — `cna_net`'s one call site
-     (`GamerProfile.cpp`'s constructor) still used the old spelling. Fixed the one call site
-     (confirmed via a full-tree `grep` that no other call sites existed).
-  2. **10 tests failed**, not just the 2 the task originally anticipated — every `Decode*
-     ThrowsOnTruncatedBuffer`-style test across the whole Net test suite asserted the old
-     `std::runtime_error`, not just `PacketReader`'s own two. Updated all 10, adding
-     `#include "System/IO/EndOfStreamException.hpp"` and changing the expected exception type,
-     each verified individually to be a genuine underrun-triggered assertion (not conflating them
-     with the unrelated, still-`std::runtime_error` `Encode*ThrowsWhenXExceeds255` 255-capacity-
-     guard tests, or `NetDiscoveryProtocolTest`'s own explicit version-mismatch/index-bounds
-     checks, which still throw `std::runtime_error` directly and correctly stayed unchanged):
-     `NetPacketCodecTest.DecodeClientHelloThrowsOnTruncatedBuffer`,
-     `DecodeServerWelcomeThrowsOnTruncatedBuffer`, `DecodeGamerJoinBroadcastThrowsOnTruncatedBuffer`,
-     `DecodeGamerLeaveBroadcastThrowsOnTruncatedBuffer`, `DecodeStateChangeBroadcastThrowsOnTruncatedBuffer`,
-     `DecodeAppDataThrowsOnTruncatedBuffer`; `NetDiscoveryProtocolTest.DecodeQueryThrowsOnTruncatedBuffer`,
-     `DecodeAnnounceThrowsOnTruncatedBuffer`; `PacketReaderTest.ReadingPastEndOfBufferThrows`,
-     `ReadingPartialValueAtEndOfBufferThrows` (the original 2 the task named).
-
-  Verified the fix already works genuinely (not just compiles): rebuilt `cna_net` fresh against
-  the merged `sharp-runtime` — first build failed exactly as described (the `RegionInfo` rename);
-  fixed that, rebuilt clean, ran the full suite — exactly the 10 tests above failed (asserting
-  `std::runtime_error` against an exception that is no longer one, confirming the exception-type
-  change is real and observable, not just a docstring update); updated all 10 to
-  `System::IO::EndOfStreamException`; reran — full suite **3398/3398 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions.
+- [ ] **Task 8.1** — Design a small **demo-only** shared helper (per `CLAUDE.md`/meta-prompt
+  guidance: "keep demo-only helpers in examples, not public API" — do not add this to CNA's
+  public API surface). Likely home: a shared header/source under `examples/common/` or similar if
+  that convention already exists (check first), otherwise a new small shared location scoped to
+  avatar demos only.
+- [ ] **Task 8.2** — Implement: F1 (`Keys::F1`, confirm it exists in the existing `Keys` enum)
+  toggles overlay visibility; draws the 3D scene first, then the 2D overlay on top via
+  `SpriteBatch`; translucent white rectangle behind black text (decision 5d); uses the default
+  text block from this plan's header verbatim (decision 5a) for `demo_avatar`, adapted per-demo
+  for the others where command-line args/controls differ (keep the "F1: Show/hide this help" /
+  "Esc: Quit" lines identical across all of them for consistency; customize the rest).
+- [ ] **Task 8.3** — Needs a `SpriteBatch`, a `SpriteFont`, and a 1x1 white texture in each demo
+  that doesn't already have them — reuse if present, add minimally if not.
+  Overlay must not crash if font/texture assets fail to load; show inline fallback text if
+  practical.
+- [ ] **Task 8.4** — Update each demo's window title or intro text to mention F1 help.
+- [ ] **Task 8.5** — Verify: build and run each of the 8 demos, confirm F1 toggles correctly, Esc
+  still quits, overlay renders on top of the 3D content, and male/female avatar selection (where
+  applicable per-demo) doesn't break the overlay.
+- [ ] **Task 8.6** — One commit per demo is likely excessive for 8 near-identical additions built
+  on the same Task 8.1 helper — since the user's "one task = one commit" rule maps to *this
+  plan's tasks*, treat Task 8.1+8.2+8.3 (the shared helper + its first real usage in
+  `demo_avatar`) as one task/commit, then each subsequent demo's rollout as its own small
+  task/commit referencing this same Phase.
 
 ---
 
-## Phase 7 — GamerServices: Bugs
+## Phase 9 — Docs and demo cleanup
 
-- [x] **Task 7.1** — Fix `SignedInGamer::GetAchievements()` hanging forever once GamerServices is
-  actually initialized — the same class of bug as the already-fixed `NetworkSession` hang (Task
-  12.1 in the prior plan). Confirmed (`SignedInGamer.cpp`, ~lines 88-111): `BeginGetAchievements()`
-  never marks its `GamerAction` completed (unlike `BeginAwardAchievement`, ~line 79, which
-  explicitly does `statStoreAction_->setIsCompletedProperty(true)`). The synchronous wrapper's
-  `while (!result->getIsCompletedProperty()) { if (!GamerServicesDispatcher::UpdateAsync())
-  statReceiveAction_->setIsCompletedProperty(true); }` only terminates when `UpdateAsync()` returns
-  `false` — once a real `GamerServicesComponent` exists (`IsInitialized == true`, the normal case
-  for any real game), `UpdateAsync()` returns `true` forever and the loop spins at 100% CPU
-  indefinitely. The only existing test (`SignedInGamerTest.GetAchievementsReturnsEmptyCollection`)
-  passes only because the test suite deliberately never calls `GamerServicesDispatcher::Initialize()`
-  (documented in `GamerServicesServiceTests.cpp`, ~lines 16-20), making this bug completely
-  invisible to the current test suite. Fix the same way `NetworkSession.cpp` was fixed: mark the
-  action pre-completed in `BeginGetAchievements` (there's no real deferred work to wait on). Add a
-  regression test analogous to `tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp`
-  that runs in a genuinely separate process with `Initialize()` actually called, proving
-  `GetAchievements()` returns promptly instead of hanging.
-
-  Fixed: `BeginGetAchievements` now calls `statReceiveAction_->setIsCompletedProperty(true);`
-  immediately after construction, matching `BeginAwardAchievement`'s already-correct pattern —
-  `GetAchievements()`'s polling loop now sees `IsCompleted == true` from the start and never
-  enters its body.
-
-  Extended the existing `tools/net/gamerservices_dispatcher_harness.cpp` (rather than a new
-  executable) with a `--mode=get-achievements` flag (defaulting to `network-session`, so the
-  existing DEFERRED.md item #19 test needed no changes), and added
-  `GamerServicesDispatcherHangRegressionTest.GetAchievementsDoesNotHangWhenGamerServicesIsInitialized`,
-  spawning the harness with that mode — same process-isolation reasoning as the existing test
-  (`GamerServicesDispatcher::Initialize()`'s process-lifetime static with no reset hook would
-  otherwise contaminate every other test in this binary).
-
-  Revert-verify-restore: reverting just the fix (keeping the new test/harness code) reproduced
-  the hang exactly — the harness never exited, was `SIGKILL`ed by the test's own 10-second
-  watchdog, and the test failed with exit code -1. Restored the fix; both regression tests now
-  pass promptly (~50ms each). Full suite: **3302/3304 passing** (2 expected accelerometer/
-  gyroscope skips), no regressions.
-
-- [x] **Task 7.2** — Audit every other `SignedInGamer` `Begin*` method (`BeginGetFriends`,
-  `BeginGetProfile`, and any others in the same file) for the identical "never marks itself
-  completed" pattern found in Task 7.1 — Task 7.1's fix was scoped to `GetAchievements` specifically,
-  but the same root cause (an async action never calling `setIsCompletedProperty(true)`) may recur
-  in sibling methods in the same file. Fix any found, and add the same out-of-process regression
-  test pattern for each.
-
-  Audited every `Begin*` async method across the whole `GamerServices` namespace (not just
-  `SignedInGamer.cpp` — `Gamer.cpp`, `AvatarDescription.cpp`, `LeaderboardReader.cpp`, and
-  `Guide.cpp` too, everywhere an `IAsyncResult*`-returning `Begin*` exists): `Gamer::BeginGetProfile`
-  already calls `setIsCompletedProperty(true)`; `Guide::BeginShowKeyboardInput` already does the
-  same; `AvatarDescription::BeginGetFromGamer`'s own `AvatarDescriptionAsyncResult::
-  getIsCompletedProperty()` is hardcoded `return true;` unconditionally; and every remaining
-  `Begin*` (`Gamer::BeginGetFromGamertag`/`BeginGetPartnerToken`, `LeaderboardReader::
-  BeginPageUp`/`BeginPageDown`/`BeginRead` ×3) unconditionally `throw System::
-  NotSupportedException()` — never creating a pending action that a polling loop could ever wait
-  on in the first place, so the `while (!result->getIsCompletedProperty())` loops in
-  `LeaderboardReader::PageUp()`/`Read()` are unreachable dead code (the preceding `Begin*` call
-  always throws first). `BeginGetFriends` doesn't exist anywhere in this codebase at all
-  (`GetFriends()` returns synchronously with no `Begin*`/`End*` pair) — the plan's own text
-  referencing it pre-dated this audit and was inaccurate.
-
-  Confirmed: `SignedInGamer::BeginGetAchievements` (fixed in Task 7.1) was the **only** instance
-  of this bug anywhere in `GamerServices`. No further fix needed; a pure investigation task with a
-  negative (no-further-bugs-found) result, not requiring new source changes or new regression
-  tests (there is no other hang to regress-test against).
-
-  No revert-verify applies (no code change). Full suite unaffected (no source change made) —
-  **3302/3304 passing** (2 expected accelerometer/gyroscope skips), same baseline as Task 7.1.
-
-- [x] **Task 7.3** — Fix `GameDefaults`'s constructor initializing `GameDifficulty`/`ControllerSensitivity`
-  to the wrong stub default values. Confirmed: FNA's `internal GameDefaults()` constructor is
-  genuinely empty (an upstream "FIXME: This is one huge joke" — the field is just left at C#'s
-  `default(T)`, which is the enum's ordinal-0 value). `GameDifficulty`'s ordinal-0 value is `Easy`
-  (order: `Easy=0, Normal=1, Hard=2`); `ControllerSensitivity`'s ordinal-0 value is `Low` (order:
-  `Low=0, Medium=1, High=2`). `GameDefaults.hpp` (~lines 108-109) instead hardcodes
-  `gameDifficulty_{GameDifficulty::Normal}` and `controllerSensitivity_{ControllerSensitivity::Medium}`
-  — both wrong (by contrast, `racingCameraAngle_{RacingCameraAngle::Back}` on ~line 117 is already
-  correct since `Back` is ordinal 0 there). The existing test (`GamerServicesDataTests.cpp`, ~lines
-  144-145) asserts the *wrong* values too, self-consistently hiding the bug. Fix both field
-  initializers to their correct ordinal-0 values and correct the two `EXPECT_EQ` lines in the
-  existing test to match the fix (not to keep asserting the old, wrong values).
-
-  Fixed both field initializers (`GameDifficulty::Easy`, `ControllerSensitivity::Low`) and
-  corrected `GamerServicesDataTests.cpp`'s `GameDefaultsTest.DefaultValues`. While rebuilding,
-  found a **second, previously-undiscovered self-consistently-wrong test** in a different file:
-  `GamerServicesGamerTests.cpp`'s `SignedInGamerTest.GameDefaultsPresencePrivilegesDefaults` also
-  asserted `GameDifficulty::Normal` — missed by the plan's own original grep, which only checked
-  `GamerServicesDataTests.cpp`. Fixed that assertion too. Confirmed no other hardcoded
-  `GameDifficulty::Normal`/`ControllerSensitivity::Medium` references exist anywhere else in the
-  codebase (the only other 2 hits, in `GamerServicesEnumsTests.cpp`, are trivial enum
-  self-equality checks, unrelated to `GameDefaults`).
-
-  Revert-verify-restore: reverting just the header fix (keeping both corrected tests) reproduced
-  the exact predicted failure in `GameDefaultsTest.DefaultValues` (`Which is: 4-byte object
-  <01-00 00-00>` — the wrong, ordinal-1 value, for both fields). Restored the fix; full suite:
-  **3302/3304 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 7.4** — Fix `PropertyDictionary`'s mutable `operator[]` auto-vivifying missing keys
-  instead of throwing, matching the const overload's already-correct behavior. Confirmed: FNA's
-  indexer getter is `return dictionary[key];`, which throws `KeyNotFoundException` for a missing
-  key via `Dictionary<TKey,TValue>`. The const overload correctly mirrors this via `.at(key)`
-  (throws `std::out_of_range`), but the non-const overload uses `dictionary_[key]`
-  (`std::map::operator[]`), which silently default-constructs and inserts an empty `std::any` for a
-  missing key instead of throwing, and inflates `Count` as a side effect. Any read through a
-  non-const `PropertyDictionary&` (the common case) silently diverges from FNA. Fix: separate
-  get-context (no auto-insert, throws on missing key) from set-context (insert-on-write) — e.g. via
-  a proxy-object return type, or by providing a distinct read accessor and having assignment go
-  through a different path. Add a test: reading a missing key through a non-const reference should
-  throw, not silently insert and inflate `Count`.
-
-  Confirmed all 8 `SetValue` overloads already write directly through `dictionary_[key] = value;`
-  on the underlying `std::map` — never through `PropertyDictionary::operator[]` itself — so no
-  proxy-object redesign was needed: switched the non-const `operator[]` to `dictionary_.at(key)`
-  (identical to the const overload), which only ever affects reads. Grepped the whole codebase and
-  the (previously non-existent) test file's own history for any external caller writing a *new*
-  key via `dict[key] = value` — none exist; every real write path already goes through `SetValue`.
-  Updated the header's doc comment to state the corrected contract. Added
-  `MutableIndexerThrowsOnMissingKeyInsteadOfAutoVivifying` and
-  `MutableIndexerReadsAndOverwritesExistingKey` (proving reading/overwriting an *existing* key
-  through the mutable indexer still works correctly, not just that missing-key access throws).
-
-  Revert-verify-restore: reverting just the `.cpp` fix (keeping the new tests) reproduced both
-  predicted symptoms exactly — no throw, and `Count` inflated from 0 to 1. Restored the fix; full
-  suite: **3304/3306 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 7.5** — Fix `GamerServicesDispatcher::Initialize()` leaking the previous 4
-  `SignedInGamer` objects when called a second time. Confirmed: `Initialize()` heap-allocates 4 new
-  `SignedInGamer*` every call, wraps them in a new `SignedInGamerCollection`, then calls
-  `Gamer::setSignedInGamersProperty(...)`. That setter deletes the old `SignedInGamerCollection`
-  before replacing the pointer, but `GamerCollection<T>` has no destructor that deletes its
-  contained `T*` elements — only the vector's own storage is freed. The 4 `SignedInGamer` objects
-  from the first call become unreachable and leaked on any second `Initialize()` call. (FNA itself
-  has the identical no-op-if-already-initialized gap — this is a C++-ownership-model issue turning
-  FNA's harmless GC-covered pattern into a real leak, not a CNA logic divergence from FNA's own
-  behavior.) Fix: have `Initialize()` explicitly free the previous collection's contents before
-  overwriting (ties into the same ownership-model question as Net's Phase 3 — consider a consistent
-  approach across both namespaces). Add a leak-check test (or at minimum a test with an
-  instance-counting test double) proving no leak across two `Initialize()` calls.
-
-  Fixed: `Initialize()` now iterates `*Gamer::getSignedInGamersProperty()` and `delete`s every
-  previous-generation `SignedInGamer*` *before* constructing the fresh set of 4 — a harmless
-  no-op the very first time it runs, since `getSignedInGamersProperty()` lazily returns an empty
-  collection until `Initialize()` has run at least once.
-
-  For the "instance-counting test double" the task suggests: rather than retrofitting `Rule of
-  Five` onto `SignedInGamer` (a value type that's freely copied/moved elsewhere in this codebase,
-  where a naive constructor/destructor counter would risk under/over-counting across copies)
-  purely to make one leak scenario testable, added `GamerServicesDispatcher::
-  GetFreedGamerCountForTesting()` (a `NOXNA` counter incremented once per actual `delete` in the
-  loop above) — directly, deterministically proving the exact code path runs the expected number
-  of times, scoped to `Initialize()` itself rather than to `SignedInGamer`'s general lifetime.
-
-  Extended the existing `tools/net/gamerservices_dispatcher_harness.cpp` with a
-  `--mode=initialize-leak-check` flag (same process-isolation reasoning as Tasks 12.1/7.1 —
-  `isInitialized_` is a process-lifetime static with no reset hook) and added
-  `GamerServicesDispatcherHangRegressionTest.SecondInitializeDoesNotLeakThePreviousFourGamers`:
-  confirms `GetFreedGamerCountForTesting() == 0` before a second `Initialize()` call and `== 4`
-  after it.
-
-  Revert-verify-restore: reverting just the delete-loop (keeping the counter and the new test)
-  reproduced the exact predicted symptom — harness reported "expected exactly 4 freed gamers ...
-  got 0". Restored the fix; full suite: **3305/3307 passing** (2 expected accelerometer/gyroscope
-  skips), no regressions.
-
-- [x] **Task 7.6** — Move `SignedInGamer::SignedIn`/`SignedOut` static events off the incorrect
-  `NOXNA` tag — they are genuine, fully public XNA 4.0 API (confirmed against FNA's
-  `SignedInGamer.cs`, `public static event EventHandler<SignedInEventArgs> SignedIn;`), not CNA
-  extensions. Remove the `NOXNA` marker from these two declarations specifically (the
-  `OnSignIn`/`OnSignOut` raiser methods are a separate, correctly-flagged-as-different issue — see
-  Task 7.7).
-
-  Removed `NOXNA` from both declarations and expanded their doc comments to state why (genuine
-  public FNA API, unlike `OnSignIn`/`OnSignOut` just below). `NOXNA` is a pure marker macro with no
-  compiled effect, so this is a documentation/tagging-only change.
-
-  No revert-verify applies (marker-only, no behavior change). Full suite: **3305/3307 passing**
-  (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 7.7** — Change `SignedInGamer::OnSignIn`/`OnSignOut` from `public static ... NOXNA` to
-  `private static` + `friend class GamerServicesDispatcher`, matching this project's own documented
-  convention for C# `internal` members (per `CHECKLIST.md`). Confirmed FNA declares these `internal
-  static void OnSignIn/OnSignOut(...)`. The only caller anywhere in the codebase today is
-  `GamerServicesDispatcher.cpp` (`OnSignIn`); `OnSignOut` currently has zero callers at all. Add the
-  `friend` declaration and verify the build still passes after tightening visibility.
-
-  Moved both to `private:`, added `friend class GamerServicesDispatcher;`, and (following this
-  codebase's own established `*TestAccess` convention — e.g. `SoundEffectInstanceTestAccess`,
-  `CueTestAccess`, `AudioEngineTestAccess`) added `NOXNA friend struct SignedInGamerTestAccess;`
-  plus a new `tests/Microsoft/Xna/Framework/GamerServices/SignedInGamerTestAccess.hpp`, since the
-  two existing direct-call tests (`SignedInEventFires`/`SignedOutEventFires`) needed to keep
-  exercising these now-private raisers. Updated `GamerServicesGamerTests.cpp` to call through
-  `SignedInGamerTestAccess::OnSignIn`/`OnSignOut` instead of `SignedInGamer::OnSignIn`/`OnSignOut`
-  directly.
-
-  Revert-verify via compile error (consistent with this session's established practice for
-  test-only NOXNA API changes): temporarily reverted the two call sites back to the direct,
-  now-private form — confirmed the build fails with "is private within this context" for both.
-  Restored the `TestAccess` indirection; full suite: **3305/3307 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 7.8** — Fix `GamerCollection<T>::GamerCollectionEnumerator::getCurrent()` having no
-  bounds check — undefined behavior, not a catchable exception like FNA's equivalent. Confirmed:
-  `return (*collection_)[static_cast<std::size_t>(position_)];` uses raw `std::vector::operator[]`.
-  Calling `getCurrent()` before the first `MoveNext()` (`position_ == -1`, casts to a huge
-  `size_t`) or after enumeration has run past the end is real undefined behavior — likely a crash or
-  memory corruption. FNA's equivalent throws a catchable `ArgumentOutOfRangeException` in the same
-  situation. Fix: bounds-check and throw the matching `sharp-runtime` exception type. Add a test for
-  both misuse cases (this is exactly the gap Task 8.3's test-coverage task would otherwise leave
-  undiscovered).
-
-  Confirmed against FNA's real `GamerCollection<T>.GamerCollectionEnumerator.Current` getter
-  (`return collection[position];`, via `ReadOnlyCollection<T>`'s indexer → `List<T>`'s own
-  indexer, which throws `ArgumentOutOfRangeException`). Fixed `getCurrent()` with an explicit
-  bounds check covering all three unsafe cases: `position_ < 0` (pre-`MoveNext()`), `position_ >=
-  size()` (past the end), and — an additional case found while fixing this, not explicitly named
-  by the task — `collection_ == nullptr` (post-`Dispose()`, previously a null-pointer dereference).
-  All three throw `System::ArgumentOutOfRangeException` now.
-
-  Added `GamerCollectionEnumeratorTest` (4 tests) exercised through `SignedInGamerCollection`, a
-  concrete `GamerCollection<T>` subclass: `GetCurrentBeforeFirstMoveNextThrows`,
-  `GetCurrentPastTheEndThrows`, `GetCurrentAfterDisposeThrows`, and
-  `MoveNextAndGetCurrentEnumerateInOrder` (proving normal enumeration still works correctly, not
-  just that misuse throws).
-
-  Revert-verify-restore: reverting just the bounds check (keeping the new tests) reproduced all
-  three predicted failure modes — the first two silently returned/misbehaved instead of throwing,
-  and critically the third (`GetCurrentAfterDisposeThrows`) **crashed the entire test binary with
-  a real SIGSEGV** (exit code 139), confirming this was genuine memory-unsafety, not just a
-  theoretical concern. Restored the fix; full suite: **3309/3311 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions, no crash.
-
-- [x] **Task 7.9** — Fix the wrong exception types thrown by 3 collection indexers, for consistency
-  with FNA and with this same file's own other, correctly-typed exceptions. Confirmed:
-  `AchievementCollection::operator[](const std::string&)` throws `std::out_of_range`, but FNA's
-  equivalent explicitly does `throw new IndexOutOfRangeException();`. `sharp-runtime` already ships
-  both `System::IndexOutOfRangeException` and `System::ArgumentOutOfRangeException`, and this same
-  file already uses proper `sharp-runtime` exception types elsewhere (`NotSupportedException`,
-  `InvalidOperationException`), so this is a real inconsistency, not a missing-dependency gap. The
-  same issue affects `AchievementCollection::operator[](int)` (via `.at()`) and the base
-  `GamerCollection<T>::operator[](int)` (also via `.at()`) — FNA's `List<T>`/`ReadOnlyCollection<T>`
-  int indexers throw `ArgumentOutOfRangeException`. Switch all three call sites to the matching
-  `sharp-runtime` exception types. Update/add tests asserting the correct exception type is thrown
-  in each case (not just "throws something").
-
-  Confirmed against FNA's real source: `this[int index] { get { return collection[index]; } }`
-  (a `List<T>`, throwing `ArgumentOutOfRangeException`) for both int indexers, and
-  `this[string achievementKey]` explicitly doing `throw new IndexOutOfRangeException();`. Fixed
-  all three: `AchievementCollection::operator[](int)` and the base
-  `GamerCollection<T>::operator[](int)` now use
-  `ArgumentOutOfRangeException::ThrowIfNegative`/`ThrowIfGreaterThanOrEqual` before a raw,
-  now-safe `operator[]` index (replacing `.at()`'s differently-typed exception);
-  `AchievementCollection::operator[](const std::string&)` now throws
-  `System::IndexOutOfRangeException()` for a missing key.
-
-  Fixed the existing self-consistently-wrong `AchievementCollectionTest.IndexByKeyNotFound` (was
-  asserting `std::out_of_range`). Added `AchievementCollectionTest.
-  IndexByIntOutOfRangeThrowsArgumentOutOfRangeException` and `SignedInGamerCollectionTest.
-  IntIndexOutOfRangeThrowsArgumentOutOfRangeException` (through `SignedInGamerCollection`, a
-  concrete `GamerCollection<T>` subclass, for the base-class int indexer) — neither of the two
-  int-indexer out-of-range cases had any prior test coverage at all.
-
-  Revert-verify-restore: reverting both source fixes (keeping all three tests) reproduced the
-  exact predicted symptom for all three — `std::out_of_range` instead of the correct
-  sharp-runtime type. Restored the fixes; full suite: **3311/3313 passing** (2 expected
-  accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 7.10** — Add the missing `NOXNA` marker to `LeaderboardEntry::getRankingEXTProperty()`.
-  Confirmed against the XNA 4.0 HTML doc spec that real XNA's `LeaderboardEntry` exposes only
-  `Columns`, `Gamer`, `Rating` — no ranking property; `RankingEXT` is FNA's own stub extension.
-  `LeaderboardEntry.hpp` (~lines 51-56) declares it without `NOXNA`, violating `CLAUDE.md`'s "MUST
-  wrap it with NOXNA" rule (contrast with `operator==`/`operator!=` a few lines below, which are
-  correctly marked). Add the marker to the declaration and its Doxygen block.
-
-  Confirmed directly against FNA's own real `LeaderboardEntry.cs`: `RankingEXT` is FNA's own
-  addition (not present in real XNA 4.0, which exposes only `Columns`/`Gamer`/`Rating`) — FNA's
-  own author already named it with the "EXT" suffix for exactly this reason. Added `NOXNA` to the
-  declaration and expanded its Doxygen comment to state why.
-
-  Marker-only change (`NOXNA` has no compiled effect), no behavior change, no revert-verify
-  applies. Full suite: **3311/3313 passing** (2 expected accelerometer/gyroscope skips), no
-  regressions.
-
-- [x] **Task 7.11** — Add the missing `NOXNA` marker to `Guide::ShowAchievementsEXT`. Confirmed this
-  is FNA's own addition (not real XNA 4.0 API — the doc comment even says "(FNA extension)"), but
-  neither the declaration (`Guide.hpp`, ~line 321) nor the definition carries `NOXNA` anywhere in
-  the file, unlike all ~25 other `Guide` members (which are real XNA API and correctly unmarked).
-  Add the marker.
-
-  Confirmed directly in FNA's own real `Guide.cs`: `ShowAchievementsEXT` is FNA's own addition,
-  already named with the "EXT" suffix by FNA's own author. Added `NOXNA` to the declaration.
-
-  Marker-only change, no behavior change, no revert-verify applies. Full suite: **3311/3313
-  passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 7.12** — Fix `FriendCollection::Dispose()` never deleting the raw `FriendGamer*`
-  pointers it owns (mirrors the same ownership-model gap as Net's Task 3.1). Confirmed:
-  `Dispose()` does `collection_.clear()`, which only drops the pointers from the vector, never
-  deleting the pointed-to objects. Currently masked because `SignedInGamer::GetFriends()` only ever
-  constructs an empty stub `FriendCollection` today (no real `FriendGamer*` is ever allocated in
-  practice) — but there is no documented ownership contract for when real friend-list population is
-  eventually implemented. Fix and document the ownership contract now, before any non-stub
-  population work begins, using the same design decision as Task 3.1/7.5's ownership-model
-  question. Add a test (with a test-double/instance counter) proving no leak on `Dispose()` once
-  real `FriendGamer` objects can exist in the collection.
-
-  Confirmed against FNA's real `FriendCollection.Dispose()` (`collection.Clear(); IsDisposed =
-  true;`) — FNA itself never frees individual `FriendGamer` objects either, relying entirely on
-  .NET's GC once nothing else references them (the identical class of gap as Task 7.5, not a CNA
-  logic divergence). Decided: `FriendCollection` stays a **non-owning view**, consistent with
-  `GamerCollection<T>`'s general design and Task 3.1's precedent (the *creator* of `Gamer`-derived
-  objects owns them — e.g. `NetworkSession::ownedGamers_`, `ENetBackend::SessionState::
-  OwnedRemoteGamers`, or `GamerServicesDispatcher::Initialize()`'s explicit free-before-replace
-  pattern — never the read-only view collection holding non-owning pointers to them). Making
-  `Dispose()` delete pointers it doesn't actually own would be the wrong fix, not a fix at all —
-  since there is no real population code yet to establish who *does* own them, added an explicit
-  doc comment to the class stating this contract for whoever implements real friend-list
-  population later, rather than writing speculative ownership code for a scenario that doesn't
-  exist yet.
-
-  Added `FriendCollectionTest.DisposeDoesNotOwnOrFreeFriendGamerPointers`: constructs a real,
-  caller-owned heap `FriendGamer`, wraps it in a `FriendCollection`, calls `Dispose()`, and proves
-  the `FriendGamer` is still valid and safely deletable by the caller afterward — if `Dispose()`
-  had wrongly freed it, this would be a use-after-free/double-free.
-
-  No source behavior change (confirmed already-correct), no revert-verify applies. Full suite:
-  **3312/3314 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-  **Phase 7 complete** — all 12 GamerServices bug tasks (Tasks 7.1-7.12) done.
+- [ ] **Task 9.1** — Execute Task 1.1's `docs/xna-4-api-coverage.md` fixes (staged here since
+  Phase 1 only investigated).
+- [ ] **Task 9.2** — Update `docs/avatar-real-rendering-ext.md` with the new mesh-craft-based
+  asset pipeline description (Phase 7) and current real-rendering status.
+- [ ] **Task 9.3** — Update `tools/avatar_builder/README.md` to describe the new mesh-craft →
+  Blender pipeline stages (Phase 7).
+  Add a support-matrix table to GamerServices docs: implemented / local-fake-persisted (Phase 4) /
+  CNA extension / no-op / genuinely unsupported — replacing whatever currently-stale
+  characterization exists.
+- [ ] **Task 9.4** — Update Net docs similarly: SystemLink-real, PlayerMatch/Ranked/Invite-stub,
+  host-migration-real (Phase 5), simulated-conditions-real (Phase 6).
+- [ ] **Task 9.5** — Confirm no doc claims Xbox Live compatibility (only SystemLink-style local
+  play is real; PlayerMatch/Ranked/Invite remain documented stubs per the networking-scope
+  decision).
+- [ ] **Task 9.6** — Add a troubleshooting section for avatar asset generation (mesh-craft +
+  Blender pipeline) and network demo startup (ENet port binding, discovery).
+- [ ] **Task 9.7** — Add a short README for avatar demo controls/command-line args if one doesn't
+  already exist, referencing the new F1 overlays from Phase 8 as the authoritative in-app control
+  reference (avoid duplicating control lists that can drift out of sync).
 
 ---
 
-## Phase 8 — GamerServices: API Gaps
+## Phase 10 — Tests and validation
 
-- [x] **Task 8.1** — Add an `IDictionary<string, object>`-equivalent surface to `PropertyDictionary`.
-  Confirmed FNA's `PropertyDictionary` explicitly implements
-  `IDictionary<string, object>`/`ICollection<KeyValuePair<string, object>>`: `Add(key, value)`
-  (throws on duplicate key, unlike the indexer setter), `Remove(key)`, `Clear()`, `Keys`, `Values`,
-  `IsReadOnly` (hardcoded `true`), `Contains`, `CopyTo` (throws `NotImplementedException` in FNA
-  itself, so preserve that). `sharp-runtime` already ships a matching
-  `System::Collections::Generic::IDictionary<TKey,TValue>` shape — use it rather than inventing a
-  new interface. Add these members (matching FNA's exact semantics, including `Add` throwing on
-  duplicate keys) and tests for each.
-
-  Confirmed against FNA's real `PropertyDictionary.cs`: every one of these members is an
-  **explicit interface implementation** in C# (`void IDictionary<string,object>.Add(...)`,
-  `bool ICollection<KeyValuePair<string,object>>.Remove(...)`, etc.) — reachable only through an
-  interface cast, never directly on a `PropertyDictionary` variable. C++ has no equivalent of
-  explicit interface implementation, so deriving `PropertyDictionary` from `sharp-runtime`'s
-  `IDictionary<TKey,TValue>` template wouldn't reproduce that "hidden unless cast" behavior
-  anyway (C++ virtual overrides are directly callable on the derived type), and `sharp-runtime`'s
-  `IDictionary<TKey,TValue>` interface is itself missing the `ICollection<KeyValuePair<...>>`
-  half of FNA's real interface list (`Keys`/`Values`/`IsReadOnly`/`Contains`/`CopyTo`) — extending
-  it would be a `sharp-runtime` file modification requiring the user's approval first (Tasks
-  4.4/4.5/6.6's standing constraint). Per `CLAUDE.md`'s own guidance for interfaces without an
-  exact C++ mapping, added the *equivalent member surface* directly as ordinary public methods on
-  `PropertyDictionary` instead of deriving from any interface — a documented, intentional
-  deviation (directly callable in C++, unlike C#'s cast-gated explicit members), not a silent gap.
-
-  Added `Add` (throws `System::ArgumentException` on duplicate key, matching
-  `Dictionary<TKey,TValue>.Add`'s real message format, unlike `SetValue`/the indexer setter which
-  silently overwrite), `Remove` (bool return), `Clear`, `Keys`/`Values` (snapshot `std::vector`s —
-  `sharp-runtime` has no live-view collection equivalent to FNA's real `ICollection<string>`/
-  `ICollection<object>`, another documented deviation), `getIsReadOnlyProperty()` (hardcoded
-  `true`, faithfully preserving FNA's own upstream inconsistency — `Add`/`Remove`/`Clear` are all
-  real, working mutators despite this), and `CopyTo` (always throws
-  `System::NotImplementedException`, matching FNA's own unimplemented stub exactly).
-
-  Deliberately **not** added: the `ICollection<KeyValuePair<string,object>>.Contains(item)` and
-  `.Remove(item)` explicit-interface overloads (which compare by key+value, not just key). Both
-  are the lowest-practical-value members here (explicit-interface-cast-only in real XNA, and
-  `Contains` in FNA's own source has an upstream copy-paste bug — `dictionary.ContainsValue(item
-  .Key)` instead of `.ContainsValue(item.Value)` — that would be awkward and not worthwhile to
-  replicate exactly for `std::any`-valued entries, which have no general equality comparison in
-  C++ without knowing the concrete type). The already-existing `ContainsKey(key)` and the new
-  `Remove(key)` cover the meaningful, non-buggy, actually-useful behavior.
-
-  Added 10 new tests (`AddInsertsNewKey`, `AddThrowsOnDuplicateKey`,
-  `RemoveReturnsTrueAndDeletesExistingKey`, `RemoveReturnsFalseForMissingKey`,
-  `ClearRemovesEverything`, `KeysReturnsEveryKey`, `ValuesReturnsEveryValue`,
-  `IsReadOnlyIsAlwaysTrue`, `CopyToAlwaysThrows`), one per new member. Pure API-surface addition
-  (no prior behavior to regress against — the standard revert-verify cycle doesn't apply to
-  brand-new methods; running the new tests themselves is the meaningful verification here). Full
-  suite: **3321/3323 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 8.2** — Add `AchievementCollection`'s missing `IList<Achievement>`/`ICollection<Achievement>`
-  surface: `IndexOf`, `Insert`, `RemoveAt`, `Add`, `Remove`, `Clear`, `Contains`, `CopyTo`, and
-  `IsReadOnly` (hardcoded `true`), matching FNA's `IList<Achievement>, ICollection<Achievement>,
-  IEnumerable<Achievement>, IEnumerable, IDisposable` interface list. Lower priority than Task 8.1
-  since these are C# explicit-interface members only reachable via an `IList<Achievement>` cast in
-  real XNA, but still a real surface gap for full fidelity. Add tests for each new member.
-
-  Confirmed against FNA's real `AchievementCollection.cs`: same explicit-interface-only pattern as
-  Task 8.1, exposed here as ordinary public methods for the same documented reason (no C++
-  equivalent of explicit interface implementation). Unlike Task 8.1's `PropertyDictionary` case,
-  `CopyTo` here is a **real, working** implementation in FNA (`collection.CopyTo(array,
-  arrayIndex)`), not an unimplemented stub — implemented faithfully (validates `arrayIndex`/
-  destination size, throws `ArgumentOutOfRangeException`/`ArgumentException` respectively).
-
-  `IndexOf`/`Contains`/`Remove` need value equality on `Achievement`, which FNA's own real
-  `Achievement` doesn't have (a reference type relying on default reference-identity equality) —
-  added `Achievement::operator==`/`operator!=` (structural, all-fields comparison), following the
-  exact same precedent already established for `LeaderboardEntry::operator==` (by-value storage
-  has no reference-identity equivalent).
-
-  Added all 8 members (`IndexOf`, `Insert`, `RemoveAt`, `Add`, `Remove`, `Clear`, `Contains`,
-  `CopyTo`) plus `getIsReadOnlyProperty()` (hardcoded `true`, matching FNA — noted this is the
-  conventional .NET explicit-interface-only-mutable pattern here, not an inconsistency like Task
-  8.1's `PropertyDictionary.IsReadOnly`, since there's no upstream bug in this case). Added 15 new
-  tests (one covering the happy path and, where applicable, a second covering the out-of-range/
-  not-found case for each member) plus `AchievementTest.EqualityIsStructural` for the new
-  `operator==`/`operator!=`.
-
-  Pure API-surface addition, no prior behavior to regress against (same reasoning as Task 8.1 —
-  no revert-verify cycle applies to brand-new methods). Full suite: **3336/3338 passing** (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 8.3** — Extend `GamerCollection<T>` to expose the full `ReadOnlyCollection<T>` surface
-  FNA's equivalent provides (`Contains`, `IndexOf`, `CopyTo`), since FNA's `GamerCollection<T>`
-  derives from `ReadOnlyCollection<T>`. `sharp-runtime` already has a full
-  `System::Collections::ObjectModel::ReadOnlyCollection<T>` (already used elsewhere in this exact
-  namespace by `LeaderboardReader::getEntriesProperty()`), so the infrastructure to fix this already
-  exists — either derive `GamerCollection<T>` from it or add equivalent methods directly. This
-  affects every collection built on `GamerCollection<T>` (`SignedInGamerCollection`,
-  `FriendCollection`). Add tests for the new members on at least one concrete collection type.
-
-  Confirmed against FNA's real `GamerCollection<T>.cs` (`: ReadOnlyCollection<T>, IEnumerable<T>,
-  IEnumerable`) — no own overrides, so `IndexOf`/`Contains`/`CopyTo` come straight from real
-  .NET's `ReadOnlyCollection<T>`. Chose to add equivalent methods directly to `GamerCollection<T>`
-  rather than deriving from `sharp-runtime`'s `ReadOnlyCollection<T>` — a safer, more surgical
-  change than restructuring the inheritance hierarchy of a base class used throughout both `Net`
-  and `GamerServices`, avoiding any risk of subtly changing already-relied-upon behavior
-  (`operator[]`'s exception types, etc.) inherited from a different base.
-
-  Unlike Task 8.2's `Achievement`/`LeaderboardEntry`'s own value-storage equality workaround,
-  `GamerCollection<T>` needed **no new `operator==`** at all: it stores `T*` (raw pointers), and
-  native C++ pointer comparison already *is* reference-identity comparison — an exact match for
-  FNA's own real `Gamer`-derived reference-type equality semantics, with no deviation needed.
-
-  Added `IndexOf(T*)`, `Contains(T*)`, and `CopyTo(std::vector<T*>&, int)` (validates `index`/
-  destination size, throwing `ArgumentOutOfRangeException`/`ArgumentException` respectively,
-  matching Task 8.2's `AchievementCollection::CopyTo` precedent). Added 5 new tests through
-  `SignedInGamerCollection` (a concrete `GamerCollection<T>` subclass):
-  `IndexOfFindsAndReportsNotFound`, `ContainsFindsAndReportsNotFound`,
-  `CopyToCopiesStartingAtIndex`, `CopyToThrowsWhenDestinationTooSmall`,
-  `CopyToThrowsForNegativeIndex`.
-
-  Pure API-surface addition, no prior behavior to regress against (no revert-verify cycle
-  applies). Full suite: **3341/3343 passing** (2 expected accelerometer/gyroscope skips), no
-  regressions.
-
-  **Phase 8 complete** — all 3 GamerServices API-gap tasks (Tasks 8.1-8.3) done.
+- [ ] **Task 10.1** — Run the full existing Net test suite; confirm baseline pass count before
+  any Phase 1-9 change (record the exact number here once run).
+- [ ] **Task 10.2** — Run the full existing GamerServices test suite; record baseline.
+- [ ] **Task 10.3** — After each phase's changes, rerun the full suite (not just the new/changed
+  tests) — this is the same revert-verify-restore discipline the prior pass used throughout;
+  continue it here.
+- [ ] **Task 10.4** — Build/test scope for this entire pass: `cmake-build-debug` with the
+  **EASYGL** backend only (decision 6d) — confirm the build is actually configured for EASYGL
+  before running (`cmake -S . -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL` if not already).
+  Do not spend time on Vulkan/SDL_RENDERER/BGFX backends this pass unless a failure turns out to
+  be backend-specific and genuinely blocks EASYGL too.
+- [ ] **Task 10.5** — Add demo smoke-build targets for the affected avatar and network demos if
+  the build system already supports this pattern (check for precedent before inventing one).
+- [ ] **Task 10.6** — Record exact commands and pass/fail counts in this plan as each phase
+  closes out (matching the prior pass's own documentation style — see
+  `plan_net_20260707.md` for the level of detail expected per task write-up).
+- [ ] **Task 10.7** — Fix all failures caused by this pass's own changes before considering any
+  task done.
 
 ---
 
-## Phase 9 — GamerServices: Test Coverage
+## Phase 11 — Final audit
 
-- [x] **Task 9.1** — Add a test for `Gamer::setSignedInGamersProperty`'s delete-old-then-replace
-  logic — currently only the getter is tested. Cover setting once, setting twice (proving the old
-  collection is properly cleaned up per Task 7.5's fix), and setting to the same pointer.
-
-  Added `GamerTest.SetSignedInGamersPropertyReplacesThePreviousCollection`: sets once, sets a
-  second time (must replace, not leak, the first), and sets to the same pointer again (must be a
-  safe no-op, not a self-delete). Uses the established RAII global-swap guard pattern from
-  `NetworkSessionTests.cpp` (install a *fresh, empty* collection on teardown, never reuse a
-  captured "previous" pointer — `setSignedInGamersProperty` unconditionally deletes whatever it
-  replaces, so reusing a captured pointer would double-free, per Task 2.15's own discovery).
-
-  Pure test-coverage addition for already-correct code (no bug found or fixed), no revert-verify
-  applies. Ran the full suite twice in a row to confirm this global-state test doesn't
-  contaminate any other test: **3342/3344 passing** both times (2 expected accelerometer/
-  gyroscope skips), no regressions.
-
-- [x] **Task 9.2** — Add tests for the 3 untested `FriendGamer` properties: `getInviteReceivedFromProperty()`,
-  `getInviteRejectedProperty()`, `getInviteSentToProperty()` — confirmed never referenced anywhere
-  in the test suite (the existing `DefaultStubFlags` test only checks `IsJoinable`, `HasVoice`,
-  `InviteAccepted`, `Presence`).
-
-  Confirmed against FNA's real `internal FriendGamer(...)` constructor: it hardcodes all three to
-  `false` regardless of any constructor argument — a faithfully-preserved upstream stub, not a CNA
-  gap. Extended the existing `DefaultStubFlags` test (rather than adding a new one) with the 3
-  missing assertions, matching its own established pattern for the sibling stub properties.
-
-  Pure test-coverage addition for already-correct code, no revert-verify applies. Full suite:
-  **3342/3344 passing** (2 expected accelerometer/gyroscope skips) — one transient run showed 3
-  unrelated `ENetDiscoveryServiceTest` failures (network/socket timing flakiness, confirmed
-  unrelated by passing individually and on a clean full-suite re-run), no regressions from this
-  change.
-
-- [x] **Task 9.3** — Add real iteration/mutation tests for `GamerCollection<T>`'s custom enumerator
-  and NOXNA mutators, for both `FriendCollection` and `SignedInGamerCollection`. Confirmed a grep
-  across all GamerServices test files for enumerator/`Add`/`Remove` usage returns nothing — this is
-  exactly the coverage gap that let Task 7.8's `getCurrent()` bug ship undetected. Test
-  `GetEnumerator()`, `MoveNext()`, `getCurrent()`, `Reset()`, `Dispose()` on the enumerator, and the
-  `Add()`/`Remove()` mutators, with at least 2+ elements (not just 0 or 1).
-
-  Task 7.8 already added `GetEnumerator()`/`MoveNext()`/`getCurrent()`/`Dispose()` coverage
-  (through `SignedInGamerCollection`); this task filled the remaining gaps: added
-  `ResetRestartsEnumeration` (confirms enumeration genuinely restarts from before the first
-  element, not just that `Reset()` compiles), `WorksThroughFriendCollectionToo` (the same
-  enumerator behavior through `FriendCollection`, `GamerCollection<T>`'s other concrete
-  subclass, with 2 elements), and `AddAppendsAndRemoveDeletesTheRightElement` for both
-  `SignedInGamerCollection` and `FriendCollection` (the `NOXNA` `Add`/`Remove` mutators,
-  previously exercised by zero tests anywhere in `GamerServices`).
-
-  Pure test-coverage addition for already-correct code, no revert-verify applies. Full suite:
-  **3346/3348 passing** (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 9.4** — Add ordinal-value assertions to `GamerPresenceModeTest` and sibling enum tests
-  (`GamerPrivilegeSettingTest`, `GamerZoneTest`, `ControllerSensitivityTest`, `GameDifficultyTest`,
-  `LeaderboardKeyTest`, `LeaderboardOutcomeTest`), not just tautological self-equality checks.
-  Confirmed `GamerPresence::setPresenceModeProperty` indexes a 60-entry string table directly by the
-  enum's ordinal, so a future accidental reordering of `GamerPresenceMode` would silently break
-  presence strings with nothing to catch it (unlike the already-correct `AvatarBodyType`/`AvatarBone`
-  tests in the same file, which do check exact ordinal values).
-
-  Added an `OrdinalValuesMatchXna` test to each of the 7 enum test suites in
-  `GamerServicesEnumsTests.cpp`, asserting `static_cast<int>(...)` against the real FNA reference
-  ordinals (`FNA.NetStub/src/GamerServices/*.cs`). Confirmed every one of CNA's `enum class`
-  declarations is a contiguous, unmodified 0-based transcription of the real XNA enum member order —
-  no reordering bug currently exists — so this is a pure regression-guard addition, not a bug fix.
-  While drafting `GamerPresenceModeTest.OrdinalValuesMatchXna` I initially miscounted several interior
-  ordinals by hand (off by 1-2 for `DifficultyEasy`/`Winning`/`Losing`/`WaitingInLobby`); the test
-  itself caught my own arithmetic mistake immediately on first run (expected-vs-actual gtest output),
-  which was corrected before commit — a small live demonstration of exactly the kind of silent-drift
-  protection this task exists to add. No revert-verify applies (pure test-coverage addition guarding
-  already-correct code). Full suite: 3355/3355 passing (2 expected accelerometer/gyroscope skips), no
-  regressions.
-
-- [x] **Task 9.5** — Add an out-of-range int-index test for `AchievementCollection::operator[](int)`
-  (only the string-key-not-found case is currently tested) — add alongside Task 7.9's exception-type
-  fix.
-
-  Cross-reference: Task 7.9's own commit (`853aa27b`) already added
-  `AchievementCollectionTest.IndexByIntOutOfRangeThrowsArgumentOutOfRangeException`, covering
-  `col[0]`/`col[-1]` on an *empty* collection. That only exercises the boundary at `index ==
-  size() == 0`; it doesn't prove the check still holds once the collection actually has elements.
-  Added `IndexByIntOutOfRangeOnPopulatedCollectionThrowsArgumentOutOfRangeException` (a genuinely new
-  case: 1-element collection, `col[1]` at `index == size()` and `col[-1]`), closing that remaining
-  gap. No revert-verify applies (pure test-coverage addition for already-correct code, confirmed
-  fixed in Task 7.9). Full suite: 3356/3356 passing (2 expected accelerometer/gyroscope skips), no
-  regressions.
-
-- [x] **Task 9.6** — Add tests for the 3 untested `PropertyDictionary::GetValueX` overloads
-  (`GetValueDateTime`, `GetValueStream`, `GetValueTimeSpan`) and both `operator[]` overloads (get,
-  set, and missing-key path) — currently only int/float/double/long/string/outcome plus
-  `ContainsKey`/`TryGetValue`/`CountIncrementsOnSet` are covered.
-
-  Added `SetAndGetDateTime`, `SetAndGetTimeSpan` (both via the existing `SetValue` overloads), and
-  `SetAndGetStream`. Confirmed against the real FNA source that `GetValueStream` has no matching
-  `SetValue` overload there either — Stream values only ever enter the dictionary through the
-  generic object indexer setter in C#; in this C++ port, `Add(key, std::any)` (Task 8.1) is the
-  closest equivalent generic entry point, so the new test stores a `System::IO::MemoryStream*`
-  through `Add` and reads it back via `GetValueStream`. Also added `ConstIndexerReadsExistingKey`
-  and `ConstIndexerThrowsOnMissingKey` — the const `operator[]` overload was previously only ever
-  exercised incidentally through a non-const reference, never directly on a `const
-  PropertyDictionary&`. No revert-verify applies (pure test-coverage addition for already-correct
-  code). Full suite: 3361/3361 passing (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 9.7** — Add equal-case and not-equal-case (differing gamer, rating, ranking) tests for
-  `LeaderboardEntry::operator==`/`operator!=` — currently zero coverage, despite the class's own
-  doc-comment stating the operator exists specifically to support
-  `ReadOnlyCollection<T>::IndexOf/Contains`.
-
-  Added a new `--- LeaderboardEntry ---` section to `GamerServicesCollectionsTests.cpp`:
-  `EqualityIsStructural` (equal case, same gamer pointer/rating/ranking) plus
-  `DifferingGamerIsNotEqual`/`DifferingRatingIsNotEqual`/`DifferingRankingIsNotEqual` (one
-  not-equal case per field), using `FriendGamer` (a concrete, stack-constructible `Gamer`
-  subclass) as the gamer pointer, following the same pattern already established for
-  `Achievement::EqualityIsStructural`. No revert-verify applies (pure test-coverage addition for
-  already-correct code from Task 8.2). Full suite: 3365/3365 passing (2 expected
-  accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 9.8** — Add an out-of-process test (mirroring
-  `tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp`'s isolation pattern) for
-  `GamerServicesDispatcher::Initialize()`'s actual gamer-population behavior. Confirmed nothing
-  currently verifies: the 4 stub gamers get the exact names `"Stub Gamer"`/`"Stub Gamer (1)"`/`"(2)"`/`"(3)"`;
-  their `PlayerIndex` values are `One`/`Two`/`Three`/`Four`; `Gamer::getSignedInGamersProperty()`
-  ends up with exactly 4 entries; `SignedInGamer::OnSignIn()` fires once per gamer. Ideally also
-  exercise Task 7.1's `GetAchievements()` fix in the same isolated process, proving it doesn't hang
-  once real initialization has actually happened.
-
-  Added `--mode=initialize-population-check` to `tools/net/gamerservices_dispatcher_harness.cpp`:
-  subscribes an `int` counter to `SignedInGamer::SignedIn` *before* `main()`'s existing mandatory
-  `Initialize()` call (so it observes every firing caused by that first, real initialization, not
-  just a later redundant second call), then verifies all 4 gamertags/`PlayerIndex` values in order,
-  `getCountProperty() == 4`, `signInFireCount == 4`, and finally calls `GetAchievements()` on the
-  first populated gamer to exercise Task 7.1's fix post-real-initialization (unlike
-  `RunGetAchievementsCheck`'s own freshly-constructed, never-`Initialize()`-populated
-  `SignedInGamer`). Added `GamerServicesDispatcherHangRegressionTest.InitializePopulatesFourStubGamersCorrectly`,
-  spawning the harness with this new mode and the same watchdog pattern as the other 3 tests in
-  that file.
-
-  Revert-verify performed despite this being additive (no prior bug — wanted proof the new
-  assertions actually detect a real mismatch, not just that they compile): temporarily changed
-  `"Stub Gamer (1)"`'s `PlayerIndex` from `Two` to `Three` in
-  `GamerServicesDispatcher::Initialize()`. Confirmed the harness printed `"gamer 1: unexpected
-  PlayerIndex"` and exited 2, and the new gtest failed with exactly that message. Restored the
-  correct `PlayerIndex::Two` and confirmed green again. Full suite: 3366/3366 passing (2 expected
-  accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 9.9** — Add a populated-collection test for `SignedInGamerCollectionTest::operator[](PlayerIndex)`.
-  Confirmed the existing test only covers the empty-collection case (returns `nullptr` for any
-  index). Add a test with a populated (2-4 gamer) collection verifying: correct gamer returned at a
-  valid index, boundary case `index == size()` returns `nullptr`, and iteration with >1 element
-  works correctly.
-
-  Added `PlayerIndexOperatorOnPopulatedCollection` with 3 gamers, verifying `col[One]`/`col[Two]`/
-  `col[Three]` each return the correct gamer, `col[Four]` (== size()) returns `nullptr`, and a
-  range-for over the collection visits exactly 3 elements. Confirmed against FNA's own real
-  indexer (`return collection[(int)index];`, bounds-checked only against `Count`) that this
-  operator indexes the underlying collection directly by the enum's ordinal position — not a
-  lookup by each gamer's own `PlayerIndex` property — documented this in the test's own comment
-  since it's an easy behavior to misread from the parameter name alone. No revert-verify applies
-  (pure test-coverage addition for already-correct code, matching FNA exactly). Full suite:
-  3367/3367 passing (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 9.10** — Add message-content assertions to all 6 GamerServices exception types'
-  `DefaultCtor` tests. Confirmed every existing `*Test.DefaultCtor` only checks `dynamic_cast`
-  succeeds, never what the default (no-message) constructor produces for `what()`/`getMessageProperty()`
-  — a regression that silently blanked the default message wouldn't be caught by any existing test.
-
-  Confirmed against FNA's real source that all 6 default constructors (`NetworkException`,
-  `NetworkNotAvailableException`, `GamerPrivilegeException`, `GamerServicesNotAvailableException`,
-  `GameUpdateRequiredException`, `GuideAlreadyVisibleException`) simply forward to `: base()` with
-  no hardcoded message anywhere — unlike some `Audio` namespace exceptions elsewhere in this
-  codebase, which do have a custom hardcoded default message. So the correct default-message
-  assertion here is the empty string produced by `System::Exception()`'s own default constructor.
-  Added `EXPECT_STREQ("", ex.what());` to all 6 `DefaultCtor` tests. No revert-verify applies
-  (pure test-coverage addition for already-correct code). Full suite: 3367/3367 passing (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 9.11** — Fix `SignedInGamer::getPresenceProperty()` being permanently unable to
-  mutate a gamer's own presence after construction. Surfaced while building Task 15.8's demo
-  (`cna_demo_gamerservices_signin_presence`), which needs to actually change a signed-in gamer's
-  `GamerPresenceMode` live.
-
-  **Checked FNA's real reference first**: `SignedInGamer.Presence` is `public GamerPresence
-  Presence { get; private set; }` — get-only from outside, but `GamerPresence` is itself `public
-  sealed class` (a .NET reference type), so real XNA/FNA game code writes `gamer.Presence
-  .PresenceMode = ...` and mutates the *same live object* the get-only property handed back; the
-  property being get-only never prevented that. CNA's only accessor was `const GamerPresence&
-  getPresenceProperty() const`, which makes this real, intended FNA usage pattern permanently
-  impossible to reproduce in C++ — no `SignedInGamer` can ever have its presence changed once
-  constructed, through any public API.
-
-  **Fixed**: added a second, non-const overload `NOXNA GamerPresence& getPresenceProperty()` to
-  `SignedInGamer` (kept the existing const overload for const contexts), returning the same
-  `presence_` member so mutation through the new overload is visible through *either* overload
-  afterward — mirroring the "get-only property, mutable reference-type object" idiom from the real
-  C# source precisely.
-
-  **Added `SignedInGamerTest.PresencePropertyNonConstOverloadMutatesLiveObject`**: constructs a
-  gamer, confirms `PresenceMode` starts at `None`, calls the non-const overload to set it to
-  `SinglePlayer`, then confirms the change is visible both through another non-const call *and*
-  through a separate `const SignedInGamer&` reference to the same object (proving a live mutation,
-  not a copy).
-
-  **Verified the bug is real, not theoretical**: stashed just the 2 source-fix files (keeping the
-  new test), rebuilt — a genuine **compile-time** failure: `passing 'const ... GamerPresence' as
-  'this' argument discards qualifiers [-fpermissive]` on the `setPresenceModeProperty(...)` call,
-  exactly as predicted (the const-only overload cannot support this call at all). Restored the fix
-  and rebuilt — compiles and passes. Full suite: **3398/3398 passing** (2 expected accelerometer/
-  gyroscope skips; one incidental unrelated rerun showed 2 flaky `ENetDiscoveryServiceTest` real-
-  UDP-timing failures that passed cleanly again in isolation and on a subsequent full run — not
-  caused by this change, which touches only `SignedInGamer`), no regressions.
-
-**Phase 9 complete — 11/11.**
+- [ ] **Task 11.1** — Re-run `rg -i "TODO|FIXME|NotImplemented|stub|no-op|placeholder|fake"`
+  across the same file set as Phase 0 and classify every remaining item as: intentional
+  FNA/XNA-fidelity (leave as-is, documented), genuinely fixed by this pass, or a new follow-up
+  item for a future pass (list explicitly, do not silently drop).
+- [ ] **Task 11.2** — Re-verify `docs/xna-4-api-coverage.md` matches actual code state after all
+  phases (not just after Phase 1/9's initial pass — things may have changed further by then).
+- [ ] **Task 11.3** — Confirm `plan_net_20260707.md` stays archived (not deleted) and this plan
+  (`plan_net.md`) shows every task's final `[x]`/write-up state.
+- [ ] **Task 11.4** — Confirm no doc claims Xbox Live compatibility (re-check after Phase 9,
+  since new docs/sections were added that could reintroduce a stale/misleading claim).
+- [ ] **Task 11.5** — Confirm no proprietary Xbox Avatar asset was introduced anywhere across the
+  whole pass (decision 4a) — one final explicit grep/review, not just Phase 7's own internal
+  check.
+- [ ] **Task 11.6** — Confirm commits are clean and logically separated (one task = one commit,
+  per decision 6c) — spot-check `git log` against this plan's task list.
+- [ ] **Task 11.7** — Final summary to the user: what changed, tests run and results, remaining
+  gaps (including any still-open micro-decisions from this plan's header that never got a
+  concrete user answer), and recommended next steps.
 
 ---
 
-## Phase 10 — GamerServices: Further Investigation
-
-- [x] **Task 10.1** — Re-evaluate `Gamer`'s empty-string-as-null-sentinel for `displayName`
-  (`displayName_(displayName.empty() ? gamertag : displayName)`). Confirmed FNA's `DisplayName =
-  displayName ?? gamertag` only substitutes on a true C# `null`, not on an explicit empty string — a
-  caller intentionally passing `""` as a blank display name keeps `""` in FNA but gets silently
-  overwritten in cna. Already documented in a source comment and tested, satisfying `CHECKLIST.md`'s
-  deviation-documentation rule, but worth a decision on whether `std::optional<std::string>` should
-  replace the sentinel, since `FriendGamer`'s constructor forwards externally-sourced display names
-  through this same path. Decide and implement (or explicitly re-affirm the current documented
-  deviation as intentional and sufficient).
-
-  Decided: fix it, not just re-affirm. Confirmed this divergence is immediately reachable (not
-  merely latent) — `FriendGamer`'s own real FNA constructor forwards a required, non-defaulted
-  `displayName` straight to `base(gamertag, displayName)`, so any caller-supplied `""` was already
-  silently coerced to the gamertag by the old sentinel, exactly what the pre-existing (now
-  corrected) test `DisplayNameFallsBackToGamertagWhenEmpty` had locked in as if it were correct
-  behavior. Changed `Gamer`'s protected constructor from
-  `Gamer(const std::string&, const std::string& displayName = "")` to
-  `Gamer(const std::string&, std::optional<std::string> displayName = std::nullopt)` — matching
-  this codebase's own existing `std::optional<T>` convention for modeling nullable C# parameters
-  (already used in `Guide::EndShowMessageBox`, `AvatarDescription`), and mirroring FNA's `string
-  displayName = null` exactly. `displayName_` is now `displayName.has_value() ? std::move(*displayName)
-  : gamertag`. All 3 existing subclasses (`FriendGamer`, `SignedInGamer`, `NetworkGamer`) always
-  pass an explicit `const std::string&` for this argument, which converts implicitly to
-  `std::optional<std::string>` — none needed any signature change, and none ever relied on the old
-  default value, so this is a pure internal-substitution-logic fix, not an API break.
-
-  Updated the pre-existing test (renamed `DisplayNameFallsBackToGamertagWhenEmpty` →
-  `DisplayNameStaysEmptyWhenExplicitlyEmpty`, now asserting `""` is preserved) and added
-  `DisplayNameFallsBackToGamertagWhenOmitted`, exercised via a minimal test-only `TestOnlyGamer`
-  subclass — no current production subclass ever omits the second argument, so the true
-  omitted-entirely fallback path needed its own direct test.
-
-  Revert-verify: temporarily reverted `Gamer.hpp`/`Gamer.cpp` to the old empty-string-sentinel via
-  `git stash`, rebuilt, and confirmed `DisplayNameStaysEmptyWhenExplicitlyEmpty` failed with the
-  exact predicted symptom (`getDisplayNameProperty()` returned `"tagonly"` instead of the expected
-  `""`). Restored via `git stash pop`, rebuilt, confirmed green again. Full suite: 3368/3368
-  passing (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 10.2** — Design and document the ownership contract for `T*` items inside
-  `GamerCollection<T>`-derived collections (broader framing of Tasks 3.1/7.5/7.12). No documented
-  contract currently exists for who allocates/frees `FriendGamer*`/`SignedInGamer*`/`NetworkGamer*`
-  once real (non-stub) population is implemented anywhere. This should be a single design decision
-  applied consistently across both `Net` and `GamerServices` — do this task first, before Tasks
-  3.1/7.5/7.12's individual fixes, so they all follow one consistent model rather than three
-  independent ad hoc fixes.
-
-  Tasks 3.1/7.5/7.12 (all already completed earlier in this plan) had, in practice, already
-  independently converged on the identical model each time: the *creator* of a `Gamer`-derived
-  object owns it in its own separate registry; `GamerCollection<T>` (and everything built on it)
-  is always a non-owning view that never allocates or frees a `T*`. Since they were already
-  consistent, this task's real work was consolidating three separately-worded restatements of the
-  same rule into one canonical, authoritative statement rather than writing a fourth independent
-  one. Added a substantial "ownership contract" paragraph to `GamerCollection<T>`'s own class doc
-  comment in `GamerCollection.hpp` (the shared base every one of these types derives from — the
-  single natural home for this), explicitly naming all 3 established registries as precedent
-  (`NetworkSession::ownedGamers_`, `ENetBackend::SessionState::OwnedRemoteGamers`,
-  `GamerServicesDispatcher::Initialize()`'s free-before-replace loop) and stating the rule any
-  future real (non-stub) population code must follow. Trimmed the 3 existing per-site comments
-  (`NetworkSession.hpp`'s `ownedGamers_`, `ENetBackend.cpp`'s `OwnedRemoteGamers`,
-  `GamerServicesDispatcher.cpp`'s `Initialize()`, and `FriendCollection.hpp`'s class doc) to
-  cross-reference this canonical statement instead of independently restating it. Pure
-  documentation consolidation, no behavior change — no test/revert-verify applies. Full suite:
-  3368/3368 passing (2 expected accelerometer/gyroscope skips; one unrelated pre-existing
-  statistical flake in `CueTest.PlayWeightedVariationFavorsHigherWeightEntryStatistically` seen
-  once, confirmed to pass in isolation and on a clean rerun — not caused by this change), no
-  regressions.
-
-- [x] **Task 10.3** — Investigate whether a lightweight fake-`Game`/mock-`IServiceProvider` test
-  double could allow direct unit testing of `GamerServicesComponent::Initialize()`/`Update()`
-  forwarding, without needing a full SDL window. Currently `GamerServicesComponent` has no direct
-  unit tests (documented precedent, consistent with `GameComponentTests.cpp`'s similar situation),
-  but given this exact `Dispatcher`/`Component` pairing has now produced two real hang bugs (the
-  already-fixed `NetworkSession` one, and Task 7.1's `GetAchievements` one), a real, direct test of
-  this pairing's forwarding logic would add real value beyond what integration-level tests can
-  catch.
-
-  Investigated and decided against pursuing a fake-`Game` double. Confirmed: (1) `Game::Game()`
-  unconditionally stands up a real `GraphicsDevice`/backend/window
-  (`Window_.setWindowInternal(GraphicsDevice_.GetBackend().GetWindowInternal());`) — there is no
-  genuinely "lightweight" `Game` to fake; constructing *any* `Game` needs a real backend
-  regardless, which is exactly why `GameCrashTest.cpp` is left entirely commented out and
-  `GameComponentTests.cpp` has no tests at all. (2) `GamerServicesComponent`'s public constructor
-  signature (`GamerServicesComponent(Game& game)`) must match FNA's real API exactly, so it can't
-  be changed to accept an injectable fake/interface instead without violating this project's own
-  API-fidelity rule. (3) `Initialize()`/`Update()` are two trivial one-line forwards to
-  `GamerServicesDispatcher::Initialize()`/`Update()` with no independent branching or state — both
-  targets are already extensively, directly unit-tested (`GamerServicesDispatcherTest`,
-  `GamerServicesDispatcherHangRegressionTest.cpp`). (4) Both real hang bugs this task cites were
-  actually caught by out-of-process harnesses calling `GamerServicesDispatcher::Initialize()`
-  directly — exactly simulating "a `GamerServicesComponent` exists" — not by any hypothetical
-  component-level unit test; a `GamerServicesComponent` unit test would add zero coverage beyond
-  what those harnesses already exercise. **Decision: re-affirm the existing no-direct-tests
-  stance** — expanded the comment in `GamerServicesServiceTests.cpp` to record this investigation
-  and its reasoning for future readers, rather than force a test that adds no real value. No
-  behavior change; build-verified only (comment-only edit).
-
-- [x] **Task 10.4** — Assess real-world reachability/priority of the double-`Initialize()` leak
-  (Task 7.5). FNA's own `GamerServicesDispatcher.Initialize()` has the identical
-  no-op-if-already-initialized gap — confirm whether any current/planned caller (a game re-adding a
-  second `GamerServicesComponent`, or a multi-`Game`-instance test harness) can trigger this today,
-  to properly gauge priority relative to other Phase 7 bugs.
-
-  Traced `Game.cpp`'s actual component-initialization sequence to find every path that could call
-  `GamerServicesComponent::Initialize()` (and therefore `GamerServicesDispatcher::Initialize()`)
-  more than once: `Game::DoInitialize()` calls `Initialize()` (which loops over every
-  already-registered component and calls `component->Initialize()`) *before* wiring up
-  `Components_.ComponentAdded += ...` a few lines later — so a `GamerServicesComponent` added the
-  standard way (in the game's own constructor, before `Run()`/`DoInitialize()` ever executes) is
-  initialized exactly once, via that explicit loop, not via `OnComponentAdded` too. **The standard
-  single-component, single-`Game`-instance path is safe** — this is not a bug reachable by normal
-  XNA usage.
-
-  However, confirmed 2 concretely reachable triggers, not merely hypothetical ones: (1) a game
-  (mistakenly, but not preventably — no duplicate-type guard exists in `GameComponentCollection`,
-  matching FNA's own real behavior) constructing and adding a **second**
-  `GamerServicesComponent` instance to `Game.Components`, whether at startup or later at runtime
-  via `OnComponentAdded`'s auto-init path; and (2) — more relevant to this specific codebase —
-  `GamerServicesDispatcher`'s statics (`isInitialized_`, and `Gamer::signedInGamers_` which it
-  replaces) are **process-wide**, not per-`Game`-instance, so **any two `Game` instances
-  constructed in the same process**, each with its own `GamerServicesComponent`, would trigger
-  this path against the same shared statics — exactly the kind of process-wide-static hazard this
-  very phase already had to build dedicated out-of-process isolation infrastructure for
-  (`gamerservices_dispatcher_harness.cpp`) because of a *different* member of this same static
-  group.
-
-  **Conclusion: Task 7.5's fix was correctly prioritized, not over- or under-prioritized** — the
-  scenario is realistically reachable (a plausible game-authoring mistake, or a multi-`Game`
-  process such as a future test harness or in-process "restart the game" utility), not purely
-  theoretical, and the already-landed fix (explicit free-before-replace loop, verified via
-  revert-verify in Task 7.5's own write-up) is cheap and low-risk enough that no further work or
-  priority change is warranted. Pure investigation/documentation task — no code change, no test
-  needed beyond what Task 7.5 already added.
-
-- [x] **Task 10.5** — Decide whether `GamerCollection<T>` needs a virtual destructor. Confirmed not
-  currently exploited (all current code deletes via the concrete derived pointer type, e.g.
-  `SignedInGamerCollection*`), but it's a latent risk if any future code ever holds/deletes a
-  `GamerCollection<T>*` base pointer. Either add a virtual destructor, or explicitly document (with
-  a comment and/or a `static_assert`/deleted-copy-style guard) that this type must never be used
-  polymorphically via a base pointer.
-
-  Audited every current instance: the only heap-allocated one (`Gamer::signedInGamers_`, a
-  `SignedInGamerCollection*`) is always deleted through its own concrete type; every other
-  instance (`NetworkSession`'s 4 `GamerCollection<T>` members, `NetworkMachine::gamers_`) is a
-  plain by-value member destroyed via its own static type by the owning object's destructor —
-  zero current polymorphic-deletion exposure. **Decision: document, don't add a virtual
-  destructor.** `GamerCollection<T>` has no virtual members at all today (no vtable), and is used
-  heavily as a plain-value member in hot per-session/per-machine collections
-  (`NetworkSession`/`NetworkMachine`) — adding a vtable pointer to every instance purely as
-  defense against a scenario with zero current or planned exploitation isn't justified.
-  Added a doc-comment paragraph to `GamerCollection<T>` stating this constraint explicitly:
-  deleting a derived collection through a `GamerCollection<T>*` base pointer is undefined
-  behavior without a virtual destructor, and if that need ever arises, a virtual destructor must
-  be added first. No behavior change; build-verified only (comment-only edit).
-
-- [x] **Task 10.6** — Re-verify `LeaderboardReader`'s page-slicing constructor loop bound
-  (`for (int i = pageStart_; i < pageSize_ && i < entryCache_.size(); ++i)`) against every current
-  and future caller of `CreateInternal`. Confirmed this faithfully matches FNA's own identical
-  (non-obvious) bound — correctly *not* a cna-introduced bug — but correctness depends entirely on
-  whatever populates `entryCache_` already being consistent with this bound. Add a doc comment (or
-  an assertion) making this precondition explicit for any future caller, so the non-obvious FNA
-  fidelity isn't accidentally "fixed away" later by someone unaware of why it looks odd.
-
-  Re-confirmed byte-for-byte against FNA's real internal constructor
-  (`for (int i = PageStart; i < pageSize && i < entryCache.Count; i += 1)`) — exact match, genuine
-  upstream quirk. Traced every current caller of `CreateInternal`: there are none in production —
-  every real `BeginRead`/`EndRead` overload unconditionally throws `NotSupportedException` (a stub
-  API surface matching FNA), so `CreateInternal` is only ever reached from test code today, and
-  the precondition has no live caller to violate yet. Added a full doc comment to
-  `CreateInternal`'s declaration in `LeaderboardReader.hpp` spelling out the precondition
-  explicitly for any future caller: `entries` must already be pre-sliced to exactly the
-  `[start, start + size)` page before being passed in, since the constructor trusts its input
-  completely and never re-derives the slice itself — passing a full, un-sliced leaderboard would
-  silently produce a wrong page. No behavior change; build-verified only (comment-only edit).
-
-**Phase 10 complete — 6/6.**
-
----
-
-## Phase 11 — Avatar: Bugs (faithful API + real-rendering EXT engine layer)
-
-- [x] **Task 11.1** — Fix the unbounded iterative loop-wraparound in
-  `SkinnedModelEXT::ComputeBoneTransformsEXT`. Confirmed (`SkinnedModelEXT.cpp`, ~lines 114-118):
-  `while (pos > clip.Duration) { pos = pos - clip.Duration; }` (and the symmetric negative-direction
-  loop) subtracts/adds `Duration` one clip-length at a time instead of computing a single modulo
-  (`System::TimeSpan` has no modulo operator). If `position` (an accumulated playtime) grows large
-  relative to a short clip `Duration` — e.g. a long-running demo/game session — this iterates
-  proportionally: a real, unbounded per-frame cost, not just a style nit. Fix: compute wraparound
-  via a single division/multiply (`pos - Duration * floor(pos/Duration)`). Add a test with a large
-  accumulated position and a short clip duration, asserting correct results and (via a call-count or
-  timing bound) that the fix doesn't iterate proportionally to `position`.
-
-  Fixed via raw-tick integer arithmetic instead of a `TimeSpan`-level modulo (which doesn't exist):
-  `posTicks = pos.getTicksProperty() % durationTicks`, then a single `+= durationTicks` if negative
-  (C++'s `%` truncates toward zero, so at most one correction is ever needed to land in
-  `[0, durationTicks)` — true floor-mod, O(1) regardless of `position`'s magnitude). This is a
-  NOXNA/EXT engine feature CNA authored itself (no FNA/XNA reference exists for this method), so
-  "correctness" here is defined by this engine's own intended semantics, not an external spec —
-  confirmed no existing test depended on the old loop's incidental boundary quirk (an exact
-  multiple of `Duration` used to land on `Duration` itself rather than `0`, an artifact of using
-  `>`/`<` instead of `>=`/`<=`, not an intentional feature).
-
-  Added `WrapsHugePositionInBoundedTime`: constructs a position ~1,000,000,000.5 clip-durations in
-  via pure integer tick arithmetic (avoiding `FromSeconds`'s floating-point path, which loses
-  precision at that magnitude), asserts the call completes in under 100ms and produces the
-  correct interpolated result (0.5s into the clip). **Revert-verify:** temporarily restored the
-  old iterative loop (`git stash`) and reran just this test under a 20s wall-clock `timeout` —
-  took **12.24 seconds** (proportional to the ~1 billion iterations, as predicted) and failed the
-  100ms assertion exactly as expected. Restored the fix and reran — passes in under 1ms. Full
-  suite: 3369/3369 passing (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 11.2** — Add validation that `ParentBoneIndices` is topologically ordered in
-  `ComputeBoneTransformsEXT`. Confirmed (~lines 140-149): the code comments "bones are stored in
-  topological (breadth-first) order" but never checks `parent < i` for each bone — a pure
-  convention enforced only by the content pipeline, not the engine. Malformed/future content with
-  `parent[i] >= i` (or a self-referencing/cyclic parent) silently reads a not-necessarily-identity
-  `Matrix` from `worldTransforms[parent]` with no error. Add a validation pass (throwing
-  `ArgumentException`) either at load time (`SkinnedModelTypeReader`) or in
-  `ComputeBoneTransformsEXT` itself. Add a test feeding a deliberately non-topological/cyclic parent
-  array and asserting it's rejected cleanly.
-
-  Added the check directly in `ComputeBoneTransformsEXT`'s own topological-composition loop
-  (rather than at content-load time only): `if (parent >= i) throw System::ArgumentException(...)`.
-  Chosen over a load-time-only check because `SkinnedModelEXT`'s data members are all public and
-  directly settable (as the test suite itself does throughout this file), so a load-time-only
-  check would miss hand-constructed or post-load-mutated models; validating at the actual point of
-  use catches every path uniformly for a negligible O(BoneCount) cost (versus Task 11.1's
-  O(position) concern, this is a one-time-per-call, already-being-iterated loop). Proved this
-  single `parent[i] >= i` check is both necessary *and sufficient* to reject cycles too, not just
-  forward references: a cycle's maximum-index member would need a parent with a strictly greater
-  index than itself, which the same check already catches — documented this reasoning in the
-  source comment. Added `ForwardReferencedParentThrows` (bone 0's parent is bone 1) and
-  `SelfParentThrows` (the simplest possible cycle: a bone whose own parent is itself).
-  **Revert-verify:** removed just the `if (parent >= i) throw ...;` block, rebuilt, confirmed both
-  new tests failed with "it throws nothing" (not a crash — small enough indices that the stale
-  `worldTransforms[parent]` read didn't happen to segfault, just silently produced a wrong,
-  unvalidated result). Restored the fix, rebuilt, confirmed green. Full suite: 3371/3371 passing
-  (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 11.3** — Add a bounds/size-consistency check between `BoneCount` and
-  `ParentBoneIndices`/`BindPoseLocal`/`InverseBindPoseGlobal` in `SkinnedModelEXT`. Confirmed
-  (~lines 143-155): all three arrays are indexed by `i` up to `BoneCount` with no check that
-  `.size() == BoneCount`. Since these are populated straight from file content, a corrupt/truncated
-  `.skeleton.bin` produces real out-of-bounds `std::vector::operator[]` reads (undefined behavior),
-  not a hypothetical. Add the size check (throwing a clear `ArgumentException`/`ContentLoadException`
-  instead) and a test with a deliberately size-mismatched skeleton.
-
-  Added the check at the top of `ComputeBoneTransformsEXT`, right after the clip lookup and before
-  any of the three arrays are ever indexed: throws `System::ArgumentException` (matching the
-  exception type already used elsewhere in this method, e.g. the unknown-clip-name and Task 11.2
-  checks) naming `BoneCount` and all 3 actual sizes in the message. Added
-  `MismatchedArraySizesThrows` (`BoneCount = 2` but `ParentBoneIndices` has only 1 entry).
-  **Revert-verify:** removed the check, rebuilt, confirmed the new test failed ("it throws
-  nothing" — the small out-of-bounds read didn't happen to crash in this case, just silently
-  produced an unvalidated result). Restored the fix, rebuilt, confirmed green, and re-ran all 3
-  GPU avatar integration tests (`cna_test_avatar_real_render`, `cna_test_avatar_attach_part`,
-  `cna_test_avatar_tint_routing`) to confirm real content loading is unaffected — all 3 still
-  pass. Full suite: 3372/3372 passing (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 11.4** — Add slot/replace-by-name semantics to `SkinnedModelEXT::AttachPartEXT` (or a
-  new `ReplacePartEXT`). Confirmed a real, live problem: `AttachPartEXT` unconditionally appends
-  every part from `other` into `Parts` with no duplicate/slot-replace handling. Both shipped
-  wardrobe pieces (`examples/demo_avatar/Content/wardrobe/hair_Cap/` and `hair_Ponytail/`) use the
-  *identical* part name `"CNAAvatarHair"` — attaching one after another (e.g. swapping hairstyles at
-  runtime) yields two overlapping "CNAAvatarHair" meshes both rendered. `examples/demo_avatar/src/AvatarDemo.cpp`
-  (~lines 90-94) already has to manually `Parts.erase(std::remove_if(...Name ==
-  "CNAAvatarHair"...))` before every `AttachPartEXT` call as a hand-rolled workaround — proof the
-  engine API itself is missing this. Add real replace-by-name semantics to the engine method itself
-  (see Task 11.5 for the resource-leak half of this same problem) and remove the demo's manual
-  workaround once the engine handles it. Add a test attaching two parts with the same name and
-  asserting only one remains/renders.
-
-- [x] **Task 11.5** — Fix the GPU-resource leak in the demo's manual `Parts.erase()` workaround (and
-  add a proper engine-level removal API so this can't recur). Confirmed: `AvatarDemo.cpp` (~lines
-  90-94) erases entries straight out of the *public* `SkinnedModelEXT::Parts` vector, but the
-  corresponding `vertexBuffers_`/`indexBuffers_`/`ownedParts_`/`textures_` `unique_ptr`s (private,
-  `SkinnedModelEXT.hpp`, ~lines 190-193) are never removed — the old hair part's GPU buffers stay
-  allocated and owned forever, just no longer drawn. Add a proper `RemovePartEXT(name)`/`DetachPartEXT(name)`
-  API to `SkinnedModelEXT` that also frees the underlying owned resources, and stop exposing `Parts`
-  as a directly-mutable public vector for this purpose (tie this in with Task 11.4's fix — likely
-  one combined API change). Add a test proving a removed part's resources are actually released
-  (e.g. via an instance/resource counter).
-
-  Implemented together as one combined change, per this task's own suggestion. Added
-  `SkinnedModelEXT::RemovePartEXT(name)`: erases every part matching `name` from `Parts` *and* the
-  corresponding entries from `vertexBuffers_`/`indexBuffers_`/`ownedParts_` (always parallel arrays
-  to `Parts` — every `AddPartEXT` call and `AttachPartEXT`'s own append loop push to all 4 in
-  lockstep, so a matching index identifies the same part's entries in all 4 at once) and `textures_`
-  (matched by pointer instead, since it's the one non-parallel vector — only populated when a part
-  actually supplied a real texture). `AttachPartEXT` now calls `RemovePartEXT(part.Name)` for every
-  incoming part *before* appending it, giving it real replace-by-name semantics directly (no
-  separate `ReplacePartEXT` needed). Removed `AvatarDemo.cpp`'s manual `Parts.erase(std::remove_if(...))`
-  workaround (and its now-unused `<algorithm>` include) — `AttachPartEXT` alone now does the right
-  thing.
-
-  Kept `Parts` public (read elsewhere: `AvatarRenderer::DrawRealEXT`, the attach-part integration
-  test) rather than restricting its type/visibility — the actual problem was external code
-  *removing* parts by mutating it directly, which `RemovePartEXT` now makes unnecessary; nothing
-  else needs to mutate it.
-
-  Added 4 `NOXNA *ForTesting()` accessors (`GetOwnedVertexBufferCountForTesting`/
-  `GetOwnedIndexBufferCountForTesting`/`GetOwnedPartCountForTesting`/`GetOwnedTextureCountForTesting`)
-  to make the private resource vectors' sizes observable. `VertexBuffer`/`IndexBuffer` require a
-  real `GraphicsDevice` to construct (no fake/mock exists yet — see Task 13.3), but confirmed a
-  plain default-constructed `GraphicsDevice` works headlessly in this environment exactly like the
-  existing `Texture2DTests.cpp` fixtures already rely on — added a `SkinnedModelEXTPartTest`
-  fixture using this same pattern rather than needing a new GPU integration test binary. Added
-  `AttachingSameNamedPartReplacesTheOldOne` (Task 11.4), `RemovePartFreesOwnedResources` (Task
-  11.5, covering all 4 resource kinds including a real texture), and
-  `RemovePartRemovesAllMatchingNamesNotJustFirst`.
-
-  **Revert-verify (2 separate passes):** (1) removed just `AttachPartEXT`'s new
-  `RemovePartEXT(part.Name)` loop — confirmed `AttachingSameNamedPartReplacesTheOldOne` failed
-  (2 parts remained instead of 1); restored, confirmed green. (2) temporarily replaced
-  `RemovePartEXT`'s body with the old demo workaround's exact bug (erase only `Parts`, matching
-  `AvatarDemo.cpp`'s pre-fix code) — confirmed all 3 new tests failed with the owned-resource
-  counts staying at their pre-removal values (proving the leak); restored the real fix, confirmed
-  green. Re-ran all 3 GPU avatar integration tests (`cna_test_avatar_real_render`,
-  `cna_test_avatar_attach_part`, `cna_test_avatar_tint_routing`) plus `cna_demo_avatar
-  --wardrobe-hair Cap` directly (ran cleanly for 5s with no exception, confirming the demo's
-  simplified code path works end-to-end in practice, not just in a unit test) — all unaffected.
-  Full suite: 3375/3375 passing (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 11.6** — Add `isDisposed_` checks to `AvatarRenderer::EnableRealRenderingEXT`/
-  `SetAppearanceEXT`. Confirmed (`AvatarRenderer.cpp`, ~lines 121-137): unlike `DrawRealEXT`/`Draw`/
-  `getStateProperty`/`getBindPoseProperty` (which all throw `ObjectDisposedException`), these two
-  EXT methods silently succeed after `Dispose()` — `EnableRealRenderingEXT` even re-populates
-  `realDevice_`/`realModel_`/`realEffect_`, effectively "undisposing" the object. Add the same
-  `isDisposed_` check to both, for consistency with the rest of the class's own `IDisposable`
-  contract. Add tests for both methods called after `Dispose()`, asserting `ObjectDisposedException`
-  (mirroring the existing `DrawRealThrowsAfterDispose` test's pattern).
-
-  Added the same `if (isDisposed_) throw System::ObjectDisposedException("AvatarRenderer");` guard
-  to both methods, at the very top before either touches any state. Added
-  `EnableRealRenderingThrowsAfterDispose` and `SetAppearanceThrowsAfterDispose` (this doubles as
-  Task 13.4's test half — done together as that task suggests). For
-  `EnableRealRenderingThrowsAfterDispose`, confirmed a plain default-constructed `GraphicsDevice`
-  (the same headless-safe pattern already used by `Texture2DTests.cpp` and this session's own
-  `SkinnedModelEXTPartTest`) is fine to pass here, since the disposed check throws before the
-  method ever touches the device or model argument. **Revert-verify:** removed both new checks,
-  rebuilt, confirmed both new tests failed ("it throws nothing"); restored, rebuilt, confirmed
-  green. Full suite: 3377/3377 passing (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 11.7** — Add bounds checking to `ContentManager`'s `BinReaderEXT::Read<T>()`. Confirmed
-  (`ContentManager.cpp`, ~lines 585-592): `std::memcpy(&value, Data.data() + Pos, sizeof(T)); Pos +=
-  sizeof(T);` never checks `Pos + sizeof(T) <= Data.size()`. A truncated or corrupt
-  `.skeleton.bin`/`.clip.bin` (or a header value like `boneCount`/`trackCount`/`keyCount`
-  inconsistent with the file's actual byte length) causes a real out-of-bounds heap read (undefined
-  behavior) instead of a clean `ContentLoadException`. This is the most serious memory-safety
-  finding in the Avatar content-loading path. Fix: bounds-check before every read, throwing
-  `ContentLoadException` on underflow. Add a test loading a deliberately truncated
-  `.skeleton.bin`/`.clip.bin` and asserting a clean exception, not a crash (run under ASan if
-  available).
-
-  Added the check at the top of `Read<T>()`: throws `ContentLoadException` naming the requested
-  byte count, current offset, and total buffer size. `BinReaderEXT` is a private struct in an
-  anonymous namespace inside `ContentManager.cpp` with no direct unit-test access, so testing
-  this required exercising the real end-to-end `ContentManager::Load<shared_ptr<SkinnedModelEXT>>()`
-  path — created a new `tests/Microsoft/Xna/Framework/Content/` directory (this namespace had no
-  test coverage at all before now) with `ContentManagerSkinnedModelTests.cpp`: a
-  `ScratchContentRoot` RAII helper writes a minimal `avatar.skinnedmodel.json` +
-  deliberately-truncated `skeleton.bin` to a unique temp directory, then a `ContentManager`
-  pointed at that root (with a plain headless `GraphicsDevice`, same pattern as this session's
-  other new Graphics tests) attempts to load it. Added `TruncatedSkeletonBinThrowsContentLoadException`
-  (`boneCount = 1` header present, but the file ends immediately after — the very next read is
-  past the end) and `EmptySkeletonBinThrowsContentLoadException` (0-byte file — even the first
-  read, `boneCount` itself, is already out of bounds).
-
-  **Revert-verify:** removed the bounds check, rebuilt, reran — the truncated-header case merely
-  failed ("throws nothing", a silent OOB read that happened not to crash), but the **empty-buffer
-  case crashed the entire test process with a genuine SIGSEGV (exit code 139)** — the strongest
-  possible confirmation this is a real, exploitable memory-safety bug, not a theoretical one.
-  Restored the fix, rebuilt, confirmed both tests pass again, full suite green, and re-ran all 3
-  GPU avatar integration tests to confirm real (non-truncated) content loading is unaffected. Full
-  suite: 3379/3379 passing (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 11.8** — Add a sanity check on `boneCount` before `.resize()` in
-  `SkinnedModelTypeReader::Read()`. Confirmed (`ContentManager.cpp`, ~lines 679-681): `boneCount` is
-  read as a raw `int32_t` with no validation it's `>= 0` or below some sane cap before
-  `static_cast<std::size_t>(boneCount)` is used to `.resize()` three vectors — a corrupted/negative
-  value produces a huge `std::size_t` and either an allocation failure or a crash rather than a
-  graceful `ContentLoadException`. Add the validation and a test with a deliberately corrupt/negative
-  `boneCount`.
-
-  Added `if (boneCount < 0 || boneCount > kMaxSaneBoneCount) throw ContentLoadException(...)`
-  right after reading `boneCount`, before any `.resize()` call — `kMaxSaneBoneCount = 100000`, a
-  generous, arbitrary ceiling (real content uses 19). Added
-  `NegativeBoneCountThrowsContentLoadException` and `AbsurdlyLargeBoneCountThrowsContentLoadException`
-  to `ContentManagerSkinnedModelTests.cpp`.
-
-  **Revert-verify** surfaced two distinct, genuine problems the fix addresses: (1) removed the
-  check, reran — the negative-boneCount test failed with the *wrong exception type entirely*
-  (`std::length_error: vector::_M_default_append`, from `static_cast<std::size_t>(-1)` ==
-  `SIZE_MAX`), exactly the correctness bug described; (2) the absurdly-large-but-positive case
-  still technically passed (Task 11.7's own per-`Read()` bounds check independently catches it
-  once the loop starts) — **but took 4636ms**, actually attempting an 8GB allocation for
-  `ParentBoneIndices` first. Restored the fix and reran: both tests pass, and the large-boneCount
-  case now completes in **27ms** — an ~170x speedup, confirming the fix's real, measurable value
-  is rejecting the huge wasteful allocation attempt *before* Task 11.7's own check would
-  eventually catch it anyway, not just a correctness fix. Full suite: 3381/3381 passing (2
-  expected accelerometer/gyroscope skips), no regressions. Re-ran all 3 GPU avatar integration
-  tests to confirm real content loading is unaffected.
-
-- [x] **Task 11.9** — Add vertex/index consistency validation in `SkinnedModelTypeReader::Read()`.
-  Confirmed (`ContentManager.cpp`, ~lines 712-715): `numVertices = vertBytes.size() / stride`
-  truncates silently if the byte count isn't an exact multiple of `stride`; index values from
-  `idxBytes` are never checked to be `< numVertices`. Malformed/corrupted part data can produce an
-  index buffer that references out-of-range vertices with no validation anywhere in this path. Add
-  the checks (throwing `ContentLoadException` on a mismatch) and a test with deliberately
-  inconsistent vertex/index data.
-
-  Added 2 checks per part, both before `numVertices`/`numIndices` are computed: vertex byte count
-  must be an exact multiple of `stride`, and index byte count must be an exact multiple of
-  `sizeof(std::uint16_t)`. Then, after computing `numVertices`/`numIndices`, added a loop checking
-  every index value is `< numVertices` before the index buffer is ever created/uploaded. Added
-  `VertexByteCountNotMultipleOfStrideThrows` (10 vertex bytes, stride 52) and
-  `OutOfRangeIndexThrows` (exactly 1 vertex's worth of vertex data, but an index value of 5) to
-  `ContentManagerSkinnedModelTests.cpp`, via a new `WriteManifestWithOnePart` helper (a 0-bone
-  skeleton — the simplest possible valid one — plus a single part).
-
-  **Revert-verify:** removed both new checks (and the index-range loop), rebuilt, confirmed both
-  new tests failed ("it throws nothing" — a silently-wrong part, not a crash, since these
-  particular small buffers happened not to trip Task 11.7's own bounds check either). Restored the
-  fix, rebuilt, confirmed green, full suite, and re-ran all 3 GPU avatar integration tests to
-  confirm real (well-formed) content loading is unaffected. Full suite: 3383/3383 passing (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 11.10** — Investigate consolidating the vertex-layout-by-magic-stride-number pattern
-  for the Skinned (52-byte) vertex format specifically. Confirmed the same `switch(stride){case
-  52: ...}` idiom is independently duplicated in `EasyGLGraphicsBackend.cpp` (~lines 1790-1802),
-  `BgfxGraphicsBackend.cpp`'s `MakeBgfxLayout` (~lines 1249-1268), and hardcoded
-  stride/offsets in `VulkanGraphicsBackend.cpp`'s `GetOrCreatePipelineSkinned3D` (~lines 3384-3399,
-  `constexpr kSkinnedStride = 52`) — none derive the layout from
-  `VertexPositionNormalTextureSkinned::getVertexDeclarationStatic()` or share a single source of
-  truth; only `VertexBuffer::SetData(const VertexPositionNormalTextureSkinned*, int)` has a
-  `static_assert(sizeof(GpuVertex) == 52)` guarding its own packing. If the vertex struct's layout
-  ever changes, 3 independent backend copies would silently desync with no compile-time error. This
-  is a pre-existing project-wide convention, not introduced by this feature, so treat this as a
-  design investigation (is a shared helper feasible without a bigger cross-backend refactor?) rather
-  than an immediate rewrite — but the Skinned case has 5 attributes (the most complex instance) and
-  is the newest, highest-risk case, so it's worth scoping even if the fix is deferred.
-
-  Investigated feasibility of a shared `VertexElement`-derived layout helper. The canonical data
-  already exists (`VertexPositionNormalTextureSkinned::getVertexDeclarationStatic()`'s 5
-  `VertexElement`s: offset 0 Vector3 Position, 12 Vector3 Normal, 24 Vector2 TextureCoordinate, 32
-  Vector4 BlendWeight, 48 Byte4 BlendIndices — an exact match for all 3 backend copies), but
-  deriving from it isn't a local fix: every backend's API boundary
-  (`ApplyLayout(vao, stride)`/`MakeBgfxLayout(stride)`/Vulkan's hardcoded constant) currently
-  receives only a bare `stride`, never a `VertexDeclaration` — routing the real layout through
-  instead would mean widening `IGraphicsBackend`'s abstract interface across all 4 backends, and
-  doing so consistently for *every* existing magic-stride case (16/32/52), not just Skinned, to
-  avoid leaving two conventions coexisting. Also, Vulkan/Bgfx aren't currently smoke-tested in
-  this environment at all (Task 13.6's own "not yet smoke-tested" caveat), so a refactor touching
-  their pipeline-creation code would be effectively unverifiable beyond compilation here.
-  **Decision: defer the full refactor** (matches the task's own framing), but apply the concrete,
-  zero-risk mitigation available today — added a cross-referencing doc comment at all 3
-  duplicate sites (`EasyGLGraphicsBackend.cpp`'s `case 52`, `BgfxGraphicsBackend.cpp`'s
-  `MakeBgfxLayout`, `VulkanGraphicsBackend.cpp`'s `GetOrCreatePipelineSkinned3D`), each naming the
-  canonical layout and the other 2 copies, so a future person changing
-  `VertexPositionNormalTextureSkinned`'s field order (the one thing the existing `sizeof(...) ==
-  52` `static_assert` in `VertexBuffer.cpp` does *not* already catch) has an explicit,
-  discoverable checklist of what else needs updating. Pure comment additions, no behavior change
-  — build-verified (`CNA`/EasyGL backend; Vulkan/Bgfx aren't built in this environment, so those 2
-  edits were verified by careful manual diff review only). Full suite: 3383/3383 passing (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-**Phase 11 complete — 10/10.**
-
----
-
-## Phase 12 — Avatar: API Gaps
-
-- [x] **Task 12.1** — Add `FindPartEXT`/`RemovePartEXT` (or equivalent) API to `SkinnedModelEXT`.
-  Confirmed callers currently have to reach into the public `Parts` vector directly with
-  `std::remove_if`/`erase` (see `AvatarDemo.cpp`, ~lines 90-94), which is both undocumented as a
-  supported pattern and the direct cause of Tasks 11.4/11.5. This task may be fully subsumed by
-  Task 11.5's fix if scoped together — check before starting whether a separate task is still
-  needed once 11.4/11.5 land.
-
-  Fully subsumed by Tasks 11.4/11.5, as anticipated. `RemovePartEXT(name)` (the exact name this
-  task itself suggests) now exists and is used internally by `AttachPartEXT`'s own replace-by-name
-  logic; `AvatarDemo.cpp`'s manual `Parts.erase(std::remove_if(...))` workaround was already
-  removed as part of that fix. Checked whether a separate `FindPartEXT` (lookup-by-name without
-  removing) is still needed: grepped `AvatarRenderer.cpp`, `AvatarDemo.cpp`, and the attach-part
-  integration test for any `find`/lookup-by-name need — none exists; `Parts` is already a public,
-  directly-iterable vector, so any future caller needing an existence check can already do so
-  without a dedicated API. No additional API added. Pure investigation, no code change beyond what
-  Task 11.4/11.5 already landed.
-
-**Phase 12 complete — 1/1.**
-
----
-
-## Phase 13 — Avatar: Test Coverage
-
-- [x] **Task 13.1** — Add direct/edge-case test coverage for `AvatarRenderer::PartTintEXT`'s
-  substring-match routing logic. Confirmed it's `private`, reachable only through `DrawRealEXT` +
-  GPU pixel-readback, and the one existing integration test
-  (`avatar_tint_routing_integration_test.cpp`) covers only Hair/Shirt routing — Pants/Shoes/skin-fallback
-  routing through the real `PartTintEXT` code path is untested at any level (only
-  `AvatarAppearanceEXT`'s own storage round-trip is tested, not the routing logic itself). Also add
-  case-sensitivity and substring-collision edge-case coverage.
-
-  Added `AvatarRendererTestAccess` (a `NOXNA friend struct` in `tests/`, following this codebase's
-  own established test-access convention) granting direct, GPU-independent access to the private
-  `PartTintEXT`. Added 7 tests: `PartTintRoutesHairSubstring`/`...ShirtSubstring`/`...PantsSubstring`/
-  `...ShoesSubstring` (each of the 4 keyword branches individually), `PartTintFallsBackToSkinColorWhenNoKeywordMatches`,
-  `PartTintIsCaseSensitive` (a lowercase keyword must not match — directly guards against
-  regressing to Task 11.17's original bug, exact-equality against a lowercase literal), and
-  `PartTintFirstMatchWinsOnSubstringCollision` (a name containing both "Hair" and "Shirt" must
-  route to whichever is checked first). Confirmed the collision test has real detection power by
-  temporarily swapping the Hair/Shirt check order — it failed with the exact predicted mismatch;
-  restored and confirmed green. The existing GPU integration test's own Hair/Shirt real-pixel-
-  readback coverage is unchanged and still the end-to-end proof; these are a complementary,
-  much-cheaper unit-level layer for the branches it didn't reach. Full suite: 3390/3390 passing (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 13.2** — Add a test for `ComputeBoneTransformsEXT`'s defensive bone-index bounds check
-  (`if (!track.Keys.empty() && track.BoneIndex >= 0 && track.BoneIndex <
-  static_cast<int>(localTransforms.size()))`, ~lines 133-134) — confirmed no existing test exercises
-  a track with an out-of-range or negative `BoneIndex` to confirm it's safely skipped rather than
-  silently mis-happening.
-
-  Added `OutOfRangeOrNegativeBoneIndexTrackIsSkippedSafely`: extends `MakeTwoBoneModel()`'s clip
-  with 2 extra tracks (`BoneIndex = 99`, way past `BoneCount == 2`, and `BoneIndex = -5`), and
-  confirms `ComputeBoneTransformsEXT` neither throws nor corrupts anything — bone 0's own valid
-  track still drives it normally, and bone 1 (with no valid track) stays at its bind pose.
-  **Revert-verify:** temporarily removed the bounds check (kept only the `!track.Keys.empty()`
-  guard), rebuilt, reran — a genuine crash: `free(): invalid pointer` / SIGABRT (glibc heap
-  corruption detection), from `localTransforms[static_cast<std::size_t>(-5)]` writing far out of
-  bounds — the strongest possible proof this defensive check is real and load-bearing, not
-  theoretical. Restored the fix, rebuilt, confirmed green. Full suite: 3391/3391 passing (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 13.3** — Add a plain (non-GPU-dependent) unit test for `SkinnedModelEXT::AddPartEXT`'s
-  own bookkeeping. Confirmed currently only exercised inside 3 GPU-dependent integration tests
-  (zero references in the plain `tests/` unit-test tree). Cover the texture-ownership branch
-  (`texture.HasBackend()` true vs. false, ~lines 61-66) and growth of the four private ownership
-  vectors, independent of a real `GraphicsDevice` if at all feasible (may need a lightweight
-  fake/mock graphics device — investigate what's available/precedented elsewhere in the test suite).
-
-  Largely already covered incidentally by Task 11.4/11.5's `SkinnedModelEXTPartTest` fixture
-  (confirmed a plain, default-constructed `GraphicsDevice` works headlessly in this environment —
-  no fake/mock needed), but that fixture's own tests were framed around `AttachPartEXT`/
-  `RemovePartEXT`, not `AddPartEXT` in isolation. Added 3 more tests directly targeting
-  `AddPartEXT`'s own bookkeeping: `AddPartWithTextureRecordsOwnershipAndPartFields` (asserts
-  `PartEXT::Name`/`Part`/`Texture` are all populated correctly, plus all 4 ownership counts reach
-  1), `AddPartWithoutTextureLeavesTextureNullAndOwnsNoTexture` (the `HasBackend() == false`
-  branch — `PartEXT::Texture` stays null, `GetOwnedTextureCountForTesting()` stays 0), and
-  `RepeatedAddPartGrowsOwnershipVectorsByOneEachTime` (3 sequential calls, asserting all 4 vectors
-  grow by exactly one per call). No revert-verify applies (pure test-coverage addition for
-  already-correct code, confirmed by Task 11.4/11.5's own earlier revert-verify passes exercising
-  this same code path). Full suite: 3394/3394 passing (2 expected accelerometer/gyroscope skips),
-  no regressions.
-
-- [x] **Task 13.4** — Add a test for `EnableRealRenderingEXT`/`SetAppearanceEXT` called after
-  `Dispose()` — see Task 11.6 (this is the test half of that fix; do them together).
-
-  Already done together with Task 11.6 itself: `EnableRealRenderingThrowsAfterDispose` and
-  `SetAppearanceThrowsAfterDispose` were added and revert-verified as part of that task's own
-  commit. No further work needed here.
-
-- [x] **Task 13.5** — Extend `AvatarAnimationPresetNamesEXTTest::NameMatchesEnumeratorSpelling` to
-  check all 31 presets for exact string spelling, not just 4 of them. Confirmed the other 27
-  mappings are only checked for non-emptiness (`AllThirtyPresetsMapToNonEmptyName`) — a spelling
-  typo in any untested mapping (e.g. `MaleSurprised` vs. a hypothetical `MaleSurprized`) would pass
-  all existing tests today. Cheap fix: loop all 31 against a parallel string table instead of
-  hand-picking 4.
-
-  **Bookkeeping catch-up**: the actual fix already landed in commit `cf405dcf` ("test(Task
-  13.4/13.5): mark 13.4 done via Task 11.6 cross-reference; extend preset spelling test") — the
-  checkbox here was simply never flipped at the time. Confirmed the real code is in place:
-  `AvatarAnimationPresetNamesEXTTests.cpp`'s `NameMatchesEnumeratorSpelling` now uses an
-  `AVATAR_PRESET_CASE(x)` stringizing macro (`{AvatarAnimationPreset::x, #x}`) over all 31 presets
-  in enum declaration order, so a spelling typo in any mapping would now fail this test directly
-  rather than only being caught by the weaker non-emptiness check. No further code change needed;
-  this entry closes the checkbox to match already-completed, already-tested work (verified passing
-  as part of the full 3398/3398 suite throughout this session's Phase 15 work).
-
-- [x] **Task 13.6** — Add Vulkan and Bgfx smoke tests for the avatar-rendering path. Confirmed all
-  three avatar GPU integration tests (`cna_test_avatar_real_render`, `cna_test_avatar_attach_part`,
-  `cna_test_avatar_tint_routing`) are currently wired up for EasyGL only
-  (`cna_easygl_test(...)` in `CMakeLists.txt`) — Vulkan's dedicated `GetOrCreatePipelineSkinned3D`
-  pipeline (Task 11.10) and Bgfx's bone-uniform wiring have never been run against real (or even
-  synthetic) avatar content in CI, exactly matching `docs/avatar-real-rendering-ext.md`'s own
-  "not yet smoke-tested" caveat. This may require a fresh Vulkan/Bgfx build configuration (`glslc`
-  etc.) — investigate what's needed and either add the smoke tests or clearly document the specific
-  remaining blocker if tooling is unavailable in this environment.
-
-  **Vulkan: added successfully.** Configured a fresh `cmake-build-vulkan` directory
-  (`-DCNA_GRAPHICS_BACKEND=VULKAN`) — the Vulkan SDK/loader/headers/validation layers are all
-  already installed in this environment. Confirmed `glslc`/`glslangValidator` aren't needed at
-  all: the Skinned pipeline's SPIR-V is already pre-compiled and checked in as a C++ byte array
-  (`src/CNA/Internal/Backends/Vulkan/shaders/spirv_shaders.hpp`, generated by
-  `compile_shaders.py`), so building the existing Vulkan backend requires no shader compiler.
-  Registered all 3 tests in `CMakeLists.txt`'s existing Vulkan test block via the pre-established
-  `cna_vulkan_test(...)` macro, reusing the *exact same* backend-agnostic source files already
-  used for EasyGL (they only touch the public `GraphicsDevice`/`SkinnedModelEXT`/`AvatarRenderer`
-  API) — no new test source needed. Built and ran all 3 directly and via `ctest -R
-  Vulkan_AvatarRenderer`: **all 3 pass**, with identical expected pixel colors to EasyGL,
-  confirming Task 11.10's `GetOrCreatePipelineSkinned3D` pipeline genuinely works correctly for
-  real bone-skinned avatar rendering, runtime part-attach, and tint routing on real Vulkan
-  hardware (AMD Radeon 780M/RADV in this environment). Also reconfigured/rebuilt the main EasyGL
-  debug directory afterward to confirm the shared `CMakeLists.txt` edit doesn't affect it — full
-  suite still 3394/3394, all 3 EasyGL avatar tests still pass too.
-
-  **Bgfx: investigated, found a genuine pre-existing blocker, documented rather than worked
-  around.** Configured a fresh `cmake-build-bgfx` directory (`-DCNA_GRAPHICS_BACKEND=BGFX`,
-  fetches bgfx from GitHub — took ~5.5 minutes, one-time cost) and confirmed the backend itself
-  builds and runs (`cna_test_bgfx_env_map` passes: "3 frames drawn without crash"). Built an
-  experimental target reusing `avatar_real_render_integration_test.cpp` as-is: it compiled and
-  linked cleanly, but crashed immediately at runtime with `Bgfx backend: SetDepthTestEnabled /
-  SetBlend* are not yet wired into bgfx state flags.` — traced to
-  `BgfxGraphicsBackend::SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled`
-  (`BgfxGraphicsBackend.cpp`), all 3 unconditionally calling a shared `ThrowNo3DState()` helper.
-  This is unrelated to the readback-reliability question `bgfx_env_map_test.cpp`'s own comment
-  raises ("Bgfx has no GPU readback API in this project") — it's a more fundamental, pre-existing
-  gap: the test harness itself (not `AvatarRenderer`'s own code, which never touches these) calls
-  `SetDepthTestEnabled`/`setBlendStateProperty` to set up its scene before drawing, so all 3
-  avatar tests would throw before ever reaching `DrawRealEXT`, on Bgfx, today, regardless of how
-  the test itself is written. Implementing real depth-test/blend-state support for Bgfx (wiring
-  `bgfx::setState` flags) is a full backend feature in its own right, well beyond this
-  test-coverage task's scope — deferred, not attempted. Removed the experimental target and
-  documented this exact finding (the precise throw message, the 3 stub functions, and why it
-  blocks all 3 tests unconditionally) directly in `CMakeLists.txt`'s Bgfx test block for whoever
-  picks up that backend feature next.
-
-**Phase 13 complete — 6/6.**
-
----
-
-## Phase 14 — Avatar: Further Investigation (content tooling & minor polish)
-
-- [x] **Task 14.1** — Investigate hardening the hand-rolled JSON bracket-matching in
-  `FindMatchingBracketEXT`/`ParseFlatObjectArrayEXT` (`ContentManager.cpp`, ~lines 605-642) against
-  braces/brackets embedded inside string values. Confirmed this is an existing convention shared
-  with `ModelTypeReader`/`SpriteFontTypeReader` (not new to this feature), but the Skinned-model
-  manifest is the first one fed by a fully automated Python pipeline (`convert_avatar.py`) where a
-  part/clip name containing such a character is structurally possible, even if not currently
-  produced. Decide whether to add string-literal-aware bracket matching (possibly shared across all
-  three readers) or explicitly document the current limitation/constraint on generated names.
-
-  Decided: fix it (shared across all 3 readers, since it's one small, self-contained helper).
-  Made `FindMatchingBracketEXT` string-literal-aware: tracks whether the scan is currently inside
-  a `"..."` string (toggled on unescaped `"`, correctly skipping over `\"` and other backslash
-  escapes without ending the string early) and skips bracket-counting entirely while inside one.
-  Benefits `ModelTypeReader`/`SpriteFontTypeReader` too, not just the Skinned-model path, since
-  they all share this one helper. Left `ExtractJsonStringField`'s own separate (and also
-  escape-unaware) string-value extraction alone — a related but distinct pre-existing gap not
-  named by this task, out of scope here.
-
-  Added `PartNameWithUnbalancedEmbeddedBraceParsesCorrectly`: a part named `"Weird{Name"` (one
-  embedded `{` with **no matching `}`**) immediately followed by an ordinary second part — chosen
-  deliberately unbalanced, since a *balanced* embedded pair (e.g. `"Weird{Name}"`) nets-cancel
-  under the old naive counter and would accidentally still land on the correct position, silently
-  failing to exercise the bug (confirmed this by trying the balanced case first: it passed even
-  with the old code, precisely because it's a false-negative test design). **Revert-verify:**
-  reverted just the string-awareness, rebuilt, reran — the old naive counter swallowed the second
-  part entirely: `model->Parts.size() == 1` instead of `2` (the embedded unmatched `{` pushed
-  depth one level too high, so the object boundary's own real closing `}` no longer reached
-  depth 0, and the algorithm kept consuming into the next part). Restored the fix, rebuilt,
-  confirmed both parts round-trip correctly, full suite green, and re-ran all 3 GPU avatar
-  integration tests to confirm real content is unaffected. Full suite: 3395/3395 passing (2
-  expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 14.2** — Investigate texture path re-basing's assumption that a manifest always lives
-  under the content root (`ContentManager.cpp`, ~line 732: `fs::relative(manifestDir / texFile,
-  root)`). Confirmed both `Content/avatar/` and `Content/wardrobe/` happen to be nested under the
-  same root in every existing test/demo, so this is currently unexercised outside that assumption —
-  if a manifest is ever loaded from outside the root's directory tree, path resolution through
-  `cm.Load<Texture2D>()` is unverified. Add a test loading content from a nested-but-still-under-root
-  path at minimum, and decide whether the outside-root case needs explicit support or an explicit
-  rejection with a clear error.
-
-  Traced how a manifest could ever be loaded from outside the root at all:
-  `ContentManager::BuildAssetPath` does `(fs::path(rootDirectory_) / assetName).string()` — per
-  `std::filesystem::path::operator/` semantics, appending an *absolute* `assetName` to any base
-  path discards the base entirely, so `cm.Load<SkinnedModelEXT>("/absolute/path/avatar")` already
-  lets a manifest live anywhere, root notwithstanding. Empirically tested both the nested-under-root
-  case and the genuinely-outside-root case (an absolute `assetName` pointing at a manifest+texture
-  living in a sibling directory of an otherwise-empty root) — **both already work correctly, no
-  code change needed.** `fs::relative()`'s resulting `..`-laden relative path, re-joined with
-  `root`, still resolves to the correct absolute file when the OS actually opens it — path
-  resolution handles `..` segments lazily at the OS level; no canonicalization is required in
-  advance for this to work. This was a real, previously-unverified assumption, but not a bug.
-
-  Added `TextureLoadsFromNestedButUnderRootManifestDirectory` (a manifest 2 directories deep under
-  root) and `TextureLoadsFromManifestOutsideContentRoot` (root and manifest+texture as sibling
-  directories, manifest reached via an absolute `assetName`), both writing a real 2×2 PNG via
-  `Texture2D::SaveAsPng` and asserting the loaded part's texture round-trips with the correct
-  dimensions. No revert-verify applies (investigation confirmed already-correct behavior, no fix
-  made). Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no regressions.
-
-- [x] **Task 14.3** — Polish `examples/demo_avatar/src/Main.cpp`'s CLI argument parsing. Confirmed
-  `ParseGenderArg` (~lines 9-21) silently accepts any value other than exactly `"female"` (including
-  a typo like `"Female"`) as `Male`, with no warning; `ParseWardrobeHairArg` similarly does zero
-  validation against the two known styles (`Cap`/`Ponytail`) — a bogus style throws a raw,
-  unfriendly `ContentLoadException` from deep inside `ContentManager` instead of a clear
-  usage error. Minor example-code polish, not a core-engine bug; add basic validation with a
-  friendly error message for both.
-
-  Added explicit validation to both: `ParseGenderArg` now accepts only `"male"`/`"female"`,
-  printing `unrecognized --gender value "<value>" (expected "male" or "female")` to stderr and
-  exiting `64` (the `sysexits.h` `EX_USAGE` convention) for anything else — including the exact
-  `"Female"` typo case named by this task. `ParseWardrobeHairArg` now validates against `"Cap"`/
-  `"Ponytail"` up front, printing an equivalent friendly error and exiting `64` before ever
-  reaching `ContentManager`. Manually built and ran `cna_demo_avatar` with `--gender Female`,
-  `--wardrobe-hair Wig` (both now produce the friendly error and exit 64, confirmed via direct
-  invocation) and `--gender female`/`--wardrobe-hair Cap` (both still proceed normally into the
-  real windowed demo, confirmed by running under `timeout` and observing it launches rather than
-  erroring). Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no
-  regressions (example-only change).
-
-**Phase 14 complete — 3/3.**
-
----
-
-## Phase 15 — Demonstration Applications
-
-Each new demo below is a small, focused, real, runnable program under `examples/` proving one or
-more Net/GamerServices/Avatar features work end-to-end for a human to see — not a unit test. Reuse
-existing demo infrastructure (`examples/demo_2d`'s SpriteBatch/window setup, `examples/demo_avatar`'s
-avatar-loading/camera setup, `tools/net/net_two_process_harness.cpp`'s two-process spawn pattern)
-wherever it fits, rather than rebuilding boilerplate from scratch. Every demo must build cleanly and
-be manually screenshot/run-verified (per this repo's own established rigor) before being considered
-done — "it compiles" is not sufficient.
-
-- [x] **Task 15.1** — `cna_demo_net_client_server_arena`: real two-process `NetworkSession::Create/
-  Find/Join`, `LocalNetworkGamer::SendData`/`ReceiveData`, `PacketReader/Writer`, and `GamerJoined`/
-  `SessionEnded` events over real ENet. A small 2D arena (reusing `demo_2d`'s SpriteBatch/window
-  setup) where each connected gamer controls a colored square with arrow keys, every other gamer's
-  square visibly moves too, with gamertag labels drawn above each square. Host launched with
-  `--host`, client with `--join <ip>`.
-
-  New files: `examples/demo_net_client_server_arena/src/{ArenaGame.hpp,ArenaGame.cpp,Main.cpp}`,
-  registered in `CMakeLists.txt` (same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
-  `cna_demo_avatar`, linking `CNA_GamerServices`/`CNA_Net`). CLI: `--host` (default) or `--join`
-  (uses `NetworkSession::Find(SystemLink, 1, {})`, polling up to 5s), plus a `--smoke N` flag
-  (defaults to 180) that exits cleanly after N `Draw` frames with a summary line, for automated
-  two-process verification without a human at the keyboard — the same convention `cna_demo_2d`
-  established.
-
-  Building this real, working demo surfaced three real issues, none of which were "it compiles" —
-  each is a genuine bug/design constraint that the demo could not run to completion without
-  addressing, which is the "test that would fail without the fix" proof for this task (a runnable
-  two-process demo, not a unit test):
-
-  1. **`AvailableNetworkSessionCollection`'s non-const `operator[]` throws.** The client's first
-     attempt (`NetworkSession::Join(&available[0])` on a non-const local) crashed immediately with
-     `System::NotSupportedException("Collection is read-only.")` — the non-const `operator[]` is a
-     mutating accessor that always throws for a genuinely read-only collection, matching real
-     .NET's `ReadOnlyCollection<T>` semantics; only the `const` overload returns a plain reference.
-     Fixed by binding through `const auto& constAvailable = available;` before indexing. This is a
-     real gotcha for any future Net demo/game code indexing a `Find()` result and is now documented
-     inline in `ArenaGame.cpp`.
-
-  2. **`NetworkSession::Join()` has only one overload and requires `Gamer::SignedInGamers` to
-     already be populated.** Confirmed via `NetworkSession.hpp` that (unlike `Create()`, which has
-     both a `maxLocalGamers`-only overload and an explicit-`std::vector<SignedInGamer*>` overload)
-     `Join()` has no explicit-gamer-list variant — it always falls back to the global
-     `Gamer::getSignedInGamersProperty()` list for local gamers. The demo's first `Initialize()`
-     constructed its own standalone `SignedInGamer` and never touched that global list, so `Join()`
-     threw `ArgumentOutOfRangeException("'index' must be less than 0.")` indexing an empty
-     collection. Fixed by calling `GamerServicesDispatcher::Initialize(nullServiceProvider)` at the
-     top of `Initialize()` (matching how a real XNA game with `GamerServicesComponent` registered
-     behaves) and fetching `localGamer_` from `(*Gamer::getSignedInGamersProperty())[0]` instead —
-     a non-owning pointer into `GamerServicesDispatcher`'s 4 auto-created stub gamers, per
-     `GamerCollection<T>`'s own ownership contract. The host's session creation was switched to the
-     simple `Create(SystemLink, 1, 8)` overload for consistency with `Join()`'s reliance on the
-     same global list.
-
-  3. **Investigated, confirmed NOT a bug: every `NetworkGamer`'s gamertag reads "Stub Gamer".**
-     Traced `LocalNetworkGamer`'s constructor (`: NetworkGamer(session)` — forwards only the
-     session, never the wrapped `SignedInGamer`'s real gamertag) and `NetworkGamer`'s default
-     parameter (`gamertag = "Stub Gamer"`) against FNA's actual reference source
-     (`FNA.NetStub/src/Net/NetworkGamer.cs`: `internal NetworkGamer(NetworkSession session) : base
-     ("Stub Gamer", "Stub Gamer")`; `LocalNetworkGamer.cs`: `internal LocalNetworkGamer
-     (SignedInGamer gamer, NetworkSession session) : base(session)`) — this is genuine, deliberate,
-     already-documented upstream FNA behavior, not a CNA porting bug, so no fix was made. The demo
-     correctly reads the local player's own label from `localGamer_->getGamertagProperty()` (the
-     underlying `SignedInGamer`, not the `NetworkGamer` wrapper) instead.
-
-  Verified end-to-end by running two genuine, separate OS processes under
-  `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--host --smoke 180` and, one second later, `--join --smoke
-  180`), both exiting `0`. Host log: session created, `GamerJoined` fired for both the local and
-  the remote gamer, position advanced and synced (`knownRemotes=1`), clean smoke-test exit. Client
-  log: `Find`/`Join` succeeded, `GamerJoined` fired for both gamers, position synced
-  (`knownRemotes=1`), and — an unplanned but welcome extra proof of event wiring — `SessionEnded`
-  correctly fired when the host process exited first. Full suite: 3397/3397 passing (2 expected
-  accelerometer/gyroscope skips); this task added no unit tests (a runnable demo, not a library
-  API) so the full suite is a pure no-regression check.
-
-- [x] **Task 15.2** — `cna_demo_packet_roundtrip`: every XNA-type `PacketWriter::Write`/`PacketReader::Read`
-  overload (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `float`, `double`). Console-only: writes
-  a table of random values of each type into one `PacketWriter`, reads them back via a `PacketReader`
-  over the same bytes, prints a PASS/FAIL row per type. Single process, no networking.
-
-  New file: `examples/demo_packet_roundtrip/src/Main.cpp`, registered in `CMakeLists.txt` under
-  `CNA_ENABLE_NET` linking only `CNA_Net`/`SHARP_RUNTIME` (no windowing/graphics dependency at
-  all, unlike every other Phase 15 demo so far). Moves bytes from writer to reader the same way
-  `LocalNetworkGamer::SendData`/`ReceiveData` do for a real network hop:
-  `dynamic_cast<MemoryStream*>(writer.getBaseStreamProperty())->ToArray()`, then
-  `reader.getBaseStreamProperty()->Write(bytes.data(), 0, size)` with `setPositionProperty(0)`
-  before and after.
-
-  Building it surfaced two real issues, both used as the "would fail without the fix" proof (the
-  demo aborts or misreports without either fix):
-
-  1. **Own bug, fixed: relying on unspecified C++ argument-evaluation order.** The first draft of
-     the `Color` roundtrip constructed `Color(reader.ReadByte(), reader.ReadByte(),
-     reader.ReadByte(), reader.ReadByte())` inline, assuming left-to-right evaluation. C++ does not
-     guarantee this — observed under GCC, the four `ReadByte()` calls evaluated right-to-left,
-     silently reading the bytes into reversed constructor slots (verified: read back
-     `{R:51 G:100 B:2 A:108}` for a written `{R:108 G:2 B:100 A:51}` — the exact byte-reversed
-     value). Fixed by reading each byte into a named local in stream order first, then
-     constructing the `Color` from the locals — not a CNA bug, a bug in this new demo code.
-
-  2. **Confirmed real, faithful FNA quirk (not fixed): `Write(Color)`/`ReadColor()` are not a
-     matched pair, and mismatching them doesn't just misread — it throws.** `PacketWriter::Write
-     (Color)` emits 4 raw bytes (R,G,B,A) while `PacketReader::ReadColor()` always reads 4 32-bit
-     floats (16 bytes); each header already documented the asymmetry, and FNA's own source
-     (`FNA.NetStub/src/Net/PacketReader.cs`) carries the maintainer's own `// FIXME: Only using
-     floats because of the overloads...? -flibit` comment confirming it's a known upstream wart,
-     not a CNA porting bug. Pairing `Write(Color)` with `ReadColor()` on the same 4-byte buffer
-     doesn't produce garbage silently — `ReadColor()` tries to read 16 bytes from a 4-byte buffer
-     and throws `std::runtime_error("Unexpected end of stream.")`. The demo's final row
-     deliberately exercises this mismatched pairing inside a `try`/`catch`, printing the caught
-     exception as a `QUIRK` row (not a crash) with an inline explanation, and reports the correct
-     matched pairing (`Write(Color)` + 4x `ReadByte()`) as the preceding `PASS` row — an honest,
-     non-crashing demonstration of both the correct usage and the documented gotcha.
-
-  Ran the built demo directly: all 7 real round-trip pairs (`float`, `double`, `Vector2/3/4`,
-  `Quaternion`, `Matrix`) plus the matched `Color`/`ReadByte()` pairing print `PASS`, the
-  mismatched `Color`/`ReadColor()` pairing prints `QUIRK` with the caught exception text, summary
-  line reads `9/9 rows behaved as expected`, exit code `0`. Full suite: 3397/3397 passing (2
-  expected accelerometer/gyroscope skips), no regressions (new demo-only file, no library changes).
-
-- [x] **Task 15.3** — `cna_demo_qos_probe`: `QualityOfService` (`AverageRoundtripTime`,
-  `MinimumRoundtripTime`, `BytesPerSecondUpstream/Downstream`, `IsAvailable`) measured between two
-  real gamers over real ENet — depends on Phase 4's Task 4.1/4.2 wiring real measurements through
-  first, otherwise this demo would just show the hardcoded stub. Console output refreshes a live
-  line every ~200ms showing RTT/bandwidth. Two real processes (extends
-  `net_two_process_harness`'s host/client split).
-
-  New file: `examples/demo_qos_probe/src/Main.cpp`, registered in `CMakeLists.txt` under
-  `CNA_ENABLE_NET` linking `CNA_GamerServices`/`CNA_Net` (console-only, no windowing). `--host`/
-  `--join` CLI, `--iterations N` (default 25, ~5s at the demo's 200ms refresh rate).
-
-  Designed to honestly reflect Task 4.1/4.2's *actual, asymmetric* scope rather than pretending
-  both sides measure the same thing:
-  - **Host side**: prints `NetworkGamer::RoundtripTime` for each remote gamer every ~200ms — real,
-    live, continuously re-measured from `ENetPeer::roundTripTime` per Task 4.1's host-only wiring.
-  - **Client side**: prints the one-shot `AvailableNetworkSession::QualityOfService` sample from
-    `Find()`'s discovery reply once (Task 4.2's real measured discovery-time RTT), then — since
-    Task 4.1's own scope decision documents that a client has no direct `ENetPeer` to the host to
-    measure a live RTT from — prints an explicit "not tracked from the client side (Task 4.1
-    documented gap)" label alongside the always-zero value every iteration, instead of fabricating
-    a moving number.
-
-  Verified end-to-end with two real OS processes (host `--iterations 40`, client joining 1s
-  later): client's one-shot discovery sample showed a real non-zero `AvgRTT=0.1ms`/`MinRTT=0.1ms`
-  (`IsAvailable=true`, bandwidth fields honestly 0/unmeasured per Task 4.2's own documented
-  scope); host's live per-gamer RTT read a real, non-zero, live-tracked value (`200.0ms`,
-  consistent across all 32 post-connect samples) once the client joined; client's own per-gamer
-  view of the host correctly stayed at the documented-gap `0.0ms` with its explanatory label for
-  all 38 iterations. Both processes exited `0`.
-
-  The host-side RTT settling to one stable value across the whole run is real ENet behavior, not
-  a frozen/stubbed value: ENet's round-trip smoothing filter (`protocol.c`,
-  `roundTripTime += diff/8`) uses **integer** division, so once the live measurement converges
-  near a given value, small real fluctuations (a few ms either way, expected for loopback UDP
-  under this container's virtualization/scheduling overhead) produce a `diff` too small to move
-  the truncated integer result — a live value can legitimately look static over a short observation
-  window. Confirmed this is the real mechanism (not a CNA bug) by reading `third_party/enet/
-  protocol.c`'s `enet_protocol_process_acknowledgement` directly rather than assuming.
-
-  Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no regressions
-  (new demo-only file, no library changes).
-
-- [x] **Task 15.4** — `cna_demo_simulated_network_conditions`: `NetworkSession.SimulatedLatencyProperty`/
-  `SimulatedPacketLossProperty` — depends on Phase 4's Task 4.3 actually implementing an effect
-  first. A ball bounces between two paddles (host/client), each paddle's position sent every frame;
-  Up/Down arrows raise/lower simulated latency/packet-loss live, visible stutter/jitter scales with
-  the HUD-displayed values. Two real processes ideally; investigate whether a single-process
-  `NetworkSessionType::Local` fallback is viable if the simulated values apply to the local event
-  queue too.
-
-  **Re-scoped after re-reading Task 4.3's own conclusion**: Task 4.3 explicitly confirmed
-  `SimulatedLatencyProperty`/`SimulatedPacketLossProperty` are stored but **never applied to real
-  traffic anywhere**, deliberately matching FNA's own non-functional reference stub (FNA itself
-  never implemented real delay-queue/packet-drop behavior for these) — a considered decision, not
-  an oversight, with its own regression test
-  (`ENetBackendTest.SimulatedLatencyAndPacketLossHaveNoEffectOnRealTraffic`) already locking in
-  that inertness. This task's original premise ("visible stutter/jitter scales with the HUD
-  values") therefore describes something that provably cannot exist without contradicting Task
-  4.3's own already-verified conclusion — building a demo around a fabricated stutter effect would
-  mean showing something false. Re-scoped to the opposite, honest framing: prove *live* that
-  cranking these dials to their extremes has **zero** observable effect on real traffic, with the
-  HUD showing both the requested simulated values and the real measured RTT side by side so the
-  decoupling is visually obvious. A single-process `NetworkSessionType::Local` fallback was not
-  investigated further, since Task 4.3 already confirmed zero references to either property
-  anywhere in `CNA::Internal::Net` — there is no local-queue effect to fall back to either.
-
-  New files: `examples/demo_simulated_network_conditions/src/{SimGame.hpp,SimGame.cpp,Main.cpp}`,
-  registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
-  `cna_demo_net_client_server_arena`. Real two-process `NetworkSession::Create/Find/Join` (same
-  proven `GamerServicesDispatcher::Initialize()` + const-reference-`AvailableNetworkSessionCollection`
-  pattern from Task 15.1), rendered as a small Pong-style match: two paddles (Up/Down to move,
-  synced every frame via `PacketWriter::Write(Vector2)`/`PacketReader::ReadVector2()`, reusing
-  Task 15.1's `SendData`/`ReceiveData` pattern) and one host-authoritative ball (simple AABB
-  bounce physics against both paddle rectangles and the top/bottom walls, broadcast by the host
-  in the same packet as its own paddle position). Number keys 1/2 lower/raise
-  `SimulatedLatencyProperty` by 100ms per press (clamped 0-2000ms); 3/4 lower/raise
-  `SimulatedPacketLossProperty` by 10 percentage points per press (clamped 0-100%). The HUD and a
-  once-per-second console line both show the current simulated values *and* the real measured
-  `NetworkGamer::RoundtripTime` (Task 4.1) side by side. `--smoke N` deterministically ramps both
-  simulated dials every frame (no real keyboard in smoke mode, matching Task 15.1's convention) to
-  prove the values visibly change without needing interactive input.
-
-  Verified end-to-end with two real OS processes (`--host --smoke 180` / `--join --smoke 180`,
-  one second apart), both exiting `0`. Host log: simulated dial climbed to its clamp
-  (`simulatedLatency=2000ms simulatedPacketLoss=100%`) while the real measured RTT independently
-  read a genuine non-zero value once the client connected (`realMeasuredRTT=1001.0ms` this run —
-  the specific number varies by environment scheduling, as already established in Task 15.3, and
-  is beside the point here); `haveRemotePaddle=true` at smoke-test completion confirms real
-  position sync kept working throughout, *even while the simulated packet loss dial sat at its
-  maximum 100% setting* — direct, live proof the setting drops nothing. Client log: same simulated
-  ramp, `realMeasuredRTT` correctly stayed `0.0ms` throughout (the documented Task 4.1 client-side
-  gap — no direct `ENetPeer` to measure from), plus an incidental `SessionEnded` firing when the
-  host exited first. Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no
-  regressions (new demo-only files, no library changes).
-
-- [x] **Task 15.5** — `cna_demo_session_browser`: `NetworkSession::Find(...)` returning an
-  `AvailableNetworkSessionCollection`, and `Join`. One process hosts/advertises (title "Hosting…");
-  the other shows a scrollable list of `AvailableNetworkSession` entries (host gamertag,
-  current/max gamer counts) with Up/Down to select and Enter/A to `Join` — the classic "session
-  lobby" screen. Two real processes.
-
-  New files: `examples/demo_session_browser/src/{BrowserGame.hpp,BrowserGame.cpp,Main.cpp}`,
-  registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
-  `cna_demo_net_client_server_arena`. `--host [--max-gamers N]` advertises a session (title
-  "Hosting…"); `--browse` repeatedly calls `NetworkSession::Find()` every ~300ms, copies each
-  discovered entry into a plain owned `std::vector<AvailableNetworkSession>` (sidestepping
-  `AvailableNetworkSessionCollection`'s own throwing non-const `operator[]`, per Task 15.1's
-  finding, entirely by not re-indexing the throwing collection type at all), and renders a
-  scrollable list with a `>`-prefixed, highlighted selection cursor. Up/Down move the selection
-  (edge-triggered against a stored previous-frame `KeyboardState` so holding a key scrolls one
-  entry per press, not the whole list in one frame); Enter joins the selected entry. Since every
-  stub gamer's gamertag is identically "Stub Gamer" (the same real, faithful FNA behavior already
-  confirmed in Task 15.1), each list entry is disambiguated by its real discovered
-  `AvailableNetworkSession::GetConnectPort()` instead, alongside `current/max` gamer counts (max
-  computed as `CurrentGamerCount + OpenPublicGamerSlots + OpenPrivateGamerSlots`). Supports
-  launching several `--host` processes at once with different `--max-gamers` values, relying on
-  `ENetDiscoveryService`'s own Task 6.5 support for multiple independent processes sharing the
-  well-known discovery port, to prove the list genuinely scrolls across multiple distinct real
-  entries rather than a single-item stub. `--smoke N [--select I]` has no real keyboard driving
-  it, so it deterministically auto-selects and joins entry `I` (default 0) once at least `I + 1`
-  entries have been discovered (matching the established Phase 15 deterministic-nudge convention).
-
-  Verified end-to-end with 4 real OS processes: three hosts (`--max-gamers 4`/`8`/`16`, each
-  `--smoke 100`) plus one browser (`--browse --select 1 --smoke 100`, started 1s later). Browser
-  log: `discovered=3` (all three real hosts found via one shared discovery port), successfully
-  joined index 1 (`Joined "Stub Gamer" (port 44258) as "Stub Gamer"`, a real, distinct discovered
-  port disambiguating which of the three identically-named hosts was selected), smoke summary
-  `discovered=3 joined=true`. All 3 host logs correctly echoed back their own distinct
-  `maxGamers=4`/`8`/`16` values. All 4 processes exited `0`. Full suite: 3397/3397 passing (2
-  expected accelerometer/gyroscope skips), no regressions (new demo-only files, no library
-  changes).
-
-- [x] **Task 15.6** — `cna_demo_gamer_roster_hud`: the full gamer-roster event surface —
-  `GamerJoined`, `GamerLeft`, `HostChanged`, `SessionEnded`, plus per-gamer `IsHost`/`IsLocal`/
-  `IsReady`/`IsTalking` flags. A live-updating panel lists every `NetworkGamer` in `AllGamers` with
-  colored flag icons updating in real time. Single process via `NetworkSessionType::Local` with
-  multiple local gamers for a quick version, or two real processes for a fuller join/leave/host-migration
-  proof (the latter also doubles as a live demo of Phase 2's Task 2.6 host-migration fix, if
-  implemented).
-
-  **Re-checked Task 2.6 before building**: it confirmed real host migration is genuinely
-  unimplemented (`ENetBackend::HandleDisconnect` unconditionally ends the session the instant the
-  host peer disconnects, no election logic anywhere), matching FNA's own reference — so
-  `HostChanged` can never fire in this demo. Built and wired the handler anyway (exercising the
-  full event surface as the task asks), expecting and asserting a `0` fire count rather than
-  omitting it.
-
-  New files: `examples/demo_gamer_roster_hud/src/{RosterGame.hpp,RosterGame.cpp,Main.cpp}`,
-  registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
-  `cna_demo_net_client_server_arena`. Real two-process `NetworkSession::Create/Find/Join`
-  (Task 15.1's proven pattern), subscribing all 4 roster events (`GamerJoined`/`GamerLeft`/
-  `HostChanged`/`SessionEnded`) and rendering a live panel over `AllGamers` (gamertag, `Host`/
-  `Local`/`Ready`/`Talking` as Y/N columns, local gamer's row highlighted). `R` toggles the local
-  gamer's `IsReady` (edge-triggered against a stored previous-frame `KeyboardState`). `--smoke N`
-  deterministically flips local `IsReady` every 60 frames (no real keyboard in smoke mode,
-  matching the established convention) and asserts `hostChangedFireCount == 0` at completion.
-
-  Checking `NetworkGamer.cpp`/`ENetBackend.cpp` before wiring the `IsReady` toggle surfaced that
-  `IsReady` is plain local storage with no wire message ever sending it (confirmed by `grep`);
-  `IsTalking` has no setter anywhere (always `false`, no voice-chat backend). Documented both
-  honestly in the demo's own comments and console output rather than presenting them as if they
-  were live-synced multiplayer state.
-
-  Verified end-to-end with two real OS processes (`--host --smoke 180` / `--join --smoke 180`, one
-  second apart), both exiting `0`. Host log: `GamerJoined` fired for both the local and remote
-  gamer with correct `Host`/`Local` flags (`Host:Y Local:Y` for itself, `Host:N Local:N` for the
-  client); the deterministic `Ready` toggle visibly flipped `Y`/`N` over time on the host's own row
-  while the remote gamer's `Ready` column stayed `N` the entire run — direct, live proof `IsReady`
-  is not synced across the wire. Smoke summary: `hostChangedFireCount=0`, exactly as predicted.
-  Client log surfaced a genuine, real, *already-known* limitation rather than a new bug: the
-  client's own roster panel shows `Host:N` for **both** rows, including the row that is actually
-  the host — traced to `ENetBackend.cpp`'s `HandleServerWelcome`/`HandleGamerJoinBroadcast`
-  (`RosterEntry doesn't carry a host flag, so this new remote gamer's IsHost stays at NetworkGamer's
-  default (false) even when it's actually the host's gamer`), which references `cna-samples/
-  DEFERRED.md` item #20 — resolved for the main `IsHost`/`Id` bug back in Task 12.2, with this one
-  specific client-side-view gap explicitly called out there as a still-open, already-scoped,
-  already-tracked limitation, not something newly discovered by this task. `SessionEnded` also
-  fired correctly on the client when the host exited first (same incidental proof pattern as
-  Task 15.1). Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no
-  regressions (new demo-only files, no library changes).
-
-- [x] **Task 15.7** — `cna_demo_session_lifecycle_events`: `NetworkSession::StartGame()`/`EndGame()`,
-  `NetworkSessionState` transitions (Lobby→Playing→Ended), `GameStarted`/`GameEnded` events, and a
-  manual `Raise()` of `WriteArbitratedLeaderboard`/`WriteUnarbitratedLeaderboard`/`WriteTrueSkill`
-  to prove the delegate wiring works even though the real port never triggers them automatically —
-  an honest spotlight on that documented gap. Console-only, single process,
-  `NetworkSessionType::Local`.
-
-  New file: `examples/demo_session_lifecycle_events/src/Main.cpp`, registered in `CMakeLists.txt`
-  under `CNA_ENABLE_NET` linking `CNA_GamerServices`/`CNA_Net` (console-only, no windowing).
-
-  **Corrected an imprecision in this task's own original description while reading
-  `NetworkSession.cpp` directly**: `EndGame()` transitions `Playing` back to `Lobby` (raising
-  `GameEnded`), not to `Ended` — the natural round-trip is Lobby→Playing→Lobby, not
-  Lobby→Playing→Ended. Reaching `Ended` requires the local gamer to actually leave the session
-  (real disconnect/session-end paths all funnel through `NetworkSession::RemoveGamer`, which is
-  public); the demo calls it explicitly to complete a genuine, full
-  Lobby→Playing→Lobby→Ended tour instead of asserting a transition that doesn't exist.
-
-  Confirmed the delegate-wiring/no-automatic-firing gap by `grep`ping for
-  `WriteArbitratedLeaderboard.Raise`/`WriteUnarbitratedLeaderboard.Raise`/`WriteTrueSkill.Raise`
-  across `src/` before writing a word of demo code: zero real call sites exist anywhere in
-  production code — these three delegates are declared and fully subscribable, but nothing ever
-  invokes them outside of this demo's own manual `Raise()` calls. (FNA's own reference never
-  implemented a real arbitration/leaderboard-writing pipeline either, so this is a genuine,
-  pre-existing parity gap, not something this task discovered as new.)
-
-  Ran the built demo directly (no networking, so no two-process verification needed): printed
-  `Initial state: Lobby`; `StartGame()`+`Update()` → `GameStarted fired` → `Playing`;
-  `EndGame()`+`Update()` → `GameEnded fired` → back to `Lobby` (with the corrected-transition note
-  printed inline); manually raised all 3 leaderboard delegates, each printing its own fire
-  confirmation with the local gamer's name and `isLeaving=false`; `RemoveGamer(localGamer,
-  HostEndedSession)`+`Update()` → `SessionEnded fired` → `Ended`; final summary line
-  `leaderboardDelegateFireCount=3` (exactly the 3 manual calls, nothing more). Exit code `0`. Full
-  suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no regressions (new
-  demo-only file, no library changes).
-
-- [x] **Task 15.8** — `cna_demo_gamerservices_signin_presence`: `GamerServicesComponent`
-  registration, the resulting population of `Gamer::SignedInGamers` (4 stub gamers), `SignedInGamer::SignedIn`/
-  `SignedOut` static events, and `GamerPresence` (`PresenceMode`, `PresenceValue`,
-  `SetPresenceModeStringEXT`). Number keys cycle each signed-in gamer's `GamerPresenceMode`, HUD
-  text shows the resulting presence string live. Single process.
-
-  Building this demo's presence-cycling surfaced Task 9.11 (see Phase 9 above, committed
-  separately as its own dedicated fix): `SignedInGamer::getPresenceProperty()` was const-only,
-  making it permanently impossible to ever mutate a gamer's presence through any public API —
-  fixed there first, then used here.
-
-  New files: `examples/demo_gamerservices_signin_presence/src/{PresenceGame.hpp,PresenceGame.cpp,
-  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
-  gate as `cna_demo_avatar` (needs `CNA_GamerServices` + windowing for the `SpriteBatch`/
-  `SpriteFont` HUD, no networking). Unlike every earlier Phase 15 Net demo (which all called
-  `GamerServicesDispatcher::Initialize()` directly with a null service provider), this is the
-  first to exercise the actual idiomatic XNA registration path: `Components.Add(new
-  GamerServicesComponent(this))` in the constructor, relying on `Game::Initialize()`'s own
-  per-component loop to call `GamerServicesComponent::Initialize()` automatically (confirmed by
-  reading `Game.cpp` directly first) — matching `cna-samples`' own documented real-world usage
-  precedent. `SignedInGamer::SignedIn`/`SignedOut` are subscribed in the constructor, before
-  `Initialize()` runs, matching Task 9.8's already-proven pattern for observing every firing during
-  startup. Number keys 1-4 cycle that signed-in gamer's `GamerPresenceMode` forward (wrapping
-  through all 60 values) via the newly-fixed non-const `getPresenceProperty()`.
-
-  **Honest scope note**: neither FNA's real `GamerPresence` nor CNA's port expose a public getter
-  for the internal formatted presence string that `PresenceMode`'s setter computes — it is only
-  ever passed one-way into the always-no-op `SetPresenceModeStringEXT` (confirmed against FNA's
-  own `GamerPresence.cs` directly: `presence` is a private field with no public accessor). So the
-  HUD shows each gamer's `PresenceMode` enum name (via a `#x`-stringizing macro switch, the same
-  pattern already used for `AvatarAnimationPresetNamesEXTTests` in Task 13.5) and `PresenceValue`
-  directly, rather than reconstructing a private implementation detail that was never part of
-  either engine's public contract.
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 180`): console
-  showed all 4 real `SignedIn` firings during `GamerServicesComponent::Initialize()`
-  (`"Stub Gamer"`, `"Stub Gamer (1)"`, `"Stub Gamer (2)"`, `"Stub Gamer (3)"`,
-  `signInFireCount=4`), and the deterministic smoke-mode presence cycle (every 30 frames × 6
-  cycles over 180 frames) correctly landed gamer 0 on `OnlineVersus` — exactly the enum's 6th
-  step forward from `None` (`None→SinglePlayer→Multiplayer→LocalCoOp→LocalVersus→OnlineCoOp→
-  OnlineVersus`), confirming both the wraparound-cycling math and the newly-fixed mutation path
-  work correctly end-to-end. Exit code `0`. Full suite: 3398/3398 passing (2 expected
-  accelerometer/gyroscope skips), no regressions (demo-only files; the one library change,
-  Task 9.11, is already covered by its own dedicated commit/test above).
-
-- [x] **Task 15.9** — `cna_demo_achievement_showcase`: `Achievement`, `AchievementCollection`,
-  `SignedInGamer::AwardAchievement`/`GetAchievements`. A grid of achievement tiles (built via
-  `CreateInternal` since the real `GetAchievements()` is empty on this platform) shows
-  locked/unlocked art, gamerscore badges, `EarnedDateTime`; number keys call `AwardAchievement(key)`
-  and flip a tile to "earned" with a small animation. Single process, reuses `demo_2d`'s
-  SpriteBatch/SpriteFont setup.
-
-  New files: `examples/demo_achievement_showcase/src/{AchievementGame.hpp,AchievementGame.cpp,
-  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
-  gate as `cna_demo_avatar`. Real `GamerServicesComponent` registration (same pattern as Task
-  15.8). 6 fixed local achievement tiles built via `Achievement::CreateInternal` at startup (one
-  with `displayBeforeEarned=false`, rendering as a hidden `"???"` tile until earned — a real,
-  meaningful field this demo actually exercises). Number keys 1-6 call the real
-  `SignedInGamer::AwardAchievement(key)` and flip that tile to earned with a brief flash-color
-  animation.
-
-  **Confirmed before writing any demo code that `Achievement` is immutable once constructed** —
-  `CreateInternal`'s only constructor takes `earned`/`earnedDateTime` as fixed arguments with no
-  setter anywhere in the class. "Earning" a tile therefore means constructing a *new* `Achievement`
-  value (with `earned=true`, `earnedDateTime=DateTime::getNowProperty()`) and swapping it into the
-  demo's own local grid — the grid is deliberately the demo's own state, not something read back
-  from `GetAchievements()`.
-
-  **Confirmed `AwardAchievement()`/`GetAchievements()` are real, faithful no-ops** before design:
-  `SignedInGamer::AwardAchievement`'s body is empty and `GetAchievements()` always returns
-  `AchievementCollection::CreateInternal({})` — matching FNA's own reference exactly (its
-  `AwardAchievement` is likewise empty and `GetAchievements` likewise always empty). Rather than
-  silently working around this, the demo calls the real API on every award and prints the real
-  `GetAchievements().Count` each time, proving it stays `0` regardless of what was "awarded."
-
-  **Confirmed `GamerScore` is hardcoded to `0` in both FNA and CNA's `Achievement` constructor**
-  (checked FNA's `Achievement.cs` directly: `GamerScore = 0;`, no way to configure it via any
-  public constructor there either) — not a CNA gap, so the demo's gamerscore badge honestly always
-  reads `0` rather than fabricating a nonzero value the real API has no way to produce.
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 200`, one
-  deterministic award every 30 frames): all 6 tiles awarded in order (including the hidden `"???"`
-  one), each award's console line confirmed real `GetAchievements()` stayed at count `0`; final
-  summary `locallyEarned=6/6 realGetAchievementsCount=0`. Exit code `0`. Full suite: 3398/3398
-  passing (2 expected accelerometer/gyroscope skips), no regressions (demo-only files, no library
-  changes).
-
-- [x] **Task 15.10** — `cna_demo_leaderboard_viewer`: `LeaderboardReader` (`PageUp`/`PageDown`,
-  `CanPageUp/Down`, `Entries`, `PageStart`, `TotalLeaderboardSize`) plus an explicit demonstration of
-  `LeaderboardWriter::GetLeaderboard`'s always-throws-`NotSupportedException` platform boundary. A
-  scrolling table of fabricated `LeaderboardEntry` rows (via `CreateInternal`) with Up/Down paging;
-  a status line also attempts the real throwing calls once and prints "threw NotSupportedException
-  as expected". Single process.
-
-  **Re-scoped after checking the API before writing any demo code**: the plan's premise ("Up/Down
-  paging") implies `PageUp()`/`PageDown()` do real work — but both are already confirmed, tested
-  no-ops (`LeaderboardReaderTest.PageUpThrows`/`PageDownThrows`, pre-existing): they always throw
-  `NotSupportedException`, exactly like `LeaderboardWriter::GetLeaderboard`. So the demo's real
-  page-to-page navigation discards the current `LeaderboardReader` and constructs a fresh one via
-  `CreateInternal` at a different `pageStart` — the same workaround any real CNA/FNA caller would
-  need today, since there is no working paging implementation to call.
-
-  New files: `examples/demo_leaderboard_viewer/src/{LeaderboardGame.hpp,LeaderboardGame.cpp,
-  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
-  gate as `cna_demo_avatar`. Builds 20 fixed local `LeaderboardEntry` rows (ranks 1-20, descending
-  rating) at `Initialize()`, then once, calls the 3 real always-throwing APIs
-  (`reader.PageDown()`, `reader.PageUp()`, `LeaderboardWriter{}.GetLeaderboard(identity)`) inside
-  try/catch, printing the plan's own suggested "threw NotSupportedException as expected" line for
-  each. Up/Down page through 5-entry pages by rebuilding the reader (only when the current
-  reader's real `CanPageUp`/`CanPageDown` getter allows it).
-
-  **Confirmed the `pageSize` parameter's real, non-obvious semantics before designing the
-  rebuild helper**: `LeaderboardReader`'s constructor loop bound is `i < size` (an *absolute*
-  upper index, not a page length) — already investigated and locked in by Task 10.6 and
-  `LeaderboardReaderTest.EntriesLoopBoundMatchesFNAExactly`. So each page's `CreateInternal` call
-  passes the *full* 20-entry list plus `start = page*5, size = start+5` (not just `size=5`) to
-  correctly slice out that page's 5 real entries — confirmed empirically by checking
-  `getEntriesProperty().Count` per page during manual testing before finalizing the demo.
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 180`, one
-  deterministic page-down every 30 frames while `CanPageDown` allows it): all 3 real API calls
-  printed their expected "threw NotSupportedException as expected" line. Paging correctly walked
-  pages 0-3 (5 real entries each), then advanced once more to page 4 (`pageStart=20`) where
-  `entriesOnPage=0` — an honest, direct demonstration that `CanPageDown`'s own formula for a
-  non-friend board (`pageStart < entryCache.size()`) doesn't itself guard against the *next* page
-  having zero real entries; `CanPageDown` correctly read `false` once actually on page 4, matching
-  the getter's own real, if imprecise, formula rather than a demo bug. Exit code `0`. Full suite:
-  3398/3398 passing (2 expected accelerometer/gyroscope skips), no regressions (demo-only files,
-  no library changes).
-
-- [x] **Task 15.11** — `cna_demo_guide_overlay_console`: the full `Guide` static API surface —
-  `ShowSignIn`, `BeginShowKeyboardInput`/`EndShowKeyboardInput` (completes instantly with an empty
-  string), `BeginShowMessageBox`/`EndShowMessageBox` (throws), `IsTrialMode`/`SimulateTrialMode`,
-  `IsScreenSaverEnabled`, `NotificationPosition`, `DelayNotifications`. Console menu: each numbered
-  key triggers one `Guide` call and prints its result/exception. Single process, no graphics needed.
-
-  New file: `examples/demo_guide_overlay_console/src/Main.cpp`, registered in `CMakeLists.txt`
-  under `CNA_ENABLE_NET` linking `CNA_GamerServices`/`SHARP_RUNTIME` (no windowing at all).
-  Confirmed safe to build with zero SDL/window setup by reading `TextInputEXT::StartTextInput`/
-  `StopTextInput` first — both are already null-window-guarded, so
-  `Guide::BeginShowKeyboardInput`/`EndShowKeyboardInput` never touch SDL unsafely here. A numbered
-  stdin-driven menu (matching the plan's own "console menu" framing) runs interactively by
-  default, plus an `--auto` flag that executes every item once in order for automated
-  verification.
-
-  **Building the `IsScreenSaverEnabled` menu item surfaced a genuine, real platform constraint**:
-  `Guide::getIsScreenSaverEnabledProperty()`/`setIsScreenSaverEnabledProperty()` wrap real
-  `SDL_ScreenSaverEnabled()`/`SDL_EnableScreenSaver()`/`SDL_DisableScreenSaver()` calls (not a
-  simple stored flag, unlike `IsTrialMode`/`SimulateTrialMode`) — confirmed with a standalone SDL3
-  probe program before touching the demo: `SDL_ScreenSaverEnabled()` always reads `true` and
-  `SDL_DisableScreenSaver()` has zero effect until `SDL_InitSubSystem(SDL_INIT_VIDEO)` has run.
-  Since this demo is deliberately console-only with no video subsystem (matching the plan's own
-  "no graphics needed" scope), toggling `IsScreenSaverEnabled` here can never produce an observable
-  change. Rather than print a silently-confusing `true -> true`, the demo detects the no-change
-  case and prints an explicit explanatory note instead.
-
-  Ran the built demo directly with `--auto`: all 8 menu items executed in order — `ShowSignIn`
-  no-op confirmed; keyboard input completed instantly with `result=""`; both
-  `BeginShowMessageBox`/`EndShowMessageBox` printed "threw NotSupportedException as expected";
-  `IsTrialMode`/`SimulateTrialMode` toggled `false -> true`; `IsScreenSaverEnabled` printed the
-  honest unchanged-with-explanation line; `NotificationPosition` cycled `BottomRight -> TopLeft`
-  (confirmed `BottomRight` is the real default, per `Guide.cpp`'s static initializer);
-  `DelayNotifications` no-op confirmed. Also manually verified the interactive stdin menu path
-  (piped `1`, `4`, `0`) runs the same dispatch correctly and quits cleanly on `0`. Exit code `0`
-  in both modes. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
-  regressions (new demo-only file, no library changes).
-
-- [x] **Task 15.12** — `cna_demo_gamerservices_dispatcher_watchdog`: a visual/interactive version of
-  `tools/net/gamerservices_dispatcher_harness.cpp` (proving Task 12.1's/this plan's Task 7.1 hang
-  fixes) — calls `GamerServicesDispatcher::Initialize()` then `NetworkSession::Create(...)` (and,
-  once Task 7.1 lands, `SignedInGamer::GetAchievements()` too) and shows on-screen ticking text
-  "waiting…" followed by "SUCCESS" once each resolves, so a human watching the window can see the
-  historical hangs are fixed rather than trusting an exit code. Single process.
-
-  New files: `examples/demo_gamerservices_dispatcher_watchdog/src/{WatchdogGame.hpp,
-  WatchdogGame.cpp,Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND
-  NOT EMSCRIPTEN` gate as `cna_demo_net_client_server_arena`. A 7-state machine renders each of
-  the 3 checks (`GamerServicesDispatcher::Initialize()`, `NetworkSession::Create(Local, 1, 8)`,
-  `SignedInGamer::GetAchievements()`) through a `kWarmupFrames=20`-frame "waiting..." window (long
-  enough for a human watching the window to actually perceive it) before performing the real,
-  once-hanging-forever blocking call and flipping to `SUCCESS (Xms)` with the real measured
-  wall-clock duration (`std::chrono::steady_clock`) — mirroring the existing harness's exact 3
-  checks and call patterns (`NetworkSessionType::Local`, matching the harness's own choice so
-  neither this demo nor the harness ever touches a real socket). Self-terminating: exits
-  automatically ~1 second after all 3 report `SUCCESS`, no `--smoke` flag needed since the whole
-  point is a short, bounded, visible sequence.
-
-  **Found and fixed a real bug in this new demo's own state machine** (not library code) during
-  first-run verification: the `AllDone` case incremented a grace-frame counter and called `Exit()`
-  once it crossed a threshold, but `Exit()` doesn't halt `Update()` immediately — several more
-  frames ran before the game loop actually stopped, so the completion line printed roughly 28
-  times instead of once. Fixed with a one-shot guard (`if (doneGraceFrames_ < 60) { ...
-  }`), matching the pattern every other Phase 15 demo's own smoke-completion check already used
-  (checking the *outer* condition before incrementing, so it can only ever fire once).
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` with a `timeout` safety net
-  (in case of a genuine regression back to a real hang): all 3 checks completed in well under a
-  millisecond each (`0.03ms`, `0.04ms`, `0.00ms` this run), the completion line printed exactly
-  once after the one-shot-guard fix, and the process exited `0` on its own. Full suite: 3398/3398
-  passing (2 expected accelerometer/gyroscope skips), no regressions (new demo-only files, no
-  library changes).
-
-- [x] **Task 15.13** — `cna_demo_gamer_profile_privileges`: `GamerProfile` (`GamerScore`,
-  `GamerZone`, `Motto`, `Region`, `Reputation`, `TitlesPlayed`, `TotalAchievements`, via
-  `CreateInternal`) and `GamerPrivileges`. Left/Right cycles through the 4 stub `SignedInGamers`,
-  showing each one's profile card and privilege flags. Single process.
-
-  New files: `examples/demo_gamer_profile_privileges/src/{ProfileGame.hpp,ProfileGame.cpp,
-  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
-  gate as `cna_demo_avatar`. Real `GamerServicesComponent` registration (Task 15.8's pattern).
-  Left/Right cycles the selected gamer (edge-triggered), calling `Gamer::GetProfile()` (a real,
-  heap-allocated, caller-owned `GamerProfile*` — disposed/deleted before each re-select) and
-  reading `SignedInGamer::getPrivilegesProperty()` (a plain const reference, no allocation) for
-  the currently-selected gamer's card.
-
-  **Confirmed before writing any demo code that neither `GamerProfile::CreateInternal()` nor
-  `GamerPrivileges::CreateInternal()` take any per-gamer configuration at all** — both are
-  parameterless factories over a single hardcoded default constructor (`GamerScore=0,
-  GamerZone=Pro, Motto="", Region=RegionInfo::CurrentRegion(), Reputation=5.0,
-  TitlesPlayed=1, TotalAchievements=0` and `AllowCommunication=Everyone,
-  AllowOnlineSessions=true, AllowPremiumContent=true, AllowProfileViewing=Everyone,
-  AllowPurchaseContent=true, AllowTradeContent=true, AllowUserCreatedContent=Everyone`
-  respectively). So all 4 stub gamers show identical profile/privilege cards — documented this
-  honestly in the demo's own header comment and a one-time startup console line, rather than
-  fabricating per-gamer variation the real API has no way to produce.
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 180`, one
-  deterministic cycle every 30 frames): startup line confirmed 4 signed-in gamers and the
-  identical-cards expectation; smoke summary after 6 cycles (`0→1→2→3→0→1→2`, matching
-  `selectedIndex=2 = 6 mod 4`) read `gamerScore=0 gamerZone=Pro allowCommunication=Everyone` —
-  exactly the predicted hardcoded defaults. Exit code `0`. Full suite: 3398/3398 passing (2
-  expected accelerometer/gyroscope skips), no regressions (new demo-only files, no library
-  changes).
-
-- [x] **Task 15.14** — `cna_demo_friends_and_gamercard`: `FriendCollection` (via `CreateInternal`)
-  and the no-op `Guide::ShowGamerCard`/`ShowFriendRequest`/`ShowFriends`/`ShowComposeMessage` calls.
-  A friends-list panel plus an on-screen scrolling log printing "ShowGamerCard(...) called" etc.
-  every time a key triggers one of those `Guide` calls, since none produce real OS UI otherwise.
-  Single process.
-
-  New files: `examples/demo_friends_and_gamercard/src/{FriendsGame.hpp,FriendsGame.cpp,Main.cpp}`,
-  registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
-  `cna_demo_avatar`. 5 fabricated `FriendGamer` entries (via `CreateInternal`, varying
-  Online/Playing/Away/Busy/FriendRequestReceived/FriendRequestSent) wrapped in a real
-  `FriendCollection::CreateInternal` (this demo's own `friendStorage_` vector is the actual owner
-  of the `FriendGamer` objects, matching the class's own documented non-owning-view contract).
-  Up/Down selects a friend; G/R/F/C trigger `ShowGamerCard`/`ShowFriendRequest`/`ShowFriends`/
-  `ShowComposeMessage` respectively, each logging "... called - no-op, no real OS UI" to both the
-  on-screen scrolling log and the console.
-
-  **Found and fixed a real, cross-cutting bug in 8 already-committed Phase 15 demos' smoke-mode
-  logic** while verifying this task's own `--smoke` run: the deterministic-nudge condition in
-  every affected demo used `smokeFramesLeft_ >= 0` instead of `> 0`. Once `smokeFramesLeft_`
-  reaches exactly `0` it stops decrementing (guarded by the *separate* completion-check block's
-  own `> 0` condition), so it stays frozen at `0` forever afterward — and since `Exit()` does not
-  halt `Update()` immediately, several more frames run after the completion line prints. An
-  `>= 0` guard on the nudge condition therefore kept re-triggering on every one of those extra
-  frames; this demo's own `TriggerAction`/`Log` calls made the bug directly visible (the
-  completion line printed once correctly, but "ShowGamerCard(...) called" kept repeating dozens of
-  times afterward). The other 8 already-committed demos have the identical root-cause bug, just
-  silently (no visible duplicate print) because their own post-freeze mutations happened to be
-  harmless no-ops once clamped/bounded, or didn't themselves print anything:
-  - `demo_gamer_roster_hud/RosterGame.cpp` (Task 15.6) — kept toggling `IsReady` forever.
-  - `demo_gamerservices_signin_presence/PresenceGame.cpp` (Task 15.8) — kept cycling gamer 0's
-    `PresenceMode` forever.
-  - `demo_gamer_profile_privileges/ProfileGame.cpp` (Task 15.13) — kept cycling the selected
-    gamer forever.
-  - `demo_session_browser/BrowserGame.cpp` (Task 15.5), `demo_leaderboard_viewer/LeaderboardGame.cpp`
-    (Task 15.10), `demo_achievement_showcase/AchievementGame.cpp` (Task 15.9) — each already had
-    its own separate bounding condition (`!joined_`, `CanPageDown`, `smokeNextAwardIndex_ <
-    tiles_.size()`) that happened to make the `>= 0` mistake harmless in practice.
-  - `demo_simulated_network_conditions/SimGame.cpp` (Task 15.4), `demo_net_client_server_arena/
-    ArenaGame.cpp` (Task 15.1) — no frame-modulo gate at all, so these ran their nudge logic every
-    single frame regardless; harmless (already-clamped dial values / a little extra position
-    drift) but the same inconsistency.
-
-  Fixed all 9 occurrences (the 8 pre-existing demos plus this task's own first draft) by changing
-  the guard to `smokeFramesLeft_ > 0`, with an inline comment at each site explaining why
-  (cross-referencing this task's discovery), rather than silently patching them with no
-  explanation. This is example/demo code only — no production CNA library behavior was affected,
-  and every original task's own already-reported verification numbers (session counts, final
-  selected index, etc.) remain accurate, since those were always computed inside the
-  correctly-guarded `> 0` completion block, not the buggy nudge condition.
-
-  Ran the fixed `cna_demo_friends_and_gamercard` directly under `SDL_VIDEODRIVER=x11
-  DISPLAY=:0` (`--smoke 180`): exactly 6 actions triggered (matching `180/30`), completion line
-  printed exactly once, exit code `0`. Re-ran `cna_demo_gamerservices_signin_presence --smoke 180`
-  after its fix and confirmed the same, already-correct final `PresenceMode` value
-  (`OnlineVersus`) still reported identically (the fix only removes *extra*, unreported, post-
-  completion mutation - it never changed what was already being measured/printed). Full suite:
-  3398/3398 passing (2 expected accelerometer/gyroscope skips), no regressions (demo-only files
-  across all 7 fixes, no library changes).
-
-- [x] **Task 15.15** — `cna_demo_avatar_animation_gallery`: a completionist version of
-  `demo_avatar`'s Space-cycling — programmatically iterates **all 31** `AvatarAnimationPreset`
-  values (not a hand-picked subset), resolves each via `AvatarAnimationPresetToClipNameEXT`,
-  auto-plays/labels each for ~2 seconds before advancing, switching gender and reloading content
-  every full cycle so both Male* and Female* presets play against their own gender's baked clips.
-  Reuses `demo_avatar`'s window/camera/renderer setup. Single process.
-
-  New files: `examples/demo_avatar_animation_gallery/src/{GalleryDemo.hpp,GalleryDemo.cpp,
-  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
-  gate as `cna_demo_avatar`, reusing `demo_avatar`'s own `Content/` directory via the same
-  `copy_directory` POST_BUILD pattern (not duplicating avatar assets). All 31 presets enumerated
-  in the enum's own declaration order via a `#define`-based macro (same pattern as
-  `AvatarAnimationPresetNamesEXTTests`, Task 13.5) so the list can never silently drift from the
-  real enum.
-
-  **Confirmed the exact gender/clip split before writing the skip logic**: `ls`'d both baked clip
-  directories directly — exactly 21 clip files per gender (11 shared: `Stand0-7`, `Clap`, `Wave`,
-  `Celebrate`; 10 gender-specific `Female*`/`Male*`). A preset incompatible with the currently
-  loaded gender (checked via a plain `"Female"`/`"Male"` name-prefix test) is skipped instantly —
-  no frame delay, no attempt to `DrawRealEXT` a clip that doesn't exist in the loaded content —
-  advancing immediately to the next preset within the same `Update()` call. Once a full 31-slot
-  pass completes (21 played + 10 skipped), the gender flips and content reloads via the same
-  `AvatarBodyTypeToContentNameEXT` + `ContentManager::Load` + `AvatarRenderer::EnableRealRenderingEXT`
-  sequence `demo_avatar`'s own `LoadContent()` uses, so the *next* pass's 21 "compatible" clips
-  are the *other* 21 (its own neutral set plus its own gender-specific 10).
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` for a full real-time run
-  (~120s wall-clock, `--smoke 3720`): console log showed the complete male pass in order (`Stand0`
-  through `MaleYawn`, correctly jumping from `Celebrate [11/31]` straight to
-  `MaleIdleLookAround [22/31]`, silently skipping all 10 `Female*` slots), the
-  "Full pass complete - switching to female and reloading content" transition, then the female
-  pass beginning correctly (`Stand0` through `Wave` observed before the smoke budget ran out).
-  Final smoke summary: `played=31 skipped=10 genderSwitches=1` — exactly 21 (full male pass) + 10
-  (partial female pass) = 31 played, 10 skipped (all from the male pass's `Female*` slots), 1
-  gender switch — precise, predicted proof that both genders' own baked clips get exercised
-  against their own content. A separate, shorter confirming run (`--smoke 600`) exited cleanly
-  with code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
-  regressions (new demo-only files, no library changes).
-
-- [x] **Task 15.16** — `cna_demo_avatar_wardrobe_hotswap`: `SkinnedModelEXT::AttachPartEXT`/
-  `RemovePartEXT` (Task 11.4/11.5) used repeatedly *at runtime* — Tab cycles live between baked-in
-  hair, `wardrobe/hair_Cap`, and `wardrobe/hair_Ponytail`, removing the old hair part and
-  re-attaching, with the avatar visibly changing hairstyle without restarting the process. Depends
-  on Tasks 11.4/11.5/12.1 landing first (otherwise this demo would need the same manual workaround
-  `AvatarDemo.cpp` already has, which somewhat defeats its own purpose as a proof of the *engine*
-  API). Single process, reuses `demo_avatar`'s Content/renderer.
-
-  New files: `examples/demo_avatar_wardrobe_hotswap/src/{HotswapDemo.hpp,HotswapDemo.cpp,
-  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
-  gate as `cna_demo_avatar`, reusing `demo_avatar`'s `Content/` directory via the same
-  `copy_directory` POST_BUILD pattern. Tab cycles a 3-state cycle (baked-in → Cap → Ponytail →
-  baked-in → …); Cap/Ponytail states call `model_->AttachPartEXT(std::move(*wardrobePiece))`
-  directly (its own confirmed-fixed replace-by-name semantics remove the previous hair part
-  automatically — no manual pre-removal needed, unlike `AvatarDemo.cpp`'s workaround before that
-  fix landed).
-
-  **Worked out the one real design problem before writing any code**: there is no
-  `wardrobe/hair_baked` folder to `AttachPartEXT` from, and `RemovePartEXT` already frees a
-  replaced part's GPU buffers the moment it's swapped out — so restoring "baked-in" hair cannot
-  be another `AttachPartEXT` call. Confirmed `ContentManager::Unload()`'s actual implementation
-  first (`loadedAssets_.clear(); textureCache_.clear();`) — it only clears the cache *map*, so
-  this demo's own `model_`/`renderer_` (independent `shared_ptr`/owning references) can never
-  dangle from it. Restoring baked-in hair therefore calls `Unload()` then re-`Load`s the base
-  avatar fresh from disk (bypassing the now-cleared cache), rebuilding the renderer around the new
-  instance exactly like `LoadContent()` does the first time.
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 300`, one
-  deterministic swap every 45 frames): console log showed the full 6-swap sequence in order —
-  `Cap → Ponytail → baked-in → Cap → Ponytail → baked-in` — proving both directions work
-  repeatedly across multiple cycles, not just a single one-shot swap: `AttachPartEXT`'s
-  replace-by-name correctly handles wardrobe-to-wardrobe swaps (Cap→Ponytail), and the
-  `Unload()`+reload path correctly restores baked-in hair every time it's cycled back to. Exit
-  code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
-  regressions (new demo-only files, no library changes).
-
-- [x] **Task 15.17** — `cna_demo_avatar_appearance_tint_studio`: `AvatarAppearanceEXT`'s 5 tint
-  slots (Skin/Hair/Shirt/Pants/Shoes) and `AvatarRenderer::SetAppearanceEXT` as a live color
-  customization screen. Number keys 1-5 select a slot, Up/Down cycle preset swatch colors, avatar
-  re-tints on the next `DrawRealEXT` call with an on-screen swatch row showing the 5 current colors.
-  Single process.
-
-  New files: `examples/demo_avatar_appearance_tint_studio/src/{TintStudioDemo.hpp,
-  TintStudioDemo.cpp,Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND
-  NOT EMSCRIPTEN` gate as `cna_demo_avatar`, reusing its `Content/` directory. Number keys 1-5
-  select the active slot; Up/Down cycle that slot's color through a shared 6-color preset palette
-  (wrapping both directions); every change rebuilds the whole `AvatarAppearanceEXT` from all 5
-  slots' current palette indices and calls `SetAppearanceEXT` again, so the avatar's next
-  `DrawRealEXT` picks up the new tint. `SpriteBatch` draws a 5-swatch row (one filled rectangle per
-  slot's current color) with a white outline around the currently-selected slot.
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 200`, one
-  deterministic slot-cycle every 20 frames): console log showed all 5 slots
-  (Skin/Hair/Shirt/Pants/Shoes) cycling through the palette in round-robin order across 2 full
-  rounds (10 total changes), each reapplying `SetAppearanceEXT` immediately. Final summary
-  `paletteIndices=[2,2,2,2,2]` — exactly the expected state after cycling every slot forward by 2
-  full 20-frame steps. Exit code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/
-  gyroscope skips), no regressions (new demo-only files, no library changes).
-
-- [x] **Task 15.18** — `cna_demo_avatar_dual_compare`: two independent `AvatarRenderer`/
-  `SkinnedModelEXT` instances alive and drawing simultaneously (not yet exercised anywhere — all
-  existing avatar code uses exactly one). Male and female avatars stand side-by-side, each
-  independently steppable through animation presets (1/2 select which avatar, Space cycles its
-  clip), proving multi-instance rendering and per-instance appearance isolation. Single process.
-
-  New files: `examples/demo_avatar_dual_compare/src/{DualCompareDemo.hpp,DualCompareDemo.cpp,
-  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
-  gate as `cna_demo_avatar`, reusing its `Content/` directory. Two independent `AvatarSlot`
-  structs (male at `worldX=-1`, female at `worldX=+1`), each with its own `SkinnedModelEXT`/
-  `AvatarRenderer`/clip-name-list/clip-position state, both loaded and drawn every frame in the
-  same `Draw()` call — genuinely new coverage, since every other avatar demo/test in this
-  codebase only ever has one `AvatarRenderer` alive at a time. Deliberately distinct
-  `AvatarAppearanceEXT` tints per slot (different skin/hair/shirt colors) prove
-  `SetAppearanceEXT` is real per-instance state, not shared/global — if it were global, both
-  avatars would show the same tint despite the different values set. 1/2 selects the active
-  avatar; Space cycles that avatar's own clip independently of the other's.
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 200`, alternating
-  active avatar every 25 frames): both avatars loaded and rendered simultaneously with no crash
-  (the actual proof this task exists for), console log showed 8 alternating
-  Female/Male/Female/Male/... clip advances, both independently reaching `Stand4` after 4 of
-  their own advances each. Exit code `0`. Full suite: 3398/3398 passing (2 expected
-  accelerometer/gyroscope skips), no regressions (new demo-only files, no library changes).
-
-- [x] **Task 15.19** — `cna_demo_avatar_multi_attach_stress`: an interactive, human-drivable version
-  of `avatar_attach_part_integration_test.cpp`'s idea. Each keypress attaches one more standalone
-  wardrobe piece via `AttachPartEXT` (hair variants plus a synthetic quad "accessory"), with an
-  on-screen `Parts.size()` counter and all attached parts visibly rendering together, proving
-  accumulation doesn't break skinning/tinting as part count grows. Single process.
-
-  New files: `examples/demo_avatar_multi_attach_stress/src/{StressDemo.hpp,StressDemo.cpp,
-  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
-  gate as `cna_demo_avatar`, reusing its `Content/` directory. Space attaches the next piece in a
-  fixed sequence: attach 1 = `wardrobe/hair_Cap` (replaces the baked-in hair by name, `Parts.size()`
-  unchanged), attach 2 = `wardrobe/hair_Ponytail` (replaces Cap by name, still unchanged — proving
-  the *replace* half of Task 11.4's semantics holds up mid-stress-sequence), every attach after
-  that builds and attaches a brand-new, uniquely-named (`"CNAAccessoryN"`) synthetic one-bone quad
-  (`Parts.size()` growing by exactly 1 each time — the actual stress/accumulation proof).
-
-  **Worked out the accessory's bone-compatibility requirement before writing any rendering
-  code**: `AttachPartEXT` requires the incoming model to "share this model's exact bone count and
-  index order"; `avatar_attach_part_integration_test.cpp`'s own synthetic quads use `BoneCount=1`,
-  which cannot attach onto a real, many-boned avatar. Instead, each accessory quad copies
-  `BoneCount`/`ParentBoneIndices`/`BindPoseLocal`/`InverseBindPoseGlobal` straight off the
-  already-loaded host model at construction time (so this demo is robust to whatever the real
-  skeleton's bone count actually is, never hardcoded) and rigidly skins all its vertices to bone 0
-  (weight 1.0, no blending) — the accessory's own `Clips` are irrelevant post-attach, since
-  `DrawRealEXT` always computes bone transforms from the *host* model's own clip for every part,
-  including newly-attached ones. Also confirmed `AvatarRenderer::PartTintEXT`'s real fallback
-  behavior first (any part name not containing "Hair"/"Shirt"/"Pants"/"Shoes" falls back to the
-  shared skin tint, not a crash or an unmatched-name exception) before choosing to distinguish
-  successive accessories by their own distinct base texture color instead.
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` (`--smoke 500`, one
-  deterministic attach every 20 frames): console log showed `Parts.size()=5` after both hair
-  swaps (correctly unchanged, proving replace-by-name held up), then 23 consecutive synthetic
-  accessories each incrementing `Parts.size()` by exactly 1 (`5→6→7→…→28`) with zero crashes and
-  continued correct rendering throughout. Final summary: `attachCount=25 finalPartsSize=28`. Exit
-  code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
-  regressions (new demo-only files, no library changes).
-
-- [x] **Task 15.20** — `cna_demo_avatar_bone_state_boundary`: documents the surprising,
-  verified-intentional `AvatarRenderer` behavior — `getStateProperty()` always returns
-  `Unavailable`, and `getParentBonesProperty()`/`getBindPoseProperty()` always throw
-  `InvalidOperationException` — contrasted against the *working* real skeleton reachable through
-  `SkinnedModelEXT::ParentBoneIndices`/`BindPoseLocal` (the EXT path `demo_avatar` actually uses).
-  Attempts both APIs, catches/prints the expected exception from the faithful path, then prints the
-  real bone count/hierarchy from the EXT path — teaching exactly where the "real" boundary sits.
-  Console or minimal window, single process.
-
-  **Corrected an imprecision in this task's own original description while reading
-  `AvatarRenderer.cpp` directly, before writing a line of demo code**: `getParentBonesProperty()`
-  does *not* throw at all — it's a plain, always-succeeding getter returning a real, fixed
-  71-entry Xbox-standard parent-bone-index table (`kParentBoneIds`), entirely independent of
-  `State`. Only `getBindPoseProperty()` actually throws `InvalidOperationException` (it checks the
-  raw internal state field directly against `Ready`, which nothing anywhere ever sets it to). The
-  demo's own console output documents the corrected, real 3-way split (`State`: always
-  `Unavailable`; `ParentBones`: genuinely works; `BindPose`: always throws) rather than the
-  originally-assumed 1-works/2-throw split.
-
-  New files: `examples/demo_avatar_bone_state_boundary/src/{BoundaryDemo.hpp,BoundaryDemo.cpp,
-  Main.cpp}`, registered in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN`
-  gate as `cna_demo_avatar`, reusing its `Content/` directory. A minimal window (no meaningful
-  rendering) whose entire content is printed to console during `Initialize()`: constructs a bare
-  `AvatarRenderer(nullptr)` (no `EnableRealRenderingEXT` call — the plain, un-rendered XNA-shaped
-  path), reads `State`, reads `ParentBones` (prints its first 5 real entries), attempts
-  `BindPose` in a try/catch printing the caught exception's message, then loads the real
-  avatar via `ContentManager` and prints `SkinnedModelEXT::BoneCount`/`ParentBoneIndices`/`Clips`/
-  `Parts` counts for direct contrast. Exits itself after 30 frames.
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0`: console output confirmed
-  exactly the corrected 3-way split — `State=Unavailable`; `ParentBones=71 real entries`
-  (`[-1, 0, 0, 0, 0]` first 5, no exception); `BindPose` threw `InvalidOperationException`
-  (`"The avatar's bind pose is not available."`) as expected — then the real EXT-path contrast:
-  `SkinnedModelEXT::BoneCount=19` (genuinely different from `AvatarRenderer`'s own fixed 71, per
-  the class's own doc comment that the two bone systems are "entirely independent"), 21 real
-  clips, 5 real parts. Exit code `0`. Full suite: 3398/3398 passing (2 expected accelerometer/
-  gyroscope skips), no regressions (new demo-only files, no library changes).
-
-- [x] **Task 15.21** — `cna_demo_net_avatar_sync` (bonus, cross-cutting): combines Net + Avatar —
-  each of two processes loads its own gendered avatar, and every frame sends local position/yaw
-  plus current `AvatarAnimationPreset` index over `PacketWriter`/`SendData(SendDataOptions::InOrder)`;
-  each process renders both its own and the remote peer's avatar in one 3D scene, moving with arrow
-  keys and switching animation with Space — the smallest possible proof that Net and
-  Avatar/GamerServices compose the way a real game would use them together (in the spirit of
-  `cna-samples/ClientServerSample` but with avatars instead of tanks). Two real processes.
-
-  New files: `examples/demo_net_avatar_sync/src/{SyncGame.hpp,SyncGame.cpp,Main.cpp}`, registered
-  in `CMakeLists.txt` under the same `CNA_ENABLE_NET AND NOT EMSCRIPTEN` gate as
-  `cna_demo_net_client_server_arena`, additionally reusing `demo_avatar`'s `Content/` directory.
-  Real two-process `NetworkSession::Create/Find/Join` (Task 15.1's proven pattern): host loads a
-  Male avatar, client a Female avatar. Each process ALSO pre-loads the *other* gender's content
-  locally to render the remote peer — no avatar asset bytes travel over the wire, only a small
-  per-frame `PacketWriter` payload (`Vector2` position, `float` yaw, `int32` clip index) via
-  `LocalNetworkGamer::SendData(SendDataOptions::InOrder)`, exactly matching how a real game would
-  sync transform + animation state rather than geometry. Arrow keys move/rotate the local avatar;
-  Space cycles its clip (from the same gendered neutral+specific clip list `AvatarDemo`/
-  `DualCompareDemo` already use). Both avatars render in one shared-camera 3D scene every frame.
-
-  Ran the built demo directly under `SDL_VIDEODRIVER=x11 DISPLAY=:0` as two real OS processes
-  (`--host --smoke 180` / `--join --smoke 180`, one second apart), both exiting `0`. Host log:
-  Male avatar at `x=-1.50` drifting in its own deterministic direction, clip cycling correctly,
-  `haveRemote` flipping to `true` once the client's first packet arrived, remote position/clip
-  tracking the client's real reported state. Client log: Female avatar at `x=+1.50` drifting the
-  *opposite* deterministic direction (proving both directions of the sync are real and
-  independent, not a shared/mirrored value), remote position/clip tracking the host's real state,
-  plus an incidental `SessionEnded` firing when the host exited first (same proof pattern already
-  established in Task 15.1). Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope
-  skips), no regressions (new demo-only files, no library changes).
-
-**Phase 15 complete — 21/21.**
-
----
-
-## Notes on scope and sequencing
-
-- **Ownership-model tasks (10.2, and the individual fixes in 3.1/3.2/3.3/7.5/7.12) should be done
-  as one coherent design decision**, not three-plus independent point fixes — do Task 10.2 first
-  (or fold it into whichever of 3.1/3.2/3.3 is tackled first, then apply the same model to the
-  rest).
-- **Phase 1 (Net critical security bugs) should be prioritized first** — these are the only
-  findings in this plan that are remotely triggerable against an unauthenticated LAN or a connected
-  peer, independent of any XNA-fidelity concern.
-- **Demo apps in Phase 15 that depend on earlier phases' fixes are noted inline** (e.g. Task 15.3
-  depends on 4.1/4.2, Task 15.4 depends on 4.3, Tasks 15.16 depends on 11.4/11.5/12.1) — do the
-  underlying fix before or alongside the demo that showcases it, not after, so the demo doesn't ship
-  showing broken/stub behavior as if it were real.
-- Every task's "add a test" instruction is load-bearing, not decorative — per this repo's own
-  `CLAUDE.md`, a task fixing behavior is not done until a test exists that would fail without the
-  fix. Where a task explicitly couldn't verify something live (e.g. Vulkan/Bgfx smoke tests needing
-  unavailable tooling), say so explicitly rather than silently skipping.
+## Implementation quality rules (carried over, still binding)
+
+- Keep changes minimal but complete — no half-finished implementations.
+- Prefer correctness and tests over visual gimmicks.
+- Do not hide broken behavior behind demos — if a demo can't honestly show a feature working,
+  say so in its own help text rather than faking it.
+- Intentionally-unsupported features stay documented and tested as failing clearly (e.g.
+  PlayerMatch/Ranked/Invite, `Achievement::GetPicture`, `NetworkMachine::RemoveFromSession` if
+  Task 1.2 confirms it should stay that way).
+- Local-fake/persisted behavior (Phase 4) is documented as such, not silently presented as a real
+  online service.
+- XNA-compatible methods (`Microsoft::Xna` namespace) never unexpectedly depend on CNA-only
+  rendering/networking services — CNA extensions stay opt-in (`EnableRealRenderingEXT`,
+  `*EXT` methods, etc.).
+- Avoid global mutable state where possible; where XNA compatibility requires static state
+  (e.g. `activeSession_`, `activeAction_`), test reset/dispose behavior explicitly (Phase 2).
+- Keep demo-only helpers (Phase 8's F1 overlay helper) in `examples/`, not CNA's public API.
+- Make avatar asset generation (Phase 7) deterministic and reviewable.
+- Clear English in docs, comments, plan files, and demo help text.
