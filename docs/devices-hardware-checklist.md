@@ -179,7 +179,7 @@ If step 2 above is ever re-verified on real hardware and found to disagree with 
 documented convention, that is now a bug in the *opt-in* remap specifically, not evidence
 that the remap should be removed outright — removal was considered and explicitly
 declined. **Not yet applied to `Motion`'s Gravity/DeviceAcceleration/RotationRate**
-(see Section 8, `plan_devices.md` Task `MOTION-011`) — tracked separately since it needs
+(see Section 8, `plan_devices.md` Task `MOTION-012`) — tracked separately since it needs
 its own careful math derivation, not a rushed addition alongside this decision.
 
 ## 2. Gyroscope axis correctness
@@ -395,7 +395,7 @@ basis between Android's world frame and XNA's. Whether this needs the same kind 
 remap `Detail::ConvertAndroidPortraitToXnaLandscape()` applies to
 `Accelerometer`/`Gyroscope` is genuinely unknown until tested on a real device.
 
-**Cross-reference (2026-07-07, Task `ACCEL-008` → new Task `MOTION-011`):** `ACCEL-008`
+**Cross-reference (2026-07-07, Task `ACCEL-008` → new Task `MOTION-012`):** `ACCEL-008`
 decided to keep (and now explicitly document + make opt-out-able) the landscape remap for
 `Accelerometer`/`Gyroscope`. `Motion.Gravity`/`DeviceAcceleration`/`DeviceRotationRate` are
 plain device-frame vectors of the same shape (gravity/linear-acceleration/angular-rate),
@@ -407,7 +407,7 @@ Android's own sensor fusion), before blindly reusing the same formula. `Motion.A
 (the quaternion) is a separate, harder question — a quaternion isn't a plain vector, so
 the same sign-flip remap does not apply to it at all; any fix there needs a real change-
 of-basis derivation, tracked as part of the same open question above, not this checklist
-item. See `plan_devices.md` Task `MOTION-011` for the tracked follow-up.
+item. See `plan_devices.md` Task `MOTION-012` for the tracked follow-up.
 
 **Steps:**
 1. On a real Android device, run a game/demo using `Motion`, holding the device flat and

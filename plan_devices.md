@@ -2590,7 +2590,12 @@ not an alternate spelling to preserve.
   - `docs/devices-hardware-checklist.md` Sections 1, 2, and 8 updated with the decision,
     the opt-out mechanism, and an explicit cross-reference to the new `Motion` follow-up
     below.
-  - **New follow-up task opened, not silently skipped:** `MOTION-011` — `Motion`'s
+  - **New follow-up task opened, not silently skipped:** `MOTION-012` (renumbered from
+    an initially-assigned `MOTION-011` — that ID was already promised, in this same
+    file's own `MOTION-001` resolution note, to a separate, still-never-written-up
+    `Motion::Calibrate`-firing gap; `MOTION-012` avoids the collision, and that older
+    promised task remains outstanding, tracked only by `MOTION-001`'s own cross-reference
+    until someone gives it its own section) — `Motion`'s
     `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` still receive no remap at all
     (per `MOTION-002`'s own note, this is now inconsistent with the "keep it" decision
     made here) but applying the same formula without first confirming Android's
@@ -3415,7 +3420,7 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (inspected, no change needed —
     fake backend cannot reach this exact call chain)
 
-### COMPASS-009 — NEW (found 2026-07-06, while researching `COMPASS-001`/`COMPASS-002`): implement the real Compass's device-tilt-dependent axis switch — OPEN, not implemented
+### COMPASS-009 — NEW (found 2026-07-06, while researching `COMPASS-001`/`COMPASS-002`): implement the real Compass's device-tilt-dependent axis switch — CLOSED (2026-07-07)
 
 **Hardware verification:** `docs/devices_sensor_hardware_qa_template.md` (Task `DEMO-002`) Section 7 has a dedicated field for recording whether heading behavior visibly changes/misbehaves between held-upright and lying-flat orientations on real hardware — the direct evidence needed to resolve this question.
 
@@ -3497,6 +3502,62 @@ not an alternate spelling to preserve.
   - `include/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.hpp`
   - `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp`
   - `docs/devices-hardware-checklist.md`
+- **Resolution (2026-07-07):** derived the Android-specific equivalent of the WP7
+  tilt-mode switch from first principles, the same discipline the existing
+  flat-mode formula already used — not a port of WP7's own axis-selection logic
+  (which is written against WP7's own coordinate convention, confirmed inapplicable
+  directly, per this task's own problem statement).
+  - **Mode detection (`IsDeviceInUprightCompassMode()`):** rather than adding a
+    second, independent accelerometer sensor subscription to
+    `AndroidCompassBackend` purely to reproduce the WP7 condition
+    (`|Acceleration.Z| < cos(45°) && Acceleration.Y < sin(315°)`), derived the
+    equivalent device-frame gravity components directly from the same
+    rotation-vector quaternion already being read for heading: Android's
+    `getRotationMatrixFromVector()` is documented to produce `R` such that
+    `R * device_vector = world_vector`; a stationary device's accelerometer
+    reading in device coordinates is therefore approximately `R^T * (0,0,g)`
+    (`R` orthogonal, so `R^{-1}=R^T`), i.e. the third row of `R` — giving
+    `deviceFrameGravityY = 2(yz+xw)`, `deviceFrameGravityZ = 1-2(x²+y²)` from the
+    same quaternion→matrix formula the existing flat-mode function already uses.
+  - **Upright-mode heading (`ConvertRotationVectorToUprightMagneticHeadingDegrees()`):**
+    derived from Android's own documented `SensorManager.remapCoordinateSystem(inR,
+    AXIS_X, AXIS_Z, outR)` — the standard, documented Android pattern for a
+    "hold the phone upright like a compass" heading — which substitutes the
+    rotation matrix's second column for what the flat-mode `getOrientation()`
+    formula normally reads from the first column. Combined with Android's own
+    `getOrientation()` azimuth formula and the existing quaternion→matrix
+    formula, this gives `atan2(R02, R12)` where `R02=2(xz+yw)`, `R12=2(yz-xw)` —
+    as opposed to the flat-mode formula's `atan2(R01, R11)`.
+  - **Combined dispatcher
+    (`ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode()`):** checks
+    `IsDeviceInUprightCompassMode()` and calls whichever heading formula applies;
+    this is the one `AndroidCompassBackend::HandleRotationVectorSample()` now
+    calls, replacing its previous direct call to the flat-mode-only function
+    (kept unchanged and still directly callable/tested on its own).
+  - **Tests:** 12 new tests in `AndroidCompassMathTests.cpp`, including three
+    hand-derived test quaternions with their full construction documented inline
+    (a base "held upright" pose via a -90° rotation about the device's local X
+    axis; that same pose additionally spun +90° about its own local Y axis, via
+    a hand-computed Hamilton quaternion product, confirming the mode-detection
+    is insensitive to the spin while the heading formula responds to it exactly
+    as expected — 0° → 90°; and a mirror-image opposite-tilt quaternion,
+    confirming the mode check recognizes only the one specific tilt direction
+    the WP7 condition describes, not any vertical tilt). All self-consistency
+    only — real hardware verification remains outstanding, same standing caveat
+    as every other Android sensor math function in this file.
+  - **A task-ID collision found and fixed along the way (unrelated to the math
+    itself):** while cross-referencing `Motion` from `ACCEL-008`'s own resolution,
+    discovered `MOTION-001`'s resolution note had already promised the ID
+    `MOTION-011` to a separate, still-never-written-up `Motion::Calibrate`-firing
+    gap. `ACCEL-008`'s new Motion follow-up task (initially also numbered
+    `MOTION-011`) was renumbered to `MOTION-012` to avoid the collision — see that
+    task's own note for the full account. Not otherwise related to `COMPASS-009`,
+    fixed opportunistically since it was noticed during this same edit pass.
+  - **Build/test:** `CNA` and `CnaTests` both build cleanly. Full suite: 3380/3380
+    (3378 pass + 2 expected skips, up from 3371 — the 9 new tests), **zero
+    regressions**. `AndroidCompassMathTests` (21 tests, up from 12) re-run clean
+    (exit code 0, zero reports) under both `devices-asan`
+    (`ASAN_OPTIONS=detect_leaks=1`) and `devices-ubsan`.
 
 ---
 
@@ -3671,7 +3732,13 @@ not an alternate spelling to preserve.
   code change or a new tracked task on its own, distinct from `ACCEL-008`'s stronger,
   two-source finding.
 
-### MOTION-011 — NEW (found 2026-07-07, while implementing `ACCEL-008`): apply the landscape remap to `Motion`'s Gravity/DeviceAcceleration/DeviceRotationRate, or explicitly decide not to — OPEN, not implemented
+### MOTION-012 — NEW (found 2026-07-07, while implementing `ACCEL-008`): apply the landscape remap to `Motion`'s Gravity/DeviceAcceleration/DeviceRotationRate, or explicitly decide not to — OPEN, not implemented
+
+**Note:** originally numbered `MOTION-011` when first written; renumbered to `MOTION-012`
+after discovering `MOTION-001`'s own resolution note had already promised the
+`MOTION-011` ID to a different, unrelated task (a `Motion::Calibrate`-firing gap) that
+was never actually given its own section in this file — see that cross-reference for
+the still-outstanding original task.
 
 - **Priority:** Medium
 - **Area:** Motion Math / Android Backend

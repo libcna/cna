@@ -7,6 +7,9 @@
 using Microsoft::Devices::Sensors::Detail::AndroidSensorAccuracyStatus;
 using Microsoft::Devices::Sensors::Detail::ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees;
 using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToMagneticHeadingDegrees;
+using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode;
+using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToUprightMagneticHeadingDegrees;
+using Microsoft::Devices::Sensors::Detail::IsDeviceInUprightCompassMode;
 using Microsoft::Devices::Sensors::Detail::ShouldRaiseCalibrateForAccuracyStatus;
 
 namespace
@@ -62,6 +65,107 @@ TEST(AndroidCompassMathTests, HeadingIsAlwaysInZeroToThreeSixtyRange)
     const double heading = ConvertRotationVectorToMagneticHeadingDegrees(0.1f, 0.2f, 0.3f, 0.9f);
     EXPECT_GE(heading, 0.0);
     EXPECT_LT(heading, 360.0);
+}
+
+// Task COMPASS-009: hand-derived test quaternions below (documented inline via
+// their construction, not just their numeric literals, so a future reader can
+// re-derive and re-check them independently of this file's own claims).
+//
+// q_uprightBase = rotation of -90 degrees about the device's local X axis,
+// starting from the "lying flat" identity pose -- i.e. tilting the top edge
+// up and back until the screen faces the user vertically, the physical pose
+// the WP7 walkthrough's "isCompassUsingNegativeZAxis" condition describes.
+// Quaternion for a -90-degree rotation about X: (sin(-45deg), 0, 0, cos(-45deg)).
+//
+// q_uprightRotated90 = q_uprightBase composed (Hamilton product) with an
+// additional +90-degree rotation about the device's own local Y axis --
+// physically, spinning the phone in place while still held upright, which is
+// the actual "changing compass heading" motion in this pose. Computed by hand
+// via the standard Hamilton quaternion product formula (not verified against
+// any Android or WP7 API call, only against the formula itself).
+//
+// q_oppositeTilt = the mirror-image +90-degree rotation about X (top edge
+// tilted the *other* way, screen facing down/away instead of toward the
+// user) -- deliberately included to confirm IsDeviceInUprightCompassMode()
+// only recognizes the one specific tilt direction the WP7 condition
+// describes, not "any" vertical tilt, matching that condition's own
+// asymmetric Y-sign check.
+namespace
+{
+    constexpr float UprightBaseX = -0.70710678f;
+    constexpr float UprightBaseW = 0.70710678f;
+
+    constexpr float UprightRotated90X = -0.5f;
+    constexpr float UprightRotated90Y = 0.5f;
+    constexpr float UprightRotated90Z = -0.5f;
+    constexpr float UprightRotated90W = 0.5f;
+
+    constexpr float OppositeTiltX = 0.70710678f;
+    constexpr float OppositeTiltW = 0.70710678f;
+} // namespace
+
+TEST(AndroidCompassMathTests, IdentityQuaternionIsNotUprightMode)
+{
+    EXPECT_FALSE(IsDeviceInUprightCompassMode(0.0f, 0.0f, 0.0f, 1.0f));
+}
+
+TEST(AndroidCompassMathTests, UprightBaseQuaternionIsUprightMode)
+{
+    EXPECT_TRUE(IsDeviceInUprightCompassMode(UprightBaseX, 0.0f, 0.0f, UprightBaseW));
+}
+
+TEST(AndroidCompassMathTests, UprightRotated90QuaternionIsStillUprightMode)
+{
+    // Confirms spinning the phone in place (changing heading) while it stays
+    // physically upright does not itself change the flat-vs-upright mode
+    // classification -- only the initial tilt-about-X matters.
+    EXPECT_TRUE(IsDeviceInUprightCompassMode(
+        UprightRotated90X, UprightRotated90Y, UprightRotated90Z, UprightRotated90W));
+}
+
+TEST(AndroidCompassMathTests, OppositeTiltQuaternionIsNotUprightMode)
+{
+    EXPECT_FALSE(IsDeviceInUprightCompassMode(OppositeTiltX, 0.0f, 0.0f, OppositeTiltW));
+}
+
+TEST(AndroidCompassMathTests, UprightBaseQuaternionProducesZeroDegreeUprightHeading)
+{
+    const double heading =
+        ConvertRotationVectorToUprightMagneticHeadingDegrees(UprightBaseX, 0.0f, 0.0f, UprightBaseW);
+    EXPECT_NEAR(heading, 0.0, Tolerance);
+}
+
+TEST(AndroidCompassMathTests, UprightRotated90QuaternionProducesNinetyDegreeUprightHeading)
+{
+    const double heading = ConvertRotationVectorToUprightMagneticHeadingDegrees(
+        UprightRotated90X, UprightRotated90Y, UprightRotated90Z, UprightRotated90W);
+    EXPECT_NEAR(heading, 90.0, Tolerance);
+}
+
+TEST(AndroidCompassMathTests, UprightHeadingIsAlwaysInZeroToThreeSixtyRange)
+{
+    const double heading = ConvertRotationVectorToUprightMagneticHeadingDegrees(
+        UprightRotated90X, UprightRotated90Y, UprightRotated90Z, UprightRotated90W);
+    EXPECT_GE(heading, 0.0);
+    EXPECT_LT(heading, 360.0);
+}
+
+TEST(AndroidCompassMathTests, WithTiltModeUsesFlatFormulaWhenLyingFlat)
+{
+    // Identity quaternion -- flat mode -- must match the plain flat-mode
+    // function's own result exactly, not the upright one.
+    const double combined = ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode(0.0f, 0.0f, 0.0f, 1.0f);
+    const double flatOnly = ConvertRotationVectorToMagneticHeadingDegrees(0.0f, 0.0f, 0.0f, 1.0f);
+    EXPECT_NEAR(combined, flatOnly, Tolerance);
+}
+
+TEST(AndroidCompassMathTests, WithTiltModeUsesUprightFormulaWhenHeldUpright)
+{
+    const double combined = ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode(
+        UprightBaseX, 0.0f, 0.0f, UprightBaseW);
+    const double uprightOnly =
+        ConvertRotationVectorToUprightMagneticHeadingDegrees(UprightBaseX, 0.0f, 0.0f, UprightBaseW);
+    EXPECT_NEAR(combined, uprightOnly, Tolerance);
 }
 
 TEST(AndroidCompassMathTests, HighAccuracyStatusMapsToSmallestDegreeValue)

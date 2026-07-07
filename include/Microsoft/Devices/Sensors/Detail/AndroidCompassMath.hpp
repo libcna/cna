@@ -71,6 +71,142 @@ namespace Microsoft::Devices::Sensors::Detail
     }
 
     /**
+     * @brief Magnetic heading, in degrees [0, 360), for a device held **upright**
+     * ("portrait"/handheld-compass mode, e.g. held vertically facing the user, like
+     * a traditional compass) — as opposed to `ConvertRotationVectorToMagneticHeadingDegrees()`
+     * above, which is correct for a device lying **flat** (e.g. face-up like a map).
+     *
+     * Task COMPASS-009: the real WP7 `Compass`'s own archived MSDN Remarks state
+     * "the compass uses a different axis to compute the heading, depending on the
+     * orientation of the device" — held upright vs. held flat. The companion
+     * walkthrough ("How to get data from the compass sensor for Windows Phone 8",
+     * archived `hh202974(v=vs.105)`) names the upright case
+     * `isCompassUsingNegativeZAxis` and switches to a different axis of its own
+     * (WP7-specific) accelerometer/orientation data — but that exact switch cannot
+     * be ported verbatim, since it is written against WP7's own coordinate
+     * convention, not Android's rotation-vector quaternion.
+     *
+     * This function derives the Android-specific equivalent from first principles,
+     * the same discipline `ConvertRotationVectorToMagneticHeadingDegrees()` above
+     * already uses: Android's own `SensorManager.remapCoordinateSystem(inR,
+     * AXIS_X, AXIS_Z, outR)` — the standard, documented way Android apps compute a
+     * "hold the phone upright like a compass" heading — redefines the device's
+     * axes so the new Y axis is the old Z axis and the new Z axis is the old
+     * -Y axis (the third axis is always fixed by the right-hand rule once two are
+     * chosen), which is equivalent to substituting the rotation matrix's *second*
+     * column (index 2, `R02`/`R12`) for what `getOrientation()`'s azimuth formula
+     * normally reads from the *first* column (index 1, `R01`/`R11`, used by
+     * `ConvertRotationVectorToMagneticHeadingDegrees()` above). Combined with
+     * Android's own documented `getOrientation()` azimuth formula
+     * (`atan2(R[1], R[4])` in its row-major layout) applied to that remapped
+     * matrix, and the same quaternion→rotation-matrix formula already used above,
+     * this gives `atan2(R02, R12)` where `R02 = 2(xz+yw)` and `R12 = 2(yz-xw)`.
+     *
+     * @note Never checked against real hardware — same standing caveat as
+     * `ConvertRotationVectorToMagneticHeadingDegrees()` above. Only self-consistency
+     * (identity quaternion, monotonic response to a known yaw) has been verified.
+     * The *mode-selection* logic (`IsDeviceInUprightCompassMode()` below) and this
+     * heading formula are two independently-derived pieces; a hardware check should
+     * verify both separately if either looks wrong.
+     *
+     * @param x Quaternion X component (`ASensorEvent::data[0]`).
+     * @param y Quaternion Y component (`data[1]`).
+     * @param z Quaternion Z component (`data[2]`).
+     * @param w Quaternion scalar component (`data[3]`).
+     * @return Magnetic heading, in degrees, in the range [0, 360), for upright mode.
+     */
+    [[nodiscard]] inline double ConvertRotationVectorToUprightMagneticHeadingDegrees(
+        float x, float y, float z, float w)
+    {
+        constexpr double Pi = 3.141592653589793238462643383279502884;
+
+        const double r02 = 2.0 * (static_cast<double>(x) * z + static_cast<double>(y) * w);
+        const double r12 = 2.0 * (static_cast<double>(y) * z - static_cast<double>(x) * w);
+
+        const double azimuthRadians = std::atan2(r02, r12);
+        double degrees = azimuthRadians * (180.0 / Pi);
+        degrees = std::fmod(degrees + 360.0, 360.0);
+        return degrees;
+    }
+
+    /**
+     * @brief Whether a device (identified only by its rotation-vector quaternion)
+     * is being held upright ("portrait" compass mode) rather than lying flat
+     * ("flat" compass mode) — Task COMPASS-009.
+     *
+     * The real WP7 walkthrough's own tilt-mode test (`hh202974(v=vs.105)`) reads
+     * the device's *accelerometer*, in WP7's fixed, never-remapped device frame
+     * (per `ACCEL-008`, `Accelerometer.Acceleration` is exactly this raw frame):
+     * `|Acceleration.Z| < cos(45°) && Acceleration.Y < sin(315°)` (`sin(315°) ==
+     * -cos(45°)`). Rather than adding a second, independent accelerometer sensor
+     * subscription to `AndroidCompassBackend` purely to reproduce this condition,
+     * this function derives the equivalent device-frame gravity components
+     * directly from the same rotation-vector quaternion already being read for
+     * heading: Android's `getRotationMatrixFromVector()` is documented to produce
+     * a matrix `R` such that `R * device_vector = world_vector`; a device at rest
+     * reports `device_vector ≈ (0, 0, standard_gravity)` in world coordinates
+     * (Android's own accelerometer convention, "Up" = `+Z` world), so the
+     * stationary accelerometer reading in *device* coordinates is approximately
+     * `R^T * (0, 0, g) = g * (third row of R)` (`R` is orthogonal, so
+     * `R^{-1} = R^T`). That third row, from the same quaternion→matrix formula
+     * `ConvertRotationVectorToMagneticHeadingDegrees()` above already uses, is
+     * `R20 = 2(xz-yw)` (device-frame X), `R21 = 2(yz+xw)` (device-frame Y), and
+     * `R22 = 1-2(x²+y²)` (device-frame Z) — this function only needs Y and Z,
+     * matching the WP7 condition above exactly (only `Acceleration.Y`/`.Z` are
+     * ever tested there).
+     *
+     * @note This mode-selection condition is a real, cited requirement (the WP7
+     * behavior it reproduces); the specific Android rotation-matrix-to-gravity
+     * derivation above is grounded in Android's own documented sensor-fusion
+     * contract, not an arbitrary choice — but like everything else in this file,
+     * unverified against real hardware.
+     *
+     * @param x Quaternion X component (`ASensorEvent::data[0]`).
+     * @param y Quaternion Y component (`data[1]`).
+     * @param z Quaternion Z component (`data[2]`).
+     * @param w Quaternion scalar component (`data[3]`).
+     * @return true if the device should use `ConvertRotationVectorToUprightMagneticHeadingDegrees()`
+     * instead of `ConvertRotationVectorToMagneticHeadingDegrees()`.
+     */
+    [[nodiscard]] inline bool IsDeviceInUprightCompassMode(float x, float y, float z, float w)
+    {
+        // cos(45 degrees) == sin(315 degrees) in magnitude -- a single named
+        // constant covers both sides of the WP7-documented condition.
+        constexpr double CosFortyFiveDegrees = 0.70710678118654752440;
+
+        const double deviceFrameGravityY = 2.0 * (static_cast<double>(y) * z + static_cast<double>(x) * w);
+        const double deviceFrameGravityZ = 1.0 - 2.0 * (static_cast<double>(x) * x + static_cast<double>(y) * y);
+
+        return std::abs(deviceFrameGravityZ) < CosFortyFiveDegrees
+            && deviceFrameGravityY < -CosFortyFiveDegrees;
+    }
+
+    /**
+     * @brief Magnetic heading, in degrees [0, 360), automatically choosing the
+     * flat-mode or upright-mode axis convention based on the device's current
+     * tilt (Task COMPASS-009). This is the function real Android backends should
+     * call — `ConvertRotationVectorToMagneticHeadingDegrees()`/
+     * `ConvertRotationVectorToUprightMagneticHeadingDegrees()` above are the two
+     * single-mode building blocks, kept directly testable and unchanged from
+     * their own pre-COMPASS-009 behavior.
+     *
+     * @param x Quaternion X component (`ASensorEvent::data[0]`).
+     * @param y Quaternion Y component (`data[1]`).
+     * @param z Quaternion Z component (`data[2]`).
+     * @param w Quaternion scalar component (`data[3]`).
+     * @return Magnetic heading, in degrees, in the range [0, 360).
+     */
+    [[nodiscard]] inline double ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode(
+        float x, float y, float z, float w)
+    {
+        if (IsDeviceInUprightCompassMode(x, y, z, w))
+        {
+            return ConvertRotationVectorToUprightMagneticHeadingDegrees(x, y, z, w);
+        }
+        return ConvertRotationVectorToMagneticHeadingDegrees(x, y, z, w);
+    }
+
+    /**
      * @brief Maps a magnetic-field sensor's accuracy status to a HeadingAccuracy value, in degrees.
      *
      * CNA-chosen mapping (the real WP7 API documents `HeadingAccuracy` as

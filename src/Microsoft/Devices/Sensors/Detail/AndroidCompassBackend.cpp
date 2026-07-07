@@ -83,7 +83,13 @@ namespace Microsoft::Devices::Sensors::Detail
         // from raw accelerometer+magnetometer cross-product math computed
         // in this bridge -- see this class's own doc comment and
         // plan_devices.md's DEVICES-0100 gate task.
-        const double heading = ConvertRotationVectorToMagneticHeadingDegrees(
+        //
+        // Task COMPASS-009: automatically switches between flat-mode and
+        // upright-mode axis conventions based on the device's current tilt,
+        // derived entirely from this same quaternion -- see
+        // ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode()'s own
+        // doc comment for the full derivation.
+        const double heading = ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode(
             sample.Values[0], sample.Values[1], sample.Values[2], sample.Values[3]);
 
         {
