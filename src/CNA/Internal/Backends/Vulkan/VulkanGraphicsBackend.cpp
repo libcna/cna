@@ -4838,6 +4838,21 @@ namespace CNA::Internal::Backends::Vulkan
             barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        } else if (from == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                   to   == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+            // Task 865: needed by VulkanTexture3DBackend/VulkanTextureCubeBackend::GetData to
+            // read back a texture that has already been sampled at least once.
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        } else if (from == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+                   to   == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            // Task 865: restores sampling readiness after GetData's readback copy.
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
         } else {
             throw std::runtime_error("Vulkan: unsupported image layout transition");
         }
@@ -6296,7 +6311,9 @@ namespace CNA::Internal::Backends::Vulkan
         imgInfo.arrayLayers   = 1;
         imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-        imgInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        // TRANSFER_SRC (Task 865): needed by GetData's vkCmdCopyImageToBuffer readback.
+        imgInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                VK_IMAGE_USAGE_SAMPLED_BIT;
         imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
         imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         if (vkCreateImage(dev, &imgInfo, nullptr, &image_) != VK_SUCCESS) return;
@@ -6368,6 +6385,45 @@ namespace CNA::Internal::Backends::Vulkan
         vkFreeMemory(dev, stagingMem, nullptr);
     }
 
+    // Task 865: real GPU readback via vkCmdCopyImageToBuffer + a host-visible staging buffer,
+    // mirroring SetData's upload path in reverse.
+    void VulkanTexture3DBackend::GetData(int level, int x, int y, int z,
+                                          int w, int h, int depth,
+                                          void* data, int dataLength) const
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return;
+        VkDevice dev = owner_->device_;
+
+        VkBuffer       stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void*          mapped     = nullptr;
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(dataLength),
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+
+        owner_->TransitionImageLayout(image_,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
+        region.imageOffset      = { x, y, z };
+        region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h),
+                                     static_cast<uint32_t>(depth) };
+        vkCmdCopyImageToBuffer(cb, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                stagingBuf, 1, &region);
+        owner_->EndOneTimeCommands(cb);
+
+        owner_->TransitionImageLayout(image_,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        std::memcpy(data, mapped, static_cast<size_t>(dataLength));
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+    }
+
     // --- VulkanTextureCubeBackend ---
 
     VulkanTextureCubeBackend::VulkanTextureCubeBackend(VulkanGraphicsBackend* owner, int size)
@@ -6386,7 +6442,9 @@ namespace CNA::Internal::Backends::Vulkan
         imgInfo.arrayLayers   = 6;
         imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-        imgInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        // TRANSFER_SRC (Task 865): needed by GetData's vkCmdCopyImageToBuffer readback.
+        imgInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                VK_IMAGE_USAGE_SAMPLED_BIT;
         imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
         imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         if (vkCreateImage(dev, &imgInfo, nullptr, &image_) != VK_SUCCESS) return;
@@ -6487,6 +6545,67 @@ namespace CNA::Internal::Backends::Vulkan
             0, 0, nullptr, 0, nullptr, 1, &toRead);
 
         owner_->EndOneTimeCommands(cb);
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+    }
+
+    // Task 865: real GPU readback via vkCmdCopyImageToBuffer + a host-visible staging buffer,
+    // mirroring SetData's per-face upload path in reverse (inline barriers scoped to just the
+    // target face layer, mirroring SetData's own approach -- the shared TransitionImageLayout
+    // helper always transitions layer 0 only, so it can't be reused for an arbitrary cube face).
+    void VulkanTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return;
+        if (face < 0 || face >= 6) return;
+        VkDevice dev = owner_->device_;
+
+        VkBuffer       stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void*          mapped     = nullptr;
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(dataLength),
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+
+        // Transition only the target face layer to TRANSFER_SRC_OPTIMAL.
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkImageMemoryBarrier toXfer{};
+        toXfer.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toXfer.oldLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        toXfer.newLayout           = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        toXfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toXfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toXfer.image               = image_;
+        toXfer.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT,
+                                        static_cast<uint32_t>(level), 1,
+                                        static_cast<uint32_t>(face), 1 };
+        toXfer.srcAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+        toXfer.dstAccessMask       = VK_ACCESS_TRANSFER_READ_BIT;
+        vkCmdPipelineBarrier(cb,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &toXfer);
+
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,
+                                     static_cast<uint32_t>(level),
+                                     static_cast<uint32_t>(face), 1 };
+        region.imageOffset      = { x, y, 0 };
+        region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        vkCmdCopyImageToBuffer(cb, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                stagingBuf, 1, &region);
+
+        VkImageMemoryBarrier toRead = toXfer;
+        std::swap(toRead.oldLayout, toRead.newLayout);
+        std::swap(toRead.srcAccessMask, toRead.dstAccessMask);
+        vkCmdPipelineBarrier(cb,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &toRead);
+
+        owner_->EndOneTimeCommands(cb);
+
+        std::memcpy(data, mapped, static_cast<size_t>(dataLength));
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);

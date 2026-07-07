@@ -550,10 +550,10 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
         // the first (every texel is the same solid colour by construction).
         std::vector<Color> got(16, Color(0, 0, 0, 0));
         tex.GetData(faces[i], got.data(), 16);
-#ifdef CNA_BACKEND_EASYGL
-        // Vulkan/Bgfx: Texture3D/TextureCube::GetData is a known, already-tracked no-op
-        // (Task 865, unrelated to DDS loading) — SetData's own content can't be verified via
-        // readback on those backends yet, so this exact-colour assertion is EasyGL-only.
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_VULKAN)
+        // Bgfx: TextureCube::GetData has no GPU readback path at all (accepted, already-
+        // documented, project-wide limitation — not a bug to fix), so this exact-colour
+        // assertion excludes it. Vulkan's own GetData is real as of Task 865.
         EXPECT_EQ(got[0].getRProperty(), expected[i].getRProperty()) << "face " << i;
         EXPECT_EQ(got[0].getGProperty(), expected[i].getGProperty()) << "face " << i;
         EXPECT_EQ(got[0].getBProperty(), expected[i].getBProperty()) << "face " << i;

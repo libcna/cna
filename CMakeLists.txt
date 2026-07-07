@@ -2963,6 +2963,26 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 865: Texture3D::GetData is now real on Vulkan -- shared with EasyGL's registration
+        # of the same backend-agnostic file (Task 173).
+        cna_vulkan_test(cna_test_vulkan_texture3d_slices
+                        examples/easygl_texture3d_slices_test.cpp)
+        add_test(NAME Vulkan_Texture3D_Slices_RoundTrip
+                 COMMAND cna_test_vulkan_texture3d_slices)
+        set_tests_properties(Vulkan_Texture3D_Slices_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 865: TextureCube::GetData is now real on Vulkan -- shared with EasyGL's
+        # registration of the same backend-agnostic file (Task 275).
+        cna_vulkan_test(cna_test_vulkan_texturecube_partial_rect
+                        examples/easygl_texturecube_partial_rect_test.cpp)
+        add_test(NAME Vulkan_TextureCube_PartialRect_RoundTrip
+                 COMMAND cna_test_vulkan_texturecube_partial_rect)
+        set_tests_properties(Vulkan_TextureCube_PartialRect_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 178: RenderTargetUsage DiscardContents vs PreserveContents
         cna_vulkan_test(cna_test_vulkan_render_target_usage
                         examples/vulkan_render_target_usage_test.cpp)

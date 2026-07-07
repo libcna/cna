@@ -382,6 +382,9 @@ namespace CNA::Internal::Backends::Vulkan
         void SetData(int level, int x, int y, int z,
                      int w, int h, int depth,
                      const void* data, int dataLength) override;
+        void GetData(int level, int x, int y, int z,
+                     int w, int h, int depth,
+                     void* data, int dataLength) const override;
 
     private:
         VulkanGraphicsBackend* owner_ = nullptr;
@@ -403,6 +406,8 @@ namespace CNA::Internal::Backends::Vulkan
 
         void SetData(int face, int level, int x, int y, int w, int h,
                      const void* data, int dataLength) override;
+        void GetData(int face, int level, int x, int y, int w, int h,
+                     void* data, int dataLength) const override;
 
         /** @brief Returns the Vulkan cube image view for sampling. */
         [[nodiscard]] VkImageView GetImageView()        const { return imageView_; }
