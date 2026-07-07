@@ -1993,7 +1993,42 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   (pure test-coverage addition for already-correct code). Full suite: 3367/3367 passing (2
   expected accelerometer/gyroscope skips), no regressions.
 
-**Phase 9 complete — 10/10.**
+- [x] **Task 9.11** — Fix `SignedInGamer::getPresenceProperty()` being permanently unable to
+  mutate a gamer's own presence after construction. Surfaced while building Task 15.8's demo
+  (`cna_demo_gamerservices_signin_presence`), which needs to actually change a signed-in gamer's
+  `GamerPresenceMode` live.
+
+  **Checked FNA's real reference first**: `SignedInGamer.Presence` is `public GamerPresence
+  Presence { get; private set; }` — get-only from outside, but `GamerPresence` is itself `public
+  sealed class` (a .NET reference type), so real XNA/FNA game code writes `gamer.Presence
+  .PresenceMode = ...` and mutates the *same live object* the get-only property handed back; the
+  property being get-only never prevented that. CNA's only accessor was `const GamerPresence&
+  getPresenceProperty() const`, which makes this real, intended FNA usage pattern permanently
+  impossible to reproduce in C++ — no `SignedInGamer` can ever have its presence changed once
+  constructed, through any public API.
+
+  **Fixed**: added a second, non-const overload `NOXNA GamerPresence& getPresenceProperty()` to
+  `SignedInGamer` (kept the existing const overload for const contexts), returning the same
+  `presence_` member so mutation through the new overload is visible through *either* overload
+  afterward — mirroring the "get-only property, mutable reference-type object" idiom from the real
+  C# source precisely.
+
+  **Added `SignedInGamerTest.PresencePropertyNonConstOverloadMutatesLiveObject`**: constructs a
+  gamer, confirms `PresenceMode` starts at `None`, calls the non-const overload to set it to
+  `SinglePlayer`, then confirms the change is visible both through another non-const call *and*
+  through a separate `const SignedInGamer&` reference to the same object (proving a live mutation,
+  not a copy).
+
+  **Verified the bug is real, not theoretical**: stashed just the 2 source-fix files (keeping the
+  new test), rebuilt — a genuine **compile-time** failure: `passing 'const ... GamerPresence' as
+  'this' argument discards qualifiers [-fpermissive]` on the `setPresenceModeProperty(...)` call,
+  exactly as predicted (the const-only overload cannot support this call at all). Restored the fix
+  and rebuilt — compiles and passes. Full suite: **3398/3398 passing** (2 expected accelerometer/
+  gyroscope skips; one incidental unrelated rerun showed 2 flaky `ENetDiscoveryServiceTest` real-
+  UDP-timing failures that passed cleanly again in isolation and on a subsequent full run — not
+  caused by this change, which touches only `SignedInGamer`), no regressions.
+
+**Phase 9 complete — 11/11.**
 
 ---
 

@@ -79,6 +79,19 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] const GamerPresence& getPresenceProperty() const;
 
         /**
+         * @brief Gets the gamer's rich presence information for in-place mutation.
+         *
+         * FNA's real `Presence` property is get-only but returns a `GamerPresence` *class*
+         * (reference type), so real game code writes `gamer.Presence.PresenceMode = ...` and
+         * mutates the same live object the get-only property returned - this overload preserves
+         * that usage pattern in C++, where a const-only accessor would otherwise make it
+         * impossible to ever change a SignedInGamer's presence after construction.
+         *
+         * @return Reference to the mutable GamerPresence.
+         */
+        NOXNA [[nodiscard]] GamerPresence& getPresenceProperty();
+
+        /**
          * @brief Gets the gamer's privilege settings.
          *
          * @return Reference to the GamerPrivileges.

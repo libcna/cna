@@ -435,6 +435,23 @@ TEST(SignedInGamerTest, PartySizeSet) {
     EXPECT_EQ(4, gamer.getPartySizeProperty());
 }
 
+// Task 9.11: FNA's real SignedInGamer.Presence is get-only but returns a GamerPresence *class*
+// (reference type), so real game code writes `gamer.Presence.PresenceMode = ...` and mutates the
+// same live object - a const-only getPresenceProperty() would make this permanently impossible in
+// C++. Proves the non-const overload mutates the gamer's own live GamerPresence, not a copy: the
+// change is visible through a completely separate later call to the property, including the
+// const overload used by a const-qualified reference to the same gamer.
+TEST(SignedInGamerTest, PresencePropertyNonConstOverloadMutatesLiveObject) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    ASSERT_EQ(GamerPresenceMode::None, gamer.getPresenceProperty().getPresenceModeProperty());
+
+    gamer.getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::SinglePlayer);
+
+    EXPECT_EQ(GamerPresenceMode::SinglePlayer, gamer.getPresenceProperty().getPresenceModeProperty());
+    const SignedInGamer& constGamer = gamer;
+    EXPECT_EQ(GamerPresenceMode::SinglePlayer, constGamer.getPresenceProperty().getPresenceModeProperty());
+}
+
 // Task 7.3: FNA's own internal GameDefaults() constructor is empty, leaving GameDifficulty at
 // C#'s implicit default(T) - the ordinal-0 value, GameDifficulty::Easy, not Normal.
 TEST(SignedInGamerTest, GameDefaultsPresencePrivilegesDefaults) {

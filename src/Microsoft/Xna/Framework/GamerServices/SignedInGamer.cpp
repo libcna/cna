@@ -47,6 +47,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     const GamerPresence& SignedInGamer::getPresenceProperty() const       { return presence_; }
+    GamerPresence& SignedInGamer::getPresenceProperty()                   { return presence_; }
     const GamerPrivileges& SignedInGamer::getPrivilegesProperty() const   { return privileges_; }
 
     bool SignedInGamer::IsFriend(Gamer* /*gamer*/) const
