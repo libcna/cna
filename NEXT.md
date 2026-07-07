@@ -74,7 +74,15 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   new `Vulkan_TextureAddressMode` test (a direct port of Task 269's EasyGL test) confirmed via
   `git stash` revert-and-refail — pre-fix, both `PointWrap` and `PointClamp` read the identical
   blended color, proving `Wrap` never took effect. **This closes both of Phase 47's originally-
-  scoped "two SpriteBatch bugs found this session."**
+  scoped "two SpriteBatch bugs found this session."** **Task 884 fixed the real, confirmed
+  `EffectParameterCollection`/`EffectPassCollection` by-value-`vector` dangling-pointer hazard**
+  (the same shape Task 355 already fixed for `EffectTechniqueCollection`) — switched both to
+  `vector<unique_ptr<T>>` with matching custom iterators; discriminating power independently
+  verified via `git stash` revert-and-rebuild, where the pre-fix code didn't just fail an
+  assertion but actually **segfaulted** (`EffectPassCollectionTest`, a genuine use-after-free).
+  **Split the RasterizerState-default GPU-sync gap out of Task 884's old bundled title into its
+  own Task 896** (not fixed — needs a scoping decision on its large, unaudited blast radius
+  across ~128 EasyGL/Vulkan example files before it can safely land; see §5/§8).
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -282,8 +290,12 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - **`GraphicsDevice`'s default `RasterizerState` (`CullCounterClockwiseFace`, matches FNA) is never
   pushed to any backend's actual GPU state at construction** — Bgfx's own hardcoded default happens
   to be the only one of the 3 that matches FNA's, so it's the only backend that silently culls a
-  standard-winding full-screen quad unless `RasterizerState::CullNone` is set explicitly (Task 884,
-  found this session).
+  standard-winding full-screen quad unless `RasterizerState::CullNone` is set explicitly (Task 896;
+  found this session under Task 364, previously mis-tracked as part of Task 884, which is now
+  closed and covers only the Effect-collection fix below). **Deliberately not fixed** — its
+  correct fix has a much larger blast radius than it looks (128 EasyGL/Vulkan example files never
+  set `RasterizerState` at all and rely on those backends' incorrect no-culling default), needs a
+  scoping decision before it can safely land.
 - `SetRenderTargets`'s simultaneous-target cap doesn't match FNA's real `MAX_RENDERTARGET_BINDINGS
   = 4`: EasyGL/Bgfx silently cap at 8, Vulkan has no CNA-level cap at all (Task 881).
 - `EasyGL_MRT_TwoAttachments` (Task 145): even a basic, same-size/format 2-target MRT setup doesn't
@@ -323,7 +335,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 665 | **Real, confirmed Vulkan bug found and FIXED — both predicted root causes confirmed present.** `VulkanSpriteBatchBackend` never overrode `SetSamplerFilter`/`SetSamplerAddressMode` (always used the texture's own fixed descriptor set, bypassing the per-slot `VkSampler` cache entirely); `Draw()` separately clamped UVs to `[0,1]` regardless of `sourceRectangle`, defeating `Wrap`/`Mirror` addressing even if the sampler wiring alone were fixed. Fixed both, mirroring EasyGL's Task 269/118 pattern. New `Vulkan_TextureAddressMode` test (direct port of Task 269's EasyGL test) confirmed via `git stash` revert-and-refail — pre-fix both `PointWrap`/`PointClamp` read the identical blended color. Closes both of Phase 47's originally-scoped SpriteBatch bugs. |
+| — | 884 | **Real, confirmed dangling-pointer hazard found and FIXED** — `EffectParameterCollection`/`EffectPassCollection` stored their elements **by value** in a `std::vector`, the same hazard Task 355 already fixed for `EffectTechniqueCollection`. Switched both to `vector<unique_ptr<T>>` with matching custom iterators; no call-site changes needed anywhere (every usage went through `operator[]`/`GetParameterBySemantic`/range-`for`). New `PointerStableAcrossReallocatingAdd` tests on both collections; discriminating power independently verified via `git stash` revert-and-rebuild — pre-fix, `EffectParameterCollectionTest` failed on a pointer-address mismatch and `EffectPassCollectionTest` **segfaulted** (genuine use-after-free), both confirming the hazard was real. Split the RasterizerState-default GPU-sync gap out of this task's old bundled title into its own Task 896 (needs a scoping decision, not fixed here). |
+| `1c20d985` | 665 | **Real, confirmed Vulkan bug found and FIXED — both predicted root causes confirmed present.** `VulkanSpriteBatchBackend` never overrode `SetSamplerFilter`/`SetSamplerAddressMode` (always used the texture's own fixed descriptor set, bypassing the per-slot `VkSampler` cache entirely); `Draw()` separately clamped UVs to `[0,1]` regardless of `sourceRectangle`, defeating `Wrap`/`Mirror` addressing even if the sampler wiring alone were fixed. Fixed both, mirroring EasyGL's Task 269/118 pattern. New `Vulkan_TextureAddressMode` test (direct port of Task 269's EasyGL test) confirmed via `git stash` revert-and-refail — pre-fix both `PointWrap`/`PointClamp` read the identical blended color. Closes both of Phase 47's originally-scoped SpriteBatch bugs. |
 | `b9094009` | 664 | **Real, confirmed Vulkan bug found and FIXED.** Root cause isolated via instrumentation/tracing (per this task's own instruction, not guess-fixed): `VulkanSpriteBatchBackend::Begin()` destructively cleared the same mutable vectors a prior `End()` had just populated, before the once-per-frame harvest could read them; a second, latent bug meant the harvest always wrote to a hardcoded offset 0 instead of an accumulating cursor. Fixed with a per-cycle `BatchSnapshot` moved into `activeBatches_` at `End()`, plus a genuine running `vbOff`/`ibOff` cursor mirroring the already-correct 3D draw path. New `Vulkan_SpriteBatch_MultiBeginEnd` regression test confirmed via `git stash` revert-and-refail. |
 | `718f6499` | 420 | **Verify-only, zero bugs found, closes Phase 47's core `SpriteBatch` test arc (Tasks 411–420).** Proved that `layerDepth`-driven draw order (already verified via mock backend in Tasks 415/416) actually determines which of 2 overlapping opaque sprites is visible, via a real GPU pixel test deliberately submitted in reverse order from the correct sort order. Independently verified discriminating power by disabling the sort and confirming the overlap check fails exactly as predicted. |
 | `13baad58` | 419 | **Verify-only, zero bugs found (EasyGL).** Confirmed `SpriteBatch::Draw`'s `sourceRectangle` genuinely crops the sampled texture region (2x2 grid of solid-color cells, one cell selected and stretched, entire drawn sprite uniformly that cell's color). Independently verified discriminating power: temporarily forced whole-texture UVs and confirmed both cropping checks fail exactly as predicted. |
@@ -378,7 +391,7 @@ index, not a duplicate.
 | `2569b0e1` | 367 | **Fix (2 of 3 backends)**: the stride-24 `VertexPositionColorTexture` shader path (texture × vertex color) silently dropped `DiffuseColor` entirely on EasyGL and Bgfx (no uniform, no multiply at all); Vulkan already had it right. Fixed both to mirror Task 364's `VertexColorEnabled`-gate pattern. Also fixed a stale Task 189 test that only passed because of the EasyGL bug this task fixed. |
 | `90b9be1b` | 366 | Verify-only: texture × diffuse color already correct on all 3 backends; closed a real test-coverage gap (prior test only used degenerate white/white cases). |
 | `a4a80bd2` | 365 | Verify-only: `DiffuseColor × Alpha × VertexColor` already correct on all 3 backends when `VertexColorEnabled=true`. |
-| `54aee7a2` | 364 | **Fix**: `VertexColorEnabled` wasn't honored by any of the 3 backends' no-texture shaders — fixed per-backend; found (not fixed) a Bgfx-only rasterizer-cull-default bug (Task 884). |
+| `54aee7a2` | 364 | **Fix**: `VertexColorEnabled` wasn't honored by any of the 3 backends' no-texture shaders — fixed per-backend; found (not fixed) a Bgfx-only rasterizer-cull-default bug (Task 896). |
 | `563dcbb2` | 363 | Verify-only: `EnableDefaultLighting()`'s exact constants already match FNA literal-for-literal. |
 | `251c38d2` | 362 | Exhaustive default-value tests for all 22 `BasicEffect` properties; **fix**: `DirectionalLight`'s direction default was wrong (`Vector3::Forward` instead of `Vector3.Zero`). |
 | `c079089d` | 361 | Opened Phase 42. Audited `BasicEffect` vs FNA; **fix**: 2 default-value bugs (`VertexColorEnabled`, `DirectionalLight0.Enabled`). |
@@ -456,7 +469,7 @@ direct code reading.
 | Confirmed, pre-existing, out-of-repo | `easy-gl-resource-smoke-tests` aborts on an internal assert in the sibling `easy-gl` repo. | — |
 | Confirmed, pre-existing | `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case fails; other sub-cases pass. | — |
 | Confirmed, pre-existing, flaky | `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage`: order-dependent, only one fails per full-suite run. | — |
-| Confirmed, architectural, not fixed | `GraphicsDevice`'s default `RasterizerState` is never pushed to any backend's actual GPU state at construction; Bgfx's hardcoded default happens to be the only one matching FNA's, so it alone silently culls standard-winding quads unless `CullNone` is set explicitly. | Task 884 (also covers the `EffectTechniqueCollection`/`EffectParameterCollection`/`EffectPassCollection` dangling-vector hazard class — Techniques fixed by Task 355, Parameters/Pass not yet exercised) |
+| Confirmed, architectural, not fixed | `GraphicsDevice`'s default `RasterizerState` is never pushed to any backend's actual GPU state at construction; Bgfx's hardcoded default happens to be the only one matching FNA's, so it alone silently culls standard-winding quads unless `CullNone` is set explicitly. Fixing this correctly has a large, unaudited blast radius (~128 EasyGL/Vulkan example files never set `RasterizerState` and rely on those backends' incorrect no-culling default) — needs a scoping decision before it can land. | Task 896 |
 | Confirmed, architectural, not fixed | `Effect::Clone()` doesn't exist — needs an ownership-model decision plus fixing an `EffectPass::Apply()` owner-aliasing hazard plus `Clone()` overrides in all 7 stock effects. | Task 883 |
 | Confirmed, real, not fixed | `BasicEffect::FillGpuDrawParams()` only forwards `DirectionalLight0` (never `SpecularColor`/`SpecularPower`/`DirectionalLight1`/`DirectionalLight2`); lit path still omits `+EmissiveColor` (disabled-lighting path fixed Task 369). No specular infra exists anywhere. | Tasks 885/886 |
 | Confirmed, real, not fixed (empirically verified) | `AlphaTestEffect.VertexColorEnabled` has **zero effect on Vulkan or Bgfx** — their alpha-test pipeline/shader never declares a color vertex attribute at all, and this pipeline is used by default (`AlphaFunction=Greater`/`ReferenceAlpha=0` already trigger it). Correct on EasyGL (reuses `BasicEffect`'s already-fixed stride-24 shader). | Task 887 |
@@ -516,8 +529,9 @@ direct code reading.
   multisample count on Vulkan/Bgfx** — only EasyGL actually wires these through (Tasks 336/337).
 - **`Effect`/`EffectTechnique`/`EffectPass`/`EffectParameterCollection`** — collections of these
   must use `vector<unique_ptr<T>>`, not `vector<T>` by value, if any code caches a raw pointer/
-  reference across an `Add()` call (a real dangling-pointer bug class found in Task 355; see
-  Task 884 for the collections not yet converted).
+  reference across an `Add()` call (a real dangling-pointer bug class found in Task 355; now fixed
+  everywhere — `EffectTechniqueCollection` by Task 355, `EffectParameterCollection`/
+  `EffectPassCollection` by Task 884).
 
 ### FNA reference
 
@@ -569,17 +583,20 @@ There is no known reproducible failing build command right now (see §4).
 
 Phase 47 ("SpriteBatch renderer correctness") is now fully closed — Tasks 411–420 (mock-backend
 infrastructure + all 5 sort modes + real GPU pixel tests) and both of the phase's originally-
-scoped real bugs (Tasks 664/665) are done. In priority order, the rest are the accumulated
-backlog from earlier phases (Tasks 825–828, 863–895).
+scoped real bugs (Tasks 664/665) are done. Task 884 (`EffectParameterCollection`/
+`EffectPassCollection` dangling-pointer hazard) is also done. In priority order, the rest are the
+accumulated backlog from earlier phases (Tasks 825–828, 863–882, 885–896).
 
 1. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
    effects). Files: `Effect.hpp`/`.cpp` + all 7 stock-effect pairs.
 
-2. **Task 884 — fix the `RasterizerState`-default GPU-sync gap** and the remaining
-   `EffectParameterCollection`/`EffectPassCollection` by-value-vector dangling-pointer hazard.
-   Files: each backend's device-construction path; `EffectParameterCollection.hpp`/
-   `EffectPassCollection.hpp`.
+2. **Task 896 — fix the `RasterizerState`-default GPU-sync gap** (needs: a scoping decision —
+   the architecturally correct fix is a one-line `GraphicsDevice` ctor change, but its blast
+   radius is ~128 EasyGL/Vulkan example files that never set `RasterizerState` and currently rely
+   on those backends' incorrect no-culling default; landing it needs either a winding-order audit
+   of those files or an explicit decision on how to sequence that cleanup first). Files:
+   `GraphicsDevice.cpp` (ctor), potentially many `examples/*.cpp` files.
 
 3. **Task 885 — forward `EmissiveColor` on `BasicEffect`'s lit path + `DirectionalLight1`/`2`**
    (opened by Task 369). Needs a new uniform on EasyGL/Bgfx's lit shaders (straightforward) plus
@@ -700,8 +717,11 @@ Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
 instruction — do not wait to be asked; one task = one commit = one push).
 
-Current status: Phases 1-46 are FULLY COMPLETE. Phase 47 ("SpriteBatch renderer correctness",
-plan_graphics.md Tasks 411-420) is OPEN. Task 411 (opener) built the mock/recording
+Current status: Phases 1-47 are FULLY COMPLETE (Tasks 664/665 closed Phase 47's own 2 real bugs).
+Task 884 (EffectParameterCollection/EffectPassCollection dangling-pointer hazard) is also DONE.
+Task 896 (RasterizerState-default GPU-sync gap, split out of Task 884's old bundled title) is
+OPEN but deliberately not started -- needs a scoping decision first (see NEXT.md Task 896 note
+in section 8). Task 883 is next in the backlog. Task 411 (opener) built the mock/recording
 ISpriteBatchBackend infrastructure Tasks 412-416 depend on -- audited SpriteBatch's architecture
 first (it already has a dedicated ISpriteBatchBackend interface; flushBatch()'s stable_sort by
 layerDepth/texture-pointer followed by flushSingle()'s backend_->Draw(s.texture->GetBackend(),...)
@@ -1004,14 +1024,54 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block the current backlog's tasks.
 
-Last full regression: Task 665 (Vulkan, real bug fix) --
-Vulkan 3544/3556 pass (same 12 of 13 documented pre-existing failures as Task 664's run,
-exact-name match, zero new regressions; +1 new test).
-EasyGL last verified at Task 420: 3625/3628 pass (3 documented pre-existing failures, no flakes).
+Task 884 fixed a real, confirmed dangling-pointer hazard: EffectParameterCollection and
+EffectPassCollection both stored their elements BY VALUE in a std::vector -- the identical bug
+shape Task 355 already found and fixed for EffectTechniqueCollection. Switched both to
+vector<unique_ptr<T>> with matching custom iterator/const_iterator pairs copied verbatim from
+EffectTechniqueCollection.hpp/.cpp; Add() now does elements_.push_back(make_unique<T>(move(x))).
+No call-site changes needed anywhere in the codebase -- grepped first and confirmed every existing
+usage goes through operator[]/GetParameterBySemantic/range-for, never names the iterator type
+directly. Added PointerStableAcrossReallocatingAdd to both collections in EffectCollectionTests.cpp
+(take &col[0] after one Add(), force 64 more Add() calls to guarantee reallocation, assert the
+original pointer/address is unchanged). Independently verified discriminating power via git stash
+revert-and-rebuild on just the 4 production files: pre-fix, EffectParameterCollectionTest failed
+cleanly on a pointer-address mismatch, but EffectPassCollectionTest actually SEGFAULTED (a genuine
+use-after-free dereferencing the stale pointer) -- strong proof the hazard was real, not
+theoretical. Restored the fix, rebuilt, reconfirmed both pass.
+
+While investigating Task 884's original (bundled) scope, discovered the row's own title had
+accidentally bundled two unrelated issues together: the Effect-collection fix above, plus a
+separate RasterizerState-default GPU-sync gap that Task 364 had originally opened and asked to be
+"tracked as new Task 884" -- but by the time a plan_graphics.md row for 884 actually got written,
+it only covered the Effect-collection half. Investigated the RasterizerState issue via a research
+agent before deciding what to do with it (per the standing "investigate before implementing"
+practice): confirmed GraphicsDevice's ctor sets rasterizerState_ to the correct FNA-matching
+default (CullCounterClockwiseFace) but never pushes it to any backend's actual GPU state --
+EasyGL/Vulkan both start from an effectively-CullNone hardware default, Bgfx is the only one of
+the 3 whose hardcoded default happens to match FNA's. The architecturally correct fix is one line
+(call setRasterizerStateProperty(rasterizerState_) once in the ctor after backend creation), but
+grepping examples/*.cpp found 174 of 208 files never mention RasterizerState at all (128 of those
+issue real draw calls) -- since each test's geometry/winding is shared verbatim across its
+EasyGL/Vulkan/Bgfx variants, and those variants currently only pass because EasyGL/Vulkan's
+INCORRECT no-culling default happens to let the same winding through that Bgfx's CORRECT default
+culls, landing the one-line fix would very likely flip many of those 128 EasyGL/Vulkan tests to
+black-frame failures. This is a scoping decision (audit-then-fix vs. some other sequencing), not
+an implementation task -- split it out into its own Task 896, left unstarted, and updated every
+historical plan_graphics.md row that pointed at "Task 884" for this specific bug (Tasks 364, 365,
+366, 367, 368, 370, 375, 384, 399) to point at Task 896 instead, so the tracking numbers stay
+accurate.
+
+Last full regression: Task 884 (EasyGL-config full ctest after restoring the fix) --
+3626/3630 pass (4 pre-existing unrelated failures: EasyGL_MRT_TwoAttachments,
+EasyGL_GraphicsDevice_ReferenceStencil, easy-gl-resource-smoke-tests,
+ENetDiscoveryServiceTest.UnregisterHostIsSafeForAnUnregisteredOrMismatchedSession -- all previously
+documented flaky/pre-existing, unrelated to Effect collections).
+Vulkan last verified at Task 665: 3544/3556 pass (same 12 of 13 documented pre-existing failures
+as Task 664's run, exact-name match, zero new regressions; +1 new test).
 Bgfx last verified at Task 416: 3525/3525 pass (100%, no flakes).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-420, 664-665) rather than this file — this file intentionally keeps only a
-one-line summary per task (see §3) to stay a genuinely quick-to-read handoff document.
+directly (Tasks 351-420, 664-665, 884, 896) rather than this file — this file intentionally keeps
+only a one-line summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```

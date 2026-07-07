@@ -308,6 +308,23 @@ TEST(EffectParameterCollectionTest, GetParameterBySemanticOnEmptyCollectionRetur
     EXPECT_EQ(col.GetParameterBySemantic("ANYTHING"), nullptr);
 }
 
+// Task 884: EffectParameterCollection used to store EffectParameter by value in a
+// std::vector, so a pointer/reference obtained from the collection (e.g. via operator[])
+// would dangle the moment a later Add() forced the vector to reallocate (guaranteed by
+// std::vector's capacity-growth semantics once size exceeds capacity) -- the same hazard
+// Task 355 found and fixed for EffectTechniqueCollection. Fixed by switching the backing
+// storage to std::vector<std::unique_ptr<EffectParameter>>, whose element addresses are
+// stable across reallocation because only the pointers (not the pointed-to objects) move.
+TEST(EffectParameterCollectionTest, PointerStableAcrossReallocatingAdd)
+{
+    EffectParameterCollection col;
+    col.Add(MakeParam("First"));
+    EffectParameter* first = &col[0];
+    for (int i = 0; i < 64; ++i) col.Add(MakeParam("P" + std::to_string(i)));
+    EXPECT_EQ(first, &col[0]);
+    EXPECT_EQ(first->getNameProperty(), "First");
+}
+
 // ============================================================
 // EffectPassCollection (standalone, beyond EffectTechniqueTests)
 // ============================================================
@@ -359,4 +376,17 @@ TEST(EffectPassCollectionTest, IterationVisitsAllPasses)
     int count = 0;
     for (const auto& p : col) { (void)p; ++count; }
     EXPECT_EQ(count, 2);
+}
+
+// Task 884: same by-value-vector dangling-pointer hazard as EffectParameterCollection
+// (and the EffectTechniqueCollection bug Task 355 fixed), one level down -- an
+// EffectPass&/* obtained from the collection must survive a later reallocating Add().
+TEST(EffectPassCollectionTest, PointerStableAcrossReallocatingAdd)
+{
+    EffectPassCollection col;
+    col.Add(EffectPass(nullptr, "First"));
+    EffectPass* first = &col[0];
+    for (int i = 0; i < 64; ++i) col.Add(EffectPass(nullptr, "P" + std::to_string(i)));
+    EXPECT_EQ(first, &col[0]);
+    EXPECT_EQ(first->getNameProperty(), "First");
 }

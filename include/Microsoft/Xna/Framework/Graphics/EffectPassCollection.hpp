@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -11,10 +12,62 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     /**
      * @brief An indexed, name-keyed collection of EffectPass objects within a technique.
+     *
+     * Stores its elements behind `std::unique_ptr` (not by value) so that a previously
+     * obtained `EffectPass*`/`&` stays valid after a later Add(), even if the backing
+     * vector of pointers itself reallocates. A by-value `std::vector<EffectPass>` would
+     * silently dangle such pointers on reallocation (the same hazard Task 355 fixed for
+     * EffectTechniqueCollection).
      */
     class EffectPassCollection
     {
     public:
+        /**
+         * @brief Forward, non-owning iterator over EffectPass& (mutable overload).
+         */
+        class iterator
+        {
+        public:
+            /** @brief Wraps the underlying storage iterator. */
+            explicit iterator(std::vector<std::unique_ptr<EffectPass>>::iterator it) : it_(it) {}
+            /** @brief Dereferences to the referenced EffectPass. */
+            EffectPass& operator*() const { return **it_; }
+            /** @brief Member access on the referenced EffectPass. */
+            EffectPass* operator->() const { return it_->get(); }
+            /** @brief Advances to the next element. */
+            iterator& operator++() { ++it_; return *this; }
+            /** @brief Compares for inequality. */
+            bool operator!=(const iterator& other) const { return it_ != other.it_; }
+            /** @brief Compares for equality. */
+            bool operator==(const iterator& other) const { return it_ == other.it_; }
+
+        private:
+            std::vector<std::unique_ptr<EffectPass>>::iterator it_;
+        };
+
+        /**
+         * @brief Forward, non-owning iterator over const EffectPass& (const overload).
+         */
+        class const_iterator
+        {
+        public:
+            /** @brief Wraps the underlying storage iterator. */
+            explicit const_iterator(std::vector<std::unique_ptr<EffectPass>>::const_iterator it) : it_(it) {}
+            /** @brief Dereferences to the referenced EffectPass. */
+            const EffectPass& operator*() const { return **it_; }
+            /** @brief Member access on the referenced EffectPass. */
+            const EffectPass* operator->() const { return it_->get(); }
+            /** @brief Advances to the next element. */
+            const_iterator& operator++() { ++it_; return *this; }
+            /** @brief Compares for inequality. */
+            bool operator!=(const const_iterator& other) const { return it_ != other.it_; }
+            /** @brief Compares for equality. */
+            bool operator==(const const_iterator& other) const { return it_ == other.it_; }
+
+        private:
+            std::vector<std::unique_ptr<EffectPass>>::const_iterator it_;
+        };
+
         /** @brief Constructs an empty EffectPassCollection. */
         EffectPassCollection() = default;
 
@@ -64,11 +117,6 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA void Add(EffectPass pass);
 
-        /** @brief Mutable iterator type for range-for support. */
-        using iterator = std::vector<EffectPass>::iterator;
-        /** @brief Const iterator type for range-for support. */
-        using const_iterator = std::vector<EffectPass>::const_iterator;
-
         /**
          * @brief Returns a mutable iterator to the first pass.
          *
@@ -98,6 +146,6 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA const_iterator end() const;
 
     private:
-        std::vector<EffectPass> elements_;
+        std::vector<std::unique_ptr<EffectPass>> elements_;
     };
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -11,10 +12,62 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     /**
      * @brief An indexed, name-keyed collection of EffectParameter objects.
+     *
+     * Stores its elements behind `std::unique_ptr` (not by value) so that a previously
+     * obtained `EffectParameter*`/`&` stays valid after a later Add(), even if the backing
+     * vector of pointers itself reallocates. A by-value `std::vector<EffectParameter>` would
+     * silently dangle such pointers on reallocation (the same hazard Task 355 fixed for
+     * EffectTechniqueCollection).
      */
     class EffectParameterCollection
     {
     public:
+        /**
+         * @brief Forward, non-owning iterator over EffectParameter& (mutable overload).
+         */
+        class iterator
+        {
+        public:
+            /** @brief Wraps the underlying storage iterator. */
+            explicit iterator(std::vector<std::unique_ptr<EffectParameter>>::iterator it) : it_(it) {}
+            /** @brief Dereferences to the referenced EffectParameter. */
+            EffectParameter& operator*() const { return **it_; }
+            /** @brief Member access on the referenced EffectParameter. */
+            EffectParameter* operator->() const { return it_->get(); }
+            /** @brief Advances to the next element. */
+            iterator& operator++() { ++it_; return *this; }
+            /** @brief Compares for inequality. */
+            bool operator!=(const iterator& other) const { return it_ != other.it_; }
+            /** @brief Compares for equality. */
+            bool operator==(const iterator& other) const { return it_ == other.it_; }
+
+        private:
+            std::vector<std::unique_ptr<EffectParameter>>::iterator it_;
+        };
+
+        /**
+         * @brief Forward, non-owning iterator over const EffectParameter& (const overload).
+         */
+        class const_iterator
+        {
+        public:
+            /** @brief Wraps the underlying storage iterator. */
+            explicit const_iterator(std::vector<std::unique_ptr<EffectParameter>>::const_iterator it) : it_(it) {}
+            /** @brief Dereferences to the referenced EffectParameter. */
+            const EffectParameter& operator*() const { return **it_; }
+            /** @brief Member access on the referenced EffectParameter. */
+            const EffectParameter* operator->() const { return it_->get(); }
+            /** @brief Advances to the next element. */
+            const_iterator& operator++() { ++it_; return *this; }
+            /** @brief Compares for inequality. */
+            bool operator!=(const const_iterator& other) const { return it_ != other.it_; }
+            /** @brief Compares for equality. */
+            bool operator==(const const_iterator& other) const { return it_ == other.it_; }
+
+        private:
+            std::vector<std::unique_ptr<EffectParameter>>::const_iterator it_;
+        };
+
         /** @brief Constructs an empty EffectParameterCollection. */
         EffectParameterCollection() = default;
 
@@ -80,11 +133,6 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] const EffectParameter* GetParameterBySemantic(const std::string& semantic) const;
 
-        /** @brief Mutable iterator type for range-for support. */
-        using iterator = std::vector<EffectParameter>::iterator;
-        /** @brief Const iterator type for range-for support. */
-        using const_iterator = std::vector<EffectParameter>::const_iterator;
-
         /** @brief Returns a mutable iterator to the first parameter. */
         NOXNA iterator begin();
         /** @brief Returns a mutable iterator past the last parameter. */
@@ -95,6 +143,6 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA const_iterator end() const;
 
     private:
-        std::vector<EffectParameter> elements_;
+        std::vector<std::unique_ptr<EffectParameter>> elements_;
     };
 }
