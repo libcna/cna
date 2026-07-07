@@ -2672,8 +2672,10 @@ namespace CNA::Internal::Backends::Vulkan
         // [20..23]: alpha test params {refVal, tolerance, passWeight, failWeight}
         pc[20] = p.alphaTest[0]; pc[21] = p.alphaTest[1];
         pc[22] = p.alphaTest[2]; pc[23] = p.alphaTest[3];
-        // [24..31]: padding (unused)
-        for (int i = 24; i < 32; ++i) pc[i] = 0.f;
+        // [24]: vertexColorEnabled (Task 887, read only by the stride-24 colored variant's VS);
+        // [25..31]: padding (unused)
+        pc[24] = p.vertexColorEnabled ? 1.f : 0.f;
+        for (int i = 25; i < 32; ++i) pc[i] = 0.f;
     }
 
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineAlphaTest3D(
@@ -2696,22 +2698,36 @@ namespace CNA::Internal::Backends::Vulkan
         if (it != pipelinesAlphaTest3D_.end()) return it->second;
 
         using namespace Shaders;
-        VkShaderModule vert = CreateShaderModule(kAlphaTest3dVertSpv, kAlphaTest3dVertSpv_size);
+        // Task 887: stride 24 (VertexPositionColorTexture) gets its own vertex shader that reads
+        // the color attribute and gates it by VertexColorEnabled; strides 20/32 have no color data
+        // and keep the original shared position+UV-only shader (UV offset remapped per stride).
+        const bool colored = (stride == 24);
+        VkShaderModule vert = colored
+            ? CreateShaderModule(kAlphaTestColored3dVertSpv, kAlphaTestColored3dVertSpv_size)
+            : CreateShaderModule(kAlphaTest3dVertSpv, kAlphaTest3dVertSpv_size);
         VkShaderModule frag = CreateShaderModule(kAlphaTest3dFragSpv, kAlphaTest3dFragSpv_size);
 
-        // Vertex binding: position always at location=0, UV always remapped to location=1.
         VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[2]{};
-        attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };   // position
-        uint32_t uvOffset = 12;
-        if (stride == 24) uvOffset = 16;   // past ubyte4 color
-        if (stride == 32) uvOffset = 24;   // past float3 normal
-        attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT, uvOffset }; // UV remapped to location=1
+        VkVertexInputAttributeDescription attrs[3]{};
+        uint32_t attrCount;
+        if (colored) {
+            // float3 pos + ubyte4 color + float2 uv (mirrors colored_textured3d's layout).
+            attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };
+            attrs[1] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12 };
+            attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    16 };
+            attrCount = 3;
+        } else {
+            // Position always at location=0, UV always remapped to location=1.
+            attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };   // position
+            uint32_t uvOffset = (stride == 32) ? 24 : 12;         // past float3 normal, else stride 20
+            attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT, uvOffset }; // UV remapped to location=1
+            attrCount = 2;
+        }
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = 2; vis.pVertexAttributeDescriptions = attrs;
+        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,

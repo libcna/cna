@@ -2363,6 +2363,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 887: AlphaTestEffect.VertexColorEnabled fix verification
+        cna_vulkan_test(cna_test_vulkan_alphatest_vertexcolor
+                        examples/vulkan_alphatest_vertexcolor_test.cpp)
+        add_test(NAME Vulkan_AlphaTest_VertexColor
+                 COMMAND cna_test_vulkan_alphatest_vertexcolor)
+        set_tests_properties(Vulkan_AlphaTest_VertexColor PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
         cna_vulkan_test(cna_test_vulkan_basiceffect_emissive
                         examples/vulkan_basiceffect_emissive_test.cpp)
@@ -2679,6 +2688,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_BasicEffect_Specular
              COMMAND cna_test_bgfx_basiceffect_specular)
     set_tests_properties(Bgfx_BasicEffect_Specular PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    # Task 887: AlphaTestEffect.VertexColorEnabled fix verification
+    cna_bgfx_test(cna_test_bgfx_alphatest_vertexcolor
+                  examples/bgfx_alphatest_vertexcolor_test.cpp)
+    add_test(NAME Bgfx_AlphaTest_VertexColor
+             COMMAND cna_test_bgfx_alphatest_vertexcolor)
+    set_tests_properties(Bgfx_AlphaTest_VertexColor PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 

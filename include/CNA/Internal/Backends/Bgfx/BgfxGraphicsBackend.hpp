@@ -266,6 +266,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ProgramHandle coloredTextured3DProgram_ = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle litTextured3DProgram_     = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle alphaTest3DProgram_       = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle alphaTestColoredTextured3DProgram_ = BGFX_INVALID_HANDLE; // Task 887
         bgfx::ProgramHandle dualTexture3DProgram_     = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle skinned3DProgram_         = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle instanced3DProgram_       = BGFX_INVALID_HANDLE;

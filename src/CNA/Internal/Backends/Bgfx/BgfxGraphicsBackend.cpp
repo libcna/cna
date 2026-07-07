@@ -727,6 +727,10 @@ namespace CNA::Internal::Backends::Bgfx
                                                              "vs_alpha_test3d",
                                                              "fs_alpha_test3d",
                                                              "alpha_test3d");
+                alphaTestColoredTextured3DProgram_ = tryCreateProgram(kAlphaTest3dShaders,
+                                                             "vs_alpha_test_colored3d",
+                                                             "fs_alpha_test3d",
+                                                             "alpha_test_colored3d");
                 dualTexture3DProgram_     = tryCreateProgram(kDualTexture3dShaders,
                                                              "vs_dual_texture3d",
                                                              "fs_dual_texture3d",
@@ -854,6 +858,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyP(coloredTextured3DProgram_);
         destroyP(litTextured3DProgram_);
         destroyP(alphaTest3DProgram_);
+        destroyP(alphaTestColoredTextured3DProgram_);
         destroyP(dualTexture3DProgram_);
         destroyP(skinned3DProgram_);
         destroyP(instanced3DProgram_);
@@ -1612,6 +1617,31 @@ namespace CNA::Internal::Backends::Bgfx
                 bgfx::setTexture(1, envMapSampler_, cube.handle);
             }
             bgfx::submit(currentViewId_, envMap3DProgram_);
+        }
+        else if (alphaTestActive && params.vertexColorEnabled
+                 && bgfx::isValid(alphaTestColoredTextured3DProgram_))
+        {
+            // Task 887: stride-24 (VertexPositionColorTexture) variant — reads a_color0 and
+            // gates it by VertexColorEnabled, mirroring BasicEffect's coloredTextured3DProgram_.
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
+            bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            bgfx::submit(currentViewId_, alphaTestColoredTextured3DProgram_);
         }
         else if (alphaTestActive && bgfx::isValid(alphaTest3DProgram_))
         {

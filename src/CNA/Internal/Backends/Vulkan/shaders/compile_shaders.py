@@ -147,9 +147,12 @@ def main():
         # Lit+Textured 3D pipeline — stride 32 (VertexPositionNormalTexture)
         ("lit_textured3d.vert.glsl",     VERTEX_SHADER,   "kLitTextured3dVertSpv"),
         ("lit_textured3d.frag.glsl",     FRAGMENT_SHADER, "kLitTextured3dFragSpv"),
-        # AlphaTestEffect pipeline — single VS handles stride 20/24/32 via attribute remapping
+        # AlphaTestEffect pipeline — single VS handles stride 20/32 via attribute remapping
         ("alpha_test3d.vert.glsl",       VERTEX_SHADER,   "kAlphaTest3dVertSpv"),
         ("alpha_test3d.frag.glsl",       FRAGMENT_SHADER, "kAlphaTest3dFragSpv"),
+        # AlphaTestEffect stride-24 (VertexPositionColorTexture) variant with VertexColorEnabled
+        # support (Task 887); shares alpha_test3d's FS.
+        ("alpha_test_colored3d.vert.glsl", VERTEX_SHADER, "kAlphaTestColored3dVertSpv"),
         # DualTextureEffect pipeline — VS reuses textured3d; FS samples two texture units
         ("dual_texture3d.frag.glsl",     FRAGMENT_SHADER, "kDualTexture3dFragSpv"),
         # EnvironmentMapEffect pipeline — stride 32, world matrix in PC, UBO for FS params

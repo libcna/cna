@@ -46,6 +46,9 @@ SHADER_PAIRS = [
     ("kAlphaTest3dShaders", [
         ("vs_alpha_test3d",       "vertex",   "vs_alpha_test3d.sc"),
         ("fs_alpha_test3d",       "fragment", "fs_alpha_test3d.sc"),
+        # Stride-24 (VertexPositionColorTexture) variant with VertexColorEnabled support
+        # (Task 887); shares fs_alpha_test3d's fragment shader.
+        ("vs_alpha_test_colored3d", "vertex", "vs_alpha_test_colored3d.sc"),
     ]),
     ("kDualTexture3dShaders", [
         ("vs_dual_texture3d",     "vertex",   "vs_dual_texture3d.sc"),
