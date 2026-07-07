@@ -902,6 +902,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+        # Task 420: layerDepth must affect on-screen draw order under FrontToBack
+        cna_easygl_test(cna_test_easygl_spritebatch_layerdepth
+                        examples/easygl_spritebatch_layerdepth_test.cpp)
+        add_test(NAME EasyGL_SpriteBatch_LayerDepthOrder
+                 COMMAND cna_test_easygl_spritebatch_layerdepth)
+        set_tests_properties(EasyGL_SpriteBatch_LayerDepthOrder PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
         # Task 168: transformMatrix in SpriteBatch::Begin — translation pixel readback
         cna_easygl_test(cna_test_easygl_transform_matrix
                         examples/easygl_transform_matrix_test.cpp)

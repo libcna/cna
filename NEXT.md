@@ -53,8 +53,12 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   crops the sampled texture region rather than stretching the whole texture — zero bugs found**,
   independently confirmed by temporarily forcing whole-texture UVs and watching both cropping
   checks fail exactly as predicted (reading the texture's own top-left/bottom-right cell colors
-  instead of the selected cell). Task 420 (layer depth affects draw order) is next — the last
-  task before Phase 47's remaining backlog items.
+  instead of the selected cell). **Task 420 closes Phase 47's core `SpriteBatch` test arc (Tasks
+  411–420) — zero bugs found**: proved that `layerDepth`-driven draw order (already verified via
+  mock backend in Tasks 415/416) actually determines which of 2 overlapping opaque sprites is
+  visible, via a real GPU pixel test deliberately submitted in reverse order from the correct
+  sort order — independently confirmed by disabling the sort and watching the overlap check fail
+  exactly as predicted. Task 664 (Vulkan `SpriteBatch` multi-`Begin`/`End` bug) is next.
 - Phase 46 ("SkinnedEffect exactness", Tasks 401–410) is **CLOSED** — Task 410 wrote
   `docs/skinnedeffect-support.md` synthesizing Tasks 401–409: property/default audit (zero bugs,
   Task 401), a real `Clone()`-drops-`SpecularColor`/`SpecularPower` bug found and fixed (Task 401,
@@ -132,11 +136,11 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 
 ### Build status
 - **EasyGL** (`cmake-build-debug`), **Vulkan** (`cmake-build-vulkan`), and **Bgfx**
-  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 419
+  (`cmake-build-bgfx`): all 3 configured, build cleanly. Last rebuilt/re-verified for Task 420
   (EasyGL only — net production-code diff is zero, Vulkan/Bgfx untouched and unverified this task).
 
-### Test status (last verified: Task 419 for EasyGL; Task 416 for Vulkan/Bgfx)
-- **EasyGL, full `ctest -j1`:** 3624/3627 pass. 3 pre-existing/documented failures (see §5):
+### Test status (last verified: Task 420 for EasyGL; Task 416 for Vulkan/Bgfx)
+- **EasyGL, full `ctest -j1`:** 3625/3628 pass. 3 pre-existing/documented failures (see §5):
   `EasyGL_MRT_TwoAttachments`, `easy-gl-resource-smoke-tests`, `EasyGL_GraphicsDevice_ReferenceStencil`.
 - **Vulkan, full `ctest -j1`:** 3541/3554 pass (as of Task 416). 13 documented pre-existing
   failures (see §5), exact-name match, no flakes.
@@ -300,7 +304,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
-| — | 419 | **Verify-only, zero bugs found (EasyGL).** Confirmed `SpriteBatch::Draw`'s `sourceRectangle` genuinely crops the sampled texture region (2x2 grid of solid-color cells, one cell selected and stretched, entire drawn sprite uniformly that cell's color). Independently verified discriminating power: temporarily forced whole-texture UVs and confirmed both cropping checks fail exactly as predicted. |
+| — | 420 | **Verify-only, zero bugs found, closes Phase 47's core `SpriteBatch` test arc (Tasks 411–420).** Proved that `layerDepth`-driven draw order (already verified via mock backend in Tasks 415/416) actually determines which of 2 overlapping opaque sprites is visible, via a real GPU pixel test deliberately submitted in reverse order from the correct sort order. Independently verified discriminating power by disabling the sort and confirming the overlap check fails exactly as predicted. |
+| `13baad58` | 419 | **Verify-only, zero bugs found (EasyGL).** Confirmed `SpriteBatch::Draw`'s `sourceRectangle` genuinely crops the sampled texture region (2x2 grid of solid-color cells, one cell selected and stretched, entire drawn sprite uniformly that cell's color). Independently verified discriminating power: temporarily forced whole-texture UVs and confirmed both cropping checks fail exactly as predicted. |
 | `f3cbbe55` | 418 | **Verify-only, zero bugs found (EasyGL).** Confirmed `SpriteBatch::Draw`'s scalar and `Vector2` scale overloads produce exact expected destination sizes, including non-uniform `Vector2` scale. Independently verified discriminating power twice: temporarily forced each axis-mixing bug (`scale.X`-for-both, `scale.Y`-for-both) and confirmed the corresponding check fails exactly as predicted each time. |
 | `a643fc25` | 417 | **Verify-only, zero bugs found (EasyGL).** First real GPU pixel test in Phase 47: confirmed `SpriteBatch::Draw`'s rotation genuinely pivots around the caller's `origin` point, matching FNA's real `GenerateVertexInfo` formula term-for-term. Independently verified discriminating power: temporarily hardcoded `origin=(0,0)` in EasyGL's `Draw()` and confirmed 2 of 3 checks fail exactly as predicted. |
 | `1294cd32` | 416 | **Verify-only, zero bugs found, closes the per-`SpriteSortMode` test arc (Tasks 412–416)**: fulfills Task 165 — confirmed `SpriteSortMode::BackToFront` sorts by descending `layerDepth`, the mirror image of Task 415, reusing its exact test shape with sort mode and expected order reversed. Independently verified discriminating power the same way. |
@@ -542,21 +547,23 @@ There is no known reproducible failing build command right now (see §4).
 
 ## 8. Next smallest tasks
 
-In priority order — the first continues Phase 47 (Task 420 fully scoped in `plan_graphics.md`,
-the last per-feature `SpriteBatch` pixel test task before the phase's remaining backlog items);
+In priority order — the first continues Phase 47 (Task 664 fully scoped in `plan_graphics.md`,
+a real Vulkan bug fix, not a pixel test);
 the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 
-1. **Task 420 — pixel test: layer depth affects order when sort mode uses it (EasyGL)**
-   - Goal: verify that `layerDepth` genuinely affects on-screen draw **order** (which sprite ends
-     up composited on top when 2 sprites overlap), not just the previously-verified backend
-     dispatch order (Tasks 415/416 already proved `FrontToBack`/`BackToFront` deliver draw calls
-     to the backend in the right order via the mock backend — this task closes the loop with a
-     real GPU pixel test proving that ordering actually determines final visible pixels when
-     sprites overlap). Draw 2 overlapping opaque sprites with different `layerDepth` values under
-     `SpriteSortMode::FrontToBack` (or `BackToFront`) and verify via pixel readback that the
-     nearer/farther sprite (per the mode's semantics) is the one visible in the overlap region.
-   - Files: new `examples/easygl_spritebatch_layerdepth_test.cpp`, registered in
-     `CMakeLists.txt`.
+1. **Task 664 — fix Vulkan: multiple `SpriteBatch::Begin()`/`End()` calls per frame — only the
+   last batch renders**
+   - Goal: confirmed bug (session 2026-07-02, see NEXT.md §5) — 2+ `Begin()`/`Draw()`/`End()`
+     cycles in one `Draw(GameTime)`, each drawing a distinct-colour quad to a distinct screen
+     region, should render both regions correctly but currently only the last one renders. Root
+     cause not yet isolated — likely `VulkanSpriteBatchBackend` reuses/overwrites a single
+     per-frame vertex/index staging buffer or descriptor set across `Begin`/`End` cycles instead
+     of flushing or double-buffering per batch. Per `plan_graphics.md`'s own note: **do not
+     guess-fix — instrument/trace the Vulkan command recording first** to isolate the actual root
+     cause before attempting a fix.
+   - Files: likely `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`'s
+     `VulkanSpriteBatchBackend` implementation; new `examples/vulkan_spritebatch_multi_begin_end_test.cpp`
+     as a regression guard once fixed.
 
 2. **Task 883 — implement `Effect::Clone()`** (needs: C++ ownership-model decision, fixing the
    `EffectPass::Apply()` `owner_`-aliasing hazard on clone, `Clone()` overrides in all 7 stock
@@ -680,7 +687,7 @@ the rest are the accumulated backlog from earlier phases (Tasks 863–895).
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 420).
+Read NEXT.md first. Inspect only the files needed for the first task in §8 (Task 664).
 Do not refactor unrelated code. Make one small, verified improvement.
 Run the relevant build/test command before declaring the task done.
 Update NEXT.md and plan_graphics.md after finishing, then commit AND push (standing
@@ -825,12 +832,29 @@ failed exactly as predicted (Red and Yellow instead of Blue); reverted, net prod
 No production code changed. Added examples/easygl_spritebatch_sourcerect_test.cpp. EasyGL-only,
 Vulkan/Bgfx unaffected/unverified.
 
-Task 420 (NEXT) is the last per-feature SpriteBatch pixel test in Phase 47 before the remaining
-backlog items: verify layerDepth genuinely affects on-screen draw ORDER (which sprite composites
-on top when 2 sprites overlap), not just backend dispatch order (already proved by Tasks
-415/416's mock-backend tests). Draw 2 overlapping opaque sprites with different layerDepth values
-under SpriteSortMode::FrontToBack (or BackToFront) and verify via pixel readback that the
-nearer/farther sprite (per the mode's semantics) is the one visible in the overlap region.
+Task 420 closed Phase 47's core SpriteBatch test arc (Tasks 411-420) -- verify-only, zero bugs
+found. Proved layerDepth genuinely affects on-screen draw ORDER (which sprite composites on top
+when 2 sprites overlap), not just backend dispatch order (already proved by Tasks 415/416's
+mock-backend tests). Read EasyGLSpriteBatchBackend::Draw() directly: sprite vertices carry no Z
+component at all -- layerDepth is used purely as a CPU-side sort key in flushBatch(), never
+written into vertex data -- so with no depth test the sprite drawn LAST in the sorted sequence
+wins the overlap via simple painter's algorithm, matching FNA's own default
+(DepthStencilState.None) behaviour. Designed a discriminating test: 2 overlapping 60x60 opaque
+sprites (Red layerDepth=0.1, Blue layerDepth=0.9) DELIBERATELY SUBMITTED IN THE OPPOSITE ORDER in
+code (Draw(Blue) first, Draw(Red) second) from the correct FrontToBack draw order, so the test
+genuinely discriminates depth-based sorting from raw submission order. All 3 checks (Red-only,
+overlap=Blue, Blue-only) passed with exact predicted values on the first attempt. Independently
+verified discriminating power: temporarily disabled the FrontToBack sort branch and rebuilt --
+the overlap check failed exactly as predicted (Red instead of Blue); reverted, net production
+diff zero. No production code changed. Added examples/easygl_spritebatch_layerdepth_test.cpp.
+EasyGL-only, Vulkan/Bgfx unaffected/unverified.
+
+Task 664 (NEXT) is a real Vulkan bug fix, not a pixel test: multiple SpriteBatch::Begin()/End()
+calls per frame -- only the last batch renders. Confirmed bug (session 2026-07-02). Root cause
+not yet isolated -- likely VulkanSpriteBatchBackend reuses/overwrites a single per-frame
+vertex/index staging buffer or descriptor set across Begin/End cycles instead of flushing or
+double-buffering per batch. plan_graphics.md's own note: do NOT guess-fix -- instrument/trace the
+Vulkan command recording first to isolate the actual root cause before attempting a fix.
 
 Phase 46 ("SkinnedEffect exactness", Tasks 401-410) CLOSED with Task 410
 (docs/skinnedeffect-support.md, full synthesis of Tasks 401-409). Summary of what it found/fixed:
@@ -908,14 +932,14 @@ DirectionalLight1/2 unforwarded), Task 894 (SkinnedEffect.SpecularColor/Specular
 GPU implementation on any backend), and Task 895 (SkinnedEffect.WeightsPerVertex is a complete
 GPU no-op on all 3 backends). None of these 11 block Phase 47's tasks.
 
-Last full regression: Task 419 was EasyGL-only (net production-code diff zero after
+Last full regression: Task 420 was EasyGL-only (net production-code diff zero after
 discriminating-power verification) --
-EasyGL 3624/3627 pass (3 documented pre-existing failures, no flakes this run, +1 new test).
+EasyGL 3625/3628 pass (3 documented pre-existing failures, no flakes this run, +1 new test).
 Vulkan/Bgfx last verified at Task 416: Vulkan 3541/3554 pass (13 documented pre-existing
 failures, exact-name match, no flakes); Bgfx 3525/3525 pass (100%, no flakes).
 Caution: run all 3 backends' full ctest suites sequentially, never concurrently (see NEXT.md §2).
 
 For the full history of what each task in Phase 41/42/43/44/45/46/47 found, read plan_graphics.md
-directly (Tasks 351-419) rather than this file — this file intentionally keeps only a one-line
+directly (Tasks 351-420) rather than this file — this file intentionally keeps only a one-line
 summary per task (see §3) to stay a genuinely quick-to-read handoff document.
 ```
