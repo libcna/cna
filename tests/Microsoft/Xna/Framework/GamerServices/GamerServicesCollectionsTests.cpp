@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/DateTime.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 using namespace Microsoft::Xna::Framework;
@@ -38,9 +39,19 @@ TEST(AchievementCollectionTest, IndexByKey) {
     EXPECT_EQ("ach1", col["ach1"].getKeyProperty());
 }
 
+// Task 7.9: FNA's own string-key indexer explicitly does `throw new IndexOutOfRangeException();`
+// - not std::out_of_range.
 TEST(AchievementCollectionTest, IndexByKeyNotFound) {
     auto col = AchievementCollection::CreateInternal({});
-    EXPECT_THROW(col["missing"], std::out_of_range);
+    EXPECT_THROW(col["missing"], System::IndexOutOfRangeException);
+}
+
+// Task 7.9: FNA's own int indexer (List<T>) throws ArgumentOutOfRangeException, not
+// std::out_of_range.
+TEST(AchievementCollectionTest, IndexByIntOutOfRangeThrowsArgumentOutOfRangeException) {
+    auto col = AchievementCollection::CreateInternal({});
+    EXPECT_THROW((void) col[0], System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void) col[-1], System::ArgumentOutOfRangeException);
 }
 
 TEST(AchievementCollectionTest, Dispose) {
@@ -112,6 +123,15 @@ TEST(FriendCollectionTest, Dispose) {
 TEST(SignedInGamerCollectionTest, EmptyCollection) {
     auto col = SignedInGamerCollection::CreateInternal({});
     EXPECT_EQ(0, col.getCountProperty());
+}
+
+// Task 7.9: the base GamerCollection<T>::operator[](int) (inherited here from
+// SignedInGamerCollection) used std::vector::at(), throwing std::out_of_range - FNA's own
+// ReadOnlyCollection<T> -> List<T> int indexer throws ArgumentOutOfRangeException instead.
+TEST(SignedInGamerCollectionTest, IntIndexOutOfRangeThrowsArgumentOutOfRangeException) {
+    auto col = SignedInGamerCollection::CreateInternal({});
+    EXPECT_THROW((void) col[0], System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void) col[-1], System::ArgumentOutOfRangeException);
 }
 
 TEST(SignedInGamerCollectionTest, PlayerIndexOutOfBounds) {

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -18,7 +20,15 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     const Achievement& AchievementCollection::operator[](int index) const
     {
-        return collection_.at(static_cast<std::size_t>(index));
+        // Task 7.9: FNA's own int indexer (`return collection[index];`, a List<T>) throws
+        // ArgumentOutOfRangeException, not std::out_of_range - use ThrowIfNegative/
+        // ThrowIfGreaterThanOrEqual for the matching sharp-runtime exception type instead of
+        // relying on std::vector::at()'s own (differently-typed) exception.
+        System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
+        System::ArgumentOutOfRangeException::ThrowIfGreaterThanOrEqual(
+            index, static_cast<int>(collection_.size()), "index"
+        );
+        return collection_[static_cast<std::size_t>(index)];
     }
 
     const Achievement& AchievementCollection::operator[](const std::string& achievementKey) const
@@ -28,7 +38,9 @@ namespace Microsoft::Xna::Framework::GamerServices
             if (ach.getKeyProperty() == achievementKey)
                 return ach;
         }
-        throw std::out_of_range("Achievement key not found: " + achievementKey);
+        // Task 7.9: FNA's own string-key indexer explicitly does `throw new
+        // IndexOutOfRangeException();` - not std::out_of_range.
+        throw System::IndexOutOfRangeException();
     }
 
     void AchievementCollection::Dispose()

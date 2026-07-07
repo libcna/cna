@@ -1593,7 +1593,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   theoretical concern. Restored the fix; full suite: **3309/3311 passing** (2 expected
   accelerometer/gyroscope skips), no regressions, no crash.
 
-- [ ] **Task 7.9** — Fix the wrong exception types thrown by 3 collection indexers, for consistency
+- [x] **Task 7.9** — Fix the wrong exception types thrown by 3 collection indexers, for consistency
   with FNA and with this same file's own other, correctly-typed exceptions. Confirmed:
   `AchievementCollection::operator[](const std::string&)` throws `std::out_of_range`, but FNA's
   equivalent explicitly does `throw new IndexOutOfRangeException();`. `sharp-runtime` already ships
@@ -1605,6 +1605,28 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   int indexers throw `ArgumentOutOfRangeException`. Switch all three call sites to the matching
   `sharp-runtime` exception types. Update/add tests asserting the correct exception type is thrown
   in each case (not just "throws something").
+
+  Confirmed against FNA's real source: `this[int index] { get { return collection[index]; } }`
+  (a `List<T>`, throwing `ArgumentOutOfRangeException`) for both int indexers, and
+  `this[string achievementKey]` explicitly doing `throw new IndexOutOfRangeException();`. Fixed
+  all three: `AchievementCollection::operator[](int)` and the base
+  `GamerCollection<T>::operator[](int)` now use
+  `ArgumentOutOfRangeException::ThrowIfNegative`/`ThrowIfGreaterThanOrEqual` before a raw,
+  now-safe `operator[]` index (replacing `.at()`'s differently-typed exception);
+  `AchievementCollection::operator[](const std::string&)` now throws
+  `System::IndexOutOfRangeException()` for a missing key.
+
+  Fixed the existing self-consistently-wrong `AchievementCollectionTest.IndexByKeyNotFound` (was
+  asserting `std::out_of_range`). Added `AchievementCollectionTest.
+  IndexByIntOutOfRangeThrowsArgumentOutOfRangeException` and `SignedInGamerCollectionTest.
+  IntIndexOutOfRangeThrowsArgumentOutOfRangeException` (through `SignedInGamerCollection`, a
+  concrete `GamerCollection<T>` subclass, for the base-class int indexer) — neither of the two
+  int-indexer out-of-range cases had any prior test coverage at all.
+
+  Revert-verify-restore: reverting both source fixes (keeping all three tests) reproduced the
+  exact predicted symptom for all three — `std::out_of_range` instead of the correct
+  sharp-runtime type. Restored the fixes; full suite: **3311/3313 passing** (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 7.10** — Add the missing `NOXNA` marker to `LeaderboardEntry::getRankingEXTProperty()`.
   Confirmed against the XNA 4.0 HTML doc spec that real XNA's `LeaderboardEntry` exposes only

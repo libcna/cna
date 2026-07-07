@@ -34,6 +34,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param index Zero-based index.
          * @return Const reference to the Achievement.
+         * @throws System::ArgumentOutOfRangeException if index is out of range.
          */
         [[nodiscard]] const Achievement& operator[](int index) const;
 
@@ -42,7 +43,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param achievementKey The key to search for.
          * @return Const reference to the matching Achievement.
-         * @throws std::out_of_range if no achievement with that key exists.
+         * @throws System::IndexOutOfRangeException if no achievement with that key exists.
          */
         [[nodiscard]] const Achievement& operator[](const std::string& achievementKey) const;
 

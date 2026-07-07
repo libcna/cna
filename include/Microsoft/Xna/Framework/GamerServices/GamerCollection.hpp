@@ -93,10 +93,19 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param index Zero-based index.
          * @return Pointer to the element.
+         * @throws System::ArgumentOutOfRangeException if index is out of range.
          */
         [[nodiscard]] T* operator[](int index) const
         {
-            return collection_.at(static_cast<std::size_t>(index));
+            // Task 7.9: FNA's own int indexer (ReadOnlyCollection<T> -> List<T>) throws
+            // ArgumentOutOfRangeException, not std::out_of_range - use ThrowIfNegative/
+            // ThrowIfGreaterThanOrEqual for the matching sharp-runtime exception type instead of
+            // relying on std::vector::at()'s own (differently-typed) exception.
+            System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
+            System::ArgumentOutOfRangeException::ThrowIfGreaterThanOrEqual(
+                index, static_cast<int>(collection_.size()), "index"
+            );
+            return collection_[static_cast<std::size_t>(index)];
         }
 
         /**
