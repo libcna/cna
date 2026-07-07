@@ -174,6 +174,51 @@ TEST(SkinnedModelEXTTest, UnknownClipThrows)
         System::ArgumentException);
 }
 
+// Task 11.2: "topological order" is a convention enforced only by the content pipeline, never
+// checked in ComputeBoneTransformsEXT itself - a forward-referenced parent (parent index >= the
+// bone's own index) must be rejected instead of silently reading a not-yet-finalized
+// worldTransforms entry.
+TEST(SkinnedModelEXTTest, ForwardReferencedParentThrows)
+{
+    SkinnedModelEXT model;
+    model.BoneCount = 2;
+    // Bone 0's parent is bone 1, which is processed *after* bone 0 - not topological.
+    model.ParentBoneIndices = {1, -1};
+    model.BindPoseLocal = {Matrix::getIdentityProperty(), Matrix::getIdentityProperty()};
+    model.InverseBindPoseGlobal = {Matrix::getIdentityProperty(), Matrix::getIdentityProperty()};
+
+    AnimationClipEXT clip;
+    clip.Duration = System::TimeSpan::Zero;
+    model.Clips["Idle"] = clip;
+
+    std::vector<Matrix> bones;
+    EXPECT_THROW(
+        model.ComputeBoneTransformsEXT("Idle", System::TimeSpan::Zero, false, bones),
+        System::ArgumentException);
+}
+
+// A cyclic parent graph always contains at least one bone whose parent index is >= its own
+// (the cycle member with the greatest index must point to another cycle member, which cannot
+// have a strictly greater index without contradiction) - the same check above transitively
+// rejects cycles too. The simplest possible cycle is a bone that is its own parent.
+TEST(SkinnedModelEXTTest, SelfParentThrows)
+{
+    SkinnedModelEXT model;
+    model.BoneCount = 1;
+    model.ParentBoneIndices = {0};
+    model.BindPoseLocal = {Matrix::getIdentityProperty()};
+    model.InverseBindPoseGlobal = {Matrix::getIdentityProperty()};
+
+    AnimationClipEXT clip;
+    clip.Duration = System::TimeSpan::Zero;
+    model.Clips["Idle"] = clip;
+
+    std::vector<Matrix> bones;
+    EXPECT_THROW(
+        model.ComputeBoneTransformsEXT("Idle", System::TimeSpan::Zero, false, bones),
+        System::ArgumentException);
+}
+
 TEST(SkinnedModelEXTTest, DefaultConstructedHasNoBonesOrClips)
 {
     SkinnedModelEXT model;

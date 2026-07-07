@@ -2209,7 +2209,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   100ms assertion exactly as expected. Restored the fix and reran — passes in under 1ms. Full
   suite: 3369/3369 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 11.2** — Add validation that `ParentBoneIndices` is topologically ordered in
+- [x] **Task 11.2** — Add validation that `ParentBoneIndices` is topologically ordered in
   `ComputeBoneTransformsEXT`. Confirmed (~lines 140-149): the code comments "bones are stored in
   topological (breadth-first) order" but never checks `parent < i` for each bone — a pure
   convention enforced only by the content pipeline, not the engine. Malformed/future content with
@@ -2218,6 +2218,24 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `ArgumentException`) either at load time (`SkinnedModelTypeReader`) or in
   `ComputeBoneTransformsEXT` itself. Add a test feeding a deliberately non-topological/cyclic parent
   array and asserting it's rejected cleanly.
+
+  Added the check directly in `ComputeBoneTransformsEXT`'s own topological-composition loop
+  (rather than at content-load time only): `if (parent >= i) throw System::ArgumentException(...)`.
+  Chosen over a load-time-only check because `SkinnedModelEXT`'s data members are all public and
+  directly settable (as the test suite itself does throughout this file), so a load-time-only
+  check would miss hand-constructed or post-load-mutated models; validating at the actual point of
+  use catches every path uniformly for a negligible O(BoneCount) cost (versus Task 11.1's
+  O(position) concern, this is a one-time-per-call, already-being-iterated loop). Proved this
+  single `parent[i] >= i` check is both necessary *and sufficient* to reject cycles too, not just
+  forward references: a cycle's maximum-index member would need a parent with a strictly greater
+  index than itself, which the same check already catches — documented this reasoning in the
+  source comment. Added `ForwardReferencedParentThrows` (bone 0's parent is bone 1) and
+  `SelfParentThrows` (the simplest possible cycle: a bone whose own parent is itself).
+  **Revert-verify:** removed just the `if (parent >= i) throw ...;` block, rebuilt, confirmed both
+  new tests failed with "it throws nothing" (not a crash — small enough indices that the stale
+  `worldTransforms[parent]` read didn't happen to segfault, just silently produced a wrong,
+  unvalidated result). Restored the fix, rebuilt, confirmed green. Full suite: 3371/3371 passing
+  (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 11.3** — Add a bounds/size-consistency check between `BoneCount` and
   `ParentBoneIndices`/`BindPoseLocal`/`InverseBindPoseGlobal` in `SkinnedModelEXT`. Confirmed

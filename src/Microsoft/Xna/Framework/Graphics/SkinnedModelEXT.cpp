@@ -151,6 +151,20 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int i = 0; i < BoneCount; ++i)
         {
             const int parent = ParentBoneIndices[static_cast<std::size_t>(i)];
+            // Task 11.2: "topological order" above is a convention enforced only by the content
+            // pipeline, never checked here - malformed/future content with parent[i] >= i (which
+            // also transitively rules out any cycle: a cycle's maximum-index member would need a
+            // parent with a strictly greater index than itself, violating this same check)
+            // otherwise silently read a not-necessarily-finalized worldTransforms[parent] with no
+            // error.
+            if (parent >= i)
+            {
+                throw System::ArgumentException(
+                    "ParentBoneIndices is not topologically ordered: bone " + std::to_string(i)
+                        + " has parent index " + std::to_string(parent)
+                        + ", which must be less than the bone's own index"
+                );
+            }
             worldTransforms[static_cast<std::size_t>(i)] = parent < 0
                 ? localTransforms[static_cast<std::size_t>(i)]
                 : localTransforms[static_cast<std::size_t>(i)] * worldTransforms[static_cast<std::size_t>(parent)];
