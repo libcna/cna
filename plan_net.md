@@ -3207,11 +3207,42 @@ done — "it compiles" is not sufficient.
   3398/3398 passing (2 expected accelerometer/gyroscope skips), no regressions (demo-only files,
   no library changes).
 
-- [ ] **Task 15.11** — `cna_demo_guide_overlay_console`: the full `Guide` static API surface —
+- [x] **Task 15.11** — `cna_demo_guide_overlay_console`: the full `Guide` static API surface —
   `ShowSignIn`, `BeginShowKeyboardInput`/`EndShowKeyboardInput` (completes instantly with an empty
   string), `BeginShowMessageBox`/`EndShowMessageBox` (throws), `IsTrialMode`/`SimulateTrialMode`,
   `IsScreenSaverEnabled`, `NotificationPosition`, `DelayNotifications`. Console menu: each numbered
   key triggers one `Guide` call and prints its result/exception. Single process, no graphics needed.
+
+  New file: `examples/demo_guide_overlay_console/src/Main.cpp`, registered in `CMakeLists.txt`
+  under `CNA_ENABLE_NET` linking `CNA_GamerServices`/`SHARP_RUNTIME` (no windowing at all).
+  Confirmed safe to build with zero SDL/window setup by reading `TextInputEXT::StartTextInput`/
+  `StopTextInput` first — both are already null-window-guarded, so
+  `Guide::BeginShowKeyboardInput`/`EndShowKeyboardInput` never touch SDL unsafely here. A numbered
+  stdin-driven menu (matching the plan's own "console menu" framing) runs interactively by
+  default, plus an `--auto` flag that executes every item once in order for automated
+  verification.
+
+  **Building the `IsScreenSaverEnabled` menu item surfaced a genuine, real platform constraint**:
+  `Guide::getIsScreenSaverEnabledProperty()`/`setIsScreenSaverEnabledProperty()` wrap real
+  `SDL_ScreenSaverEnabled()`/`SDL_EnableScreenSaver()`/`SDL_DisableScreenSaver()` calls (not a
+  simple stored flag, unlike `IsTrialMode`/`SimulateTrialMode`) — confirmed with a standalone SDL3
+  probe program before touching the demo: `SDL_ScreenSaverEnabled()` always reads `true` and
+  `SDL_DisableScreenSaver()` has zero effect until `SDL_InitSubSystem(SDL_INIT_VIDEO)` has run.
+  Since this demo is deliberately console-only with no video subsystem (matching the plan's own
+  "no graphics needed" scope), toggling `IsScreenSaverEnabled` here can never produce an observable
+  change. Rather than print a silently-confusing `true -> true`, the demo detects the no-change
+  case and prints an explicit explanatory note instead.
+
+  Ran the built demo directly with `--auto`: all 8 menu items executed in order — `ShowSignIn`
+  no-op confirmed; keyboard input completed instantly with `result=""`; both
+  `BeginShowMessageBox`/`EndShowMessageBox` printed "threw NotSupportedException as expected";
+  `IsTrialMode`/`SimulateTrialMode` toggled `false -> true`; `IsScreenSaverEnabled` printed the
+  honest unchanged-with-explanation line; `NotificationPosition` cycled `BottomRight -> TopLeft`
+  (confirmed `BottomRight` is the real default, per `Guide.cpp`'s static initializer);
+  `DelayNotifications` no-op confirmed. Also manually verified the interactive stdin menu path
+  (piped `1`, `4`, `0`) runs the same dispatch correctly and quits cleanly on `0`. Exit code `0`
+  in both modes. Full suite: 3398/3398 passing (2 expected accelerometer/gyroscope skips), no
+  regressions (new demo-only file, no library changes).
 
 - [ ] **Task 15.12** — `cna_demo_gamerservices_dispatcher_watchdog`: a visual/interactive version of
   `tools/net/gamerservices_dispatcher_harness.cpp` (proving Task 12.1's/this plan's Task 7.1 hang

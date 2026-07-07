@@ -813,6 +813,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         endif()
     endif()
 
+    # Task 15.11: cna_demo_guide_overlay_console - the full Guide static API surface via a
+    # numbered console menu. Console-only, single process, no graphics/window needed - needs only
+    # CNA_GamerServices.
+    if(CNA_ENABLE_NET)
+        add_executable(cna_demo_guide_overlay_console
+            examples/demo_guide_overlay_console/src/Main.cpp
+        )
+        target_link_libraries(cna_demo_guide_overlay_console PRIVATE CNA_GamerServices SHARP_RUNTIME)
+    endif()
+
     # EasyGL integration tests (Task 85, 86, 87)
     if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
        AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
