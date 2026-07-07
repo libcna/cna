@@ -2,221 +2,208 @@
 
 ## 1. Project summary
 
-**CNA** is a C++23 reimplementation of the XNA 4.0 programming model, built on SDL3 with
-a pluggable graphics backend (`EASYGL` / `VULKAN` / `BGFX`). It preserves XNA-style
-public APIs (`Microsoft::Xna::Framework`, `Microsoft::Devices`) while using modern C++
-internally. Targets desktop Linux/Windows/macOS and Android; iOS is planned but has no
-toolchain in this environment. Branch: `feature/devices`.
+**CNA** is a C++23 reimplementation of the XNA 4.0 programming model, built on SDL3
+with a pluggable graphics backend (`EASYGL` / `VULKAN` / `BGFX`). It preserves
+XNA-style public APIs (`Microsoft::Xna::Framework`, `Microsoft::Devices`) while using
+modern C++ internally. Targets desktop Linux/Windows/macOS and Android; iOS is planned
+but has no toolchain in this environment. Branch: `feature/devices`.
 
-**Main goal on this branch:** bring `Microsoft::Devices`, `Microsoft::Devices::Sensors`,
-and `VibrateController` to verified XNA 4.0 / Windows Phone 7 compatibility — not just
-"compiles and doesn't crash," but a documented, tested public API surface with a clear
-strict-XNA-vs-`NOXNA` boundary. **A second, newer initiative** extends this with a
-brand-new `CNA::Devices` namespace (not XNA-facing at all) for CNA-only device
-capabilities SDL3 exposes that WP7 never had — see Section 1a.
-
-**`plan_devices.md` is effectively done.** All 74 tasks are CLOSED except three, all
-intentionally left open because they need something this container cannot provide
-(real hardware or a maintainer decision) — see Section 4. Tasks were picked up one at
-a time, each with its own build+test(+sanitizer) verification and its own commit.
-
-### 1a. `CNA::Devices` — new NOXNA namespace (2026-07-07)
-
-`noxna_devices.md` (repo root) is an analysis of what CNA-specific device
-capabilities could be added, grounded in SDL3 headers/backends already vendored in
-`third_party/SDL`. `plan_cna_devices.md` (repo root) turned it into concrete tasks —
-**all 11 are now CLOSED.** Implemented, under a new `CNA_DEVICES` CMake option
-(default `OFF`, mirrors `CNA_NOXNA`'s existing pattern): `CNA::Devices::PowerInfo`,
-`Locale`, `Clipboard`, `UrlLauncher`, `SystemInfo`, `DisplayInfo`, `FileDialog`,
-`SystemTray` (Phases 1-3, 36 new tests, `devices-asan`/`devices-ubsan` clean). `Camera`
-(Phase 4) is deliberately design-only — see `docs/cna-devices-camera-design.md` — no
-`Camera` class exists yet.
-
-**Two real corrections this work found in its own source analysis** (`noxna_devices.md`
-was updated to match): `FileDialog` has a real Android SDL3 backend — the original
-"desktop-only" claim was wrong, caught by reading `third_party/SDL/src/dialog/`
-directly rather than trusting the analysis. `SystemTray` genuinely is desktop-only —
-checked the same way, confirmed accurate this time.
-
-**Two real bugs caught during this work, both instructive:** (1) an early `FileDialog`
-test draft called the real backend directly and left four orphaned `zenity` processes
-running on the real desktop session — fixed by giving `FileDialog` a swappable
-`Detail::IFileDialogBackend`, and applying that lesson to `SystemTray` from the start.
-(2) A `SystemTrayTests.cpp` use-after-free (reading a freed fake backend's field after
-its owning `SystemTray` was destroyed) that the **plain, non-sanitizer build did not
-catch at all** — only `devices-asan` caught it, a concrete demonstration of why this
-project always verifies under sanitizers before calling a class-with-lifetime-concerns
-done.
-
-**Do not implement `Camera` without reading `docs/cna-devices-camera-design.md`
-first** — it documents real open questions (RGBA format negotiation, permission-event
-ownership, multi-camera support, device-loss recovery) and a recommended narrow first
-scope.
+**Two parallel efforts on this branch:**
+- **`Microsoft::Devices`/`Microsoft::Devices::Sensors`/`VibrateController`** — bringing
+  real XNA 4.0 / Windows Phone 7 APIs to verified compatibility. Tracked in
+  `plan_devices.md` (74+ tasks). **Effectively done** — every task is CLOSED except
+  one new follow-up (`MOTION-012`, see Section 4).
+- **`CNA::Devices`** — a brand-new, non-XNA namespace for CNA-only device capabilities
+  SDL3 exposes that WP7 never had (battery, clipboard, native dialogs, camera, ...).
+  Tracked in `plan_cna_devices.md`. **All 12 tasks CLOSED.** Analysis in
+  `noxna_devices.md`, including a "Round 2" survey (Section 8) of further SDL3
+  capabilities, one of which (`MessageBox`) is now implemented.
 
 **Important architectural decisions:**
 - Public API names/signatures match XNA 4.0 (or, for `Microsoft::Devices`, the archived
-  WP7 SDK docs — FNA has no equivalent) exactly; C# properties become
-  `getXProperty()`/`setXProperty()`.
-- Non-XNA extensions are tagged `NOXNA` on the public declaration, and this is now
-  **compile-time enforced** — see Section 3 (`VERIFY-003`/`DEV-API-002`).
-- `Microsoft::Devices::Sensors::SensorBase<T>` (header-only template) is the shared base
-  for `Accelerometer`/`Compass`/`Gyroscope`/`Motion`.
-- `VibrateController` (correct XNA name — not "VibrationController") is a singleton
-  (`getDefaultProperty()`), lives directly in `Microsoft::Devices` (not `::Sensors`),
-  does not derive `SensorBase<T>`/`IDisposable`. Calls through a
-  `Detail::IVibrateBackend` abstraction; the only production implementation is
-  `Detail::SdlHapticVibrateBackend`, swappable via `SetBackendForTesting()`.
-- `Compass`/`Motion` each hold a `std::unique_ptr<Detail::ICompassBackend>`/
-  `IMotionBackend`, constructed only inside `#if defined(__ANDROID__)`. Every other
-  platform keeps the original permanent-stub behavior.
-- Tests live under `tests/` mirroring the `include`/`src` namespace path 1:1, Google Test.
+  WP7 SDK docs) exactly; C# properties become `getXProperty()`/`setXProperty()`.
+- Non-XNA extensions inside `Microsoft::Devices`/`Sensors` are tagged `NOXNA` on the
+  public declaration, compile-time enforced (see Section 6, `VERIFY-003`).
+- `CNA::Devices` is a **separate, sibling namespace**, not part of `Microsoft::Devices`.
+  Gated behind its own `CNA_DEVICES` CMake option (default `OFF`). Its members do
+  **not** carry the `NOXNA` tag — the namespace itself signals "not XNA."
+- Any `CNA::Devices` (or `Microsoft::Devices`) class whose real backend has a side
+  effect an automated test cannot safely trigger (a real dialog, a real tray icon, a
+  real camera device) gets a `Detail::I<X>Backend` test-injection seam **from the
+  first line of implementation** — this project has hit real incidents from
+  retrofitting this after the fact (see Section 3).
 
 ---
 
 ## 2. Current status
 
-**Build:** `CNA` and `CnaTests` build cleanly under `EASYGL` (`cmake-build-debug`), and
-the **full default build** (every target) is clean, 100%. Android cross-compile of the
-`CNA` library target (`arm64-v8a`, NDK r30, API 24) is clean.
+**Build:** `CNA` and `CnaTests` build cleanly under `EASYGL` (`cmake-build-debug`),
+both with `CNA_DEVICES=ON` (this session's default working configuration) and
+previously confirmed with `CNA_DEVICES=OFF` (not re-verified again this session after
+the latest additions — see Section 5).
 
-**Tests:** the Devices-only exact-suite-name filter is **343 tests, 341 passed, 2
-expected `GTEST_SKIP()`s** (no accelerometer/gyroscope hardware in this container).
-Clean on plain `cmake-build-debug` and all three sanitizer presets (`VERIFY-001`/
-`VERIFY-002`). Plus a new standalone compile-check executable/ctest,
-`cna_strict_xna_api_check` (`VERIFY-003`) — not a gtest suite, run separately.
+**Tests:** full suite is **3388 tests, 3386 passed, 2 expected `GTEST_SKIP()`s** (no
+accelerometer/gyroscope hardware in this container) — zero regressions across this
+entire session's work. `CNA::Devices`-only filter: **48 tests across 10 suites**
+(`PowerInfoTests`, `LocaleTests`, `ClipboardTests`, `UrlLauncherTests`,
+`SystemInfoTests`, `DisplayInfoTests`, `FileDialogTests`, `SystemTrayTests`,
+`MessageBoxTests`, `CameraTests`), all passing.
 
-**Sanitizers:** `devices-asan` — 0 issues. `devices-ubsan` — 3 pre-existing findings, all
-in `Vector3`/`Matrix` (signed integer overflow), 0 in any `Microsoft::Devices` file.
-`devices-tsan` — 37 reports, all the same single pre-existing `sharp-runtime`
-`TimeSpan::copy_count` race (now tracked as its own task, `SDL-SENSOR-004`, rather than
-left as a repeated "same pre-existing race" aside with no follow-up).
+**Sanitizers:** `devices-ubsan` clean on everything touched this session. `devices-asan`
+clean on everything **except** a newly-surfaced, pre-existing leak in the
+EasyGL/OpenGL graphics backend (see Section 4) — confirmed unrelated to any of this
+session's own code. `devices-tsan` was run only for `SDL-SENSOR-004`'s own repro
+suites (clean, 0 races, see Section 3); it has **not** been re-run against
+`AndroidCompassMathTests`/`CameraTests` specifically this session.
 
-**Working:** `Accelerometer`/`Gyroscope` — real, SDL3-backed. `Compass`/`Motion` — real
-on Android only (`Detail::AndroidCompassBackend`/`AndroidMotionBackend`, pure NDK, no
-JNI), permanent stub on every other platform. `VibrateController` — real, SDL3
-haptic-backed. `examples/demo_devices` (`cna_demo_devices`) — built clean, and confirmed
-to run for 6-8+ seconds under `xvfb-run` without crashing (this session added
-`TimeBetweenUpdates` interactive controls and completed its title-bar diagnostic
-output); no real display was available in this container to visually confirm on-screen
-rendering, stated honestly rather than assumed.
+**`CNA::Devices` — implemented and working:** `PowerInfo`, `Locale`, `Clipboard`,
+`UrlLauncher`, `SystemInfo`, `DisplayInfo`, `FileDialog`, `SystemTray`, `MessageBox`,
+`Camera` (narrow first-implementation scope — single device, RGBA-only, no
+event-queue integration; see `docs/cna-devices-camera-design.md` for what's
+deliberately deferred).
 
-**Does not work / not implemented (by design, not bugs):** iOS backend for anything in
-this scope. `Compass.TrueHeading` permanently equals `MagneticHeading` (no declination
-source — see `docs/location-future-plan.md`). No physical Android/iOS hardware has ever
-been used to verify anything in this scope, in any session — see
-`docs/devices_sensor_hardware_qa_template.md` for how to record a real hardware session
-when one becomes available.
+**`Microsoft::Devices::Sensors` — working, changed this session:** `Accelerometer`/
+`Gyroscope`'s Android landscape-remap is now explicitly documented as a CNA-only
+deviation from real WP7 behavior, with a runtime opt-out
+(`Detail::SetAndroidLandscapeRemapEnabled(false)`). `Compass` on Android now switches
+heading-computation axis based on device tilt (upright vs. flat), matching a
+documented real-WP7 behavior that had no implementation before this session.
 
-**Working tree:** clean, up to date with local commits on `feature/devices` (not yet
-pushed — push only if the user asks).
+**Does not work / not implemented (by design, not bugs):** iOS backend for anything
+in this scope. `Camera`'s `CameraState::Lost` is never reached (no event-queue
+integration in this first pass). `Motion`'s `Gravity`/`DeviceAcceleration`/
+`DeviceRotationRate` still receive no landscape remap at all (tracked as
+`MOTION-012`, not yet started). No physical Android/iOS hardware or real camera
+device has ever been used to verify anything in this scope, in any session.
+
+**Working tree:** clean, all work through this session pushed to `feature/devices`.
 
 ---
 
-## 3. Recent changes (this session, 2026-07-06)
+## 3. Recent changes (this session, 2026-07-07)
 
-Most recent first. Full detail (citations, exact test names, sanitizer output) is in
-`plan_devices.md`'s per-task closing notes and git commit messages — this section is a
-factual summary, not the full log.
+Most recent first. Full detail (citations, exact test counts, sanitizer output) is in
+`plan_devices.md`/`plan_cna_devices.md`'s per-task resolution notes and git commit
+messages — this section is a factual summary.
 
-- **`VERIFY-003`/`DEV-API-002` (both closed):** built a real strict-XNA-API compile
-  check from scratch — `NOXNA` (`CNAHelper.hpp`) now expands to `[[deprecated]]` under a
-  new `CNA_STRICT_XNA_API` macro; a new `cna_strict_xna_api_check` CMake target
-  (`tools/devices/StrictXnaApiSurfaceCheck.cpp`, `-Werror=deprecated-declarations`)
-  fails to build the instant it references any `NOXNA` member. Caught a real bug
-  immediately: `SensorBase<T>::setTimeBetweenUpdatesProperty()` (genuine XNA API)
-  internally touched the `NOXNA` `TimeBetweenUpdatesChanged` event — fixed with a
-  targeted `#pragma` suppression at that one internal call site, not by changing the
-  public API. Verified both ways (clean build/run today; a deliberately-reintroduced
-  leak reproduces the exact expected build failure).
-- **`VERIFY-001`/`VERIFY-002` (closed):** full 21-suite/343-test filter run and recorded
-  on plain build and all three sanitizer presets — zero failures, zero new findings.
-- **`DEMO-002` (closed):** new `docs/devices_sensor_hardware_qa_template.md`, one
-  section per `docs/devices-hardware-checklist.md` section number; linked from every
-  task in the plan whose own status says hardware verification is still outstanding.
-- **`DEMO-001` (closed):** added `TimeBetweenUpdates` interactive controls (Numpad +/-)
-  to `examples/demo_devices`; closed a real gap where the title bar (the demo's one
-  text-output channel) never showed Compass/Motion's `IsDataValid` or most of their
-  reading fields.
-- **`READINGS-001`/`READINGS-003` (closed):** re-verified all five reading structs'
-  fields against archived MSDN pages (closed one citation gap — `GyroscopeReading` was
-  only ever cited "by pattern," now cited directly, `hh220755`). Confirmed one
-  consistent wall-clock timestamp policy across all four sensor classes; found and
-  closed a real gap where `CompassTests.cpp`/`MotionTests.cpp` had zero tests asserting
-  on `Timestamp` at all.
-- **`SDL-SENSOR-001`/`SDL-SENSOR-003` (closed), `SDL-SENSOR-004` (new, OPEN,
-  cross-repo):** cited SDL3's documented axis convention directly in
-  `Accelerometer.cpp`/`Gyroscope.cpp`; confirmed existing lifecycle test coverage is
-  sufficient under both sanitizers. The one sanitizer finding (TSan, `sharp-runtime`'s
-  `TimeSpan::copy_count`) was given its own permanent follow-up task for the first time.
-- **`ANDROID-BRIDGE-001`/`003`/`004` (closed):** fixed a real bug where `ValueCount` was
-  hardcoded to 16 for every Android sensor type; fixed a real concurrent-`Stop()`
-  double-`join()` data race; consolidated Android API-level/permission docs and added
-  the missing `HIGH_SAMPLING_RATE_SENSORS` manifest permission.
-- **Earlier in this session (`ACCEL-*`/`GYRO-*`/`COMPASS-*`/`MOTION-*`, all closed):**
-  numerous real bugs found and fixed by code review — a stray debug log tag, a wrong
-  manifest-attribute claim, a wrong citation (`ff707930`→`ff707531`), a `Compass`
-  accuracy-threshold inconsistency (45°→20°), a real use-after-free ordering bug in
-  `AndroidCompassBackend`, a `MotionReading.Timestamp`/`Attitude.Timestamp` divergence,
-  and a missing stale-sample-fusion guard in `AndroidMotionBackend` (now a 500ms max-age
-  window). Two new open architectural questions were found and deliberately left
-  unresolved rather than guessed at — see Section 4.
+- **`DEVICES-CNA-012` (closed):** implemented `CNA::Devices::Camera` — single camera
+  device, synchronous permission polling, RGBA8-only. New:
+  `include/CNA/Devices/{Camera,CameraState,CameraPosition,CameraDeviceInfo}.hpp`,
+  `Detail/{ICameraBackend,SdlCameraBackend}.hpp`, matching `.cpp` files,
+  `tests/CNA/Devices/CameraTests.cpp` (8 tests). Handled two real SDL3 behaviors found
+  during implementation: `SDL_GetCameraSupportedFormats()` legally returns an empty
+  list on Emscripten (handled, not treated as "unsupported"); `SDL_Surface` rows
+  aren't guaranteed tightly packed (compacted before upload). Added
+  `getFrameWidthProperty()`/`getFrameHeightProperty()` (not in the original design
+  sketch) since `Texture2D` has no resize API. **Found and correctly attributed** a
+  pre-existing, unrelated ASan leak in the EasyGL/OpenGL graphics backend — see
+  Section 4.
+- **`COMPASS-009` (closed):** implemented Android `Compass`'s device-tilt-dependent
+  heading-axis switch (`Detail::IsDeviceInUprightCompassMode()`,
+  `ConvertRotationVectorToUprightMagneticHeadingDegrees()`,
+  `ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode()` in
+  `AndroidCompassMath.hpp`), derived fresh from Android's own documented
+  `remapCoordinateSystem`/`getOrientation` contract (not a port of WP7's own
+  axis-selection logic, which uses a different coordinate convention). 9 new tests
+  with hand-derived, documented-inline test quaternions.
+- **`ACCEL-008` (closed):** decision made (kept the existing Android landscape-remap
+  rather than removing it) and implemented: `Detail::SetAndroidLandscapeRemapEnabled()`/
+  `IsAndroidLandscapeRemapEnabled()` (new `AndroidSensorOrientation.cpp`, previously
+  header-only), wired into `Accelerometer.cpp`/`Gyroscope.cpp`. Doc comments updated to
+  state explicitly this is a CNA-only deviation from real WP7 behavior. **Opened a new
+  follow-up, `MOTION-012`**, for `Motion`'s still-unremapped vector fields (not bundled
+  into this task — needs its own verification first).
+- **`SDL-SENSOR-004` (closed, cross-repo):** fixed in the sibling `sharp-runtime`
+  repo — `TimeSpan::copy_count`/`move_count` changed from plain `int` to
+  `std::atomic<int>` (relaxed ordering). Re-verified via `devices-tsan`: 0 races,
+  down from 33 originally found.
+- **`DEVICES-CNA-011` (closed):** implemented `CNA::Devices::MessageBox`
+  (`Detail::IMessageBoxBackend`/`SdlMessageBoxBackend`, `MessageBoxType` enum),
+  approved from `noxna_devices.md`'s Section 8 "Round 2" SDL3-capability survey as the
+  strongest new candidate (broadest cross-platform reach of anything surveyed). 4 new
+  tests.
+- **`noxna_devices.md` Round 2 (Section 8):** surveyed further SDL3 capabilities
+  beyond the original Phase 1-4 analysis. User approved `MessageBox`; explicitly
+  rejected `Monitors`/multi-display enumeration, `Process`, and a pen-input candidate
+  as not a fit for this project — removed from the document entirely, not just
+  marked rejected.
+- **Unrelated build fix, found opportunistically:** `GamerProfile.cpp` called
+  `System::Globalization::RegionInfo::CurrentRegion()`, renamed to
+  `getCurrentRegionProperty()` by a concurrent, unrelated upstream `sharp-runtime`
+  commit. One-line fix, committed separately from any of the above.
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No code-level blocker exists.** `plan_devices.md` has no more actionable tasks this
-container can complete. Three tasks remain OPEN, all requiring something this
-container genuinely cannot provide:
+**No build-blocking bug exists.** Every task assigned this session is closed, and the
+full suite is green. The most significant unresolved technical finding is:
 
-- **`ACCEL-008`** — an archived MSDN Magazine article states the real WP7
-  `Accelerometer`'s raw coordinate system never changes between portrait and landscape
-  mode — potentially contradicting this codebase's own Android landscape-remap step.
-  Single-source finding, not corroborated, and a breaking change to already-tested
-  behavior if acted on without evidence. **Needs either a second authoritative source
-  or real hardware** (see `docs/devices_sensor_hardware_qa_template.md` Section 1).
-- **`COMPASS-009`** — the real WP7 `Compass` documents a tilt-dependent axis switch (real
-  sample code exists) that `Detail::AndroidCompassMath` has no equivalent for. Needs a
-  careful Android-specific quaternion derivation with no hardware to check the result
-  against. **Needs real hardware** (see the QA template's Section 7) before implementing,
-  or a maintainer decision to implement blind and flag as unverified.
-- **`SDL-SENSOR-004`** — `sharp-runtime`'s `TimeSpan::copy_count`/`move_count` are
-  non-atomic statics that race under concurrent `TimeSpan` copy/move construction
-  (confirmed via `devices-tsan`). Lives in the sibling `sharp-runtime` repo, out of this
-  repo's scope to fix directly — **needs a `sharp-runtime` session** (make the counters
-  `std::atomic`, or gate them out of release builds).
+**A real, pre-existing ASan (LeakSanitizer) leak in the EasyGL/OpenGL graphics
+backend**, surfaced because `CameraTests.cpp` is the first `CNA::Devices` test file
+to construct a real `GraphicsDevice`/`Texture2D` under the `devices-asan` preset.
 
-If picking up this branch with no further `Microsoft::Devices` work available, the next
-reasonable step is either (a) one of the three items above, if the missing input
-(hardware, a second source, or a `sharp-runtime` session) has become available, or (b)
-ask the user what to work on next — there is no more open plan work to default to.
+- **Symptom:** `ASAN_OPTIONS=detect_leaks=1 ./cmake-build-devices-asan/CnaTests
+  --gtest_filter="CameraTests.*"` reports ~12KB leaked across 16 allocations. Stack
+  traces point into `libdrm.so.2` and unresolved/unknown modules — **not** any
+  `CNA::Devices` or `Camera` code path.
+- **Confirmed unrelated to `Camera`:** the identical leak pattern (~30KB / 40
+  allocations, same stack shape) reproduces from a completely unrelated,
+  already-existing test, `DrawUserPrimitivesArgumentGuardTest`
+  (`tests/Microsoft/Xna/Framework/Graphics/DrawUserPrimitivesTests.cpp`), which has
+  no `Camera`/`CNA::Devices` involvement at all — it also just constructs a real
+  `GraphicsDevice`. This is a pre-existing gap: no `CNA::Devices` test had ever
+  constructed a real `GraphicsDevice` under `devices-asan` before `CameraTests.cpp`,
+  so nothing had surfaced it until now.
+- **Not investigated further:** whether this is a real EasyGL bug, a Mesa/libdrm
+  driver-level non-issue (GPU drivers commonly hold onto some allocations LSan flags
+  as "leaked" without a full driver teardown), or something else. Out of scope for
+  the `Camera` task that found it.
+- **Practical workaround in place:** `CameraTests`/any `GraphicsDevice`-constructing
+  test under `devices-asan` must currently be run with
+  `ASAN_OPTIONS=detect_leaks=0` to get a signal on *real* memory-safety bugs (that run
+  is clean, exit 0). `devices-ubsan` is unaffected and clean.
+
+This is not blocking any current task, but it means **`devices-asan`'s leak detection
+is not currently trustworthy for anything that touches `GraphicsDevice`** until
+someone investigates it properly.
 
 ---
 
 ## 5. Known bugs and limitations
 
-- **By design, not a bug:** `Compass.TrueHeading` always equals `MagneticHeading` — real
-  declination needs a location source, out of scope for `Microsoft::Devices::Sensors`
-  (see `docs/location-future-plan.md`). `Motion.Calibrate` is never raised by any
-  backend.
-- **Deliberate, documented limitation:** concurrent `Dispose()` calls on the *same*
-  sensor instance from two threads block the losing caller until the winner's cleanup
-  finishes, then return as a silent no-op — matches the conventional .NET `IDisposable`
-  contract.
-- **Deliberate, unfixed by design:** destroying `Accelerometer`/`Compass`/`Motion` from
-  within their own callback in certain specific ways is an accepted, documented,
-  unsupported boundary — see `COMPASS-008`/`MOTION-010`'s closing notes in
-  `plan_devices.md` for the exact shape of what remains unprotected and why.
-- **Needs physical hardware verification (never done, for anything, ever):** every
-  axis-sign question, `VibrateController` actually actuating a real motor, `Compass`
-  heading accuracy/calibration, `Motion` attitude tracking, and `ACCEL-008`/`COMPASS-009`
-  above. See `docs/devices-hardware-checklist.md` (what to check) and
-  `docs/devices_sensor_hardware_qa_template.md` (how to record results) — the latter is
-  new this session.
-- **Needs verification, likely permanent:** iOS cross-compilation — no Apple toolchain
-  in this Linux container.
-- **Out of scope, not this repo's bug:** `sharp-runtime`'s `TimeSpan` copy/move-counter
-  TSan race (`SDL-SENSOR-004`) — sibling-repo concern, do not fix from here.
+- **Confirmed, unfixed, out of scope for now:** the ASan graphics-backend leak
+  above (Section 4).
+- **Incomplete:** `MOTION-012` (new this session) — `Motion.Gravity`/
+  `DeviceAcceleration`/`DeviceRotationRate` don't get the same Android
+  landscape-remap `Accelerometer`/`Gyroscope` now explicitly document, which is now
+  an inconsistency per `ACCEL-008`'s own decision. Not started — needs to first
+  verify whether Android's `TYPE_GRAVITY`/`TYPE_LINEAR_ACCELERATION` sensors report
+  in the same raw portrait-frame convention as the plain accelerometer/gyroscope
+  before reusing the same remap formula (see `plan_devices.md` `MOTION-012` for the
+  full writeup). `Motion.Attitude` (the quaternion) is explicitly out of scope for
+  that task too.
+- **Needs verification (real hardware, never done for anything in this project):**
+  `ACCEL-008`'s remap-vs-real-WP7 behavior, `COMPASS-009`'s new tilt-mode math,
+  `Camera`'s RGBA format-negotiation reliability across real platforms/devices — all
+  self-consistency-tested only, never checked against real hardware or a real camera.
+- **Incomplete by design (documented, not a bug):** `Camera`'s first-implementation
+  scope deliberately excludes: multi-camera device selection (always opens the
+  first device `SDL_GetCameras()` reports), `CameraState::Lost` detection (needs SDL
+  event-queue integration), and any pixel-format conversion beyond RGBA8 (fails to
+  `NotSupported` instead). See `docs/cna-devices-camera-design.md`'s open questions.
+- **By design, not a bug (`Microsoft::Devices::Sensors`):** `Compass.TrueHeading`
+  always equals `MagneticHeading` (no declination source — see
+  `docs/location-future-plan.md`). `Motion.Calibrate` is never raised by any backend.
+- **Unknown:** whether `CNA_DEVICES=OFF` (the default) still builds clean after this
+  session's additions (`MessageBox`, `Camera`) — the `#ifdef CNA_DEVICES` pattern was
+  followed consistently, but a fresh OFF-default build was not re-run this session to
+  confirm (it was last explicitly confirmed at `DEVICES-CNA-006`, before `MessageBox`/
+  `Camera` existed).
+- **Needs verification, likely permanent:** iOS cross-compilation — no Apple
+  toolchain in this Linux container.
+- **Out of scope, not this repo's concern:** none currently — `SDL-SENSOR-004`
+  (the one sibling-repo item) was fixed and closed this session.
 
 ---
 
@@ -227,180 +214,200 @@ include/Microsoft/Devices/Sensors/          ← XNA WP7 sensor API headers
 include/Microsoft/Devices/Sensors/Detail/   ← internal-only, never in public headers
 src/Microsoft/Devices/Sensors/              ← sensor implementations (SDL3-backed + Android-native)
 tests/Microsoft/Devices/Sensors/            ← Google Test suites per class
-tests/Microsoft/Devices/Sensors/Detail/     ← Android bridge/math pure-function tests
 include/Microsoft/Devices/                  ← VibrateController.hpp
 src/Microsoft/Devices/                      ← VibrateController.cpp
 tools/devices/                              ← StrictXnaApiSurfaceCheck.cpp (VERIFY-003, standalone, not gtest)
-examples/demo_devices/                      ← DevicesDemo (cna_demo_devices target)
-examples/demo_devices/android/              ← Android Gradle/CMake app project
-docs/devices-hardware-checklist.md          ← manual real-hardware verification steps (what to check)
-docs/devices_sensor_hardware_qa_template.md ← manual real-hardware QA report template (how to record results)
-docs/devices-build.md                       ← reproducible build/test commands
+examples/demo_devices/                      ← DevicesDemo (cna_demo_devices target, not touched this session)
+docs/devices-hardware-checklist.md          ← manual real-hardware verification steps
+docs/devices_sensor_hardware_qa_template.md ← manual real-hardware QA report template
 docs/devices-native-backend-design.md       ← Compass/Motion native backend design
 docs/devices-api-coverage.md                ← per-member API coverage table + timestamp policy
-docs/devices-thread-safety.md               ← consolidated thread-safety contract
-docs/devices-android.md                     ← consolidated Android-specific reference
 docs/location-future-plan.md                ← why GPS/location isn't here
-plan_devices.md                             ← the plan (2026-07-05); effectively done, 3 tasks OPEN
+plan_devices.md                             ← the Microsoft::Devices::Sensors plan; effectively done, 1 task OPEN (MOTION-012)
 
-include/CNA/Devices/                        ← CNA::Devices public headers (NOXNA, non-XNA)
-include/CNA/Devices/Detail/                 ← internal-only backend interfaces (IFileDialogBackend, ITrayBackend)
+include/CNA/Devices/                        ← CNA::Devices public headers (non-XNA, no NOXNA tag)
+include/CNA/Devices/Detail/                 ← internal-only backend interfaces (I<X>Backend pattern)
 src/CNA/Devices/                            ← CNA::Devices implementations
 tests/CNA/Devices/                          ← Google Test suites per class
-docs/cna-devices-camera-design.md           ← Camera design note (not implemented yet)
-noxna_devices.md                            ← the CNA::Devices analysis (2026-07-06)
-plan_cna_devices.md                         ← the CNA::Devices plan (2026-07-07); all 11 tasks CLOSED
+docs/cna-devices-camera-design.md           ← Camera design note (superseded in part by the actual implementation)
+noxna_devices.md                            ← the CNA::Devices analysis, including Round 2 (Section 8)
+plan_cna_devices.md                         ← the CNA::Devices plan; all 12 tasks CLOSED
 ```
 
 - **`SensorBase<T>`** owns `CurrentValue`, `IsDataValid`, `TimeBetweenUpdates`,
-  `CurrentValueChanged`, `Dispose()`. Every field is mutex-guarded; getters return by
-  value. **Do not restructure without a concrete, newly-found bug** — stable across many
-  hardening passes.
-- **`NOXNA` is now compile-time enforced** (`VERIFY-003`): `CNAHelper.hpp`'s `NOXNA`
-  macro expands to `[[deprecated]]` when `CNA_STRICT_XNA_API` is defined; the
-  `cna_strict_xna_api_check` CMake target builds `tools/devices/StrictXnaApiSurfaceCheck.cpp`
-  with that macro plus `-Werror=deprecated-declarations`. Adding a new public
-  `Microsoft::Devices`/`Sensors` extension without tagging it `NOXNA` will not be caught
-  by this check unless that specific member is also referenced from the check file —
-  it proves known-real members stay real and known-`NOXNA` members are truly gated, not
-  an exhaustive every-future-member guarantee.
-- **`Accelerometer`/`Gyroscope`** share `Detail::SdlSensorSubsystem<TSensor>`.
+  `CurrentValueChanged`, `Dispose()`. Every field is mutex-guarded. **Do not
+  restructure without a concrete, newly-found bug** — stable across many hardening
+  passes, not touched this session.
+- **`NOXNA` is compile-time enforced** (`VERIFY-003`, from a prior session) —
+  `CNAHelper.hpp`'s `NOXNA` macro expands to `[[deprecated]]` under
+  `CNA_STRICT_XNA_API`; `cna_strict_xna_api_check` builds
+  `tools/devices/StrictXnaApiSurfaceCheck.cpp` with `-Werror=deprecated-declarations`.
+  This applies only inside `Microsoft::Devices`/`Sensors` — `CNA::Devices` members are
+  never `NOXNA`-tagged (the namespace itself is the signal).
 - **`Compass`/`Motion`** each hold a `std::unique_ptr<Detail::ICompassBackend>`/
-  `IMotionBackend`, constructed only inside `#if defined(__ANDROID__)`. Both interfaces
-  compile and are mockable on every platform. `SetBackendForTesting()` (`NOXNA`, both
-  classes) lets tests inject a fake backend.
-- **`VibrateController`:** SDL3 haptic-backed only; no native Android bridge (confirmed
-  unnecessary — SDL3's own Android haptic backend already reaches `Context.VIBRATOR_SERVICE`
-  directly, see `docs/devices-android.md`).
-- **`CNA::Devices` (new, separate from the above):** gated behind `CNA_DEVICES` CMake
-  option (default OFF, mirrors `CNA_NOXNA`). No `NOXNA` marker on its own members — the
-  namespace itself signals "not XNA." `FileDialog`/`SystemTray` learned the hard way
-  (see Section 1a) that any class whose real backend has a side effect an automated
-  test can't safely trigger (a real dialog, a real tray icon, and — if implemented — a
-  real camera) needs a `Detail::I<X>Backend` interface from day one, not retrofitted
-  after an incident.
+  `IMotionBackend`, constructed only inside `#if defined(__ANDROID__)`.
+  `AndroidCompassBackend` now calls `ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode()`
+  (this session's change) instead of the flat-mode-only formula directly — the
+  original flat-mode function is unchanged and still independently tested.
+- **Android landscape-remap opt-out (`ACCEL-008`, new this session):**
+  `Detail::SetAndroidLandscapeRemapEnabled(bool)`/`IsAndroidLandscapeRemapEnabled()`
+  — a process-wide `std::atomic<bool>`, default `true`. `Accelerometer.cpp`/
+  `Gyroscope.cpp` check it at runtime inside their `#ifdef __ANDROID__` blocks.
+  `Motion` does **not** yet check it (`MOTION-012`).
+- **`CNA::Devices` backend-injection pattern — two shapes, pick based on the real
+  backend's side-effect timing:** a process-wide swappable static
+  (`FileDialog`/`MessageBox` — real backend construction is inert, side effect only
+  on the actual call) vs. constructor-injection (`SystemTray`/`Camera` — the real
+  backend's side effect, opening a tray icon or a camera device, happens immediately
+  on construction, so a post-construction swap would be too late).
+- **`Camera`'s texture-upload path:** `Texture2D::SetDataRGBA(data, pixelCount)`
+  assumes `width * 4` stride with **no row padding** and uses the `Texture2D`'s own
+  stored `width`, not any width the caller passes — the caller **must** construct
+  the `Texture2D` with dimensions matching `Camera::getFrameWidthProperty()`/
+  `getFrameHeightProperty()` in advance; `Texture2D` has no resize-after-construction
+  API. `Camera::TryAcquireFrame()` returns `false` without touching the texture if
+  the dimensions don't match, rather than silently uploading with the wrong stride.
 - **Boundaries — do not cross:**
   - `third_party/SDL` is vendored with its own `CLAUDE.md` forbidding AI-authored
     contributions — read-only for research.
-  - `sharp-runtime` is a sibling repo under separate development — do not fix its bugs
-    (the `TimeSpan` copy/move-counter race, `SDL-SENSOR-004`) by editing files there.
-  - Do not expand `Microsoft::Devices` scope to camera, radio, or
-    phone-call/photo-picker APIs.
-  - Do not fake `Compass`/`Motion` data from other sensors, and do not add GPS/location
-    to `Microsoft::Devices::Sensors` under any circumstances (including as `NOXNA`) —
-    see `docs/location-future-plan.md`.
+  - `sharp-runtime` is a sibling repo under separate, concurrent development (another
+    active worktree/agent has been observed there this session) — only edit it for a
+    specific, well-scoped, cited fix (as `SDL-SENSOR-004` was), never a broad change.
+  - Do not fake `Compass`/`Motion` data from other sensors, and do not add
+    GPS/location to `Microsoft::Devices::Sensors` under any circumstances — see
+    `docs/location-future-plan.md`.
   - The XNA 4.0 class name is `VibrateController`, not "VibrationController."
+  - Do not move `CNA::Devices` types into `Microsoft::Devices` or vice versa — they
+    are deliberately separate namespaces with different tagging conventions.
 
 ---
 
 ## 7. Useful commands
 
-**ZIP-export caveat:** every command below assumes a real `git clone` with submodules
-initialized (`git submodule update --init` — non-recursive) plus the two sibling repos
-this project depends on (`sharp-runtime`, `easy-gl`, which itself needs `meta-gl`)
-checked out next to this one.
-
 ```bash
-# Configure (only if CMakeCache.txt is stale/missing):
+# Configure (only if CMakeCache.txt is stale/missing) -- CNA_DEVICES defaults OFF,
+# turn it on explicitly to build/test anything under CNA::Devices:
 cmake -S . -B cmake-build-debug \
-      -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+      -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug \
+      -DCNA_DEVICES=ON
 
 # Build:
 cmake --build cmake-build-debug --target CNA -j$(nproc)
 cmake --build cmake-build-debug --target CnaTests -j$(nproc)
 
-# CNA::Devices needs its own flag (default OFF) -- reconfigure with it on, then build/test:
-cmake -S . -B cmake-build-debug -DCNA_DEVICES=ON
-cmake --build cmake-build-debug --target CnaTests -j$(nproc)
-./cmake-build-debug/CnaTests --gtest_filter="PowerInfoTests.*:LocaleTests.*:ClipboardTests.*:UrlLauncherTests.*:SystemInfoTests.*:DisplayInfoTests.*:FileDialogTests.*:SystemTrayTests.*"
+# CNA::Devices-only filter (10 suites / 48 cases):
+./cmake-build-debug/CnaTests --gtest_filter="PowerInfoTests.*:LocaleTests.*:ClipboardTests.*:UrlLauncherTests.*:SystemInfoTests.*:DisplayInfoTests.*:FileDialogTests.*:SystemTrayTests.*:MessageBoxTests.*:CameraTests.*"
 
-# Devices-only filter (exact suite names, 21 suites / 343 cases):
-./cmake-build-debug/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
+# Full suite:
+./cmake-build-debug/CnaTests
 
-# Strict XNA API surface check (VERIFY-003):
+# Sanitizer builds (separate build dirs, CMakePresets.json):
+cmake --build --preset devices-asan --target CnaTests
+cmake --build --preset devices-ubsan --target CnaTests
+cmake --build --preset devices-tsan --target CnaTests
+
+# Re-run the ASan graphics-backend leak (Section 4) -- reproduces with or without Camera:
+ASAN_OPTIONS=detect_leaks=1 ./cmake-build-devices-asan/CnaTests --gtest_filter="CameraTests.*"
+ASAN_OPTIONS=detect_leaks=1 ./cmake-build-devices-asan/CnaTests --gtest_filter="DrawUserPrimitivesArgumentGuardTest.*"
+# Workaround for a clean signal on real memory-safety bugs in the meantime:
+ASAN_OPTIONS=detect_leaks=0 ./cmake-build-devices-asan/CnaTests --gtest_filter="CameraTests.*"
+
+# Strict XNA API surface check:
 cmake --build cmake-build-debug --target cna_strict_xna_api_check -j$(nproc)
 ./cmake-build-debug/cna_strict_xna_api_check
 
-# Build and run the Devices demo (needs a real display; xvfb-run works for a crash-check
-# but cannot visually confirm on-screen rendering):
-cmake --build cmake-build-debug --target cna_demo_devices -j$(nproc)
-./cmake-build-debug/cna_demo_devices
-
-# Android cross-compile check (NDK at ~/Android/Sdk/ndk/) — CNA library only, known clean:
-cmake -S . -B cmake-build-android -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=$HOME/Android/Sdk/ndk/30.0.14904198/build/cmake/android.toolchain.cmake \
-  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DCNA_BUILD_TESTS=OFF
-cmake --build cmake-build-android --target CNA -j$(nproc)
-
-# Sanitizer builds:
-cmake --preset devices-asan && cmake --build --preset devices-asan --target CnaTests
-cmake --preset devices-tsan && cmake --build --preset devices-tsan --target CnaTests
-cmake --preset devices-ubsan && cmake --build --preset devices-ubsan --target CnaTests
+# sharp-runtime (sibling repo) tests, if touching that repo again:
+cd ../sharp-runtime && cmake --build build --target SharpRuntimeTests -j$(nproc)
+./build/SharpRuntimeTests --gtest_filter="TimeSpan*"
 ```
 
-No dedicated lint/format tooling is configured for this project. No CI infrastructure
-exists in this repo (`DEV-BUILD-003` — CI job spec was written, `.github/workflows/devices-tests.yml`,
-but never run on a real CI provider from this container).
+No dedicated lint/format tooling is configured for this project. No CI has actually
+been run on a real provider from this container (a workflow spec exists,
+`.github/workflows/devices-tests.yml`, from an earlier session).
 
 ---
 
 ## 8. Next smallest tasks
 
-`plan_devices.md` has no remaining actionable tasks for this container. If resuming
-without new user direction:
+1. **Investigate the ASan graphics-backend leak (Section 4).**
+   Goal: determine whether the leak reported when constructing a real `GraphicsDevice`
+   under `devices-asan` is a real EasyGL bug or a benign Mesa/libdrm driver artifact,
+   and either fix it or document a definitive reason it's safe to ignore.
+   Files: `src/CNA/Internal/Backends/EasyGL/*`, possibly `third_party/easy-gl`.
+   Verify: `ASAN_OPTIONS=detect_leaks=1 ./cmake-build-devices-asan/CnaTests --gtest_filter="DrawUserPrimitivesArgumentGuardTest.*"` — goal is 0 leaked bytes, or a documented reason why not.
 
-1. Check whether real Android/iOS hardware, a physical vibration motor, or a second
-   authoritative WP7 API source has become available — if so, that directly unblocks
-   `ACCEL-008`/`COMPASS-009` (see Section 4).
-2. Check whether a `sharp-runtime` session is available/appropriate — that unblocks
-   `SDL-SENSOR-004`.
-3. Otherwise, ask the user what to work on next. Do not invent new `plan_devices.md`
-   tasks unprompted, and do not start work in a different part of the codebase
-   (`Microsoft::Xna::Framework`, networking, etc.) without being asked — this plan's
-   scope is `Microsoft::Devices`/`Microsoft::Devices::Sensors`/`VibrateController` only.
+2. **Confirm `CNA_DEVICES=OFF` (default) still builds clean.**
+   Goal: close the "Unknown" item in Section 5 — a fresh configure+build with the
+   flag left at its default OFF value, after this session's `MessageBox`/`Camera`
+   additions.
+   Files: none expected (this is a verification task, not a code change, unless it
+   reveals a real `#ifdef` gap).
+   Verify: `cmake -S . -B /tmp/cna-off-check -DCNA_BUILD_TESTS=ON && cmake --build /tmp/cna-off-check --target CNA CnaTests -j$(nproc)`.
+
+3. **Re-run `devices-tsan` against `AndroidCompassMathTests`/`CameraTests`.**
+   Goal: close the "not yet re-run" gap noted in Section 2 — these two new suites
+   were verified under `devices-asan`/`devices-ubsan` but not `devices-tsan`.
+   Files: none expected (verification only).
+   Verify: `cmake --build --preset devices-tsan --target CnaTests && ./cmake-build-devices-tsan/CnaTests --gtest_filter="AndroidCompassMathTests.*:CameraTests.*"`.
+
+4. **Start `MOTION-012`** (see `plan_devices.md` for the full task writeup) — first
+   step is research only: confirm via SDL3/Android NDK sensor documentation whether
+   `TYPE_GRAVITY`/`TYPE_LINEAR_ACCELERATION` report in the same raw portrait-frame
+   convention as `TYPE_ACCELEROMETER`/`TYPE_GYROSCOPE`, before writing any remap code.
+   Files: `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (read-only
+   for this first step).
+   Verify: no code change expected for this first step; a documented finding in
+   `plan_devices.md`'s `MOTION-012` entry is the deliverable.
 
 ---
 
 ## 9. Do not do yet
 
+- Do not implement the rest of `Camera`'s deferred scope (multi-camera selection,
+  `Lost`-state event-queue integration, non-RGBA format conversion) without a
+  concrete need — the current narrow scope was a deliberate choice, not an oversight.
+- Do not apply `Detail::ConvertAndroidPortraitToXnaLandscape()` to `Motion`'s vector
+  fields without first doing `MOTION-012`'s own research step (confirming Android's
+  gravity/linear-acceleration sensors use the same raw frame) — reusing the formula
+  blind repeats a mistake this project has hit before with unverified Android sensor
+  math.
+- Do not "fix" the ASan graphics-backend leak by just adding
+  `ASAN_OPTIONS=detect_leaks=0` somewhere permanent (e.g. a CMake preset default) —
+  that would silently hide future *real* leaks too. Investigate first.
 - Do not restructure `SensorBase<T>`, `Detail::SdlSensorSubsystem<TSensor>`, or
-  `Detail::AndroidSensorBridge`'s locking scheme without a concrete, newly-found bug —
-  all have been through multiple hardening passes already.
-- Do not fake `Compass`/`Motion` data from other sensors, and do not add GPS/location to
-  `Microsoft::Devices::Sensors` under any circumstances (including as `NOXNA`) — see
-  `docs/location-future-plan.md`.
-- Do not implement `ACCEL-008` or `COMPASS-009` without either real hardware or an
-  explicit maintainer decision to proceed without it — both would be breaking changes
-  to already-tested behavior based on single-source or no evidence.
-- Do not claim Android/iOS physical-hardware verification, or a real-device run, unless
-  it was actually done in the current session.
-- Do not edit anything under `third_party/SDL` — vendored, has its own `CLAUDE.md`
-  forbidding AI-authored contributions.
-- Do not fix bugs found in `sharp-runtime` (e.g. `SDL-SENSOR-004`) by editing files
-  there directly from a `cna_devices`-scoped session.
-- Do not trust a single passing `ctest` run as proof a new concurrency/lifetime change
-  is correct — loop it (20-60+ iterations) and/or run it under a sanitizer preset first.
-- Do not open yet another new plan file — `plan_devices.md` is current, use it.
-- Do not rename or refer to `VibrateController` as "VibrationController" anywhere.
-- Do not push to the remote unless the user explicitly asks.
+  `Detail::AndroidSensorBridge`'s locking scheme without a concrete, newly-found bug.
+- Do not edit anything under `third_party/SDL` — vendored, forbids AI-authored
+  contributions per its own `CLAUDE.md`.
+- Do not make broad, unscoped edits to `sharp-runtime` — it's under active,
+  concurrent development by another session; only well-scoped, cited fixes.
+- Do not add GPS/location to `Microsoft::Devices::Sensors`, or move `CNA::Devices`
+  types into `Microsoft::Devices` (or vice versa).
+- Do not claim real Android/iOS hardware or real-camera verification unless it was
+  actually done in the current session.
+- Do not push to the remote unless the user explicitly asks (this session pushed
+  after each closed task per the user's own standing instruction for this branch —
+  confirm that's still the expectation before assuming it by default).
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. plan_devices.md (74 tasks) is effectively DONE — all tasks CLOSED
-except three (ACCEL-008, COMPASS-009, SDL-SENSOR-004), all intentionally left open
-because they need real hardware, a second source, or a sharp-runtime-repo session (see
-NEXT.md Section 4 for exactly what each needs). Do not implement any of the three
-without that missing input arriving, or an explicit maintainer decision.
+Read NEXT.md first. Both plans on this branch (plan_devices.md,
+plan_cna_devices.md) are effectively done -- only one task is open
+(MOTION-012, Microsoft::Devices::Sensors::Motion's landscape-remap
+consistency question) and it needs a research step before any code change.
 
-There is no more default `Microsoft::Devices` plan work to pick up. If the user hasn't
-given new direction, check Section 8, then ask what to work on next rather than
-inventing new scope.
+The most concrete unresolved technical finding is a pre-existing ASan leak in
+the EasyGL/OpenGL graphics backend (NEXT.md Section 4) -- not blocking, but
+worth investigating (NEXT.md Section 8, task 1) since it currently makes
+devices-asan's leak detection untrustworthy for anything touching
+GraphicsDevice.
 
-If new hardware/source/sharp-runtime access does become available, use
-docs/devices_sensor_hardware_qa_template.md to record real hardware results, and
-plan_devices.md's per-task Resolution notes for full historical context before touching
-any of the three remaining open items.
+Pick ONE task from NEXT.md Section 8. Inspect only the files it names. Do not
+refactor unrelated code, and do not start any deferred/out-of-scope work
+listed in Section 9. Make one small, verified improvement, run the exact
+verification command listed for that task, and update NEXT.md's relevant
+section (2, 3, 5, and/or 8) to reflect what changed before ending the
+session.
 ```
