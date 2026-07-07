@@ -4584,7 +4584,7 @@ not an alternate spelling to preserve.
   rather than silently ignored — satisfying this task's own "any remaining
   known-unsupported case is explicitly documented" acceptance criterion.
 
-### SDL-SENSOR-004 — [Cross-repo, sharp-runtime] `TimeSpan::copy_count`/`move_count` data race under ThreadSanitizer
+### SDL-SENSOR-004 — [Cross-repo, sharp-runtime] `TimeSpan::copy_count`/`move_count` data race under ThreadSanitizer — CLOSED (2026-07-07)
 
 - **Priority:** Low
 - **Area:** Cross-repo (sharp-runtime), surfaced by SDL-SENSOR-003
@@ -4632,6 +4632,23 @@ not an alternate spelling to preserve.
 - **Suggested files to inspect or edit (in the sharp-runtime repo):**
   - `sharp-runtime/include/System/TimeSpan.hpp`
   - `sharp-runtime/src/System/TimeSpan.cpp`
+- **Resolution:** User explicitly authorized editing `sharp-runtime` directly (2026-07-07),
+  despite another concurrent worktree/agent active in that repo at the time (confirmed
+  the main `sharp-runtime` checkout's own working tree was clean before editing, so no
+  conflict with that other session's isolated worktree). Made `copy_count`/`move_count`
+  `std::atomic<int>` with relaxed ordering (sufficient — they're a diagnostic tally, not
+  a synchronization mechanism, per this task's own acceptance criteria) in both the
+  header and `.cpp`; no other SharpRuntime type had an existing similar-counter
+  convention to match. `sharp-runtime`'s own full suite: 10584/10584 pass, zero
+  regressions. Rebased onto `origin/develop` (which had unrelated XML work merged in the
+  meantime — no conflicts, different files) and pushed
+  (`c4f6c46` → `123f602` after rebase).
+  **Re-ran the exact repro from this task in `cna_devices`** —
+  `cmake-build-devices-tsan`'s `CnaTests` against
+  Accelerometer/Gyroscope/SensorSubsystemOwnership/AndroidSensorOrientation/AndroidSensorBridge
+  (106 tests, 104 pass + 2 expected skips) — confirmed **zero ThreadSanitizer warnings**,
+  down from the 33 this task originally documented. Fix verified end-to-end from both
+  sides of the cross-repo boundary.
 
 ---
 
