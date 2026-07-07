@@ -204,3 +204,37 @@ TEST_F(ContentManagerSkinnedModelTest, OutOfRangeIndexThrows)
         cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"),
         ContentLoadException);
 }
+
+// Task 14.1: FindMatchingBracketEXT/ParseFlatObjectArrayEXT's hand-rolled JSON bracket-matching
+// only ever tracked raw character occurrences with no awareness of string-literal boundaries - a
+// brace embedded inside a part name's string value previously miscounted depth (structurally
+// possible from convert_avatar.py's fully automated pipeline, even if not currently produced).
+// Deliberately UNBALANCED ("Weird{Name", one embedded "{" with no matching "}") so the old naive
+// counter's depth never returns to the true baseline within this part's own object - a *balanced*
+// embedded pair (e.g. "Weird{Name}") would net-cancel and accidentally still land on the correct
+// position, silently failing to exercise the bug. Confirms both that this part's own name
+// (including the literal, unescaped brace) round-trips correctly, and that the second, ordinary
+// part immediately after it is still located correctly - proving the embedded brace didn't throw
+// off the parts array's own boundary tracking for what follows.
+TEST_F(ContentManagerSkinnedModelTest, PartNameWithUnbalancedEmbeddedBraceParsesCorrectly)
+{
+    ScratchContentRoot root;
+    WriteFile(root.path() / "avatar.skinnedmodel.json",
+              R"({"skeleton": "skeleton.bin", "parts": [)"
+              R"({"name": "Weird{Name", "vertices": "a.verts.bin", "indices": "a.idx.bin", "vertexStride": 52},)"
+              R"({"name": "Second", "vertices": "b.verts.bin", "indices": "b.idx.bin", "vertexStride": 52}]})");
+    WriteSkeletonWithBoneCount(root.path() / "skeleton.bin", 0);
+    WriteBytes(root.path() / "a.verts.bin", std::vector<std::uint8_t>(52, 0));
+    WriteBytes(root.path() / "a.idx.bin", {});
+    WriteBytes(root.path() / "b.verts.bin", std::vector<std::uint8_t>(52, 0));
+    WriteBytes(root.path() / "b.idx.bin", {});
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar");
+
+    ASSERT_EQ(2u, model->Parts.size());
+    EXPECT_EQ("Weird{Name", model->Parts[0].Name);
+    EXPECT_EQ("Second", model->Parts[1].Name);
+}

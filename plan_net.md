@@ -2621,7 +2621,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
 
 ## Phase 14 — Avatar: Further Investigation (content tooling & minor polish)
 
-- [ ] **Task 14.1** — Investigate hardening the hand-rolled JSON bracket-matching in
+- [x] **Task 14.1** — Investigate hardening the hand-rolled JSON bracket-matching in
   `FindMatchingBracketEXT`/`ParseFlatObjectArrayEXT` (`ContentManager.cpp`, ~lines 605-642) against
   braces/brackets embedded inside string values. Confirmed this is an existing convention shared
   with `ModelTypeReader`/`SpriteFontTypeReader` (not new to this feature), but the Skinned-model
@@ -2629,6 +2629,29 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   part/clip name containing such a character is structurally possible, even if not currently
   produced. Decide whether to add string-literal-aware bracket matching (possibly shared across all
   three readers) or explicitly document the current limitation/constraint on generated names.
+
+  Decided: fix it (shared across all 3 readers, since it's one small, self-contained helper).
+  Made `FindMatchingBracketEXT` string-literal-aware: tracks whether the scan is currently inside
+  a `"..."` string (toggled on unescaped `"`, correctly skipping over `\"` and other backslash
+  escapes without ending the string early) and skips bracket-counting entirely while inside one.
+  Benefits `ModelTypeReader`/`SpriteFontTypeReader` too, not just the Skinned-model path, since
+  they all share this one helper. Left `ExtractJsonStringField`'s own separate (and also
+  escape-unaware) string-value extraction alone — a related but distinct pre-existing gap not
+  named by this task, out of scope here.
+
+  Added `PartNameWithUnbalancedEmbeddedBraceParsesCorrectly`: a part named `"Weird{Name"` (one
+  embedded `{` with **no matching `}`**) immediately followed by an ordinary second part — chosen
+  deliberately unbalanced, since a *balanced* embedded pair (e.g. `"Weird{Name}"`) nets-cancel
+  under the old naive counter and would accidentally still land on the correct position, silently
+  failing to exercise the bug (confirmed this by trying the balanced case first: it passed even
+  with the old code, precisely because it's a false-negative test design). **Revert-verify:**
+  reverted just the string-awareness, rebuilt, reran — the old naive counter swallowed the second
+  part entirely: `model->Parts.size() == 1` instead of `2` (the embedded unmatched `{` pushed
+  depth one level too high, so the object boundary's own real closing `}` no longer reached
+  depth 0, and the algorithm kept consuming into the next part). Restored the fix, rebuilt,
+  confirmed both parts round-trip correctly, full suite green, and re-ran all 3 GPU avatar
+  integration tests to confirm real content is unaffected. Full suite: 3395/3395 passing (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 14.2** — Investigate texture path re-basing's assumption that a manifest always lives
   under the content root (`ContentManager.cpp`, ~line 732: `fs::relative(manifestDir / texFile,

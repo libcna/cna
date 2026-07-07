@@ -614,15 +614,30 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
+        // Task 14.1: string-literal-aware - a brace/bracket embedded inside a JSON string value
+        // (e.g. a part/clip name like "Weird{Name}", structurally possible from
+        // convert_avatar.py's fully automated pipeline even if not currently produced) previously
+        // miscounted depth, since this only ever tracked raw character occurrences with no
+        // awareness of string-literal boundaries. Skips over "..." contents (respecting
+        // backslash escapes, so \" doesn't end the string early) without counting brackets
+        // inside them.
         std::size_t FindMatchingBracketEXT(const std::string& j, std::size_t openPos,
                                             char openCh, char closeCh)
         {
             int depth = 1;
             std::size_t pos = openPos + 1;
+            bool inString = false;
             while (pos < j.size() && depth > 0)
             {
-                if (j[pos] == openCh) { ++depth; }
-                else if (j[pos] == closeCh) { --depth; }
+                const char c = j[pos];
+                if (inString)
+                {
+                    if (c == '\\') { ++pos; } // skip the escaped character entirely
+                    else if (c == '"') { inString = false; }
+                }
+                else if (c == '"') { inString = true; }
+                else if (c == openCh) { ++depth; }
+                else if (c == closeCh) { --depth; }
                 ++pos;
             }
             return pos;
