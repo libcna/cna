@@ -3,6 +3,10 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "System/IO/Stream.hpp"
+#include "System/FormatException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -173,15 +177,139 @@ namespace Microsoft::Xna::Framework::Graphics
         rgbaToColors(rgba, data, startIndex, elementCount);
     }
 
+    namespace
+    {
+        // DDS constants — mirrors FNA's Texture.ParseDDS magic numbers (Task 663).
+        constexpr uint32_t kDdsMagic        = 0x20534444;
+        constexpr uint32_t kDdsHeaderSize   = 124;
+        constexpr uint32_t kDdsPixfmtSize   = 32;
+        constexpr uint32_t kDdsdHeight      = 0x2;
+        constexpr uint32_t kDdsdWidth       = 0x4;
+        constexpr uint32_t kDdscapsMipmap   = 0x400000;
+        constexpr uint32_t kDdscapsTexture  = 0x1000;
+        constexpr uint32_t kDdscaps2Cubemap = 0x200;
+        constexpr uint32_t kDdpfFourCC      = 0x4;
+        constexpr uint32_t kFourCcDxt1      = 0x31545844;
+        constexpr uint32_t kFourCcDxt3      = 0x33545844;
+        constexpr uint32_t kFourCcDxt5      = 0x35545844;
+
+        uint32_t ReadU32LE(const uint8_t* p)
+        {
+            return static_cast<uint32_t>(p[0])
+                 | (static_cast<uint32_t>(p[1]) << 8)
+                 | (static_cast<uint32_t>(p[2]) << 16)
+                 | (static_cast<uint32_t>(p[3]) << 24);
+        }
+
+        // Compressed block size in bytes for one mip level — mirrors FNA's
+        // Texture.CalculateDDSLevelSize (Dxt1/3/5-only subset; CNA doesn't support the
+        // uncompressed/HDR DDS variants FNA also handles, matching Texture2D::FromStream's own
+        // established DXT1/3/5-only scope for this exact class of problem).
+        int CalculateDDSLevelSize(int width, int height, uint32_t fourCC)
+        {
+            const int blockSize = (fourCC == kFourCcDxt1) ? 8 : 16;
+            width  = std::max(width, 1);
+            height = std::max(height, 1);
+            return ((width + 3) / 4) * ((height + 3) / 4) * blockSize;
+        }
+    }
+
     TextureCube TextureCube::DDSFromStreamEXT(GraphicsDevice& device, System::IO::Stream& stream)
     {
-        // NOTE (Task 272 audit): this is a stub, not a real implementation. It ignores `stream`
-        // entirely and always returns a blank 1x1 Color cube map, regardless of what DDS data (if
-        // any) was provided. A real implementation needs: DDS header parsing (magic, size, mip
-        // levels, isCube flag — Texture.ParseDDS in FNA), per-face/per-level DXT decode (reusing
-        // DxtUtil, already used by Texture2D::FromStream's TryDecodeDds), and 6 x levelCount
-        // SetData calls. See AUDIT.md, "TextureCube detailed audit", for the full FNA reference
-        // walkthrough. Left unimplemented here — this is a substantial feature, not a guard fix.
-        return TextureCube(device, 1, false, SurfaceFormat::Color);
+        using System::IO::intcs;
+        using System::IO::bytecs;
+
+        const intcs len = stream.getLengthProperty();
+        if (len <= 0)
+            throw std::runtime_error("TextureCube::DDSFromStreamEXT: stream is empty or length unknown");
+
+        std::vector<bytecs> buf(static_cast<std::size_t>(len));
+        stream.Read(buf.data(), 0, len);
+        const auto* raw = reinterpret_cast<const uint8_t*>(buf.data());
+        const auto rawLen = static_cast<std::size_t>(len);
+
+        // --- Parse the DDS header (mirrors FNA's Texture.ParseDDS) ---
+        if (rawLen < 128 || ReadU32LE(raw) != kDdsMagic)
+            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: not a DDS stream");
+        if (ReadU32LE(raw + 4) != kDdsHeaderSize)
+            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: invalid DDS header");
+
+        const uint32_t flags = ReadU32LE(raw + 8);
+        if ((flags & (kDdsdHeight | kDdsdWidth)) != (kDdsdHeight | kDdsdWidth))
+            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: invalid DDS flags");
+
+        const int height = static_cast<int>(ReadU32LE(raw + 12));
+        const int width  = static_cast<int>(ReadU32LE(raw + 16));
+        int levels        = static_cast<int>(ReadU32LE(raw + 28));
+
+        const uint32_t formatSize = ReadU32LE(raw + 76);
+        if (formatSize != kDdsPixfmtSize)
+            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: bogus DDS pixel format size");
+        const uint32_t formatFlags  = ReadU32LE(raw + 80);
+        const uint32_t formatFourCC = ReadU32LE(raw + 84);
+
+        const uint32_t caps = ReadU32LE(raw + 108);
+        if ((caps & kDdscapsTexture) == 0)
+            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: not a texture");
+        const uint32_t caps2 = ReadU32LE(raw + 112);
+        const bool isCube = (caps2 & kDdscaps2Cubemap) == kDdscaps2Cubemap;
+        if (caps2 != 0 && !isCube)
+            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: invalid DDS caps2");
+        if (!isCube)
+            throw System::FormatException("This file does not contain cube data!");
+
+        if ((caps & kDdscapsMipmap) != kDdscapsMipmap)
+            levels = 1;
+        if (levels < 1)
+            levels = 1;
+
+        if ((formatFlags & kDdpfFourCC) == 0
+            || (formatFourCC != kFourCcDxt1 && formatFourCC != kFourCcDxt3 && formatFourCC != kFourCcDxt5))
+        {
+            throw System::NotSupportedException(
+                "TextureCube::DDSFromStreamEXT: unsupported DDS pixel format "
+                "(only DXT1/DXT3/DXT5-compressed cube maps are supported)");
+        }
+        if (width != height)
+            throw System::FormatException("TextureCube::DDSFromStreamEXT: cube map faces must be square");
+
+        // CNA deviation from FNA (documented, matches Texture2D::FromStream's own established
+        // precedent for the identical DDS/DXT problem): every face/level is fully decompressed to
+        // RGBA8 on the CPU via DxtUtil and uploaded as SurfaceFormat::Color, rather than uploading
+        // the compressed blocks directly to a real compressed GPU format — CNA doesn't implement
+        // compressed GPU texture formats end-to-end on any backend (NEXT.md's documented
+        // "SurfaceFormat support is Color-only for real GPU formats" limitation).
+        TextureCube result(device, width, levels > 1, SurfaceFormat::Color);
+
+        std::size_t offset = 128;
+        for (int face = 0; face < 6; ++face)
+        {
+            int levelSize = width;
+            for (int level = 0; level < levels; ++level)
+            {
+                const int blockBytes = CalculateDDSLevelSize(levelSize, levelSize, formatFourCC);
+                if (offset + static_cast<std::size_t>(blockBytes) > rawLen)
+                    throw System::FormatException("TextureCube::DDSFromStreamEXT: truncated DDS stream");
+
+                std::vector<uint8_t> rgba;
+                using CNA::Internal::Graphics::DxtUtil;
+                if (formatFourCC == kFourCcDxt1)
+                    rgba = DxtUtil::DecompressDxt1(raw + offset, static_cast<std::size_t>(blockBytes), levelSize, levelSize);
+                else if (formatFourCC == kFourCcDxt3)
+                    rgba = DxtUtil::DecompressDxt3(raw + offset, static_cast<std::size_t>(blockBytes), levelSize, levelSize);
+                else
+                    rgba = DxtUtil::DecompressDxt5(raw + offset, static_cast<std::size_t>(blockBytes), levelSize, levelSize);
+
+                std::vector<Color> colors(static_cast<std::size_t>(levelSize) * static_cast<std::size_t>(levelSize),
+                                          Color(0, 0, 0, 0));
+                rgbaToColors(rgba, colors.data(), 0, static_cast<int>(colors.size()));
+                result.SetData(static_cast<CubeMapFace>(face), level, nullptr,
+                               colors.data(), 0, static_cast<int>(colors.size()));
+
+                offset += static_cast<std::size_t>(blockBytes);
+                levelSize = std::max(1, levelSize / 2);
+            }
+        }
+        return result;
     }
 }

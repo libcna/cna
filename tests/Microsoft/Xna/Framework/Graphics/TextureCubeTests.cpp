@@ -22,6 +22,7 @@
 // lives in the EasyGL pixel-readback integration test: examples/easygl_texturecube_faces_test.cpp.
 
 #include <gtest/gtest.h>
+#include <cstdint>
 #include <stdexcept>
 #include <vector>
 
@@ -31,6 +32,9 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "System/FormatException.hpp"
+#include "System/IO/MemoryStream.hpp"
+#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -345,4 +349,194 @@ TEST_F(TextureCubeTest, DoubleDisposeDoesNotThrow)
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     tex.Dispose();
     EXPECT_NO_THROW(tex.Dispose());
+}
+
+// -----------------------------------------------------------------------
+// DDSFromStreamEXT (Task 663)
+//
+// Previously a silent stub — ignored `stream` entirely and always returned a blank 1x1 cube map.
+// Real implementation: parses the DDS header (magic/size/flags/width/height/mipCount/caps/caps2,
+// mirroring FNA's Texture.ParseDDS), rejects non-cube-map DDS files with FormatException (matching
+// FNA exactly), and decodes each of the 6 faces' DXT1/3/5-compressed levels to RGBA8 via DxtUtil
+// (CNA's established, already-accepted deviation from FNA for this exact class of problem — see
+// Texture2D::FromStream's identical TryDecodeDds/DxtUtil precedent), uploaded as SurfaceFormat::
+// Color.
+//
+// Test fixture: a minimal, hand-built, valid DDS cube map (4x4 faces, single mip level, DXT1) is
+// constructed byte-for-byte in BuildSolidColorCubeDds() below — one solid, exactly-RGB565-
+// representable colour per face (so decompression is exact, no tolerance needed) — since no real
+// .dds asset is available in this environment. Each DXT1 block encodes its face's colour via
+// color0==color1 (both set to the target colour) and all 2-bit indices == 0, which DxtUtil's own
+// decompressor maps to color0 in both of DXT1's internal comparison modes (confirmed by reading
+// DxtUtil::DecompressDxt1Block — index 0 always selects color0/c0 regardless of the c0>c1 branch).
+// -----------------------------------------------------------------------
+
+namespace
+{
+    void PushU32LE(std::vector<uint8_t>& v, uint32_t x)
+    {
+        v.push_back(static_cast<uint8_t>(x & 0xFF));
+        v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
+        v.push_back(static_cast<uint8_t>((x >> 16) & 0xFF));
+        v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
+    }
+
+    void PushAscii4(std::vector<uint8_t>& v, const char* s)
+    {
+        v.push_back(static_cast<uint8_t>(s[0]));
+        v.push_back(static_cast<uint8_t>(s[1]));
+        v.push_back(static_cast<uint8_t>(s[2]));
+        v.push_back(static_cast<uint8_t>(s[3]));
+    }
+
+    // Packs an exactly-RGB565-representable Color (each channel already 0 or 255) into one solid
+    // 8-byte DXT1 block: color0 == color1 == the target colour, every 2-bit index == 0.
+    void PushSolidDxt1Block(std::vector<uint8_t>& v, const Color& c)
+    {
+        const uint16_t rgb565 = static_cast<uint16_t>(
+            ((static_cast<uint32_t>(c.getRProperty()) >> 3) << 11) |
+            ((static_cast<uint32_t>(c.getGProperty()) >> 2) << 5)  |
+            (static_cast<uint32_t>(c.getBProperty()) >> 3));
+        v.push_back(static_cast<uint8_t>(rgb565 & 0xFF));
+        v.push_back(static_cast<uint8_t>((rgb565 >> 8) & 0xFF));
+        v.push_back(static_cast<uint8_t>(rgb565 & 0xFF));
+        v.push_back(static_cast<uint8_t>((rgb565 >> 8) & 0xFF));
+        v.push_back(0); v.push_back(0); v.push_back(0); v.push_back(0); // indices: all 0
+    }
+
+    constexpr uint32_t kDdsdHeightWidth = 0x2 | 0x4;
+    constexpr uint32_t kDdpfFourCC      = 0x4;
+    constexpr uint32_t kDdscapsTexture  = 0x1000;
+    constexpr uint32_t kDdscaps2Cubemap = 0x200;
+    constexpr uint32_t kDdscaps2AllFaces = 0xFC00; // all 6 DDSCAPS2_CUBEMAP_* face bits
+
+    // Builds a minimal, valid, single-mip-level DXT1 DDS cube map: `size`x`size` per face, one
+    // solid colour per face (faceColors[0..5] map to CubeMapFace::PositiveX..NegativeZ in order,
+    // matching the real DDS on-disk face layout FNA's TextureCube.DDSFromStreamEXT reads).
+    std::vector<uint8_t> BuildSolidColorCubeDds(int size, const Color faceColors[6],
+                                                bool asCubeMap = true, bool asDxt1 = true)
+    {
+        std::vector<uint8_t> d;
+        PushAscii4(d, "DDS ");
+        PushU32LE(d, 124);                       // header size
+        PushU32LE(d, kDdsdHeightWidth);           // flags
+        PushU32LE(d, static_cast<uint32_t>(size)); // height
+        PushU32LE(d, static_cast<uint32_t>(size)); // width
+        PushU32LE(d, 0);                          // pitchOrLinearSize (unused)
+        PushU32LE(d, 0);                          // depth (unused)
+        PushU32LE(d, 1);                          // mipMapCount (1 level)
+        for (int i = 0; i < 11; ++i) PushU32LE(d, 0); // reserved1
+
+        PushU32LE(d, 32);                         // pixel format size
+        PushU32LE(d, asDxt1 ? kDdpfFourCC : 0);    // pixel format flags
+        if (asDxt1) PushAscii4(d, "DXT1"); else PushU32LE(d, 0); // fourCC
+        PushU32LE(d, 0);                          // RGBBitCount
+        PushU32LE(d, 0);                          // RBitMask
+        PushU32LE(d, 0);                          // GBitMask
+        PushU32LE(d, 0);                          // BBitMask
+        PushU32LE(d, 0);                          // ABitMask
+
+        PushU32LE(d, kDdscapsTexture);             // caps
+        PushU32LE(d, asCubeMap ? (kDdscaps2Cubemap | kDdscaps2AllFaces) : 0); // caps2
+        PushU32LE(d, 0);                          // caps3 (unused)
+        PushU32LE(d, 0);                          // caps4 (unused)
+        PushU32LE(d, 0);                          // reserved2
+
+        // 6 faces x 1 level x 1 block (size==4 -> exactly one 4x4 DXT1 block per face)
+        for (int face = 0; face < 6; ++face)
+            PushSolidDxt1Block(d, faceColors[face]);
+
+        return d;
+    }
+}
+
+TEST_F(TextureCubeTest, DDSFromStreamEXTThrowsOnEmptyStream)
+{
+    System::IO::MemoryStream stream;
+    EXPECT_THROW(TextureCube::DDSFromStreamEXT(gd, stream), std::runtime_error);
+}
+
+TEST_F(TextureCubeTest, DDSFromStreamEXTThrowsOnNonDdsMagic)
+{
+    std::vector<uint8_t> garbage(128, 0xAB);
+    System::IO::MemoryStream stream(garbage.data(), static_cast<System::IO::intcs>(garbage.size()));
+    EXPECT_THROW(TextureCube::DDSFromStreamEXT(gd, stream), System::NotSupportedException);
+}
+
+TEST_F(TextureCubeTest, DDSFromStreamEXTThrowsWhenNotCubeMap)
+{
+    const Color colors[6] = {
+        Color(255, 0, 0, 255), Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+        Color(255, 0, 0, 255), Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+    };
+    std::vector<uint8_t> dds = BuildSolidColorCubeDds(4, colors, /*asCubeMap=*/false);
+    System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
+    EXPECT_THROW(TextureCube::DDSFromStreamEXT(gd, stream), System::FormatException);
+}
+
+TEST_F(TextureCubeTest, DDSFromStreamEXTThrowsOnUnsupportedFourCC)
+{
+    const Color colors[6] = {
+        Color(255, 0, 0, 255), Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+        Color(255, 0, 0, 255), Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+    };
+    std::vector<uint8_t> dds = BuildSolidColorCubeDds(4, colors, /*asCubeMap=*/true, /*asDxt1=*/false);
+    System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
+    EXPECT_THROW(TextureCube::DDSFromStreamEXT(gd, stream), System::NotSupportedException);
+}
+
+TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesSizeFormatAndLevelCount)
+{
+    const Color colors[6] = {
+        Color(255, 0, 0, 255), Color(0, 255, 0, 255), Color(0, 0, 255, 255),
+        Color(255, 255, 0, 255), Color(255, 0, 255, 255), Color(0, 255, 255, 255),
+    };
+    std::vector<uint8_t> dds = BuildSolidColorCubeDds(4, colors);
+    System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
+
+    TextureCube tex = TextureCube::DDSFromStreamEXT(gd, stream);
+    EXPECT_EQ(tex.getSizeProperty(), 4);
+    EXPECT_EQ(tex.getFormatProperty(), SurfaceFormat::Color);
+    EXPECT_EQ(tex.getLevelCountProperty(), 1);
+}
+
+TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
+{
+    // 6 maximally-distinct, exactly-RGB565-representable colours (each channel already 0 or
+    // 255), one per face in real DDS on-disk order (+X,-X,+Y,-Y,+Z,-Z).
+    const Color expected[6] = {
+        Color(255, 0, 0, 255),   // PositiveX: red
+        Color(0, 255, 0, 255),   // NegativeX: green
+        Color(0, 0, 255, 255),   // PositiveY: blue
+        Color(255, 255, 0, 255), // NegativeY: yellow
+        Color(255, 0, 255, 255), // PositiveZ: magenta
+        Color(0, 255, 255, 255), // NegativeZ: cyan
+    };
+    std::vector<uint8_t> dds = BuildSolidColorCubeDds(4, expected);
+    System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
+
+    TextureCube tex = TextureCube::DDSFromStreamEXT(gd, stream);
+
+    const CubeMapFace faces[6] = {
+        CubeMapFace::PositiveX, CubeMapFace::NegativeX,
+        CubeMapFace::PositiveY, CubeMapFace::NegativeY,
+        CubeMapFace::PositiveZ, CubeMapFace::NegativeZ,
+    };
+    for (int i = 0; i < 6; ++i)
+    {
+        // GetData(face, data, elementCount)'s 3-arg overload reads the ENTIRE face (its
+        // elementCount must match width*height, same contract as SetData's identical overload —
+        // it is not an arbitrary partial-read count), so read all 4x4=16 texels and just check
+        // the first (every texel is the same solid colour by construction).
+        std::vector<Color> got(16, Color(0, 0, 0, 0));
+        tex.GetData(faces[i], got.data(), 16);
+#ifdef CNA_BACKEND_EASYGL
+        // Vulkan/Bgfx: Texture3D/TextureCube::GetData is a known, already-tracked no-op
+        // (Task 865, unrelated to DDS loading) — SetData's own content can't be verified via
+        // readback on those backends yet, so this exact-colour assertion is EasyGL-only.
+        EXPECT_EQ(got[0].getRProperty(), expected[i].getRProperty()) << "face " << i;
+        EXPECT_EQ(got[0].getGProperty(), expected[i].getGProperty()) << "face " << i;
+        EXPECT_EQ(got[0].getBProperty(), expected[i].getBProperty()) << "face " << i;
+#endif
+    }
 }

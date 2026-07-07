@@ -37,6 +37,15 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Destructor. */
         NOXNA ~TextureCube() override;
 
+        /** @brief Not copyable — owns a unique GPU backend handle. */
+        NOXNA TextureCube(const TextureCube&) = delete;
+        /** @brief Not copyable — owns a unique GPU backend handle. */
+        NOXNA TextureCube& operator=(const TextureCube&) = delete;
+        /** @brief Movable — transfers ownership of the GPU backend handle. */
+        NOXNA TextureCube(TextureCube&&) noexcept = default;
+        /** @brief Movable — transfers ownership of the GPU backend handle. */
+        NOXNA TextureCube& operator=(TextureCube&&) noexcept = default;
+
         /** @brief Returns the fully qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 

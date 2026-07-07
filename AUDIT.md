@@ -196,7 +196,7 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | Texture3D | ✅ | Detailed audit (Task 271, Phase 33): fixed `LevelCount` hardcoded to 1 (ignored `mipMap`), fixed missing null/count/startIndex/box-bounds guards on `SetData`/`GetData` (crash + OOB read/write risks), fixed missing `Dispose(bool)` override (GPU resource leak on explicit Dispose). See below. |
 | TextureAddressMode (enum) | ✅ | Complete |
 | TextureCollection | ✅ | API complete |
-| TextureCube | ✅ | Detailed audit (Task 272, Phase 33): fixed the same 3 bug classes as `Texture3D` (hardcoded `LevelCount`, missing `SetData`/`GetData` guards, missing `Dispose(bool)`), plus 2 `TextureCube`-specific findings: a missing `SetData`/`GetData(face,data,startIndex,elementCount)` overload (added), and a `rect==nullptr`-at-`level>0` bug that ignored mip-level dimensions entirely (fixed). `DDSFromStreamEXT` confirmed to be a non-functional stub — documented, not fixed, recommended as an urgent follow-up. See below. |
+| TextureCube | ✅ | Detailed audit (Task 272, Phase 33): fixed the same 3 bug classes as `Texture3D` (hardcoded `LevelCount`, missing `SetData`/`GetData` guards, missing `Dispose(bool)`), plus 2 `TextureCube`-specific findings: a missing `SetData`/`GetData(face,data,startIndex,elementCount)` overload (added), and a `rect==nullptr`-at-`level>0` bug that ignored mip-level dimensions entirely (fixed). `DDSFromStreamEXT` is now a real implementation (Task 663) — DDS header parsing (mirrors FNA's `Texture.ParseDDS`), per-face/per-level DXT1/3/5 decode via `DxtUtil`, uploaded as `SurfaceFormat::Color` (CNA doesn't implement compressed GPU formats end-to-end on any backend, matching `Texture2D::FromStream`'s own established precedent). See below. |
 | TextureFilter (enum) | ✅ | Complete |
 | VertexBuffer | ✅ | API complete |
 | VertexBufferBinding | ✅ | API complete |
@@ -770,6 +770,9 @@ resume-prompt note), `TextureCube` had the *exact same 3 bug classes* Task 271 f
    (wrongly) since `level` was never consulted.
 
 #### Confirmed severe bug — NOT fixed (out of Task 272's guard-fixing scope)
+
+**RESOLVED (Task 663):** `DDSFromStreamEXT` is now a real implementation — see `plan_graphics.md`'s
+Task 663 entry and `NEXT.md` §3 for the full writeup. Historical finding preserved below.
 
 6. **`DDSFromStreamEXT` is a non-functional stub.** `TextureCube::DDSFromStreamEXT(GraphicsDevice&,
    Stream&)` (`TextureCube.cpp`, pre- and post- this task) is:
