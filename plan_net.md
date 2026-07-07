@@ -1300,10 +1300,29 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
   **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 6.8** — Investigate reducing the repeated `Flush()` calls after every single `Send()`
+- [x] **Task 6.8** — Investigate reducing the repeated `Flush()` calls after every single `Send()`
   inside per-peer broadcast fan-out loops (e.g. `HandleClientHello`'s `GamerJoinBroadcastMessage`
   fan-out, ~lines 168-176). Not a correctness bug, but an avoidable syscall-per-peer cost if
   fan-out ever scales past a handful of peers — batch the sends and flush once per broadcast instead.
+
+  Confirmed 3 per-peer fan-out loops, all calling the existing `SendTo` helper (which bundled
+  `Send()` + `Flush()` together) once per peer: `HandleClientHello`'s `GamerJoinBroadcastMessage`
+  fan-out, `HandleDisconnect`'s `GamerLeaveBroadcastMessage` fan-out, and
+  `BroadcastStateChange`'s `StateChangeBroadcastMessage` fan-out. Every other `SendTo` call site
+  is a genuine single-recipient send and was left untouched.
+
+  Split `SendTo` into a new `QueueSend` (just the `Send()` call, no flush) plus `SendTo` itself
+  (now `QueueSend` + `Flush()`, unchanged behavior for single-recipient callers). Updated all 3
+  fan-out loops to call `QueueSend` per peer and `state.Host.Flush()` exactly once after the loop
+  — one `enet_host_flush()` per broadcast instead of one per recipient.
+
+  Pure non-functional (syscall-count) refactor with no observable behavioral difference — final
+  delivered packets are identical either way, only timing/syscall count differs, which isn't
+  meaningfully unit-testable without invasive flush-call instrumentation disproportionate to this
+  cleanup (consistent with Task 5.12's precedent for pure refactors: existing full-suite coverage,
+  including the real end-to-end `ENetBackendTest`/`TwoProcessLoopbackTest` traffic tests, is the
+  correct validation here, not a new synthetic test). No revert-verify applies. Full suite:
+  **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 6.9** — Re-verify `LeaderboardReader`-adjacent doc-comment accuracy: confirm the
   `HasLeftSession` doc-comment in `NetworkGamer.hpp` (~line 30) correctly describes FNA's actual

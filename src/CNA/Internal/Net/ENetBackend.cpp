@@ -145,7 +145,11 @@ namespace CNA::Internal::Net
             return roster;
         }
 
-        void SendTo(
+        // Task 6.8: queues the packet on peer without flushing - used by per-peer broadcast
+        // fan-out loops, which queue every peer's copy first and flush exactly once after the
+        // loop (see SendTo just below for the single-recipient case, which still flushes
+        // immediately every time).
+        void QueueSend(
             SessionState& state,
             ENetPeer* peer,
             const std::vector<SharpRuntime::bytecs>& bytes,
@@ -154,6 +158,17 @@ namespace CNA::Internal::Net
         )
         {
             state.Host.Send(peer, channel, bytes.data(), bytes.size(), NetPacketCodec::SendDataOptionsToEnetFlags(options));
+        }
+
+        void SendTo(
+            SessionState& state,
+            ENetPeer* peer,
+            const std::vector<SharpRuntime::bytecs>& bytes,
+            SendDataOptions options,
+            uint8_t channel = kControlChannel
+        )
+        {
+            QueueSend(state, peer, bytes, options, channel);
             state.Host.Flush();
         }
 
@@ -207,13 +222,17 @@ namespace CNA::Internal::Net
             if (!broadcastMsg.NewGamers.empty())
             {
                 auto bytes = NetPacketCodec::Encode(broadcastMsg);
+                // Task 6.8: queue every peer's copy first, flush exactly once after the loop -
+                // avoids one enet_host_flush() syscall per peer for what's otherwise identical
+                // fan-out traffic.
                 for (auto& [otherPeer, wireIds] : state.PeerWireIds)
                 {
                     if (otherPeer != peer)
                     {
-                        SendTo(state, otherPeer, bytes, SendDataOptions::Reliable);
+                        QueueSend(state, otherPeer, bytes, SendDataOptions::Reliable);
                     }
                 }
+                state.Host.Flush();
             }
         }
 
@@ -377,10 +396,13 @@ namespace CNA::Internal::Net
             if (!broadcastMsg.WireIds.empty())
             {
                 auto bytes = NetPacketCodec::Encode(broadcastMsg);
+                // Task 6.8: same batch-then-flush-once reasoning as HandleClientHello's own
+                // broadcast fan-out above.
                 for (auto& [otherPeer, wireIds] : state.PeerWireIds)
                 {
-                    SendTo(state, otherPeer, bytes, SendDataOptions::Reliable);
+                    QueueSend(state, otherPeer, bytes, SendDataOptions::Reliable);
                 }
+                state.Host.Flush();
             }
         }
 
@@ -707,9 +729,12 @@ namespace CNA::Internal::Net
         StateChangeBroadcastMessage msg;
         msg.NewState = newState;
         auto bytes = NetPacketCodec::Encode(msg);
+        // Task 6.8: same batch-then-flush-once reasoning as HandleClientHello/HandleDisconnect's
+        // own broadcast fan-outs.
         for (auto& [peer, wireIds] : state.PeerWireIds)
         {
-            SendTo(state, peer, bytes, SendDataOptions::Reliable);
+            QueueSend(state, peer, bytes, SendDataOptions::Reliable);
         }
+        state.Host.Flush();
     }
 }
