@@ -1920,10 +1920,19 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   PropertyDictionary&`. No revert-verify applies (pure test-coverage addition for already-correct
   code). Full suite: 3361/3361 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 9.7** — Add equal-case and not-equal-case (differing gamer, rating, ranking) tests for
+- [x] **Task 9.7** — Add equal-case and not-equal-case (differing gamer, rating, ranking) tests for
   `LeaderboardEntry::operator==`/`operator!=` — currently zero coverage, despite the class's own
   doc-comment stating the operator exists specifically to support
   `ReadOnlyCollection<T>::IndexOf/Contains`.
+
+  Added a new `--- LeaderboardEntry ---` section to `GamerServicesCollectionsTests.cpp`:
+  `EqualityIsStructural` (equal case, same gamer pointer/rating/ranking) plus
+  `DifferingGamerIsNotEqual`/`DifferingRatingIsNotEqual`/`DifferingRankingIsNotEqual` (one
+  not-equal case per field), using `FriendGamer` (a concrete, stack-constructible `Gamer`
+  subclass) as the gamer pointer, following the same pattern already established for
+  `Achievement::EqualityIsStructural`. No revert-verify applies (pure test-coverage addition for
+  already-correct code from Task 8.2). Full suite: 3365/3365 passing (2 expected
+  accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 9.8** — Add an out-of-process test (mirroring
   `tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp`'s isolation pattern) for

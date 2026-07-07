@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
@@ -484,4 +485,43 @@ TEST(FriendCollectionTest, AddAppendsAndRemoveDeletesTheRightElement) {
     ASSERT_EQ(2, col.getCountProperty());
     EXPECT_EQ(&fgB, col[0]);
     EXPECT_EQ(&fgC, col[1]);
+}
+
+// --- LeaderboardEntry ---
+
+// Task 9.7: LeaderboardEntry::operator==/operator!= (structural equality over gamer/rating/
+// ranking, since by-value storage has no reference-identity equivalent for FNA's own real
+// LeaderboardEntry) had zero coverage, despite the class's own doc comment stating the operator
+// exists specifically to support ReadOnlyCollection<T>::IndexOf/Contains.
+TEST(LeaderboardEntryTest, EqualityIsStructural) {
+    auto fg = FriendGamer::CreateInternal("t", "d", false, false, false, false, false, false);
+    auto a = LeaderboardEntry::CreateInternal(&fg, 100, 1);
+    auto b = LeaderboardEntry::CreateInternal(&fg, 100, 1);
+    EXPECT_TRUE(a == b);
+    EXPECT_FALSE(a != b);
+}
+
+TEST(LeaderboardEntryTest, DifferingGamerIsNotEqual) {
+    auto fgA = FriendGamer::CreateInternal("a", "A", false, false, false, false, false, false);
+    auto fgB = FriendGamer::CreateInternal("b", "B", false, false, false, false, false, false);
+    auto a = LeaderboardEntry::CreateInternal(&fgA, 100, 1);
+    auto b = LeaderboardEntry::CreateInternal(&fgB, 100, 1);
+    EXPECT_FALSE(a == b);
+    EXPECT_TRUE(a != b);
+}
+
+TEST(LeaderboardEntryTest, DifferingRatingIsNotEqual) {
+    auto fg = FriendGamer::CreateInternal("t", "d", false, false, false, false, false, false);
+    auto a = LeaderboardEntry::CreateInternal(&fg, 100, 1);
+    auto b = LeaderboardEntry::CreateInternal(&fg, 200, 1);
+    EXPECT_FALSE(a == b);
+    EXPECT_TRUE(a != b);
+}
+
+TEST(LeaderboardEntryTest, DifferingRankingIsNotEqual) {
+    auto fg = FriendGamer::CreateInternal("t", "d", false, false, false, false, false, false);
+    auto a = LeaderboardEntry::CreateInternal(&fg, 100, 1);
+    auto b = LeaderboardEntry::CreateInternal(&fg, 100, 2);
+    EXPECT_FALSE(a == b);
+    EXPECT_TRUE(a != b);
 }
