@@ -185,6 +185,12 @@ namespace CNA::Internal::Input
         static CNA::Input::JoystickStateEXT GetJoystickState(std::uint32_t id);
 
         /**
+         * @brief Internal (not public CNA::Input API): the raw SDL handle for an opened joystick, so
+         *        N-013 Haptics can call `SDL_OpenHapticFromJoystick` on it. nullptr if not connected.
+         */
+        static SDL_Joystick* GetOpenedJoystickHandle(std::uint32_t id);
+
+        /**
          * @brief Translates a US-layout Keys value to the Keys value the current keyboard
          * layout produces at that same physical key position. Returns Keys::None if no
          * mapping exists in either direction.

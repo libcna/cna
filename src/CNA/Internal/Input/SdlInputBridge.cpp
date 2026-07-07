@@ -1468,6 +1468,11 @@ namespace CNA::Internal::Input
         return state;
     }
 
+    SDL_Joystick* SdlInputBridge::GetOpenedJoystickHandle(const std::uint32_t id)
+    {
+        return find_opened_joystick(id);
+    }
+
     Microsoft::Xna::Framework::Input::Keys SdlInputBridge::GetKeyFromScancode(
         const Microsoft::Xna::Framework::Input::Keys scancode
     )

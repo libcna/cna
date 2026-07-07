@@ -34,7 +34,7 @@
   N-004 — an explicit scope cut so the pass can move straight to N-007/N-013.
 
 ## Phase P3 — powerful but platform-narrow / manual actuation
-- [ ] **N-013 `CNA::Input::Haptics`** — SDL_haptic force-feedback (constant/periodic/ramp/condition/custom + gain/autocenter).
+- [x] **N-013 `CNA::Input::Haptics`** — SDL_haptic force-feedback (constant/periodic/ramp/condition/custom + gain/autocenter). Real actuation manual `[!]`.
 - [x] **N-014 `TextInputEXT::TextEditingCandidatesEXT`** — IME candidate lists (`SDL_EVENT_TEXT_EDITING_CANDIDATES`). Input-type hints -> N-014b.
 - [x] **N-014b `TextInputEXT` input-type hints** — `StartTextInputWithTypeEXT(TextInputTypeEXT)` (text/URL/email/number/password) via `SDL_StartTextInputWithProperties` (split off from N-014).
 - [x] **N-015 `CNA::Input::Sensors`** — device-level accelerometer/gyro + enumeration (`SDL_sensor`) via seam.
@@ -50,9 +50,65 @@
 - No SDL type may appear in a public header (opaque `uintptr_t` / internal seam only).
 - Device-query capabilities get an injectable backend + fake (mirror `ISdlGamepadBackend`); real actuation is `[!]`.
 - CMake auto-globs `src/**/*.cpp` + `tests/**/*.cpp` (CONFIGURE_DEPENDS) — reconfigure if a fresh file isn't picked up.
+- Not every device-scoped seam needs `SdlInputBridge` hot-plug tracking: N-013 Haptics is
+  caller-managed RAII (`Haptics::OpenEXT` -> `HapticDevice`, closed on `Dispose()`/destruction), no
+  bridge event-switch involvement at all (unlike N-007 Joystick's always-open registry). Pick whichever
+  lifecycle model matches how the real device is actually used.
+
+## Pass status (2026-07-07)
+
+All planned tasks are resolved: 21 done, N-004 skipped (engineering conflict), N-012 cancelled (owner
+request). Nothing remains to pick up from this backlog — see `NEXT.md` before starting new NOXNA work.
 
 ## Log
 (most recent first — filled as tasks complete)
+- **N-013 done (2026-07-07):** `CNA::Input::Haptics` + `CNA::Input::HapticDevice` — SDL3 force-feedback
+  (`SDL_haptic`), the last task in this pass (N-004 skipped, N-012 cancelled are the only non-done
+  rows now). New enum/descriptor headers: `HapticFeatureEXT` (bit flags, mirrors `SDL_HapticFeatures`),
+  `HapticDirectionTypeEXT`/`HapticDirectionEXT` (Polar/Cartesian/Spherical/SteeringAxis),
+  `HapticEffectTypeEXT` (13 effect families), `HapticInfoEXT` (enumeration id+name),
+  `HapticCapabilitiesEXT` (features/axes/max-effects/rumble), and `HapticEffectEXT` — one flattened
+  descriptor covering every SDL effect family (Constant/Sine/Square/Triangle/SawtoothUp/SawtoothDown/
+  Ramp/Spring/Damper/Inertia/Friction/LeftRight/Custom) instead of six separate tagged-union-mirroring
+  types, since this is NOXNA-only (no FNA fidelity constraint) and a `type`-discriminated flat struct
+  is far less combinatorial than 6 near-identical types + 6 test suites + 6x the Doxygen.
+  `CNA::Input::HapticDevice` (whole-class NOXNA, RAII, move-only, `System::IDisposable`, mirrors
+  `MouseCursor`'s SDL-forward-declared-pointer pattern) wraps an opened `SDL_Haptic*`: capabilities,
+  simple rumble (Init/Play/Stop), the full effect lifecycle (Create/Update/Run/Stop/Destroy/Status/
+  StopAll), and Gain/Autocenter/Pause/Resume. `CNA::Input::Haptics` (static factory/enumerator, like
+  `Joysticks`/`Sensors`) opens a device standalone (`OpenEXT(id)`), from an already-connected raw
+  joystick (`OpenFromJoystickEXT`, reusing N-007's `Joysticks` subsystem), or from the mouse
+  (`OpenFromMouseEXT`) — a **new** `SdlInputBridge::GetOpenedJoystickHandle(id)` internal-only
+  accessor (not part of the public `CNA::Input` surface) bridges N-007's opened-joystick registry to
+  N-013's `OpenFromJoystickEXT` without leaking `SDL_Joystick*` into any public header. New,
+  independent seam `ISdlHapticBackend` (`include|src/CNA/Internal/Input/SdlHapticBackend.hpp/.cpp`) —
+  unlike the gamepad/joystick seams, haptic devices have **no hot-plug lifecycle owned by
+  SdlInputBridge**: a `HapticDevice` is opened/closed explicitly by the caller (RAII), mirroring
+  `MouseCursor` rather than the always-open gamepad/joystick registries, so no bridge event-switch
+  changes were needed beyond the one accessor. The `HapticEffectEXT -> SDL_HapticEffect` union
+  conversion lives in `HapticDevice.cpp`'s anonymous namespace (explicit switch-case mapping for both
+  the direction-type and effect-type enums — never relying on numeric ordinal coincidence with SDL's
+  constants, even where they currently match). Whole types NOXNA/additive (no freeze pin, matches
+  Sensors/Power/InputDevices/Joysticks precedent). Tests `tests/CNA/Internal/Input/
+  SdlHapticBackendTests.cpp` (new `FakeSdlHapticBackend.hpp`) — 37 tests: enumeration, open/close
+  (standalone/from-joystick/from-mouse, using N-007's `FakeSdlJoystickBackend` + a synthetic
+  `SDL_EVENT_JOYSTICK_ADDED` to get a real opened-joystick handle to open a haptic from), move
+  semantics, capabilities, rumble, the full effect lifecycle, the union conversion for **every**
+  effect family (including per-axis condition arrays and the Custom raw-sample-buffer path), gain/
+  autocenter/pause/resume, closed-device safe-defaults for every method, and descriptor-equality +
+  bit-op tests. Caught and fixed one **test-double-only** bug during this task: the fake's `Create/
+  UpdateHapticEffect` initially copied the `SDL_HapticEffect` union by value (capturing the `custom.
+  data` raw pointer) without snapshotting the pointee, so introspecting `lastCreatedEffect.custom.
+  data` after the call returned read freed memory (the caller's local `std::vector` had already been
+  destroyed) — real SDL copies Custom sample data synchronously during the call so production
+  `HapticDevice::CreateEffectEXT`/`UpdateEffectEXT` were never at risk; fixed by having the fake
+  snapshot the buffer into an owned member and repoint `.custom.data` at that snapshot. Added
+  `*Haptic*` to `CNA_INPUT_TEST_FILTER` (CMakeLists.txt). `ctest -L input` green; ASan-clean
+  (`detect_leaks=0`, documented `libGLX_mesa` false positive). Files: HapticFeature.hpp,
+  HapticDirection.hpp, HapticEffectType.hpp, HapticEffect.hpp, HapticInfo.hpp,
+  HapticCapabilities.hpp, HapticDevice.hpp/.cpp, Haptics.hpp/.cpp, SdlHapticBackend.hpp/.cpp,
+  SdlInputBridge.hpp/.cpp (GetOpenedJoystickHandle only), FakeSdlHapticBackend.hpp (new),
+  SdlHapticBackendTests.cpp (new), CMakeLists.txt.
 - **N-012 CANCELLED (2026-07-07, owner request):** stylus/pen support removed from scope for this
   pass. Not implemented; no code changes.
 - **N-007 done (2026-07-07):** `CNA::Input::Joysticks` — raw joystick access (axes/buttons/hats/

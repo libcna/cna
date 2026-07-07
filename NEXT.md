@@ -11,10 +11,11 @@
 >    Live tracker + per-task log: **`input_noxna_progress.md`** (repo root). Analysis/design doc:
 >    **`input_noxna.md`** (repo root).
 >
-> **As of 2026-07-07:** 20 of the input_noxna.md tasks are done (one commit each, all pushed).
-> **N-012 Pen was cancelled by the owner** (explicit scope cut, not an engineering conflict) — it will
-> not be implemented. What remains is exactly **one** task: N-013 Haptics (see §6/§8). Branch in sync
-> with `origin/feature/input` at `8e99997c`.
+> **As of 2026-07-07: the `input_noxna.md` pass is COMPLETE.** 21 tasks done (one commit each, all
+> pushed), N-004 skipped (engineering conflict, not an owner question), N-012 Pen cancelled (explicit
+> owner scope cut). **Nothing is queued from this backlog** — §6/§8 are kept for reference/precedent
+> only. If asked to keep going, see §6's "if new NOXNA work is requested" note before inventing scope.
+> Branch in sync with `origin/feature/input` at `<haptics-commit-hash>` (fill in after the N-013 commit).
 
 ## 1. Project summary
 
@@ -31,11 +32,11 @@
   (`include|src/CNA/Input/`), whole class marked `NOXNA`. `.NET`-style helpers live in the sibling
   repo `sharp-runtime` (`System::MulticastAction<...>`, aliases, etc.).
 
-## 2. Current status (input_noxna.md pass)
+## 2. Current status (input_noxna.md pass) — COMPLETE
 
 - **Build:** clean. Every task this pass builds on **EasyGL** (`cmake-build-input-easygl`) and the
   **ASan** build (`cmake-build-input-asan`); `ctest -L input` = 100% green after each.
-- **20 tasks DONE** (each = its own commit, tested, pushed). See §3 for the commit list and
+- **21 tasks DONE** (each = its own commit, tested, pushed). See §3 for the commit list and
   `input_noxna_progress.md` for the full per-task log. Grouped:
   - **GamePad EXT (poll via `ISdlGamepadBackend`):** N-009 player-index · N-009b battery/power (shared
     `PowerStateEXT`) · N-010 metadata (name/path/serial/firmware/steam-handle) · N-010b connection-state
@@ -46,21 +47,28 @@
     N-016 capture + global-position/warp.
   - **New `CNA::Input` types:** N-001 `Clipboard` · N-018 `Power` · N-015 `Sensors` · N-017
     `InputDevices` (enumeration) · N-017b InputDevices hot-plug events · N-007 `Joysticks` (raw
-    joystick, its own `ISdlJoystickBackend` seam separate from the gamepad seam).
+    joystick, its own `ISdlJoystickBackend` seam separate from the gamepad seam) · N-013 `Haptics` +
+    `HapticDevice` (SDL3 force-feedback, its own `ISdlHapticBackend` seam, caller-managed RAII with no
+    bridge hot-plug involvement).
   - **Text:** N-014 `TextInputEXT::TextEditingCandidatesEXT` (IME candidate list) · N-014b
     `StartTextInputWithTypeEXT` (input-type hints).
 - **Skipped:** **N-004** (Mouse cursor-visibility EXT) — would conflict with the existing
   `Game::IsMouseVisible` path (which already calls `SDL_ShowCursor`). Engineering decision, not an
   owner question. Recorded in `input_noxna_progress.md`.
 - **Cancelled:** **N-012 `CNA::Input::Pen`** (stylus support) — explicit owner request (2026-07-07),
-  not an engineering conflict. Will not be implemented in this pass.
+  not an engineering conflict. Will not be implemented.
 - **Not headless-verifiable (by design):** real gamepad/joystick/haptic **actuation**, real **IME**
   composition, live **sensors**, OS **hot-plug** on physical hardware. The injectable seams + fakes
   prove translation/plumbing; real-device wiring is manual `[!]`.
+- **Nothing left to pick up from `input_noxna.md`.** If the owner asks for more NOXNA/SDL3 extension
+  work, that means either (a) revisiting N-012 Pen (only on explicit request — it was deliberately
+  cancelled) or (b) scoping genuinely new ideas not in the original `input_noxna.md` analysis; don't
+  assume there's an implicit next task.
 
 ## 3. This session's commits (most recent first, all on `feature/input`, all pushed)
 
 ```
+<haptics-commit-hash> input(N-013):  CNA::Input::Haptics + HapticDevice SDL3 force-feedback
 8e99997c input(N-007):  CNA::Input::Joysticks raw-joystick access
 95db2319 input(N-014b): TextInputEXT input-type hint EXT
 f92dc71a fix(GamerServices): follow sharp-runtime's RegionInfo::CurrentRegion rename
@@ -153,22 +161,21 @@ id-only events (see N-017b, N-007).
 - New source files under `src/**` and `tests/**` are auto-globbed (CONFIGURE_DEPENDS); `ninja` will
   reconfigure. New `CNA::Input` test suites must be named `CnaInput<Type>Test`.
 
-## 6. Remaining tasks
+## 6. Remaining tasks — NONE (kept for reference)
 
-- **N-013 `CNA::Input::Haptics` (SDL_haptic — the only remaining task).** Force-feedback beyond simple
-  rumble. SDL: `SDL_haptic.h` — `SDL_OpenHapticFromJoystick`/`SDL_OpenHaptic`, `SDL_CreateHapticEffect`,
-  `SDL_RunHapticEffect`, `SDL_UpdateHapticEffect`, `SDL_StopHapticEffect`, `SDL_SetHapticGain`,
-  `SDL_SetHapticAutocenter`, effect types constant/periodic/ramp/condition/custom (`SDL_HapticEffect`
-  union). Shape: `CNA::Input::Haptics` with an effect-builder + play/stop, behind an injectable seam +
-  fake — `N-007`'s new `ISdlJoystickBackend` is a nearby precedent for "own device-scoped seam,
-  separate from the gamepad one" if haptic devices need to be opened from a joystick handle
-  (`SDL_OpenHapticFromJoystick`). **Real actuation is manual `[!]`** — the fake verifies the
-  effect-struct building + call plumbing. Platform: Win/Lin ✓, mac ~, Android/Web ✗.
+The backlog is empty. N-013 Haptics (the last task) is done — see §3/§2 and `input_noxna_progress.md`'s
+N-013 log entry for its full design (the flattened `HapticEffectEXT` descriptor covering all 13 SDL
+effect families, `HapticDevice` RAII, the new `SdlInputBridge::GetOpenedJoystickHandle` bridge accessor
+for `OpenFromJoystickEXT`).
 
 **Cancelled, not remaining:** N-012 `CNA::Input::Pen` (stylus) — owner cut this from scope
-(2026-07-07); do not implement it even opportunistically.
+(2026-07-07); do not implement it even opportunistically, even though `input_noxna.md` still documents
+its analysis for reference.
 
-(`input_noxna.md` §6.2 has the full Haptics analysis, platform matrix, and effect-family breakdown.)
+**If asked for more NOXNA work:** don't invent a new N-xxx from thin air. Either (a) the owner
+explicitly reopens N-012 Pen, or (b) scope a genuinely new idea and add it to `input_noxna.md`/
+`input_noxna_progress.md` as a new task first, following the same one-task-one-commit discipline (§5)
+and picking whichever pattern in §4 fits its lifecycle model.
 
 ## 7. Useful commands
 
@@ -192,14 +199,11 @@ xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-asan/CnaTests --gtest_fi
 `*CnaInput*`, `*GamePad*`, `*Keyboard*`, `*Mouse*`, `*Touch*`, `*SdlInputBridge*`, `*PublicApiInput*`,
 etc. Name new suites so one of those globs matches.
 
-## 8. Order to resume (input_noxna.md)
+## 8. Order to resume (input_noxna.md) — pass is complete, nothing queued
 
-1. **Read `input_noxna_progress.md`** (task list + Log + notes) and `input_noxna.md` §6.2 (Haptics).
-2. **N-013 Haptics** — the only task left. Effect-builder behind an injectable seam (Pattern 4-style,
-   own seam per §4), real actuation `[!]`. Split it further if it grows (e.g. rumble/simple effects in
-   one commit, richer effect families in follow-ups) — one task = one commit still applies (§5).
-3. Once N-013 lands, the `input_noxna.md` pass is complete (modulo N-012's cancellation and N-004's
-   skip) — update NEXT.md's header/status to say so and stop looking for more work here.
+There is no next task in this backlog. If you land here expecting to pick up N-013 Haptics: it's
+already done (§2/§3). Before doing anything else, confirm with the owner what new work they actually
+want — don't restart N-012 Pen or invent a new NOXNA task on your own initiative.
 
 ## 9. Boundaries / guards that must stay stable
 
@@ -233,22 +237,20 @@ etc. Name new suites so one of those globs matches.
 ## 11. Resume prompt
 
 ```
-Read NEXT.md, then input_noxna_progress.md. You are continuing the input_noxna.md NOXNA/SDL3 input-
-extension pass on branch feature/input (the plan_input.md XNA-completion pass is already done).
+Read NEXT.md, then input_noxna_progress.md. The input_noxna.md NOXNA/SDL3 input-extension pass on
+branch feature/input is COMPLETE — 21 tasks done, N-004 skipped, N-012 Pen cancelled by the owner.
+There is nothing queued.
 
-- The only remaining task is N-013 Haptics (NEXT.md §6). N-012 Pen was cancelled by the owner — do
-  not implement it. Implement N-013 following Pattern 4 in NEXT.md §4 (own device-scoped seam,
-  separate from the gamepad/joystick seams), splitting into multiple commits if the effect-family
-  surface is too large for one.
-- Follow the per-task discipline in NEXT.md §5: build cmake-build-input-easygl + ASan, keep
-  `ctest -L input` 100% green (shuffle x5), pin any EXT-on-XNA member in the signature-freeze test +
-  docs/input-public-api-frozen.md (a whole-class-NOXNA CNA::Input type needs neither), update
-  input_noxna_progress.md ([x] + Log entry), commit `input(N-xxx): ...` with the standard trailer
-  staging files by explicit name, then push.
+- Do NOT restart N-012 Pen or invent a new N-xxx task on your own — confirm with the owner what new
+  work is actually wanted first.
+- If the owner names new NOXNA/SDL3 extension work, scope it as a new task in input_noxna.md /
+  input_noxna_progress.md first, then follow NEXT.md §4 (reusable patterns — pick by lifecycle model:
+  poll-based gamepad-seam extension, NOXNA member on a frozen XNA type, standalone type + system seam,
+  or standalone type + its own device-scoped seam) and §5 (per-task discipline: one task = one commit,
+  build cmake-build-input-easygl + ASan, keep `ctest -L input` 100% green shuffled x5, pin any
+  EXT-on-XNA member in the signature-freeze test + docs/input-public-api-frozen.md, update
+  input_noxna_progress.md, commit `input(N-xxx): ...` with the standard trailer staging files by
+  explicit name, then push).
 - Respect NEXT.md §9 boundaries and §10 do-nots: no SDL in public headers, no CNA::Internal in the
-  XNA layer, no merge, no Graphics work, one task = one commit, split a task if it grows.
-- New standalone types go in CNA::Input with a whole-class NOXNA and an injectable seam + fake (see
-  the existing SystemPower/SystemMouse/SystemSensor/SystemDevice seams, or the SdlJoystickBackend
-  seam for a device-handle-based precedent). New test suites must be named so a CNA_INPUT_TEST_FILTER
-  glob matches (e.g. CnaInput*, or add a new token like *Joystick* was added for N-007).
+  XNA layer, no merge, no Graphics work.
 ```
