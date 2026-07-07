@@ -50,12 +50,13 @@ texture-upload path into
 `Microsoft::Xna::Framework::Graphics::Texture2D`).
 
 **Round 2 (Section 8, added 2026-07-07, after Phases 1-4 landed):** a second SDL3
-capability sweep found two more strong candidates — `MessageBox` (the single best
-cross-platform coverage of anything surveyed in either round) and `Monitors`
-(multi-display enumeration, genuinely new territory beyond `DisplayInfo`'s existing
-single-window scope) — plus `Process` (desktop-only), a pen-input candidate blocked on
-a shared open question with `Camera`, and several candidates explicitly ruled out with
-rationale. See Section 8 for the full survey.
+capability sweep found `MessageBox` — the single best cross-platform coverage of
+anything surveyed in either round — as the standout new candidate; it is now approved
+and being implemented as `DEVICES-CNA-011` (`plan_cna_devices.md`). A handful of other
+candidates surfaced in that same sweep (`Monitors`/multi-display enumeration, `Process`,
+pen-device queries) were considered and rejected by the user as not a fit for this
+project; see Section 8 for the surviving analysis and `plan_cna_devices.md`'s progress
+log for the rejection record.
 
 ---
 
@@ -660,122 +661,7 @@ section.**
   callback lifetime to manage), high value (broadest platform reach of anything
   surveyed). Strong candidate for the next phase if implementation resumes.**
 
-### 8.2 `Monitors` / multi-display enumeration — extending beyond `DisplayInfo`'s current single-window scope
-
-- **SDL3 API:** `SDL_video.h` — `SDL_GetDisplays(int* count)` (all connected display
-  IDs), `SDL_GetPrimaryDisplay()`, `SDL_GetDisplayName(id)`, `SDL_GetDisplayBounds(id,
-  SDL_Rect*)`, `SDL_GetDisplayUsableBounds(id, SDL_Rect*)` (excludes OS taskbars/menu
-  bars/notches), `SDL_GetDesktopDisplayMode(id)`, `SDL_GetCurrentDisplayMode(id)`,
-  `SDL_GetFullscreenDisplayModes(id, int* count)`.
-- **What's already covered vs. what's new:** the existing `DisplayInfo` (Section 4.6,
-  `DEVICES-CNA-007`) deliberately scoped itself to properties of the *single window
-  the engine already created* (content scale, safe area) — orientation/bounds were
-  correctly excluded because real XNA `GameWindow` already exposes those. **Genuinely
-  new territory here: enumerating *all* connected displays** (relevant for
-  multi-monitor desktop setups — "which monitor is this window on," "what resolutions
-  does monitor 2 support," "move the window to the primary display") — nothing in the
-  current `CNA::Devices` or XNA surface does this; XNA 4.0 itself has no multi-monitor
-  concept at all (`GraphicsDeviceManager` targets one display).
-- **Platform support:** these are core SDL3 video functions, not backend-specific
-  extras — declared directly in `SDL_video.h`, not gated behind any
-  `SDL_VIDEO_DRIVER_*` CMake option, so every video backend (including `dummy` and
-  `emscripten`) implements them. No separate per-platform verification needed beyond
-  that structural fact.
-- **Proposed sketch:**
-  ```cpp
-  namespace CNA::Devices {
-      struct MonitorInfo {
-          std::string Name;
-          Microsoft::Xna::Framework::Rectangle Bounds;
-          Microsoft::Xna::Framework::Rectangle UsableBounds;
-          bool IsPrimary;
-      };
-      class Monitors {
-      public:
-          static std::vector<MonitorInfo> getAllProperty();
-      };
-  }
-  ```
-  Named `Monitors`/`MonitorInfo` rather than folding into `DisplayInfo` — `DisplayInfo`
-  is scoped to "properties of this engine's one window," `Monitors` is scoped to
-  "what hardware displays exist on this machine," a different question with a
-  different (plural, hardware-enumeration) shape, mirroring how `Locale`/`LocaleInfo`
-  (Section 4.2) is a separate class from `SystemInfo` (Section 4.5) rather than being
-  folded into it.
-- **Complexity/priority: Low complexity (purely synchronous enumeration, same shape
-  as `Locale`), medium value (real desktop use case; less relevant on mobile/web where
-  multi-monitor is rare-to-nonexistent, though the API still degrades gracefully to a
-  single-entry list there).**
-
-### 8.3 `Process` — spawning and communicating with child OS processes
-
-- **SDL3 API:** `SDL_process.h` — `SDL_CreateProcess(const char* const* args, bool
-  pipe_stdio)` / the property-based `SDL_CreateProcessWithProperties()`,
-  `SDL_GetProcessInput`/`GetProcessOutput` (as `SDL_IOStream*` for piped stdio),
-  `SDL_KillProcess`, `SDL_WaitProcess`, `SDL_DestroyProcess`.
-- **Platform support:** confirmed via `third_party/SDL/src/process/` — real backends
-  only for `posix` (Linux/macOS/BSD) and `windows`, plus a `dummy` fallback. **No
-  Android, iOS, or Emscripten backend exists** — those platforms compile the inert
-  dummy stub, so `getIsSupportedProperty()` must report `false` there. Beyond SDL's own
-  lack of a backend, **iOS has an additional real-world constraint**: Apple's App
-  Store review guidelines prohibit apps from spawning arbitrary subprocesses at all,
-  so this would remain unsupported on iOS even if SDL grew a backend later —
-  worth documenting as a permanent platform exclusion, not just a "not yet implemented"
-  one.
-- **Proposed sketch:**
-  ```cpp
-  namespace CNA::Devices {
-      class Process {
-      public:
-          static bool getIsSupportedProperty(); // false on Android/iOS/Web
-          explicit Process(const std::vector<std::string>& args);
-          Process(const std::vector<std::string>& args, std::unique_ptr<Detail::IProcessBackend> backend); // test-only
-          ~Process();
-          [[nodiscard]] bool getHasExitedProperty() const;
-          [[nodiscard]] int getExitCodeProperty() const;
-          void Kill();
-          bool Wait(bool block);
-      };
-  }
-  ```
-  Same constructor-injection shape as `SystemTray` (Section 4.8) — a real
-  `SDL_CreateProcess()` call has an immediate side effect (a running child process)
-  the instant it's constructed, exactly the same "must inject before the real action
-  happens" concern `SystemTray` already solved.
-- **Complexity/priority: Medium complexity (process lifecycle + piped I/O is more
-  surface than any Phase 1-3 capability), desktop-only value (useful for e.g. launching
-  a companion updater/tool process from a desktop game — not a mobile/web use case at
-  all). Lower priority than 8.1/8.2 given the narrower platform reach.**
-
-### 8.4 Pen/stylus device type query — narrow, and shares an open architectural question with `Camera`
-
-- **SDL3 API:** `SDL_pen.h` — almost everything pen-related (position, pressure,
-  tilt, rotation, per-axis values) arrives exclusively through the SDL event queue
-  (`SDL_EVENT_PEN_DOWN`/`_UP`/`_MOTION`/`_AXIS`, etc.), **not** through any pollable
-  getter. The one exception is `SDL_GetPenDeviceType(SDL_PenID)` — a cheap, static,
-  pollable query returning `Direct` (pen touches the display itself, e.g. an Apple
-  Pencil) vs. `Indirect` (an external tablet, e.g. USB Wacom) vs. `Unknown` (most
-  platforms don't report this).
-- **Why this is not a clean new class today:** every other capability in this document
-  (Phases 1-4 and 8.1-8.3 above) is either a synchronous query or has a clear
-  poll-or-callback shape `CNA::Devices` already has a pattern for. Real pen *input*
-  (position/pressure while drawing) needs the SDL event queue, and **no current
-  `CNA::Devices` class touches the event queue at all** — this is the exact same open
-  question `docs/cna-devices-camera-design.md` Section 6 already flagged
-  ("should `Camera` surface permission-change events itself, or should the consumer
-  pump SDL's event queue and inform it of the outcome") and left unresolved as a
-  design-only question. Recommend resolving that shared architectural question once
-  (event-pump ownership for `CNA::Devices` broadly), rather than re-deciding it
-  ad hoc for `Camera` and then again for pen input.
-- **What could ship without resolving that question:** a minimal
-  `CNA::Devices::PenInfo::getIsPenConnectedProperty()`/a device-type query alone,
-  skipping real-time position/pressure entirely — but this is a small enough sliver of
-  value that it's probably not worth a dedicated class by itself. **Recommendation:
-  defer entirely until either (a) the event-pump-ownership question is resolved for
-  `Camera`, at which point pen input could reuse the same mechanism, or (b) a concrete
-  consumer need for pen/stylus input actually arises.**
-
-### 8.5 Explicitly considered and rejected (round 2) — same rationale style as Section 4.10
+### 8.2 Explicitly considered and rejected (round 2) — same rationale style as Section 4.10
 
 - **HID raw device access (`SDL_hidapi.h`)** — `SDL_hid_enumerate`/`_open`/`_read`/
   `_write`/`_get_feature_report` expose arbitrary USB/Bluetooth HID devices by
@@ -832,14 +718,11 @@ section.**
   covered by real XNA API" reasoning already applied to storage and microphone in
   Section 4.10.
 
-### 8.6 Round 2 summary table
+### 8.3 Round 2 summary table
 
 | Candidate | Platform reach | Complexity | Recommendation |
 |---|---|---|---|
-| `MessageBox` | Best of any capability surveyed (incl. Web) | Low (simpler than `FileDialog`, synchronous) | **Strong candidate — next phase** |
-| `Monitors` (multi-display enumeration) | Universal (degrades to single entry on mobile/web) | Low | **Candidate — next phase** |
-| `Process` | Desktop only (real iOS App Store policy exclusion, not just missing backend) | Medium | Candidate, lower priority (narrow reach) |
-| Pen device-type query | N/A — blocked on a shared open question | N/A | Defer until event-pump ownership is resolved (shared with `Camera`) |
+| `MessageBox` | Best of any capability surveyed (incl. Web) | Low (simpler than `FileDialog`, synchronous) | **Approved — implementing (`DEVICES-CNA-011`)** |
 | HID raw device access | N/A | N/A | Out of scope — no concrete need, security-sensitive |
 | OpenXR/VR | N/A | N/A | Out of scope — graphics-backend-level concern, not a device wrapper |
 | Dynamic library loading | Desktop-only in practice | N/A | Out of scope — narrow niche, App Store/Emscripten caveats |

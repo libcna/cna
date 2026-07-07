@@ -540,6 +540,47 @@ independent task instead of guessing.
 
 ---
 
+## Phase 5 — Round 2 additions (`noxna_devices.md` Section 8)
+
+### DEVICES-CNA-011 — `MessageBox` — OPEN
+
+- **Priority:** Medium (approved by the user 2026-07-07, after `noxna_devices.md`
+  Section 8's Round 2 survey; `Monitors`, `Process`, and the pen-device candidate from
+  that same survey were explicitly rejected by the user as not a fit for this project
+  and removed from `noxna_devices.md` entirely — not implemented here or anywhere).
+- **SDL3 API:** `SDL_messagebox.h` — synchronous, blocking
+  `SDL_ShowMessageBox(const SDL_MessageBoxData*, int* buttonid)` (full control: custom
+  buttons, icon flags) and `SDL_ShowSimpleMessageBox(flags, title, message, window)`
+  (one-line convenience wrapper).
+- **Platform support:** real backends confirmed in every video backend this project
+  already vendors — `android`, `cocoa`, `haiku`, `riscos`, `uikit`, `vita`, `wayland`,
+  `windows`, `x11`, and `emscripten` (`Emscripten_ShowMessagebox()` in
+  `src/video/emscripten/SDL_emscriptenvideo.c`). No platform exclusion needed;
+  `getIsSupportedProperty()` can be unconditionally `true`.
+- **Required work:**
+  - `include/CNA/Devices/Detail/IMessageBoxBackend.hpp` — pure virtual `ShowSimple`/
+    `Show` (returns clicked button index), mirroring `IFileDialogBackend`'s shape.
+  - `include/CNA/Devices/Detail/SdlMessageBoxBackend.hpp`/`src/.../SdlMessageBoxBackend.cpp`
+    — real backend wrapping `SDL_ShowSimpleMessageBox`/`SDL_ShowMessageBox`.
+  - `include/CNA/Devices/MessageBox.hpp`/`src/CNA/Devices/MessageBox.cpp` — static
+    dispatcher over a process-wide swappable backend, same shape as `FileDialog`
+    (function-local statics for the mutex/backend storage), **not**
+    `SystemTray`'s constructor-injection shape — there is no persistent instance here,
+    every call is one-shot, exactly like `FileDialog`.
+  - `MessageBoxType` enum (`Error`/`Warning`/`Information`) mapping to
+    `SDL_MESSAGEBOX_ERROR`/`_WARNING`/`_INFORMATION`.
+  - `tests/CNA/Devices/MessageBoxTests.cpp` — fake backend from the very first test
+    written (per this plan's own repeated lesson from `DEVICES-CNA-008`'s `zenity`
+    incident and `DEVICES-CNA-009`'s use-after-free) — never call the real backend in
+    an automated test, since a real `SDL_ShowMessageBox()` call blocks the calling
+    thread on a real modal OS dialog with no way to close it headlessly.
+- **Acceptance criteria:** builds under `CNA_DEVICES=ON`; new test suite passes in 0ms
+  (no real dialog ever shown); full existing suite has zero regressions; clean under
+  `devices-asan`/`devices-ubsan`.
+- **Suggested files:** new files only.
+
+---
+
 ## Blocked / needs the user
 
 *(Nothing yet. Any task that turns out to need a decision `noxna_devices.md` did not
@@ -552,6 +593,14 @@ next independent task, per the user's explicit instruction.)*
 
 *(Updated after each task closes — newest first.)*
 
+- **2026-07-07 — User reviewed Round 2 (`noxna_devices.md` Section 8) and decided.**
+  `MessageBox`: approved, opened as `DEVICES-CNA-011` (Phase 5) and now being
+  implemented. `Monitors`/multi-display enumeration: rejected outright ("nesmysl pro
+  CNA" — not a fit for this project) and removed from `noxna_devices.md` entirely, not
+  just marked rejected. `Process` and the pen-device-type candidate: also rejected and
+  removed. `noxna_devices.md` Section 8 now contains only `MessageBox` plus the
+  already-out-of-scope items from the original sweep (HIDAPI, OpenXR, loadso, asyncio,
+  storage, touch enumeration).
 - **2026-07-07 — Round 2 analysis pass (no new tasks opened).** Per explicit user
   request ("analyze, not implement yet"), surveyed `third_party/SDL/include/SDL3/` a
   second time for `CNA::Devices` candidates beyond this plan's 11 (now-closed) tasks.
