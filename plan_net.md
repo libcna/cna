@@ -1834,10 +1834,21 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   contaminate any other test: **3342/3344 passing** both times (2 expected accelerometer/
   gyroscope skips), no regressions.
 
-- [ ] **Task 9.2** — Add tests for the 3 untested `FriendGamer` properties: `getInviteReceivedFromProperty()`,
+- [x] **Task 9.2** — Add tests for the 3 untested `FriendGamer` properties: `getInviteReceivedFromProperty()`,
   `getInviteRejectedProperty()`, `getInviteSentToProperty()` — confirmed never referenced anywhere
   in the test suite (the existing `DefaultStubFlags` test only checks `IsJoinable`, `HasVoice`,
   `InviteAccepted`, `Presence`).
+
+  Confirmed against FNA's real `internal FriendGamer(...)` constructor: it hardcodes all three to
+  `false` regardless of any constructor argument — a faithfully-preserved upstream stub, not a CNA
+  gap. Extended the existing `DefaultStubFlags` test (rather than adding a new one) with the 3
+  missing assertions, matching its own established pattern for the sibling stub properties.
+
+  Pure test-coverage addition for already-correct code, no revert-verify applies. Full suite:
+  **3342/3344 passing** (2 expected accelerometer/gyroscope skips) — one transient run showed 3
+  unrelated `ENetDiscoveryServiceTest` failures (network/socket timing flakiness, confirmed
+  unrelated by passing individually and on a clean full-suite re-run), no regressions from this
+  change.
 
 - [ ] **Task 9.3** — Add real iteration/mutation tests for `GamerCollection<T>`'s custom enumerator
   and NOXNA mutators, for both `FriendCollection` and `SignedInGamerCollection`. Confirmed a grep

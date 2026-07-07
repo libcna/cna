@@ -224,11 +224,19 @@ TEST(FriendGamerTest, RequestFlags) {
     EXPECT_FALSE(fg.getFriendRequestReceivedFromProperty());
 }
 
+// Task 9.2: InviteReceivedFrom/InviteRejected/InviteSentTo were never referenced by any test.
+// Confirmed against FNA's own real internal FriendGamer(...) constructor: it hardcodes
+// InviteReceivedFrom = false; InviteRejected = false; InviteSentTo = false; regardless of any
+// constructor argument - a faithfully-preserved upstream stub, not a CNA gap, matching the same
+// pattern already covered here for IsJoinable/HasVoice/InviteAccepted/Presence.
 TEST(FriendGamerTest, DefaultStubFlags) {
     auto fg = FriendGamer::CreateInternal("t", "d", false, false, false, false, false, false);
     EXPECT_FALSE(fg.getIsJoinableProperty());
     EXPECT_FALSE(fg.getHasVoiceProperty());
     EXPECT_FALSE(fg.getInviteAcceptedProperty());
+    EXPECT_FALSE(fg.getInviteReceivedFromProperty());
+    EXPECT_FALSE(fg.getInviteRejectedProperty());
+    EXPECT_FALSE(fg.getInviteSentToProperty());
     EXPECT_EQ("", fg.getPresenceProperty());
 }
 
