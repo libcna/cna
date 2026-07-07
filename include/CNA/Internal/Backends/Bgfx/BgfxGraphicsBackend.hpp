@@ -161,7 +161,7 @@ namespace CNA::Internal::Backends::Bgfx
         int  multiSampleCount = 0;
 
         BgfxRenderTargetBackend(int w, int h, bool hasDepth, bool preserveContents = false,
-                                 int requestedMultiSampleCount = 0);
+                                 int requestedMultiSampleCount = 0, bool mipMap = false);
         ~BgfxRenderTargetBackend() override;
 
         int GetWidth()  const override { return width; }

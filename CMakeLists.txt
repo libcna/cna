@@ -3773,6 +3773,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=VULKAN")
 
+    # Task 906: RenderTarget2D mip chains are genuinely generated (bgfx's own built-in
+    # hasMips+BGFX_RESOLVE_AUTO_GEN_MIPS mechanism), not just present-but-undefined storage.
+    cna_bgfx_test(cna_test_bgfx_rendertarget2d_mip
+                  examples/bgfx_rendertarget2d_mip_test.cpp)
+    add_test(NAME Bgfx_RenderTarget2D_MipChain
+             COMMAND cna_test_bgfx_rendertarget2d_mip)
+    set_tests_properties(Bgfx_RenderTarget2D_MipChain PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

@@ -376,8 +376,9 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   render-to-texture round trip pixel-verified on EasyGL and Vulkan; depth testing while rendering
   INTO a render target works on EasyGL/Vulkan (Task 335), though exact `DepthStencilFormat` isn't
   respected on any backend (Task 877). `RenderTarget2D` mip chains (Task 336) are genuinely
-  functional on **EasyGL and Vulkan** (Task 878 — real `vkCmdBlitImage` cascade); Bgfx `RenderTarget2D`
-  mip and `RenderTargetCube` mip on both backends remain unimplemented (Tasks 906/907). MSAA
+  functional on **all 3 backends** (EasyGL/Task 336, Vulkan/Task 878 real `vkCmdBlitImage` cascade,
+  Bgfx/Task 906 built-in `hasMips=true`+auto-resolve). `RenderTargetCube` mip on Vulkan/Bgfx
+  remains unimplemented (Task 907). MSAA
   (Task 337) is functional on **EasyGL, Vulkan, and Bgfx** for `RenderTarget2D` (Task 879);
   `RenderTargetCube` MSAA remains unimplemented on Vulkan/Bgfx (Task 903).
 - `SetRenderTarget`/`SetRenderTargets` correctly reset `Viewport`/`ScissorRectangle` to the newly
@@ -636,10 +637,11 @@ command or test is tied to this — it manifests as a compile-time impossibility
 
 The most significant *silent-failure* gaps (compile and run without error, wrong or no data):
 Vulkan's `BlendState`/`DepthStencilState` support (Tasks 868/870), `TextureCube::DDSFromStreamEXT`
-(Task 663), `Texture3D`/`TextureCube::GetData` on Vulkan/Bgfx (Task 865), `RenderTarget2D`'s
-mip param accepted but not wired on Bgfx (Task 906 — Vulkan closed by Task 878, MSAA closed by
-Task 879), and `BasicEffect`'s lit-path missing `+EmissiveColor`/unforwarded specular+extra-lights
-terms (found Task 366, fixed for the no-lighting path in Task 369, lit path tracked as Tasks
+(Task 663), `Texture3D`/`TextureCube::GetData` on Vulkan/Bgfx (Task 865), `RenderTargetCube`'s
+mip param accepted but not wired on Vulkan/Bgfx (Task 907 — `RenderTarget2D` mip closed on all 3
+backends by Tasks 336/878/906, MSAA closed by Task 879), and `BasicEffect`'s lit-path missing
+`+EmissiveColor`/unforwarded specular+extra-lights terms (found Task 366, fixed for the no-lighting
+path in Task 369, lit path tracked as Tasks
 885/886).
 None have a test that currently fails loudly — they're only visible via dedicated pixel tests or
 direct code reading.
@@ -684,7 +686,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Confirmed, MASSIVE, not fixed | Vulkan's `DepthStencilState` support is almost entirely fake — `DepthBufferFunction` hardcoded, entire stencil-test parameter set unused. Confirmed 5× via pixel tests. EasyGL fully correct. | Task 870 |
 | Confirmed, universal, not fixed | `GraphicsDevice.ReferenceStencil`'s independent-override has zero backend connection on all 3 backends. | Task 872 |
 | Confirmed, universal, not fixed | `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` on every backend. | Task 871 |
-| Fixed, EasyGL + Vulkan (`RenderTarget2D` only) | `RenderTarget2D`'s `mipMap` produces a real, pixel-verified mip chain on EasyGL (Task 336) and now Vulkan (Task 878, `vkCmdBlitImage` cascade). Bgfx `RenderTarget2D` mip split to Task 906 (needs new downsample-shader infra — bgfx has no `glGenerateMipmap`/filtered-blit equivalent). `RenderTargetCube` mip on both Vulkan/Bgfx split to Task 907. | Task 878 (`RenderTarget2D`/Vulkan done)/906 (Bgfx, open)/907 (`RenderTargetCube`, open) |
+| Fixed, all 3 backends (`RenderTarget2D` only) | `RenderTarget2D`'s `mipMap` produces a real, pixel-verified mip chain on EasyGL (Task 336), Vulkan (Task 878, `vkCmdBlitImage` cascade), and Bgfx (Task 906 — turned out to be a 2-line fix, `hasMips=true`, since bgfx's own `BGFX_RESOLVE_AUTO_GEN_MIPS` framebuffer-attachment default already auto-regenerates mips; corrects Task 878's own "needs new downsample-shader infra" prediction). `RenderTargetCube` mip on both Vulkan/Bgfx split to Task 907. | Task 878/906 (`RenderTarget2D`, all 3 backends done)/907 (`RenderTargetCube`, open) |
 | Fixed, all 3 backends (`RenderTarget2D` only); environment-dependent test on Bgfx | `RenderTarget2D`'s MSAA produces a real, pixel-verified anti-aliased resolve on EasyGL (Task 337), Vulkan and Bgfx (Task 878/879 — Vulkan piggybacks on the backend's own backbuffer `sampleCount_`, Bgfx uses `BGFX_TEXTURE_RT_MSAA_Xn`). `RenderTargetCube` MSAA remains unimplemented on Vulkan/Bgfx (honestly reports `MultiSampleCount=0`), split to Task 903. **`Bgfx_RenderTarget2D_MsaaResolve` fails under this session's `Xvfb` sandbox specifically**: the test forces `CNA_BGFX_RENDERER=VULKAN` (bgfx's default GL renderer only negotiates legacy GL 2.1 here, under which MSAA doesn't really resolve — an already-documented Task 879 finding), but `Xvfb` has no DRI3 support (confirmed via `vulkan: No DRI3 support detected` in the test's own output), so bgfx's Vulkan renderer fails to initialize and silently falls back to the same GL 2.1 path the workaround was meant to avoid (`active renderer: OpenGL 2.1` despite requesting Vulkan). Not a code regression — an `Xvfb`-specific environment limitation on top of an already-tracked finding; passes against a real display with a working Vulkan/DRI3 stack. | Task 879 (`RenderTarget2D` done)/903 (`RenderTargetCube`, open) |
 | Fixed, all 3 backends (backbuffer); RT-pass sub-region still hardcoded on Vulkan/Bgfx | `GraphicsDevice.Viewport` now has real GPU effect on the backbuffer for all 3 backends. Vulkan/Bgfx's RT passes still hardcode each RT's own full size regardless of a custom sub-region `Viewport` (deferred multi-RT-per-frame recording limitation, same shape as their existing RT-pass-scissor gap below). 2D `SpriteBatch` unaffected by `Viewport` on all 3 backends. | Task 880 (done) |
 | Confirmed, real, not fixed, separately found | Vulkan's `RecordCommandBuffer` RT pass hardcodes `vkCmdSetScissor` to each RT's own full size (`VkRect2D rtSc{{0,0},{rtW,rtH}}`), ignoring `scissorEnabled_`/`scissorX_`/etc. entirely — only the backbuffer pass reads the real dynamic scissor state. A custom `ScissorRectangle` therefore has zero effect while rendering into a bound `RenderTarget2D` on Vulkan. Found while scoping Task 880's identical Viewport limitation. | — |
@@ -732,7 +734,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Confirmed, real, not fixed | `RenderTargetCube` MSAA is unimplemented on Vulkan/Bgfx (real XNA API surface, confirmed against FNA's actual constructor — not moot), split out of Task 878/879 which only covered `RenderTarget2D`. | Task 903 |
 | Confirmed, real, latent, not fixed | Vulkan's `GetOrCreatePipelineFogTex3D` (`textured3d`/`colored_textured3d`, stride 20/24) is missing the same `msaa`-aware render-pass-selection check every sibling 3D pipeline-creation function has — dormant today (no test combines backbuffer MSAA with a textured `BasicEffect`/`DualTextureEffect` draw), found while implementing Task 878/879's Vulkan RT MSAA. | Task 904 |
 | Fixed, Vulkan | `CreateRTRenderPass()`'s subpass dependencies didn't actually match `CreateRenderPass()`'s despite a comment claiming they did — pipelines created against `renderPass_` weren't truly render-pass-compatible with `rtRenderPass_`/`rtRenderPassLoad_`, producing live `VUID-vkCmdDraw-renderPass-02684` validation errors (correct pixel output regardless) the moment a depth-tested 3D primitive drew into a plain non-MSAA `RenderTarget2D`. Pre-existing, outside Task 878/879's own diff; found during independent review of that diff, fixed by widening `CreateRTRenderPass()`'s `deps[]` to match `CreateRenderPass()`'s exactly. | Task 905 (done) |
-| Confirmed, real, not fixed | Bgfx `RenderTarget2D` mip chains need genuine new render-to-mip-level downsample-shader infrastructure — bgfx has no `glGenerateMipmap` equivalent and `bgfx::blit()` is a same-size copy only (no resize/filter), unlike Vulkan's `vkCmdBlitImage`. Split out of Task 878 once this asymmetry was discovered. | Task 906 |
+| Fixed, Bgfx | `RenderTarget2D` mip chains on Bgfx — turned out to be a 2-line fix (`hasMips=true` on `bgfx::createTexture2D`), correcting Task 878's own prediction that bgfx needed new downsample-shader infrastructure: bgfx's own `BGFX_RESOLVE_AUTO_GEN_MIPS` framebuffer-attachment default (set automatically by the already-used `createFrameBuffer` overload whenever the attached texture has mips) already auto-regenerates the chain via the platform's own `glGenerateMipmap`-equivalent, triggered on every framebuffer switch-away. | Task 906 (done) |
 | Confirmed, real, not fixed | `RenderTargetCube` mip chains are unimplemented on Vulkan and Bgfx (both need the same per-backend technique as `RenderTarget2D`'s Task 878/906, applied per cube face). Split out of Task 878's original combined scope. | Task 907 |
 | Confirmed, pre-existing, environment-only | A `ContentManagerSkinnedModelTest`-area segfault occurs when running the full `CnaTests` suite on Vulkan under `Xvfb`+`llvmpipe`, non-deterministic in exactly where it lands — reproduces identically with/without Task 878's changes (confirmed via `git stash`), and the same test passes cleanly in isolation. Matches this file's already-documented general Vulkan/Xvfb/llvmpipe full-suite flakiness; not a regression, not investigated further. | — |
 
@@ -859,15 +861,15 @@ rest are the accumulated backlog from earlier phases plus this task's new findin
    `Xvfb`+`llvmpipe` combination (confirmed via `git stash` to be unrelated to any of this
    session's changes).
 
-1. **Task 906 — implement `RenderTarget2D` mip support on Bgfx** (split out of Task 878, whose
-   Vulkan half is now done). Needs genuinely new infrastructure, not just a texture-creation flag:
-   bgfx has no `glGenerateMipmap` equivalent and `bgfx::blit()` is a same-size copy only, so this
-   needs a real render-to-mip-level downsample shader pass (new shader program using explicit-LOD
-   sampling, fullscreen-quad geometry, per-level `bgfx::Attachment(mip=N)` framebuffers).
-
-1b. **Task 907 — implement `RenderTargetCube` mip support on Vulkan and Bgfx** (split out of Task
-    878's original combined scope). Same per-backend technique as Task 878/906, applied per cube
-    face (6×) against each backend's own dedicated cube-map image/view machinery.
+1. **Task 907 — implement `RenderTargetCube` mip support on Vulkan and Bgfx** (split out of Task
+   878's original combined scope; Task 906, `RenderTarget2D` on Bgfx, is now also done). Vulkan:
+   the same `vkCmdBlitImage` cascade Task 878 used for `RenderTarget2D`, applied per cube face (6×)
+   against `VulkanRenderTargetCubeBackend`'s `cubeImage_`/6 `FaceProxy`s. Bgfx: Task 906 found the
+   fix is dramatically simpler than expected (`hasMips=true` on `bgfx::createTexture2D` — bgfx's
+   own `BGFX_RESOLVE_AUTO_GEN_MIPS` framebuffer-attachment default already auto-regenerates mips;
+   no custom shader needed) — check whether `bgfx::createTextureCube`'s `hasMips` param gets the
+   same automatic treatment for `BgfxRenderTargetCubeBackend`'s per-face framebuffers before
+   assuming a bigger lift is needed.
 
 2. **Task 904 — fix `GetOrCreatePipelineFogTex3D`'s missing `msaa`-aware render-pass check**
    (Vulkan, `textured3d`/`colored_textured3d`). Small, mechanical, same one-line fix shape as the
@@ -929,12 +931,13 @@ rest are the accumulated backlog from earlier phases plus this task's new findin
   unrelated task — both are large, multi-pipeline-site changes; each needs its own dedicated task.
 - **No opportunistic fix for Task 871/872 (stencil `Clear`/`ReferenceStencil` backend gaps)** —
   verify with a real test first.
-- **No rushed fix for Task 906 (Bgfx render-target mip)** — Task 878's Vulkan half is done; bgfx
-  needs genuinely new downsample-shader infrastructure (no `glGenerateMipmap` equivalent, `blit()`
-  can't resize/filter), not just a texture-creation flag. Design the shader/attachment approach
-  properly before implementing, and verify with the same asymmetric-split/forced-centre-sample
+- **Task 906 is done** (Bgfx `RenderTarget2D` mip — a 2-line `hasMips=true` fix, not the new
+  downsample-shader infrastructure originally predicted; see §3/§5). For Task 907
+  (`RenderTargetCube` mip), verify with the same asymmetric-split/forced-centre-sample
   differential methodology Task 878's Vulkan test established (a naive 50/50 split does NOT
-  discriminate — confirmed the hard way, see that test's own header comment).
+  discriminate — confirmed the hard way, see that test's own header comment) before assuming Bgfx
+  needs anything more than the same `hasMips=true` treatment `bgfx::createTextureCube` may already
+  support automatically.
 - **No rushed fix for Task 874 (Bgfx `RenderTargetCube` handle-cast bug)** — Task 873's
   `RenderTarget2D`/`SpriteBatch` sibling is already fixed and *was* pixel-verified (via Task
   878/879's MSAA test's RT-then-backbuffer-sample methodology, once its own prerequisite bugs were
@@ -1019,12 +1022,12 @@ project-wide prohibition, see CLAUDE.md) and any task genuinely blocked on a sco
 the project owner can make (there are currently none outstanding — Task 883 and Task 896, the
 last two decision-blocked tasks, were both resolved and closed last session).
 
-**Backlog, in priority order:** see §8. Item 0 (full `ctest` regression) should be done first
-regardless of build-check results above, since it's the last remaining unverified piece of last
-session's Task 896 work. **Update (this session, post-2026-07-07 merge): Task 878's Vulkan
-`RenderTarget2D` half is now done** (real mip chains, `vkCmdBlitImage` cascade) — see §3's recent
-row. Next up: Task 906 (Bgfx `RenderTarget2D` mip — needs new downsample-shader infra) or Task 907
-(`RenderTargetCube` mip, both backends), or §8 item 0 if not yet done.
+**Backlog, in priority order:** see §8. **Update (this session, post-2026-07-07 merge): §8 item 0
+(full 3-backend `ctest` regression) is DONE** — found and fixed 2 real regressions (Tasks 908/909)
+Task 896's own audit missed/got wrong. **`RenderTarget2D` mip chains are now done on all 3
+backends** (Tasks 336/878/906 — Vulkan needed a real `vkCmdBlitImage` cascade; Bgfx turned out to
+be a 2-line `hasMips=true` fix, correcting Task 878's own "needs new shader infra" prediction).
+Next up: Task 907 (`RenderTargetCube` mip, both backends).
 
 **Standing instructions carried over from the prior session (still in force):**
 - Commit AND push after every finished task without waiting to be asked.
