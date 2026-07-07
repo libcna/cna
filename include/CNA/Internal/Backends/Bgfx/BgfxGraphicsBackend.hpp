@@ -177,7 +177,7 @@ namespace CNA::Internal::Backends::Bgfx
         // internally -- no explicit resolve step is needed on this backend.
         int  multiSampleCount = 0;
 
-        BgfxRenderTargetBackend(int w, int h, bool hasDepth, bool preserveContents = false,
+        BgfxRenderTargetBackend(int w, int h, int depthFormat, bool preserveContents = false,
                                  int requestedMultiSampleCount = 0, bool mipMap = false);
         ~BgfxRenderTargetBackend() override;
 
@@ -199,9 +199,14 @@ namespace CNA::Internal::Backends::Bgfx
     public:
         bgfx::FrameBufferHandle fbo = BGFX_INVALID_HANDLE;
         bgfx::TextureHandle cubeTex = BGFX_INVALID_HANDLE;
+        // Task 877: single 2D depth/stencil texture shared across all 6 faces (mirrors
+        // VulkanRenderTargetCubeBackend's shared depthImage_) -- BGFX_INVALID_HANDLE when the
+        // requested DepthFormat is None. Re-attached alongside whichever face's color view is
+        // bound in BindAsRenderTargetFace, same as the color attachment's per-face rebuild.
+        bgfx::TextureHandle depthTex = BGFX_INVALID_HANDLE;
         int size_ = 0;
 
-        BgfxRenderTargetCubeBackend(int size, bool mipMap = false);
+        BgfxRenderTargetCubeBackend(int size, int depthFormat, bool mipMap = false);
         ~BgfxRenderTargetCubeBackend() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
@@ -390,10 +395,10 @@ namespace CNA::Internal::Backends::Bgfx
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
-        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
-        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, bool mipMap = false, int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) override;
         // Task 907 finding: the shared IGraphicsBackend::SetRenderTargetCubeFace default only
         // calls BindAsRenderTargetFace -- it never updates currentRtWidth_/currentRtHeight_ (the
         // Task 901 fix for 2D RTs), so any SpriteBatch draw into a cube face was rasterizing into

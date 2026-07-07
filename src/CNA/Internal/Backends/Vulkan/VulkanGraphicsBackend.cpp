@@ -253,12 +253,12 @@ namespace CNA::Internal::Backends::Vulkan
         return levels;
     }
 
-    VulkanRenderTargetBackend::VulkanRenderTargetBackend(int w, int h, bool /*hasDepth*/,
+    VulkanRenderTargetBackend::VulkanRenderTargetBackend(int w, int h, int /*depthFormat*/,
                                                           bool preserveContents,
                                                           VulkanGraphicsBackend* owner,
                                                           int requestedMultiSampleCount,
                                                           bool mipMap)
-        : width_(w), height_(h), hasDepth_(true), preserveContents_(preserveContents), owner_(owner)
+        : width_(w), height_(h), preserveContents_(preserveContents), owner_(owner)
     {
         VkDevice dev = owner_->device_;
         const uint32_t uw = static_cast<uint32_t>(w);
@@ -5558,14 +5558,15 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     std::unique_ptr<IRenderTargetBackend> VulkanGraphicsBackend::CreateRenderTarget2D(
-        int w, int h, bool hasDepth, bool preserveContents, bool mipMap, int multiSampleCount)
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         // multiSampleCount is honored on a "piggyback on the backend's own sampleCount_" basis
         // (Task 878/879) — see VulkanRenderTargetBackend's constructor comment and
         // plan_graphics.md for the exact scope decision. mipMap (Task 878) is a real
         // vkCmdBlitImage cascade regenerated every frame this RT is rendered into — see
-        // VulkanRenderTargetBackend::MaybeGenerateMips.
-        return std::make_unique<VulkanRenderTargetBackend>(w, h, hasDepth, preserveContents, this,
+        // VulkanRenderTargetBackend::MaybeGenerateMips. depthFormat (Task 877) is accepted but
+        // not yet acted upon — see VulkanRenderTargetBackend's constructor comment (Task 911).
+        return std::make_unique<VulkanRenderTargetBackend>(w, h, depthFormat, preserveContents, this,
                                                             multiSampleCount, mipMap);
     }
 
@@ -6177,7 +6178,7 @@ namespace CNA::Internal::Backends::Vulkan
         return std::make_unique<VulkanTextureCubeBackend>(this, size);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, bool mipMap, int /*multiSampleCount*/)
+    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, int /*depthFormat*/, bool mipMap, int /*multiSampleCount*/)
     {
         // mipMap (Task 907): real per-face vkCmdBlitImage cascade, mirroring Task 878's
         // RenderTarget2D fix -- see VulkanRenderTargetCubeBackend::FaceProxy::MaybeGenerateMips.
@@ -6189,7 +6190,10 @@ namespace CNA::Internal::Backends::Vulkan
         // VulkanRenderTargetBackend just got for RenderTarget2D (Task 878/879), applied 6× across
         // VulkanRenderTargetCubeBackend's per-face framebuffers. Deliberately out of scope for
         // this pass (RenderTarget2D MSAA only, per the task's own test-file list) — accepted and
-        // ignored here, tracked as a follow-up in plan_graphics.md.
+        // ignored here, tracked as a follow-up in plan_graphics.md. depthFormat (Task 877) is
+        // accepted but not yet acted upon -- see VulkanRenderTargetBackend's constructor comment
+        // (Task 911); this cube backend already always allocates a combined depth+stencil buffer
+        // via the device-wide depthFormat_, same as before this task.
         return std::make_unique<VulkanRenderTargetCubeBackend>(this, size, mipMap);
     }
 

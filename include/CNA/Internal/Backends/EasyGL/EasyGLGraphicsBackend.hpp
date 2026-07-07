@@ -40,7 +40,7 @@ namespace CNA::Internal::Backends::EasyGL
     class EasyGLRenderTargetBackend : public IRenderTargetBackend, public ::easygl::RecoverableResource
     {
     public:
-        EasyGLRenderTargetBackend(int w, int h, bool hasDepth, ::easygl::ResourceRegistry* registry,
+        EasyGLRenderTargetBackend(int w, int h, int depthFormat, ::easygl::ResourceRegistry* registry,
                                    bool mipMap = false, int multiSampleCount = 0);
         ~EasyGLRenderTargetBackend() override;
 
@@ -68,7 +68,7 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Renderbuffer msaaColorRbo_;
         int  width_            = 0;
         int  height_           = 0;
-        bool hasDepth_         = false;
+        int  depthFormat_      = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal.
         bool mipMap_           = false;
         int  levelCount_       = 1;
         int  multiSampleCount_ = 0;
@@ -80,7 +80,7 @@ namespace CNA::Internal::Backends::EasyGL
                                            public ::easygl::RecoverableResource
     {
     public:
-        EasyGLRenderTargetCubeBackend(int size, bool hasDepth, ::easygl::ResourceRegistry* registry,
+        EasyGLRenderTargetCubeBackend(int size, int depthFormat, ::easygl::ResourceRegistry* registry,
                                        bool mipMap = false, int multiSampleCount = 0);
         ~EasyGLRenderTargetCubeBackend() override;
 
@@ -107,7 +107,7 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Renderbuffer depthRbo_;
         ::easygl::Renderbuffer msaaColorRbo_;
         int  size_             = 0;
-        bool hasDepth_         = false;
+        int  depthFormat_      = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal.
         bool mipMap_           = false;
         int  levelCount_       = 1;
         int  multiSampleCount_ = 0;
@@ -493,8 +493,8 @@ namespace CNA::Internal::Backends::EasyGL
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
-        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
-        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, bool mipMap = false, int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) override;
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,

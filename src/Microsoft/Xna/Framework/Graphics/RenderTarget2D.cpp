@@ -53,7 +53,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     mipMap ? CalculateMipLevels(width, height) : 1,
                     std::shared_ptr<IRenderTargetBackend>(
                         device.GetBackend().CreateRenderTarget2D(
-                            width, height, preferredDepthFormat != DepthFormat::None,
+                            width, height, static_cast<int>(preferredDepthFormat),
                             usage == RenderTargetUsage::PreserveContents, mipMap,
                             ClosestMSAAPower(preferredMultiSampleCount))))
         , depthFormat_(preferredDepthFormat)

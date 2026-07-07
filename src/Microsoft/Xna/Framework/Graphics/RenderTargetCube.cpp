@@ -45,7 +45,8 @@ namespace Microsoft::Xna::Framework::Graphics
                       // to TextureCube so sampling and rendering share the same GPU image.
                       std::unique_ptr<ITextureCubeBackend>(
                           device.backend_ ? device.backend_->CreateRenderTargetCube(
-                                                 size, mipMap, ClosestMSAAPower(preferredMultiSampleCount)).release()
+                                                 size, static_cast<int>(preferredDepthFormat), mipMap,
+                                                 ClosestMSAAPower(preferredMultiSampleCount)).release()
                                           : nullptr),
                       mipMap ? CalculateMipLevels(size) : 1)
         , size_(size)

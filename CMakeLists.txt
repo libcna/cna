@@ -1579,6 +1579,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 877: RenderTargetCube honors its exact requested DepthFormat (None vs Depth24Stencil8)
+        cna_easygl_test(cna_test_easygl_rendertargetcube_depthformat
+                        examples/easygl_rendertargetcube_depthformat_test.cpp)
+        add_test(NAME EasyGL_RenderTargetCube_DepthFormat
+                 COMMAND cna_test_easygl_rendertargetcube_depthformat)
+        set_tests_properties(EasyGL_RenderTargetCube_DepthFormat PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 144: Model.Draw — 2-bone model, BasicEffect VertexColor, red quad, pixel readback
         cna_easygl_test(cna_test_easygl_model_draw
                         examples/easygl_model_draw_test.cpp)
@@ -3809,6 +3818,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_RenderTargetCube_MipChain
              COMMAND cna_test_bgfx_rendertargetcube_mip)
     set_tests_properties(Bgfx_RenderTargetCube_MipChain PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 877: RenderTargetCube honors its exact requested DepthFormat -- Bgfx's first-ever
+    # depth-tested RenderTargetCube face (previously no depth attachment support at all).
+    cna_bgfx_test(cna_test_bgfx_rendertargetcube_depthformat
+                  examples/bgfx_rendertargetcube_depthformat_test.cpp)
+    add_test(NAME Bgfx_RenderTargetCube_DepthFormat
+             COMMAND cna_test_bgfx_rendertargetcube_depthformat)
+    set_tests_properties(Bgfx_RenderTargetCube_DepthFormat PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

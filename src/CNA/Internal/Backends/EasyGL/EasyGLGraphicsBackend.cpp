@@ -1,5 +1,6 @@
 #include "CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include <iostream>
 
 #include "CNA/Platform.hpp"
@@ -421,10 +422,38 @@ namespace CNA::Internal::Backends::EasyGL
         return levels;
     }
 
-    EasyGLRenderTargetBackend::EasyGLRenderTargetBackend(int w, int h, bool hasDepth,
+    // Task 877: maps a Microsoft::Xna::Framework::Graphics::DepthFormat ordinal to the GL
+    // renderbuffer internal format and framebuffer attachment point a render target's
+    // depth/stencil buffer should use. Returns false for DepthFormat::None, meaning no
+    // depth/stencil attachment should be created at all.
+    static bool MapDepthFormat(int depthFormat, ::metagl::InternalFormat& outFormat,
+                                ::metagl::FramebufferAttachment& outAttachment)
+    {
+        using ::Microsoft::Xna::Framework::Graphics::DepthFormat;
+        switch (static_cast<DepthFormat>(depthFormat))
+        {
+        case DepthFormat::Depth16:
+            outFormat = ::metagl::InternalFormat::DepthComponent16;
+            outAttachment = ::metagl::FramebufferAttachment::Depth;
+            return true;
+        case DepthFormat::Depth24:
+            outFormat = ::metagl::InternalFormat::DepthComponent24;
+            outAttachment = ::metagl::FramebufferAttachment::Depth;
+            return true;
+        case DepthFormat::Depth24Stencil8:
+            outFormat = ::metagl::InternalFormat::Depth24Stencil8;
+            outAttachment = ::metagl::FramebufferAttachment::DepthStencil;
+            return true;
+        case DepthFormat::None:
+        default:
+            return false;
+        }
+    }
+
+    EasyGLRenderTargetBackend::EasyGLRenderTargetBackend(int w, int h, int depthFormat,
                                                           ::easygl::ResourceRegistry* registry,
                                                           bool mipMap, int multiSampleCount)
-        : width_(w), height_(h), hasDepth_(hasDepth), mipMap_(mipMap),
+        : width_(w), height_(h), depthFormat_(depthFormat), mipMap_(mipMap),
           multiSampleCount_(multiSampleCount), registry_(registry)
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(w, h) : 1;
@@ -522,19 +551,20 @@ namespace CNA::Internal::Backends::EasyGL
                                    colorTex_, 0);
         }
 
-        if (hasDepth_)
         {
-            depthRbo_.create();
-            depthRbo_.bind();
-            if (multiSampleCount_ > 0)
-                depthRbo_.set_storage_multisample(multiSampleCount_,
-                                                   ::metagl::InternalFormat::DepthComponent24,
-                                                   width_, height_);
-            else
-                depthRbo_.set_storage(::metagl::InternalFormat::DepthComponent24, width_, height_);
-            fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
-                                     ::metagl::FramebufferAttachment::Depth,
-                                     depthRbo_);
+            ::metagl::InternalFormat depthGlFormat;
+            ::metagl::FramebufferAttachment depthAttachment;
+            if (MapDepthFormat(depthFormat_, depthGlFormat, depthAttachment))
+            {
+                depthRbo_.create();
+                depthRbo_.bind();
+                if (multiSampleCount_ > 0)
+                    depthRbo_.set_storage_multisample(multiSampleCount_, depthGlFormat, width_, height_);
+                else
+                    depthRbo_.set_storage(depthGlFormat, width_, height_);
+                fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
+                                         depthAttachment, depthRbo_);
+            }
         }
 
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
@@ -595,10 +625,10 @@ namespace CNA::Internal::Backends::EasyGL
 
     // --- EasyGLRenderTargetCubeBackend ---
 
-    EasyGLRenderTargetCubeBackend::EasyGLRenderTargetCubeBackend(int size, bool hasDepth,
+    EasyGLRenderTargetCubeBackend::EasyGLRenderTargetCubeBackend(int size, int depthFormat,
                                                                     ::easygl::ResourceRegistry* registry,
                                                                     bool mipMap, int multiSampleCount)
-        : size_(size), hasDepth_(hasDepth), mipMap_(mipMap),
+        : size_(size), depthFormat_(depthFormat), mipMap_(mipMap),
           multiSampleCount_(multiSampleCount), registry_(registry)
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(size, size) : 1;
@@ -682,19 +712,19 @@ namespace CNA::Internal::Backends::EasyGL
             resolveFbo_.create();
         }
 
-        if (hasDepth_)
+        ::metagl::InternalFormat depthGlFormat;
+        ::metagl::FramebufferAttachment depthAttachment;
+        if (MapDepthFormat(depthFormat_, depthGlFormat, depthAttachment))
         {
             depthRbo_.create();
             depthRbo_.bind();
             if (multiSampleCount_ > 0)
-                depthRbo_.set_storage_multisample(multiSampleCount_,
-                                                   ::metagl::InternalFormat::DepthComponent24,
-                                                   size_, size_);
+                depthRbo_.set_storage_multisample(multiSampleCount_, depthGlFormat, size_, size_);
             else
-                depthRbo_.set_storage(::metagl::InternalFormat::DepthComponent24, size_, size_);
+                depthRbo_.set_storage(depthGlFormat, size_, size_);
             fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
             fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
-                                      ::metagl::FramebufferAttachment::Depth,
+                                      depthAttachment,
                                       depthRbo_);
         }
 
@@ -1516,14 +1546,14 @@ void main()
         return std::make_unique<EasyGLOcclusionQueryBackend>(RegistryPtr());
     }
 
-    std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, bool hasDepth, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
+    std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<EasyGLRenderTargetBackend>(w, h, hasDepth, RegistryPtr(), mipMap, multiSampleCount);
+        return std::make_unique<EasyGLRenderTargetBackend>(w, h, depthFormat, RegistryPtr(), mipMap, multiSampleCount);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size, bool mipMap, int multiSampleCount)
+    std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size, int depthFormat, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<EasyGLRenderTargetCubeBackend>(size, true, RegistryPtr(), mipMap, multiSampleCount);
+        return std::make_unique<EasyGLRenderTargetCubeBackend>(size, depthFormat, RegistryPtr(), mipMap, multiSampleCount);
     }
 
     std::unique_ptr<ITexture3DBackend> EasyGLGraphicsBackend::CreateTexture3D(

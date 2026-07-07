@@ -374,8 +374,14 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - `RenderTarget2D`/`RenderTargetCube`: constructors, `DepthStencilFormat`/`MultiSampleCount`/
   `RenderTargetUsage`/`IsContentLost`/`ContentLost` all match FNA at the property level. Basic
   render-to-texture round trip pixel-verified on EasyGL and Vulkan; depth testing while rendering
-  INTO a render target works on EasyGL/Vulkan (Task 335), though exact `DepthStencilFormat` isn't
-  respected on any backend (Task 877). `RenderTarget2D`/`RenderTargetCube` mip chains (Task 336)
+  INTO a render target works on EasyGL/Vulkan (Task 335). Exact `DepthStencilFormat` fidelity
+  (Task 877) is now fully implemented and pixel-verified on **EasyGL and Bgfx** (correct GL
+  internal format/bgfx texture format + attachment point per `None`/`Depth16`/`Depth24`/
+  `Depth24Stencil8`, including `RenderTargetCube` on both — Bgfx's cube previously had NO depth
+  attachment support at all). Vulkan deliberately still uses one device-global depth format for
+  every render target (a real render-pass/pipeline-sharing architectural constraint, not an
+  oversight — split to Task 911, needs its own scoping pass). `RenderTarget2D`/`RenderTargetCube`
+  mip chains (Task 336)
   are genuinely functional on **all 3 backends** (EasyGL/Task 336, Vulkan/Task 878/907 real
   `vkCmdBlitImage` cascade — `RenderTargetCube` per-face via `baseArrayLayer`, Bgfx/Task 906/907
   built-in `hasMips=true`+auto-resolve). MSAA
@@ -521,6 +527,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `TBD` | 877 (+911, +912) | **`DepthStencilFormat` fidelity fixed on EasyGL and Bgfx render targets (2D and cube); Vulkan deliberately scoped down to a documented architectural limitation, split to Task 911.** `IGraphicsBackend::CreateRenderTarget2D`'s `bool hasDepth` became `int depthFormat` (raw `DepthFormat` ordinal); `CreateRenderTargetCube` gained the same new param (previously had none at all). EasyGL/Bgfx each got a `DepthFormat`→native-format mapping (`InternalFormat`+attachment point / `bgfx::TextureFormat`) replacing their old hardcoded `DepthComponent24`/`D24S8` choices. **2 more real, independent bugs found and fixed as part of this**: EasyGL's `CreateRenderTargetCube()` previously hardcoded `hasDepth=true` unconditionally (ignored `DepthFormat::None`); Bgfx's `RenderTargetCube` had NO depth attachment support at all, on any request (new capability, not just format fidelity). Vulkan's RT render passes/pipelines are deliberately shared across the backbuffer and every RT (confirmed via the Task 904 comment on `GetOrCreatePipelineFogTex3D`) — varying the depth format per RT would need a depth-format-keyed render-pass+pipeline cache across 10+ pipeline-creation functions, a genuinely large change split to **Task 911** (needs its own scoping pass, same class as Task 902/910); Vulkan's vestigial always-`true`-never-read `hasDepth_` field removed as dead code. New `{EasyGL,Bgfx}_RenderTargetCube_DepthFormat` tests. **Discriminating power independently verified via targeted backend-only sabotage** (not full `git stash`, to preserve the new interface signature): EasyGL fails exactly as predicted when `CreateRenderTargetCube`'s factory is reverted to the old hardcoded-`true` behavior. Bgfx's `Depth24Stencil8` assertion, however, was found to have **zero discriminating power in this sandbox** — this Xvfb/Mesa-llvmpipe software-GL environment performs an identical, seemingly-correct depth comparison regardless of whether a depth attachment exists at all (confirmed via the same sabotage technique); kept the assertion (it's still true, just not exclusively provable here) and dropped strict pass/fail on the `None` case, mirroring the existing `Bgfx_RenderTarget2D_MsaaResolve` Xvfb-limitation precedent. **A second, more severe, unrelated pre-existing Bgfx bug found and NOT fixed, split to new Task 912**: sampling ANY Bgfx render target (2D or cube) back out via `EnvironmentMapEffect`/`SpriteBatch` after a real 3D depth-tested draw into it reads back black — confirmed by running the existing, unmodified `rendertarget2d_depth_test.cpp` (Task 335) against Bgfx for the first time ever. Full regression, all 3 backends: `CnaTests` exact baseline match (EasyGL/Vulkan 4262/4264, Bgfx 4265/4268); targeted `ctest -R "RenderTarget\|Mip\|Msaa\|MultiSample"` EasyGL 36/36, Vulkan 63/63, Bgfx 56/58 (2 failures are the already-documented Xvfb MSAA limitation + a reconfirmed-flaky-under-batch mip test, both pre-existing). |
 | `3923d40d` | 904 | **Real, confirmed, latent bug fixed exactly per this row's own long-standing prediction.** `GetOrCreatePipelineFogTex3D` (stride-20 `textured3d`/stride-24 `colored_textured3d`) was missing the `(msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_` render-pass-selection ternary every sibling 3D pipeline-creation function already has. Fixed with the identical one-line ternary. New `Vulkan_BasicEffect_TexturedMsaa` test (port of Task 366's texture test, backbuffer MSAA forced via `RecreateBackendForMultiSampleCount(8)`). **Discriminating power confirmed via the Vulkan validation layer, not the pixel assertion** (which passes identically either way on this driver, matching Task 905's precedent for this exact bug class) — `git stash` revert-and-rebuild reproduced the exact predicted `VUID-VkGraphicsPipelineCreateInfo-multisampledRenderToSingleSampled-06853`/`VUID-vkCmdDraw-renderPass-02684` validation errors. Full regression: `CnaTests` (Vulkan, filtered) 4262/4264 passed, 2 skipped, 0 failed (exact baseline match). |
 | `4bd25b91` | 907 (+874, +910) | **`RenderTargetCube` mip chains implemented on both Vulkan and Bgfx, mirroring each backend's own `RenderTarget2D` sibling (Task 878/906) exactly, applied per cube face/array-layer.** Vulkan: `VulkanRenderTargetCubeBackend` gained `mipMap`, full-mip-range `cubeView_`, and each `FaceProxy` a `MaybeGenerateMips` override doing a per-layer `vkCmdBlitImage` cascade (reuses `RecordCommandBuffer`'s existing generic per-RT hook unchanged). **Found and fixed a real prerequisite**: mip levels 1+ of a face were never touched by anything except the new blit cascade, whose first barrier assumed `SHADER_READ_ONLY_OPTIMAL` as a starting point that was never actually established — produced live `VUID-vkCmdDraw-None-09600` validation errors until a construction-time full-range initial transition was added (mirrors Task 878's identical fix). Bgfx: `BgfxRenderTargetCubeBackend` threads `mipMap` into `createTextureCube`'s `hasMips` (same 1-line mechanism as Task 906); `BindAsRenderTargetFace`'s existing `Attachment::init()` already defaults to `BGFX_RESOLVE_AUTO_GEN_MIPS`. **This was Bgfx's first-ever exercise of `RenderTargetCube`-via-`EnvironmentMapEffect` at all, and surfaced 2 more real bugs, both fixed as hard prerequisites**: (1) **closes Task 874** — an unsafe `static_cast<const BgfxTextureCubeBackend&>` in the `EnvironmentMapEffect` dispatch (identical shape to Task 873's `RenderTarget2D` fix), fixed via a new `IBgfxCubeSamplable` interface + `dynamic_cast`; (2) a new, previously-unreported gap — `SetRenderTargetCubeFace`'s shared default never updates `currentRtWidth_`/`currentRtHeight_` (Task 901's fix, but only for the 2D case), so `SpriteBatch` draws into a cube face rasterized into a full-window-sized viewport instead of the face's own size; fixed with a Bgfx-specific override. **A third, genuinely architectural bug was found and root-caused (unlike Task 876's still-open Vulkan analogue) but NOT fixed, split to new Task 910**: rendering into more than one cube face within a single un-advanced bgfx frame only actually renders into whichever face was bound *last* (`bgfx::setViewFrameBuffer` is a per-view-per-*frame* setting, and all faces share view id 1) — confirmed directly (forcing a `bgfx::frame()` boundary between faces fixes it), worked around in this test with exactly that. New `{Vulkan,Bgfx}_RenderTargetCube_MipChain` tests (6-face solid-blue fill + `EnvironmentMapEffect`-sample, both read back `(0,0,255)`) — deliberately do NOT assert on coarser mip levels' content specifically (an attempt at that was tried and abandoned as non-discriminating, see the Vulkan test's own header comment for why). `git stash` revert-and-refail independently confirmed discriminating power on both backends. Full regression: Vulkan `CnaTests` (filtered) 4262/4264, Bgfx `CnaTests` 4275/4277 — both exact baseline matches, 0 failed. |
 | `0fd4a80d` | 906 | **Real feature implemented and pixel-verified: `RenderTarget2D` mip chains on Bgfx — a 2-line fix, correcting Task 878's own "Bgfx needs new downsample-shader infra" prediction.** bgfx has a real, built-in `glGenerateMipmap`-equivalent, gated behind a framebuffer attachment's resolve flag (`BGFX_RESOLVE_AUTO_GEN_MIPS`, the default whenever the attached texture has mips, confirmed in `bgfx.cpp`) rather than exposed on `bgfx::blit()` (still just a same-size copy, as originally found). Fix: `BgfxRenderTargetBackend` threads a `mipMap` bool through to `createTexture2D`'s `hasMips` argument (previously hardcoded `false`); bgfx auto-regenerates the chain internally on every framebuffer switch-away. An earlier spike toward a custom downsample shader (2 `.sc` files, a `compile_shaders.py` entry, bgfx's `shaderc` built from scratch) was cleanly reverted once this simpler mechanism was found. New `Bgfx_RenderTarget2D_MipChain` test (port of Vulkan's asymmetric-7:1-split methodology) passes with `sample=(224,0,32)`, matching the predicted `(223,0,32)`. Also surfaced a separate Bgfx test-harness-only issue (not a code bug, reproduces with `mipMap=false` too): resampling the same already-rendered RT object across more than one independent read cycle only reliably works on the first cycle — worked around via this project's established fresh-RT-per-checkpoint convention. `git stash` revert-and-refail confirmed discriminating power. Full regression: `CnaTests` (Bgfx) 4275/4277 passed, 2 skipped, 0 failed (exact baseline match). |
@@ -701,7 +708,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Confirmed, severe, silent failure, not fixed | Bgfx: same bug shape as Task 873 for `RenderTargetCube` via `EnvironmentMapEffect`. | Task 874 |
 | Confirmed, real, not fixed | Vulkan: `SetRenderTarget`+`Clear()` with no draw call never records a render pass — target's image stays `VK_IMAGE_LAYOUT_UNDEFINED` forever. | Task 875 |
 | Confirmed, real, not fixed, root cause not isolated | Vulkan: sampling a `RenderTargetCube` via `EnvironmentMapEffect` after unbinding renders black instead of actual content. | Task 876 |
-| Confirmed, format-fidelity gap, not fixed | No backend honors the exact requested `DepthStencilFormat` for a render target's depth/stencil attachment. Core depth-test functionality itself works (Task 335). | Task 877 |
+| Fixed, EasyGL and Bgfx; Vulkan deliberately deferred | EasyGL and Bgfx now honor the exact requested `DepthStencilFormat` (`None`/`Depth16`/`Depth24`/`Depth24Stencil8`) for a render target's depth/stencil attachment, on both `RenderTarget2D` and `RenderTargetCube` (Bgfx's cube previously had NO depth attachment support at all — new capability, not just a format fix). Vulkan still uses one device-global depth format for every render target — a real render-pass/pipeline-sharing architectural constraint (split to Task 911), not an oversight. Core depth-test functionality itself works everywhere it's honored (Task 335). | Task 877 (done, EasyGL+Bgfx) / 911 (Vulkan, open) |
 | Confirmed, architectural, deliberate | `GraphicsDevice` stores state objects by value, unlike FNA's reference-type aliasing. No game code here relies on FNA's behavior. | Task 869 |
 | Confirmed, incomplete | `SpriteBatch`'s `SamplerState` (`Begin()`) is a no-op on Bgfx (fixed on Vulkan by Task 665; EasyGL already correct). | — |
 | Confirmed, pre-existing | `EasyGL_MRT_TwoAttachments`: attachment 1 stays black with 2 render targets. | Task 145 |
@@ -740,6 +747,8 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Fixed, Bgfx | `RenderTarget2D` mip chains on Bgfx — turned out to be a 2-line fix (`hasMips=true` on `bgfx::createTexture2D`), correcting Task 878's own prediction that bgfx needed new downsample-shader infrastructure: bgfx's own `BGFX_RESOLVE_AUTO_GEN_MIPS` framebuffer-attachment default (set automatically by the already-used `createFrameBuffer` overload whenever the attached texture has mips) already auto-regenerates the chain via the platform's own `glGenerateMipmap`-equivalent, triggered on every framebuffer switch-away. | Task 906 (done) |
 | Fixed, Bgfx | `EnvironmentMapEffect` sampling a `RenderTargetCube` on Bgfx previously did an unsafe `static_cast` to `BgfxTextureCubeBackend`, reading `BgfxRenderTargetCubeBackend::fbo` (wrong handle type) — identical bug shape to Task 873's `RenderTarget2D` fix. Fixed via a new `IBgfxCubeSamplable` interface + `dynamic_cast`, as part of Task 907's own verification (this was Bgfx's first-ever test of this path). | Task 874 (done) |
 | Confirmed, real, genuinely architectural, not fixed | Bgfx: rendering into more than one `RenderTargetCube` face (or, by the same root cause, more than one `RenderTarget2D`) within a single un-advanced bgfx frame only actually renders into whichever one was bound *last* — `bgfx::setViewFrameBuffer(viewId, fbo)` is a per-view, per-*frame* setting, and all cube faces share one hardcoded view id. Root cause fully isolated (confirmed via a forced `bgfx::frame()` boundary between faces fixing it) while verifying Task 907, unlike Task 876's still-open Vulkan analogue of the same class of bug. Real fix needs per-face (or per-concurrently-active-RT) distinct view ids — a separate, likely-large architectural change. | Task 910 |
+| Confirmed, real, genuinely architectural, not fixed | Vulkan: every render target's depth/stencil buffer uses one device-global `VkFormat` regardless of the specific `DepthFormat` requested — varying it per-RT would need a depth-format-keyed render-pass *and* pipeline cache across 10+ `GetOrCreatePipelineXXX` functions (pipelines are deliberately shared across the backbuffer's and every RT's render pass today for exactly this reason). Confirmed while implementing Task 877 (EasyGL/Bgfx got full fidelity; Vulkan didn't). | Task 911 |
+| Confirmed, real, not fixed, not cube-specific | Bgfx: sampling a render target (2D or cube) back out via `EnvironmentMapEffect`/`SpriteBatch` after a real 3D depth-tested draw (`DrawUserPrimitives` + custom `DepthStencilState`/`RasterizerState`) into it reads back incorrect/black content — confirmed by running the existing, unmodified `rendertarget2d_depth_test.cpp` (Task 335) against Bgfx for the first time ever (never previously registered for this backend). Reading the same content directly while still bound works fine. Root cause not isolated. | Task 912 |
 | Confirmed, pre-existing, environment-only | A `ContentManagerSkinnedModelTest`-area segfault occurs when running the full `CnaTests` suite on Vulkan under `Xvfb`+`llvmpipe`, non-deterministic in exactly where it lands — reproduces identically with/without Task 878's changes (confirmed via `git stash`), and the same test passes cleanly in isolation. Matches this file's already-documented general Vulkan/Xvfb/llvmpipe full-suite flakiness; not a regression, not investigated further. | — |
 
 ---
@@ -847,11 +856,13 @@ Task 880 (`GraphicsDevice.Viewport` GPU wiring on all 3 backends), Task 899 (Vul
 pipelines + Bgfx bonus + `env_map3d` leftover), Task 879 (`RenderTarget2D` MSAA on Vulkan/Bgfx),
 Task 873 (Bgfx `SpriteBatch` RT-sampling cast bug), Task 901/905 (2 more real bugs found while
 verifying Task 878/879), Task 883 (`Effect::Clone()`, plus discovering 5 of its 8 concrete
-subclasses already had a working `Clone()` from an earlier, undocumented pass), and Task 896
+subclasses already had a working `Clone()` from an earlier, undocumented pass), Task 896
 (`GraphicsDevice`'s default `RasterizerState` GPU-sync gap, closed via an upfront 119-file audit
-across 8 parallel forks before landing the 1-line ctor fix) are all done. In priority order, the
-rest are the accumulated backlog from earlier phases plus this task's new findings (Tasks 825–828,
-863–882, 889–895, 902–904).
+across 8 parallel forks before landing the 1-line ctor fix), and Task 877 (`DepthStencilFormat`
+fidelity on EasyGL/Bgfx render targets, including new `RenderTargetCube` depth support on Bgfx —
+Vulkan's own per-instance fidelity split to Task 911, a genuine architectural constraint) are all
+done. In priority order, the rest are the accumulated backlog from earlier phases plus this task's
+new findings (Tasks 825–828, 863–882, 889–895, 902–904, 911–912).
 
 0. **DONE this session.** Not a `plan_graphics.md` task — ran the full `ctest` suite for all 3
    backends' `examples/*.cpp` pixel tests, the single highest-value step to confirm Task 896's
@@ -873,12 +884,17 @@ rest are the accumulated backlog from earlier phases plus this task's new findin
    likely large architectural change — view-id allocation is currently a fixed 0=backbuffer/1=RT
    scheme threaded through many call sites.
 
-2. **Task 877 — wire `DepthStencilFormat`'s exact value into render-target depth/stencil
-    attachments** on all 3 backends (currently hardcoded/coarse choices).
+2. **Task 911 — give Vulkan render targets true per-instance `DepthStencilFormat` fidelity**
+    (split out of Task 877, which fully closed this for EasyGL/Bgfx). Needs a depth-format-keyed
+    render-pass *and* pipeline cache across 10+ `GetOrCreatePipelineXXX` functions — a real,
+    large, systemic change, same class as Task 910 — needs its own scoping pass before starting.
 
-3. **Task 875/876 — Vulkan render-target bugs**: `Clear()`-only draws never record a render pass
-    (875); `RenderTargetCube` via `EnvironmentMapEffect` renders black after unbind, root cause not
-    isolated (876, needs isolation before a fix is attempted — see §9).
+3. **Task 875/876/912 — Vulkan/Bgfx render-target bugs**: Vulkan `Clear()`-only draws never
+    record a render pass (875); Vulkan `RenderTargetCube` via `EnvironmentMapEffect` renders black
+    after unbind, root cause not isolated (876); Bgfx sampling a render target back out via
+    `EnvironmentMapEffect`/`SpriteBatch` after a real 3D depth-tested draw into it reads back
+    incorrect/black content, not cube-specific, found while building Task 877's Bgfx depth test
+    (912, needs isolation before a fix is attempted — see §9).
 
 4. **Task 663 — implement `TextureCube::DDSFromStreamEXT` for real** (build a real DDS cube-map
     test fixture *first*, then implement against it).
@@ -937,10 +953,19 @@ rest are the accumulated backlog from earlier phases plus this task's new findin
   878/879's MSAA test's RT-then-backbuffer-sample methodology, once its own prerequisite bugs were
   fixed) — the old assumption that Bgfx has no pixel readback path for this class of bug no longer
   holds; use the same methodology for 874 rather than a purely structural check.
-- **No fix for Task 875/876 (Vulkan render-target bugs)** without isolating the root cause first —
-  Task 876 especially has 2 unisolated candidates (see `plan_graphics.md`).
-- **No opportunistic fix for Task 877 (DepthStencilFormat fidelity)** bundled into an unrelated
-  task — verify with a dedicated stencil-in-RT pixel test first.
+- **No fix for Task 875/876/912 (Vulkan/Bgfx render-target bugs)** without isolating the root
+  cause first — Task 876 especially has 2 unisolated candidates (see `plan_graphics.md`). Task 912
+  (Bgfx: sampling a render target after a real 3D depth-tested draw into it reads back
+  incorrect/black content) is confirmed not cube-specific — start by bisecting exactly which of
+  `DrawUserPrimitives` vs. custom `DepthStencilState` vs. custom `RasterizerState` triggers it,
+  using the existing, unmodified `rendertarget2d_depth_test.cpp` as the minimal repro.
+- **Task 877 is done** (`DepthStencilFormat` fidelity on EasyGL/Bgfx render targets, including new
+  `RenderTargetCube` depth support on Bgfx — see §3/§5). **For Task 911 (Vulkan per-instance
+  `DepthStencilFormat` fidelity)**: don't assume a quick fix — varying the depth format per RT
+  needs a depth-format-keyed render-pass *and* pipeline cache across 10+ `GetOrCreatePipelineXXX`
+  functions (pipelines are deliberately shared across the backbuffer's and every RT's render pass
+  today), a real architectural change in the same class as Task 902/910 — needs its own scoping
+  pass before starting.
 - **No opportunistic fix for Vulkan/Bgfx's RT-pass sub-region Viewport/scissor limitation** (found
   while scoping Task 880) bundled into an unrelated task — the deferred multi-RT-per-frame
   recording architecture needs a real per-draw-call viewport/scissor capture design, not a quick
@@ -956,77 +981,63 @@ rest are the accumulated backlog from earlier phases plus this task's new findin
 Read NEXT.md first, in full — this section is intentionally the only thing you need before
 touching any code.
 
-## Repo state as of 2026-07-07 (end of Task 896 session) — READ THIS FIRST
+## Repo state as of 2026-07-08 (end of Task 877 session) — READ THIS FIRST
 
-A large external merge landed on this branch AFTER Task 896's own commits (cd4bcc4e), outside
-this session: feature/devices, feature/audio, and feature/input were merged into `develop`, and
-`feature/graphics` was then fast-forwarded to match (596 files changed, ~95K lines, per
-`git diff cd4bcc4e..HEAD --stat`). This was the project owner's own intended workflow (merge
-sibling feature branches into develop, keep feature/graphics in sync) — not a mistake, and
-nothing was lost: `git log --oneline -1` should show a merge commit mentioning feature/input (or
-later); all of this session's commits (`d1018384` through `cd4bcc4e`, Tasks 878/879/883/896) are
-still in the branch's history, just no longer at the tip.
-
-**Consequences you must account for before doing anything else:**
-1. **All `cmake-build-*` directories are gone** (confirmed absent at session end) — a fresh
-   `cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL` (and `=VULKAN` / `=BGFX` for the
-   other two configs) is needed before any build.
-2. **Every build/test status number in this file (§2, §5, this section) predates the merge and
-   is UNVERIFIED against the merged-in code.** Do not trust "last known good" numbers below as
-   current — re-run them fresh. The merge pulled in substantial new subsystems (Input, Devices,
-   Audio work) that graphics code doesn't depend on, so a clean rebuild is *likely* but not
-   guaranteed to still succeed — verify, don't assume.
-3. Graphics work no longer happens in isolation on this branch — Input/Devices/Audio subsystem
-   code now coexists here. Stay scoped to graphics-relevant files per CLAUDE.md's existing
-   discipline; don't get pulled into auditing unrelated subsystems.
+No unusual repo state this time (unlike the Task 896 session's big external merge) — just resume
+normally. All 3 `cmake-build-{debug,vulkan,bgfx}` directories exist and were verified building
+clean at the end of this session. Working tree should be clean (this session's work is committed
+and pushed).
 
 **First action on resume, before any feature work** (run these in order):
-  1. `git log --oneline -5` — confirm the merge landed as expected, note the new HEAD hash.
-  2. `git status --short` — confirm clean working tree.
-  3. `cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL && cmake --build cmake-build-debug --target CNA CnaTests -j4`
-  4. `cmake -B cmake-build-vulkan -DCNA_GRAPHICS_BACKEND=VULKAN && cmake --build cmake-build-vulkan --target CNA CnaTests -j4`
-  5. `cmake -B cmake-build-bgfx -DCNA_GRAPHICS_BACKEND=BGFX && cmake --build cmake-build-bgfx --target CNA CnaTests -j4`
+  1. `git log --oneline -5` and `git status --short` — confirm clean tree, note current HEAD.
+  2. `cmake --build cmake-build-debug --target CNA CnaTests -j4` (EasyGL)
+  3. `cmake --build cmake-build-vulkan --target CNA CnaTests -j4` (Vulkan)
+  4. `cmake --build cmake-build-bgfx --target CNA CnaTests -j4` (Bgfx)
 
-If any of these fail, that IS the current top-priority task (fix the post-merge build break) —
-do not proceed to §8's backlog until all 3 configs build clean. If they all succeed, run
-`CnaTests` on all 3 (see the environment note just below) to get a fresh baseline, update §2 with
-the real numbers, then proceed to §8 item 0 (full `ctest` suite — still applies, likely even more
-important now given the merge scope).
+If any of these fail on a fresh checkout, reconfigure first (`cmake -S . -B cmake-build-debug
+-DCNA_GRAPHICS_BACKEND=EASYGL`, `=VULKAN`, `=BGFX` respectively) before treating it as a real
+break. If they all succeed, proceed straight to the backlog below — no baseline re-verification
+needed, this session already did a full `CnaTests` + targeted `ctest` pass on all 3 backends.
 
 **Environment, non-negotiable:** never run any GPU/window-creating binary against the real
-`DISPLAY=:0` — confirmed disruptive to the human developer's desktop twice in the prior session
+`DISPLAY=:0` — confirmed disruptive to the human developer's desktop in an earlier session
 (window/keyboard-focus stealing). Start a virtual display first: `Xvfb :99 -screen 0 1280x1024x24
-&`, then always `SDL_VIDEODRIVER=x11 DISPLAY=:99 <binary>`. `ctest` itself cannot reach this virtual
-display as-is (`CMakeLists.txt` hardcodes `DISPLAY=:0` on every GPU test's `ENVIRONMENT` property,
-~265 occurrences) — either fix that hardcoding (make it a CMake cache variable) or keep using
-direct binary invocation instead of `ctest` for GPU tests. Full details in §4.
+&`, then always `SDL_VIDEODRIVER=x11 DISPLAY=:99 <binary>` (this session used `:99`, already
+running — check `pgrep -a Xvfb` before starting a second one). `ctest`'s GPU tests read
+`CNA_TEST_DISPLAY` (cache variable, default `:0`) — either pass `-DCNA_TEST_DISPLAY=:99` at
+configure time or keep using direct binary invocation for GPU tests. Full details in §4. Run all
+3 backends' test suites **sequentially, never concurrently** — concurrent runs cause transient
+GPU/driver-contention false failures (this session hit exactly this with `Bgfx_RenderTarget2D_
+MipChain`: failed once inside a broader `ctest -R` batch, passed cleanly 4/4 times in isolation —
+re-run any anomaly in isolation before treating it as a regression).
 
-## What to do after the build is confirmed working
+## What to do next
 
 Work through `plan_graphics.md` autonomously, one task at a time, following the established
-per-task methodology (see CLAUDE.md and this file's own conventions, reinforced all last
-session): research → implement → write a discriminating test FIRST → verify via
-`git stash`-revert-and-rebuild that the new test actually fails without the fix → full regression
-per affected backend(s) → update `plan_graphics.md` (verbose writeup) and `NEXT.md` (concise) →
-commit → push → a small follow-up commit filling in the just-created commit hash into NEXT.md's
-`TBD` placeholder. One task = one commit; never bundle unrelated tasks.
+per-task methodology: research → implement → write a discriminating test FIRST → verify via
+`git stash`-revert-and-rebuild (or targeted backend-only sabotage when a full interface-signature
+stash would break the build, as this session did for Task 877) that the new test actually fails
+without the fix → full regression per affected backend(s) → update `plan_graphics.md` (verbose
+writeup) and `NEXT.md` (concise) → commit → push → a small follow-up commit filling in the
+just-created commit hash into NEXT.md's `TBD` placeholder (see the Task 877 row in §3 — its hash
+is still `TBD`, fill it in first thing on resume). One task = one commit; never bundle unrelated
+tasks.
 
-**Skip without asking**, exactly like last session: any WebGPU task (`plan_webgpu.md`, hard
-project-wide prohibition, see CLAUDE.md) and any task genuinely blocked on a scoping decision only
-the project owner can make (there are currently none outstanding — Task 883 and Task 896, the
-last two decision-blocked tasks, were both resolved and closed last session).
+**Skip without asking**: any WebGPU task (`plan_webgpu.md`, hard project-wide prohibition, see
+CLAUDE.md) and any task genuinely blocked on a scoping decision only the project owner can make.
+Currently outstanding decision-blocked tasks: Task 902 (`GraphicsDevice.Reset()`), Task 910 (Bgfx
+per-frame view-id architecture), Task 911 (Vulkan per-RT depth-format architecture) — all 3 need
+their own scoping pass before starting, not a guess bundled into another task.
 
-**Backlog, in priority order:** see §8. **Update (this session, post-2026-07-07 merge): §8 item 0
-(full 3-backend `ctest` regression) is DONE** — found and fixed 2 real regressions (Tasks 908/909)
-Task 896's own audit missed/got wrong. **`RenderTarget2D`/`RenderTargetCube` mip chains are now
-done on all 3 backends** (Tasks 336/878/906/907 — Vulkan needed a real `vkCmdBlitImage` cascade;
-Bgfx turned out to be a 2-line `hasMips=true` fix on both, correcting Task 878's own "needs new
-shader infra" prediction). Verifying Task 907 also closed Task 874 (Bgfx `RenderTargetCube`
-handle-cast bug) and found a new one, Task 910 (Bgfx per-frame view-id sharing corrupts all but
-the last-bound RT/face when more than one is used within a single un-advanced frame — root cause
-isolated, not yet fixed). Next up: Task 910, or continue down §8's backlog.
+**Backlog, in priority order:** see §8. This session closed Task 877 (`DepthStencilFormat`
+fidelity on EasyGL/Bgfx, including new `RenderTargetCube` depth support on Bgfx) and split off two
+new findings: Task 911 (Vulkan's own per-RT depth-format fidelity — real architectural constraint,
+same class as Task 910) and Task 912 (Bgfx: sampling a render target after a real 3D depth-tested
+draw into it reads back black — confirmed not cube-specific, root cause not isolated). Next up:
+Task 910 (already root-caused, needs its own scoping pass), Task 875/876/912 (Vulkan/Bgfx
+render-target bugs, none yet isolated to a fixable root cause), or continue down §8's backlog.
 
-**Standing instructions carried over from the prior session (still in force):**
+**Standing instructions (still in force):**
 - Commit AND push after every finished task without waiting to be asked.
 - Chain to the next non-decision task automatically once one finishes — don't stop to ask
   "should I continue?" for ordinary backlog progression.

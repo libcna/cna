@@ -107,7 +107,17 @@ namespace CNA::Internal::Backends::Vulkan
                                       public IVulkanSamplable
     {
     public:
-        VulkanRenderTargetBackend(int w, int h, bool hasDepth, bool preserveContents,
+        // Task 877: `depthFormat` (raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal)
+        // is accepted for interface uniformity with the other 2 backends but not yet acted upon
+        // here — every Vulkan render target always allocates a combined depth+stencil buffer
+        // using the device-wide depthFormat_ (see VulkanGraphicsBackend::FindDepthFormat()),
+        // the same format shared by the backbuffer and every other render target so that
+        // pipelines can be reused across renderPass_/rtRenderPass_/rtRenderPassMsaa_ (Vulkan
+        // render-pass-compatibility rules require matching attachment formats). Varying the
+        // depth/stencil format per render target would need a depth-format-keyed render
+        // pass/pipeline cache across every GetOrCreatePipelineXXX call site — a genuine
+        // architectural change, tracked as Task 911 rather than attempted opportunistically here.
+        VulkanRenderTargetBackend(int w, int h, int depthFormat, bool preserveContents,
                                    VulkanGraphicsBackend* owner, int requestedMultiSampleCount = 0,
                                    bool mipMap = false);
         ~VulkanRenderTargetBackend() override;
@@ -149,7 +159,6 @@ namespace CNA::Internal::Backends::Vulkan
     private:
         int                     width_            = 0;
         int                     height_           = 0;
-        bool                    hasDepth_         = false;
         bool                    preserveContents_ = false;
         // Task 878: number of mip levels colorImage_ actually owns (1 when mipMap was false).
         int                     levelCount_   = 1;
@@ -541,7 +550,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         std::unique_ptr<ITextureBackend>         CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend>     CreateSpriteBatch() override;
-        std::unique_ptr<IRenderTargetBackend>    CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetBackend>    CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         void                                     SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
         // ---- Graphics state: IMPLEMENTED ----
@@ -566,7 +575,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DBackend>  CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
-        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, bool mipMap = false, int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
 
         // ---- Extended 3D draws (textured + lit) ----

@@ -432,23 +432,33 @@ namespace CNA::Internal::Backends
         virtual std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) { return nullptr; }
 
         /// Creates an off-screen FBO-backed render target. Returns nullptr on
-        /// backends that do not support render targets. `mipMap` requests a full mip
-        /// chain, auto-generated from level 0 when the target is unbound (matching
-        /// FNA3D's OPENGL_ResolveTarget behavior) — only EasyGL currently implements this;
-        /// Vulkan/Bgfx accept and ignore it (Task 336/877). `multiSampleCount` requests a
-        /// multisampled color (and depth, if `hasDepth`) attachment, resolved into the
-        /// sampleable texture when the target is unbound (same FNA3D resolve mechanism,
-        /// same caveat: only EasyGL currently implements this — Task 337/878).
-        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, bool hasDepth, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
+        /// backends that do not support render targets. `depthFormat` is the raw ordinal of
+        /// Microsoft::Xna::Framework::Graphics::DepthFormat (None=0, Depth16=1, Depth24=2,
+        /// Depth24Stencil8=3), passed as `int` to avoid coupling this backend-agnostic header
+        /// to the XNA namespace — mirrors CreateTexture3D/CreateTextureCube's `surfaceFormat`
+        /// convention. EasyGL and Bgfx honor the exact requested format (None omits the
+        /// depth/stencil attachment entirely); Vulkan always allocates a combined depth+stencil
+        /// buffer using its device-wide format regardless of the exact value requested, since
+        /// varying it per render target would require a depth-format-keyed render pass/pipeline
+        /// cache (Vulkan render-pass-compatibility rules require matching attachment formats
+        /// for the pipelines this backend currently shares across the backbuffer and every
+        /// render target) — a real architectural change, tracked as Task 911 (Task 877).
+        /// `mipMap` requests a full mip chain, auto-generated from level 0 when the target is
+        /// unbound (matching FNA3D's OPENGL_ResolveTarget behavior) — all 3 backends implement
+        /// this (Task 336/878/906). `multiSampleCount` requests a multisampled color (and depth,
+        /// where honored) attachment, resolved into the sampleable texture when the target is
+        /// unbound (same FNA3D resolve mechanism; all 3 backends implement this for
+        /// RenderTarget2D — Task 337/878/879).
+        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
 
         /// Activates the given render target (binds its FBO). Pass nullptr to
         /// restore the default back buffer.
         virtual void SetRenderTarget2D(IRenderTargetBackend* rt) {}
 
         /// Creates a cube-map render target. Returns nullptr on backends that
-        /// do not support cube map render targets. See CreateRenderTarget2D for `mipMap`/
-        /// `multiSampleCount`.
-        virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
+        /// do not support cube map render targets. See CreateRenderTarget2D for `depthFormat`/
+        /// `mipMap`/`multiSampleCount`.
+        virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
 
         /// Compiles a shader program from GLSL/HLSL source strings.
         /// Returns nullptr on backends that do not support programmable shaders.
