@@ -536,7 +536,90 @@ independent task instead of guessing.
   a recommended narrow first-implementation scope. Cross-linked from `noxna_devices.md`
   Section 4.9. **No `Camera` class, header, or test file was created** — confirmed
   by design, matching this task's own acceptance criteria exactly.
-  **This closes Phase 4 and every task in `plan_cna_devices.md`.**
+
+### DEVICES-CNA-012 — Implement `Camera` per the design note's recommended narrow scope — CLOSED (2026-07-07)
+
+- **Priority:** Medium
+- **Problem:** `docs/cna-devices-camera-design.md` (Task `DEVICES-CNA-010`) designed
+  `Camera` but explicitly did not implement it. This task implements exactly the
+  design note's own "recommended scope for the first implementation task" (Section 7
+  there): single camera device (first one `SDL_GetCameras()` reports, no device
+  selection), synchronous permission polling (no SDL event-queue integration),
+  RGBA-only format request.
+- **Required work:**
+  - `include/CNA/Devices/CameraState.hpp`, `CameraPosition.hpp`, `CameraDeviceInfo.hpp`
+    — small value types, mirroring the design note's proposed `CameraState` enum
+    exactly (`NotSupported`/`Closed`/`Opening`/`Denied`/`Ready`/`Lost`).
+  - `include/CNA/Devices/Detail/ICameraBackend.hpp` — `CameraFrame` (tightly-packed
+    RGBA8 bytes) plus the backend interface (`GetState`/`GetFrameWidth`/
+    `GetFrameHeight`/`TryAcquireFrame`).
+  - `include/CNA/Devices/Detail/SdlCameraBackend.hpp`/`src/.../SdlCameraBackend.cpp`
+    — real backend. Constructor-injection testability seam (mirroring `SystemTray`'s
+    pattern, not `FileDialog`'s post-construction swap), designed in from the start
+    per the design note's own Section 5 — never retrofitted after an incident.
+  - `include/CNA/Devices/Camera.hpp`/`src/CNA/Devices/Camera.cpp` — poll-based public
+    API (`TryAcquireFrame(Texture2D&)`, no result callback, matching
+    `SDL_AcquireCameraFrame()`'s own poll-based shape exactly, per the design note's
+    Section 4).
+  - `tests/CNA/Devices/CameraTests.cpp` — fake backend injected via the constructor
+    from the first test written; never touches the real backend.
+- **Design decisions made during implementation, beyond the design note's own scope:**
+  - **`SDL_GetCameraSupportedFormats()`'s documented empty-list case (Emscripten
+    specifically) handled explicitly:** SDL3's own doc comment states this call
+    legally returns an empty list on Emscripten (which won't describe a camera's
+    capabilities until opened) — this does **not** mean "unsupported"; `SdlCameraBackend`
+    falls back to building its own RGBA32-format request spec directly rather than
+    incorrectly treating an empty supported-formats list as "no camera available".
+  - **RGBA-only enforced by verifying the actual negotiated format after opening,**
+    not just trusting the request: `SDL_GetCameraFormat()` is checked after
+    `SDL_OpenCamera()` succeeds; if the actual format isn't `SDL_PIXELFORMAT_RGBA32`
+    (would contradict SDL's own documented "seamlessly converts" contract for
+    `SDL_OpenCamera()`), the device is closed and reported `NotSupported` rather than
+    attempting any pixel-format conversion — matching the design note's own scope
+    ("fail/report NotSupported rather than converting non-RGBA formats").
+  - **`Camera::getFrameWidthProperty()`/`getFrameHeightProperty()` added** (not in the
+    design note's illustrative sketch) — needed because `Texture2D` has no resize API
+    after construction (`Texture2D(GraphicsDevice&, width, height)` is fixed at
+    construction time), so the caller must construct their `Texture2D` with the
+    camera's actual negotiated frame size in advance; `TryAcquireFrame()` returns
+    `false` without modifying the texture if the caller's dimensions don't match,
+    rather than silently uploading with a wrong stride.
+  - **Non-tightly-packed `SDL_Surface` rows handled explicitly:**
+    `Texture2D::SetDataRGBA()` assumes `width * 4` stride with no row padding;
+    `SdlCameraBackend::TryAcquireFrame()` compacts rows into a tightly-packed buffer
+    whenever the acquired surface's `pitch` differs from `width * 4`, rather than
+    assuming camera frames are always tightly packed.
+- **Acceptance criteria:** builds under `CNA_DEVICES=ON`; tests pass using the fake
+  backend exclusively (no real camera ever opened in an automated run); full existing
+  suite has zero regressions; clean under `devices-ubsan`.
+- **Suggested files:** new files only.
+- **Build/test:** `CNA` and `CnaTests` both build cleanly. 8 new tests in
+  `CameraTests.cpp`, all passing (some exercise a real `GraphicsDevice`/`Texture2D` —
+  the first `CNA::Devices` test file to do so — confirmed via existing test-log output
+  that this correctly constructs the real EasyGL/OpenGL backend, matching established
+  precedent in `DrawUserPrimitivesArgumentGuardTest`/etc., not a new risk). Full suite:
+  3388/3388 (3386 pass + 2 expected skips, up from 3380 — the 8 new tests), **zero
+  regressions**. Clean under `devices-ubsan` (exit 0) and under `devices-asan` with
+  leak detection explicitly disabled (`ASAN_OPTIONS=detect_leaks=0`, exit 0, no
+  memory-safety errors).
+  - **A pre-existing, unrelated ASan leak report found and correctly attributed, not
+    misdiagnosed as a `Camera` bug:** running `CameraTests.*` under
+    `devices-asan` with `ASAN_OPTIONS=detect_leaks=1` reports ~12KB leaked across 16
+    allocations, all inside the EasyGL/OpenGL/Mesa graphics-driver stack (stack frames
+    inside `libdrm.so.2`/unknown modules, none inside any `CNA::Devices`/`Camera` code
+    path). **Verified this is pre-existing and unrelated to `Camera`**, not a new bug:
+    ran the same `ASAN_OPTIONS=detect_leaks=1` against a completely unrelated,
+    already-existing test that also constructs a real `GraphicsDevice`
+    (`DrawUserPrimitivesArgumentGuardTest`, no `Camera`/`CNA::Devices` involvement at
+    all) and got the identical leak pattern (~30KB across 40 allocations, same
+    stack-trace shape). This is a real, pre-existing gap in this project's own
+    sanitizer coverage — no `CNA::Devices` test had ever constructed a real
+    `GraphicsDevice` under `devices-asan` before `CameraTests.cpp`, so this is the
+    first time it surfaced, not something `Camera`'s own code introduced. Out of
+    scope to fix here (a graphics-backend/driver-level investigation, unrelated to
+    this task's own code); noted for whoever next touches `devices-asan` +
+    `GraphicsDevice`-constructing tests together.
+  **This closes Phase 4 and every currently-assigned task in `plan_cna_devices.md`.**
 
 ---
 
