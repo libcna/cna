@@ -722,10 +722,37 @@ section.**
 
 | Candidate | Platform reach | Complexity | Recommendation |
 |---|---|---|---|
-| `MessageBox` | Best of any capability surveyed (incl. Web) | Low (simpler than `FileDialog`, synchronous) | **Approved — implementing (`DEVICES-CNA-011`)** |
+| `MessageBox` | Best of any capability surveyed (incl. Web) | Low (simpler than `FileDialog`, synchronous) | **Implemented (`DEVICES-CNA-011`, CLOSED 2026-07-07)** |
 | HID raw device access | N/A | N/A | Out of scope — no concrete need, security-sensitive |
 | OpenXR/VR | N/A | N/A | Out of scope — graphics-backend-level concern, not a device wrapper |
 | Dynamic library loading | Desktop-only in practice | N/A | Out of scope — narrow niche, App Store/Emscripten caveats |
 | Async file I/O | Universal | N/A | Out of scope for *this* namespace — belongs in a hypothetical `CNA::IO`, not `CNA::Devices` |
 | `SDL_Storage` abstraction | — | — | No gap found — existing `TitleContainer`/`StorageDevice` already solve this |
 | Touch device enumeration | — | — | Out of scope — duplicates real XNA `TouchPanel` |
+
+---
+
+## 9. Current status (2026-07-07)
+
+Snapshot of where `CNA::Devices` stands right now, for anyone picking this document
+up cold — see `plan_cna_devices.md` for full task-level detail on every item below.
+
+**Implemented and closed:** `PowerInfo`, `Locale`, `Clipboard`, `UrlLauncher`,
+`SystemInfo` (Phase 1); `DisplayInfo` (Phase 2); `FileDialog`, `SystemTray` (Phase 3);
+`MessageBox` (Phase 5, Section 8.1 above). All build under `CNA_DEVICES=ON`, have full
+test coverage, and are clean under `devices-asan`/`devices-ubsan`.
+
+**Designed but not implemented:** `Camera` (Phase 4) — `docs/cna-devices-camera-design.md`
+has the full design note; implementing it is tracked as `DEVICES-CNA-012` in
+`plan_cna_devices.md`, not yet started.
+
+**Not part of `CNA::Devices` at all, but worth knowing about if returning to this
+area:** this same session also closed three related items in the separate
+`Microsoft::Devices::Sensors` work (`plan_devices.md`, real XNA API, not a
+`CNA::Devices` extension) — `ACCEL-008` (Android landscape-remap decision, kept +
+documented as `NOXNA` + opt-out), `COMPASS-009` (Android Compass tilt-mode axis
+switch), and a cross-repo `sharp-runtime` data race (`SDL-SENSOR-004`). One follow-up
+from that work remains open: `MOTION-012` (apply the same landscape remap to
+`Motion`'s `Gravity`/`DeviceAcceleration`/`DeviceRotationRate`, or explicitly decide
+not to) — tracked in `plan_devices.md`, not here, since it's real XNA API surface,
+not a `CNA::Devices` capability.
