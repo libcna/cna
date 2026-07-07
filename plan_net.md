@@ -799,7 +799,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `ICollection<T>` (coordinate per the same rule as Task 4.4) or implement it directly on
   `NetworkSessionProperties` without going through the generic interface. Add a test.
 
-- [ ] **Task 4.6** — Extend `NetworkGamer::IsHost` to be correct for remote gamers representing the
+- [x] **Task 4.6** — Extend `NetworkGamer::IsHost` to be correct for remote gamers representing the
   actual host machine, as seen from a non-host client. Confirmed self-documented gap
   (`NetworkGamer.hpp`, ~lines 81-90): a remote gamer's `IsHost` is currently always `false`, because
   the wire roster (`RosterEntry`) carries no host flag. Fix requires extending `NetPacketCodec`'s
@@ -807,6 +807,48 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   in `ENetBackend.cpp` (ties directly into Task 2.6's host-migration work — do them together or in
   sequence). Add a test (over a real two-peer connection) asserting a client correctly sees
   `IsHost == true` on the remote gamer representing the actual host.
+
+  Revisited after Phase 15's own Task 15.6 demo surfaced this exact live, still-open gap
+  (`cna_demo_gamer_roster_hud`'s client showed `Host:N` for the row that was actually the host) —
+  confirmed via `cna-samples/DEFERRED.md` item #20's own "still-open, already-scoped" note that
+  this was a real, tracked-but-unfixed limitation, not a new discovery, and picked it up as its
+  own dedicated fix now that Phase 15 is complete.
+
+  **Fixed:** added `bool IsHost{false}` to `RosterEntry` (`NetPacketCodec.hpp`), written/read by
+  the single shared `WriteRosterEntry`/`ReadRosterEntry` helpers used by both `ServerWelcomeMessage`
+  and `GamerJoinBroadcastMessage` — one wire-format change covers both message types.
+  `ENetBackend.cpp`'s `SnapshotRoster` (used to build `ServerWelcomeMessage.ExistingRoster`, sent
+  to a newly-joining client) now forwards each gamer's own real `getIsHostProperty()` — accurate
+  on the host side already, since the host's own local gamer is `IsHost=true` from construction
+  and every remote (client) gamer is explicitly set `false` in `HandleClientHello`.
+  `HandleServerWelcome`/`HandleGamerJoinBroadcast` (the receiving side, on a client) now call
+  `gamer->SetIsHost(entry.IsHost)` for each newly-constructed remote `NetworkGamer`, instead of
+  leaving it at the default `false`. `GamerJoinBroadcastMessage.NewGamers` entries are built with
+  an explicit `false` (a newly-joining client can never be the host). Updated the stale
+  "documented, scoped limitation" comments at all 3 call sites plus `NetworkGamer::SetIsHost`'s
+  own doc comment, since the limitation is now resolved rather than merely explained.
+
+  **Added/extended tests**: `NetPacketCodecTest.ServerWelcomeRoundtrip`/`GamerJoinBroadcastRoundtrip`
+  now assert `IsHost` round-trips correctly (`true` for a host entry, `false` for a non-host one).
+  `ENetBackendTest.ClientSendsClientHelloAndProcessesServerWelcome` (already the established
+  real-client + fake-host integration test for this exact decode path) now marks its
+  `"HostPlayer"` roster entry `IsHost=true` and asserts
+  `EXPECT_TRUE(hostPlayer->getIsHostProperty())` — removing the test's own prior "NOTE: not
+  asserting IsHost here... a documented, scoped limitation" comment block, since it's exactly what
+  this fix now makes provable.
+
+  **Verified the bug is real, not theoretical**: stashed the 4 source-fix files (keeping all test
+  changes), rebuilt — genuine **compile-time** failures across both test files (`RosterEntry`
+  aggregate-inits with a 3rd `true`/`false` argument failing with "too many initializers"/"has no
+  member named IsHost"), confirming the tests only pass because of the real fix. Restored and
+  rebuilt clean — full suite **3398/3398 passing** (2 expected accelerometer/gyroscope skips), no
+  regressions.
+
+  **Additional real-world confirmation beyond the unit tests**: rebuilt and reran Task 15.6's own
+  `cna_demo_gamer_roster_hud` as two genuine real OS processes (`--host --smoke 180` /
+  `--join --smoke 180`) — the client's own roster panel, which previously showed `Host:N` for the
+  row representing the actual host (exactly the gap this task closes), now correctly reads
+  `Host:Y` for that row throughout the run. Both processes exited `0`.
 
 ---
 

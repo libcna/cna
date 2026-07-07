@@ -256,7 +256,9 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
 
     ServerWelcomeMessage welcome;
     welcome.AssignedWireIds = {5};
-    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer"}};
+    // Task 4.6: marking this entry IsHost=true - the fake host's own roster entry represents
+    // the actual host, so the real client's resulting NetworkGamer should report IsHost==true.
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer", true}};
     auto welcomeBytes = NetPacketCodec::Encode(welcome);
     fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
     fakeHost.Flush();
@@ -282,13 +284,15 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
     // wire id (0).
     EXPECT_EQ(client.session->getLocalGamersProperty()[0]->getIdProperty(), 5);
     EXPECT_EQ(hostPlayer->getIdProperty(), 0);
-    // NOTE: not asserting IsHost here — this fixture's "client" session is itself constructed via
-    // NetworkSession::Create() (see SystemLinkSessionFixture above), so its own local gamer
-    // legitimately reports IsHost == true; that reflects this test's Create()-based fixture setup,
-    // not the real Join()-based client path exercised by NetworkSessionTests.cpp's
-    // JoinInvitedMakesLocalGamersReportIsHostFalse. The remote "HostPlayer" gamer's IsHost stays at
-    // NetworkGamer's default false — a documented, scoped limitation (RosterEntry carries no host
-    // flag; see NetworkGamer::SetIsHost's doc comment), not something this test can prove correct.
+    // Task 4.6: RosterEntry now carries a real host flag, so the remote "HostPlayer" gamer
+    // correctly reports IsHost == true here (previously a documented, scoped limitation - see
+    // cna-samples/DEFERRED.md item #20's own "still-open" note, now resolved). Not asserting
+    // anything about this fixture's own local gamer's IsHost here - it's constructed via
+    // NetworkSession::Create() (see SystemLinkSessionFixture above), so it legitimately reports
+    // IsHost == true regardless, reflecting this test's Create()-based fixture setup rather than
+    // the real Join()-based client path exercised by NetworkSessionTests.cpp's
+    // JoinInvitedMakesLocalGamersReportIsHostFalse.
+    EXPECT_TRUE(hostPlayer->getIsHostProperty());
 }
 
 // Task 2.13: SendAppData silently dropped (bare `return;`, no error/log/queue) whenever sender

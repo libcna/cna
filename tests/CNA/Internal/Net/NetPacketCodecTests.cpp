@@ -46,7 +46,8 @@ TEST(NetPacketCodecTest, ClientHelloEncodeThrowsWhenLocalGamertagsExceeds255) {
 TEST(NetPacketCodecTest, ServerWelcomeRoundtrip) {
     ServerWelcomeMessage message;
     message.AssignedWireIds = {3, 4};
-    message.ExistingRoster = {{1, "host"}, {2, "guest"}};
+    // Task 4.6: RosterEntry's 3rd field (IsHost) - "host" is the real host, "guest" is not.
+    message.ExistingRoster = {{1, "host", true}, {2, "guest", false}};
 
     auto bytes = NetPacketCodec::Encode(message);
     EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::ServerWelcome);
@@ -58,8 +59,10 @@ TEST(NetPacketCodecTest, ServerWelcomeRoundtrip) {
     ASSERT_EQ(decoded.ExistingRoster.size(), 2u);
     EXPECT_EQ(decoded.ExistingRoster[0].WireId, 1);
     EXPECT_EQ(decoded.ExistingRoster[0].Gamertag, "host");
+    EXPECT_TRUE(decoded.ExistingRoster[0].IsHost);
     EXPECT_EQ(decoded.ExistingRoster[1].WireId, 2);
     EXPECT_EQ(decoded.ExistingRoster[1].Gamertag, "guest");
+    EXPECT_FALSE(decoded.ExistingRoster[1].IsHost);
 }
 
 TEST(NetPacketCodecTest, ServerWelcomeEncodeThrowsWhenAssignedWireIdsExceeds255) {
@@ -85,6 +88,8 @@ TEST(NetPacketCodecTest, GamerJoinBroadcastRoundtrip) {
     ASSERT_EQ(decoded.NewGamers.size(), 1u);
     EXPECT_EQ(decoded.NewGamers[0].WireId, 5);
     EXPECT_EQ(decoded.NewGamers[0].Gamertag, "newgamer");
+    // Task 4.6: a newly-joined gamer is never the host - IsHost round-trips as false by default.
+    EXPECT_FALSE(decoded.NewGamers[0].IsHost);
 }
 
 TEST(NetPacketCodecTest, GamerJoinBroadcastEncodeThrowsWhenNewGamersExceeds255) {

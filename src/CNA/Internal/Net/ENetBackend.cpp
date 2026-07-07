@@ -141,7 +141,13 @@ namespace CNA::Internal::Net
             std::vector<RosterEntry> roster;
             for (NetworkGamer* gamer : session->getAllGamersProperty())
             {
-                roster.push_back(RosterEntry{state.GamerToWireId.at(gamer), WireGamertagFor(gamer)});
+                // Task 4.6: this runs on the host, whose own view of IsHost is already accurate
+                // for every gamer it knows about (its own local gamer is IsHost==true from
+                // construction; every remote gamer was set IsHost==false in HandleClientHello
+                // below) - forwarding it lets a newly-joining client's HandleServerWelcome
+                // correctly identify which roster entry is the host.
+                roster.push_back(RosterEntry{state.GamerToWireId.at(gamer), WireGamertagFor(gamer),
+                                              gamer->getIsHostProperty()});
             }
             return roster;
         }
@@ -200,13 +206,13 @@ namespace CNA::Internal::Net
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, gamertag));
                 state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
                 // We are the host handling an incoming ClientHello, so this gamer belongs to the
-                // connecting client - never the host (see DEFERRED.md item #20).
+                // connecting client - never the host.
                 gamer->SetIsHost(false);
                 uint8_t id = AssignWireId(state, gamer);
                 welcome.AssignedWireIds.push_back(id);
                 newWireIds.push_back(id);
                 newGamers.push_back(gamer);
-                broadcastMsg.NewGamers.push_back(RosterEntry{id, gamertag});
+                broadcastMsg.NewGamers.push_back(RosterEntry{id, gamertag, false});
                 state.WireIdToPeer[id] = peer;
             }
             state.PeerWireIds[peer] = std::move(newWireIds);
@@ -260,12 +266,11 @@ namespace CNA::Internal::Net
                 state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
                 state.GamerToWireId[gamer] = entry.WireId;
                 state.WireIdToGamer[entry.WireId] = gamer;
-                // RosterEntry doesn't carry a host flag, so this new remote gamer's IsHost stays
-                // at NetworkGamer's default (false) even when it's actually the host's gamer -
-                // a scoped, documented limitation (see DEFERRED.md item #20 and
-                // NetworkGamer::SetIsHost's doc comment). Its Id is real and wire-consistent
-                // regardless.
                 gamer->SetId(entry.WireId);
+                // Task 4.6: RosterEntry now carries a real host flag (SnapshotRoster on the host
+                // side forwards each gamer's own accurate IsHost), so a client correctly learns
+                // which remote gamer is the actual host here instead of always defaulting false.
+                gamer->SetIsHost(entry.IsHost);
                 session->AddRemoteGamer(gamer);
             }
         }
@@ -282,8 +287,11 @@ namespace CNA::Internal::Net
                 state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
                 state.GamerToWireId[gamer] = entry.WireId;
                 state.WireIdToGamer[entry.WireId] = gamer;
-                // Same scoped IsHost limitation as HandleServerWelcome above; Id is real either way.
                 gamer->SetId(entry.WireId);
+                // Task 4.6: same real host-flag propagation as HandleServerWelcome above - always
+                // false in practice here, since a newly-joining client (the only thing this
+                // broadcast ever announces) can never be the host.
+                gamer->SetIsHost(entry.IsHost);
                 session->AddRemoteGamer(gamer);
             }
         }

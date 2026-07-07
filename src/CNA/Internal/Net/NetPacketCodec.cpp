@@ -18,6 +18,7 @@ namespace CNA::Internal::Net
             RosterEntry entry;
             entry.WireId = reader.ReadByte();
             entry.Gamertag = reader.ReadString();
+            entry.IsHost = reader.ReadBoolean();
             return entry;
         }
 
@@ -25,6 +26,7 @@ namespace CNA::Internal::Net
         {
             writer.Write(entry.WireId);
             writer.Write(entry.Gamertag);
+            writer.Write(entry.IsHost);
         }
 
         // Task 2.12: every list-length count field in this wire format is a single byte; naively

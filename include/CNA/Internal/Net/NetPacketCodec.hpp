@@ -33,11 +33,20 @@ namespace CNA::Internal::Net
         AppData = 0x10,
     };
 
-    /** @brief A wire-id/gamertag pair describing one gamer in a roster snapshot. */
+    /** @brief A wire-id/gamertag/host-flag triple describing one gamer in a roster snapshot. */
     struct RosterEntry
     {
         uint8_t WireId{0};
         std::string Gamertag;
+        /**
+         * @brief Task 4.6: whether this entry represents the session's host.
+         *
+         * Lets a receiving client correctly set NetworkGamer::IsHost on the remote gamer
+         * representing the actual host machine (see ENetBackend.cpp's HandleServerWelcome/
+         * HandleGamerJoinBroadcast) - previously this struct carried no host information at all,
+         * so a client's own view of the host's gamer always reported IsHost == false.
+         */
+        bool IsHost{false};
     };
 
     /** @brief Sent by a client immediately after connecting, announcing its local gamers. */

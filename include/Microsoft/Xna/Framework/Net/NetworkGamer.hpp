@@ -87,11 +87,10 @@ namespace Microsoft::Xna::Framework::Net
          * machine). Restored here, NOXNA, so NetworkSession can set a local gamer's real host
          * status at construction (true after Create(), false after Join()/JoinInvited()).
          *
-         * Scoped limitation: a *remote* gamer representing the actual host machine still reports
-         * false here, since determining that from the wire roster alone (RosterEntry carries no
-         * host flag) is not yet implemented - only a session's own local gamers get a fully
-         * correct value. This already fully replaces the broken NetworkSession.IsHost for local
-         * "am I the host" checks, which is what real callers need it for.
+         * Task 4.6: a *remote* gamer representing the actual host machine also reports this
+         * correctly now - RosterEntry carries a real host flag (set from the host's own accurate
+         * view of each gamer in ENetBackend.cpp's SnapshotRoster), propagated by
+         * HandleServerWelcome/HandleGamerJoinBroadcast when a client learns about that gamer.
          *
          * @param value The new host state.
          */
