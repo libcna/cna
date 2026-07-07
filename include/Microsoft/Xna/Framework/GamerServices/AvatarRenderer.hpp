@@ -222,6 +222,11 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         NOXNA [[nodiscard]] Microsoft::Xna::Framework::Color PartTintEXT(const std::string& partName) const;
 
+        // Task 13.1: PartTintEXT's substring-match routing has no non-GPU-dependent test access
+        // otherwise - the only existing coverage goes through DrawRealEXT + real pixel readback,
+        // which only ever exercised Hair/Shirt. Grants direct access for thorough Pants/Shoes/
+        // skin-fallback/case-sensitivity/substring-collision coverage without needing a GPU.
+        NOXNA friend struct AvatarRendererTestAccess;
 
         Microsoft::Xna::Framework::Matrix world_;
         Microsoft::Xna::Framework::Matrix view_;

@@ -2493,13 +2493,27 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
 
 ## Phase 13 — Avatar: Test Coverage
 
-- [ ] **Task 13.1** — Add direct/edge-case test coverage for `AvatarRenderer::PartTintEXT`'s
+- [x] **Task 13.1** — Add direct/edge-case test coverage for `AvatarRenderer::PartTintEXT`'s
   substring-match routing logic. Confirmed it's `private`, reachable only through `DrawRealEXT` +
   GPU pixel-readback, and the one existing integration test
   (`avatar_tint_routing_integration_test.cpp`) covers only Hair/Shirt routing — Pants/Shoes/skin-fallback
   routing through the real `PartTintEXT` code path is untested at any level (only
   `AvatarAppearanceEXT`'s own storage round-trip is tested, not the routing logic itself). Also add
   case-sensitivity and substring-collision edge-case coverage.
+
+  Added `AvatarRendererTestAccess` (a `NOXNA friend struct` in `tests/`, following this codebase's
+  own established test-access convention) granting direct, GPU-independent access to the private
+  `PartTintEXT`. Added 7 tests: `PartTintRoutesHairSubstring`/`...ShirtSubstring`/`...PantsSubstring`/
+  `...ShoesSubstring` (each of the 4 keyword branches individually), `PartTintFallsBackToSkinColorWhenNoKeywordMatches`,
+  `PartTintIsCaseSensitive` (a lowercase keyword must not match — directly guards against
+  regressing to Task 11.17's original bug, exact-equality against a lowercase literal), and
+  `PartTintFirstMatchWinsOnSubstringCollision` (a name containing both "Hair" and "Shirt" must
+  route to whichever is checked first). Confirmed the collision test has real detection power by
+  temporarily swapping the Hair/Shirt check order — it failed with the exact predicted mismatch;
+  restored and confirmed green. The existing GPU integration test's own Hair/Shirt real-pixel-
+  readback coverage is unchanged and still the end-to-end proof; these are a complementary,
+  much-cheaper unit-level layer for the branches it didn't reach. Full suite: 3390/3390 passing (2
+  expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 13.2** — Add a test for `ComputeBoneTransformsEXT`'s defensive bone-index bounds check
   (`if (!track.Keys.empty() && track.BoneIndex >= 0 && track.BoneIndex <
