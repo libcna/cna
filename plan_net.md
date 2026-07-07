@@ -2681,13 +2681,27 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   dimensions. No revert-verify applies (investigation confirmed already-correct behavior, no fix
   made). Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 14.3** — Polish `examples/demo_avatar/src/Main.cpp`'s CLI argument parsing. Confirmed
+- [x] **Task 14.3** — Polish `examples/demo_avatar/src/Main.cpp`'s CLI argument parsing. Confirmed
   `ParseGenderArg` (~lines 9-21) silently accepts any value other than exactly `"female"` (including
   a typo like `"Female"`) as `Male`, with no warning; `ParseWardrobeHairArg` similarly does zero
   validation against the two known styles (`Cap`/`Ponytail`) — a bogus style throws a raw,
   unfriendly `ContentLoadException` from deep inside `ContentManager` instead of a clear
   usage error. Minor example-code polish, not a core-engine bug; add basic validation with a
   friendly error message for both.
+
+  Added explicit validation to both: `ParseGenderArg` now accepts only `"male"`/`"female"`,
+  printing `unrecognized --gender value "<value>" (expected "male" or "female")` to stderr and
+  exiting `64` (the `sysexits.h` `EX_USAGE` convention) for anything else — including the exact
+  `"Female"` typo case named by this task. `ParseWardrobeHairArg` now validates against `"Cap"`/
+  `"Ponytail"` up front, printing an equivalent friendly error and exiting `64` before ever
+  reaching `ContentManager`. Manually built and ran `cna_demo_avatar` with `--gender Female`,
+  `--wardrobe-hair Wig` (both now produce the friendly error and exit 64, confirmed via direct
+  invocation) and `--gender female`/`--wardrobe-hair Cap` (both still proceed normally into the
+  real windowed demo, confirmed by running under `timeout` and observing it launches rather than
+  erroring). Full suite: 3397/3397 passing (2 expected accelerometer/gyroscope skips), no
+  regressions (example-only change).
+
+**Phase 14 complete — 3/3.**
 
 ---
 
