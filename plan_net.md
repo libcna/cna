@@ -1978,10 +1978,22 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   (pure test-coverage addition for already-correct code, matching FNA exactly). Full suite:
   3367/3367 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 9.10** — Add message-content assertions to all 6 GamerServices exception types'
+- [x] **Task 9.10** — Add message-content assertions to all 6 GamerServices exception types'
   `DefaultCtor` tests. Confirmed every existing `*Test.DefaultCtor` only checks `dynamic_cast`
   succeeds, never what the default (no-message) constructor produces for `what()`/`getMessageProperty()`
   — a regression that silently blanked the default message wouldn't be caught by any existing test.
+
+  Confirmed against FNA's real source that all 6 default constructors (`NetworkException`,
+  `NetworkNotAvailableException`, `GamerPrivilegeException`, `GamerServicesNotAvailableException`,
+  `GameUpdateRequiredException`, `GuideAlreadyVisibleException`) simply forward to `: base()` with
+  no hardcoded message anywhere — unlike some `Audio` namespace exceptions elsewhere in this
+  codebase, which do have a custom hardcoded default message. So the correct default-message
+  assertion here is the empty string produced by `System::Exception()`'s own default constructor.
+  Added `EXPECT_STREQ("", ex.what());` to all 6 `DefaultCtor` tests. No revert-verify applies
+  (pure test-coverage addition for already-correct code). Full suite: 3367/3367 passing (2
+  expected accelerometer/gyroscope skips), no regressions.
+
+**Phase 9 complete — 10/10.**
 
 ---
 
