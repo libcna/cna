@@ -27,8 +27,12 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Marks whether this gamer has left the session.
          *
-         * FNA's setter for this is `internal`; restored here for NetworkSession's
-         * RemoveGamer() (a sibling class, not a subclass) to update it.
+         * FNA's setter for this is `private` (`{ get; private set; }`), not `internal` -
+         * FNA's own NetworkSession never actually calls it after construction, so real XNA's
+         * HasLeftSession is permanently false in practice (an unimplemented FNA stub, like several
+         * other NetworkSession-adjacent members). Restored here, as a NOXNA extension, so this
+         * port's NetworkSession::RemoveGamer() (a sibling class, not a subclass, so it couldn't
+         * reach a real `private` setter either way) can make this property actually functional.
          *
          * @param value The new value.
          */

@@ -1324,11 +1324,31 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   correct validation here, not a new synthetic test). No revert-verify applies. Full suite:
   **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 6.9** — Re-verify `LeaderboardReader`-adjacent doc-comment accuracy: confirm the
+- [x] **Task 6.9** — Re-verify `LeaderboardReader`-adjacent doc-comment accuracy: confirm the
   `HasLeftSession` doc-comment in `NetworkGamer.hpp` (~line 30) correctly describes FNA's actual
   access modifier (`{ get; private set; }`, not `internal`) — a minor doc-accuracy fix, not a
   behavior change, but worth correcting so future readers don't misunderstand what CNA's `NOXNA
   SetHasLeftSession()` extension is actually restoring vs. adding.
+
+  Confirmed against FNA's real source (`NetworkGamer.cs`): the property is indeed
+  `public bool HasLeftSession { get; private set; }`, and — more notably — FNA's own
+  `NetworkSession.cs` never actually calls the setter after the constructor's one-time
+  `HasLeftSession = false;`, meaning real XNA's `HasLeftSession` is permanently `false` in
+  practice (an unimplemented stub, like several other `NetworkSession`-adjacent members already
+  found this session). Fixed the doc comment: corrected "internal" to "private", and added why
+  CNA's own `NOXNA SetHasLeftSession()` extension exists at all — this port's own
+  `NetworkSession::RemoveGamer()` (a sibling class, not a subclass, so it couldn't reach a real
+  `private` setter regardless of the exact modifier) needed a way to make this property actually
+  functional, unlike FNA's own dead one.
+
+  Documentation-only change (no behavior modified), no revert-verify applies. Full suite:
+  **3301/3303 passing** (2 expected accelerometer/gyroscope skips), no regressions.
+
+  **Phase 6 complete** — Tasks 6.1-6.5 and 6.7-6.9 done (8 of 9); Task 6.6 requires modifying an
+  existing `sharp-runtime` file and per this repo's own convention needs the user's approval
+  first — skipped for now, consistent with Tasks 4.4/4.5 being deferred for the same reason. Task
+  6.10 (added mid-session, logged under Phase 6 above) likewise requires a `sharp-runtime` change
+  and remains open for the same reason.
 
 - [ ] **Task 6.10** — Investigate and fix (in `sharp-runtime`, coordinating per that repo's own
   modification rule — see Task 4.4) `BinaryReader::ReadBytes` throwing plain
