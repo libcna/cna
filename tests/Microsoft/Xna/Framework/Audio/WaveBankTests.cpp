@@ -727,6 +727,44 @@ TEST(WaveBankTest, IsInUseFalseAfterDisposeWhilePlaying)
     }
 }
 
+// P12-BANK-001: real FACT (FACTWaveBank_Destroy, FACT.c) force-stops every cue still using the
+// wave bank when it's destroyed -- previously WaveBank::Dispose() only cleared activeCues_
+// without stopping anything, so a cue kept audibly playing even though IsInUse already
+// (misleadingly) reported false right after Dispose(). This is the same scenario as
+// IsInUseFalseAfterDisposeWhilePlaying above, but actually checking the cue was stopped.
+TEST(WaveBankTest, DisposeForceStopsStillPlayingCue)
+{
+    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, XwbFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+        SoundBank sb(&engine, XsbFixturePath());
+
+        std::unique_ptr<Cue> cue(sb.GetCue("Boom"));
+        cue->Play();
+
+        if (!wb.getIsInUseProperty())
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not exercise WaveBank playback";
+        }
+
+        ASSERT_TRUE(cue->getIsPlayingProperty());
+        wb.Dispose();
+
+        EXPECT_TRUE(cue->getIsDisposedProperty());
+        EXPECT_FALSE(cue->getIsPlayingProperty());
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise WaveBank playback";
+    }
+}
+
 // XA-7: IsInUse used to only check IsPlaying, so pausing the only cue using this bank made it
 // falsely report itself as not in use.
 TEST(WaveBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)

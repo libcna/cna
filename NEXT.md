@@ -48,8 +48,13 @@ framework/runtime, not a game.
   randomization -- which itself found and fixed a real double-reciprocal filter-Q bug, caught by
   its own end-to-end test), and the RFC-1 crossfeed pan matrix (`P11-PAN-001`, user-greenlit after
   three prior deferrals -- see §3) are all done. **Phase 11 is now fully closed**, having spawned
-  one small follow-up (`P11-PAN-002`, §8). **See §4 for an important process note about how this
-  phase started.**
+  one small follow-up (`P11-PAN-002`, closed, see §3). **See §4 for an important process note about
+  how this phase started.** **Phase 12** (`plan_audio.md`'s fresh XNA 4.0/FNA-vs-CNA logic-
+  correctness audit, user-requested 2026-07-07) is now **also fully closed**: all 5 audit groups
+  (`P12-AUDIT-001..005`) and all 6 follow-up tasks they spawned (`P12-PITCH-001`, `P12-DOC-001`,
+  `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`) are `[x]`. **This closes the
+  entire Phase 11/12 Audio audit scope with zero remaining self-selectable or user-pending items**
+  (see §8).
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT (the user explicitly reconfirmed this
   2026-07-07, rejecting `P10-HRTF-002`'s RFC-2 optional-FAudio-backend proposal). XACT
@@ -67,27 +72,26 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P11-PAN-002`, on top of `P12-VAR-001`,
-  `P12-CATEGORY-001`, `P12-PAUSE-001`, `P12-DOC-001`, `P12-PITCH-001`, `P11-PAN-001`,
+- **Build:** clean, rebuilt and reverified this pass (`P12-BANK-001`, on top of `P11-PAN-002`,
+  `P12-VAR-001`, `P12-CATEGORY-001`, `P12-PAUSE-001`, `P12-DOC-001`, `P12-PITCH-001`, `P11-PAN-001`,
   `P11-XACT-003/004/002`, `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`,
   `P11-CHECKLIST-001`, and everything in Phase 10). EasyGL backend (Linux default),
-  `SOUND_ENABLED` on, SDL3_mixer linked. Required a one-line unrelated unblock first
-  (`GamerProfile.cpp`'s `RegionInfo::CurrentRegion()` call, renamed upstream in sharp-runtime --
-  see §3). `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt this pass (no Audio
-  *public XNA* API surface touched -- `P11-PAN-002`'s changes are all internal to
-  `SoundEffect.cpp`'s anonymous namespace).
-- **Tests:** `CnaTests` whole-suite count is **3397 / 3399 pass** (2 skipped:
+  `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets not
+  rebuilt this pass (no Audio *public XNA* API surface touched -- `P12-BANK-001`'s changes are
+  all to `SoundBank`/`WaveBank`/`Cue`'s private cue-tracking internals).
+- **Tests:** `CnaTests` whole-suite count is **3400 / 3402 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-  hardware-dependent, expected — not Audio; the 1-test increase since the last sync is
-  `P11-PAN-002`'s new `PlayWithHardPanDoesNotCrash` smoke test, see §3). Prior sync's 14-test
-  increase was `P12-VAR-001`'s new variable-accessibility/clamping coverage. The audio-scoped
-  subset (§7's `--gtest_filter` list) was reverified under **two** fresh one-off sanitizer
-  builds this pass: ThreadSanitizer during `P11-PAN-001` (497/497 pass, zero `WARNING:
-  ThreadSanitizer` reports, not re-run for `P11-PAN-002` -- no new threading surface, only a
-  mutex-protected deferred-free queue) and a **fresh ASan+UBSan build specifically for
-  `P11-PAN-002`** (522/522 pass, zero errors/leaks -- this one caught and drove a real fix, see
-  §3). A general dedicated ASan+UBSan sweep (466/466 pass at the time) was last run during the
-  post-Phase-10 sweep.
+  hardware-dependent, expected — not Audio; the 3-test increase since the last sync is
+  `P12-BANK-001`'s new force-stop-cascade coverage, see §3). Prior sync's 1-test increase was
+  `P11-PAN-002`'s new `PlayWithHardPanDoesNotCrash` smoke test. The audio-scoped subset (§7's
+  `--gtest_filter` list) was reverified under **two** fresh one-off sanitizer builds during
+  `P11-PAN-001`/`P11-PAN-002`: ThreadSanitizer (497/497 pass, zero `WARNING: ThreadSanitizer`
+  reports) and ASan+UBSan (522/522 pass, zero errors/leaks -- the latter caught and drove a real
+  fix, see §3). `P12-BANK-001` did not need a fresh sanitizer run (no new raw ownership/threading
+  pattern -- plain synchronous C++ object-graph management, same snapshot-before-mutate shape
+  already exercised by `AudioEngine::StopCategoryInternal`); verified instead via the standard
+  git-stash regression pattern (§7). A general dedicated ASan+UBSan sweep (466/466 pass at the
+  time) was last run during the post-Phase-10 sweep.
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
@@ -125,6 +129,28 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12" sections.
 
+- **`P12-BANK-001`** — implemented the real force-stop cascade for `SoundBank`/
+  `WaveBank::Dispose()`, user-greenlit ("Implementovat force-stop cascade", alongside
+  `P11-PAN-002`'s confirmation). `SoundBank` gained its own `activeCues_`/`RegisterCue()`/
+  `UnregisterCue()`, mirroring `WaveBank`'s already-correct existing pattern; `Cue::Play()` now
+  calls `bank_->RegisterCue(this)` at all three of its `state_ = State::Playing` exit points (not
+  just the final one -- missing the first two initially broke three of this task's own new tests,
+  caught immediately), and `Cue::StopInternal()`'s immediate-stop path pairs it with
+  `bank_->UnregisterCue(this)`. `SoundBank::Dispose()` now snapshots `activeCues_` before looping
+  (same mutate-during-iteration hazard as `AudioEngine::StopCategoryInternal`) and force-`Dispose()`s
+  each remaining cue -- ordering matters: `fireAndForget_.clear()` runs first, so every
+  fire-and-forget cue self-unregisters from `activeCues_` via its own destructor before the
+  cascade loop runs, leaving only genuinely caller-owned `GetCue()` cues to force-stop, no
+  double-dispose. `WaveBank::Dispose()` got the identical snapshot-then-force-stop fix in place of
+  its old bare `activeCues_.clear()`. Matches `FACTSoundBank_Destroy`/`FACTWaveBank_Destroy`
+  (`FACT.c:1311-1327`/`:1457-1483`). Also widened `SoundBank::getIsInUseProperty()` to check the
+  new broader `activeCues_` instead of only `fireAndForget_` (closes the exact visibility gap its
+  own doc comment used to name), and noted in `GetCue()`'s doc comment that a still-playing
+  caller-owned cue is force-stopped if the bank is disposed first. 3 new tests
+  (`SoundBankTests.cpp`, `WaveBankTests.cpp`); `git stash`-verified (all 3 fail pre-fix). Full
+  suite 3400/3402 pass (was 3397/3399; +3 new tests), no regressions. **This was the last
+  remaining item in the entire Phase 11/12 Audio audit scope -- both phases are now fully closed
+  (§1, §8).** See `plan_audio.md`.
 - **Phase 12 audit** (`P12-AUDIT-001..005`) — user-requested, direct instruction (not a
   self-selected continuation): 5 parallel read-only agents re-audited all 18
   `Microsoft::Xna::Framework::Audio` classes against FNA for *logic* correctness (not just
@@ -161,8 +187,9 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12" s
   internal `MIX_Track` for sample-level verification, same limitation `P12-PITCH-001` already
   hit here; the underlying matrix math is what `P11-PAN-001`'s own tests already verify, reused
   as-is). Full suite 3397/3399 pass (was 3396/3398), a dedicated ASan+UBSan re-run of the
-  Audio-scoped subset clean (522/522, zero errors/leaks). **This closes every outstanding Phase
-  11/12 Audio finding except `P12-BANK-001`, in progress next.** See `plan_audio.md`.
+  Audio-scoped subset clean (522/522, zero errors/leaks). **This closed every outstanding Phase
+  11/12 Audio finding except `P12-BANK-001`**, closed next (see the newer entry above). See
+  `plan_audio.md`.
 - **`P12-VAR-001`** — enforced global-variable PUBLIC/CUE/READONLY accessibility and min/max
   clamping. Independently re-read `FACT.c`'s two variable-index resolvers first, which surfaced
   a deeper finding than the audit originally described: `AudioEngine::GetGlobalVariable`/
@@ -717,36 +744,19 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**Phase 11 is fully closed**, including its one deliberate follow-up (`P11-PAN-002`,
-user-greenlit 2026-07-07, see §3). `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was
-explicitly **rejected** by the user the same day -- staying on SDL3_mixer (see §9).
+**Phase 11 and Phase 12 are both fully closed.** Phase 11's one deliberate follow-up
+(`P11-PAN-002`, user-greenlit 2026-07-07) and Phase 12's fresh logic-correctness audit (all 5
+audit groups plus all 6 follow-up tasks: `P12-PITCH-001`, `P12-DOC-001`, `P12-CATEGORY-001`,
+`P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`) are all `[x]` in `plan_audio.md`. `P10-HRTF-002`'s
+RFC-2 (optional FAudio/FACT backend) was explicitly **rejected** by the user the same day --
+staying on SDL3_mixer (see §9). `P12-PAUSE-001` was investigated and found to be a **false
+positive** -- `Cue::state_` already stays `Playing` throughout a pause (the independent `paused_`
+bool, `P9-LIFECYCLE-013`); a new passing regression test locks in the already-correct behavior
+with zero code change. Everything else was a real bug, fixed for real -- see §3 for each.
 
-**Phase 12 (fresh logic-correctness audit, user-requested 2026-07-07) found 6 candidate gaps --
-5 are closed:** `P12-PITCH-001` fixed (real bug); `P12-DOC-001` fixed (docs); `P12-CATEGORY-001`
-fixed (real bug, category hierarchy + a SetVolume raw-overwrite bug found along the way);
-`P12-VAR-001` fixed (real bug -- AudioEngine/Cue variable accessibility were conflated into one
-domain when real FACT has two separate ones, see §3); `P12-PAUSE-001` investigated and found to
-be a **false positive** -- `Cue::state_` already stays `Playing` throughout a pause (the
-independent `paused_` bool, `P9-LIFECYCLE-013`), so the audit's finding did not reproduce; a new
-passing regression test (`InstanceLimitStillCountsAPausedCue`) locks in the already-correct
-behavior with zero code change.
-
-**One item remains, user-greenlit 2026-07-07, next up:**
-
-1. **`P12-BANK-001`** -- `SoundBank`/`WaveBank::Dispose()` doesn't force-stop cues still using the
-   bank, unlike real FACT. User chose the "implement a real force-stop cascade" option (not the
-   "document as accepted deviation" alternative also offered) -- this changes the currently-
-   documented "a `GetCue()`'d `Cue*` is caller-owned" contract, so needs care around who's allowed
-   to force-stop a cue neither bank nominally owns. See `plan_audio.md` P12-AUDIT-004 for the
-   full tension and design options already scoped out.
-
-**With `P12-BANK-001` needing user input, Phase 12 has no further self-selectable Audio work.**
-
-Also still open, spawned by `P11-PAN-001` (not part of Phase 12's audit, but same "confirm before
-starting" caveat):
-- **`P11-PAN-002`** -- apply the same crossfeed fix to the static fire-and-forget
-  `SoundEffect::Play(volume, pitch, pan)` helper. Lower risk than `P11-PAN-001` (no existing
-  filter/callback to share or regress) but still new scope beyond what was greenlit.
+**There is currently no open, scoped Audio task on this branch.** Whoever resumes next needs a
+fresh instruction from the user (a new phase, a specific bug report, or explicit permission to run
+another audit pass) -- see §9 for what not to self-start without asking.
 
 ---
 
@@ -778,12 +788,11 @@ starting" caveat):
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state. Phase 9 is
-fully closed. Phase 10 (plan_audio.md) is a large, intentionally open task list; 18 items are
-closed so far -- read its Phase 10 section before picking anything, every task there already has a
-concrete, cited status. See NEXT.md §8 for the remaining candidates: every one of them is real
-feature/behavior-decision work or a large mechanical audit, and needs the user's confirmed scope
-first -- there is no self-selectable pure-test-addition work left on the list (§9).
+Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state. Phases
+9, 10, 11, and 12 are all fully closed (plan_audio.md) -- every task ID in every one of those
+phases is checked [x] with a concrete, cited status. There is currently NO open, scoped Audio task
+on this branch (§8) -- do not self-start a new phase or audit pass; wait for the user to name a
+specific task, report a bug, or explicitly authorize another audit round (§9).
 
 1. If the user names a specific task, inspect only the files needed for it -- do not refactor
    unrelated code. Confirm scope/approach with the user first if it's real feature work rather

@@ -5173,10 +5173,57 @@ context-free agents, explicitly instructed not to modify any files):
   Full suite 3379/3381 pass (was 3378/3380; +1 new test, no regressions), same 2 pre-existing
   hardware-only skips.
 
-* [ ] P12-BANK-001: decide and implement `SoundBank`/`WaveBank::Dispose()`'s cue force-stop
+* [x] P12-BANK-001: decide and implement `SoundBank`/`WaveBank::Dispose()`'s cue force-stop
   cascade, or explicitly re-scope/document the caller-owns-`GetCue()`-cues design as an accepted
   deviation instead (`P12-AUDIT-004` finding). Needs a design decision, not just an implementation
-  -- candidate for user input rather than autonomous self-selection. Not started.
+  -- candidate for user input rather than autonomous self-selection.
+  *Status:* Fixed, user-greenlit 2026-07-07 ("Implementovat force-stop cascade" -- implement the
+  real fix, not just document the gap as an accepted deviation). Gave `SoundBank` its own
+  `activeCues_`/`RegisterCue()`/`UnregisterCue()`, mirroring `WaveBank`'s already-correct existing
+  pattern exactly (`WaveBank.cpp:221-230`). `Cue::Play()` now calls `bank_->RegisterCue(this)`
+  alongside the existing `eng->RegisterCue(this)` at **all three** of its `state_ = State::Playing`
+  exit points (`Cue.cpp`: the "no parsed XSB data" early return, the "no sound resolved" early
+  return, and the normal end-of-function path after the wave-reference loop) -- missing the first
+  two initially made a sound-less cue (e.g. a cue whose sound has zero waves, as used by the
+  existing "Explosion" test fixture) never register at all, caught immediately by three of my own
+  new tests failing until all three sites were fixed (see below). `Cue::StopInternal()`'s
+  immediate-stop path calls the paired `bank_->UnregisterCue(this)` right next to the existing
+  `bank_->engine_->UnregisterCue(this)` -- only one call site needed here since `StopInternal` is
+  generic over however the cue reached `Playing`, unlike `Play()`'s three separate entry points.
+  `SoundBank::Dispose()` now snapshots `activeCues_` into a local `std::vector<Cue*>` before
+  looping (same mutate-during-iteration hazard as `AudioEngine::StopCategoryInternal`, since each
+  `cue->Dispose()` call below re-enters `UnregisterCue()` and would otherwise invalidate a live
+  range-for) and calls `Dispose()` (not just `Stop()`) on each -- chosen over `Stop(Immediate)`
+  alone since `Dispose()` more fully matches FACT's actual "destroyed, gone" semantic, and is safe
+  given `Cue::Dispose()`'s already-confirmed idempotency (`Cue.cpp:1300-1313`,
+  `if (!isDisposed_) { ...; StopInternal(true); isDisposed_ = true; }`). Order inside `Dispose()`
+  matters: `fireAndForget_.clear()` runs **first** (destroying every fire-and-forget `Cue` via its
+  own `unique_ptr`, which self-unregisters from `activeCues_` through the same `StopInternal()`
+  path), so by the time the `activeCues_` snapshot-and-cascade loop runs second, only genuinely
+  caller-owned `GetCue()` cues remain in it -- no double-`Dispose()` of a fire-and-forget cue, and
+  no separate "skip cues also in `fireAndForget_`" filter needed. `WaveBank::Dispose()` got the
+  identical fix (snapshot `activeCues_`, `cue->Dispose()` each, `.clear()`) in place of its old
+  bare `activeCues_.clear()` (`WaveBank.cpp:382-396`) -- matches `FACTWaveBank_Destroy`
+  (`FACT.c:1457-1483`) the same way `SoundBank::Dispose()` now matches `FACTSoundBank_Destroy`
+  (`FACT.c:1311-1327`). Also widened `SoundBank::getIsInUseProperty()` from iterating only
+  `fireAndForget_` to iterating the new, broader `activeCues_` (`SoundBank.cpp:89-98`) -- a natural
+  consequence of the same tracking data now existing, matching `WaveBank::getIsInUseProperty()`'s
+  identical existing check and closing the exact visibility gap the original `getIsInUseProperty()`
+  doc comment used to call out by name ("cues obtained via GetCue are owned by the caller and not
+  tracked here" -- now false, comment updated in `SoundBank.hpp`). `GetCue()`'s own doc comment
+  gained a note that a still-playing `GetCue()`-obtained cue will be force-stopped if the bank is
+  disposed first, so it never outlives the bank (dangling `bank_` pointer risk from the audit
+  finding is now closed). New tests (`SoundBankTests.cpp`,`WaveBankTests.cpp`):
+  `IsInUseTrueForCueObtainedViaGetCueNotJustFireAndForget`, `DisposeForceStopsCueObtainedViaGetCue`,
+  `DisposeForceStopsStillPlayingCue`. Verified via git-stash: reverting the four production files
+  (keeping the new tests) reproduced exactly the failures the fix addresses -- the two
+  `IsInUse`-widening tests and the two "still playing/not disposed after bank Dispose()" assertions
+  in both bank types' force-stop tests, all failing pre-fix, all passing post-fix; also caught the
+  "only registered at the final Play() exit point" gap this same way before it ever reached the
+  stash step (an earlier build-and-run pass against three pre-existing `IsInUse*` tests failed
+  first, which is what surfaced the missing two `RegisterCue()` sites). Full suite 3400/3402 pass
+  (was 3397/3399; +3 new tests, no regressions), same 2 pre-existing hardware-only skips. This was
+  the last remaining item from the entire Phase 11/12 Audio scope.
 
 * [x] P12-DOC-001: fix `AUDIT.md` line 88's stale claim that `NoAudioHardwareException` is never
   thrown (`P12-AUDIT-005` finding).

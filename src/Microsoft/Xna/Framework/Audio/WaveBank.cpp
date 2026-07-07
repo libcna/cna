@@ -385,7 +385,17 @@ namespace Microsoft::Xna::Framework::Audio
         {
             Disposing.Raise(this, System::EventArgs::Empty);
             if (engine_) engine_->UnregisterWaveBank(this);
+
+            // P12-BANK-001: force-stop every cue still using this wave bank instead of merely
+            // forgetting about it -- matches FACTWaveBank_Destroy (FACT.c:1457-1483). Snapshot
+            // first: Cue::Dispose() below calls back into UnregisterCue() (for every wave bank
+            // the cue uses, not just this one), which would otherwise invalidate a live
+            // range-for over activeCues_ mid-iteration.
+            std::vector<Cue*> cues = activeCues_;
+            for (auto* cue : cues)
+                if (cue) cue->Dispose(); // idempotent; safe even if already disposed elsewhere
             activeCues_.clear();
+
             xactImpl_.reset();
             isDisposed_ = true;
         }

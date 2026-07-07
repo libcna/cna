@@ -840,6 +840,7 @@ namespace Microsoft::Xna::Framework::Audio
             // No parsed data — update state only
             state_ = State::Playing;
             if (eng) eng->RegisterCue(this);
+            if (bank_) bank_->RegisterCue(this); // P12-BANK-001
             return;
         }
 
@@ -965,6 +966,7 @@ namespace Microsoft::Xna::Framework::Audio
         {
             state_ = State::Playing;
             if (eng) eng->RegisterCue(this);
+            if (bank_) bank_->RegisterCue(this); // P12-BANK-001
             return;
         }
 
@@ -1124,6 +1126,10 @@ namespace Microsoft::Xna::Framework::Audio
 
         state_ = State::Playing;
         if (eng) eng->RegisterCue(this);
+        // P12-BANK-001: lets SoundBank::Dispose() force-stop this cue if it's still playing when
+        // the bank goes away, whether it's a fire-and-forget cue or one the caller obtained via
+        // GetCue() and is holding independently (see SoundBank::activeCues_'s comment).
+        if (bank_) bank_->RegisterCue(this);
 
         // P9-CATEGORY-007: start the fade-in ramp at silence -- ReconcileState() (ticked by
         // AudioEngine::Update() and every state getter) brings it up to full volume over
@@ -1241,6 +1247,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         if (bank_ && bank_->engine_)
             bank_->engine_->UnregisterCue(this);
+        if (bank_) bank_->UnregisterCue(this); // P12-BANK-001: pair to the RegisterCue() in Play()
     }
 
     void Cue::ForceFadeOutForInstanceLimit(uint16_t fadeOutMS)

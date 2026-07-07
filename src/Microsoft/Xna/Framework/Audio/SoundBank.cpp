@@ -88,11 +88,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool SoundBank::getIsInUseProperty() const
     {
-        // XA-7: a paused fire-and-forget cue is still in use -- FACT_STATE_INUSE (which FNA's
-        // IsInUse reflects) stays set while paused, it only clears once the cue is genuinely
-        // stopped. Checking IsPlaying alone made a paused cue look unused.
-        for (const auto& faf : fireAndForget_)
-            if (faf.cue && (faf.cue->getIsPlayingProperty() || faf.cue->getIsPausedProperty()))
+        // XA-7: a paused cue is still in use -- FACT_STATE_INUSE (which FNA's IsInUse reflects)
+        // stays set while paused, it only clears once the cue is genuinely stopped. Checking
+        // IsPlaying alone made a paused cue look unused. activeCues_ (P12-BANK-001) covers both
+        // fire-and-forget and caller-owned GetCue() cues, matching WaveBank's identical check.
+        for (const auto* cue : activeCues_)
+            if (cue && (cue->getIsPlayingProperty() || cue->getIsPausedProperty()))
                 return true;
         return false;
     }
@@ -160,6 +161,17 @@ namespace Microsoft::Xna::Framework::Audio
             fireAndForget_.end());
     }
 
+    void SoundBank::RegisterCue(Cue* cue)
+    {
+        if (!cue) return;
+        activeCues_.push_back(cue);
+    }
+
+    void SoundBank::UnregisterCue(Cue* cue)
+    {
+        activeCues_.erase(std::remove(activeCues_.begin(), activeCues_.end(), cue), activeCues_.end());
+    }
+
     void SoundBank::PlayCueInternal(const std::string& name,
                                      const AudioListener* listener,
                                      const AudioEmitter* emitter)
@@ -191,7 +203,19 @@ namespace Microsoft::Xna::Framework::Audio
         {
             Disposing.Raise(this, System::EventArgs::Empty);
             if (engine_) engine_->UnregisterSoundBank(this); // XA-8
-            fireAndForget_.clear(); // stops any still-playing fire-and-forget cues
+            fireAndForget_.clear(); // stops any still-playing fire-and-forget cues; each one's
+                                     // destructor also unregisters itself from activeCues_.
+
+            // P12-BANK-001: force-stop every cue still associated with this bank, including ones
+            // the caller obtained via GetCue() and is still holding -- matches
+            // FACTSoundBank_Destroy (FACT.c:1311-1327). Snapshot first: Cue::Dispose() below
+            // calls back into UnregisterCue(), which would otherwise invalidate a live range-for
+            // over activeCues_ mid-iteration (same hazard as AudioEngine::StopCategoryInternal).
+            std::vector<Cue*> cues = activeCues_;
+            for (auto* cue : cues)
+                if (cue) cue->Dispose(); // idempotent; safe even if the caller already disposed it
+            activeCues_.clear();
+
             xactImpl_.reset();
             isDisposed_ = true;
         }

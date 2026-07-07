@@ -602,6 +602,41 @@ TEST(SoundBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
     bank.Dispose();
 }
 
+// P12-BANK-001: IsInUse used to only look at fireAndForget_, so a cue the caller obtained via
+// GetCue() (not PlayCue()) and is playing independently was invisible to it -- now activeCues_
+// tracks both origins, matching WaveBank's already-correct broader registry.
+TEST(SoundBankTest, IsInUseTrueForCueObtainedViaGetCueNotJustFireAndForget)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    std::unique_ptr<Cue> cue(bank.GetCue("Explosion"));
+    ASSERT_FALSE(bank.getIsInUseProperty());
+
+    cue->Play();
+    EXPECT_TRUE(bank.getIsInUseProperty());
+
+    cue->Stop(AudioStopOptions::Immediate);
+    EXPECT_FALSE(bank.getIsInUseProperty());
+}
+
+// P12-BANK-001: real FACT (FACTSoundBank_Destroy, FACT.c) force-stops every cue still using the
+// bank when it's destroyed, including ones the caller obtained via GetCue() and is still holding
+// -- previously SoundBank::Dispose() only cleared fireAndForget_, leaving a GetCue()-obtained cue
+// playing (and its bank_ pointer dangling once the SoundBank itself was later destructed).
+TEST(SoundBankTest, DisposeForceStopsCueObtainedViaGetCue)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    Cue* cue = bank.GetCue("Explosion");
+    cue->Play();
+    ASSERT_TRUE(cue->getIsPlayingProperty());
+    ASSERT_FALSE(cue->getIsDisposedProperty());
+
+    bank.Dispose();
+
+    EXPECT_TRUE(cue->getIsDisposedProperty());
+    EXPECT_FALSE(cue->getIsPlayingProperty());
+    delete cue; // caller-owned; Cue::Dispose() is idempotent so the already-forced disposal is safe
+}
+
 // P9-LIFECYCLE-003/006: unlike "Explosion" above, "Apply3DCue" has a real (200-byte, ~1.13ms)
 // WaveBank-backed instance, so its fire-and-forget cue actually finishes naturally -- IsInUse must
 // become false soon afterward without any explicit Stop() or a second PlayCue() call to trigger
