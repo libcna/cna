@@ -585,6 +585,18 @@ namespace Microsoft::Xna::Framework::Content
             template <typename T>
             T Read()
             {
+                // Task 11.7: a truncated/corrupt .skeleton.bin/.clip.bin (or a header value like
+                // boneCount/trackCount/keyCount inconsistent with the file's actual byte length)
+                // previously caused a real out-of-bounds heap read (undefined behavior) here
+                // instead of a clean, catchable error - this is the most serious memory-safety
+                // finding in the whole Avatar content-loading path.
+                if (Pos + sizeof(T) > Data.size())
+                {
+                    throw ContentLoadException(
+                        "Truncated or corrupt binary content: attempted to read " + std::to_string(sizeof(T))
+                            + " bytes at offset " + std::to_string(Pos) + ", but only "
+                            + std::to_string(Data.size()) + " bytes are available");
+                }
                 T value{};
                 std::memcpy(&value, Data.data() + Pos, sizeof(T));
                 Pos += sizeof(T);

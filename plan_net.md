@@ -2341,7 +2341,7 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   rebuilt, confirmed both new tests failed ("it throws nothing"); restored, rebuilt, confirmed
   green. Full suite: 3377/3377 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
-- [ ] **Task 11.7** — Add bounds checking to `ContentManager`'s `BinReaderEXT::Read<T>()`. Confirmed
+- [x] **Task 11.7** — Add bounds checking to `ContentManager`'s `BinReaderEXT::Read<T>()`. Confirmed
   (`ContentManager.cpp`, ~lines 585-592): `std::memcpy(&value, Data.data() + Pos, sizeof(T)); Pos +=
   sizeof(T);` never checks `Pos + sizeof(T) <= Data.size()`. A truncated or corrupt
   `.skeleton.bin`/`.clip.bin` (or a header value like `boneCount`/`trackCount`/`keyCount`
@@ -2351,6 +2351,28 @@ revert-verify-restore (or documented where a fix wasn't the right call). Continu
   `ContentLoadException` on underflow. Add a test loading a deliberately truncated
   `.skeleton.bin`/`.clip.bin` and asserting a clean exception, not a crash (run under ASan if
   available).
+
+  Added the check at the top of `Read<T>()`: throws `ContentLoadException` naming the requested
+  byte count, current offset, and total buffer size. `BinReaderEXT` is a private struct in an
+  anonymous namespace inside `ContentManager.cpp` with no direct unit-test access, so testing
+  this required exercising the real end-to-end `ContentManager::Load<shared_ptr<SkinnedModelEXT>>()`
+  path — created a new `tests/Microsoft/Xna/Framework/Content/` directory (this namespace had no
+  test coverage at all before now) with `ContentManagerSkinnedModelTests.cpp`: a
+  `ScratchContentRoot` RAII helper writes a minimal `avatar.skinnedmodel.json` +
+  deliberately-truncated `skeleton.bin` to a unique temp directory, then a `ContentManager`
+  pointed at that root (with a plain headless `GraphicsDevice`, same pattern as this session's
+  other new Graphics tests) attempts to load it. Added `TruncatedSkeletonBinThrowsContentLoadException`
+  (`boneCount = 1` header present, but the file ends immediately after — the very next read is
+  past the end) and `EmptySkeletonBinThrowsContentLoadException` (0-byte file — even the first
+  read, `boneCount` itself, is already out of bounds).
+
+  **Revert-verify:** removed the bounds check, rebuilt, reran — the truncated-header case merely
+  failed ("throws nothing", a silent OOB read that happened not to crash), but the **empty-buffer
+  case crashed the entire test process with a genuine SIGSEGV (exit code 139)** — the strongest
+  possible confirmation this is a real, exploitable memory-safety bug, not a theoretical one.
+  Restored the fix, rebuilt, confirmed both tests pass again, full suite green, and re-ran all 3
+  GPU avatar integration tests to confirm real (non-truncated) content loading is unaffected. Full
+  suite: 3379/3379 passing (2 expected accelerometer/gyroscope skips), no regressions.
 
 - [ ] **Task 11.8** — Add a sanity check on `boneCount` before `.resize()` in
   `SkinnedModelTypeReader::Read()`. Confirmed (`ContentManager.cpp`, ~lines 679-681): `boneCount` is
