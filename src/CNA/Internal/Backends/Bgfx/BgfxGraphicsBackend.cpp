@@ -1600,6 +1600,11 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(light0Diff3DUnif_, diff);
             float litEn[4] = { params.lightingEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(lightingEn3DUnif_, litEn);
+            // Task 899: EmissiveColor was never forwarded to the skinned3d shader at all -- see
+            // fs_skinned3d.sc's comment for the full finding.
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
             if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
                 bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
             if (bgfx::isValid(texColor3DSampler_))

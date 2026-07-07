@@ -1,4 +1,4 @@
-$input v_texcoord0, v_normal, v_eyeDir
+$input v_texcoord0, v_normal, v_eyeDir, v_fogFactor
 
 #include <bgfx_shader.sh>
 
@@ -11,6 +11,7 @@ uniform vec4 u_light0Dir;
 uniform vec4 u_light0Diffuse;
 uniform vec4 u_envMapAmount;
 uniform vec4 u_envMapSpecular;
+uniform vec4 u_fogColor;
 
 void main()
 {
@@ -28,5 +29,7 @@ void main()
         ? pow(max(1.0 - abs(viewAngle), 0.0), u_envMapSpecular.w) * u_envMapAmount.x
         : u_envMapAmount.x;
     vec3 rgb = mix(baseColor, envSample.xyz, blendFactor) + u_envMapSpecular.xyz * envSample.w * combinedAlpha;
+    // Task 899: mix toward FogColor as v_fogFactor -> 0 (matches Task 888's established formula).
+    rgb = mix(u_fogColor.xyz, rgb, v_fogFactor);
     gl_FragColor  = vec4(rgb, combinedAlpha);
 }

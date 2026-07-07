@@ -1,5 +1,5 @@
 $input a_position, a_normal, a_texcoord0
-$output v_texcoord0, v_normal, v_eyeDir
+$output v_texcoord0, v_normal, v_eyeDir, v_fogFactor
 
 #include <bgfx_shader.sh>
 
@@ -7,6 +7,7 @@ uniform mat4 u_wvp;
 uniform mat4 u_world;
 uniform mat3 u_normalMatrix;
 uniform vec4 u_eyePos;
+uniform vec4 u_fogParams;
 
 void main()
 {
@@ -19,4 +20,9 @@ void main()
     v_normal      = mul(u_normalMatrix, a_normal);
     v_eyeDir      = u_eyePos.xyz - worldPos;
     v_texcoord0   = a_texcoord0;
+    // Task 899: fog factor from raw object-space Z (matches lit_textured3d's Task 888 formula
+    // exactly). u_fogParams = (fogEnabled, fogStart, fogEnd, unused). 1.0 = no fog, 0.0 = full.
+    v_fogFactor = (u_fogParams.x > 0.5)
+        ? clamp((u_fogParams.z - a_position.z) / max(u_fogParams.z - u_fogParams.y, 1e-6), 0.0, 1.0)
+        : 1.0;
 }

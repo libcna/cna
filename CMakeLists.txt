@@ -2899,6 +2899,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
 
+    # Task 899: EnvironmentMapEffect/SkinnedEffect fog on Bgfx (opportunistic bonus scope)
+    cna_bgfx_test(cna_test_bgfx_environmentmapeffect_fog
+                  examples/bgfx_environmentmapeffect_fog_test.cpp)
+    add_test(NAME Bgfx_EnvironmentMapEffect_Fog
+             COMMAND cna_test_bgfx_environmentmapeffect_fog)
+    set_tests_properties(Bgfx_EnvironmentMapEffect_Fog PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_fog
+                  examples/bgfx_skinnedeffect_fog_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_Fog
+             COMMAND cna_test_bgfx_skinnedeffect_fog)
+    set_tests_properties(Bgfx_SkinnedEffect_Fog PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=:0")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
