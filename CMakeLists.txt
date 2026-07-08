@@ -3827,6 +3827,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 706: RenderTargetUsage::DiscardContents vs PreserveContents on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_rendertarget_usage
+                 examples/sdlrenderer_rendertarget_usage_test.cpp)
+    add_test(NAME SDL_Renderer_RenderTargetUsage
+             COMMAND cna_test_sdl_rendertarget_usage)
+    set_tests_properties(SDL_Renderer_RenderTargetUsage PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
