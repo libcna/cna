@@ -90,8 +90,35 @@ namespace CNA::Internal::Backends::SdlRenderer
 
     void SdlSpriteBatchBackend::SetSamplerFilter(int textureFilter)
     {
-        // TextureFilter::Linear=0 → SDL_SCALEMODE_LINEAR; anything else → SDL_SCALEMODE_NEAREST
-        scaleMode = (textureFilter == 0) ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST;
+        // Task 701 finding: TextureFilter has 9 values encoding separate min/mag/mip filter
+        // components (see TextureFilter.hpp's own doc comments -- "shrink" = minification,
+        // "expand" = magnification), but SDL_SetTextureScaleMode takes a single SDL_ScaleMode
+        // applied uniformly (no separate min/mag/mip control, and no LOD/mipmap-level sampling
+        // at all in SDL_Renderer's 2D blit pipeline). Since SpriteBatch draws are near-universally
+        // magnification-dominant (sprites scaled up or 1:1, never minified with proper LOD
+        // selection on this backend), the MAGNIFICATION ("expand") component is the one that
+        // visibly matters and is used here as the effective filter:
+        //   Linear=0 (mag=Linear), Anisotropic=2 (linear-based, no SDL equivalent -- approximate
+        //   with Linear), LinearMipPoint=3 (mag=Linear), MinPointMagLinearMipLinear=7 (mag=Linear),
+        //   MinPointMagLinearMipPoint=8 (mag=Linear) -> SDL_SCALEMODE_LINEAR.
+        //   Point=1, PointMipLinear=4, MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6
+        //   (all mag=Point) -> SDL_SCALEMODE_NEAREST.
+        // Previously only textureFilter==0 mapped to Linear -- Anisotropic/LinearMipPoint/
+        // MinPointMagLinearMipLinear/MinPointMagLinearMipPoint were silently downgraded to Point
+        // filtering despite specifying a Linear magnification filter.
+        switch (textureFilter)
+        {
+            case 0: // Linear
+            case 2: // Anisotropic
+            case 3: // LinearMipPoint
+            case 7: // MinPointMagLinearMipLinear
+            case 8: // MinPointMagLinearMipPoint
+                scaleMode = SDL_SCALEMODE_LINEAR;
+                break;
+            default: // Point, PointMipLinear, MinLinearMagPointMipLinear, MinLinearMagPointMipPoint
+                scaleMode = SDL_SCALEMODE_NEAREST;
+                break;
+        }
     }
 
     void SdlSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)

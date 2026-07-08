@@ -3782,6 +3782,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 701: SamplerState -> SDL_ScaleMode + address-mode mapping audit pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_samplerstate_filter_audit
+                 examples/sdlrenderer_samplerstate_filter_audit_test.cpp)
+    add_test(NAME SDL_Renderer_SamplerState_FilterAudit
+             COMMAND cna_test_sdl_samplerstate_filter_audit)
+    set_tests_properties(SDL_Renderer_SamplerState_FilterAudit PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
