@@ -3507,6 +3507,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 667: SpriteSortMode::Deferred submission-order pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritebatch_deferred_order
+                 examples/sdlrenderer_spritebatch_deferred_order_test.cpp)
+    add_test(NAME SDL_Renderer_SpriteBatch_DeferredOrder
+             COMMAND cna_test_sdl_spritebatch_deferred_order)
+    set_tests_properties(SDL_Renderer_SpriteBatch_DeferredOrder PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
