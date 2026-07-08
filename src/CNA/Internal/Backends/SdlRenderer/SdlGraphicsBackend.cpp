@@ -64,12 +64,15 @@ namespace CNA::Internal::Backends::SdlRenderer
 
     void SdlSpriteBatchBackend::Begin()
     {
+        // Task 695 finding: this previously hardcoded SDL_SetRenderDrawBlendMode(SDL_BLENDMODE_BLEND)
+        // unconditionally, clobbering whatever SdlGraphicsBackend::ApplyBlendState had just set via
+        // GraphicsDevice::setBlendStateProperty(blendState) -- called by SpriteBatch::Begin()
+        // immediately before backend_->Begin() runs (see SpriteBatch.cpp). This was invisible while
+        // ApplyBlendState's own mapping was still incomplete (BlendState::AlphaBlend/NonPremultiplied
+        // both happened to resolve to this exact same SDL_BLENDMODE_BLEND value anyway), but became a
+        // real, visible bug once ApplyBlendState was fixed to distinguish them correctly.
         if (!renderer) throw std::runtime_error("SdlSpriteBatchBackend::Begin failed: renderer is null.");
         begun = true;
-        if (!SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND))
-        {
-            throw std::runtime_error(std::string("SDL_SetRenderDrawBlendMode failed: ") + SDL_GetError());
-        }
     }
 
     void SdlSpriteBatchBackend::End()
@@ -558,19 +561,60 @@ namespace CNA::Internal::Backends::SdlRenderer
         SDL_DestroySurface(surface);
     }
 
-    void SdlGraphicsBackend::ApplyBlendState(int colorSrcBlend, int /*alphaSrcBlend*/,
-                                              int colorDstBlend, int /*alphaDstBlend*/,
-                                              int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+    // Maps Microsoft::Xna::Framework::Graphics::Blend's 13 values to SDL_BlendFactor. The first
+    // 10 (One..InverseDestinationAlpha) have exact SDL equivalents; BlendFactor/InverseBlendFactor
+    // (a constant colour set via GraphicsDevice::BlendFactor) and SourceAlphaSaturation have no
+    // SDL_BlendFactor equivalent at all -- throw rather than silently substitute a wrong factor
+    // (Task 700's own "must not silently ... per unsupported combination" framing).
+    static SDL_BlendFactor ToSdlBlendFactor(int blend)
     {
-        // Map common XNA BlendState presets to SDL blend modes.
-        // Blend::One=0, Blend::Zero=1, Blend::SourceAlpha=4, Blend::InverseSourceAlpha=5
-        SDL_BlendMode mode = SDL_BLENDMODE_BLEND;
-        if (colorSrcBlend == 0 && colorDstBlend == 1)       // One, Zero → Opaque
-            mode = SDL_BLENDMODE_NONE;
-        else if (colorSrcBlend == 4 && colorDstBlend == 0)  // SourceAlpha, One → Additive
-            mode = SDL_BLENDMODE_ADD;
+        switch (blend)
+        {
+            case 0: return SDL_BLENDFACTOR_ONE;                 // Blend::One
+            case 1: return SDL_BLENDFACTOR_ZERO;                // Blend::Zero
+            case 2: return SDL_BLENDFACTOR_SRC_COLOR;           // Blend::SourceColor
+            case 3: return SDL_BLENDFACTOR_ONE_MINUS_SRC_COLOR; // Blend::InverseSourceColor
+            case 4: return SDL_BLENDFACTOR_SRC_ALPHA;           // Blend::SourceAlpha
+            case 5: return SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA; // Blend::InverseSourceAlpha
+            case 6: return SDL_BLENDFACTOR_DST_COLOR;           // Blend::DestinationColor
+            case 7: return SDL_BLENDFACTOR_ONE_MINUS_DST_COLOR; // Blend::InverseDestinationColor
+            case 8: return SDL_BLENDFACTOR_DST_ALPHA;           // Blend::DestinationAlpha
+            case 9: return SDL_BLENDFACTOR_ONE_MINUS_DST_ALPHA; // Blend::InverseDestinationAlpha
+            default:
+                throw std::runtime_error(
+                    "SDL_Renderer does not support Blend::BlendFactor/InverseBlendFactor/"
+                    "SourceAlphaSaturation: no equivalent SDL_BlendFactor exists for a constant "
+                    "blend-factor colour or alpha saturation.");
+        }
+    }
+
+    // Maps BlendFunction's 5 values to SDL_BlendOperation -- a direct 1:1 match.
+    static SDL_BlendOperation ToSdlBlendOperation(int func)
+    {
+        switch (func)
+        {
+            case 0:  return SDL_BLENDOPERATION_ADD;          // BlendFunction::Add
+            case 1:  return SDL_BLENDOPERATION_SUBTRACT;     // BlendFunction::Subtract
+            case 2:  return SDL_BLENDOPERATION_REV_SUBTRACT; // BlendFunction::ReverseSubtract
+            case 3:  return SDL_BLENDOPERATION_MAXIMUM;      // BlendFunction::Max
+            default: return SDL_BLENDOPERATION_MINIMUM;      // BlendFunction::Min
+        }
+    }
+
+    void SdlGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                              int colorDstBlend, int alphaDstBlend,
+                                              int colorBlendFunc, int alphaBlendFunc)
+    {
+        const SDL_BlendMode mode = SDL_ComposeCustomBlendMode(
+            ToSdlBlendFactor(colorSrcBlend), ToSdlBlendFactor(colorDstBlend),
+            ToSdlBlendOperation(colorBlendFunc),
+            ToSdlBlendFactor(alphaSrcBlend), ToSdlBlendFactor(alphaDstBlend),
+            ToSdlBlendOperation(alphaBlendFunc));
         blendMode_ = mode;
-        SDL_SetRenderDrawBlendMode(renderer, blendMode_);
+        if (!SDL_SetRenderDrawBlendMode(renderer, blendMode_))
+        {
+            throw std::runtime_error(std::string("SDL_SetRenderDrawBlendMode failed: ") + SDL_GetError());
+        }
     }
 
     void SdlGraphicsBackend::SetScissorRect(int x, int y, int w, int h)

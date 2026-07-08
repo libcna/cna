@@ -3728,6 +3728,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 695: BlendState -> SDL_BlendMode mapping audit pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_audit
+                 examples/sdlrenderer_blendstate_audit_test.cpp)
+    add_test(NAME SDL_Renderer_BlendState_Audit
+             COMMAND cna_test_sdl_blendstate_audit)
+    set_tests_properties(SDL_Renderer_BlendState_Audit PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
