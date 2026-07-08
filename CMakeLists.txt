@@ -3516,6 +3516,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 668: SpriteSortMode::Texture grouping pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritebatch_texture_sort
+                 examples/sdlrenderer_spritebatch_texture_sort_test.cpp)
+    add_test(NAME SDL_Renderer_SpriteBatch_TextureSort
+             COMMAND cna_test_sdl_spritebatch_texture_sort)
+    set_tests_properties(SDL_Renderer_SpriteBatch_TextureSort PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
