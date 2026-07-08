@@ -3701,6 +3701,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 692: SpriteFont newline-advances-by-lineSpacing pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritefont_newline
+                 examples/sdlrenderer_spritefont_newline_test.cpp)
+    add_test(NAME SDL_Renderer_SpriteFont_Newline
+             COMMAND cna_test_sdl_spritefont_newline)
+    set_tests_properties(SDL_Renderer_SpriteFont_Newline PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
