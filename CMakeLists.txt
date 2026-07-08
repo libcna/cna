@@ -3665,6 +3665,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 688: TextureFilter::Point vs Linear via SDL_ScaleMode pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture_filter_point_vs_linear
+                 examples/sdlrenderer_texture_filter_point_vs_linear_test.cpp)
+    add_test(NAME SDL_Renderer_TextureFilterPointVsLinear
+             COMMAND cna_test_sdl_texture_filter_point_vs_linear)
+    set_tests_properties(SDL_Renderer_TextureFilterPointVsLinear PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
