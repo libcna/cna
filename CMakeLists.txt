@@ -2318,6 +2318,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 737: SpriteBatch TextureAddressMode::Mirror edge-sampling pixel-readback -- Task 269
+        # only independently verified Wrap/Clamp; Mirror is fixed by the same code path but was
+        # never verified on its own until now.
+        cna_easygl_test(cna_test_easygl_texture_address_mode_mirror
+                        examples/easygl_texture_address_mode_mirror_test.cpp)
+        add_test(NAME EasyGL_TextureAddressMode_Mirror
+                 COMMAND cna_test_easygl_texture_address_mode_mirror)
+        set_tests_properties(EasyGL_TextureAddressMode_Mirror PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0]
         cna_easygl_test(cna_test_easygl_sampler_state_effect
                         examples/easygl_sampler_state_effect_test.cpp)
