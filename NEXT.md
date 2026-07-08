@@ -584,6 +584,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `pending` | 670 | **No bug found — `SpriteSortMode::Immediate` genuinely flushes per-draw on SDL_Renderer, end-to-end.** New `sdlrenderer_spritebatch_immediate_flush_test.cpp`: draws a sprite, then `Clear(Green)` (a plain `GraphicsDevice` call outside `SpriteBatch`'s queue), then `End()` — correct behavior wipes the already-drawn sprite (region reads Green); a "silently `Deferred`" bug would draw the sprite AFTER the clear instead (region would read Red). **Methodology finding**: an initial single-line sabotage produced a false negative (it caused a silent-drop bug instead of a defer-to-`End()` bug, since `End()`'s own `Immediate`-skip meant the queued sprite was never flushed at all) — corrected by also making `End()` unconditionally flush, which genuinely reproduced the intended bug and failed as predicted; restored and reconfirmed passing. Requires `PresentationMode::NativeBackBuffer` (Task 915). Full regression: `ctest` 4277/4292 passed, 2 skipped, 13 failed (same baseline as Task 667/668/669 — zero new failures). |
 | `f27356a5` | 668 | **No bug found — `SpriteSortMode::Texture` grouping already works correctly on SDL_Renderer.** The pointer-order contract (which texture group ends up first) is already covered at the logic level by the mock-backend Task 414 test; this task pixel-verifies that SDL_Renderer's draw dispatch still binds the correct texture per reordered call. New `sdlrenderer_spritebatch_texture_sort_test.cpp`: 4 non-overlapping sprites, 2 textures, scrambled A/B/A/B submission — each destination shows its own colour regardless of reordering. Requires `PresentationMode::NativeBackBuffer` (Task 915). All 4 checks pass. Full regression: `ctest` 4276/4291 passed, 2 skipped, 13 failed (same baseline as Task 667/669 — zero new failures). |
 | `803b2c0c` | 667 | **No bug found — `SpriteSortMode::Deferred` (the default) already correctly preserves submission order on SDL_Renderer, ignoring `layerDepth`.** `SpriteBatch::flushBatch()` confirmed: `Deferred` takes the "no sort" fall-through branch. New `sdlrenderer_spritebatch_deferred_order_test.cpp`: 2 overlapping-sprite pairs with `layerDepth` values chosen to flip the outcome if `Deferred` secretly sorted like `FrontToBack` or `BackToFront` — both pairs confirm the submitted-last sprite always wins the overlap regardless of depth. Requires `PresentationMode::NativeBackBuffer` (Task 915). All 6 checks pass. Full regression: `ctest` 4275/4290 passed, 2 skipped, 13 failed (same already-documented baseline as Task 669 — zero new failures). |
 | `eda538d7` | 669 | **No bug found — `SpriteSortMode::FrontToBack`/`BackToFront` already work correctly on SDL_Renderer.** Sort logic lives entirely in the shared, backend-agnostic `SpriteBatch.cpp`, already proven correct on EasyGL (Tasks 415/416/420); this task confirmed SDL_Renderer's draw-dispatch doesn't itself reorder anything after that shared sort. New `sdlrenderer_spritebatch_layerdepth_test.cpp`: a direct port of Task 420's `FrontToBack` scenario plus a brand-new `BackToFront` scenario (no prior test on any backend exercised it with real pixels) — both use the established "submit in the wrong order so the test discriminates real sorting from submission order" methodology. Requires `PresentationMode::NativeBackBuffer` (Task 915). All 6 checks pass. Full regression: `ctest` 4274/4289 passed, 2 skipped, 13 failed (same already-documented "SDL_Renderer does not support 3D" baseline as Task 915 — zero new failures). |
@@ -980,11 +981,12 @@ texture, unblocking Task 864's mip-allocation fix for Bgfx too — confirmed `BG
 BLIT`/`READ_BACK` are both actually supported in this sandbox.
 
 All 4 tasks the project owner explicitly approved "Implement now" this stretch (902/910/911/914)
-are now closed. Now working through the standing backlog: **Tasks 667, 668, and 669 are done**
-(see §3 — all 4 non-`Immediate` `SpriteSortMode` values now pixel-verified on SDL_Renderer, no
-bugs found; new tests cover `BackToFront` and `Texture` grouping for the first time on any
-backend). Next: Task 670 (`SpriteSortMode::Immediate`). Triage note on the Task
-666+ SDL_Renderer audit phase (Tasks 667–861): most remaining rows are concrete, well-scoped
+are now closed. Now working through the standing backlog: **Tasks 667, 668, 669, and 670 are
+done** (see §3 — every `SpriteSortMode` value now pixel-verified on SDL_Renderer, no bugs found;
+new tests cover `BackToFront` and `Texture` grouping for the first time on any backend). Next:
+Task 671 is already done from an earlier session (SpriteBatch rotation) — continue at Task 672.
+Triage note on the Task 666+ SDL_Renderer audit phase (Tasks 667–861): most remaining rows are
+concrete, well-scoped
 "verify/pixel-test X on SDL_Renderer" items that fit this project's established
 test-first/`git stash`-verify methodology directly — good source of the next several tasks. The
 421–500 range is a different shape: mostly cross-cutting audit/documentation/infrastructure tasks
@@ -1071,10 +1073,11 @@ pushed). **Tasks 902, 870, 911, and 914 (`GraphicsDevice::Reset()` real backend 
 `DepthStencilState`/stencil-test fidelity; Vulkan per-instance `DepthStencilFormat` fidelity; Bgfx
 real `Texture3D`/`TextureCube::GetData` readback + mip-allocation fix) are all now done** — every
 task the project owner explicitly approved "Implement now" this stretch (902/910/911/914) is
-closed. Now working the standing backlog (§8): **Tasks 667, 668, and 669 are also done this
-session** (`SpriteSortMode::Deferred`/`Texture`/`FrontToBack`/`BackToFront` all confirmed already
-correct on SDL_Renderer, no bugs found). Next up: continue the Task 666+ SDL_Renderer audit phase
-in order (Task 670, `SpriteSortMode::Immediate`, next), and/or the untriaged 421–500 range of
+closed. Now working the standing backlog (§8): **Tasks 667, 668, 669, and 670 are also done this
+session** (every `SpriteSortMode` value — `Deferred`/`Texture`/`FrontToBack`/`BackToFront`/
+`Immediate` — confirmed already correct on SDL_Renderer, no bugs found). Next up: continue the
+Task 666+ SDL_Renderer audit phase in order (Task 671 is already done from an earlier session —
+continue at Task 672), and/or the untriaged 421–500 range of
 `plan_graphics.md` (see §8's own triage note on why 667+ is the
 better source of well-scoped single-commit tasks right now).
 
@@ -1167,11 +1170,16 @@ found — new test covers `BackToFront` with real pixels for the first time on a
 667 (`SpriteSortMode::Deferred` submission order also confirmed already correct, no bug found),
 and Task 668 (`SpriteSortMode::Texture` grouping also confirmed already correct, no bug found —
 new test pixel-verifies texture bindings survive the sort's reordering, complementing the
-existing mock-backend adjacency/stability test). Next up: continue the SDL_Renderer audit phase
-in order (Task 670, `SpriteSortMode::Immediate`, next — then write pixel tests for
+existing mock-backend adjacency/stability test), and Task 670 (`SpriteSortMode::Immediate`
+per-draw flush also confirmed already correct end-to-end — a real methodology finding while
+verifying it: an initial 1-line sabotage produced a false-negative-passing test because it caused
+a silent-drop bug instead of the intended defer-to-`End()` bug; a 2nd, correct sabotage genuinely
+reproduced it and the test failed as predicted). **Every `SpriteSortMode` value is now
+pixel-verified on SDL_Renderer.** Next up: continue the SDL_Renderer audit phase (Task 671 is
+already done from an earlier session — continue at Task 672 — write pixel tests for
 SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/GraphicsDevice-lifecycle on
-this backend, Tasks 671–861 in `plan_graphics.md`, all unblocked by Task 915 — note Task 671 is
-already done from an earlier session, see §3), and/or the older, not-yet-triaged backlog in the
+this backend, Tasks 672–861 in `plan_graphics.md`, all unblocked by Task 915), and/or the older,
+not-yet-triaged backlog in the
 421–500 range of `plan_graphics.md`
 (audits, reference-value generation, and other
 per-backend tasks from earlier phases never folded into this §8 list) — worth a dedicated triage
