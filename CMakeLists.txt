@@ -4043,6 +4043,52 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 730: port and run 5 minimal 2D-only FNA/XNA samples specifically targeting
+    # SDL_Renderer -- real compatibility proof for the 2D-only backend, not EasyGL.
+    # Sample 1/5: the existing cross-backend cna_demo_2d, already smoke-tested on Vulkan/Bgfx
+    # (Tasks 88/89) but never on SDL_Renderer -- a genuine gap, closed here.
+    add_test(NAME SDL_Renderer_Demo2D_SmokeTest
+             COMMAND cna_demo_2d --smoke 3)
+    set_tests_properties(SDL_Renderer_Demo2D_SmokeTest PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Sample 2/5: bouncing sprite -- real multi-frame Update()+Draw() physics/bounce loop.
+    cna_sdl_test(cna_test_sdl_sample_bouncing_sprite
+                 examples/sdlrenderer_sample_bouncing_sprite_test.cpp)
+    add_test(NAME SDL_Renderer_Sample_BouncingSprite
+             COMMAND cna_test_sdl_sample_bouncing_sprite)
+    set_tests_properties(SDL_Renderer_Sample_BouncingSprite PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Sample 3/5: keyboard-driven sprite -- Keyboard::GetState()-driven Update() logic.
+    cna_sdl_test(cna_test_sdl_sample_keyboard_sprite
+                 examples/sdlrenderer_sample_keyboard_sprite_test.cpp)
+    add_test(NAME SDL_Renderer_Sample_KeyboardSprite
+             COMMAND cna_test_sdl_sample_keyboard_sprite)
+    set_tests_properties(SDL_Renderer_Sample_KeyboardSprite PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Sample 4/5: SpriteFont text display -- genuine multi-glyph string layout ("HI").
+    cna_sdl_test(cna_test_sdl_sample_spritefont_text
+                 examples/sdlrenderer_sample_spritefont_text_test.cpp)
+    add_test(NAME SDL_Renderer_Sample_SpriteFontText
+             COMMAND cna_test_sdl_sample_spritefont_text)
+    set_tests_properties(SDL_Renderer_Sample_SpriteFontText PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Sample 5/5: animated spritesheet -- Update()-driven sourceRectangle frame selection.
+    cna_sdl_test(cna_test_sdl_sample_animated_spritesheet
+                 examples/sdlrenderer_sample_animated_spritesheet_test.cpp)
+    add_test(NAME SDL_Renderer_Sample_AnimatedSpritesheet
+             COMMAND cna_test_sdl_sample_animated_spritesheet)
+    set_tests_properties(SDL_Renderer_Sample_AnimatedSpritesheet PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
