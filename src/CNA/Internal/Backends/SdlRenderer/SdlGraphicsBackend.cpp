@@ -124,12 +124,17 @@ namespace CNA::Internal::Backends::SdlRenderer
     void SdlSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
     {
         if (!begun) throw std::runtime_error("SdlSpriteBatchBackend::Draw called before Begin().");
-        auto& sdlTex = static_cast<const SdlTextureBackend&>(texture);
-        if (!sdlTex.texture) return;
-        SDL_SetTextureScaleMode(sdlTex.texture, scaleMode);
+        // Task 705 finding: texture may be an SdlRenderTargetBackend (a RenderTarget2D sampled as
+        // a Texture2D after unbinding) -- a sibling class of SdlTextureBackend, NOT a subclass, so
+        // an unchecked static_cast<const SdlTextureBackend&> here would be undefined behavior.
+        // GetNativeTexture()/GetWidth()/GetHeight() are virtual on ITextureBackend and safe for
+        // either concrete backend.
+        SDL_Texture* nativeTex = texture.GetNativeTexture();
+        if (!nativeTex) return;
+        SDL_SetTextureScaleMode(nativeTex, scaleMode);
 
-        SDL_FRect dst{x, y, static_cast<float>(sdlTex.width), static_cast<float>(sdlTex.height)};
-        if (!SDL_RenderTexture(renderer, sdlTex.texture, nullptr, &dst))
+        SDL_FRect dst{x, y, static_cast<float>(texture.GetWidth()), static_cast<float>(texture.GetHeight())};
+        if (!SDL_RenderTexture(renderer, nativeTex, nullptr, &dst))
         {
             throw std::runtime_error(std::string("SDL_RenderTexture failed: ") + SDL_GetError());
         }
@@ -141,21 +146,24 @@ namespace CNA::Internal::Backends::SdlRenderer
                                      const Color& color)
     {
         if (!begun) throw std::runtime_error("SdlSpriteBatchBackend::Draw called before Begin().");
-        auto& sdlTex = static_cast<const SdlTextureBackend&>(texture);
-        if (!sdlTex.texture) return;
-        SDL_SetTextureScaleMode(sdlTex.texture, scaleMode);
+        // Task 705 finding: see the (x,y) Draw overload above -- texture may be an
+        // SdlRenderTargetBackend, a sibling class of SdlTextureBackend, so an unchecked
+        // static_cast<const SdlTextureBackend&> here would be undefined behavior.
+        SDL_Texture* nativeTex = texture.GetNativeTexture();
+        if (!nativeTex) return;
+        SDL_SetTextureScaleMode(nativeTex, scaleMode);
 
-        if (!SDL_SetTextureColorMod(sdlTex.texture, color.getRProperty(), color.getGProperty(), color.getBProperty()))
+        if (!SDL_SetTextureColorMod(nativeTex, color.getRProperty(), color.getGProperty(), color.getBProperty()))
         {
             throw std::runtime_error(std::string("SDL_SetTextureColorMod failed: ") + SDL_GetError());
         }
-        if (!SDL_SetTextureAlphaMod(sdlTex.texture, color.getAProperty()))
+        if (!SDL_SetTextureAlphaMod(nativeTex, color.getAProperty()))
         {
             throw std::runtime_error(std::string("SDL_SetTextureAlphaMod failed: ") + SDL_GetError());
         }
         SDL_BlendMode currentBlendMode = SDL_BLENDMODE_BLEND;
         SDL_GetRenderDrawBlendMode(renderer, &currentBlendMode);
-        if (!SDL_SetTextureBlendMode(sdlTex.texture, currentBlendMode))
+        if (!SDL_SetTextureBlendMode(nativeTex, currentBlendMode))
         {
             throw std::runtime_error(std::string("SDL_SetTextureBlendMode failed: ") + SDL_GetError());
         }
@@ -168,7 +176,7 @@ namespace CNA::Internal::Backends::SdlRenderer
             (float)destinationRectangle.X, (float)destinationRectangle.Y, (float)destinationRectangle.Width,
             (float)destinationRectangle.Height
         };
-        if (!SDL_RenderTexture(renderer, sdlTex.texture, &src, &dst))
+        if (!SDL_RenderTexture(renderer, nativeTex, &src, &dst))
         {
             throw std::runtime_error(std::string("SDL_RenderTexture failed: ") + SDL_GetError());
         }
@@ -185,21 +193,24 @@ namespace CNA::Internal::Backends::SdlRenderer
     {
         (void)layerDepth;
         if (!begun) throw std::runtime_error("SdlSpriteBatchBackend::Draw called before Begin().");
-        auto& sdlTex = static_cast<const SdlTextureBackend&>(texture);
-        if (!sdlTex.texture) return;
-        SDL_SetTextureScaleMode(sdlTex.texture, scaleMode);
+        // Task 705 finding: see the (x,y) Draw overload above -- texture may be an
+        // SdlRenderTargetBackend, a sibling class of SdlTextureBackend, so an unchecked
+        // static_cast<const SdlTextureBackend&> here would be undefined behavior.
+        SDL_Texture* nativeTex = texture.GetNativeTexture();
+        if (!nativeTex) return;
+        SDL_SetTextureScaleMode(nativeTex, scaleMode);
 
-        if (!SDL_SetTextureColorMod(sdlTex.texture, color.getRProperty(), color.getGProperty(), color.getBProperty()))
+        if (!SDL_SetTextureColorMod(nativeTex, color.getRProperty(), color.getGProperty(), color.getBProperty()))
         {
             throw std::runtime_error(std::string("SDL_SetTextureColorMod failed: ") + SDL_GetError());
         }
-        if (!SDL_SetTextureAlphaMod(sdlTex.texture, color.getAProperty()))
+        if (!SDL_SetTextureAlphaMod(nativeTex, color.getAProperty()))
         {
             throw std::runtime_error(std::string("SDL_SetTextureAlphaMod failed: ") + SDL_GetError());
         }
         SDL_BlendMode currentBlendMode = SDL_BLENDMODE_BLEND;
         SDL_GetRenderDrawBlendMode(renderer, &currentBlendMode);
-        if (!SDL_SetTextureBlendMode(sdlTex.texture, currentBlendMode))
+        if (!SDL_SetTextureBlendMode(nativeTex, currentBlendMode))
         {
             throw std::runtime_error(std::string("SDL_SetTextureBlendMode failed: ") + SDL_GetError());
         }
@@ -279,14 +290,14 @@ namespace CNA::Internal::Backends::SdlRenderer
             SDL_FPoint sdlOrigin{originCorner.X, originCorner.Y};
             SDL_FPoint sdlRight{rightCorner.X, rightCorner.Y};
             SDL_FPoint sdlDown{downCorner.X, downCorner.Y};
-            if (!SDL_RenderTextureAffine(renderer, sdlTex.texture, &src, &sdlOrigin, &sdlRight, &sdlDown))
+            if (!SDL_RenderTextureAffine(renderer, nativeTex, &src, &sdlOrigin, &sdlRight, &sdlDown))
             {
                 throw std::runtime_error(std::string("SDL_RenderTextureAffine failed: ") + SDL_GetError());
             }
             return;
         }
 
-        if (!SDL_RenderTextureRotated(renderer, sdlTex.texture, &src, &dst, rotationDeg, &sdlCenter, flip))
+        if (!SDL_RenderTextureRotated(renderer, nativeTex, &src, &dst, rotationDeg, &sdlCenter, flip))
         {
             throw std::runtime_error(std::string("SDL_RenderTextureRotated failed: ") + SDL_GetError());
         }

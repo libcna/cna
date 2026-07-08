@@ -3818,6 +3818,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 705: RenderTarget2D sampled as Texture2D via SpriteBatch after unbinding on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_rendertarget2d_sample
+                 examples/sdlrenderer_rendertarget2d_sample_test.cpp)
+    add_test(NAME SDL_Renderer_RenderTarget2D_SampleAfterUnbind
+             COMMAND cna_test_sdl_rendertarget2d_sample)
+    set_tests_properties(SDL_Renderer_RenderTarget2D_SampleAfterUnbind PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
