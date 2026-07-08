@@ -1687,13 +1687,16 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderTarget &&
             renderTarget->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
-            // Only ask for a depth-buffer clear when the target actually has one — a target
-            // created with DepthFormat::None has no depth-stencil buffer at all (matches
-            // RenderTarget2D's own constructor, which only allocates one when a depth format was
-            // requested), so backends with no depth-buffer concept at all (SDL_Renderer) must not
-            // be asked to clear a depth buffer that doesn't exist.
-            const bool hasDepthBuffer =
+            // Only ask for a depth-buffer clear when the target actually has one. A requested
+            // DepthFormat::None never has one; beyond that, ask the BACKEND (Task 708) rather
+            // than trusting the merely-requested XNA-level format, since a backend may honor no
+            // depth format at all regardless of what was requested (SDL_Renderer's 2D-only
+            // render targets never allocate real depth-buffer storage).
+            const bool depthFormatRequested =
                 renderTarget->getDepthStencilFormatProperty() != DepthFormat::None;
+            const auto* rtBackend = renderTarget->GetRenderTargetBackend();
+            const bool hasDepthBuffer =
+                rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
             Clear(hasDepthBuffer ? (ClearOptions::Target | ClearOptions::DepthBuffer) : ClearOptions::Target,
                   Color(0, 0, 0, 255), 1.0f, 0);
         }
@@ -1754,8 +1757,11 @@ namespace Microsoft::Xna::Framework::Graphics
             first->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
             // See SetRenderTarget(RenderTarget2D*)'s identical guard for the rationale.
-            const bool hasDepthBuffer =
+            const bool depthFormatRequested =
                 first->getDepthStencilFormatProperty() != DepthFormat::None;
+            const auto* rtBackend = first->GetRenderTargetBackend();
+            const bool hasDepthBuffer =
+                rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
             Clear(hasDepthBuffer ? (ClearOptions::Target | ClearOptions::DepthBuffer) : ClearOptions::Target,
                   Color(0, 0, 0, 255), 1.0f, 0);
         }

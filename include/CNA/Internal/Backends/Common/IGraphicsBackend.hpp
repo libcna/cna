@@ -194,6 +194,14 @@ namespace CNA::Internal::Backends
         /// RenderTarget2D.MultiSampleCount reflects the real clamped value, not the raw
         /// constructor request (FNA3D_GetMaxMultiSampleCount).
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
+        /// Returns whether this specific target instance actually has a real depth-stencil
+        /// buffer backing it, as opposed to merely being requested via DepthFormat at
+        /// construction time. Most backends honor whatever DepthFormat was requested, so the
+        /// default mirrors that (via @p depthFormatWasRequested, computed by the caller from
+        /// RenderTarget2D::getDepthStencilFormatProperty() != DepthFormat::None). SDL_Renderer's
+        /// 2D-only render targets never allocate real depth-buffer storage regardless of what
+        /// format was requested, and overrides this to always return false (Task 708).
+        [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const { return depthFormatWasRequested; }
     };
 
     /// Backend handle for a cube-map render target.

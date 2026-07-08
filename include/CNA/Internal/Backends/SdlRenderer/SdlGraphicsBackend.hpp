@@ -42,6 +42,12 @@ namespace CNA::Internal::Backends::SdlRenderer
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
+
+        // Task 708: SDL_Renderer's 2D-only render targets never allocate a real depth-stencil
+        // buffer, regardless of what DepthFormat was requested at construction time (see
+        // CreateRenderTarget2D, which ignores its depthFormat parameter entirely) -- so this
+        // always reports false rather than trusting the merely-requested XNA-level format.
+        bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override { return false; }
     };
 
     class SdlSpriteBatchBackend : public ISpriteBatchBackend
