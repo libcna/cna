@@ -3773,6 +3773,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 700: custom (non-preset) BlendState combination decision/verification on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_custom
+                 examples/sdlrenderer_blendstate_custom_test.cpp)
+    add_test(NAME SDL_Renderer_BlendState_Custom
+             COMMAND cna_test_sdl_blendstate_custom)
+    set_tests_properties(SDL_Renderer_BlendState_Custom PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
