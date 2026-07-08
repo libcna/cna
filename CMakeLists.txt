@@ -3836,6 +3836,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 707: GetBackBufferData reads correct pixels after SetRenderTarget(nullptr) restores the backbuffer on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_getbackbufferdata_after_rt_unbind
+                 examples/sdlrenderer_getbackbufferdata_after_rt_unbind_test.cpp)
+    add_test(NAME SDL_Renderer_GetBackBufferData_AfterRtUnbind
+             COMMAND cna_test_sdl_getbackbufferdata_after_rt_unbind)
+    set_tests_properties(SDL_Renderer_GetBackBufferData_AfterRtUnbind PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
