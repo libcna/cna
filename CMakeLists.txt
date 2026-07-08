@@ -3456,13 +3456,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         endif()
     endmacro()
 
-    # Task 666: GetBackBufferData readback -- foundational prerequisite for the whole
+    # Task 915: GetBackBufferData readback -- foundational prerequisite for the whole
     # SDL_Renderer pixel-test audit phase (Tasks 666-861).
     cna_sdl_test(cna_test_sdl_readback
                  examples/sdlrenderer_readback_test.cpp)
     add_test(NAME SDL_Renderer_Readback
              COMMAND cna_test_sdl_readback)
     set_tests_properties(SDL_Renderer_Readback PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 666: audit all SpriteBatch::Draw overloads through SDL_Renderer
+    cna_sdl_test(cna_test_sdl_spritebatch_overloads
+                 examples/sdlrenderer_spritebatch_overloads_test.cpp)
+    add_test(NAME SDL_Renderer_SpriteBatch_Overloads
+             COMMAND cna_test_sdl_spritebatch_overloads)
+    set_tests_properties(SDL_Renderer_SpriteBatch_Overloads PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
