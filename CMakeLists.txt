@@ -3656,6 +3656,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 685: TextureAddressMode::Clamp via SpriteBatch pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture_address_mode_clamp
+                 examples/sdlrenderer_texture_address_mode_clamp_test.cpp)
+    add_test(NAME SDL_Renderer_TextureAddressModeClamp
+             COMMAND cna_test_sdl_texture_address_mode_clamp)
+    set_tests_properties(SDL_Renderer_TextureAddressModeClamp PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
