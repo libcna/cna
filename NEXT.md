@@ -584,6 +584,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `pending` | 699 | **No bug found — `BlendState::Additive` correctly adds (alpha-scaled) source colour onto the destination, including correct saturation/clamping at 255 without wraparound.** Already confirmed correct by Task 695's audit (`SDL_BLENDMODE_ADD`, one of the 2 presets the old mapping already got right); dedicated verification confirms no regression. New `sdlrenderer_blendstate_additive_test.cpp`: (1) non-saturating half-alpha dim Red over dim Red bg → proper sum `≈(100,0,0)`; (2) saturating full-alpha bright Red over bright Red bg → mathematically `(400,0,0)`, correctly clamps to `(255,0,0)`. Both pass. **Discriminating power verified**: sabotaging `BlendFunction::Add→ADD` to `SUBTRACT` made both checks read black instead of the correct sums; restored and reconfirmed. Full regression: `ctest` 4303/4318 passed, 2 skipped, 13 failed (same baseline as Tasks 667-698 — zero new failures). **Closes the entire per-preset pixel-test set (696-699) — all 4 `BlendState` presets individually, empirically verified correct on SDL_Renderer.** |
 | `617dd2c8` | 698 | **No bug found — `BlendState::NonPremultiplied` correctly performs the straight-alpha blend equation on SDL_Renderer.** Its factors (`SourceAlpha`, `InverseSourceAlpha`) exactly match SDL's plain `SDL_BLENDMODE_BLEND` — the same fallback the OLD mapping already used for everything besides `Opaque`/`Additive` — so this preset was already correct even before Task 695's fix; dedicated verification confirms no regression under the new mapping. New `sdlrenderer_blendstate_nonpremultiplied_test.cpp`: straight-alpha Red (`R=255`, `alpha=128`) over Blue — expected proper blend `≈(128,0,127)`. Passes. **Discriminating power verified**: sabotaging `Blend::SourceAlpha→SRC_ALPHA` to `ONE` applied the source at full brightness (`255,0,127`) instead of scaled by alpha; restored and reconfirmed. Full regression: `ctest` 4302/4317 passed, 2 skipped, 13 failed (same baseline as Tasks 667-697 — zero new failures). |
 | `b60b1d61` | 697 | **No bug found — `BlendState::AlphaBlend` correctly performs the premultiplied-alpha blend equation now that Task 695's fix landed.** Complements Task 695's own test (which showed the "over-bright" artifact when fed non-premultiplied data) by feeding genuinely premultiplied source colour instead. New `sdlrenderer_blendstate_alphablend_test.cpp`: premultiplied Red at alpha=128 (`R≈128`, not 255) over Blue background — expected proper blend `≈(128,0,127)`. Passes. **Discriminating power verified**: sabotaging `Blend::InverseSourceAlpha→ONE_MINUS_SRC_ALPHA` to `ZERO` made the destination fully ignored (pure Red); restored and reconfirmed. Full regression: `ctest` 4300/4316 passed, 3 skipped, 13 failed (same 13-failure baseline as Tasks 667-696 — zero new failures; one extra unrelated `WaveBankTest` skip this run). |
 | `40d40d64` | 696 | **No bug found — `BlendState::Opaque` correctly ignores alpha and fully overwrites the destination on SDL_Renderer.** Already confirmed correct by Task 695's audit (one of the 2 presets the old mapping already got right, and still correct under the new general mapping). New `sdlrenderer_blendstate_opaque_test.cpp`: draws a low-alpha (64/255) Red tint over Green with `Opaque` — must be pure Red, ignoring both alpha and destination. Passes. **Discriminating power verified**: sabotaging `Blend::Zero→SDL_BLENDFACTOR_ZERO` to `ONE` instead made the background bleed through (yellow); restored and reconfirmed. Full regression: `ctest` 4285/4315 passed, 2 skipped, 13 failed (same baseline as Tasks 667-695 — zero new failures). |
@@ -1015,7 +1016,7 @@ All 4 tasks the project owner explicitly approved "Implement now" this stretch (
 are now closed. Now working through the standing backlog: **Tasks 667, 668, 669, and 670 are
 done** (see §3 — every `SpriteSortMode` value now pixel-verified on SDL_Renderer, no bugs found;
 new tests cover `BackToFront` and `Texture` grouping for the first time on any backend). Next:
-Task 671 is already done from an earlier session (SpriteBatch rotation). The entire Texture2D section (667-689, excluding BLOCKED 686/687) is now done, and the entire SpriteFont section (690-694) is also now done (Task 694 found a real, cross-backend `DrawString`+`SpriteEffects` bug, fixed). Task 695 (start of the BlendState section) found and fixed 2 real SDL_Renderer bugs (BlendState mapping + a `Begin()` blend-mode clobber); Tasks 696/697/698 (`Opaque`/`AlphaBlend`/`NonPremultiplied` pixel tests) are also done — continue at Task 699 (Tasks 672-685, 688-698 also done this session, see §3; Tasks 686/687 are BLOCKED on a project-owner architecture decision, see §5 and their own plan_graphics.md rows).
+Task 671 is already done from an earlier session (SpriteBatch rotation). The entire Texture2D section (667-689, excluding BLOCKED 686/687) is now done, and the entire SpriteFont section (690-694) is also now done (Task 694 found a real, cross-backend `DrawString`+`SpriteEffects` bug, fixed). Task 695 (start of the BlendState section) found and fixed 2 real SDL_Renderer bugs (BlendState mapping + a `Begin()` blend-mode clobber); Tasks 696-699 (the entire per-preset pixel-test set — `Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive`) are now ALL done — continue at Task 700 (`decide custom BlendState`, largely pre-answered by Task 695's fix) (Tasks 672-685, 688-699 also done this session, see §3; Tasks 686/687 are BLOCKED on a project-owner architecture decision, see §5 and their own plan_graphics.md rows).
 Triage note on the Task 666+ SDL_Renderer audit phase (Tasks 667–861): most remaining rows are
 concrete, well-scoped
 "verify/pixel-test X on SDL_Renderer" items that fit this project's established
@@ -1109,8 +1110,8 @@ session** (every `SpriteSortMode` value — `Deferred`/`Texture`/`FrontToBack`/`
 `Immediate` — confirmed already correct on SDL_Renderer, no bugs found). Next up: continue the
 Task 666+ SDL_Renderer audit phase in order — the Texture2D section (667-689) is now fully done
 except BLOCKED 686/687 (see §5), the entire SpriteFont section (690-694) is also done, and Task
-695 (start of BlendState) found+fixed 2 real bugs (Tasks 696/697/698 also done) — continue at
-Task 699, and/or the untriaged 421–500 range of
+695 (start of BlendState) found+fixed 2 real bugs; the entire per-preset test set (696-699) is
+now done — continue at Task 700, and/or the untriaged 421–500 range of
 `plan_graphics.md` (see §8's own triage note on why 667+ is the
 better source of well-scoped single-commit tasks right now).
 
@@ -1211,7 +1212,8 @@ reproduced it and the test failed as predicted). **Every `SpriteSortMode` value 
 pixel-verified on SDL_Renderer.** Next up: continue the SDL_Renderer audit phase (Task 671 is
 already done from an earlier session; the Texture2D section (667-689) is now fully done except
 BLOCKED 686/687 (see §5); the SpriteFont section (690-694) is also fully done, and Task 695
-(start of BlendState) found+fixed 2 real bugs (Tasks 696/697/698 also done) — continue at Task 699 — write pixel tests for
+(start of BlendState) found+fixed 2 real bugs; the entire per-preset test set (696-699) is
+now done — continue at Task 700 — write pixel tests for
 SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/GraphicsDevice-lifecycle on
 this backend, Tasks 672–861 in `plan_graphics.md`, all unblocked by Task 915), and/or the older,
 not-yet-triaged backlog in the

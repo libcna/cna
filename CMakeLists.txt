@@ -3764,6 +3764,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 699: BlendState::Additive saturation behavior pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_additive
+                 examples/sdlrenderer_blendstate_additive_test.cpp)
+    add_test(NAME SDL_Renderer_BlendState_Additive
+             COMMAND cna_test_sdl_blendstate_additive)
+    set_tests_properties(SDL_Renderer_BlendState_Additive PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
