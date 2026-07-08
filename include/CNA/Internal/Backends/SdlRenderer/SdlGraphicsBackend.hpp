@@ -61,6 +61,13 @@ namespace CNA::Internal::Backends::SdlRenderer
         void Begin() override;
         void End() override;
         void SetTransformMatrix(const Matrix& m) override { transformMatrix = m; }
+        // Task 676: SDL_Renderer has no programmable shader stage at all, so a custom Effect
+        // (SpriteBatch::Begin's effect parameter) can never actually be applied -- silently
+        // ignoring it would misrender any game that depends on the custom shader's visual output.
+        // Throws whenever a non-null Effect is supplied; a null Effect (the default, "no custom
+        // effect" case used by every other SpriteBatch call in this project) is always a no-op,
+        // matching SpriteBatch::Begin's own unconditional per-Begin() call to this method.
+        void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void Draw(const ITextureBackend& texture, float x, float y) override;
         void Draw(const ITextureBackend& texture,

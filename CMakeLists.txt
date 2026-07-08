@@ -3574,6 +3574,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 676: SpriteBatch::Begin(effect) custom-Effect behavior decision -- must throw
+    # (no programmable shader stage exists on SDL_Renderer to apply a custom Effect with).
+    cna_sdl_test(cna_test_sdl_custom_effect_throws
+                 examples/sdlrenderer_custom_effect_throws_test.cpp)
+    add_test(NAME SDL_Renderer_CustomEffectThrows
+             COMMAND cna_test_sdl_custom_effect_throws)
+    set_tests_properties(SDL_Renderer_CustomEffectThrows PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32

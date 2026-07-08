@@ -584,6 +584,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `pending` | 676 | **Decided: SDL_Renderer throws for a custom `SpriteBatch::Begin(effect)`.** `SdlSpriteBatchBackend` never overrode `SetCustomEffect` (silently ignored, since SDL_Renderer has no programmable shader stage at all — a genuine "must not silently misrender" case). Implemented via a real override that throws `std::runtime_error` whenever a non-null `Effect` is supplied, mirroring this backend's own `ThrowNo3D` convention (not `System::NotSupportedException`, kept for internal consistency within this one file). A null `Effect` (every other SpriteBatch call in this project) stays a no-op. New `sdlrenderer_custom_effect_throws_test.cpp` confirms both cases. `git stash` confirmed discriminating power. Full regression: `ctest` 4282/4297 passed, 2 skipped, 13 failed (same baseline as Tasks 667-675 — zero new failures). |
 | `7031f46c` | 675 | **Real bug found and fixed: `SpriteBatch::Begin`'s `transformMatrix` was completely silently ignored on SDL_Renderer.** `ISpriteBatchBackend::SetTransformMatrix` defaults to a no-op and `SdlSpriteBatchBackend` never overrode it (EasyGL is the ONLY backend that does — Vulkan/Bgfx have the identical gap, Bgfx's own equivalent tracked as still-open Task 808). Fixed by adding a real `SetTransformMatrix` override plus a new `SDL_RenderTextureAffine()`-based code path (SDL3's general 3-point affine texture-blit API) used only when the transform isn't Identity — the existing `SDL_RenderTextureRotated()` path is untouched for the common (Identity) case, zero regression risk. The new path computes the sprite's local quad corners, rotates them like FNA's `GenerateVertexInfo`, then applies `Vector2::Transform` per corner (world transform on top of the sprite's own placement); `SpriteEffects` flip is implemented by permuting which corner feeds which affine parameter. New `sdlrenderer_transform_matrix_test.cpp`: ports Task 168's EasyGL translation test, plus a new check combining `FlipHorizontally` with the transform to exercise the corner-permutation logic. `git stash` confirmed all 4 checks fail exactly as predicted without the fix; restored and reconfirmed passing. Full regression: `ctest` 4281/4296 passed, 2 skipped, 13 failed (same baseline as Tasks 667-674, confirming zero regression in already-shipped rotation/flip/scale/source-rect behavior). |
 | `29373fe2` | 674 | **No bug found — `SpriteEffects::FlipHorizontally`/`FlipVertically` already work correctly on SDL_Renderer.** Genuinely backend-specific: `SdlSpriteBatchBackend::Draw()` maps `SpriteEffects` to `SDL_FlipMode` passed to `SDL_RenderTextureRotated()`'s `flip` parameter. New `sdlrenderer_sprite_effects_test.cpp`: direct port of Task 167's EasyGL test — 4 viewport sections testing both flip effects against 2-colour textures with `PointClamp` sampling. Requires `PresentationMode::NativeBackBuffer` (Task 915). All 8 checks pass. **Discriminating power verified**: forcing `flip = SDL_FLIP_NONE` unconditionally reproduced the predicted failure on all 4 flip-dependent checks; restored and reconfirmed all 8 pass. Full regression: `ctest` 4280/4295 passed, 2 skipped, 13 failed (same baseline as Tasks 667-673 — zero new failures). |
 | `9b55d584` | 673 | **No bug found — source rectangle cropping already works correctly on SDL_Renderer.** Unlike Tasks 667-670/672, this IS genuinely backend-specific: `SdlSpriteBatchBackend::Draw()`'s full 8-arg overload (always called by `flushSingle()` regardless of which public overload the caller used) passes `sourceRectangle` straight through as `SDL_RenderTextureRotated()`'s `srcrect`. New `sdlrenderer_spritebatch_sourcerect_test.cpp`: direct port of Task 419's EasyGL test — a 2x2 grid texture, `sourceRectangle` selecting one cell, checks near both destination corners rule out "whole texture stretched" leaking the wrong cell's colour. Requires `PresentationMode::NativeBackBuffer` (Task 915). All 3 checks pass. **Discriminating power verified**: sabotaging the `SDL_RenderTextureRotated` call's `srcrect` argument reproduced the predicted failure; restored and reconfirmed passing (a first sabotage attempt targeted the wrong, non-rotated overload and had zero effect — caught and corrected). Full regression: `ctest` 4279/4294 passed, 2 skipped, 13 failed (same baseline as Tasks 667-672 — zero new failures). |
@@ -989,7 +990,7 @@ All 4 tasks the project owner explicitly approved "Implement now" this stretch (
 are now closed. Now working through the standing backlog: **Tasks 667, 668, 669, and 670 are
 done** (see §3 — every `SpriteSortMode` value now pixel-verified on SDL_Renderer, no bugs found;
 new tests cover `BackToFront` and `Texture` grouping for the first time on any backend). Next:
-Task 671 is already done from an earlier session (SpriteBatch rotation) — continue at Task 676 (Tasks 672-675 also done this session, see §3).
+Task 671 is already done from an earlier session (SpriteBatch rotation) — continue at Task 677 (Tasks 672-676 also done this session, see §3).
 Triage note on the Task 666+ SDL_Renderer audit phase (Tasks 667–861): most remaining rows are
 concrete, well-scoped
 "verify/pixel-test X on SDL_Renderer" items that fit this project's established
@@ -1082,7 +1083,7 @@ closed. Now working the standing backlog (§8): **Tasks 667, 668, 669, and 670 a
 session** (every `SpriteSortMode` value — `Deferred`/`Texture`/`FrontToBack`/`BackToFront`/
 `Immediate` — confirmed already correct on SDL_Renderer, no bugs found). Next up: continue the
 Task 666+ SDL_Renderer audit phase in order (Task 671 is already done from an earlier session —
-continue at Task 676), and/or the untriaged 421–500 range of
+continue at Task 677), and/or the untriaged 421–500 range of
 `plan_graphics.md` (see §8's own triage note on why 667+ is the
 better source of well-scoped single-commit tasks right now).
 
@@ -1181,7 +1182,7 @@ verifying it: an initial 1-line sabotage produced a false-negative-passing test 
 a silent-drop bug instead of the intended defer-to-`End()` bug; a 2nd, correct sabotage genuinely
 reproduced it and the test failed as predicted). **Every `SpriteSortMode` value is now
 pixel-verified on SDL_Renderer.** Next up: continue the SDL_Renderer audit phase (Task 671 is
-already done from an earlier session — continue at Task 676 — write pixel tests for
+already done from an earlier session — continue at Task 677 — write pixel tests for
 SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/GraphicsDevice-lifecycle on
 this backend, Tasks 672–861 in `plan_graphics.md`, all unblocked by Task 915), and/or the older,
 not-yet-triaged backlog in the

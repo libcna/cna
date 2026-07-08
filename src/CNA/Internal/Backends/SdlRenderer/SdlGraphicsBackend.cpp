@@ -68,6 +68,14 @@ namespace CNA::Internal::Backends::SdlRenderer
         begun = false;
     }
 
+    void SdlSpriteBatchBackend::SetCustomEffect(Effect* effect)
+    {
+        if (effect != nullptr)
+            throw std::runtime_error(
+                "SDL_Renderer does not support custom SpriteBatch Effects: "
+                "no programmable shader stage exists on this backend.");
+    }
+
     void SdlSpriteBatchBackend::SetSamplerFilter(int textureFilter)
     {
         // TextureFilter::Linear=0 → SDL_SCALEMODE_LINEAR; anything else → SDL_SCALEMODE_NEAREST
