@@ -350,14 +350,31 @@ namespace CNA::Internal::Backends::Bgfx
         return std::make_unique<BgfxOcclusionQueryBackend>();
     }
 
+    // Task 914: advances bgfx frames until the given target frame number (as returned by
+    // bgfx::readTexture()) has been reached, mirroring ReadBackbuffer's own established
+    // retry-until-ready convention for bgfx's inherently async/deferred completion model.
+    // Bounded by a generous attempt cap as a safety net (never observed to need more than 1-2
+    // in this project's single-threaded-bgfx sandbox, matching ReadBackbuffer's own comment).
+    static bool AdvanceFramesUntil(uint32_t targetFrame)
+    {
+        for (int attempt = 0; attempt < 4; ++attempt)
+        {
+            const uint32_t current = bgfx::frame();
+            if (current >= targetFrame) return true;
+        }
+        return false;
+    }
+
     // --- BgfxTextureCubeBackend ---
 
-    BgfxTextureCubeBackend::BgfxTextureCubeBackend(int size, bool /*mipMap*/, int /*surfaceFormat*/)
+    BgfxTextureCubeBackend::BgfxTextureCubeBackend(int size, bool mipMap, int /*surfaceFormat*/)
         : size_(size)
     {
+        // Task 914: mipMap now genuinely threaded through (was hardcoded false) -- verifiable now
+        // that GetData() (below) provides a real readback path to check mip-level content.
         handle = bgfx::createTextureCube(
             static_cast<uint16_t>(size),
-            false,
+            mipMap,
             1,
             bgfx::TextureFormat::RGBA8,
             BGFX_TEXTURE_NONE);
@@ -383,6 +400,38 @@ namespace CNA::Internal::Backends::Bgfx
             mem);
     }
 
+    // Task 914: real GPU readback, previously a total no-op (the shared ITextureCubeBackend
+    // default silently left the caller's buffer untouched). bgfx::readTexture() requires the
+    // SOURCE texture to be created with BGFX_TEXTURE_READ_BACK -- incompatible with this cube's
+    // own shader-sampled `handle` ("can't be a GPU resource at the same time" per bgfx's own doc
+    // comment) -- so a temporary plain 2D texture, sized exactly to the requested (w,h) region and
+    // created with BGFX_TEXTURE_BLIT_DST|BGFX_TEXTURE_READ_BACK, receives the requested face/mip
+    // region via bgfx::blit() (dst is 2D so dstZ=0; src is a cube face so srcZ=face, per bgfx's own
+    // blit() doc comment), then bgfx::readTexture() reads that temporary texture directly into the
+    // caller's buffer. Confirmed BGFX_CAPS_TEXTURE_BLIT/READ_BACK are both supported in this
+    // project's Xvfb/llvmpipe/OpenGL sandbox via a throwaway caps-log check before implementing.
+    void BgfxTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                         void* data, int dataLength) const
+    {
+        if (!bgfx::isValid(handle) || !data || dataLength <= 0 || w <= 0 || h <= 0) return;
+
+        const bgfx::TextureHandle readback = bgfx::createTexture2D(
+            static_cast<uint16_t>(w), static_cast<uint16_t>(h),
+            false, 1, bgfx::TextureFormat::RGBA8,
+            BGFX_TEXTURE_BLIT_DST | BGFX_TEXTURE_READ_BACK);
+        if (!bgfx::isValid(readback)) return;
+
+        bgfx::blit(0, readback, 0, 0, 0, 0,
+                   handle, static_cast<uint8_t>(level),
+                   static_cast<uint16_t>(x), static_cast<uint16_t>(y), static_cast<uint16_t>(face),
+                   static_cast<uint16_t>(w), static_cast<uint16_t>(h), 1);
+
+        const uint32_t targetFrame = bgfx::readTexture(readback, data);
+        AdvanceFramesUntil(targetFrame);
+
+        bgfx::destroy(readback);
+    }
+
     std::unique_ptr<ITextureCubeBackend> BgfxGraphicsBackend::CreateTextureCube(
         int size, bool mipMap, int surfaceFormat)
     {
@@ -391,13 +440,15 @@ namespace CNA::Internal::Backends::Bgfx
 
     // --- BgfxTexture3DBackend ---
 
-    BgfxTexture3DBackend::BgfxTexture3DBackend(int w, int h, int depth, bool /*mipMap*/, int /*surfaceFormat*/)
+    BgfxTexture3DBackend::BgfxTexture3DBackend(int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
     {
+        // Task 914: mipMap now genuinely threaded through (was hardcoded false) -- verifiable now
+        // that GetData() (below) provides a real readback path to check mip-level content.
         handle = bgfx::createTexture3D(
             static_cast<uint16_t>(w),
             static_cast<uint16_t>(h),
             static_cast<uint16_t>(depth),
-            false,
+            mipMap,
             bgfx::TextureFormat::RGBA8,
             BGFX_TEXTURE_NONE);
     }
@@ -419,6 +470,34 @@ namespace CNA::Internal::Backends::Bgfx
             static_cast<uint16_t>(x), static_cast<uint16_t>(y), static_cast<uint16_t>(z),
             static_cast<uint16_t>(w), static_cast<uint16_t>(h), static_cast<uint16_t>(depth),
             mem);
+    }
+
+    // Task 914: real GPU readback, previously a total no-op -- mirrors
+    // BgfxTextureCubeBackend::GetData's approach exactly, except the temporary readback texture is
+    // itself a 3D texture (sized to the requested w/h/depth region) rather than a plain 2D one,
+    // since a 3D source's _depth argument applies to blit regardless of the destination's own
+    // dimensionality and this keeps both sides symmetric.
+    void BgfxTexture3DBackend::GetData(int level, int x, int y, int z,
+                                       int w, int h, int depth,
+                                       void* data, int dataLength) const
+    {
+        if (!bgfx::isValid(handle) || !data || dataLength <= 0 || w <= 0 || h <= 0 || depth <= 0) return;
+
+        const bgfx::TextureHandle readback = bgfx::createTexture3D(
+            static_cast<uint16_t>(w), static_cast<uint16_t>(h), static_cast<uint16_t>(depth),
+            false, bgfx::TextureFormat::RGBA8,
+            BGFX_TEXTURE_BLIT_DST | BGFX_TEXTURE_READ_BACK);
+        if (!bgfx::isValid(readback)) return;
+
+        bgfx::blit(0, readback, 0, 0, 0, 0,
+                   handle, static_cast<uint8_t>(level),
+                   static_cast<uint16_t>(x), static_cast<uint16_t>(y), static_cast<uint16_t>(z),
+                   static_cast<uint16_t>(w), static_cast<uint16_t>(h), static_cast<uint16_t>(depth));
+
+        const uint32_t targetFrame = bgfx::readTexture(readback, data);
+        AdvanceFramesUntil(targetFrame);
+
+        bgfx::destroy(readback);
     }
 
     std::unique_ptr<ITexture3DBackend> BgfxGraphicsBackend::CreateTexture3D(

@@ -514,11 +514,12 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   `TransitionImageLayout` case (`SHADER_READ_ONLY_OPTIMAL <-> TRANSFER_SRC_OPTIMAL`) and adding
   `VK_IMAGE_USAGE_TRANSFER_SRC_BIT` to both textures' image usage flags.
 - **`Texture3D`'s mip levels >0 now work on EasyGL (Task 862) and both `Texture3D`/`TextureCube`'s
-  mip levels >0 now work on Vulkan (Task 864)** — both previously hardcoded `mipLevels`/allocated
-  GPU storage to 1 regardless of `mipMap`, and reverting either fix reproduces real GPU memory
-  corruption (higher mip levels' writes land back inside level 0's only allocated memory), not
-  just a silent no-op. Bgfx's half remains open, split to Task 914 (currently unverifiable — see
-  §5).
+  mip levels >0 now work on all 3 backends (Vulkan/Task 864, Bgfx/Task 914)** — all previously
+  hardcoded `mipLevels`/allocated GPU storage to 1 regardless of `mipMap`, and reverting the
+  EasyGL/Vulkan fix reproduces real GPU memory corruption (higher mip levels' writes land back
+  inside level 0's only allocated memory), not just a silent no-op. Bgfx's own fix needed a real
+  `GetData` readback path first (Task 914 — `bgfx::readTexture()` via a temporary
+  `BGFX_TEXTURE_BLIT_DST|READ_BACK` texture, since `GetData` was previously a total no-op there).
 - **`GraphicsDevice.GetBackBufferData` now works on SDL_Renderer** (Task 915 fix) — this backend
   never overrode `ReadBackbuffer` at all (hard `throw`), which blocked the *entire* SDL_Renderer
   pixel-test audit phase (`plan_graphics.md` Tasks 666–861) before any of it could start. Fixed via
@@ -567,9 +568,9 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
 - `EasyGL_MRT_TwoAttachments` (Task 145): even a basic, same-size/format 2-target MRT setup doesn't
   render correctly on EasyGL — attachment 1 stays black. Pre-existing, off-limits for opportunistic
   fixing (see §9).
-- `Texture3D`/`TextureCube::GetData` is a total silent no-op on Bgfx (no GPU readback API at all —
-  accepted, already-documented, project-wide limitation, not a bug to fix). **Fixed on Vulkan**
-  (Task 865, real `vkCmdCopyImageToBuffer` readback).
+- **`Texture3D`/`TextureCube::GetData` is now a real GPU readback on all 3 backends**: Vulkan
+  (Task 865, `vkCmdCopyImageToBuffer`) and Bgfx (Task 914, blit into a temporary
+  `BGFX_TEXTURE_BLIT_DST|READ_BACK` texture + `bgfx::readTexture()` — previously a total no-op).
 - `Texture2D::SetData(level>0,...)` is a silent no-op on Vulkan/Bgfx; EasyGL's non-mip-aware
   filters render solid black on mip-incomplete textures (Task 867).
 - `Texture3D` sampling cannot be wired into any shader without an architecture change (Task 863).
@@ -583,6 +584,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `pending` | 914 | **`Texture3D`/`TextureCube::GetData` is now real on Bgfx (previously a total no-op silently leaving the caller's buffer untouched), and Task 864's mip-allocation fix (`mipMap` genuinely threaded through, previously hardcoded `false`) now applies to Bgfx too.** `bgfx::readTexture()` requires its source texture to have `BGFX_TEXTURE_READ_BACK`, incompatible with a normally shader-sampled texture — `GetData()` instead blits the requested region into a small temporary `BGFX_TEXTURE_BLIT_DST|READ_BACK` texture (2D for cube faces, 3D for volume slices) via `bgfx::blit()`, then reads that via `bgfx::readTexture()`; a new `AdvanceFramesUntil()` helper loops `bgfx::frame()` until the returned future frame number is reached, mirroring `ReadBackbuffer`'s own established retry-until-ready convention. Confirmed both `BGFX_CAPS_TEXTURE_BLIT`/`READ_BACK` are actually supported in this sandbox via a throwaway caps check before implementing — resolving the real open question Task 864's own scoping note had flagged. Registered the same 4 backend-agnostic example tests already shared by EasyGL/Vulkan (Tasks 173/275/862/864) for Bgfx too, rather than writing new ones. `git stash` confirmed all 4 fail exactly as predicted without the fix; restored and reconfirmed all 4 pass 100%. Full regression: `ctest` 4342/4344 passed (2 pre-existing: `Bgfx_RenderTarget2D_MsaaResolve`/`MipChain`, the same already-documented Xvfb/environment limitations carried since Task 750/877 — zero new failures). |
 | `11642341` | 911 | **Every Vulkan `RenderTarget2D`/`RenderTargetCube` now gets a real, distinct depth `VkFormat` picked for its own instance (or genuinely no depth attachment at all for `DepthFormat::None`), instead of silently sharing the backbuffer's device-wide `depthFormat_` regardless of what was requested.** New `PickDepthFormat()` maps each `DepthFormat` to a real, probed `VkFormat`; the old single shared RT render pass members became 3 `std::unordered_map<VkFormat, VkRenderPass>` caches (`GetOrCreateRTRenderPass`/`GetOrCreateRTRenderPassMsaa`); `VulkanRenderTargetBackend`/`VulkanRenderTargetCubeBackend` both now genuinely act on their `depthFormat` constructor parameter (previously silently dropped). All 9 3D pipeline functions plus the 2D sprite pipeline (converted from eager singletons to the same lazy depth-format-keyed cache pattern) gained a `targetDepthFmt` parameter, folded into their cache key and used to select the render pass via new `PickRTPipelineRenderPass()`; MRT deliberately stays out of scope (always the device-wide `depthFormat_`, XNA/FNA's own multi-target depth semantics being inherently ambiguous). **Real regression found and fixed while testing this task**: `VulkanMRTProxy` previously borrowed `rts[0]->GetDepthView()` directly, an invariant broken by this task's own `DepthFormat::None` fix (null `depthView_`) — reproduced as a live `vkCreateFramebuffer` validation error + abort on `SetRenderTargets_FourTargets_DoesNotThrow`; fixed by giving the proxy its own dedicated depth image, always in `depthFormat_`. Also fixed a second, pre-existing, unrelated leak found in the process: `mrtProxy_` was never explicitly reset before device teardown. New `Vulkan_RenderTarget2D_DepthFormatFidelity` test proves genuine per-format fidelity (a `None`-format RT can't depth-reject a later draw; `Depth24Stencil8`/`Depth16` RTs can, coexisting correctly in one frame). `git stash` confirmed both the depth-format bug and the MRT regression fail exactly as predicted without the fix. Full regression: `ctest` 4369/4378 passed (9 failures, identical set to Task 870's own documented baseline — zero new failures). |
 | `8764d201` | 870 | **Vulkan's `DepthStencilState` support was almost entirely fake — `DepthBufferFunction` hardcoded (2 pipelines `LESS`, 5 `LESS_OR_EQUAL`, unrelated to what's requested), entire stencil-test parameter set dropped by `ApplyDepthStencilState`. Now fixed: real per-pipeline `depthCompareOp` + full front/back `VkStencilOpState` (`ToVkCompareOp`/`ToVkStencilOp` mirror EasyGL's exact ordinal mapping), stencil reference/masks as true Vulkan dynamic state, `FindDepthFormat()` reordered to prefer stencil-capable formats.** Fixes 6 of the 12 pre-existing Vulkan `ctest` failures (`CompareFunction`, `StencilEnable`, `StencilMask`, `StencilOps`, `StencilTwoSided`, `GraphicsDevice.ReferenceStencil`); the remaining 6 are the separate, already-tracked Task 868 `BlendState` bug (5) + 1 known `DepthBias` sub-case. **Found and fixed a 2nd bug as a prerequisite**: `GraphicsDevice.ReferenceStencil`'s setter never reached any backend at all (new `IGraphicsBackend::SetReferenceStencil`, mirroring `SetBlendFactor`'s pattern) — EasyGL/Bgfx have the identical gap, deliberately left open. **A genuinely surprising empirical finding**: stencil `front`/`back` needed the OPPOSITE assignment from what culling's own (already-correct) `frontFace` convention would suggest — likely an llvmpipe/Mesa quirk specific to asymmetric `VkStencilOpState`, not a general winding bug (culling itself is unaffected). Also updated `vulkan_depth_bias_test.cpp`, which relied on the old buggy hardcoded `LESS` behavior — XNA's real default is `LessEqual`, under which the test's premise can't discriminate anything, so it now explicitly requests `CompareFunction::Less`. `git stash` confirmed all 6 previously-failing tests fail exactly as predicted without the fix. Full regression: `ctest` 4368/4377 (9 pre-existing, unrelated), `CnaTests` (filtered) 4278/4280 passed, 2 skipped, 0 failed. |
 | `e75ed62a` | 910 | **Bgfx: every render target (2D, cube, MRT) now gets its own distinct, stable bgfx view id instead of sharing one hardcoded id — fixes the "only the last-bound render target actually renders" bug found while building Task 907's mip test.** Root cause: `bgfx::setViewFrameBuffer(viewId, fbo)` is a per-view-per-*frame* setting resolved once at `bgfx::frame()`, not per `bgfx::submit()`/`touch()` call, so whichever value was set last for a shared view id wins for every draw submitted to it that frame. New free-list-backed `Detail::AllocateRtViewId()`/`ReleaseRtViewId()` pool (ids `[1,256)`, 0 reserved for the backbuffer); `BgfxRenderTargetBackend`/`BgfxRenderTargetCubeBackend` each get a `viewId_` allocated at construction, released at destruction; MRT gets its own fresh `mrtViewId_` per `SetRenderTargets(count>1)` call. New `bgfx_concurrent_rendertargets_test.cpp`: binds+fills 2 different `RenderTarget2D`s with NO `bgfx::frame()` boundary in between, `git stash` confirmed the 1st one silently stays at its primed baseline color without the fix (clobbered by the 2nd's bind), both read back correctly with it. Full Bgfx regression: `ctest` 4338/4340 (2 pre-existing environment failures only), `CnaTests` 4285/4287 passed, 2 skipped, 0 failed. |
@@ -773,7 +775,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Confirmed, real, not fixed, separately found | Vulkan's `RecordCommandBuffer` RT pass hardcodes `vkCmdSetScissor` to each RT's own full size (`VkRect2D rtSc{{0,0},{rtW,rtH}}`), ignoring `scissorEnabled_`/`scissorX_`/etc. entirely — only the backbuffer pass reads the real dynamic scissor state. A custom `ScissorRectangle` therefore has zero effect while rendering into a bound `RenderTarget2D` on Vulkan. Found while scoping Task 880's identical Viewport limitation. | — |
 | Fixed | `TextureCube::DDSFromStreamEXT` now really parses DDS headers and decodes DXT1/3/5 cube-map data (6 faces × mip levels) to `SurfaceFormat::Color`, matching FNA's exception behavior for non-cube/unsupported input. | Task 663 (done) |
 | Fixed, `TextureCube` and `Texture3D` | `SetData`/`GetData`'s region-taking overloads now validate `elementCount` against the actual texel/voxel count, matching `Texture2D`'s already-correct pattern — a mismatch previously caused heap corruption (confirmed via a live `free(): invalid pointer` crash) instead of a clean exception. | Task 913 (done) |
-| Fixed, Vulkan; Bgfx accepted limitation | `Texture3D`/`TextureCube::GetData` is now a real GPU readback on Vulkan (`vkCmdCopyImageToBuffer` + staging buffer, mirroring `SetData` in reverse). Bgfx remains a total no-op — no GPU readback API at all, accepted project-wide limitation, not a bug to fix. | Task 865 (done, Vulkan) |
+| Fixed, all 3 backends | `Texture3D`/`TextureCube::GetData` is now a real GPU readback on all 3 backends: Vulkan (`vkCmdCopyImageToBuffer` + staging buffer, mirroring `SetData` in reverse) and Bgfx (Task 914 — blit into a temporary `BGFX_TEXTURE_BLIT_DST|READ_BACK` texture, since `bgfx::readTexture()`'s source can't also be shader-sampled; `bgfx::frame()`-advance loop to wait for the async result). | Task 865 (done, Vulkan) / 914 (done, Bgfx) |
 | Confirmed, silent failure | `Texture2D::SetData(level>0,...)` no-op on Vulkan/Bgfx; EasyGL renders solid black for mip filters on mip-incomplete textures. | Task 867 |
 | Confirmed, architectural, not fixed | `Texture3D`/`TextureCube` can't be sampled in any shader — don't inherit `Texture`. | Task 863 |
 | Fixed, Bgfx | Bgfx: `SpriteBatch::Draw`ing a `RenderTarget2D` previously read a framebuffer handle where a texture handle was expected — samples wrong data, doesn't crash. Fixed via a new `IBgfxSamplable` accessor both `BgfxTextureBackend`/`BgfxRenderTargetBackend` implement correctly, fixed as a hard prerequisite of Task 878/879's Bgfx MSAA test. | Task 873 (done) |
@@ -807,7 +809,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Confirmed, real, not fixed | `SkinnedEffect`'s `SpecularColor`/`SpecularPower` have zero GPU implementation on any backend — `GpuDrawParams` has no generic specular fields at all, same shape as `BasicEffect`'s already-tracked gap. | Task 894 |
 | Confirmed, real, not fixed | `SkinnedEffect.WeightsPerVertex` is a complete GPU no-op on all 3 backends — the skinning shader always sums all 4 bone weights regardless of the property's value (1/2/4), unlike FNA's real shader which only sums the first N. Only visible when unused weight slots hold nonzero data. | Task 895 |
 | Confirmed, minor, acceptable deviation | `SkinnedEffect`'s `PreferPerPixelLighting=false` default is effectively a no-op — lighting (`NdotL`) is always computed in the fragment shader on every backend, so CNA always renders at per-pixel quality regardless of this flag (strictly more accurate than FNA's real per-vertex default, never worse). | — |
-| Fixed, EasyGL+Vulkan; Bgfx blocked | Confirmed and fixed the same `mipLevels`/`hasMips` hardcoded-to-1 bug (same shape as Task 276's `TextureCube` fix) for `Texture3D` on EasyGL (Task 862) and for both `Texture3D`/`TextureCube` on Vulkan (Task 864) — reverting either fix reproduces real GPU memory corruption (mip levels overwrite each other), not just a silent no-op. Bgfx's half split to Task 914: currently unverifiable by any means (`GetData` is a total no-op there, `Texture3D` can't be sampled at all per Task 863, and `TextureCube` mip-content sampling was already found non-discriminating by Task 907). | Task 862/864 (done, EasyGL+Vulkan) / 914 (Bgfx, open) |
+| Fixed, all 3 backends | Confirmed and fixed the same `mipLevels`/`hasMips` hardcoded-to-1 bug (same shape as Task 276's `TextureCube` fix) for `Texture3D` on EasyGL (Task 862), both `Texture3D`/`TextureCube` on Vulkan (Task 864), and both on Bgfx (Task 914) — reverting the EasyGL/Vulkan fix reproduces real GPU memory corruption (mip levels overwrite each other), not just a silent no-op. Bgfx's own fix needed a real `GetData` readback path first (`GetData` was previously a total no-op there); Task 914 added one via a temporary `BGFX_TEXTURE_BLIT_DST|READ_BACK` texture + `bgfx::blit()`/`bgfx::readTexture()`, confirming `BGFX_CAPS_TEXTURE_BLIT`/`READ_BACK` are both actually supported in this sandbox. | Task 862/864/914 (all done) |
 | Needs verification | Whether Bgfx's window actually has a physical stencil buffer has not been checked. | — |
 | Incomplete, by design | Stride-keyed vertex layout only supports strides 16/20/24/32/52. Vulkan has no `Tangent`/`Binormal` mapping. `SurfaceFormat` support is Color-only for real GPU formats. `SDL_Renderer` has no 3D at all. | — |
 | Risky assumption | `GraphicsDevice`'s user-primitive scratch buffers never shrink — fine for typical use, but memory stays at the high-water mark for the device's lifetime. | — |
@@ -966,18 +968,20 @@ superseded by later, higher-numbered rediscoveries of the same underlying bug.
    `Xvfb`+`llvmpipe` combination (confirmed via `git stash` to be unrelated to any of this
    session's changes).
 
-**Task 911 is now DONE** — see §3/§5 for the full write-up (real per-instance `VkFormat` fidelity
-for every Vulkan render target, a depth-format-keyed render-pass+pipeline cache across all 9 3D
-pipeline functions plus the 2D sprite pipeline, plus a real `VulkanMRTProxy` regression and a
-pre-existing `mrtProxy_` teardown leak found and fixed along the way).
+**Tasks 911 and 914 are now DONE** — see §3/§5 for the full write-ups. Task 911: real per-instance
+`VkFormat` fidelity for every Vulkan render target, a depth-format-keyed render-pass+pipeline cache
+across all 9 3D pipeline functions plus the 2D sprite pipeline, plus a real `VulkanMRTProxy`
+regression and a pre-existing `mrtProxy_` teardown leak found and fixed along the way. Task 914:
+real `Texture3D`/`TextureCube::GetData` readback on Bgfx via a temporary blit-dst/read-back
+texture, unblocking Task 864's mip-allocation fix for Bgfx too — confirmed `BGFX_CAPS_TEXTURE_
+BLIT`/`READ_BACK` are both actually supported in this sandbox.
 
-1. **Task 914 — give Bgfx a real GPU readback path for `Texture3D`/`TextureCube`** (split out of
-    Task 864, whose mip-allocation fix landed on EasyGL/Vulkan but found Bgfx's half currently
-    unverifiable by any means — `GetData` is a total no-op there, `Texture3D` can't be sampled at
-    all per Task 863, and `TextureCube` mip-content sampling was already found non-discriminating
-    by Task 907). Real fix needs `bgfx::readTexture()` — genuinely async (`BGFX_TEXTURE_READ_BACK`-
-    gated, resolves on a future `bgfx::frame()`) and possibly incompatible with a texture also
-    being shader-sampled — needs its own scoping pass before starting, same class as Task 911 was.
+All 4 tasks the project owner explicitly approved "Implement now" this stretch (902/910/911/914)
+are now closed. The standing backlog (see the paragraph above this list) is next: continue the
+Task 666+ SDL_Renderer audit phase (Tasks 667–861 in `plan_graphics.md`, all unblocked by Task
+915's real `ReadBackbuffer`), and/or the older, not-yet-triaged backlog in the 421–500 range —
+worth a dedicated triage pass before working through either in bulk, since some entries may
+already be superseded by later, higher-numbered rediscoveries of the same bug.
 
 ---
 
@@ -1047,15 +1051,16 @@ pre-existing `mrtProxy_` teardown leak found and fixed along the way).
 Read NEXT.md first, in full — this section is intentionally the only thing you need before
 touching any code.
 
-## Repo state as of 2026-07-08 (end of Task 911 session) — READ THIS FIRST
+## Repo state as of 2026-07-08 (end of Task 914 session) — READ THIS FIRST
 
 All 4 `cmake-build-{debug,vulkan,bgfx,sdl}` directories exist and were verified building clean at
 the end of this session. Working tree should be clean (this session's work is committed and
-pushed). **Tasks 902, 870, and 911 (`GraphicsDevice::Reset()` real backend wiring; Vulkan
-`DepthStencilState`/stencil-test fidelity; Vulkan per-instance `DepthStencilFormat` fidelity) are
-now done** — of the 4 tasks the project owner explicitly approved "Implement now" this stretch
-(902/910/911/914), only Task 914 (Bgfx real `Texture3D`/`TextureCube` readback) has NOT been
-started yet (no investigation, no code) and is next.
+pushed). **Tasks 902, 870, 911, and 914 (`GraphicsDevice::Reset()` real backend wiring; Vulkan
+`DepthStencilState`/stencil-test fidelity; Vulkan per-instance `DepthStencilFormat` fidelity; Bgfx
+real `Texture3D`/`TextureCube::GetData` readback + mip-allocation fix) are all now done** — every
+task the project owner explicitly approved "Implement now" this stretch (902/910/911/914) is
+closed. Next up is the standing backlog (§8): the Task 666+ SDL_Renderer audit phase, and/or the
+untriaged 421–500 range of `plan_graphics.md`.
 
 **First action on resume, before any feature work** (run these in order):
   1. `git log --oneline -5` and `git status --short` — confirm clean tree, note current HEAD.
@@ -1093,13 +1098,9 @@ hash filled in, `7d883ee5` — this describes the pattern for the *next* task). 
 commit; never bundle unrelated tasks.
 
 **Skip without asking**: any WebGPU task (`plan_webgpu.md`, hard project-wide prohibition, see
-CLAUDE.md). The project owner has already explicitly approved "Implement now" for Task
-910 (done, see below), Task 911 (Vulkan per-RT depth-format architecture), and Task 914 (Bgfx
-`Texture3D`/`TextureCube` real readback) — the remaining 2 are no longer decision-blocked, just
-not yet started. Per the project owner's own instruction, work through them **one at a time**
-(finish + commit + push one before starting the next), then continue automatically into the rest
-of the backlog (§8) one task at a time, without stopping to ask permission between ordinary
-backlog items.
+CLAUDE.md). All 4 tasks the project owner explicitly approved "Implement now" this stretch
+(902/910/911/914) are now closed — continue automatically into the standing backlog (§8) one task
+at a time, without stopping to ask permission between ordinary backlog items.
 
 **Backlog, in priority order:** see §8. This session closed Task 902 (`GraphicsDevice::Reset()`
 now really reaches the backend — `GraphicsDeviceManager.PreferMultiSampling` reaches
@@ -1125,10 +1126,7 @@ and Task 862/864 (`Texture3D`/`TextureCube` mip-level allocation fixed on EasyGL
 reverting either fix reproduces real GPU memory corruption, not just a silent no-op), and Task 903
 (`RenderTargetCube` MSAA on Vulkan and Bgfx, mirroring `RenderTarget2D`'s Task 878/879 support —
 also found and fixed a real Vulkan bug along the way: the 2D `SpriteBatch` pipeline's MSAA
-selection never checked an RT's own `WantsMsaa()`, only the backbuffer's); split off two new
-findings: Task 911 (Vulkan's own per-RT depth-format fidelity — real architectural constraint)
-and Task 914 (Bgfx's `Texture3D`/`TextureCube` mip fix, currently
-unverifiable — needs a real `bgfx::readTexture()` readback path first). Also closed Task 750
+selection never checked an RT's own `WantsMsaa()`, only the backbuffer's). Also closed Task 750
 (`SpriteBatch`'s `SamplerState` fixed on Bgfx — never overrode `SetSamplerFilter`/
 `SetSamplerAddressMode` at all, closing the last of the 3 backends for this bug shape) and Task 915
 (`GraphicsDevice.GetBackBufferData` implemented for the first time on SDL_Renderer via
@@ -1137,21 +1135,24 @@ pixel-test audit phase before it could start; also fixed a real CMakeLists.txt s
 while wiring up the first test). Also closed Task 870 this session (Vulkan `DepthStencilState`
 support was almost entirely fake -- `DepthBufferFunction` and the entire stencil-test parameter
 set now real, see §3/§5; a project-owner reprioritization inserted this ahead of Task 911 given
-its severity), and Task 911 this session (Vulkan render targets now get true per-instance
+its severity), Task 911 this session (Vulkan render targets now get true per-instance
 `DepthStencilFormat` fidelity — a depth-format-keyed render-pass+pipeline cache across all 9 3D
 pipeline functions plus the 2D sprite pipeline; MRT deliberately stays on the device-wide format;
 also found and fixed a real `VulkanMRTProxy` regression this surfaced, plus a pre-existing
 unrelated `mrtProxy_` teardown leak — the project owner's "push through full scope even when
-large" instruction was followed rather than landing a narrower alternative). Next up, in order:
-**Task 914** (Bgfx real `Texture3D`/`TextureCube` readback) — already approved "Implement now".
-After that, continue the SDL_Renderer audit phase
-(Task 666's remaining scope — write pixel
-tests for SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/
-GraphicsDevice-lifecycle on this backend, Tasks 667–861 in `plan_graphics.md`, all unblocked by
-Task 915), and/or the older, not-yet-triaged backlog in the 421–500 range of `plan_graphics.md`
-(audits, reference-value generation, and other per-backend tasks from earlier phases never folded
-into this §8 list) — worth a dedicated triage pass before working through in bulk, since some
-entries (e.g. Task 750) may already be superseded by later, higher-numbered rediscoveries of the
+large" instruction was followed rather than landing a narrower alternative), and Task 914 this
+session (`Texture3D`/`TextureCube::GetData` now real on Bgfx via a temporary
+`BGFX_TEXTURE_BLIT_DST|READ_BACK` texture + `bgfx::blit()`/`bgfx::readTexture()`, unblocking Task
+864's mip-allocation fix for Bgfx too — confirmed `BGFX_CAPS_TEXTURE_BLIT`/`READ_BACK` are both
+actually supported in this sandbox before implementing). **All 4 project-owner-approved
+"Implement now" tasks (902/910/911/914) are now closed.** Next up: continue the SDL_Renderer
+audit phase (Task 666's remaining scope — write pixel tests for SpriteBatch/SpriteFont/
+BlendState/SamplerState/RenderTarget2D/Viewport/GraphicsDevice-lifecycle on this backend, Tasks
+667–861 in `plan_graphics.md`, all unblocked by Task 915), and/or the older, not-yet-triaged
+backlog in the 421–500 range of `plan_graphics.md` (audits, reference-value generation, and other
+per-backend tasks from earlier phases never folded into this §8 list) — worth a dedicated triage
+pass before working through in bulk, since some entries (e.g. Task 750) may already be superseded
+by later, higher-numbered rediscoveries of the
 same bug.
 
 **Standing instructions (still in force):**

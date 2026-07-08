@@ -4004,6 +4004,44 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 914: Texture3D/TextureCube::GetData is now real on Bgfx (blit into a temporary
+    # BGFX_TEXTURE_BLIT_DST|BGFX_TEXTURE_READ_BACK texture + bgfx::readTexture()) -- shared with
+    # EasyGL/Vulkan's registration of the same backend-agnostic files (Tasks 173/275/865).
+    cna_bgfx_test(cna_test_bgfx_texture3d_slices
+                  examples/easygl_texture3d_slices_test.cpp)
+    add_test(NAME Bgfx_Texture3D_Slices_RoundTrip
+             COMMAND cna_test_bgfx_texture3d_slices)
+    set_tests_properties(Bgfx_Texture3D_Slices_RoundTrip PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_bgfx_test(cna_test_bgfx_texturecube_partial_rect
+                  examples/easygl_texturecube_partial_rect_test.cpp)
+    add_test(NAME Bgfx_TextureCube_PartialRect_RoundTrip
+             COMMAND cna_test_bgfx_texturecube_partial_rect)
+    set_tests_properties(Bgfx_TextureCube_PartialRect_RoundTrip PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 914: Texture3D/TextureCube mip-level allocation is now real on Bgfx (mipMap genuinely
+    # threaded through createTexture3D/createTextureCube's _hasMips, previously hardcoded false) --
+    # shared with EasyGL/Vulkan's registration of the same backend-agnostic files (Tasks 862/864).
+    cna_bgfx_test(cna_test_bgfx_texture3d_mip
+                  examples/easygl_texture3d_mip_test.cpp)
+    add_test(NAME Bgfx_Texture3D_Mip_RoundTrip
+             COMMAND cna_test_bgfx_texture3d_mip)
+    set_tests_properties(Bgfx_Texture3D_Mip_RoundTrip PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_bgfx_test(cna_test_bgfx_texturecube_mip
+                  examples/easygl_texturecube_mip_test.cpp)
+    add_test(NAME Bgfx_TextureCube_Mip_RoundTrip
+             COMMAND cna_test_bgfx_texturecube_mip)
+    set_tests_properties(Bgfx_TextureCube_Mip_RoundTrip PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
