@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/SdlRenderer/SdlGraphicsBackend.hpp"
+#include <cmath>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -188,6 +189,55 @@ namespace CNA::Internal::Backends::SdlRenderer
             flip = SDL_FLIP_HORIZONTAL_AND_VERTICAL;
         else if ((int)effects & (int)SpriteEffects::FlipHorizontally) flip = SDL_FLIP_HORIZONTAL;
         else if ((int)effects & (int)SpriteEffects::FlipVertically) flip = SDL_FLIP_VERTICAL;
+
+        // Task 675: SpriteBatch::Begin's transformMatrix was previously silently ignored on this
+        // backend (SetTransformMatrix has no override, so the shared no-op default ran) --
+        // SDL_RenderTextureRotated has no way to accept an arbitrary transform on top of its own
+        // rotation/flip. Fixed via SDL_RenderTextureAffine, which maps 3 quad corners (origin,
+        // right, down) to arbitrary destination points, for the genuinely general case (only
+        // taken when transformMatrix isn't Identity -- the common case keeps using
+        // SDL_RenderTextureRotated above, unchanged, zero regression risk). The 4 unrotated local
+        // corners (relative to the origin pivot, mirroring the sdlCenter math above) are rotated
+        // by `rotation` exactly like FNA's own GenerateVertexInfo formula, translated to screen
+        // space, then transformed by transformMatrix via Vector2::Transform (world/camera
+        // transform applied on top of the sprite's own placement, matching FNA's real vertex
+        // pipeline order). Flip is applied by permuting which corner feeds which
+        // SDL_RenderTextureAffine parameter (each parameter fixes which SOURCE corner it
+        // represents; flipping swaps which SCREEN corner that source corner lands on) rather than
+        // by an SDL_FlipMode, which this API doesn't accept.
+        if (transformMatrix != Matrix::getIdentityProperty())
+        {
+            const float cosR = std::cos(rotation);
+            const float sinR = std::sin(rotation);
+            auto rotateAndPlace = [&](float localX, float localY) -> Vector2
+            {
+                const float rx = localX * cosR - localY * sinR;
+                const float ry = localX * sinR + localY * cosR;
+                return Vector2(static_cast<float>(destinationRectangle.X) + rx,
+                               static_cast<float>(destinationRectangle.Y) + ry);
+            };
+            const float w = static_cast<float>(destinationRectangle.Width);
+            const float h = static_cast<float>(destinationRectangle.Height);
+            const Vector2 topLeft     = Vector2::Transform(rotateAndPlace(-sdlCenterX,     -sdlCenterY),     transformMatrix);
+            const Vector2 topRight    = Vector2::Transform(rotateAndPlace(w - sdlCenterX,  -sdlCenterY),     transformMatrix);
+            const Vector2 bottomLeft  = Vector2::Transform(rotateAndPlace(-sdlCenterX,     h - sdlCenterY),  transformMatrix);
+            const Vector2 bottomRight = Vector2::Transform(rotateAndPlace(w - sdlCenterX,  h - sdlCenterY),  transformMatrix);
+
+            const bool flipH = flip == SDL_FLIP_HORIZONTAL || flip == SDL_FLIP_HORIZONTAL_AND_VERTICAL;
+            const bool flipV = flip == SDL_FLIP_VERTICAL   || flip == SDL_FLIP_HORIZONTAL_AND_VERTICAL;
+            const Vector2& originCorner = (flipH && flipV) ? bottomRight : flipH ? topRight    : flipV ? bottomLeft  : topLeft;
+            const Vector2& rightCorner  = (flipH && flipV) ? bottomLeft  : flipH ? topLeft     : flipV ? bottomRight : topRight;
+            const Vector2& downCorner   = (flipH && flipV) ? topRight    : flipH ? bottomRight : flipV ? topLeft     : bottomLeft;
+
+            SDL_FPoint sdlOrigin{originCorner.X, originCorner.Y};
+            SDL_FPoint sdlRight{rightCorner.X, rightCorner.Y};
+            SDL_FPoint sdlDown{downCorner.X, downCorner.Y};
+            if (!SDL_RenderTextureAffine(renderer, sdlTex.texture, &src, &sdlOrigin, &sdlRight, &sdlDown))
+            {
+                throw std::runtime_error(std::string("SDL_RenderTextureAffine failed: ") + SDL_GetError());
+            }
+            return;
+        }
 
         if (!SDL_RenderTextureRotated(renderer, sdlTex.texture, &src, &dst, rotationDeg, &sdlCenter, flip))
         {

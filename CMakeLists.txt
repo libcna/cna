@@ -3564,6 +3564,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 675: transformMatrix in SpriteBatch::Begin pixel test on SDL_Renderer -- direct port
+    # of Task 168's EasyGL test.
+    cna_sdl_test(cna_test_sdl_transform_matrix
+                 examples/sdlrenderer_transform_matrix_test.cpp)
+    add_test(NAME SDL_Renderer_TransformMatrix
+             COMMAND cna_test_sdl_transform_matrix)
+    set_tests_properties(SDL_Renderer_TransformMatrix PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32

@@ -49,11 +49,18 @@ namespace CNA::Internal::Backends::SdlRenderer
         SDL_Renderer* renderer;
         bool begun = false;
         SDL_ScaleMode scaleMode = SDL_SCALEMODE_LINEAR;
+        // Task 675: transform matrix applied on top of each sprite's own destRect/rotation/origin
+        // placement. Defaults to Identity -- SDL_RenderTextureRotated() is used unchanged
+        // whenever this stays Identity (the overwhelmingly common case), so this fix carries zero
+        // regression risk for existing rotation/flip/scale/source-rect behaviour; only a
+        // genuinely non-Identity transform routes through the new SDL_RenderTextureAffine() path.
+        Matrix transformMatrix = Matrix::getIdentityProperty();
 
         explicit SdlSpriteBatchBackend(SDL_Renderer* renderer);
         ~SdlSpriteBatchBackend() override = default;
         void Begin() override;
         void End() override;
+        void SetTransformMatrix(const Matrix& m) override { transformMatrix = m; }
         void SetSamplerFilter(int textureFilter) override;
         void Draw(const ITextureBackend& texture, float x, float y) override;
         void Draw(const ITextureBackend& texture,
