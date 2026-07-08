@@ -3854,6 +3854,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 709: MRT (SetRenderTargets with 2+ bindings) throws clearly on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_rendertargets_mrt_throws
+                 examples/sdlrenderer_rendertargets_mrt_throws_test.cpp)
+    add_test(NAME SDL_Renderer_RenderTargets_MrtThrows
+             COMMAND cna_test_sdl_rendertargets_mrt_throws)
+    set_tests_properties(SDL_Renderer_RenderTargets_MrtThrows PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32

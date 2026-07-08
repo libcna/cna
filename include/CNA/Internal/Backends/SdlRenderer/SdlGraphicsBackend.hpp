@@ -124,6 +124,10 @@ namespace CNA::Internal::Backends::SdlRenderer
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        // Task 709: SDL_Renderer supports exactly one active render target at a time -- the
+        // shared IGraphicsBackend::SetRenderTargets default would otherwise silently bind only
+        // rts[0] and ignore the rest. Throws clearly for count > 1 instead.
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,

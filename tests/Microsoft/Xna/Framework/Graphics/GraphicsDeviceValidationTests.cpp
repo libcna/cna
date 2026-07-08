@@ -117,7 +117,16 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
+#if defined(CNA_BACKEND_SDL_RENDERER)
+    // Task 709: SDL_Renderer supports exactly one active render target at a time -- unlike the
+    // other 3 (real-MRT-capable) backends, binding more than one target here must throw clearly
+    // rather than silently rendering to only the first. 4 is still within the
+    // MAX_RENDERTARGET_BINDINGS cap this test's name/history (Task 881) refers to, so the throw
+    // here comes entirely from SDL_Renderer's own MRT limitation, not the cap check.
+    EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
+#else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
+#endif
 }
 
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
