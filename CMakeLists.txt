@@ -3647,6 +3647,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 684: NPOT (3x5, 7x11) texture upload+sample pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_npot_texture
+                 examples/sdlrenderer_npot_texture_test.cpp)
+    add_test(NAME SDL_Renderer_NpotTexture
+             COMMAND cna_test_sdl_npot_texture)
+    set_tests_properties(SDL_Renderer_NpotTexture PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
