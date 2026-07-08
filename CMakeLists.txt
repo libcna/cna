@@ -3554,6 +3554,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 674: SpriteEffects::FlipHorizontally/FlipVertically pixel test on SDL_Renderer --
+    # direct port of Task 167's EasyGL test.
+    cna_sdl_test(cna_test_sdl_sprite_effects
+                 examples/sdlrenderer_sprite_effects_test.cpp)
+    add_test(NAME SDL_Renderer_SpriteEffects
+             COMMAND cna_test_sdl_sprite_effects)
+    set_tests_properties(SDL_Renderer_SpriteEffects PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
