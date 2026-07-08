@@ -584,6 +584,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `pending` | 693 | **No bug found — `DrawString`'s unknown-character fallback correctly renders the configured `defaultCharacter`'s glyph (not a wrong glyph, and doesn't throw) on SDL_Renderer.** Same situation as Tasks 690-692 (Task 427/EasyGL isn't implemented either) — a NEW test. Two-glyph font: `'A'` (White, real char) and `'?'` (Red, `defaultCharacter`) — drawing `"Z"` (absent from the font) must fall back to `'?'`'s Red glyph, not throw, not render `'A'`. New `sdlrenderer_spritefont_default_char_test.cpp`: no-throw check + fallback-colour check + background checks. All 4 pass. **Discriminating power verified**: sabotaging the fallback lookup to hardcode `'A'`'s index instead of the real `defaultCharacter_` made the fallback glyph incorrectly read White; restored and reconfirmed. Full regression: `ctest` 4285/4312 passed, 2 skipped, 13 failed (same baseline as Tasks 667-692 — zero new failures). |
 | `f7f31817` | 692 | **No bug found — `\n` correctly advances by `SpriteFont.lineSpacing_` (not glyph height) on SDL_Renderer.** Same situation as Tasks 690/691 (Task 426/EasyGL isn't implemented either) — a NEW test. Single-glyph font `'A'` (White, 8x8), `lineSpacing=10` deliberately different from the 8px glyph height so an "advances by glyph height" bug shape would be caught. Drawing `"A\nA"` at `(2,2)` should place the lines at `(2,2,8,8)` and `(2,12,8,8)` — an exact 2px gap. New `sdlrenderer_spritefont_newline_test.cpp`: checks inside each line's glyph, the gap, and below the 2nd line. All 4 pass. **Discriminating power verified**: sabotaging the newline advance to `lineSpacing_-5` shifted the 2nd line into the gap exactly as predicted; restored and reconfirmed. Full regression: `ctest` 4285/4311 passed, 2 skipped, 13 failed (same baseline as Tasks 667-691 — zero new failures; one incidental unrelated `AudioCategoryTest` flake did not reproduce on repeat). |
 | `8541a5a2` | 691 | **No bug found — `SpriteBatch::DrawString`'s horizontal-advance math (spacing + kerning) is correct on SDL_Renderer.** Same situation as Task 690 (Task 425/EasyGL isn't implemented either) — a NEW test. Two-glyph font (`'A'` White, `'B'` Green, both 8x8, kerning `(0,8,0)`), `spacing=4`. Drawing `"AB"` at `(2,2)` should place `'A'` at `(2,2,8,8)` and `'B'` at `(14,2,8,8)` — an exact 4px gap between them. New `sdlrenderer_spritefont_multiglyph_spacing_test.cpp`: checks inside each glyph (distinct colour, rules out index mix-up), the gap, and both outer edges. All 5 pass. **Discriminating power verified**: dropping `spriteFont.spacing_` from the shared advance math shifted `'B'` into the gap exactly as predicted; restored and reconfirmed. Full regression: `ctest` 4285/4310 passed, 2 skipped, 13 failed (same baseline as Tasks 667-690 — zero new failures). |
 | `2e99bf1a` | 690 | **No bug found — `SpriteBatch::DrawString` correctly places a single glyph at the expected position and size on SDL_Renderer.** This row's "Mirrors Task 424" note is moot — Task 424 (EasyGL) is itself not yet implemented — so this is a NEW SpriteFont pixel test, designed directly from the shared `SpriteBatch.cpp` DrawString contract (position + kerning/cropping offset → dest rect, glyph rect → source rect, same `pushSprite`/`backend_->Draw()` path already verified across Tasks 671-685). Hand-built a minimal single-glyph font (8x8 solid-white atlas for `'A'`, zero cropping/kerning) — drawing `"A"` at `(4,4)` should land at exactly `(4,4,8,8)`. New `sdlrenderer_spritefont_single_glyph_test.cpp`: 1 inside-glyph check (White) + 4 outside-corner checks (Black bg), all 5 pass. **Discriminating power verified**: doubling the shared DrawString's glyph dest-rect sizing failed the bottom-right corner check exactly as predicted; restored and reconfirmed. Full regression: `ctest` 4285/4309 passed, 2 skipped, 13 failed (same baseline as Tasks 667-689 — zero new failures). |
@@ -1007,7 +1008,7 @@ All 4 tasks the project owner explicitly approved "Implement now" this stretch (
 are now closed. Now working through the standing backlog: **Tasks 667, 668, 669, and 670 are
 done** (see §3 — every `SpriteSortMode` value now pixel-verified on SDL_Renderer, no bugs found;
 new tests cover `BackToFront` and `Texture` grouping for the first time on any backend). Next:
-Task 671 is already done from an earlier session (SpriteBatch rotation). The entire Texture2D section (667-689, excluding BLOCKED 686/687) is now done, and Tasks 690-692 (SpriteFont section) are also done — continue at Task 693 (Tasks 672-685, 688-692 also done this session, see §3; Tasks 686/687 are BLOCKED on a project-owner architecture decision, see §5 and their own plan_graphics.md rows).
+Task 671 is already done from an earlier session (SpriteBatch rotation). The entire Texture2D section (667-689, excluding BLOCKED 686/687) is now done, and Tasks 690-693 (SpriteFont section) are also done — continue at Task 694 (Tasks 672-685, 688-693 also done this session, see §3; Tasks 686/687 are BLOCKED on a project-owner architecture decision, see §5 and their own plan_graphics.md rows).
 Triage note on the Task 666+ SDL_Renderer audit phase (Tasks 667–861): most remaining rows are
 concrete, well-scoped
 "verify/pixel-test X on SDL_Renderer" items that fit this project's established
@@ -1100,8 +1101,8 @@ closed. Now working the standing backlog (§8): **Tasks 667, 668, 669, and 670 a
 session** (every `SpriteSortMode` value — `Deferred`/`Texture`/`FrontToBack`/`BackToFront`/
 `Immediate` — confirmed already correct on SDL_Renderer, no bugs found). Next up: continue the
 Task 666+ SDL_Renderer audit phase in order — the Texture2D section (667-689) is now fully done
-except BLOCKED 686/687 (see §5), and Tasks 690-692 (SpriteFont section) are also done —
-continue at Task 693, and/or the untriaged 421–500 range of
+except BLOCKED 686/687 (see §5), and Tasks 690-693 (SpriteFont section) are also done —
+continue at Task 694, and/or the untriaged 421–500 range of
 `plan_graphics.md` (see §8's own triage note on why 667+ is the
 better source of well-scoped single-commit tasks right now).
 
@@ -1201,7 +1202,7 @@ a silent-drop bug instead of the intended defer-to-`End()` bug; a 2nd, correct s
 reproduced it and the test failed as predicted). **Every `SpriteSortMode` value is now
 pixel-verified on SDL_Renderer.** Next up: continue the SDL_Renderer audit phase (Task 671 is
 already done from an earlier session; the Texture2D section (667-689) is now fully done except
-BLOCKED 686/687 (see §5); Tasks 690-692 are also done — continue at Task 693 — write pixel tests for
+BLOCKED 686/687 (see §5); Tasks 690-693 are also done — continue at Task 694 — write pixel tests for
 SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/GraphicsDevice-lifecycle on
 this backend, Tasks 672–861 in `plan_graphics.md`, all unblocked by Task 915), and/or the older,
 not-yet-triaged backlog in the
