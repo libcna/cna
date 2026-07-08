@@ -3397,6 +3397,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 911: RenderTarget2D per-instance DepthStencilFormat fidelity -- DepthFormat::None
+        # genuinely has no depth buffer, Depth24Stencil8/Depth16 genuinely do (each with its own
+        # render pass), all three coexisting correctly in a single frame.
+        cna_vulkan_test(cna_test_vulkan_rendertarget_depthformat_fidelity
+                        examples/vulkan_rendertarget_depthformat_fidelity_test.cpp)
+        add_test(NAME Vulkan_RenderTarget2D_DepthFormatFidelity
+                 COMMAND cna_test_vulkan_rendertarget_depthformat_fidelity)
+        set_tests_properties(Vulkan_RenderTarget2D_DepthFormatFidelity PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 13.6: the same 3 avatar-rendering GPU integration tests already registered for
         # EasyGL above, reusing the exact same backend-agnostic source files (public
         # GraphicsDevice/SkinnedModelEXT/AvatarRenderer API only) - Vulkan's own dedicated

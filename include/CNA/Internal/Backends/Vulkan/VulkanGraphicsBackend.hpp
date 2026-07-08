@@ -36,6 +36,12 @@ namespace CNA::Internal::Backends::Vulkan
         /// actually engaged MSAA (Task 878/879 — see the "piggyback on the backend's own
         /// sampleCount_" scope decision in plan_graphics.md).
         virtual bool          WantsMsaa()                   const { return false; }
+        /// Task 911: this RT's own real depth VkFormat (VK_FORMAT_UNDEFINED = no depth
+        /// attachment at all, DepthFormat::None). Default VK_FORMAT_UNDEFINED; overridden by
+        /// VulkanRenderTargetBackend/VulkanRenderTargetCubeBackend with their own instance's
+        /// picked format (see PickDepthFormat()). Backbuffer draws don't go through a
+        /// VulkanRTSource at all, so callers use depthFormat_ directly for that case.
+        virtual VkFormat      GetDepthFormat()               const { return VK_FORMAT_UNDEFINED; }
         /// Task 878: regenerate this RT's mip chain (no-op unless the concrete RT actually owns
         /// mip levels beyond 0). Called by RecordCommandBuffer right after this RT's render pass
         /// ends, once per frame it was actually rendered into.
@@ -107,16 +113,16 @@ namespace CNA::Internal::Backends::Vulkan
                                       public IVulkanSamplable
     {
     public:
-        // Task 877: `depthFormat` (raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal)
-        // is accepted for interface uniformity with the other 2 backends but not yet acted upon
-        // here — every Vulkan render target always allocates a combined depth+stencil buffer
-        // using the device-wide depthFormat_ (see VulkanGraphicsBackend::FindDepthFormat()),
-        // the same format shared by the backbuffer and every other render target so that
-        // pipelines can be reused across renderPass_/rtRenderPass_/rtRenderPassMsaa_ (Vulkan
-        // render-pass-compatibility rules require matching attachment formats). Varying the
-        // depth/stencil format per render target would need a depth-format-keyed render
-        // pass/pipeline cache across every GetOrCreatePipelineXXX call site — a genuine
-        // architectural change, tracked as Task 911 rather than attempted opportunistically here.
+        // Task 911: `depthFormat` (raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal)
+        // gives this instance true per-RT DepthStencilFormat fidelity -- a real, distinct
+        // VkFormat picked via PickDepthFormat() (or no depth attachment at all for
+        // DepthFormat::None), independent of the backbuffer's own depthFormat_ and of every
+        // other render target. Each distinct depthVkFormat_ gets its own render pass (see
+        // VulkanGraphicsBackend::GetOrCreateRTRenderPass()/GetOrCreateRTRenderPassMsaa()) and its
+        // own pipeline cache entries (DepthStencilKeyParams no longer needs a depth-format
+        // dimension since depthCompareOp/stencil ops are independent of the buffer's exact
+        // format -- but the render pass itself is, since Vulkan pipeline/render-pass
+        // compatibility requires an exact attachment-format match).
         VulkanRenderTargetBackend(int w, int h, int depthFormat, bool preserveContents,
                                    VulkanGraphicsBackend* owner, int requestedMultiSampleCount = 0,
                                    bool mipMap = false);
@@ -134,6 +140,9 @@ namespace CNA::Internal::Backends::Vulkan
         uint32_t        GetColorAttachmentCount()  const override { return 1; }
         // Task 878/879: true once this instance actually engaged MSAA (msaaFramebuffer_ created).
         bool            WantsMsaa()                const override { return msaaFramebuffer_ != VK_NULL_HANDLE; }
+        // Task 911: this instance's own real depth VkFormat (VK_FORMAT_UNDEFINED = no depth
+        // attachment, DepthFormat::None).
+        VkFormat        GetDepthFormat()            const override { return depthVkFormat_; }
         // Real, backend-clamped applied MultiSampleCount (0 if MSAA wasn't engaged — see the
         // "piggyback on the backend's own sampleCount_" scope decision in plan_graphics.md).
         int             GetMultiSampleCount()      const override { return appliedMultiSampleCount_; }
@@ -166,6 +175,9 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceMemory          colorMemory_  = VK_NULL_HANDLE;
         VkImageView             colorView_    = VK_NULL_HANDLE; ///< mip 0 only — framebuffer color attachment.
         VkImageView             colorSampleView_ = VK_NULL_HANDLE; ///< all levelCount_ levels — descriptor/sampling view.
+        // Task 911: VK_FORMAT_UNDEFINED means "no depth attachment at all" (DepthFormat::None);
+        // depthImage_/depthMemory_/depthView_ stay VK_NULL_HANDLE in that case.
+        VkFormat                depthVkFormat_ = VK_FORMAT_UNDEFINED;
         VkImage                 depthImage_   = VK_NULL_HANDLE;
         VkDeviceMemory          depthMemory_  = VK_NULL_HANDLE;
         VkImageView             depthView_    = VK_NULL_HANDLE;
@@ -453,8 +465,11 @@ namespace CNA::Internal::Backends::Vulkan
                                           public IVulkanCubeSamplable
     {
     public:
-        VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size, bool mipMap = false,
-                                       int requestedMultiSampleCount = 0);
+        // Task 911: `depthFormat` (raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal)
+        // gives this instance true per-RT DepthStencilFormat fidelity, mirroring
+        // VulkanRenderTargetBackend's identical constructor-comment fix.
+        VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size, int depthFormat,
+                                       bool mipMap = false, int requestedMultiSampleCount = 0);
         ~VulkanRenderTargetCubeBackend() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
@@ -482,12 +497,17 @@ namespace CNA::Internal::Backends::Vulkan
             VkImage       image        = VK_NULL_HANDLE;
             int           levelCount   = 1;
             int           faceIndex    = 0;
+            /// Task 911: this cube's own real depth VkFormat (VK_FORMAT_UNDEFINED = no depth
+            /// attachment, DepthFormat::None), mirrored from the owning
+            /// VulkanRenderTargetCubeBackend's depthVkFormat_.
+            VkFormat      depthFormat  = VK_FORMAT_UNDEFINED;
             VkFramebuffer GetFramebuffer()          const override { return (msaaFramebuffer != VK_NULL_HANDLE) ? msaaFramebuffer : framebuffer; }
             VkRenderPass  GetRenderPass()            const override { return (msaaFramebuffer != VK_NULL_HANDLE) ? msaaRenderPass : renderPass; }
             int GetWidth()                          const override { return size; }
             int GetHeight()                         const override { return size; }
             uint32_t GetColorAttachmentCount()      const override { return 1; }
             bool WantsMsaa()                        const override { return msaaFramebuffer != VK_NULL_HANDLE; }
+            VkFormat GetDepthFormat()               const override { return depthFormat; }
             void MaybeGenerateMips(VkCommandBuffer cb) override;
         };
 
@@ -496,6 +516,10 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceMemory             memory_    = VK_NULL_HANDLE;
         VkImageView                cubeView_  = VK_NULL_HANDLE;   ///< Full-cube view for sampling.
         std::array<VkImageView, 6> faceViews_ = {};
+        /// Task 911: this cube's own real depth VkFormat (VK_FORMAT_UNDEFINED = no depth
+        /// attachment at all, DepthFormat::None), picked independently of the backbuffer's own
+        /// depthFormat_ -- see PickDepthFormat().
+        VkFormat                   depthVkFormat_ = VK_FORMAT_UNDEFINED;
         VkImage                    depthImage_  = VK_NULL_HANDLE;
         VkDeviceMemory             depthMemory_ = VK_NULL_HANDLE;
         VkImageView                depthView_   = VK_NULL_HANDLE;
@@ -530,6 +554,9 @@ namespace CNA::Internal::Backends::Vulkan
         int           GetWidth()                const override { return width_; }
         int           GetHeight()               const override { return height_; }
         uint32_t      GetColorAttachmentCount() const override { return colorCount_; }
+        // Task 911: MRT stays out of Task 911's scope -- always the device-wide depthFormat_
+        // (this proxy owns its own dedicated depth image in that format; see the constructor).
+        VkFormat      GetDepthFormat()           const override;
 
     private:
         VulkanGraphicsBackend* owner_       = nullptr;
@@ -538,6 +565,13 @@ namespace CNA::Internal::Backends::Vulkan
         int                    width_       = 0;
         int                    height_      = 0;
         uint32_t               colorCount_  = 0;
+        // Task 911: MRT's own dedicated depth image, always in the device-wide depthFormat_ --
+        // NOT borrowed from any bound RenderTarget2D's own depthView_, since an individual RT can
+        // now genuinely have no depth buffer at all (DepthFormat::None) or a distinct real
+        // format, either of which would be wrong (or simply absent) for this shared MRT pass.
+        VkImage                depthImage_  = VK_NULL_HANDLE;
+        VkDeviceMemory         depthMemory_ = VK_NULL_HANDLE;
+        VkImageView            depthView_   = VK_NULL_HANDLE;
     };
 
     // Task 870: bundles every DepthStencilState field that -- unlike stencil reference/compare
@@ -695,7 +729,13 @@ namespace CNA::Internal::Backends::Vulkan
         VkImage                  msaaColorImage_  = VK_NULL_HANDLE;
         VkDeviceMemory           msaaColorMemory_ = VK_NULL_HANDLE;
         VkImageView              msaaColorView_   = VK_NULL_HANDLE;
-        VkPipeline               pipeline2DMsaa_  = VK_NULL_HANDLE;
+        // Task 911: depth-format-keyed (VK_FORMAT_UNDEFINED = no depth attachment), lazily
+        // populated via GetOrCreatePipeline2DMsaa() -- mirrors the 3D pipeline caches' own
+        // per-target-depth-format fidelity, since the 2D sprite pipeline's render pass must still
+        // exactly attachment-format-match whichever target it draws into even though it never
+        // itself reads/writes the depth attachment (VkPipelineDepthStencilStateCreateInfo has
+        // depthTestEnable=depthWriteEnable=VK_FALSE always).
+        std::unordered_map<VkFormat, VkPipeline> pipelines2DMsaaByDepthFmt_;
 
         // --- Swap interval (set at construction; Vulkan requires swapchain recreation to change) ---
         int swapInterval_ = 1;
@@ -709,14 +749,17 @@ namespace CNA::Internal::Backends::Vulkan
 
         // --- Render pass (permanent) + framebuffers (per swapchain image) ---
         VkRenderPass               renderPass_       = VK_NULL_HANDLE;
-        VkRenderPass               rtRenderPass_     = VK_NULL_HANDLE;  // LOAD_OP_CLEAR, color → SHADER_READ_ONLY_OPTIMAL
-        VkRenderPass               rtRenderPassLoad_ = VK_NULL_HANDLE;  // LOAD_OP_LOAD,  color → SHADER_READ_ONLY_OPTIMAL
-        // Task 878/879: shared 3-attachment (MSAA color/resolve/MSAA depth) RT render pass, lazily
-        // created the first time a VulkanRenderTargetBackend actually engages MSAA. Reused by every
-        // MSAA-enabled RT instance's own per-instance framebuffer (mirrors rtRenderPass_'s existing
-        // lazy-shared-singleton pattern). DiscardContents-shaped only — see VulkanRenderTargetBackend
-        // constructor comment for why PreserveContents+MSAA doesn't get its own LOAD_OP_LOAD variant.
-        VkRenderPass               rtRenderPassMsaa_ = VK_NULL_HANDLE;
+        // Task 911: RT render passes are now keyed by real depth VkFormat (VK_FORMAT_UNDEFINED =
+        // no depth attachment at all) instead of one hardcoded device-wide format shared by every
+        // render target — each RenderTarget2D/RenderTargetCube gets true per-instance
+        // DepthStencilFormat fidelity. Lazily populated via GetOrCreateRTRenderPass()/
+        // GetOrCreateRTRenderPassMsaa(); a format's entry is shared by every RT requesting that
+        // same format (render-pass "compatibility" requires an exact attachment-format match, so
+        // a distinct format genuinely needs its own render pass, but RTs sharing a format safely
+        // share one pass + one pipeline, mirroring the pre-existing single-format reuse pattern).
+        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassByDepthFmt_;      // LOAD_OP_CLEAR, color → SHADER_READ_ONLY_OPTIMAL
+        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassLoadByDepthFmt_;  // LOAD_OP_LOAD,  color → SHADER_READ_ONLY_OPTIMAL
+        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassMsaaByDepthFmt_;  // 3-attachment MSAA color/resolve/depth
         std::vector<VkFramebuffer> swapchainFramebuffers_;
 
         // --- Depth buffer (recreated with swapchain) ---
@@ -746,7 +789,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorSetLayout descriptorSetLayout_   = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPool_        = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayout2D_      = VK_NULL_HANDLE;
-        VkPipeline            pipeline2D_            = VK_NULL_HANDLE;
+        // Task 911: depth-format-keyed, mirrors pipelines2DMsaaByDepthFmt_ above.
+        std::unordered_map<VkFormat, VkPipeline> pipelines2DByDepthFmt_;
         VkPipelineLayout      pipelineLayout3D_      = VK_NULL_HANDLE;
         std::unordered_map<uint64_t, VkPipeline>             pipelines3D_;
         VkPipelineLayout      pipelineLayoutExt3D_      = VK_NULL_HANDLE;
@@ -1038,10 +1082,17 @@ namespace CNA::Internal::Backends::Vulkan
         // ---- Init helpers ----
         void CreateInstance();
         void SetupDebugMessenger();
-        void CreateRTRenderPass();
-        // Task 878/879: lazily-created 3-attachment (MSAA color/resolve/MSAA depth) RT render
-        // pass, shared by every MSAA-enabled RenderTarget2D. See rtRenderPassMsaa_ comment.
-        void CreateRTRenderPassMsaa();
+        // Task 911: lazily creates (and caches) the RT render pass for a specific real depth
+        // VkFormat -- VK_FORMAT_UNDEFINED means "no depth attachment at all" (DepthFormat::None).
+        // discardContents selects LOAD_OP_CLEAR (false) vs LOAD_OP_LOAD (true); a pipeline
+        // created against the discard variant is render-pass-compatible with the load variant
+        // too (they differ only in loadOp/initialLayout, which compatibility ignores), so callers
+        // that only need a pipeline's *reference* render pass should always pass false.
+        VkRenderPass GetOrCreateRTRenderPass(VkFormat depthFmt, bool discardContents);
+        // Task 911: MSAA counterpart -- DiscardContents-shaped only, mirrors the pre-existing
+        // rtRenderPassMsaa_ scope decision (PreserveContents+MSAA was never given its own
+        // LOAD_OP_LOAD variant).
+        VkRenderPass GetOrCreateRTRenderPassMsaa(VkFormat depthFmt);
         void CreateSurface();
         void PickPhysicalDevice();
         void CreateLogicalDevice();
@@ -1055,19 +1106,25 @@ namespace CNA::Internal::Backends::Vulkan
         void CreateSampler();
         void CreateDescriptorSetLayout();
         void CreateDescriptorPool();
-        void CreatePipeline2D();
+        // Task 911: lazily creates (and caches) the 2D sprite pipeline for a specific real depth
+        // VkFormat -- VK_FORMAT_UNDEFINED means "no depth attachment" (DepthFormat::None), mirrors
+        // GetOrCreateRTRenderPass()'s own depth-format-keyed caching. Uses PickRTPipelineRenderPass
+        // for the reference render pass, same as every 3D pipeline creation function.
+        VkPipeline GetOrCreatePipeline2D(VkFormat depthFmt);
         VkFormat   FindDepthFormat() const;
         void       CreateDepthResources();
         void       CleanupDepthResources();
         VkPipeline GetOrCreatePipeline3D(VkPrimitiveTopology, bool depthTest, bool depthWrite,
                                          bool blend, int cullMode,
                                          uint32_t colorAttachmentCount, bool wireframe,
-                                         bool msaa, const DepthStencilKeyParams& dsParams = {});
+                                         bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         VkPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
                                                    bool blend, int cullMode,
                                                    uint32_t colorAttachmentCount, bool wireframe,
-                                                   bool msaa, const DepthStencilKeyParams& dsParams = {});
+                                                   bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void       EnsureDualTexResources();
         VkDescriptorSet GetOrCreateDualTexDescSet(uint32_t frameIdx, VkImageView view0, VkImageView view1,
                                                     VkSampler sampler0, VkSampler sampler1);
@@ -1075,7 +1132,8 @@ namespace CNA::Internal::Backends::Vulkan
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,
-                                                bool msaa, const DepthStencilKeyParams& dsParams = {});
+                                                bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         // EnvironmentMapEffect
         void       EnsureEnvMapResources();
         VkDescriptorSet GetOrCreateEnvMapDescSet(uint32_t frameIdx,
@@ -1084,7 +1142,8 @@ namespace CNA::Internal::Backends::Vulkan
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,
-                                                bool msaa, const DepthStencilKeyParams& dsParams = {});
+                                                bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void       FillEnvMapPushConst(float (&pc)[32], const Matrix& wvp, const Matrix& world);
         // SkinnedEffect
         void       EnsureSkinnedResources();
@@ -1093,7 +1152,8 @@ namespace CNA::Internal::Backends::Vulkan
                                                  bool depthTest, bool depthWrite,
                                                  bool blend, int cullMode,
                                                  uint32_t colorAttachmentCount, bool wireframe,
-                                                 bool msaa, const DepthStencilKeyParams& dsParams = {});
+                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void       EnsureDefaultWhiteTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
@@ -1106,7 +1166,8 @@ namespace CNA::Internal::Backends::Vulkan
                                                      bool depthTest, bool depthWrite,
                                                      bool blend, int cullMode,
                                                      uint32_t colorAttachmentCount, bool wireframe,
-                                                     bool msaa, const DepthStencilKeyParams& dsParams = {});
+                                                     bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         // BasicEffect fog bundle (Task 899) — shared by colored3d/textured3d/colored_textured3d.
         void       EnsureFogTex3DResources();
         VkDescriptorSet GetOrCreateFogTex3DDescSet(uint32_t frameIdx, VkImageView view2D);
@@ -1114,18 +1175,21 @@ namespace CNA::Internal::Backends::Vulkan
                                                     bool depthTest, bool depthWrite,
                                                     bool blend, int cullMode,
                                                     uint32_t colorAttachmentCount, bool wireframe,
-                                                    bool msaa, const DepthStencilKeyParams& dsParams = {});
+                                                    bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         VkPipeline GetOrCreatePipelineFogTex3D(std::size_t stride, VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,
-                                                bool msaa, const DepthStencilKeyParams& dsParams = {});
+                                                bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         // --- Instanced 3D pipeline ---
         VkPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
                                                    bool blend, int cullMode,
                                                    uint32_t colorAttachmentCount, bool wireframe,
-                                                   bool msaa, const DepthStencilKeyParams& dsParams = {});
+                                                   bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void FillInstancedPushConst(float (&pc)[32], const Matrix& view, const Matrix& proj,
                                     const GpuDrawParams& p);
         void CreateFrame3DInstBuffers();
@@ -1134,12 +1198,21 @@ namespace CNA::Internal::Backends::Vulkan
         void CreateMsaaColorResources();
         void CleanupMsaaColorResources();
         void CreateRenderPassMsaa();
-        void CreatePipeline2DMsaa();
+        // Task 911: MSAA counterpart to GetOrCreatePipeline2D(), same depth-format-keyed caching.
+        VkPipeline GetOrCreatePipeline2DMsaa(VkFormat depthFmt);
 
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();
         void EnsureFrame3DBuffers();
         VkRenderPass GetOrCreateMRTRenderPass(uint32_t colorAttachmentCount);
+        // Task 911: the single render-pass-selection decision shared by every 3D pipeline
+        // creation function (GetOrCreatePipeline3D et al.) -- MRT keeps its own dedicated,
+        // device-wide-depthFormat_ render pass (out of Task 911's scope); a single-target draw
+        // reuses the backbuffer's own renderPass_/renderPassMsaa_ when the target's real depth
+        // format matches depthFormat_ (the common case, keeping existing pipelines/cache hits
+        // valid), otherwise falls back to a render pass keyed by the target's own depth format.
+        VkRenderPass PickRTPipelineRenderPass(uint32_t colorAttachmentCount, bool msaa,
+                                               VkFormat targetDepthFmt);
 
         // --- Per-slot SamplerState (Task 118) ---
         void ApplySamplerState(int slot, int filter,
