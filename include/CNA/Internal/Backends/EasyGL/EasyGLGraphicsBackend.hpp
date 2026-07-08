@@ -487,6 +487,13 @@ namespace CNA::Internal::Backends::EasyGL
 
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        // Task 902: EasyGL applies MultiSampleCount only at construction time (via the
+        // multiSampleCount ctor argument, clamped into sampleCount_ below) -- there is no way to
+        // resize the MSAA renderbuffers without recreating the whole GL context, so
+        // ApplyMultiSampleCount() uses IGraphicsBackend's default (echoes back the current,
+        // already-applied value, ignoring the request). GetMultiSampleCount() reports that real
+        // value honestly instead of falling back to the interface default of 0.
+        [[nodiscard]] int GetMultiSampleCount() const override { return sampleCount_ > 1 ? sampleCount_ : 0; }
         SDL_Window* GetWindowInternal() const override { return window; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 

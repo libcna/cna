@@ -328,7 +328,16 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   resume-prompt note below) — no build errors anywhere. Verified again after Task 878's Vulkan
   changes landed.
 
-### Test status (last verified: Task 915, 2026-07-08)
+### Test status (last verified: Task 902, 2026-07-08)
+- **Task 902 full 4-backend regression** (each independently `git stash`-verified against its own
+  pre-existing baseline, zero new failures introduced): Vulkan `ctest` 4362/4377 (15 pre-existing:
+  the 12 already-documented state-test failures + 3 newly-confirmed pre-existing
+  `ContentManagerSkinnedModelTest` segfaults), EasyGL `ctest` 4430/4433 (3 pre-existing:
+  `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`,
+  `easy-gl-resource-smoke-tests`), SDL_Renderer `ctest` 4275/4288 (13 pre-existing, all
+  `"SDL_Renderer does not support 3D"`), Bgfx `ctest` 4337/4339 (2 pre-existing, environment
+  DRI3/Vulkan-negotiation flakiness — `Bgfx_RenderTarget2D_MsaaResolve`/`MipChain`). See §3 Task
+  902 row for the full breakdown.
 - **`CnaTests` (gtest unit-test binary, `tests/*.cpp` only — does NOT cover the `examples/*.cpp`
   pixel tests below), all 3 original backends:** EasyGL 4272/4274 passed (2 known skips, 0 failed), Bgfx
   4276/4278 passed (2 known skips, 0 failed), Vulkan 4272/4274 passed (2 known skips, 0 failed)
@@ -568,6 +577,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `TBD` | 902 | **`GraphicsDevice::Reset()` now really reconfigures the backend — `GraphicsDeviceManager.PreferMultiSampling` (and general preference changes) finally reach it, closing `vulkan_msaa_test.cpp`'s (Task 147) long-standing false positive.** FNA's real `Reset()` does an in-place `FNA3D_ResetBackbuffer()`, not a full teardown, and doesn't notify individual resources (that FNA code path is dead) — narrower scope than Task 902's original write-up assumed. New `IGraphicsBackend::ApplyMultiSampleCount()`/`GetMultiSampleCount()` virtuals; `VulkanGraphicsBackend` implements real in-place swapchain/render-pass/pipeline MSAA reconfiguration (backbuffer-only — live RTs keep their own construction-time sample count). `GraphicsDevice::Reset(pp,adapter)` now calls it and writes the real clamped value back to `PresentationParameters` (mirrors FNA's `FNA3D_GetMaxMultiSampleCount` write-back); `GraphicsDeviceManager::applyToExistingBackend()` now calls the real `Reset()` instead of the long-commented-out no-op path (order matters: `SetPresentationMode()` before `Reset()`, found via a real SDL_Renderer regression). EasyGL's main backend gained an honest `GetMultiSampleCount()` override (was silently always 0). `vulkan_msaa_test.cpp` rewritten with a genuine diagonal-edge differential (toggling real MSAA at runtime via `ApplyChanges()`, not the `RecreateBackendForMultiSampleCount()` NOXNA escape hatch other MSAA tests use) — `git stash` confirmed it fails without the fix, passes with it. `easygl_msaa_change_test.cpp` updated: PP now honestly reports `0` (not the old requested-but-never-applied `8`) when toggling MSAA on an already-constructed EasyGL device. **Full 4-backend regression, each independently `git stash`-verified against its own pre-existing baseline, zero new failures**: Vulkan 4362/4377 (15 pre-existing: 12 already-documented + 3 newly-confirmed pre-existing `ContentManagerSkinnedModelTest` segfaults), EasyGL 4430/4433 (3 pre-existing), SDL_Renderer 4275/4288 (13 pre-existing), Bgfx 4337/4339 (2 pre-existing, environment DRI3/Vulkan-negotiation flakiness). |
 | `2d4f7a2c` | 671 | **Real bug found and fixed: `SDL_RenderTextureRotated`'s pivot model is the opposite of XNA's rotation contract.** XNA requires `origin` to map to exactly `destinationRectangle.X/Y`, invariant under rotation; SDL's `center` is relative to `dstrect`'s own position, which was passed straight through, placing the pivot a full sprite-size away from where XNA needs it. Direct port of Task 417's EasyGL rotation test caught this immediately (marker landed at the clear colour instead of the expected rotated position). Fixed by offsetting `dst.x/y` by `-center` in `SdlSpriteBatchBackend::Draw`'s 8-arg overload — corrects all 9 `SpriteBatch::Draw` overloads at once, since they all funnel through this one backend call (confirmed via `SpriteBatch.cpp`'s `flushSingle()`). Rotation *angle* direction itself was already correct (verified algebraically against SDL's documented clockwise convention). **Discriminating power independently verified**: `git stash`-reverted the fix, reproduced the exact predicted failure; restored and reconfirmed all 3 checks pass. Full regression: `CnaTests` (SDL_Renderer, filtered) exact baseline match; Task 666's overloads test (rotation=0 only) unaffected. |
 | `382e4f8c` | 666 | **Audited all 9 `SpriteBatch::Draw` overloads on SDL_Renderer — all correct, no backend bug found (first task actually run in the newly-unblocked Task 666–861 phase).** New `examples/sdlrenderer_spritebatch_overloads_test.cpp` draws each overload into its own 60×60 screen slot with a unique tint colour (white 1×1 texture × tint, `BlendState::Opaque`), then reads back a real discriminating pixel per overload — including a genuine `SpriteEffects::FlipHorizontally` check against an asymmetric red/green texture (wrong-half colour if the flip silently no-ops). Caught a real bug in the test itself during development (wrong read-back point for the 2 native-size, unscaled overloads), confirming the test isn't vacuously true. `DrawString`'s 6 overloads are tracked separately (existing Tasks 690–694). Full regression: `CnaTests` (SDL_Renderer, filtered) exact baseline match, 0 new failures. |
 | `997b53b9` | 915 | **`SdlGraphicsBackend::ReadBackbuffer` implemented for the first time — foundational prerequisite unblocking the entire SDL_Renderer pixel-test audit phase (Tasks 666–861).** Previously a hard `throw` (the shared `IGraphicsBackend::ReadBackbuffer` default), meaning `GraphicsDevice::GetBackBufferData` — the pixel-verification mechanism every EasyGL/Vulkan/Bgfx test in this project relies on — was structurally impossible on this backend. Fixed via `SDL_RenderReadPixels()` + `SDL_ConvertSurface(..., SDL_PIXELFORMAT_RGBA32)`. **Real subtlety found**: `SDL_RenderReadPixels` operates in *physical* output coordinates, while every other backend uses *logical* coordinates, and this project's default presentation mode (`FixedHeightDynamicWidth`) deliberately does NOT map 1:1 between them (confirmed empirically: a requested 64×64 canvas became a real `107×64` logical size against an 800×480 physical window). Fixed to detect this via `SDL_GetRenderLogicalPresentationRect()` and throw clearly on mismatch rather than return wrong data; exact-pixel tests must request `PresentationMode::NativeBackBuffer` for true 1:1 correspondence. New `examples/sdlrenderer_readback_test.cpp` plus a brand-new `cna_sdl_test` CMake macro (this backend had zero test infrastructure before). **Found and fixed a second, unrelated CMakeLists.txt bug**: the new test block was initially inserted inside a ~2850-line `if(EASYGL OR VULKAN)` block, silently swallowing the registration; moved to the correct unconditional location. **Discriminating power independently verified**: `git stash`-reverted both backend files — the pre-fix binary aborted with the exact predicted `std::runtime_error`; restored and reconfirmed passes. Full regression: `CnaTests` (SDL_Renderer, filtered) 4262/4274 passed, 2 skipped, 10 failed (all pre-existing/expected, "`SDL_Renderer does not support 3D`"); full unfiltered `ctest` (4339 tests, first run this systematically) found 3 more in the excluded `ContentManagerSkinnedModelTest` suite for the same reason — 13 known/expected 3D-related failures total, 0 unexplained. EasyGL/Vulkan/Bgfx spot-checked clean after the CMakeLists.txt restructuring. |
@@ -795,7 +805,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Risky assumption | `GraphicsDevice`'s user-primitive scratch buffers never shrink — fine for typical use, but memory stays at the high-water mark for the device's lifetime. | — |
 | Confirmed, test-harness only, worked around | Bgfx's `GetBackBufferData()` only reliably reflects the *first* read call per rendered frame — reading multiple distinct rectangles from a single frame returns stale/blank data for reads after the first. Every multi-point Bgfx pixel test in this project reads exactly one rectangle per draw+retry pass as a result (Task 406 established a `renderAndRead()`-style per-checkpoint helper for new tests). | — |
 | Fixed, Bgfx | `BgfxGraphicsBackend::EnsureViewState()` (called from `Clear()`/`SubmitSprite()`) previously reset the current view's rect and 2D ortho-projection to the full *window* size unconditionally, clobbering `BindAsRenderTarget()`'s correctly RT-sized viewport the moment `Clear()` next ran on that RT — silently corrupting all rendering into any `RenderTarget2D` smaller than the window. Found and fixed while verifying Task 878/879's Bgfx MSAA test (the first Bgfx test to both render into a differently-sized RT and pixel-verify the result). | Task 901 (done) |
-| Confirmed, real, severe, architectural, not fixed | `GraphicsDeviceManager.PreferMultiSampling` (and by extension any preference requiring backend reconstruction, not just window resize/fullscreen) never actually reaches the Vulkan backend's construction — `Game`'s `GraphicsDevice` member is unconditionally default-constructed before any derived-class/`GraphicsDeviceManager` code can run, and `GraphicsDeviceManager`'s apply path only patches the already-built backend (window size, swap interval), never recreates it. Means `vulkan_msaa_test.cpp` (Task 147) has been a false positive its entire existence. Needs a real `GraphicsDevice.Reset()` implementation — large, separate, needs its own scoping decision. | Task 902 |
+| Fixed | `GraphicsDeviceManager.PreferMultiSampling` now genuinely reaches the backend: `GraphicsDeviceManager::applyToExistingBackend()` calls the real `GraphicsDevice::Reset()`, which calls the new `IGraphicsBackend::ApplyMultiSampleCount()` (Vulkan: real in-place swapchain/render-pass/pipeline reconfiguration; EasyGL: honest echo of its construction-time value, can't change post-construction; SDL_Renderer/Bgfx: no backbuffer MSAA support, honest 0). `vulkan_msaa_test.cpp` (Task 147) no longer a false positive — rewritten with a genuine diagonal-edge differential exercising the real runtime toggle path. Scoped to the backbuffer only — already-live `RenderTarget2D`/`RenderTargetCube` instances keep whatever MultiSampleCount they engaged at their own construction time. | Task 902 (done) |
 | Fixed, both Vulkan and Bgfx | `RenderTargetCube` MSAA now works on both backends, mirroring `RenderTarget2D`'s existing Task 878/879 support (real XNA API surface, confirmed against FNA's actual constructor). Also fixed a real Vulkan bug found while verifying this: the 2D `SpriteBatch` pipeline's MSAA selection never checked an RT's own `WantsMsaa()`, only the backbuffer's. | Task 903 (done) |
 | Fixed, Vulkan | `GetOrCreatePipelineFogTex3D` (`textured3d`/`colored_textured3d`, stride 20/24) was missing the same `msaa`-aware render-pass-selection check every sibling 3D pipeline-creation function has. Fixed with the identical ternary the siblings already use. Discriminating power confirmed via the Vulkan validation layer (not the pixel assertion, which passes either way on this driver) — `git stash` revert-and-rebuild reproduced the exact predicted `VUID-VkGraphicsPipelineCreateInfo-multisampledRenderToSingleSampled-06853`/`VUID-vkCmdDraw-renderPass-02684` errors. | Task 904 (done) |
 | Fixed, Vulkan | `CreateRTRenderPass()`'s subpass dependencies didn't actually match `CreateRenderPass()`'s despite a comment claiming they did — pipelines created against `renderPass_` weren't truly render-pass-compatible with `rtRenderPass_`/`rtRenderPassLoad_`, producing live `VUID-vkCmdDraw-renderPass-02684` validation errors (correct pixel output regardless) the moment a depth-tested 3D primitive drew into a plain non-MSAA `RenderTarget2D`. Pre-existing, outside Task 878/879's own diff; found during independent review of that diff, fixed by widening `CreateRTRenderPass()`'s `deps[]` to match `CreateRenderPass()`'s exactly. | Task 905 (done) |
@@ -925,8 +935,10 @@ allocation fixed on EasyGL/Vulkan; Bgfx split to Task 914, genuinely unverifiabl
 infrastructure), Task 903 (`RenderTargetCube` MSAA on Vulkan and Bgfx, plus a real Vulkan
 2D-sprite-pipeline MSAA bug found and fixed along the way), and Task 750 (`SpriteBatch`'s
 `SamplerState` fixed on Bgfx, closing the last of the 3 backends for this bug shape — EasyGL/Task
-269, Vulkan/Task 665) are all done. In priority order, the rest are the accumulated backlog from
-earlier phases plus this task's new findings (Tasks 825–828, 863, 866–882, 889–895, 902, 910–911,
+269, Vulkan/Task 665), and Task 902 (`GraphicsDevice::Reset()` now really reaches the backend —
+`GraphicsDeviceManager.PreferMultiSampling` closes `vulkan_msaa_test.cpp`'s Task 147 false
+positive) are all done. In priority order, the rest are the accumulated backlog from
+earlier phases plus this task's new findings (Tasks 825–828, 863, 866–882, 889–895, 910–911,
 914) — note the 421–500/666–861 ranges in `plan_graphics.md` also contain many still-open ⬜ rows
 from earlier phases (audits, reference-value generation, per-backend pixel-test parity) that were
 never folded into this curated list; Task 750 was pulled from there as a well-scoped exception
@@ -959,20 +971,13 @@ superseded by later, higher-numbered rediscoveries of the same underlying bug.
     render-pass *and* pipeline cache across 10+ `GetOrCreatePipelineXXX` functions — a real,
     large, systemic change, same class as Task 910 — needs its own scoping pass before starting.
 
-3. **Task 902 — implement a real `GraphicsDevice.Reset()`** so `GraphicsDeviceManager` preference
-    changes (e.g. `PreferMultiSampling`) actually reach backend construction, not just window
-    size/fullscreen. Large, architecturally risky (touches `Game`/`GraphicsDeviceManager`/
-    `GraphicsDevice`'s core lifecycle, needs `DeviceResetting`/`DeviceReset` events on every live
-    `IGraphicsResource`) — needs its own scoping decision before starting, same class as Task 896.
-
-4. **Task 914 — give Bgfx a real GPU readback path for `Texture3D`/`TextureCube`** (split out of
+3. **Task 914 — give Bgfx a real GPU readback path for `Texture3D`/`TextureCube`** (split out of
     Task 864, whose mip-allocation fix landed on EasyGL/Vulkan but found Bgfx's half currently
     unverifiable by any means — `GetData` is a total no-op there, `Texture3D` can't be sampled at
     all per Task 863, and `TextureCube` mip-content sampling was already found non-discriminating
     by Task 907). Real fix needs `bgfx::readTexture()` — genuinely async (`BGFX_TEXTURE_READ_BACK`-
     gated, resolves on a future `bgfx::frame()`) and possibly incompatible with a texture also
-    being shader-sampled — needs its own scoping pass before starting, same class as Task 902/910/
-    911.
+    being shader-sampled — needs its own scoping pass before starting, same class as Task 910/911.
 
 ---
 
@@ -1023,8 +1028,12 @@ superseded by later, higher-numbered rediscoveries of the same underlying bug.
   `DepthStencilFormat` fidelity)**: don't assume a quick fix — varying the depth format per RT
   needs a depth-format-keyed render-pass *and* pipeline cache across 10+ `GetOrCreatePipelineXXX`
   functions (pipelines are deliberately shared across the backbuffer's and every RT's render pass
-  today), a real architectural change in the same class as Task 902/910 — needs its own scoping
+  today), a real architectural change in the same class as Task 910 — needs its own scoping
   pass before starting.
+- **Task 902 is done** (`GraphicsDevice::Reset()` now really reconfigures the backend —
+  `GraphicsDeviceManager.PreferMultiSampling` reaches `VulkanGraphicsBackend::ApplyMultiSampleCount()`
+  and `vulkan_msaa_test.cpp`'s Task 147 false positive is fixed — see §3/§5). Scoped to the
+  backbuffer only; already-live `RenderTarget2D`/`RenderTargetCube` MSAA is untouched.
 - **No opportunistic fix for Vulkan/Bgfx's RT-pass sub-region Viewport/scissor limitation** (found
   while scoping Task 880) bundled into an unrelated task — the deferred multi-RT-per-frame
   recording architecture needs a real per-draw-call viewport/scissor capture design, not a quick
@@ -1040,16 +1049,13 @@ superseded by later, higher-numbered rediscoveries of the same underlying bug.
 Read NEXT.md first, in full — this section is intentionally the only thing you need before
 touching any code.
 
-## Repo state as of 2026-07-08 (end of Task 915 session) — READ THIS FIRST
+## Repo state as of 2026-07-08 (end of Task 902 session) — READ THIS FIRST
 
-**New this session**: a 4th build directory, `cmake-build-sdl` (`CNA_GRAPHICS_BACKEND=SDL_RENDERER`),
-was configured for the first time to start the Task 666+ SDL_Renderer audit phase. If resuming,
-either reuse it or recreate via `cmake -S . -B cmake-build-sdl -DCNA_GRAPHICS_BACKEND=SDL_RENDERER`.
-
-No unusual repo state this time (unlike the Task 896 session's big external merge) — just resume
-normally. All 3 `cmake-build-{debug,vulkan,bgfx}` directories exist and were verified building
-clean at the end of this session. Working tree should be clean (this session's work is committed
-and pushed).
+All 4 `cmake-build-{debug,vulkan,bgfx,sdl}` directories exist and were verified building clean at
+the end of this session. Working tree should be clean (this session's work is committed and
+pushed). **Task 902 (`GraphicsDevice::Reset()` real backend wiring) is now done** — of the 4
+tasks the project owner explicitly approved "Implement now" this stretch (902/910/911/914), only
+902 is closed; 910/911/914 have NOT been started yet (no investigation, no code) and are next.
 
 **First action on resume, before any feature work** (run these in order):
   1. `git log --oneline -5` and `git status --short` — confirm clean tree, note current HEAD.
@@ -1087,12 +1093,18 @@ hash filled in, `7d883ee5` — this describes the pattern for the *next* task). 
 commit; never bundle unrelated tasks.
 
 **Skip without asking**: any WebGPU task (`plan_webgpu.md`, hard project-wide prohibition, see
-CLAUDE.md) and any task genuinely blocked on a scoping decision only the project owner can make.
-Currently outstanding decision-blocked tasks: Task 902 (`GraphicsDevice.Reset()`), Task 910 (Bgfx
-per-frame view-id architecture), Task 911 (Vulkan per-RT depth-format architecture) — all 3 need
-their own scoping pass before starting, not a guess bundled into another task.
+CLAUDE.md). The project owner has already explicitly approved "Implement now" for Task
+910 (Bgfx per-frame view-id architecture), Task 911 (Vulkan per-RT depth-format architecture), and
+Task 914 (Bgfx `Texture3D`/`TextureCube` real readback) — these are no longer decision-blocked,
+just not yet started. Per the project owner's own instruction, work through them **one at a time**
+(finish + commit + push one before starting the next), then continue automatically into the rest
+of the backlog (§8) one task at a time, without stopping to ask permission between ordinary
+backlog items.
 
-**Backlog, in priority order:** see §8. This session closed Task 877 (`DepthStencilFormat`
+**Backlog, in priority order:** see §8. This session closed Task 902 (`GraphicsDevice::Reset()`
+now really reaches the backend — `GraphicsDeviceManager.PreferMultiSampling` reaches
+`VulkanGraphicsBackend::ApplyMultiSampleCount()`, fixing `vulkan_msaa_test.cpp`'s Task 147 false
+positive; scoped to the backbuffer only). A prior session closed Task 877 (`DepthStencilFormat`
 fidelity on EasyGL/Bgfx, including new `RenderTargetCube` depth support on Bgfx), Task 875
 (Vulkan `Clear()`-only render targets never recording a render pass), Task 876 (Vulkan
 `RenderTargetCube`-via-`EnvironmentMapEffect` black-after-unbind — re-checked while investigating
@@ -1119,15 +1131,17 @@ unverifiable — needs a real `bgfx::readTexture()` readback path first). Also c
 (`GraphicsDevice.GetBackBufferData` implemented for the first time on SDL_Renderer via
 `SDL_RenderReadPixels()` — previously a hard `throw`, blocking the entire Task 666+ SDL_Renderer
 pixel-test audit phase before it could start; also fixed a real CMakeLists.txt scoping bug found
-while wiring up the first test). Next up: continue the SDL_Renderer audit phase (Task 666's
-remaining scope — write pixel tests for SpriteBatch/SpriteFont/BlendState/SamplerState/
-RenderTarget2D/Viewport/GraphicsDevice-lifecycle on this backend, Tasks 667–861 in
-`plan_graphics.md`, all now unblocked by Task 915), or whatever the project owner scopes for the
-remaining decision-blocked items (Task 902/910/911/914, all need their own dedicated scoping
-pass). The older, not-yet-triaged backlog in the 421–500 range of `plan_graphics.md` (audits,
-reference-value generation, and other per-backend tasks from earlier phases never folded into
-this §8 list) is worth a dedicated triage pass before working through in bulk, since some entries
-(e.g. Task 750) may already be superseded by later, higher-numbered rediscoveries of the same bug.
+while wiring up the first test). Next up, in order: Task 910 (Bgfx per-frame view-id
+architecture), Task 911 (Vulkan per-RT depth-format architecture), Task 914 (Bgfx real
+`Texture3D`/`TextureCube` readback) — all 3 already approved "Implement now", work them one at a
+time. After those, continue the SDL_Renderer audit phase (Task 666's remaining scope — write pixel
+tests for SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/
+GraphicsDevice-lifecycle on this backend, Tasks 667–861 in `plan_graphics.md`, all unblocked by
+Task 915), and/or the older, not-yet-triaged backlog in the 421–500 range of `plan_graphics.md`
+(audits, reference-value generation, and other per-backend tasks from earlier phases never folded
+into this §8 list) — worth a dedicated triage pass before working through in bulk, since some
+entries (e.g. Task 750) may already be superseded by later, higher-numbered rediscoveries of the
+same bug.
 
 **Standing instructions (still in force):**
 - Commit AND push after every finished task without waiting to be asked.

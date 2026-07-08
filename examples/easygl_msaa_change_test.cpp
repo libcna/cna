@@ -6,19 +6,33 @@
 // IGraphicsBackend::SetMultiSampleCount() — changing the sample count at
 // runtime would require recreating the backend, which is not yet implemented.
 //
+// Task 902: GraphicsDeviceManager::applyToExistingBackend() now calls the real
+// GraphicsDevice::Reset(), which writes the backend's actual, honestly-reported
+// applied MultiSampleCount (IGraphicsBackend::ApplyMultiSampleCount(), which for
+// EasyGL just echoes GetMultiSampleCount() since it can't reconfigure post-
+// construction) back into the stored PresentationParameters — matching real FNA's
+// PresentationParameters.MultiSampleCount = FNA3D_GetMaxMultiSampleCount(...)
+// write-back after FNA3D_ResetBackbuffer(). This means toggling
+// preferMultiSampling via ApplyChanges() on an *already-constructed* EasyGL
+// device can no longer retroactively report MultiSampleCount=8 in the PP: the
+// backend genuinely never engaged MSAA, so honestly reports back 0.
+//
 // The invariants this test verifies:
 //   1. GDM with preferMultiSampling=false → device PP stores MultiSampleCount=0.
-//   2. GDM with preferMultiSampling=true  → device PP stores MultiSampleCount=8
-//      (CNA caps MSAA count at 8 when preferMultiSampling is true, matching the
-//       FNA behavior of capping at the max supported count; actual GL cap may
-//       reduce this value further but is transparent to PP storage).
-//   3. Toggling preferMultiSampling after device creation via ApplyChanges()
-//      updates the PP field — does not throw.
-//   4. Direct GraphicsDevice::SetPresentationParameters() with arbitrary
-//      sample counts stores the value — does not throw.
+//   2. GDM with preferMultiSampling=true, applied via ApplyChanges() on an
+//      already-constructed device (this device was first created with
+//      preferMultiSampling=false) → device PP stores MultiSampleCount=0, since
+//      EasyGL cannot actually engage MSAA post-construction and now honestly
+//      reports that back (does not throw).
+//   3. Direct GraphicsDevice::SetPresentationParameters() with arbitrary
+//      sample counts stores the value — does not throw (bypasses Reset()'s
+//      ApplyMultiSampleCount() write-back entirely).
 //
 // What is NOT tested: actual MSAA rendering quality (requires pixel readback
-// and a rendered scene with geometry edges — out of scope for this task).
+// and a rendered scene with geometry edges — out of scope for this task), nor
+// MultiSampleCount reaching the backend when preferMultiSampling=true is set
+// *before* the device's first construction (see vulkan_msaa_test.cpp, Task 902,
+// for that scenario on a backend that does support runtime MSAA reconfiguration).
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -67,11 +81,13 @@ protected:
         checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
                    0, "GDM default MultiSampleCount=0 (preferMultiSampling=false)");
 
-        // Enable MSAA via GDM — PP stores 8 (CNA cap when preferMultiSampling=true)
+        // Enable MSAA via GDM on an already-constructed EasyGL device — Task 902's
+        // Reset()-driven ApplyMultiSampleCount() write-back means the PP now honestly
+        // stores 0 (EasyGL cannot engage MSAA post-construction), not the requested 8.
         gdm_->setPreferMultiSamplingProperty(true);
         gdm_->ApplyChanges();
         checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
-                   8, "GDM preferMultiSampling=true → MultiSampleCount=8 in PP");
+                   0, "GDM preferMultiSampling=true on existing device → MultiSampleCount=0 in PP (EasyGL can't reconfigure post-construction)");
         check(gdm_->getPreferMultiSamplingProperty(),
               "GDM getter returns true after setPreferMultiSampling(true)");
 

@@ -16,11 +16,6 @@ namespace Microsoft::Xna::Framework
 {
     namespace
     {
-        std::runtime_error makeSdlError(const char* operation)
-        {
-            return std::runtime_error(std::string(operation) + " failed: " + SDL_GetError());
-        }
-
         // Matches FNA (SDL3_FNAPlatform.SupportsOrientations): only iOS and Android
         // care about device orientation. On desktop platforms the back buffer keeps
         // the requested PreferredBackBufferWidth x Height verbatim (no landscape swap),
@@ -552,35 +547,21 @@ namespace Microsoft::Xna::Framework
 
         auto& pp = gdi.getPresentationParametersProperty();
 
-        graphicsDevice_->SetPresentationParameters(pp);
-
-        SDL_Window* window = tryGetSDLWindow();
-        if (window != nullptr)
-        {
-            // Fullscreen switching may not be available in headless / virtual environments.
-            // The PP already stores the requested value, so a failure here is non-fatal.
-            if (!SDL_SetWindowFullscreen(window, pp.getIsFullScreenProperty()))
-            {
-                SDL_ClearError();
-            }
-
-            if (pp.getBackBufferWidthProperty() > 0 && pp.getBackBufferHeightProperty() > 0)
-            {
-#ifndef __ANDROID__
-                if (!SDL_SetWindowSize(window, pp.getBackBufferWidthProperty(), pp.getBackBufferHeightProperty()))
-                {
-                    throw makeSdlError("SDL_SetWindowSize");
-                }
-#endif
-            }
-        }
-
+        // The presentation/scaling mode must be applied before Reset()'s own
+        // SetVirtualResolution() call below -- SDL_Renderer's logical-presentation size
+        // computation depends on which mode is already active, so setting the mode
+        // afterward can leave a stale logical size computed under the previous mode.
         graphicsDevice_->SetPresentationMode(static_cast<int>(preferredPresentationMode_));
-        graphicsDevice_->SetVirtualResolution(pp.getBackBufferWidthProperty(), pp.getBackBufferHeightProperty());
 
-        // Full XNA-compatible device reset belongs to GraphicsDevice::Reset once the
-        // GraphicsDevice/PresentationParameters backend is fully ported.
-        // graphicsDevice_->Reset(pp, *gdi.getAdapterProperty());
+        // Task 902: real in-place device reset -- stores PP, applies fullscreen/window size
+        // (non-fatal on fullscreen failure, see applyPresentationParametersToWindow()),
+        // updates virtual resolution, and reconfigures backend-construction-time-only
+        // properties like MultiSampleCount (GraphicsDeviceManager.PreferMultiSampling) via
+        // IGraphicsBackend::ApplyMultiSampleCount(), writing the real applied value back into
+        // the stored PresentationParameters. Also raises GraphicsDevice's own
+        // DeviceResetting/DeviceReset events (separate from this class's own, raised by the
+        // ApplyChanges()/CreateDevice() callers of this method).
+        graphicsDevice_->Reset(pp, *gdi.getAdapterProperty());
 
         graphicsDevice_->UpdateViewportFromWindow();
     }

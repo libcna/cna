@@ -569,6 +569,14 @@ namespace CNA::Internal::Backends::Vulkan
 
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int)       override {}
+        // Task 902: real in-place backbuffer MSAA reconfiguration, wired from
+        // GraphicsDevice::Reset() so GraphicsDeviceManager.PreferMultiSampling actually reaches
+        // the backend. Deliberately scoped to the backbuffer only -- already-live RenderTarget2D/
+        // RenderTargetCube instances keep whatever MultiSampleCount they engaged at their own
+        // construction time (see VulkanRenderTargetBackend's own sampleCount_ capture); a
+        // cascading invalidation of live render targets is tracked separately as a follow-up.
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        [[nodiscard]] int GetMultiSampleCount() const override;
 
         SDL_Window*  GetWindowInternal()   const override { return window_; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }

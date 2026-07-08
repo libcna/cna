@@ -5581,6 +5581,57 @@ namespace CNA::Internal::Backends::Vulkan
             RecreateSwapchain();
     }
 
+    int VulkanGraphicsBackend::GetMultiSampleCount() const
+    {
+        return SampleCountToInt(sampleCount_);
+    }
+
+    int VulkanGraphicsBackend::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        const VkSampleCountFlagBits newCount = PickSampleCount(physicalDevice_, requestedMultiSampleCount);
+        if (newCount == sampleCount_)
+            return SampleCountToInt(sampleCount_);
+
+        vkDeviceWaitIdle(device_);
+
+        // Tear down every piece of state whose creation baked in the OLD sampleCount_ --
+        // the backbuffer's MSAA render pass/pipeline, the render-target MSAA render pass
+        // (lazily recreated on next MSAA-enabled RenderTarget2D use), and every lazily-created
+        // 3D pipeline (each VkPipeline hardcodes rasterizationSamples at creation time). The
+        // sample-count-independent renderPass_/pipeline2D_/rtRenderPass_/rtRenderPassLoad_ are
+        // left untouched.
+        if (pipeline2DMsaa_ != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipeline2DMsaa_, nullptr); pipeline2DMsaa_ = VK_NULL_HANDLE; }
+        if (renderPassMsaa_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPassMsaa_, nullptr); renderPassMsaa_ = VK_NULL_HANDLE; }
+        if (rtRenderPassMsaa_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, rtRenderPassMsaa_, nullptr); rtRenderPassMsaa_ = VK_NULL_HANDLE; }
+        auto clearPipelineCache = [this](auto& cache) {
+            for (auto& [key, pipe] : cache)
+                if (pipe != VK_NULL_HANDLE) vkDestroyPipeline(device_, pipe, nullptr);
+            cache.clear();
+        };
+        clearPipelineCache(pipelines3D_);
+        clearPipelineCache(pipelinesAlphaTest3D_);
+        clearPipelineCache(pipelinesDualTex3D_);
+        clearPipelineCache(pipelinesEnvMap3D_);
+        clearPipelineCache(pipelinesLitTextured3D_);
+        clearPipelineCache(pipelinesFogColored3D_);
+        clearPipelineCache(pipelinesFogTex3D_);
+        clearPipelineCache(pipelinesSkinned3D_);
+        clearPipelineCache(pipelinesInstanced3D_);
+
+        sampleCount_ = newCount;
+
+        // CreateFramebuffers() (called by RecreateSwapchain() below) reads renderPassMsaa_
+        // directly whenever sampleCount_ > 1, so it must already exist before that call.
+        if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) {
+            CreateRenderPassMsaa();
+            CreatePipeline2DMsaa();
+        }
+        RecreateSwapchain();
+
+        SDL_Log("[Vulkan] MultiSampleCount reset to %d×", SampleCountToInt(sampleCount_));
+        return SampleCountToInt(sampleCount_);
+    }
+
     std::unique_ptr<ITextureBackend> VulkanGraphicsBackend::CreateTexture(const ImageData& data)
     {
         auto tex = std::make_unique<VulkanTextureBackend>(data, this);

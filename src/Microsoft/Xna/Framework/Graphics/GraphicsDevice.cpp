@@ -332,6 +332,13 @@ namespace Microsoft::Xna::Framework::Graphics
         if (backend_ != nullptr)
         {
             backend_->SetVirtualResolution(virtualWidth_, virtualHeight_);
+
+            // Task 902: reconfigure the backend's actual MSAA sample count in place, mirroring
+            // FNA's own PresentationParameters.MultiSampleCount = FNA3D_GetMaxMultiSampleCount(...)
+            // write-back of the real, device-clamped value after FNA3D_ResetBackbuffer().
+            const int appliedMultiSampleCount = backend_->ApplyMultiSampleCount(
+                presentationParameters_.getMultiSampleCountProperty());
+            presentationParameters_.setMultiSampleCountProperty(appliedMultiSampleCount);
         }
 
         UpdateViewportFromWindow();
@@ -1451,10 +1458,15 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
+        // Task 902: fullscreen switching may not be available in headless / virtual-display
+        // test environments (Xvfb). The PP value is already stored above this call, so a
+        // backend that cannot actually switch fullscreen still has the correct stored state --
+        // matches GraphicsDeviceManager::applyToExistingBackend()'s identical non-fatal handling
+        // (Task 224), which this method now supersedes as the single fullscreen-application path.
         const bool fullScreen = presentationParameters_.getIsFullScreenProperty();
         if (!SDL_SetWindowFullscreen(window_, fullScreen))
         {
-            throw makeSdlError("SDL_SetWindowFullscreen");
+            SDL_ClearError();
         }
 
         const int width = presentationParameters_.getBackBufferWidthProperty();

@@ -400,6 +400,15 @@ namespace CNA::Internal::Backends
         /// Updates the swap interval at runtime (0=immediate, 1=VSync, 2=half-rate).
         /// Backends that cannot change VSync at runtime (e.g. Vulkan) silently ignore this.
         virtual void SetSwapInterval(int /*interval*/) {}
+        /// Task 902: reconfigures the backbuffer's MSAA sample count in place, called from
+        /// GraphicsDevice::Reset() so GraphicsDeviceManager.PreferMultiSampling (and any other
+        /// preference-driven MultiSampleCount change) actually reaches the backend instead of
+        /// being silently ignored after construction. Returns the actual, device-clamped sample
+        /// count applied (0 = no MSAA). Default: unsupported -- backends that cannot change this
+        /// post-construction report back whatever GetMultiSampleCount() already is.
+        virtual int ApplyMultiSampleCount(int /*requestedMultiSampleCount*/) { return GetMultiSampleCount(); }
+        /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
+        [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
         /// Converts a point from physical window coordinates to logical (virtual)
         /// game coordinates. Returns true on success. Default: no-op (returns false).
         virtual bool TransformWindowToLogical(float windowX, float windowY,
