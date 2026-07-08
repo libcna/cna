@@ -380,6 +380,27 @@ namespace Microsoft::Xna::Framework::Graphics
         const float sinR = std::sin(rotation);
         const float cosR = std::cos(rotation);
 
+        // Mirrors FNA's SpriteBatch.DrawString axis-direction tables, indexed by (int)effects
+        // (None=0, FlipHorizontally=1, FlipVertically=2). When effects != None, the whole string
+        // is measured up front and `origin` is shifted by the measured size on the mirrored
+        // axis, so the flip pivots around the correct edge of the text block -- otherwise each
+        // glyph would individually flip in place without the character SEQUENCE itself mirroring
+        // (previously CNA's own bug: effects was forwarded to pushSprite for intra-glyph texture
+        // flip only, never affecting glyph placement/order at all).
+        static constexpr float axisDirX[3]        = {-1.0f, 1.0f, -1.0f};
+        static constexpr float axisDirY[3]        = {-1.0f, -1.0f, 1.0f};
+        static constexpr float axisIsMirroredX[3] = { 0.0f, 1.0f,  0.0f};
+        static constexpr float axisIsMirroredY[3] = { 0.0f, 0.0f,  1.0f};
+        const int effIdx = static_cast<int>(effects);
+
+        Vector2 baseOffset = origin;
+        if (effects != SpriteEffects::None)
+        {
+            const Vector2 size = spriteFont.MeasureString(text);
+            baseOffset.X -= size.X * axisIsMirroredX[effIdx];
+            baseOffset.Y -= size.Y * axisIsMirroredY[effIdx];
+        }
+
         Vector2 curOffset(0.0f, 0.0f);
         bool firstInLine = true;
 
@@ -420,8 +441,15 @@ namespace Microsoft::Xna::Framework::Graphics
             const Rectangle& cCrop  = spriteFont.croppingData_[index];
             const Rectangle& cGlyph = spriteFont.glyphData_[index];
 
-            const float localX  = curOffset.X + static_cast<float>(cCrop.X) - origin.X;
-            const float localY  = curOffset.Y + static_cast<float>(cCrop.Y) - origin.Y;
+            float offsetX = baseOffset.X + (curOffset.X + static_cast<float>(cCrop.X)) * axisDirX[effIdx];
+            float offsetY = baseOffset.Y + (curOffset.Y + static_cast<float>(cCrop.Y)) * axisDirY[effIdx];
+            if (effects != SpriteEffects::None)
+            {
+                offsetX += static_cast<float>(cGlyph.Width)  * axisIsMirroredX[effIdx];
+                offsetY += static_cast<float>(cGlyph.Height) * axisIsMirroredY[effIdx];
+            }
+            const float localX  = -offsetX;
+            const float localY  = -offsetY;
             const float scaledX = localX * scale.X;
             const float scaledY = localY * scale.Y;
             const float rotX    = scaledX * cosR - scaledY * sinR;
