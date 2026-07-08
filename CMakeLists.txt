@@ -4024,6 +4024,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 728: Model::Draw throws correctly on SDL_Renderer (requires 3D primitives).
+    cna_sdl_test(cna_test_sdl_model_draw_throws
+                 examples/sdlrenderer_model_draw_throws_test.cpp)
+    add_test(NAME SDL_Renderer_ModelDrawThrows
+             COMMAND cna_test_sdl_model_draw_throws)
+    set_tests_properties(SDL_Renderer_ModelDrawThrows PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
