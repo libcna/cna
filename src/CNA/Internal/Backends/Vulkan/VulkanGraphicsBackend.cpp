@@ -6196,15 +6196,15 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     std::unique_ptr<ITexture3DBackend> VulkanGraphicsBackend::CreateTexture3D(
-        int w, int h, int depth, bool /*mipMap*/, int /*surfaceFormat*/)
+        int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
     {
-        return std::make_unique<VulkanTexture3DBackend>(this, w, h, depth);
+        return std::make_unique<VulkanTexture3DBackend>(this, w, h, depth, mipMap);
     }
 
     std::unique_ptr<ITextureCubeBackend> VulkanGraphicsBackend::CreateTextureCube(
-        int size, bool /*mipMap*/, int /*surfaceFormat*/)
+        int size, bool mipMap, int /*surfaceFormat*/)
     {
-        return std::make_unique<VulkanTextureCubeBackend>(this, size);
+        return std::make_unique<VulkanTextureCubeBackend>(this, size, mipMap);
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, int /*depthFormat*/, bool mipMap, int /*multiSampleCount*/)
@@ -6295,11 +6295,21 @@ namespace CNA::Internal::Backends::Vulkan
 
     // --- VulkanTexture3DBackend ---
 
-    VulkanTexture3DBackend::VulkanTexture3DBackend(VulkanGraphicsBackend* owner, int w, int h, int depth)
+    // Task 864: mirrors Texture3D.cpp's CalculateMipLevels(w,h) -- depth does not participate in
+    // the level count, matching FNA's Texture3D constructor exactly.
+    static int CalculateVulkanTexture3DMipLevels(int w, int h)
+    {
+        int levels = 1;
+        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        return levels;
+    }
+
+    VulkanTexture3DBackend::VulkanTexture3DBackend(VulkanGraphicsBackend* owner, int w, int h, int depth, bool mipMap)
         : owner_(owner), width_(w), height_(h), depth_(depth)
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice dev = owner_->device_;
+        levelCount_ = mipMap ? CalculateVulkanTexture3DMipLevels(w, h) : 1;
 
         VkImageCreateInfo imgInfo{};
         imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -6307,7 +6317,7 @@ namespace CNA::Internal::Backends::Vulkan
         imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
         imgInfo.extent        = { static_cast<uint32_t>(w), static_cast<uint32_t>(h),
                                    static_cast<uint32_t>(depth) };
-        imgInfo.mipLevels     = 1;
+        imgInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
         imgInfo.arrayLayers   = 1;
         imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
@@ -6328,15 +6338,35 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkAllocateMemory(dev, &allocInfo, nullptr, &memory_) != VK_SUCCESS) return;
         vkBindImageMemory(dev, image_, memory_, 0);
 
-        owner_->TransitionImageLayout(image_,
-            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        // Task 864: covers *all* levelCount_ levels (not just level 0, unlike the shared
+        // single-level TransitionImageLayout helper) so SetData/GetData can address any mip
+        // level from construction time, mirroring VulkanRenderTargetBackend's identical fix.
+        {
+            VkCommandBuffer initCb = owner_->BeginOneTimeCommands();
+            VkImageMemoryBarrier initBarrier{};
+            initBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            initBarrier.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+            initBarrier.newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            initBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            initBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            initBarrier.image               = image_;
+            initBarrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
+                                                 static_cast<uint32_t>(levelCount_), 0, 1 };
+            initBarrier.srcAccessMask       = 0;
+            initBarrier.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(initCb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                                 0, nullptr, 0, nullptr, 1, &initBarrier);
+            owner_->EndOneTimeCommands(initCb);
+        }
 
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image    = image_;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
         viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
-        viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
+                                       static_cast<uint32_t>(levelCount_), 0, 1 };
         vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
     }
 
@@ -6426,11 +6456,21 @@ namespace CNA::Internal::Backends::Vulkan
 
     // --- VulkanTextureCubeBackend ---
 
-    VulkanTextureCubeBackend::VulkanTextureCubeBackend(VulkanGraphicsBackend* owner, int size)
+    // Task 864: mirrors TextureCube.cpp's CalculateMipLevels(size,size) -- cube faces are square.
+    static int CalculateVulkanTextureCubeMipLevels(int size)
+    {
+        int levels = 1;
+        int s = size;
+        while (s > 1) { s = std::max(1, s / 2); ++levels; }
+        return levels;
+    }
+
+    VulkanTextureCubeBackend::VulkanTextureCubeBackend(VulkanGraphicsBackend* owner, int size, bool mipMap)
         : owner_(owner), size_(size)
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice dev = owner_->device_;
+        levelCount_ = mipMap ? CalculateVulkanTextureCubeMipLevels(size) : 1;
 
         VkImageCreateInfo imgInfo{};
         imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -6438,7 +6478,7 @@ namespace CNA::Internal::Backends::Vulkan
         imgInfo.imageType     = VK_IMAGE_TYPE_2D;
         imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
         imgInfo.extent        = { static_cast<uint32_t>(size), static_cast<uint32_t>(size), 1 };
-        imgInfo.mipLevels     = 1;
+        imgInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
         imgInfo.arrayLayers   = 6;
         imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
@@ -6468,7 +6508,8 @@ namespace CNA::Internal::Backends::Vulkan
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image               = image_;
-        barrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6 };
+        barrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
+                                         static_cast<uint32_t>(levelCount_), 0, 6 };
         barrier.srcAccessMask       = 0;
         barrier.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
         vkCmdPipelineBarrier(cb,
@@ -6481,7 +6522,8 @@ namespace CNA::Internal::Backends::Vulkan
         viewInfo.image    = image_;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
         viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
-        viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6 };
+        viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
+                                       static_cast<uint32_t>(levelCount_), 0, 6 };
         vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
     }
 

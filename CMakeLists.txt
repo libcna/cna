@@ -1741,6 +1741,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 862: Texture3D mip-level SetData/GetData round-trip
+        cna_easygl_test(cna_test_easygl_texture3d_mip
+                        examples/easygl_texture3d_mip_test.cpp)
+        add_test(NAME EasyGL_Texture3D_Mip_RoundTrip
+                 COMMAND cna_test_easygl_texture3d_mip)
+        set_tests_properties(EasyGL_Texture3D_Mip_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 273: Texture3D partial box (x/y/z region) SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texture3d_partial_box
                         examples/easygl_texture3d_partial_box_test.cpp)
@@ -2980,6 +2989,26 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_TextureCube_PartialRect_RoundTrip
                  COMMAND cna_test_vulkan_texturecube_partial_rect)
         set_tests_properties(Vulkan_TextureCube_PartialRect_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 864: Texture3D mip-level allocation is now real on Vulkan -- shared with EasyGL's
+        # registration of the same backend-agnostic file (Task 862).
+        cna_vulkan_test(cna_test_vulkan_texture3d_mip
+                        examples/easygl_texture3d_mip_test.cpp)
+        add_test(NAME Vulkan_Texture3D_Mip_RoundTrip
+                 COMMAND cna_test_vulkan_texture3d_mip)
+        set_tests_properties(Vulkan_Texture3D_Mip_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 864: TextureCube mip-level allocation is now real on Vulkan -- shared with EasyGL's
+        # registration of the same backend-agnostic file (Task 276).
+        cna_vulkan_test(cna_test_vulkan_texturecube_mip
+                        examples/easygl_texturecube_mip_test.cpp)
+        add_test(NAME Vulkan_TextureCube_Mip_RoundTrip
+                 COMMAND cna_test_vulkan_texturecube_mip)
+        set_tests_properties(Vulkan_TextureCube_Mip_RoundTrip PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

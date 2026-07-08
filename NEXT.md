@@ -488,6 +488,12 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   path in reverse; previously silently left the caller's buffer untouched. Required a new
   `TransitionImageLayout` case (`SHADER_READ_ONLY_OPTIMAL <-> TRANSFER_SRC_OPTIMAL`) and adding
   `VK_IMAGE_USAGE_TRANSFER_SRC_BIT` to both textures' image usage flags.
+- **`Texture3D`'s mip levels >0 now work on EasyGL (Task 862) and both `Texture3D`/`TextureCube`'s
+  mip levels >0 now work on Vulkan (Task 864)** — both previously hardcoded `mipLevels`/allocated
+  GPU storage to 1 regardless of `mipMap`, and reverting either fix reproduces real GPU memory
+  corruption (higher mip levels' writes land back inside level 0's only allocated memory), not
+  just a silent no-op. Bgfx's half remains open, split to Task 914 (currently unverifiable — see
+  §5).
 
 ### What does NOT work yet
 - **Vulkan `BlendState`/`DepthStencilState` support is almost entirely fake** — hardcoded blend
@@ -524,6 +530,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `TBD` | 862/864 (+914) | **`Texture3D`'s mip levels >0 fixed on EasyGL (Task 862); both `Texture3D`/`TextureCube`'s mip levels >0 fixed on Vulkan (Task 864); Bgfx split to new Task 914 as genuinely unverifiable.** Same bug shape as Task 276's already-fixed EasyGL `TextureCube` mip bug: `mipLevels`/GPU storage was hardcoded to 1 regardless of `mipMap` on `EasyGLTexture3DBackend` and both `VulkanTexture3DBackend`/`VulkanTextureCubeBackend` (Vulkan's `CreateTexture3D`/`CreateTextureCube` dropped the `mipMap` parameter entirely). Fixed by pre-allocating every mip level at construction (EasyGL: per-level `set_image_3d(nullptr)` loop; Vulkan: real `mipLevels`/full-range `VkImageView`/a construction-time full-mip-range initial layout transition mirroring `VulkanRenderTargetBackend`'s Task 878/907 pattern, since the shared single-level `TransitionImageLayout` helper can't be reused). **Found a more severe symptom than expected**: on Vulkan, writing to an unallocated mip level didn't just silently fail — it corrupted mip level 0's real GPU memory (confirmed via `git stash` revert: `Texture3D` 67/73 pass with 6 corrupted, `TextureCube` 112/126 pass with 14 corrupted, higher levels' writes landing back inside level 0's only real memory). New backend-agnostic `examples/easygl_texture3d_mip_test.cpp` (4x4x4, 3 levels, mirrors Task 276's `TextureCube` test) registered for both EasyGL and Vulkan; the existing unmodified `easygl_texturecube_mip_test.cpp` (Task 276) registered for Vulkan for the first time (only possible now thanks to Task 865's real `GetData`). `git stash` revert-and-rebuild confirmed discriminating power on Vulkan; direct before/after binary comparison confirmed it on EasyGL. Full regression: `CnaTests` EasyGL/Vulkan 4272/4274 passed, 2 skipped, 0 failed (exact baseline match); `ctest -R "Texture3D\|TextureCube"` EasyGL 88/88, Vulkan 85/85. **Bgfx split to Task 914**: the identical 1-line-shaped fix (`hasMips` threaded through) is obviously correct by inspection but currently has zero way to be verified — `GetData` is a total no-op on Bgfx (confirmed empirically: the mip test fails 100% identically whether or not the fix is applied), `Texture3D` can't be sampled in any shader (Task 863), and `TextureCube` mip-content sampling via `EnvironmentMapEffect` was already found non-discriminating by Task 907's own test. Not landed to avoid shipping an unverified change; Task 914 covers the real prerequisite (bgfx's genuine but async, `BGFX_TEXTURE_READ_BACK`-gated `readTexture()` API) needed before this can be verified. |
 | `82a19244` | 865 | **Real Vulkan `GetData` readback implemented for `Texture3D`/`TextureCube`, closing a severe silent-failure gap (same class as Task 663's old `DDSFromStreamEXT` stub).** Neither backend class overrode `GetData` before this — both silently fell through to the empty base-class default, leaving the caller's buffer untouched with no error. Fixed with `vkCmdCopyImageToBuffer` + a host-visible staging buffer, mirroring `SetData`'s upload path in reverse (`TextureCube` needs its own inline barrier pair since the shared `TransitionImageLayout` helper only targets array layer 0). **2 prerequisites required**: a new `TransitionImageLayout` case (`SHADER_READ_ONLY_OPTIMAL <-> TRANSFER_SRC_OPTIMAL`, previously only upload-direction transitions existed) and `VK_IMAGE_USAGE_TRANSFER_SRC_BIT` added to both textures' image usage flags (previously upload/sample-only). **Test approach**: registered 2 existing backend-agnostic example files for Vulkan rather than writing new ones — `easygl_texture3d_slices_test.cpp` → `Vulkan_Texture3D_Slices_RoundTrip`, `easygl_texturecube_partial_rect_test.cpp` → `Vulkan_TextureCube_PartialRect_RoundTrip` — both do real per-pixel/per-voxel assertions. Also widened `TextureCubeTests.cpp`'s DDS 6-face test guard from EasyGL-only to include Vulkan. **Discriminating power independently verified**: `git stash`-reverting just the 2 Vulkan backend files reproduced 16/16 + 114/114 + 1 failures exactly as predicted; restored and reconfirmed all pass. Full regression: `CnaTests` all 3 backends 0 failed (Vulkan/EasyGL 4272/4274 passed, Bgfx 4276/4278 passed, all pre-existing skips only); `ctest -R "Texture3D\|TextureCube"` (Vulkan) 83/83. |
 | `93a2acd8` | 913 | **Fixed a genuine memory-safety bug: `TextureCube`/`Texture3D`'s `SetData`/`GetData` region overloads never validated `elementCount` against the actual texel/voxel count being read/written.** Confirmed FNA's real contract by reading its `Texture2D.SetData<T>`/`GetData<T>` source (`elementCount` must be `>=` the region size; extra is allowed and ignored) — CNA's own `Texture2D.cpp` already implements this exact check; `TextureCube` and `Texture3D` were the only 2 sibling classes missing it. Added the identical `elementCount < (region size)` check to all 4 sites (`TextureCube::SetData`/`GetData`, `Texture3D::SetData`/`GetData`), matching `Texture2D.cpp`'s exact message style. 4 new gtest cases across all 3 backends. **Discriminating power independently verified**: reverted both production files and reran — all 4 silently proceeded instead of throwing (the same underlying condition that produced a live heap-corruption crash while building Task 663's DDS fixture, though this smaller repro didn't reliably reproduce the crash itself — undefined behavior, not guaranteed to crash every time); restored and reconfirmed 4/4 PASS. Full regression: `CnaTests` all 3 backends exact baseline match +4, 0 failed. |
 | `105a33aa` | 663 (+913) | **`TextureCube::DDSFromStreamEXT` implemented for real — DDS header parsing (mirrors FNA's `Texture.ParseDDS`) + DXT1/3/5 per-face/per-level decode via the existing `DxtUtil` (already used by `Texture2D::FromStream`), uploaded as `SurfaceFormat::Color`** (CNA's established, already-accepted deviation from FNA's real compressed-GPU-format upload, matching `Texture2D::FromStream`'s own identical precedent — CNA doesn't implement compressed GPU formats end-to-end on any backend). Throws `System::FormatException` for non-cube-map DDS input and `System::NotSupportedException` for malformed/unsupported input, matching FNA's exact exception types. **Found and fixed a real infrastructure gap**: `TextureCube` had no explicit move constructor (a user-declared destructor suppresses the implicit one) and an implicitly-deleted copy ctor (owns a `unique_ptr` backend) — meaning a factory function returning `TextureCube` by value couldn't compile at all without NRVO. Added explicit move ctor/assignment + explicit deleted copy. **Test fixture, per this row's own "build a real DDS cube-map test fixture first" guidance**: `BuildSolidColorCubeDds()` hand-builds a minimal, valid, 4x4 single-mip DXT1 cube-map DDS entirely in memory (no real .dds asset available in this environment) — 6 maximally-distinct, exactly-RGB565-representable solid colours, one per face, each encoded as a single solid DXT1 block. 6 new gtest cases in `TextureCubeTests.cpp`, all 3 backends; the strict per-face colour assertion is EasyGL-only (`#ifdef CNA_BACKEND_EASYGL`) since `TextureCube::GetData` is a known no-op on Vulkan/Bgfx (Task 865) — confirmed directly when an earlier draft of this exact test failed with all-zero readback there. **A second, real, separate memory-safety gap found and NOT fixed, split to new Task 913**: `TextureCube::SetData`/`GetData`'s 6-arg overload never validates `elementCount` against the actual region size (`w*h`) — confirmed via a genuine `free(): invalid pointer` heap-corruption crash from an early, incorrectly-written draft of the new test. **Discriminating power independently verified**: `git stash`-reverted the implementation back to the old 1x1-blank stub (keeping the header/test changes) — all 6 new tests failed exactly as predicted; restored and reconfirmed 6/6 PASS on all 3 backends. Full regression: `CnaTests` all 3 backends exact baseline match +6 new tests, 0 failed. |
@@ -738,7 +745,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Confirmed, real, not fixed | `SkinnedEffect`'s `SpecularColor`/`SpecularPower` have zero GPU implementation on any backend — `GpuDrawParams` has no generic specular fields at all, same shape as `BasicEffect`'s already-tracked gap. | Task 894 |
 | Confirmed, real, not fixed | `SkinnedEffect.WeightsPerVertex` is a complete GPU no-op on all 3 backends — the skinning shader always sums all 4 bone weights regardless of the property's value (1/2/4), unlike FNA's real shader which only sums the first N. Only visible when unused weight slots hold nonzero data. | Task 895 |
 | Confirmed, minor, acceptable deviation | `SkinnedEffect`'s `PreferPerPixelLighting=false` default is effectively a no-op — lighting (`NdotL`) is always computed in the fragment shader on every backend, so CNA always renders at per-pixel quality regardless of this flag (strictly more accurate than FNA's real per-vertex default, never worse). | — |
-| Suspected, not reproduced | Vulkan/Bgfx likely have the same mip-allocation bug already fixed on EasyGL's `TextureCube` (Task 276), for `Texture3D`/`TextureCube` on both backends. | Task 864 |
+| Fixed, EasyGL+Vulkan; Bgfx blocked | Confirmed and fixed the same `mipLevels`/`hasMips` hardcoded-to-1 bug (same shape as Task 276's `TextureCube` fix) for `Texture3D` on EasyGL (Task 862) and for both `Texture3D`/`TextureCube` on Vulkan (Task 864) — reverting either fix reproduces real GPU memory corruption (mip levels overwrite each other), not just a silent no-op. Bgfx's half split to Task 914: currently unverifiable by any means (`GetData` is a total no-op there, `Texture3D` can't be sampled at all per Task 863, and `TextureCube` mip-content sampling was already found non-discriminating by Task 907). | Task 862/864 (done, EasyGL+Vulkan) / 914 (Bgfx, open) |
 | Needs verification | Whether Bgfx's window actually has a physical stencil buffer has not been checked. | — |
 | Incomplete, by design | Stride-keyed vertex layout only supports strides 16/20/24/32/52. Vulkan has no `Tangent`/`Binormal` mapping. `SurfaceFormat` support is Color-only for real GPU formats. `SDL_Renderer` has no 3D at all. | — |
 | Risky assumption | `GraphicsDevice`'s user-primitive scratch buffers never shrink — fine for typical use, but memory stays at the high-water mark for the device's lifetime. | — |
@@ -868,10 +875,11 @@ Vulkan's own per-instance fidelity split to Task 911, a genuine architectural co
 (Vulkan Clear()-only render targets not recording a render pass), Task 912 (Bgfx sample-after-
 unbind black readback, root-caused to an already-documented quirk, not a distinct bug), Task 663
 (`TextureCube::DDSFromStreamEXT` real implementation), Task 913 (`TextureCube`/`Texture3D`
-`elementCount` validation, closing a real heap-corruption gap), and Task 865 (real Vulkan `GetData`
-readback for `Texture3D`/`TextureCube`) are all done. In priority order, the rest are the
-accumulated backlog from earlier phases plus this task's new findings (Tasks 825–828, 863–882,
-889–895, 902–904, 911–912).
+`elementCount` validation, closing a real heap-corruption gap), Task 865 (real Vulkan `GetData`
+readback for `Texture3D`/`TextureCube`), and Task 862/864 (`Texture3D`/`TextureCube` mip-level
+allocation fixed on EasyGL/Vulkan; Bgfx split to Task 914, genuinely unverifiable with current
+infrastructure) are all done. In priority order, the rest are the accumulated backlog from earlier
+phases plus this task's new findings (Tasks 825–828, 863, 866–882, 889–895, 902–904, 911–912, 914).
 
 0. **DONE this session.** Not a `plan_graphics.md` task — ran the full `ctest` suite for all 3
    backends' `examples/*.cpp` pixel tests, the single highest-value step to confirm Task 896's
@@ -898,17 +906,23 @@ accumulated backlog from earlier phases plus this task's new findings (Tasks 825
     render-pass *and* pipeline cache across 10+ `GetOrCreatePipelineXXX` functions — a real,
     large, systemic change, same class as Task 910 — needs its own scoping pass before starting.
 
-3. **Task 864 — reproduce and fix the suspected Vulkan/Bgfx mip-allocation bug** for
-    `Texture3D`/`TextureCube` (confirm with a failing test first, per Task 276's methodology).
-
-4. **Task 903 — implement `RenderTargetCube` MSAA on Vulkan and Bgfx** (split out of Task 879 —
+3. **Task 903 — implement `RenderTargetCube` MSAA on Vulkan and Bgfx** (split out of Task 879 —
     real XNA API surface, needs the same per-RT MSAA treatment applied per cube face).
 
-5. **Task 902 — implement a real `GraphicsDevice.Reset()`** so `GraphicsDeviceManager` preference
+4. **Task 902 — implement a real `GraphicsDevice.Reset()`** so `GraphicsDeviceManager` preference
     changes (e.g. `PreferMultiSampling`) actually reach backend construction, not just window
     size/fullscreen. Large, architecturally risky (touches `Game`/`GraphicsDeviceManager`/
     `GraphicsDevice`'s core lifecycle, needs `DeviceResetting`/`DeviceReset` events on every live
     `IGraphicsResource`) — needs its own scoping decision before starting, same class as Task 896.
+
+5. **Task 914 — give Bgfx a real GPU readback path for `Texture3D`/`TextureCube`** (split out of
+    Task 864, whose mip-allocation fix landed on EasyGL/Vulkan but found Bgfx's half currently
+    unverifiable by any means — `GetData` is a total no-op there, `Texture3D` can't be sampled at
+    all per Task 863, and `TextureCube` mip-content sampling was already found non-discriminating
+    by Task 907). Real fix needs `bgfx::readTexture()` — genuinely async (`BGFX_TEXTURE_READ_BACK`-
+    gated, resolves on a future `bgfx::frame()`) and possibly incompatible with a texture also
+    being shader-sampled — needs its own scoping pass before starting, same class as Task 902/910/
+    911.
 
 ---
 
@@ -976,7 +990,7 @@ accumulated backlog from earlier phases plus this task's new findings (Tasks 825
 Read NEXT.md first, in full — this section is intentionally the only thing you need before
 touching any code.
 
-## Repo state as of 2026-07-08 (end of Task 865 session) — READ THIS FIRST
+## Repo state as of 2026-07-08 (end of Task 862/864 session) — READ THIS FIRST
 
 No unusual repo state this time (unlike the Task 896 session's big external merge) — just resume
 normally. All 3 `cmake-build-{debug,vulkan,bgfx}` directories exist and were verified building
@@ -1037,12 +1051,15 @@ hand-built in-memory DDS fixture), Task 913 (`TextureCube`/`Texture3D`'s `SetDat
 not validating `elementCount` against the region size, a genuine heap-corruption bug found while
 building Task 663's fixture — fixed by mirroring `Texture2D`'s already-correct pattern), and Task
 865 (real Vulkan `GetData` readback for `Texture3D`/`TextureCube` via `vkCmdCopyImageToBuffer` +
-staging buffer, reusing 2 existing backend-agnostic example tests rather than writing new ones);
-and split off one new finding: Task 911 (Vulkan's own per-RT depth-format fidelity — real
-architectural constraint, same class as Task 910). Next up: Task 864 (reproduce/fix the suspected
-Vulkan/Bgfx mip-allocation bug for `Texture3D`/`TextureCube`) per §8's current ordering, or Task
-910/911 if a scoping pass becomes available (both need the project owner's own dedicated scoping
-pass before starting).
+staging buffer, reusing 2 existing backend-agnostic example tests rather than writing new ones),
+and Task 862/864 (`Texture3D`/`TextureCube` mip-level allocation fixed on EasyGL and Vulkan —
+reverting either fix reproduces real GPU memory corruption, not just a silent no-op); split off
+two new findings: Task 911 (Vulkan's own per-RT depth-format fidelity — real architectural
+constraint, same class as Task 910) and Task 914 (Bgfx's `Texture3D`/`TextureCube` mip fix,
+currently unverifiable — needs a real `bgfx::readTexture()` readback path first). Next up: Task
+903 (`RenderTargetCube` MSAA on Vulkan/Bgfx) per §8's current ordering, or Task 910/911/902/914 if
+a scoping pass becomes available (all 4 need the project owner's own dedicated scoping pass before
+starting).
 
 **Standing instructions (still in force):**
 - Commit AND push after every finished task without waiting to be asked.

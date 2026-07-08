@@ -376,7 +376,7 @@ namespace CNA::Internal::Backends::Vulkan
     class VulkanTexture3DBackend : public ITexture3DBackend
     {
     public:
-        VulkanTexture3DBackend(VulkanGraphicsBackend* owner, int w, int h, int depth);
+        VulkanTexture3DBackend(VulkanGraphicsBackend* owner, int w, int h, int depth, bool mipMap);
         ~VulkanTexture3DBackend() override;
 
         void SetData(int level, int x, int y, int z,
@@ -392,6 +392,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceMemory memory_    = VK_NULL_HANDLE;
         VkImageView    imageView_ = VK_NULL_HANDLE;
         int width_ = 0, height_ = 0, depth_ = 0;
+        int levelCount_ = 1;
     };
 
     // -------------------------------------------------------------------------
@@ -401,7 +402,7 @@ namespace CNA::Internal::Backends::Vulkan
     class VulkanTextureCubeBackend : public ITextureCubeBackend, public IVulkanCubeSamplable
     {
     public:
-        VulkanTextureCubeBackend(VulkanGraphicsBackend* owner, int size);
+        VulkanTextureCubeBackend(VulkanGraphicsBackend* owner, int size, bool mipMap);
         ~VulkanTextureCubeBackend() override;
 
         void SetData(int face, int level, int x, int y, int w, int h,
@@ -419,6 +420,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceMemory memory_    = VK_NULL_HANDLE;
         VkImageView    imageView_ = VK_NULL_HANDLE;
         int size_ = 0;
+        int levelCount_ = 1;
     };
 
     // -------------------------------------------------------------------------

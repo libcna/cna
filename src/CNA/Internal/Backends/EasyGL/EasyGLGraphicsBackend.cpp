@@ -66,17 +66,39 @@ namespace CNA::Internal::Backends::EasyGL
     static constexpr int kTexLinear       = static_cast<int>(::metagl::TextureMagFilter::Linear);
     static constexpr int kTexClampToEdge  = static_cast<int>(::metagl::TextureWrapMode::ClampToEdge);
 
-    EasyGLTexture3DBackend::EasyGLTexture3DBackend(int w, int h, int depth, bool /*mipMap*/, int /*surfaceFormat*/)
+    // Mirrors Texture3D.cpp's CalculateMipLevels(w,h) — depth does not participate in the level
+    // count, matching FNA's Texture3D constructor, but each level's own GPU storage still halves
+    // in all 3 dimensions (standard volume-mip behavior).
+    static int CalculateTexture3DMipLevels(int w, int h)
+    {
+        int levels = 1;
+        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        return levels;
+    }
+
+    EasyGLTexture3DBackend::EasyGLTexture3DBackend(int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
         : width_(w), height_(h), depth_(depth)
     {
         tex_.create();
         tex_.bind(::easygl::TextureTarget::Texture3D);
-        tex_.set_image_3d(::easygl::TextureTarget::Texture3D, 0,
-                          ::metagl::InternalFormat::Rgba8,
-                          w, h, depth,
-                          ::metagl::PixelFormat::Rgba,
-                          ::metagl::PixelType::UnsignedByte,
-                          nullptr);
+        // Pre-allocate GPU storage for every mip level (not just level 0): SetData's box writes
+        // use glTexSubImage3D, which requires the target level to already have a defined image —
+        // without this loop, SetData(level>0,...) would silently fail (same bug shape as Task
+        // 276's TextureCube finding).
+        const int levelCount = mipMap ? CalculateTexture3DMipLevels(w, h) : 1;
+        int levelW = w, levelH = h, levelD = depth;
+        for (int level = 0; level < levelCount; ++level)
+        {
+            tex_.set_image_3d(::easygl::TextureTarget::Texture3D, level,
+                              ::metagl::InternalFormat::Rgba8,
+                              levelW, levelH, levelD,
+                              ::metagl::PixelFormat::Rgba,
+                              ::metagl::PixelType::UnsignedByte,
+                              nullptr);
+            levelW = std::max(1, levelW / 2);
+            levelH = std::max(1, levelH / 2);
+            levelD = std::max(1, levelD / 2);
+        }
         tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MinFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MagFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::WrapS, kTexClampToEdge);
