@@ -259,6 +259,44 @@ TEST(SpriteFontTest, CarriageReturnIsIgnored)
     EXPECT_FLOAT_EQ(withR.Y, aa.Y);
 }
 
+TEST(SpriteFontTest, ConsecutiveCarriageReturnsAreAllIgnored)
+{
+    // "A\r\rA": both \r are skipped, measures like "AA".
+    SpriteFont font = makeFontA(0.0f);
+    Vector2 withRR = font.MeasureString(std::string("A\r\rA"));
+    SpriteFont font2 = makeFontA(0.0f);
+    Vector2 aa = font2.MeasureString(std::string("AA"));
+    EXPECT_FLOAT_EQ(withRR.X, aa.X);
+    EXPECT_FLOAT_EQ(withRR.Y, aa.Y);
+}
+
+// -----------------------------------------------------------------------
+// MeasureString — leading/trailing newline (an empty first/last line still
+// contributes its own lineSpacing height, matching FNA's per-'\n' Y += LineSpacing
+// followed by the loop's own unconditional final Y += finalLineHeight)
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, LeadingNewlineAddsAnEmptyFirstLine)
+{
+    // "\nA": leading '\n' -> Y += lineSpacing for the (empty) first line, then
+    // "A" is the second line -> Y += lineSpacing again. Total Y = 2*lineSpacing.
+    SpriteFont font = makeFontA(0.0f);
+    Vector2 size = font.MeasureString(std::string("\nA"));
+    EXPECT_FLOAT_EQ(size.X, 11.0f);
+    EXPECT_FLOAT_EQ(size.Y, 32.0f);
+}
+
+TEST(SpriteFontTest, TrailingNewlineAddsAnEmptyLastLine)
+{
+    // "A\n": '\n' after "A" -> Y += lineSpacing for the "A" line, then the loop's
+    // own final Y += finalLineHeight adds a second, empty trailing line.
+    // Total Y = 2*lineSpacing, not 1*lineSpacing.
+    SpriteFont font = makeFontA(0.0f);
+    Vector2 size = font.MeasureString(std::string("A\n"));
+    EXPECT_FLOAT_EQ(size.X, 11.0f);
+    EXPECT_FLOAT_EQ(size.Y, 32.0f);
+}
+
 // -----------------------------------------------------------------------
 // MeasureString — unknown glyph behaviour
 // -----------------------------------------------------------------------
