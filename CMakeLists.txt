@@ -3544,6 +3544,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 673: source rectangle cropping pixel test on SDL_Renderer -- direct port of
+    # Task 419's EasyGL test.
+    cna_sdl_test(cna_test_sdl_spritebatch_sourcerect
+                 examples/sdlrenderer_spritebatch_sourcerect_test.cpp)
+    add_test(NAME SDL_Renderer_SpriteBatch_SourceRect
+             COMMAND cna_test_sdl_spritebatch_sourcerect)
+    set_tests_properties(SDL_Renderer_SpriteBatch_SourceRect PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
