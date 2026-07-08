@@ -3881,6 +3881,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 712: fullscreen toggle on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_fullscreen_toggle
+                 examples/sdlrenderer_fullscreen_toggle_test.cpp)
+    add_test(NAME SDL_Renderer_FullscreenToggle
+             COMMAND cna_test_sdl_fullscreen_toggle)
+    set_tests_properties(SDL_Renderer_FullscreenToggle PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
