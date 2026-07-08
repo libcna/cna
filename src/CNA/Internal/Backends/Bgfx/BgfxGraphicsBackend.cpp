@@ -467,9 +467,47 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
+    namespace Detail
+    {
+        // Task 910: view id 0 is permanently reserved for the backbuffer; every render target
+        // (2D, cube, or MRT) gets a distinct id from this pool instead of the old hardcoded 1.
+        // Free-list-backed so long-running games creating/destroying render targets don't
+        // exhaust bgfx's view-id space (BGFX_CONFIG_MAX_VIEWS, 256 by default).
+        static std::vector<bgfx::ViewId>& RtViewIdFreeList()
+        {
+            static std::vector<bgfx::ViewId> pool;
+            return pool;
+        }
+
+        bgfx::ViewId AllocateRtViewId()
+        {
+            // Mirrors bgfx's own internal BGFX_CONFIG_MAX_VIEWS default (src/config.h, not part
+            // of the public bgfx.h API so not #include-able here) -- view id 0 is reserved for
+            // the backbuffer, leaving ids [1, kMaxBgfxViews) for render targets/MRT.
+            static constexpr bgfx::ViewId kMaxBgfxViews = 256;
+            auto& pool = RtViewIdFreeList();
+            if (!pool.empty())
+            {
+                const bgfx::ViewId id = pool.back();
+                pool.pop_back();
+                return id;
+            }
+            static bgfx::ViewId nextId = 1;
+            if (nextId >= kMaxBgfxViews)
+                throw std::runtime_error("Bgfx: exhausted view ids (more concurrently-live "
+                                          "render targets than bgfx supports views)");
+            return nextId++;
+        }
+
+        void ReleaseRtViewId(bgfx::ViewId id)
+        {
+            RtViewIdFreeList().push_back(id);
+        }
+    }
+
     BgfxRenderTargetBackend::BgfxRenderTargetBackend(int w, int h, int depthFormat, bool preserve,
                                                       int requestedMultiSampleCount, bool mipMap)
-        : width(w), height(h), preserveContents(preserve)
+        : width(w), height(h), preserveContents(preserve), viewId_(Detail::AllocateRtViewId())
     {
         int appliedMsaa = 0;
         const uint64_t msaaFlag = BgfxMsaaRtFlag(requestedMultiSampleCount, appliedMsaa);
@@ -511,21 +549,22 @@ namespace CNA::Internal::Backends::Bgfx
     {
         if (bgfx::isValid(fbo))
             bgfx::destroy(fbo);
+        Detail::ReleaseRtViewId(viewId_);
     }
 
     void BgfxRenderTargetBackend::BindAsRenderTarget()
     {
-        bgfx::setViewFrameBuffer(1, fbo);
-        bgfx::setViewRect(1, 0, 0, static_cast<uint16_t>(width), static_cast<uint16_t>(height));
+        bgfx::setViewFrameBuffer(viewId_, fbo);
+        bgfx::setViewRect(viewId_, 0, 0, static_cast<uint16_t>(width), static_cast<uint16_t>(height));
         // For PreserveContents, suppress the per-view clear that bgfx would otherwise
         // carry over from the previous frame (set by a DiscardContents RT or explicit Clear).
         if (preserveContents)
-            bgfx::setViewClear(1, BGFX_CLEAR_NONE, 0, 1.0f, 0);
+            bgfx::setViewClear(viewId_, BGFX_CLEAR_NONE, 0, 1.0f, 0);
     }
 
     void BgfxRenderTargetBackend::UnbindAsRenderTarget()
     {
-        bgfx::setViewFrameBuffer(1, BGFX_INVALID_HANDLE);
+        bgfx::setViewFrameBuffer(viewId_, BGFX_INVALID_HANDLE);
     }
 
     // ---
@@ -541,11 +580,16 @@ namespace CNA::Internal::Backends::Bgfx
     void BgfxGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         if (bgfx::isValid(mrtFbo_)) { bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
+        if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
         if (rt)
         {
-            rt->BindAsRenderTarget();
-            currentViewId_ = 1;
-            spriteViewId = 1;
+            // Task 910: use this RT's own stable view id, not a hardcoded shared one -- lets
+            // more than one render target be bound within a single un-advanced bgfx frame
+            // without one clobbering another's already-recorded draws.
+            auto* bgfxRt = static_cast<BgfxRenderTargetBackend*>(rt);
+            bgfxRt->BindAsRenderTarget();
+            currentViewId_ = bgfxRt->viewId_;
+            spriteViewId = bgfxRt->viewId_;
             currentRtWidth_  = static_cast<uint16_t>(rt->GetWidth());
             currentRtHeight_ = static_cast<uint16_t>(rt->GetHeight());
         }
@@ -561,6 +605,7 @@ namespace CNA::Internal::Backends::Bgfx
     void BgfxGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
     {
         if (bgfx::isValid(mrtFbo_)) { bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
+        if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
         if (count <= 0)
         {
             SetRenderTarget2D(nullptr);
@@ -571,7 +616,10 @@ namespace CNA::Internal::Backends::Bgfx
             SetRenderTarget2D(rts[0]);
             return;
         }
-        // Multi-target: build a temporary framebuffer from the color textures.
+        // Multi-target: build a temporary framebuffer from the color textures. Task 910: MRT
+        // gets its own freshly-allocated view id too (not the old hardcoded 1), so a 2nd,
+        // different MRT setup bound later within the same un-advanced frame doesn't clobber
+        // this one's already-recorded draws.
         static constexpr int kMaxAttachments = 8; // bgfx BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS default
         bgfx::Attachment attachments[kMaxAttachments];
         int n = count < kMaxAttachments ? count : kMaxAttachments;
@@ -581,9 +629,10 @@ namespace CNA::Internal::Backends::Bgfx
             attachments[i].init(bgfxRt->colorTex);
         }
         mrtFbo_ = bgfx::createFrameBuffer(static_cast<uint8_t>(n), attachments);
-        bgfx::setViewFrameBuffer(1, mrtFbo_);
-        currentViewId_ = 1;
-        spriteViewId = 1;
+        mrtViewId_ = Detail::AllocateRtViewId();
+        bgfx::setViewFrameBuffer(mrtViewId_, mrtFbo_);
+        currentViewId_ = mrtViewId_;
+        spriteViewId = mrtViewId_;
         currentRtWidth_  = static_cast<uint16_t>(rts[0]->GetWidth());
         currentRtHeight_ = static_cast<uint16_t>(rts[0]->GetHeight());
     }
@@ -592,7 +641,7 @@ namespace CNA::Internal::Backends::Bgfx
 
     BgfxRenderTargetCubeBackend::BgfxRenderTargetCubeBackend(int size, int depthFormat, bool mipMap,
                                                               int requestedMultiSampleCount)
-        : size_(size)
+        : size_(size), viewId_(Detail::AllocateRtViewId())
     {
         // Task 903: BGFX_TEXTURE_RT_MSAA_Xn instead of plain BGFX_TEXTURE_RT when requested --
         // mirrors BgfxRenderTargetBackend's identical Task 878/879 treatment exactly; bgfx
@@ -630,6 +679,7 @@ namespace CNA::Internal::Backends::Bgfx
         if (bgfx::isValid(fbo))      bgfx::destroy(fbo);
         if (bgfx::isValid(cubeTex))  bgfx::destroy(cubeTex);
         if (bgfx::isValid(depthTex)) bgfx::destroy(depthTex);
+        Detail::ReleaseRtViewId(viewId_);
     }
 
     void BgfxRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
@@ -644,13 +694,13 @@ namespace CNA::Internal::Backends::Bgfx
             numAttachments = 2;
         }
         fbo = bgfx::createFrameBuffer(numAttachments, atts);
-        bgfx::setViewFrameBuffer(1, fbo);
-        bgfx::setViewRect(1, 0, 0, static_cast<uint16_t>(size_), static_cast<uint16_t>(size_));
+        bgfx::setViewFrameBuffer(viewId_, fbo);
+        bgfx::setViewRect(viewId_, 0, 0, static_cast<uint16_t>(size_), static_cast<uint16_t>(size_));
     }
 
     void BgfxRenderTargetCubeBackend::UnbindAsRenderTarget()
     {
-        bgfx::setViewFrameBuffer(1, BGFX_INVALID_HANDLE);
+        bgfx::setViewFrameBuffer(viewId_, BGFX_INVALID_HANDLE);
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> BgfxGraphicsBackend::CreateRenderTargetCube(int size, int depthFormat, bool mipMap, int multiSampleCount)
@@ -670,9 +720,13 @@ namespace CNA::Internal::Backends::Bgfx
     void BgfxGraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
     {
         if (!rt) return;
-        rt->BindAsRenderTargetFace(face);
-        currentViewId_   = 1;
-        spriteViewId     = 1;
+        // Task 910: use this cube RT's own stable view id (shared by all 6 faces), not a
+        // hardcoded shared one -- lets more than one render target (or cube face across more
+        // than one cube) be bound within a single un-advanced bgfx frame safely.
+        auto* bgfxRt = static_cast<BgfxRenderTargetCubeBackend*>(rt);
+        bgfxRt->BindAsRenderTargetFace(face);
+        currentViewId_   = bgfxRt->viewId_;
+        spriteViewId     = bgfxRt->viewId_;
         currentRtWidth_  = static_cast<uint16_t>(rt->GetSize());
         currentRtHeight_ = static_cast<uint16_t>(rt->GetSize());
     }
@@ -1004,6 +1058,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyP(instanced3DProgram_);
         destroyP(envMap3DProgram_);
         if (bgfx::isValid(mrtFbo_))         { bgfx::destroy(mrtFbo_);         mrtFbo_         = BGFX_INVALID_HANDLE; }
+        if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
         if (bgfx::isValid(textureSampler))  { bgfx::destroy(textureSampler);  textureSampler  = BGFX_INVALID_HANDLE; }
         if (bgfx::isValid(spriteProgram))   { bgfx::destroy(spriteProgram);   spriteProgram   = BGFX_INVALID_HANDLE; }
 

@@ -577,6 +577,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `TBD` | 910 | **Bgfx: every render target (2D, cube, MRT) now gets its own distinct, stable bgfx view id instead of sharing one hardcoded id — fixes the "only the last-bound render target actually renders" bug found while building Task 907's mip test.** Root cause: `bgfx::setViewFrameBuffer(viewId, fbo)` is a per-view-per-*frame* setting resolved once at `bgfx::frame()`, not per `bgfx::submit()`/`touch()` call, so whichever value was set last for a shared view id wins for every draw submitted to it that frame. New free-list-backed `Detail::AllocateRtViewId()`/`ReleaseRtViewId()` pool (ids `[1,256)`, 0 reserved for the backbuffer); `BgfxRenderTargetBackend`/`BgfxRenderTargetCubeBackend` each get a `viewId_` allocated at construction, released at destruction; MRT gets its own fresh `mrtViewId_` per `SetRenderTargets(count>1)` call. New `bgfx_concurrent_rendertargets_test.cpp`: binds+fills 2 different `RenderTarget2D`s with NO `bgfx::frame()` boundary in between, `git stash` confirmed the 1st one silently stays at its primed baseline color without the fix (clobbered by the 2nd's bind), both read back correctly with it. Full Bgfx regression: `ctest` 4338/4340 (2 pre-existing environment failures only), `CnaTests` 4285/4287 passed, 2 skipped, 0 failed. |
 | `717fa65f` | 902 | **`GraphicsDevice::Reset()` now really reconfigures the backend — `GraphicsDeviceManager.PreferMultiSampling` (and general preference changes) finally reach it, closing `vulkan_msaa_test.cpp`'s (Task 147) long-standing false positive.** FNA's real `Reset()` does an in-place `FNA3D_ResetBackbuffer()`, not a full teardown, and doesn't notify individual resources (that FNA code path is dead) — narrower scope than Task 902's original write-up assumed. New `IGraphicsBackend::ApplyMultiSampleCount()`/`GetMultiSampleCount()` virtuals; `VulkanGraphicsBackend` implements real in-place swapchain/render-pass/pipeline MSAA reconfiguration (backbuffer-only — live RTs keep their own construction-time sample count). `GraphicsDevice::Reset(pp,adapter)` now calls it and writes the real clamped value back to `PresentationParameters` (mirrors FNA's `FNA3D_GetMaxMultiSampleCount` write-back); `GraphicsDeviceManager::applyToExistingBackend()` now calls the real `Reset()` instead of the long-commented-out no-op path (order matters: `SetPresentationMode()` before `Reset()`, found via a real SDL_Renderer regression). EasyGL's main backend gained an honest `GetMultiSampleCount()` override (was silently always 0). `vulkan_msaa_test.cpp` rewritten with a genuine diagonal-edge differential (toggling real MSAA at runtime via `ApplyChanges()`, not the `RecreateBackendForMultiSampleCount()` NOXNA escape hatch other MSAA tests use) — `git stash` confirmed it fails without the fix, passes with it. `easygl_msaa_change_test.cpp` updated: PP now honestly reports `0` (not the old requested-but-never-applied `8`) when toggling MSAA on an already-constructed EasyGL device. **Full 4-backend regression, each independently `git stash`-verified against its own pre-existing baseline, zero new failures**: Vulkan 4362/4377 (15 pre-existing: 12 already-documented + 3 newly-confirmed pre-existing `ContentManagerSkinnedModelTest` segfaults), EasyGL 4430/4433 (3 pre-existing), SDL_Renderer 4275/4288 (13 pre-existing), Bgfx 4337/4339 (2 pre-existing, environment DRI3/Vulkan-negotiation flakiness). |
 | `2d4f7a2c` | 671 | **Real bug found and fixed: `SDL_RenderTextureRotated`'s pivot model is the opposite of XNA's rotation contract.** XNA requires `origin` to map to exactly `destinationRectangle.X/Y`, invariant under rotation; SDL's `center` is relative to `dstrect`'s own position, which was passed straight through, placing the pivot a full sprite-size away from where XNA needs it. Direct port of Task 417's EasyGL rotation test caught this immediately (marker landed at the clear colour instead of the expected rotated position). Fixed by offsetting `dst.x/y` by `-center` in `SdlSpriteBatchBackend::Draw`'s 8-arg overload — corrects all 9 `SpriteBatch::Draw` overloads at once, since they all funnel through this one backend call (confirmed via `SpriteBatch.cpp`'s `flushSingle()`). Rotation *angle* direction itself was already correct (verified algebraically against SDL's documented clockwise convention). **Discriminating power independently verified**: `git stash`-reverted the fix, reproduced the exact predicted failure; restored and reconfirmed all 3 checks pass. Full regression: `CnaTests` (SDL_Renderer, filtered) exact baseline match; Task 666's overloads test (rotation=0 only) unaffected. |
 | `382e4f8c` | 666 | **Audited all 9 `SpriteBatch::Draw` overloads on SDL_Renderer — all correct, no backend bug found (first task actually run in the newly-unblocked Task 666–861 phase).** New `examples/sdlrenderer_spritebatch_overloads_test.cpp` draws each overload into its own 60×60 screen slot with a unique tint colour (white 1×1 texture × tint, `BlendState::Opaque`), then reads back a real discriminating pixel per overload — including a genuine `SpriteEffects::FlipHorizontally` check against an asymmetric red/green texture (wrong-half colour if the flip silently no-ops). Caught a real bug in the test itself during development (wrong read-back point for the 2 native-size, unscaled overloads), confirming the test isn't vacuously true. `DrawString`'s 6 overloads are tracked separately (existing Tasks 690–694). Full regression: `CnaTests` (SDL_Renderer, filtered) exact baseline match, 0 new failures. |
@@ -710,12 +711,11 @@ command or test is tied to this — it manifests as a compile-time impossibility
 
 The most significant *silent-failure* gaps (compile and run without error, wrong or no data):
 Vulkan's `BlendState`/`DepthStencilState` support (Tasks 868/870),
-`Texture3D`/`TextureCube::GetData` on Vulkan/Bgfx (Task 865), Bgfx rendering into more
-than one `RenderTargetCube` face (or `RenderTarget2D`) per un-advanced frame silently corrupting
-all but the last one bound (Task 910, found while verifying Task 907), and `BasicEffect`'s
+`Texture3D`/`TextureCube::GetData` on Vulkan/Bgfx (Task 865), and `BasicEffect`'s
 lit-path missing `+EmissiveColor`/unforwarded specular+extra-lights terms (found Task 366, fixed
 for the no-lighting path in Task 369, lit path tracked as Tasks
-885/886).
+885/886). Task 910 (Bgfx rendering into more than one `RenderTargetCube` face/`RenderTarget2D`
+per un-advanced frame silently corrupting all but the last one bound) is now fixed — see §3/§5.
 None have a test that currently fails loudly — they're only visible via dedicated pixel tests or
 direct code reading.
 
@@ -811,7 +811,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Fixed, Vulkan | `CreateRTRenderPass()`'s subpass dependencies didn't actually match `CreateRenderPass()`'s despite a comment claiming they did — pipelines created against `renderPass_` weren't truly render-pass-compatible with `rtRenderPass_`/`rtRenderPassLoad_`, producing live `VUID-vkCmdDraw-renderPass-02684` validation errors (correct pixel output regardless) the moment a depth-tested 3D primitive drew into a plain non-MSAA `RenderTarget2D`. Pre-existing, outside Task 878/879's own diff; found during independent review of that diff, fixed by widening `CreateRTRenderPass()`'s `deps[]` to match `CreateRenderPass()`'s exactly. | Task 905 (done) |
 | Fixed, Bgfx | `RenderTarget2D` mip chains on Bgfx — turned out to be a 2-line fix (`hasMips=true` on `bgfx::createTexture2D`), correcting Task 878's own prediction that bgfx needed new downsample-shader infrastructure: bgfx's own `BGFX_RESOLVE_AUTO_GEN_MIPS` framebuffer-attachment default (set automatically by the already-used `createFrameBuffer` overload whenever the attached texture has mips) already auto-regenerates the chain via the platform's own `glGenerateMipmap`-equivalent, triggered on every framebuffer switch-away. | Task 906 (done) |
 | Fixed, Bgfx | `EnvironmentMapEffect` sampling a `RenderTargetCube` on Bgfx previously did an unsafe `static_cast` to `BgfxTextureCubeBackend`, reading `BgfxRenderTargetCubeBackend::fbo` (wrong handle type) — identical bug shape to Task 873's `RenderTarget2D` fix. Fixed via a new `IBgfxCubeSamplable` interface + `dynamic_cast`, as part of Task 907's own verification (this was Bgfx's first-ever test of this path). | Task 874 (done) |
-| Confirmed, real, genuinely architectural, not fixed | Bgfx: rendering into more than one `RenderTargetCube` face (or, by the same root cause, more than one `RenderTarget2D`) within a single un-advanced bgfx frame only actually renders into whichever one was bound *last* — `bgfx::setViewFrameBuffer(viewId, fbo)` is a per-view, per-*frame* setting, and all cube faces share one hardcoded view id. Root cause fully isolated (confirmed via a forced `bgfx::frame()` boundary between faces fixing it) while verifying Task 907, unlike Task 876's still-open Vulkan analogue of the same class of bug. Real fix needs per-face (or per-concurrently-active-RT) distinct view ids — a separate, likely-large architectural change. | Task 910 |
+| Fixed | Bgfx: every render target (2D, cube, MRT) now gets its own distinct, stable bgfx view id (a free-list-backed pool, `Detail::AllocateRtViewId()`/`ReleaseRtViewId()`) instead of sharing one hardcoded id — rendering into more than one within a single un-advanced bgfx frame no longer clobbers all but the last one bound. `git stash` confirmed the exact predicted failure (the 1st RT stays at its primed baseline, never actually changes). | Task 910 (done) |
 | Confirmed, real, genuinely architectural, not fixed | Vulkan: every render target's depth/stencil buffer uses one device-global `VkFormat` regardless of the specific `DepthFormat` requested — varying it per-RT would need a depth-format-keyed render-pass *and* pipeline cache across 10+ `GetOrCreatePipelineXXX` functions (pipelines are deliberately shared across the backbuffer's and every RT's render pass today for exactly this reason). Confirmed while implementing Task 877 (EasyGL/Bgfx got full fidelity; Vulkan didn't). | Task 911 |
 | Fixed (verify-only — not a distinct bug) | Bgfx: sampling a render target (2D or cube) back out via `SpriteBatch` immediately after filling and unbinding it (no intervening `bgfx::frame()` boundary) can read back stale/black content on the first `GetBackBufferData()` call. Root-caused to the SAME already-documented "first read per rendered frame" quirk below (not `DepthStencilState`/`RasterizerState` leakage or 3D-vs-2D dispatch, both ruled out by bisection) — fixed by applying the existing retry-until-non-black convention; `rendertarget2d_depth_test.cpp` now registered for Bgfx too. | Task 912 (done) |
 | Confirmed, pre-existing, environment-only | A `ContentManagerSkinnedModelTest`-area segfault occurs when running the full `CnaTests` suite on Vulkan under `Xvfb`+`llvmpipe`, non-deterministic in exactly where it lands — reproduces identically with/without Task 878's changes (confirmed via `git stash`), and the same test passes cleanly in isolation. Matches this file's already-documented general Vulkan/Xvfb/llvmpipe full-suite flakiness; not a regression, not investigated further. | — |
@@ -958,26 +958,18 @@ superseded by later, higher-numbered rediscoveries of the same underlying bug.
    `Xvfb`+`llvmpipe` combination (confirmed via `git stash` to be unrelated to any of this
    session's changes).
 
-1. **Task 910 — give Bgfx per-frame-concurrent render targets (cube faces, and by the same root
-   cause potentially multiple `RenderTarget2D`s) their own distinct bgfx view ids**, instead of
-   sharing one hardcoded view id 1. Found and root-caused while verifying Task 907: rendering into
-   more than one in a single un-advanced frame silently corrupts all but the last one bound
-   (`bgfx::setViewFrameBuffer` is a per-view-per-*frame* setting, not per-submit-call). A real,
-   likely large architectural change — view-id allocation is currently a fixed 0=backbuffer/1=RT
-   scheme threaded through many call sites.
-
-2. **Task 911 — give Vulkan render targets true per-instance `DepthStencilFormat` fidelity**
+1. **Task 911 — give Vulkan render targets true per-instance `DepthStencilFormat` fidelity**
     (split out of Task 877, which fully closed this for EasyGL/Bgfx). Needs a depth-format-keyed
     render-pass *and* pipeline cache across 10+ `GetOrCreatePipelineXXX` functions — a real,
-    large, systemic change, same class as Task 910 — needs its own scoping pass before starting.
+    large, systemic change — needs its own scoping pass before starting.
 
-3. **Task 914 — give Bgfx a real GPU readback path for `Texture3D`/`TextureCube`** (split out of
+2. **Task 914 — give Bgfx a real GPU readback path for `Texture3D`/`TextureCube`** (split out of
     Task 864, whose mip-allocation fix landed on EasyGL/Vulkan but found Bgfx's half currently
     unverifiable by any means — `GetData` is a total no-op there, `Texture3D` can't be sampled at
     all per Task 863, and `TextureCube` mip-content sampling was already found non-discriminating
     by Task 907). Real fix needs `bgfx::readTexture()` — genuinely async (`BGFX_TEXTURE_READ_BACK`-
     gated, resolves on a future `bgfx::frame()`) and possibly incompatible with a texture also
-    being shader-sampled — needs its own scoping pass before starting, same class as Task 910/911.
+    being shader-sampled — needs its own scoping pass before starting, same class as Task 911.
 
 ---
 
@@ -1007,12 +999,11 @@ superseded by later, higher-numbered rediscoveries of the same underlying bug.
   verify with a real test first.
 - **Tasks 906/907 are done** (`RenderTarget2D`/`RenderTargetCube` mip on all 3 backends — Bgfx
   turned out to be a 2-line `hasMips=true` fix on both, not new downsample-shader infrastructure;
-  see §3/§5). **Task 874 is also done** (closed as a Task 907 verification prerequisite). **For
-  Task 910 (Bgfx per-frame view-id sharing)**: don't assume a quick fix — it's a real view-id-
-  allocation architecture change (currently a fixed 0=backbuffer/1=RT scheme), needs its own
-  scoping pass. A test-only workaround (forcing a `bgfx::frame()` boundary between per-face/per-RT
-  operations within one game-frame) already exists in `bgfx_rendertargetcube_mip_test.cpp` if you
-  need to render into more than one RT/face per frame before this is properly fixed.
+  see §3/§5). **Task 874 is also done** (closed as a Task 907 verification prerequisite). **Task
+  910 is done** (every Bgfx render target now gets its own distinct bgfx view id instead of
+  sharing one hardcoded id — see §3/§5). The pre-existing test-only workaround (forcing a
+  `bgfx::frame()` boundary between per-face/per-RT operations, `bgfx_rendertargetcube_mip_test.cpp`)
+  is left in place, harmless now that it's no longer strictly necessary.
 - **No rushed fix for Task 874 (Bgfx `RenderTargetCube` handle-cast bug)** — Task 873's
   `RenderTarget2D`/`SpriteBatch` sibling is already fixed and *was* pixel-verified (via Task
   878/879's MSAA test's RT-then-backbuffer-sample methodology, once its own prerequisite bugs were
@@ -1028,8 +1019,7 @@ superseded by later, higher-numbered rediscoveries of the same underlying bug.
   `DepthStencilFormat` fidelity)**: don't assume a quick fix — varying the depth format per RT
   needs a depth-format-keyed render-pass *and* pipeline cache across 10+ `GetOrCreatePipelineXXX`
   functions (pipelines are deliberately shared across the backbuffer's and every RT's render pass
-  today), a real architectural change in the same class as Task 910 — needs its own scoping
-  pass before starting.
+  today) — needs its own scoping pass before starting.
 - **Task 902 is done** (`GraphicsDevice::Reset()` now really reconfigures the backend —
   `GraphicsDeviceManager.PreferMultiSampling` reaches `VulkanGraphicsBackend::ApplyMultiSampleCount()`
   and `vulkan_msaa_test.cpp`'s Task 147 false positive is fixed — see §3/§5). Scoped to the
@@ -1094,9 +1084,9 @@ commit; never bundle unrelated tasks.
 
 **Skip without asking**: any WebGPU task (`plan_webgpu.md`, hard project-wide prohibition, see
 CLAUDE.md). The project owner has already explicitly approved "Implement now" for Task
-910 (Bgfx per-frame view-id architecture), Task 911 (Vulkan per-RT depth-format architecture), and
-Task 914 (Bgfx `Texture3D`/`TextureCube` real readback) — these are no longer decision-blocked,
-just not yet started. Per the project owner's own instruction, work through them **one at a time**
+910 (done, see below), Task 911 (Vulkan per-RT depth-format architecture), and Task 914 (Bgfx
+`Texture3D`/`TextureCube` real readback) — the remaining 2 are no longer decision-blocked, just
+not yet started. Per the project owner's own instruction, work through them **one at a time**
 (finish + commit + push one before starting the next), then continue automatically into the rest
 of the backlog (§8) one task at a time, without stopping to ask permission between ordinary
 backlog items.
@@ -1104,7 +1094,10 @@ backlog items.
 **Backlog, in priority order:** see §8. This session closed Task 902 (`GraphicsDevice::Reset()`
 now really reaches the backend — `GraphicsDeviceManager.PreferMultiSampling` reaches
 `VulkanGraphicsBackend::ApplyMultiSampleCount()`, fixing `vulkan_msaa_test.cpp`'s Task 147 false
-positive; scoped to the backbuffer only). A prior session closed Task 877 (`DepthStencilFormat`
+positive; scoped to the backbuffer only) and Task 910 (every Bgfx render target now gets its own
+distinct bgfx view id instead of sharing one hardcoded id, fixing the "only the last-bound render
+target actually renders within one un-advanced frame" bug found while verifying Task 907). A
+prior session closed Task 877 (`DepthStencilFormat`
 fidelity on EasyGL/Bgfx, including new `RenderTargetCube` depth support on Bgfx), Task 875
 (Vulkan `Clear()`-only render targets never recording a render pass), Task 876 (Vulkan
 `RenderTargetCube`-via-`EnvironmentMapEffect` black-after-unbind — re-checked while investigating
@@ -1123,18 +1116,18 @@ reverting either fix reproduces real GPU memory corruption, not just a silent no
 (`RenderTargetCube` MSAA on Vulkan and Bgfx, mirroring `RenderTarget2D`'s Task 878/879 support —
 also found and fixed a real Vulkan bug along the way: the 2D `SpriteBatch` pipeline's MSAA
 selection never checked an RT's own `WantsMsaa()`, only the backbuffer's); split off two new
-findings: Task 911 (Vulkan's own per-RT depth-format fidelity — real architectural constraint,
-same class as Task 910) and Task 914 (Bgfx's `Texture3D`/`TextureCube` mip fix, currently
+findings: Task 911 (Vulkan's own per-RT depth-format fidelity — real architectural constraint)
+and Task 914 (Bgfx's `Texture3D`/`TextureCube` mip fix, currently
 unverifiable — needs a real `bgfx::readTexture()` readback path first). Also closed Task 750
 (`SpriteBatch`'s `SamplerState` fixed on Bgfx — never overrode `SetSamplerFilter`/
 `SetSamplerAddressMode` at all, closing the last of the 3 backends for this bug shape) and Task 915
 (`GraphicsDevice.GetBackBufferData` implemented for the first time on SDL_Renderer via
 `SDL_RenderReadPixels()` — previously a hard `throw`, blocking the entire Task 666+ SDL_Renderer
 pixel-test audit phase before it could start; also fixed a real CMakeLists.txt scoping bug found
-while wiring up the first test). Next up, in order: Task 910 (Bgfx per-frame view-id
-architecture), Task 911 (Vulkan per-RT depth-format architecture), Task 914 (Bgfx real
-`Texture3D`/`TextureCube` readback) — all 3 already approved "Implement now", work them one at a
-time. After those, continue the SDL_Renderer audit phase (Task 666's remaining scope — write pixel
+while wiring up the first test). Next up, in order: Task 911 (Vulkan per-RT depth-format
+architecture), Task 914 (Bgfx real `Texture3D`/`TextureCube` readback) — both already approved
+"Implement now", work them one at a time. After those, continue the SDL_Renderer audit phase
+(Task 666's remaining scope — write pixel
 tests for SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/
 GraphicsDevice-lifecycle on this backend, Tasks 667–861 in `plan_graphics.md`, all unblocked by
 Task 915), and/or the older, not-yet-triaged backlog in the 421–500 range of `plan_graphics.md`

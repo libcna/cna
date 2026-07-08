@@ -15,6 +15,21 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::RendererType::Enum GetDefaultRendererType();
         bgfx::RendererType::Enum ParseRendererTypeOverride(const char* value);
         bgfx::RendererType::Enum ResolveRendererType(const char* value);
+
+        /// Sentinel meaning "no view id currently allocated" (0 and every real bgfx::ViewId are
+        /// valid allocations, so this must be outside that range -- bgfx caps view ids at 255).
+        inline constexpr bgfx::ViewId kInvalidRtViewId = 0xFFFF;
+
+        // Task 910: each concurrently-live render target (2D or cube) needs its own bgfx view id
+        // -- bgfx::setViewFrameBuffer(viewId, fbo) is a per-view-per-*frame* setting, resolved
+        // once at bgfx::frame(), not per bgfx::submit() call. Every render target previously
+        // shared one hardcoded view id (1), so binding a 2nd render target within the same
+        // un-advanced frame silently redirected the 1st one's already-submitted draws into the
+        // 2nd's framebuffer once the frame actually flushed. Allocated at RT construction time
+        // (stable for the RT's whole lifetime) and released at destruction; free-list-backed so
+        // long-running games that create/destroy render targets don't exhaust bgfx's ~256 view ids.
+        bgfx::ViewId AllocateRtViewId();
+        void ReleaseRtViewId(bgfx::ViewId id);
     }
 
     class BgfxGraphicsBackend;
@@ -176,6 +191,9 @@ namespace CNA::Internal::Backends::Bgfx
         // resolves an RT_MSAA_Xn color attachment into a sampleable single-sample image
         // internally -- no explicit resolve step is needed on this backend.
         int  multiSampleCount = 0;
+        // Task 910: this instance's own stable bgfx view id, allocated at construction --
+        // see Detail::AllocateRtViewId()'s comment for why every RT needs a distinct one.
+        bgfx::ViewId viewId_ = Detail::kInvalidRtViewId;
 
         BgfxRenderTargetBackend(int w, int h, int depthFormat, bool preserveContents = false,
                                  int requestedMultiSampleCount = 0, bool mipMap = false);
@@ -208,6 +226,9 @@ namespace CNA::Internal::Backends::Bgfx
         // Task 903: real, backend-clamped applied MultiSampleCount (0 = no MSAA), mirroring
         // BgfxRenderTargetBackend's identical Task 878/879 field.
         int  multiSampleCount = 0;
+        // Task 910: this instance's own stable bgfx view id (shared by all 6 faces), allocated
+        // at construction -- see Detail::AllocateRtViewId()'s comment.
+        bgfx::ViewId viewId_ = Detail::kInvalidRtViewId;
 
         BgfxRenderTargetCubeBackend(int size, int depthFormat, bool mipMap = false,
                                      int requestedMultiSampleCount = 0);
@@ -334,6 +355,9 @@ namespace CNA::Internal::Backends::Bgfx
         BgfxCnaCallback readbackCallback_;
         // Temporary MRT framebuffer (created on SetRenderTargets with count > 1)
         bgfx::FrameBufferHandle mrtFbo_ = BGFX_INVALID_HANDLE;
+        // Task 910: MRT's own stable view id for as long as mrtFbo_ is valid -- allocated fresh
+        // each SetRenderTargets(count>1) call, released whenever mrtFbo_ is torn down.
+        bgfx::ViewId mrtViewId_ = Detail::kInvalidRtViewId;
         // 3D shader programs (BGFX_INVALID_HANDLE until bgfx_shaders.hpp binaries are loaded)
         bgfx::ProgramHandle colored3DProgram_         = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle textured3DProgram_        = BGFX_INVALID_HANDLE;

@@ -3982,6 +3982,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 910: binding + filling more than one RenderTarget2D within a single un-advanced bgfx
+    # frame no longer clobbers all but the last one bound -- each render target now gets its own
+    # distinct bgfx view id instead of sharing one hardcoded id.
+    cna_bgfx_test(cna_test_bgfx_concurrent_rendertargets
+                  examples/bgfx_concurrent_rendertargets_test.cpp)
+    add_test(NAME Bgfx_ConcurrentRenderTargets
+             COMMAND cna_test_bgfx_concurrent_rendertargets)
+    set_tests_properties(Bgfx_ConcurrentRenderTargets PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
