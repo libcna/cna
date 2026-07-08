@@ -3683,6 +3683,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 690: SpriteFont single-glyph-at-known-position pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritefont_single_glyph
+                 examples/sdlrenderer_spritefont_single_glyph_test.cpp)
+    add_test(NAME SDL_Renderer_SpriteFont_SingleGlyph
+             COMMAND cna_test_sdl_spritefont_single_glyph)
+    set_tests_properties(SDL_Renderer_SpriteFont_SingleGlyph PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
