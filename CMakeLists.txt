@@ -3944,6 +3944,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 719: leak-check -- create/dispose 80 SDL_Renderer textures/render-targets,
+    # verify GetTrackedResourceCount returns to baseline. Mirrors Task 219.
+    cna_sdl_test(cna_test_sdl_resource_leak
+                 examples/sdlrenderer_resource_leak_test.cpp)
+    add_test(NAME SDL_Renderer_ResourceLeak
+             COMMAND cna_test_sdl_resource_leak)
+    set_tests_properties(SDL_Renderer_ResourceLeak PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
