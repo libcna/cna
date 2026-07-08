@@ -3863,6 +3863,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 710: Viewport get/set round-trip and Project/Unproject math (2D orthographic case) on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_viewport_project_unproject
+                 examples/sdlrenderer_viewport_project_unproject_test.cpp)
+    add_test(NAME SDL_Renderer_Viewport_ProjectUnproject
+             COMMAND cna_test_sdl_viewport_project_unproject)
+    set_tests_properties(SDL_Renderer_Viewport_ProjectUnproject PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
