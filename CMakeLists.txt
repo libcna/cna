@@ -3890,6 +3890,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 713: PresentInterval (vsync) mapping to SDL_SetRenderVSync on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_presentinterval
+                 examples/sdlrenderer_presentinterval_test.cpp)
+    add_test(NAME SDL_Renderer_PresentInterval
+             COMMAND cna_test_sdl_presentinterval)
+    set_tests_properties(SDL_Renderer_PresentInterval PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32

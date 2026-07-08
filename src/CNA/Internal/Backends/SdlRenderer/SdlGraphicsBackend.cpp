@@ -508,8 +508,21 @@ namespace CNA::Internal::Backends::SdlRenderer
 
     void SdlGraphicsBackend::SetSwapInterval(int interval)
     {
-        if (renderer)
-            SDL_SetRenderVSync(renderer, interval > 0 ? 1 : 0);
+        if (!renderer) return;
+        // Task 713 finding: interval is already exactly 0 (PresentInterval::Immediate), 1
+        // (Default/One), or 2 (Two) per GraphicsDevice.cpp's own toSwapInterval() -- this
+        // previously collapsed ANY positive interval down to 1, silently discarding
+        // PresentInterval::Two's "wait for two vertical retrace periods, half refresh rate"
+        // semantics. SDL_SetRenderVSync's own doc comment confirms passing 2 directly means
+        // exactly that ("synchronize present with every second vertical refresh"), so the value
+        // is now passed straight through instead of collapsed.
+        if (SDL_SetRenderVSync(renderer, interval)) return;
+        // Not every value is supported by every driver (SDL_SetRenderVSync's own doc comment --
+        // confirmed empirically: this project's own sandbox GL driver rejects interval=2). Fall
+        // back to the closest universally-supported approximation (every-refresh vsync) rather
+        // than silently leaving vsync at whatever value happened to be set previously.
+        if (interval > 1)
+            SDL_SetRenderVSync(renderer, 1);
     }
 
     void SdlGraphicsBackend::GetViewportSize(int& width, int& height)
