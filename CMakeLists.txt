@@ -3737,6 +3737,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 696: BlendState::Opaque pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_opaque
+                 examples/sdlrenderer_blendstate_opaque_test.cpp)
+    add_test(NAME SDL_Renderer_BlendState_Opaque
+             COMMAND cna_test_sdl_blendstate_opaque)
+    set_tests_properties(SDL_Renderer_BlendState_Opaque PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
