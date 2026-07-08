@@ -160,12 +160,26 @@ namespace CNA::Internal::Backends::SdlRenderer
             (float)sourceRectangle.X, (float)sourceRectangle.Y, (float)sourceRectangle.Width,
             (float)sourceRectangle.Height
         };
-        SDL_FRect dst{
-            (float)destinationRectangle.X, (float)destinationRectangle.Y, (float)destinationRectangle.Width,
-            (float)destinationRectangle.Height
-        };
 
-        SDL_FPoint sdlCenter{(origin.X / src.w) * dst.w, (origin.Y / src.h) * dst.h};
+        // Task 671 finding: XNA's Draw(destinationRectangle, ..., origin, ...) contract requires
+        // `origin` (in source-texture pixel space) to map to exactly (destinationRectangle.X,
+        // destinationRectangle.Y) on screen, invariant under rotation (FNA's real
+        // GenerateVertexInfo formula subtracts origin before rotating, then adds
+        // destinationRectangle.X/Y). SDL_RenderTextureRotated's own contract is the opposite:
+        // `center` is a pivot point *within* dstrect's local space, and dstrect itself is placed
+        // unrotated first -- so the pivot's actual screen position is
+        // (dstrect.x + center.x, dstrect.y + center.y), not dstrect's own (x,y). Passing
+        // destinationRectangle.X/Y straight through as dst.x/y (as this code previously did)
+        // therefore placed the rotation pivot destinationRectangle.Width/Height away from where
+        // XNA requires it. Fixed by offsetting dst.x/y by -sdlCenter so the pivot lands exactly
+        // on destinationRectangle.X/Y, matching every other backend's already-correct behavior.
+        const float sdlCenterX = (origin.X / src.w) * static_cast<float>(destinationRectangle.Width);
+        const float sdlCenterY = (origin.Y / src.h) * static_cast<float>(destinationRectangle.Height);
+        SDL_FRect dst{
+            (float)destinationRectangle.X - sdlCenterX, (float)destinationRectangle.Y - sdlCenterY,
+            (float)destinationRectangle.Width, (float)destinationRectangle.Height
+        };
+        SDL_FPoint sdlCenter{sdlCenterX, sdlCenterY};
         double rotationDeg = (double)rotation * 180.0 / 3.14159265358979323846;
 
         SDL_FlipMode flip = SDL_FLIP_NONE;
