@@ -3984,6 +3984,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 723: re-verify CreateVertexBuffer/CreateIndexBuffer/Dynamic variants throw correctly
+    # on SDL_Renderer, covering every construction overload plus zero/negative-count edge cases.
+    cna_sdl_test(cna_test_sdl_buffer_construction_throws
+                 examples/sdlrenderer_buffer_construction_throws_test.cpp)
+    add_test(NAME SDL_Renderer_BufferConstructionThrows
+             COMMAND cna_test_sdl_buffer_construction_throws)
+    set_tests_properties(SDL_Renderer_BufferConstructionThrows PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
