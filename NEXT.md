@@ -584,6 +584,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `pending` | 682 | **No bug found — `Texture2D::FromStream`'s real GPU texture renders correctly on SDL_Renderer, guaranteed by construction.** Traced the call chain: `FromStream` → `DecodeStreamToImageData` (DDS via `DxtUtil`, else the shared `ImageLoader::LoadFromMemory`, backend-independent) → `MakeTextureFromPixels` → `device.GetBackend().CreateTexture(img)` — the exact same call site Task 678 already proved renders correctly via real `SpriteBatch` draw + framebuffer readback. New `sdlrenderer_texture2d_fromstream_test.cpp`: a 2x2, 4-distinct-colour texture round-tripped through `SaveAsPng`→`FromStream`, drawn scaled up and read back for real. All 5 checks pass. **Discriminating power verified**: sabotaging the SDL texture upload to all-zero (same sabotage as Task 678) left dimensions correct (decode unaffected) while all 4 rendered-pixel checks correctly failed; restored and reconfirmed. Full regression: `ctest` 4285/4303 passed, 2 skipped, 13 failed (same baseline as Tasks 667-681 — zero new failures). |
 | `efb84400` | 681 | **Real bug found and fixed: `Texture2D::SetData(level>0, ...)` silently no-oped on SDL_Renderer instead of updating the GPU texture.** `ITextureBackend::UpdatePixelsLevel` defaults to a silent no-op and `SdlTextureBackend` never overrode it (EasyGL genuinely implements it via `glTexImage2D`). SDL_Renderer's 2D blit pipeline has no native mip chain or per-level LOD sampling at all, so a software fallback would be equally misleading. **Decided: throw** `std::runtime_error` for any level>0 `SetData`, mirroring the established Task 676 "throw for what can't be honored" convention. `level=0` `SetData`/`GetData` and `level>0` `GetData` (pure CPU-cache read) are unaffected. Known accepted deviation: the CPU-side mip buffer is merged before the throw fires (documented, inert in practice since SDL_Renderer never samples mip state either way). New `sdlrenderer_texture2d_miplevel_throws_test.cpp`: 5 checks, all pass. **Discriminating power verified** via `git stash`: reverting the override left exactly the one predicted check failing. Full regression: `ctest` 4285/4302 passed, 2 skipped, 13 failed (same baseline as Tasks 667-680 — zero new failures). Vulkan/Bgfx have the identical silent-no-op gap, already tracked separately (Tasks 855/817). |
 | `3262d278` | 680 | **No bug found — a non-zero `startIndex`/`elementCount` slice correctly reaches the real GPU texture on SDL_Renderer.** The `src = startIndex + row * w + col` slicing arithmetic lives in the shared, backend-agnostic `Texture2D::SetData` overload; the backend-specific question (mirroring Task 679) is whether the merged buffer, once handed to `SdlTextureBackend::UpdatePixels()`, actually renders correctly. New `sdlrenderer_texture2d_startindex_test.cpp`: ports Task 170A's scenario — a 4x1 Red texture, a 6-element source array `[Green,Green,Blue,Blue,Green,Green]` sliced with `startIndex=2`/`elementCount=2` into rect `(1,0,2,1)`, drawn scaled up and read back for real. All 4 checks pass. **Discriminating power verified**: sabotaging the slicing arithmetic to drop `startIndex` reproduced the predicted failure (middle texels read Green instead of Blue); restored and reconfirmed. Full regression: `ctest` 4285/4301 passed, 2 skipped, 13 failed (same baseline as Tasks 667-679 — zero new failures). |
 | `25685fae` | 679 | **No bug found — a partial-rectangle `SetData` correctly reaches the real GPU texture on SDL_Renderer.** `SetData`'s partial overload merges the sub-rect write into the full per-level CPU buffer then calls `SdlTextureBackend::UpdatePixels()`, which always re-uploads the WHOLE merged buffer via `SDL_UpdateTexture(texture, nullptr, ...)` rather than just the sub-rect — confirmed this still produces the correct end-to-end result. New `sdlrenderer_texture2d_partial_rect_test.cpp`: a 4x4 Red texture with a 2x2 Blue sub-rect, drawn scaled up and read back for real. All 8 checks pass. **Discriminating power verified**: sabotaging `UpdatePixels` into a no-op reproduced the predicted failure on all 8 checks; restored and reconfirmed. Full regression: `ctest` 4285/4300 passed, 2 skipped, 13 failed (same baseline as Tasks 667-678 — zero new failures). |
@@ -996,7 +997,7 @@ All 4 tasks the project owner explicitly approved "Implement now" this stretch (
 are now closed. Now working through the standing backlog: **Tasks 667, 668, 669, and 670 are
 done** (see §3 — every `SpriteSortMode` value now pixel-verified on SDL_Renderer, no bugs found;
 new tests cover `BackToFront` and `Texture` grouping for the first time on any backend). Next:
-Task 671 is already done from an earlier session (SpriteBatch rotation) — continue at Task 682 (Tasks 672-681 also done this session, see §3).
+Task 671 is already done from an earlier session (SpriteBatch rotation) — continue at Task 683 (Tasks 672-682 also done this session, see §3).
 Triage note on the Task 666+ SDL_Renderer audit phase (Tasks 667–861): most remaining rows are
 concrete, well-scoped
 "verify/pixel-test X on SDL_Renderer" items that fit this project's established
@@ -1089,7 +1090,7 @@ closed. Now working the standing backlog (§8): **Tasks 667, 668, 669, and 670 a
 session** (every `SpriteSortMode` value — `Deferred`/`Texture`/`FrontToBack`/`BackToFront`/
 `Immediate` — confirmed already correct on SDL_Renderer, no bugs found). Next up: continue the
 Task 666+ SDL_Renderer audit phase in order (Task 671 is already done from an earlier session —
-continue at Task 682), and/or the untriaged 421–500 range of
+continue at Task 683), and/or the untriaged 421–500 range of
 `plan_graphics.md` (see §8's own triage note on why 667+ is the
 better source of well-scoped single-commit tasks right now).
 
@@ -1188,7 +1189,7 @@ verifying it: an initial 1-line sabotage produced a false-negative-passing test 
 a silent-drop bug instead of the intended defer-to-`End()` bug; a 2nd, correct sabotage genuinely
 reproduced it and the test failed as predicted). **Every `SpriteSortMode` value is now
 pixel-verified on SDL_Renderer.** Next up: continue the SDL_Renderer audit phase (Task 671 is
-already done from an earlier session — continue at Task 682 — write pixel tests for
+already done from an earlier session — continue at Task 683 — write pixel tests for
 SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/GraphicsDevice-lifecycle on
 this backend, Tasks 672–861 in `plan_graphics.md`, all unblocked by Task 915), and/or the older,
 not-yet-triaged backlog in the

@@ -3629,6 +3629,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 682: Texture2D::FromStream round-trip real-render pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_fromstream
+                 examples/sdlrenderer_texture2d_fromstream_test.cpp)
+    add_test(NAME SDL_Renderer_Texture2D_FromStream
+             COMMAND cna_test_sdl_texture2d_fromstream)
+    set_tests_properties(SDL_Renderer_Texture2D_FromStream PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
