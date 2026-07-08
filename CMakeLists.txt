@@ -3917,6 +3917,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 716: GraphicsDevice::Clear (all ClearOptions combinations) on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_clearoptions_audit
+                 examples/sdlrenderer_clearoptions_audit_test.cpp)
+    add_test(NAME SDL_Renderer_ClearOptions_Audit
+             COMMAND cna_test_sdl_clearoptions_audit)
+    set_tests_properties(SDL_Renderer_ClearOptions_Audit PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
