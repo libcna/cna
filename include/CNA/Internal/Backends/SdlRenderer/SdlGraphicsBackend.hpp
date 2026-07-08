@@ -117,6 +117,10 @@ namespace CNA::Internal::Backends::SdlRenderer
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        // Task 714: SDL_Renderer's 2D blit pipeline has no MSAA control at all -- accepts any
+        // requested MultiSampleCount without throwing (logging once per request), always
+        // reporting back 0 (the real, device-clamped maximum on this backend).
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
         SDL_Window* GetWindowInternal() const override { return window; }
         SDL_Renderer* GetRendererInternal() const override { return renderer; }
 

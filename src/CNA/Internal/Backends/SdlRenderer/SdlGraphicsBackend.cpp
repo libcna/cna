@@ -525,6 +525,24 @@ namespace CNA::Internal::Backends::SdlRenderer
             SDL_SetRenderVSync(renderer, 1);
     }
 
+    int SdlGraphicsBackend::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        // Task 714 decision: SDL_Renderer's 2D blit pipeline has no MSAA control at all -- accept
+        // any requested MultiSampleCount without throwing (a caller targeting this backend
+        // alongside the other 3 MSAA-capable ones shouldn't be penalized for a harmless,
+        // unactionable request; SpriteBatch's 2D draws have no anti-aliasing seams to smooth over
+        // in the first place), but always report back 0 (matches FNA's own device-clamped
+        // write-back semantics -- this backend's real clamped maximum genuinely is 0). Logged
+        // once per non-zero request so a game that expects MSAA and doesn't see it has a clear
+        // diagnostic trail.
+        if (requestedMultiSampleCount > 0)
+        {
+            SDL_Log("[Renderer] MultiSampleCount=%d requested but ignored: SDL_Renderer's 2D pipeline has no MSAA control.",
+                    requestedMultiSampleCount);
+        }
+        return 0;
+    }
+
     void SdlGraphicsBackend::GetViewportSize(int& width, int& height)
     {
         // If virtual resolution was never configured, fall back to the physical
