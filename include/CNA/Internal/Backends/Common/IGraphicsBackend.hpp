@@ -533,6 +533,13 @@ namespace CNA::Internal::Backends
         /// Maps to glBlendColor on GL backends. Default: no-op.
         virtual void SetBlendFactor(float r, float g, float b, float a) {}
 
+        /// Task 870/319: GraphicsDevice.ReferenceStencil is a real, independent device property
+        /// (FNA3D_Get/SetReferenceStencil), analogous to BlendFactor above -- it must take effect
+        /// immediately, standalone from a full DepthStencilState re-application. Default: no-op
+        /// (backends that only apply ReferenceStencil as part of ApplyDepthStencilState's full
+        /// state and don't yet cache it for standalone re-application silently ignore this).
+        virtual void SetReferenceStencil(int /*value*/) {}
+
         /// Sets the scissor clip rectangle. Default: no-op.
         virtual void SetScissorRect(int x, int y, int w, int h) {}
 

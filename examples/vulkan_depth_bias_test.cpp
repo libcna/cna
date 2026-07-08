@@ -6,7 +6,12 @@
 // outcome of the depth test.
 //
 // Method (a "shadow acne"-style coplanar test):
-//   The depth buffer is cleared to 1.0 and the depth compare op is LESS.
+//   The depth buffer is cleared to 1.0 and DepthStencilState.DepthBufferFunction is explicitly
+//   set to CompareFunction::Less (Task 870: real per-DepthBufferFunction pipeline selection
+//   landed on Vulkan, so this can no longer rely on incidental backend-hardcoded LESS behavior
+//   the way it did before -- XNA's real DepthStencilState.Default is actually LessEqual, under
+//   which this coplanar-redraw trick can never discriminate anything, since an equal-depth
+//   redraw always passes regardless of bias).
 //   For each scenario a red triangle A is drawn first with no bias, writing its depth.
 //   A green triangle B with EXACTLY the same geometry is drawn second. Because the depth
 //   test is LESS, a second draw at equal depth fails (centre stays red) — unless a negative
@@ -34,6 +39,8 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -121,6 +128,12 @@ protected:
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());
         fx.VertexColorEnabled = true;
+
+        // Task 870: explicitly request strict Less -- see this file's header comment for why
+        // relying on the default (real XNA DepthBufferFunction=LessEqual) can't work here.
+        DepthStencilState dss;
+        dss.setDepthBufferFunctionProperty(CompareFunction::Less);
+        dev.setDepthStencilStateProperty(dss);
 
         RasterizerState rsNoBias;                          // DepthBias = 0
         RasterizerState rsConst;  rsConst.setDepthBiasProperty(-1000000.0f);

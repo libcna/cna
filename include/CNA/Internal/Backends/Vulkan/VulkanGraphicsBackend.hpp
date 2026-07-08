@@ -540,6 +540,24 @@ namespace CNA::Internal::Backends::Vulkan
         uint32_t               colorCount_  = 0;
     };
 
+    // Task 870: bundles every DepthStencilState field that -- unlike stencil reference/compare
+    // mask/write mask, which are true Vulkan dynamic state (vkCmdSetStencil*, no new pipeline
+    // needed) -- is baked into a VkPipeline at creation time (depthCompareOp and the front/back
+    // VkStencilOpState blocks), so must be part of every 3D pipeline's cache key.
+    struct DepthStencilKeyParams {
+        int  depthFunc            = 3;      // CompareFunction::LessEqual (XNA DepthStencilState.Default)
+        bool stencilEnable        = false;
+        int  stencilFunc          = 0;      // CompareFunction::Always
+        int  stencilFail          = 0;      // StencilOperation::Keep
+        int  stencilDepthFail     = 0;
+        int  stencilPass          = 0;
+        bool twoSidedStencilMode  = false;
+        int  ccwStencilFunc       = 0;
+        int  ccwStencilFail       = 0;
+        int  ccwStencilDepthFail  = 0;
+        int  ccwStencilPass       = 0;
+    };
+
     // -------------------------------------------------------------------------
     // VulkanGraphicsBackend
     // -------------------------------------------------------------------------
@@ -605,6 +623,11 @@ namespace CNA::Internal::Backends::Vulkan
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
+        // Task 870/319: GraphicsDevice.ReferenceStencil applied standalone (not just as part of
+        // a full DepthStencilState re-application) -- updates the same referenceStencil_ member
+        // ApplyDepthStencilState writes, taking effect on the next draw's
+        // vkCmdSetStencilReference call (see draw3DFor).
+        void SetReferenceStencil(int value) override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DBackend>  CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
@@ -725,7 +748,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineLayout      pipelineLayout2D_      = VK_NULL_HANDLE;
         VkPipeline            pipeline2D_            = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayout3D_      = VK_NULL_HANDLE;
-        std::unordered_map<uint32_t, VkPipeline>             pipelines3D_;
+        std::unordered_map<uint64_t, VkPipeline>             pipelines3D_;
         VkPipelineLayout      pipelineLayoutExt3D_      = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutAlphaTest3D_ = VK_NULL_HANDLE;
         std::unordered_map<uint64_t, VkPipeline>             pipelinesAlphaTest3D_;
@@ -914,6 +937,14 @@ namespace CNA::Internal::Backends::Vulkan
             bool                    wireframe         = false; // true = VK_POLYGON_MODE_LINE
             float                   depthBias         = 0.0f;  // XNA DepthBias (vkCmdSetDepthBias constant)
             float                   slopeScaleDepthBias = 0.0f; // XNA SlopeScaleDepthBias (slope factor)
+            // Task 870: full DepthStencilState snapshot at draw-call time. depthFunc/stencil*
+            // (everything baked into the pipeline) feed DepthStencilKeyParams in draw3DFor;
+            // stencilReadMask/stencilWriteMask/referenceStencil are true Vulkan dynamic state,
+            // applied directly via vkCmdSetStencilCompareMask/WriteMask/Reference per draw.
+            DepthStencilKeyParams   dsParams;
+            int                     stencilReadMask   = -1;  // all bits (0xFFFFFFFF, XNA default)
+            int                     stencilWriteMask  = -1;
+            int                     referenceStencil  = 0;
             // Debug marker (SetStringMarkerEXT) — if true, vbData is empty and this entry
             // emits vkCmdInsertDebugUtilsLabelEXT instead of a draw call.
             bool                    isMarker          = false;
@@ -954,6 +985,14 @@ namespace CNA::Internal::Backends::Vulkan
         bool     depthWriteEnabled_ = true;
         bool     blendEnabled_      = false;
         int      cullMode_          = 0;  // XNA CullMode: 0=None, 1=CW, 2=CCW
+        // Task 870: full DepthStencilState, previously almost entirely dropped by
+        // ApplyDepthStencilState (only depthTestEnabled_/depthWriteEnabled_ were ever stored).
+        // dsParams_ mirrors DepthStencilKeyParams exactly (the fields baked into a pipeline at
+        // creation time); the remaining 3 are true Vulkan dynamic state.
+        DepthStencilKeyParams dsParams_;
+        int      stencilReadMask_  = -1;  // all bits (0xFFFFFFFF, XNA DepthStencilState.Default)
+        int      stencilWriteMask_ = -1;
+        int      referenceStencil_ = 0;
 
         bool frame3DBuffersAllocated_ = false;
 
@@ -1022,21 +1061,21 @@ namespace CNA::Internal::Backends::Vulkan
         void       CleanupDepthResources();
         VkPipeline GetOrCreatePipeline3D(VkPrimitiveTopology, bool depthTest, bool depthWrite,
                                          bool blend, int cullMode,
-                                         uint32_t colorAttachmentCount = 1, bool wireframe = false,
-                                         bool msaa = false);
+                                         uint32_t colorAttachmentCount, bool wireframe,
+                                         bool msaa, const DepthStencilKeyParams& dsParams = {});
         VkPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
                                                    bool blend, int cullMode,
-                                                   uint32_t colorAttachmentCount = 1, bool wireframe = false,
-                                                   bool msaa = false);
+                                                   uint32_t colorAttachmentCount, bool wireframe,
+                                                   bool msaa, const DepthStencilKeyParams& dsParams = {});
         void       EnsureDualTexResources();
         VkDescriptorSet GetOrCreateDualTexDescSet(uint32_t frameIdx, VkImageView view0, VkImageView view1,
                                                     VkSampler sampler0, VkSampler sampler1);
         VkPipeline GetOrCreatePipelineDualTex3D(VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
-                                                uint32_t colorAttachmentCount = 1, bool wireframe = false,
-                                                bool msaa = false);
+                                                uint32_t colorAttachmentCount, bool wireframe,
+                                                bool msaa, const DepthStencilKeyParams& dsParams = {});
         // EnvironmentMapEffect
         void       EnsureEnvMapResources();
         VkDescriptorSet GetOrCreateEnvMapDescSet(uint32_t frameIdx,
@@ -1044,8 +1083,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipeline GetOrCreatePipelineEnvMap3D(VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
-                                                uint32_t colorAttachmentCount = 1, bool wireframe = false,
-                                                bool msaa = false);
+                                                uint32_t colorAttachmentCount, bool wireframe,
+                                                bool msaa, const DepthStencilKeyParams& dsParams = {});
         void       FillEnvMapPushConst(float (&pc)[32], const Matrix& wvp, const Matrix& world);
         // SkinnedEffect
         void       EnsureSkinnedResources();
@@ -1053,8 +1092,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipeline GetOrCreatePipelineSkinned3D(VkPrimitiveTopology,
                                                  bool depthTest, bool depthWrite,
                                                  bool blend, int cullMode,
-                                                 uint32_t colorAttachmentCount = 1, bool wireframe = false,
-                                                 bool msaa = false);
+                                                 uint32_t colorAttachmentCount, bool wireframe,
+                                                 bool msaa, const DepthStencilKeyParams& dsParams = {});
         void       EnsureDefaultWhiteTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
@@ -1066,27 +1105,27 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipeline GetOrCreatePipelineLitTextured3D(VkPrimitiveTopology,
                                                      bool depthTest, bool depthWrite,
                                                      bool blend, int cullMode,
-                                                     uint32_t colorAttachmentCount = 1, bool wireframe = false,
-                                                     bool msaa = false);
+                                                     uint32_t colorAttachmentCount, bool wireframe,
+                                                     bool msaa, const DepthStencilKeyParams& dsParams = {});
         // BasicEffect fog bundle (Task 899) — shared by colored3d/textured3d/colored_textured3d.
         void       EnsureFogTex3DResources();
         VkDescriptorSet GetOrCreateFogTex3DDescSet(uint32_t frameIdx, VkImageView view2D);
         VkPipeline GetOrCreatePipelineFogColored3D(VkPrimitiveTopology,
                                                     bool depthTest, bool depthWrite,
                                                     bool blend, int cullMode,
-                                                    uint32_t colorAttachmentCount = 1, bool wireframe = false,
-                                                    bool msaa = false);
+                                                    uint32_t colorAttachmentCount, bool wireframe,
+                                                    bool msaa, const DepthStencilKeyParams& dsParams = {});
         VkPipeline GetOrCreatePipelineFogTex3D(std::size_t stride, VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
-                                                uint32_t colorAttachmentCount = 1, bool wireframe = false,
-                                                bool msaa = false);
+                                                uint32_t colorAttachmentCount, bool wireframe,
+                                                bool msaa, const DepthStencilKeyParams& dsParams = {});
         // --- Instanced 3D pipeline ---
         VkPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
                                                    bool blend, int cullMode,
-                                                   uint32_t colorAttachmentCount = 1, bool wireframe = false,
-                                                   bool msaa = false);
+                                                   uint32_t colorAttachmentCount, bool wireframe,
+                                                   bool msaa, const DepthStencilKeyParams& dsParams = {});
         void FillInstancedPushConst(float (&pc)[32], const Matrix& view, const Matrix& proj,
                                     const GpuDrawParams& p);
         void CreateFrame3DInstBuffers();

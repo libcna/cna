@@ -1592,7 +1592,12 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setMultiSampleMaskProperty(int value) { multiSampleMask_ = value; }
 
     int GraphicsDevice::getReferenceStencilProperty() const { return referenceStencil_; }
-    void GraphicsDevice::setReferenceStencilProperty(int value) { referenceStencil_ = value; }
+    void GraphicsDevice::setReferenceStencilProperty(int value)
+    {
+        referenceStencil_ = value;
+        if (backend_)
+            backend_->SetReferenceStencil(value);
+    }
 
     void GraphicsDevice::Reset()
     {

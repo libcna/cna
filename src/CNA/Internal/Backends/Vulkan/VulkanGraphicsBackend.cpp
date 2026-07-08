@@ -2372,9 +2372,17 @@ namespace CNA::Internal::Backends::Vulkan
 
     VkFormat VulkanGraphicsBackend::FindDepthFormat() const
     {
-        for (VkFormat fmt : { VK_FORMAT_D32_SFLOAT,
+        // Task 870: stencil-capable formats must be preferred FIRST. Every backbuffer/RT depth
+        // image on this backend shares this one device-wide format (real per-instance
+        // DepthStencilFormat fidelity is RenderTarget2D/RenderTargetCube-only, see
+        // VulkanRenderTargetBackend/PickDepthFormat -- Task 911), so if this pick has no stencil
+        // aspect, DepthStencilState.StencilEnable can never actually work no matter how correctly
+        // ApplyDepthStencilState/the pipeline-creation functions map it. VK_FORMAT_D32_SFLOAT has
+        // mandatory support on essentially all real Vulkan hardware and used to be checked first,
+        // meaning a stencil-capable format was almost never actually chosen.
+        for (VkFormat fmt : { VK_FORMAT_D24_UNORM_S8_UINT,
                               VK_FORMAT_D32_SFLOAT_S8_UINT,
-                              VK_FORMAT_D24_UNORM_S8_UINT }) {
+                              VK_FORMAT_D32_SFLOAT }) {
             VkFormatProperties props;
             vkGetPhysicalDeviceFormatProperties(physicalDevice_, fmt, &props);
             if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
@@ -2673,12 +2681,112 @@ namespace CNA::Internal::Backends::Vulkan
     // 3D pipeline layout + per-variant pipeline (lazily created)
     // =========================================================================
 
-    // Encode (topology × depthTest × depthWrite × blend × cullMode × msaa) into a uint32_t key.
-    static uint32_t Make3DKey(VkPrimitiveTopology topo, bool depthTest, bool depthWrite,
-                              bool blend, int cullMode, uint32_t colorAttachmentCount = 1,
-                              bool wireframe = false, bool msaa = false)
+    // XNA CompareFunction enum -> VkCompareOp (mirrors EasyGL's ToEasyGLCompareFunc exactly):
+    // Always=0, Never=1, Less=2, LessEqual=3, Equal=4, GreaterEqual=5, Greater=6, NotEqual=7
+    static VkCompareOp ToVkCompareOp(int xnaCompare)
     {
-        uint32_t t = 0;
+        switch (xnaCompare) {
+        case 1: return VK_COMPARE_OP_NEVER;
+        case 2: return VK_COMPARE_OP_LESS;
+        case 3: return VK_COMPARE_OP_LESS_OR_EQUAL;
+        case 4: return VK_COMPARE_OP_EQUAL;
+        case 5: return VK_COMPARE_OP_GREATER_OR_EQUAL;
+        case 6: return VK_COMPARE_OP_GREATER;
+        case 7: return VK_COMPARE_OP_NOT_EQUAL;
+        default: return VK_COMPARE_OP_ALWAYS; // CompareFunction::Always = 0
+        }
+    }
+
+    // XNA StencilOperation ordinals -> VkStencilOp (mirrors EasyGL's ToEasyGLStencilOp exactly):
+    // Keep=0, Zero=1, Replace=2, Increment=3, Decrement=4, IncrementSaturation=5,
+    // DecrementSaturation=6, Invert=7
+    static VkStencilOp ToVkStencilOp(int xnaOp)
+    {
+        switch (xnaOp) {
+        case 1: return VK_STENCIL_OP_ZERO;
+        case 2: return VK_STENCIL_OP_REPLACE;
+        case 3: return VK_STENCIL_OP_INCREMENT_AND_WRAP;
+        case 4: return VK_STENCIL_OP_DECREMENT_AND_WRAP;
+        case 5: return VK_STENCIL_OP_INCREMENT_AND_CLAMP;
+        case 6: return VK_STENCIL_OP_DECREMENT_AND_CLAMP;
+        case 7: return VK_STENCIL_OP_INVERT;
+        default: return VK_STENCIL_OP_KEEP; // StencilOperation::Keep = 0
+        }
+    }
+
+    // Packs every DepthStencilKeyParams field into 29 bits, meant to be OR'd (after shifting past
+    // whatever bit range a caller's own existing key dimensions already occupy) into that
+    // caller's uint64_t pipeline cache key.
+    static uint64_t PackDepthStencilBits(const DepthStencilKeyParams& ds)
+    {
+        return  (static_cast<uint64_t>(ds.depthFunc & 7))
+              | (ds.stencilEnable ? (1ull << 3) : 0ull)
+              | (static_cast<uint64_t>(ds.stencilFunc & 7)         << 4)
+              | (static_cast<uint64_t>(ds.stencilFail & 7)         << 7)
+              | (static_cast<uint64_t>(ds.stencilDepthFail & 7)    << 10)
+              | (static_cast<uint64_t>(ds.stencilPass & 7)         << 13)
+              | (ds.twoSidedStencilMode ? (1ull << 16) : 0ull)
+              | (static_cast<uint64_t>(ds.ccwStencilFunc & 7)      << 17)
+              | (static_cast<uint64_t>(ds.ccwStencilFail & 7)      << 20)
+              | (static_cast<uint64_t>(ds.ccwStencilDepthFail & 7) << 23)
+              | (static_cast<uint64_t>(ds.ccwStencilPass & 7)      << 26);
+    }
+
+    // Fills in a VkPipelineDepthStencilStateCreateInfo's depthCompareOp and front/back
+    // VkStencilOpState blocks from a DepthStencilKeyParams -- shared by every 3D
+    // pipeline-creation function so the exact same XNA->Vulkan mapping is used everywhere.
+    // stencilTestEnable's compare/write masks and the reference value are intentionally left
+    // untouched here: they are true Vulkan dynamic state (vkCmdSetStencilCompareMask/WriteMask/
+    // Reference), applied per-draw, not baked into the pipeline.
+    static void FillDepthStencilState(VkPipelineDepthStencilStateCreateInfo& ds,
+                                       const DepthStencilKeyParams& p)
+    {
+        ds.depthCompareOp     = ToVkCompareOp(p.depthFunc);
+        ds.stencilTestEnable  = p.stencilEnable ? VK_TRUE : VK_FALSE;
+        ds.front.failOp       = ToVkStencilOp(p.stencilFail);
+        ds.front.passOp       = ToVkStencilOp(p.stencilPass);
+        ds.front.depthFailOp  = ToVkStencilOp(p.stencilDepthFail);
+        ds.front.compareOp    = ToVkCompareOp(p.stencilFunc);
+        // XNA's TwoSidedStencilMode=false uses the SAME (front, clockwise) ops/func for both
+        // faces (FNA's own real behavior: CCW fields are simply ignored when this is false, not
+        // reset to any default) -- mirrors EasyGL's identical fallback-to-front pattern exactly.
+        //
+        // Task 870 empirical finding: with rs.frontFace = VK_FRONT_FACE_CLOCKWISE and this
+        // backend's vertex shaders' Y-flip (pos.y = -pos.y, see colored3d.vert.glsl et al.),
+        // VkPipelineDepthStencilStateCreateInfo::front/back end up applied to the OPPOSITE
+        // winding from what the *culling* path's frontFace determination would suggest --
+        // confirmed via a genuinely differential stencil_twosided test (a back-facing triangle's
+        // CounterClockwiseStencilFunction/Fail must apply and did not until front/back were
+        // swapped here specifically; culling itself, which uses the exact same frontFace value,
+        // is unaffected and already correct across this whole project's existing test suite).
+        // Root cause not fully isolated (plausibly an llvmpipe/Mesa software-rasterizer quirk in
+        // its own front/back VkStencilOpState assignment specifically, since culling's front/back
+        // classification is provably correct on this same driver) -- swapped here pragmatically
+        // since XNA's "front"/"CounterClockwise" stencil settings must land on whichever Vulkan
+        // slot the hardware/driver actually evaluates for each winding, not on the slot named to
+        // match culling's own already-correct convention.
+        if (p.twoSidedStencilMode) {
+            ds.front.failOp      = ToVkStencilOp(p.ccwStencilFail);
+            ds.front.passOp      = ToVkStencilOp(p.ccwStencilPass);
+            ds.front.depthFailOp = ToVkStencilOp(p.ccwStencilDepthFail);
+            ds.front.compareOp   = ToVkCompareOp(p.ccwStencilFunc);
+            ds.back.failOp      = ToVkStencilOp(p.stencilFail);
+            ds.back.passOp      = ToVkStencilOp(p.stencilPass);
+            ds.back.depthFailOp = ToVkStencilOp(p.stencilDepthFail);
+            ds.back.compareOp   = ToVkCompareOp(p.stencilFunc);
+        } else {
+            ds.back = ds.front;
+        }
+    }
+
+    // Encode (topology × depthTest × depthWrite × blend × cullMode × msaa × depth/stencil state)
+    // into a uint64_t key.
+    static uint64_t Make3DKey(VkPrimitiveTopology topo, bool depthTest, bool depthWrite,
+                              bool blend, int cullMode, uint32_t colorAttachmentCount,
+                              bool wireframe, bool msaa,
+                              const DepthStencilKeyParams& ds = {})
+    {
+        uint64_t t = 0;
         switch (topo) {
         case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:  t = 0; break;
         case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP: t = 1; break;
@@ -2686,20 +2794,23 @@ namespace CNA::Internal::Backends::Vulkan
         default:                                   t = 3; break;
         }
         // bits 0-1: topology, 2: depthTest, 3: depthWrite, 4: blend, 5-6: cullMode,
-        // 7-9: colorAttachmentCount, 10: wireframe, 11: msaa
-        const uint32_t nc = std::min(colorAttachmentCount, 8u) - 1u;
-        return t | (depthTest ? 4u : 0u) | (depthWrite ? 8u : 0u) | (blend ? 16u : 0u)
-                 | (static_cast<uint32_t>(cullMode & 0x3) << 5)
+        // 7-9: colorAttachmentCount, 10: wireframe, 11: msaa, 12-40: depth/stencil state
+        // (Task 870, see PackDepthStencilBits).
+        const uint64_t nc = std::min(colorAttachmentCount, 8u) - 1u;
+        return t | (depthTest ? 4ull : 0ull) | (depthWrite ? 8ull : 0ull) | (blend ? 16ull : 0ull)
+                 | (static_cast<uint64_t>(cullMode & 0x3) << 5)
                  | (nc << 7)
-                 | (wireframe ? (1u << 10) : 0u)
-                 | (msaa     ? (1u << 11) : 0u);
+                 | (wireframe ? (1ull << 10) : 0ull)
+                 | (msaa     ? (1ull << 11) : 0ull)
+                 | (PackDepthStencilBits(ds) << 12);
     }
 
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline3D(VkPrimitiveTopology topo,
                                                              bool depthTest, bool depthWrite,
                                                              bool blend, int cullMode,
                                                              uint32_t colorAttachmentCount,
-                                                             bool wireframe, bool msaa)
+                                                             bool wireframe, bool msaa,
+                                                             const DepthStencilKeyParams& dsParams)
     {
         // Create layout once
         if (pipelineLayout3D_ == VK_NULL_HANDLE) {
@@ -2713,7 +2824,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (3D) failed");
         }
 
-        uint32_t key = Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        uint64_t key = Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams);
         auto it = pipelines3D_.find(key);
         if (it != pipelines3D_.end()) return it->second;
 
@@ -2773,7 +2884,7 @@ namespace CNA::Internal::Backends::Vulkan
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        ds.depthCompareOp   = VK_COMPARE_OP_LESS;
+        FillDepthStencilState(ds, dsParams);
 
         VkPipelineColorBlendAttachmentState cba{};
         if (blend) {
@@ -2796,15 +2907,22 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.attachmentCount = static_cast<uint32_t>(cbaVec.size());
         cbs.pAttachments    = cbaVec.data();
 
+        // Task 870: stencil reference/compare mask/write mask are true Vulkan dynamic state,
+        // set per-draw via vkCmdSetStencilReference/CompareMask/WriteMask (see draw3DFor) --
+        // not baked into the pipeline, so DepthStencilState.ReferenceStencil/StencilMask/
+        // StencilWriteMask changes never need a new pipeline variant.
         VkDynamicState dynStates[] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
             VK_DYNAMIC_STATE_BLEND_CONSTANTS,
             VK_DYNAMIC_STATE_DEPTH_BIAS,
+            VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
         };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 4; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 7; dyn.pDynamicStates = dynStates;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -2899,7 +3017,8 @@ namespace CNA::Internal::Backends::Vulkan
     static uint64_t MakeExt3DKey(std::size_t stride, VkPrimitiveTopology topo,
                                   bool depthTest, bool depthWrite, bool blend,
                                   int cullMode, uint32_t colorAttachmentCount,
-                                  bool wireframe = false, bool msaa = false)
+                                  bool wireframe, bool msaa,
+                                  const DepthStencilKeyParams& ds = {})
     {
         uint64_t s = 0;
         switch (stride) { case 20: s = 1; break; case 24: s = 2; break; case 32: s = 3; break;
@@ -2912,12 +3031,14 @@ namespace CNA::Internal::Backends::Vulkan
         default:                                   t = 3; break;
         }
         // bits 0-3: stride, 4-5: topology, 6: depthTest, 7: depthWrite, 8: blend,
-        // 9-10: cullMode, 11-13: colorAttachmentCount, 14: wireframe, 15: msaa
+        // 9-10: cullMode, 11-13: colorAttachmentCount, 14: wireframe, 15: msaa,
+        // 16-44: depth/stencil state (Task 870, see PackDepthStencilBits).
         const uint64_t nc = std::min(colorAttachmentCount, 8u) - 1u;
         return s | (t << 4) | (depthTest ? (1ull<<6) : 0) | (depthWrite ? (1ull<<7) : 0)
              | (blend ? (1ull<<8) : 0) | (static_cast<uint64_t>(cullMode & 3) << 9) | (nc << 11)
              | (wireframe ? (1ull<<14) : 0)
-             | (msaa      ? (1ull<<15) : 0);
+             | (msaa      ? (1ull<<15) : 0)
+             | (PackDepthStencilBits(ds) << 16);
     }
 
     void VulkanGraphicsBackend::EnsureDefaultWhiteTexture()
@@ -3061,7 +3182,8 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineAlphaTest3D(
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
+        const DepthStencilKeyParams& dsParams)
     {
         if (pipelineLayoutAlphaTest3D_ == VK_NULL_HANDLE) {
             VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
@@ -3073,7 +3195,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (AlphaTest3D) failed");
         }
 
-        uint64_t key = MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        uint64_t key = MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams);
         auto it = pipelinesAlphaTest3D_.find(key);
         if (it != pipelinesAlphaTest3D_.end()) return it->second;
 
@@ -3143,7 +3265,7 @@ namespace CNA::Internal::Backends::Vulkan
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        ds.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
+        FillDepthStencilState(ds, dsParams);
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
@@ -3164,11 +3286,14 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.attachmentCount = nColor;
         cbs.pAttachments    = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
+        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -3314,13 +3439,14 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineDualTex3D(
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
+        const DepthStencilKeyParams& dsParams)
     {
         EnsureDualTexResources();
 
         // DualTexture always uses stride=20 (VertexPositionTexture); key encodes topology+state.
         constexpr std::size_t kDualStride = 20;
-        uint64_t key = MakeExt3DKey(kDualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        uint64_t key = MakeExt3DKey(kDualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams);
         auto it = pipelinesDualTex3D_.find(key);
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
@@ -3375,7 +3501,7 @@ namespace CNA::Internal::Backends::Vulkan
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        ds.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
+        FillDepthStencilState(ds, dsParams);
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
@@ -3394,11 +3520,14 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
+        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -3621,12 +3750,13 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineEnvMap3D(
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
+        const DepthStencilKeyParams& dsParams)
     {
         EnsureEnvMapResources();
 
         constexpr std::size_t kEnvStride = 32;
-        uint64_t key = MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        uint64_t key = MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams);
         auto it = pipelinesEnvMap3D_.find(key);
         if (it != pipelinesEnvMap3D_.end()) return it->second;
 
@@ -3679,7 +3809,7 @@ namespace CNA::Internal::Backends::Vulkan
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        ds.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
+        FillDepthStencilState(ds, dsParams);
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
@@ -3698,11 +3828,14 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
+        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -3847,12 +3980,13 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineLitTextured3D(
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
+        const DepthStencilKeyParams& dsParams)
     {
         EnsureLitTexturedResources();
 
         constexpr std::size_t kLitStride = 32;
-        uint64_t key = MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        uint64_t key = MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams);
         auto it = pipelinesLitTextured3D_.find(key);
         if (it != pipelinesLitTextured3D_.end()) return it->second;
 
@@ -3905,7 +4039,7 @@ namespace CNA::Internal::Backends::Vulkan
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        ds.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
+        FillDepthStencilState(ds, dsParams);
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
@@ -3924,11 +4058,14 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
+        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -4070,11 +4207,12 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineFogColored3D(
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
+        const DepthStencilKeyParams& dsParams)
     {
         EnsureFogTex3DResources();
 
-        uint32_t key = Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        uint64_t key = Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams);
         auto it = pipelinesFogColored3D_.find(key);
         if (it != pipelinesFogColored3D_.end()) return it->second;
 
@@ -4126,7 +4264,7 @@ namespace CNA::Internal::Backends::Vulkan
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        ds.depthCompareOp   = VK_COMPARE_OP_LESS;
+        FillDepthStencilState(ds, dsParams);
 
         VkPipelineColorBlendAttachmentState cba{};
         if (blend) {
@@ -4153,10 +4291,13 @@ namespace CNA::Internal::Backends::Vulkan
             VK_DYNAMIC_STATE_SCISSOR,
             VK_DYNAMIC_STATE_BLEND_CONSTANTS,
             VK_DYNAMIC_STATE_DEPTH_BIAS,
+            VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
         };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 4; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 7; dyn.pDynamicStates = dynStates;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -4190,11 +4331,12 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineFogTex3D(
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
+        const DepthStencilKeyParams& dsParams)
     {
         EnsureFogTex3DResources();
 
-        uint64_t key = MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        uint64_t key = MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams);
         auto it = pipelinesFogTex3D_.find(key);
         if (it != pipelinesFogTex3D_.end()) return it->second;
 
@@ -4266,7 +4408,7 @@ namespace CNA::Internal::Backends::Vulkan
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        ds.depthCompareOp   = VK_COMPARE_OP_LESS;
+        FillDepthStencilState(ds, dsParams);
 
         VkPipelineColorBlendAttachmentState cba{};
         if (blend) {
@@ -4291,10 +4433,12 @@ namespace CNA::Internal::Backends::Vulkan
         VkDynamicState dynStates[] = {
             VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_BLEND_CONSTANTS,
             VK_DYNAMIC_STATE_DEPTH_BIAS,
+            VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK, VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
         };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 4; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 7; dyn.pDynamicStates = dynStates;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -4466,7 +4610,8 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineSkinned3D(
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
+        const DepthStencilKeyParams& dsParams)
     {
         EnsureSkinnedResources();
 
@@ -4476,7 +4621,7 @@ namespace CNA::Internal::Backends::Vulkan
         // reference to the canonical VertexPositionNormalTextureSkinned::getVertexDeclarationStatic()
         // layout and why a shared-derivation refactor was investigated but deferred.
         constexpr std::size_t kSkinnedStride = 52;
-        uint64_t key = MakeExt3DKey(kSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        uint64_t key = MakeExt3DKey(kSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams);
         auto it = pipelinesSkinned3D_.find(key);
         if (it != pipelinesSkinned3D_.end()) return it->second;
 
@@ -4531,7 +4676,7 @@ namespace CNA::Internal::Backends::Vulkan
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        ds.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
+        FillDepthStencilState(ds, dsParams);
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
@@ -4550,11 +4695,14 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
+        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -4586,7 +4734,8 @@ namespace CNA::Internal::Backends::Vulkan
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineInstanced3D(
         std::size_t pvStride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe, bool msaa)
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
+        const DepthStencilKeyParams& dsParams)
     {
         // Ensure pipelineLayoutExt3D_ exists (128-byte PC + 1 descriptor set for future texture use).
         if (pipelineLayoutExt3D_ == VK_NULL_HANDLE) {
@@ -4599,7 +4748,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (Ext3D/Instanced) failed");
         }
 
-        uint64_t key = MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa);
+        uint64_t key = MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams);
         auto it = pipelinesInstanced3D_.find(key);
         if (it != pipelinesInstanced3D_.end()) return it->second;
 
@@ -4662,7 +4811,7 @@ namespace CNA::Internal::Backends::Vulkan
         dss.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         dss.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
         dss.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        dss.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
+        FillDepthStencilState(dss, dsParams);
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
@@ -4681,11 +4830,14 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[3] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS };
+        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = (colorAttachmentCount > 1)
                           ? GetOrCreateMRTRenderPass(colorAttachmentCount)
@@ -5037,27 +5189,27 @@ namespace CNA::Internal::Backends::Vulkan
                 if (draw.useAlphaTest) {
                     pipe = GetOrCreatePipelineAlphaTest3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams);
                 } else if (draw.useDualTexture) {
                     pipe = GetOrCreatePipelineDualTex3D(draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams);
                 } else if (draw.useEnvMap) {
                     pipe = GetOrCreatePipelineEnvMap3D(draw.topology,
                                                        draw.depthTest, draw.depthWrite,
-                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
+                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams);
                 } else if (draw.useSkinned) {
                     pipe = GetOrCreatePipelineSkinned3D(draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams);
                 } else if (draw.useInstanced) {
                     pipe = GetOrCreatePipelineInstanced3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams);
                 } else if (draw.useLitTextured) {
                     pipe = GetOrCreatePipelineLitTextured3D(draw.topology,
                                                             draw.depthTest, draw.depthWrite,
-                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
+                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams);
                 } else if (draw.useFogTex3D) {
                     // Task 899: colored3d (stride 16) / textured3d (20) / colored_textured3d (24)
                     // fog-capable bundle. The legacy no-GpuDrawParams DrawColoredPrimitives()
@@ -5066,14 +5218,14 @@ namespace CNA::Internal::Backends::Vulkan
                     pipe = (draw.stride == 16)
                            ? GetOrCreatePipelineFogColored3D(draw.topology,
                                                              draw.depthTest, draw.depthWrite,
-                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa)
+                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams)
                            : GetOrCreatePipelineFogTex3D(draw.stride, draw.topology,
                                                          draw.depthTest, draw.depthWrite,
-                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
+                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams);
                 } else {
                     pipe = GetOrCreatePipeline3D(draw.topology,
                                                  draw.depthTest, draw.depthWrite,
-                                                 draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa);
+                                                 draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams);
                 }
                 if (pipe != lastPipe) {
                     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
@@ -5082,6 +5234,16 @@ namespace CNA::Internal::Backends::Vulkan
                 // All 3D pipelines declare VK_DYNAMIC_STATE_DEPTH_BIAS, so the dynamic
                 // depth bias must be set before each draw. Zero values = no bias.
                 vkCmdSetDepthBias(cb, draw.depthBias, 0.0f, draw.slopeScaleDepthBias);
+                // Task 870: stencil reference/compare mask/write mask are true Vulkan dynamic
+                // state -- every 3D pipeline declares these 3 dynamic states now, so they must be
+                // set before each draw regardless of whether StencilEnable is currently true
+                // (matches vkCmdSetDepthBias's own always-set convention just above).
+                vkCmdSetStencilCompareMask(cb, VK_STENCIL_FACE_FRONT_AND_BACK,
+                                           static_cast<uint32_t>(draw.stencilReadMask));
+                vkCmdSetStencilWriteMask(cb, VK_STENCIL_FACE_FRONT_AND_BACK,
+                                         static_cast<uint32_t>(draw.stencilWriteMask));
+                vkCmdSetStencilReference(cb, VK_STENCIL_FACE_FRONT_AND_BACK,
+                                         static_cast<uint32_t>(draw.referenceStencil));
                 if (draw.useAlphaTest) {
                     vkCmdPushConstants(cb, pipelineLayoutAlphaTest3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -5742,6 +5904,10 @@ namespace CNA::Internal::Backends::Vulkan
         d.drawCount  = drawCount;
         d.depthTest  = depthTestEnabled_;
         d.depthWrite = depthWriteEnabled_;
+        d.dsParams = dsParams_;
+        d.stencilReadMask = stencilReadMask_;
+        d.stencilWriteMask = stencilWriteMask_;
+        d.referenceStencil = referenceStencil_;
         d.blend      = blendEnabled_;
         d.cullMode   = cullMode_;
         d.wireframe  = fillModeWireframe_;
@@ -5783,6 +5949,10 @@ namespace CNA::Internal::Backends::Vulkan
         d.drawCount  = indexCount;
         d.depthTest  = depthTestEnabled_;
         d.depthWrite = depthWriteEnabled_;
+        d.dsParams = dsParams_;
+        d.stencilReadMask = stencilReadMask_;
+        d.stencilWriteMask = stencilWriteMask_;
+        d.referenceStencil = referenceStencil_;
         d.blend      = blendEnabled_;
         d.cullMode   = cullMode_;
         d.wireframe  = fillModeWireframe_;
@@ -5836,6 +6006,10 @@ namespace CNA::Internal::Backends::Vulkan
         d.drawCount      = drawCount;
         d.depthTest      = depthTestEnabled_;
         d.depthWrite     = depthWriteEnabled_;
+        d.dsParams = dsParams_;
+        d.stencilReadMask = stencilReadMask_;
+        d.stencilWriteMask = stencilWriteMask_;
+        d.referenceStencil = referenceStencil_;
         d.blend          = blendEnabled_;
         d.cullMode       = cullMode_;
         d.wireframe  = fillModeWireframe_;
@@ -5999,6 +6173,10 @@ namespace CNA::Internal::Backends::Vulkan
         d.drawCount     = indexCount;
         d.depthTest     = depthTestEnabled_;
         d.depthWrite    = depthWriteEnabled_;
+        d.dsParams = dsParams_;
+        d.stencilReadMask = stencilReadMask_;
+        d.stencilWriteMask = stencilWriteMask_;
+        d.referenceStencil = referenceStencil_;
         d.blend         = blendEnabled_;
         d.cullMode      = cullMode_;
         d.wireframe  = fillModeWireframe_;
@@ -6160,6 +6338,10 @@ namespace CNA::Internal::Backends::Vulkan
         d.drawCount    = indexCount;
         d.depthTest    = depthTestEnabled_;
         d.depthWrite   = depthWriteEnabled_;
+        d.dsParams = dsParams_;
+        d.stencilReadMask = stencilReadMask_;
+        d.stencilWriteMask = stencilWriteMask_;
+        d.referenceStencil = referenceStencil_;
         d.blend        = blendEnabled_;
         d.cullMode     = cullMode_;
         d.wireframe  = fillModeWireframe_;
@@ -6188,18 +6370,32 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     void VulkanGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
-                                                        int /*depthFunc*/,
-                                                        bool /*stencilEnable*/, int /*stencilFunc*/,
-                                                        int /*stencilPass*/, int /*stencilFail*/,
-                                                        int /*stencilDepthFail*/,
-                                                        int /*stencilMask*/, int /*stencilWriteMask*/,
-                                                        int /*referenceStencil*/,
-                                                        bool /*twoSidedStencilMode*/,
-                                                        int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
-                                                        int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+                                                        int depthFunc,
+                                                        bool stencilEnable, int stencilFunc,
+                                                        int stencilPass, int stencilFail,
+                                                        int stencilDepthFail,
+                                                        int stencilMask, int stencilWriteMask,
+                                                        int referenceStencil,
+                                                        bool twoSidedStencilMode,
+                                                        int ccwStencilFunc, int ccwStencilPass,
+                                                        int ccwStencilFail, int ccwStencilDepthFail)
     {
         depthTestEnabled_  = depthEnable;
         depthWriteEnabled_ = depthWriteEnable;
+        dsParams_.depthFunc           = depthFunc;
+        dsParams_.stencilEnable       = stencilEnable;
+        dsParams_.stencilFunc         = stencilFunc;
+        dsParams_.stencilFail         = stencilFail;
+        dsParams_.stencilDepthFail    = stencilDepthFail;
+        dsParams_.stencilPass         = stencilPass;
+        dsParams_.twoSidedStencilMode = twoSidedStencilMode;
+        dsParams_.ccwStencilFunc      = ccwStencilFunc;
+        dsParams_.ccwStencilFail      = ccwStencilFail;
+        dsParams_.ccwStencilDepthFail = ccwStencilDepthFail;
+        dsParams_.ccwStencilPass      = ccwStencilPass;
+        stencilReadMask_  = stencilMask;
+        stencilWriteMask_ = stencilWriteMask;
+        referenceStencil_ = referenceStencil;
     }
 
     void VulkanGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
@@ -6249,6 +6445,11 @@ namespace CNA::Internal::Backends::Vulkan
         blendFactorG_ = g;
         blendFactorB_ = b;
         blendFactorA_ = a;
+    }
+
+    void VulkanGraphicsBackend::SetReferenceStencil(int value)
+    {
+        referenceStencil_ = value;
     }
 
     std::unique_ptr<IOcclusionQueryBackend> VulkanGraphicsBackend::CreateOcclusionQuery()
