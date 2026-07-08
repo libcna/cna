@@ -3746,6 +3746,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 697: BlendState::AlphaBlend premultiplied alpha pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_alphablend
+                 examples/sdlrenderer_blendstate_alphablend_test.cpp)
+    add_test(NAME SDL_Renderer_BlendState_AlphaBlend
+             COMMAND cna_test_sdl_blendstate_alphablend)
+    set_tests_properties(SDL_Renderer_BlendState_AlphaBlend PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
