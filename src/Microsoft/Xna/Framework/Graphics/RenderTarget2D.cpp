@@ -92,5 +92,10 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
         Texture2D::Dispose(disposing);
+        // Task 717 finding: rtBackend_ is a raw, non-owning pointer cached at construction time
+        // into the object owned by Texture2D::backend_ (a shared_ptr, just reset() above) --
+        // left uncleared, GetRenderTargetBackend() would return a dangling pointer after
+        // disposal, a use-after-free the instant any caller dereferenced it.
+        rtBackend_ = nullptr;
     }
 }

@@ -1728,6 +1728,17 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::invalid_argument("SetRenderTargets: at most " +
                 std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");
 
+        // Task 717 finding: SetRenderTarget(RenderTarget2D*) (singular) already guards against a
+        // disposed target -- this plural overload didn't, letting a disposed RenderTarget2D reach
+        // GetRenderTargetBackend() below, which (before this same task's RenderTarget2D::Dispose
+        // fix) returned a dangling pointer -- a use-after-free crash instead of a clean exception.
+        for (const auto& binding : renderTargets)
+        {
+            auto* rt = dynamic_cast<RenderTarget2D*>(binding.getRenderTargetProperty());
+            if (rt && rt->getIsDisposedProperty())
+                throw System::ObjectDisposedException(rt->getNameProperty());
+        }
+
         currentRenderTargets_ = renderTargets;
         renderTargetBound_ = !renderTargets.empty();
         if (renderTargets.empty())

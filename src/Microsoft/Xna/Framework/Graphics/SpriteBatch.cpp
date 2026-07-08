@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Utf8Decode.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -135,6 +136,13 @@ namespace Microsoft::Xna::Framework::Graphics
                                  Color color, float rotation, Vector2 origin,
                                  SpriteEffects effects, float layerDepth)
     {
+        // Task 717 finding: without this guard, a fully-disposed Texture2D (its last shared_ptr
+        // reference released, backend_ now null) reaching flushSingle/flushBatch would dereference
+        // a null ITextureBackend& via GetBackend() -- a guaranteed crash, not a graceful failure.
+        // FNA itself doesn't guard SpriteBatch.Draw's texture argument, but its managed runtime
+        // fails more safely there than a raw C++ null-reference dereference would here, so this is
+        // a genuine hardening fix, not just an FNA-parity gap.
+        System::ObjectDisposedException::ThrowIf(texture.getIsDisposedProperty(), texture.getNameProperty());
         SpriteInfo info;
         info.texture    = &texture;
         info.destRect   = dest;
