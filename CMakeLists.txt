@@ -2329,6 +2329,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 424: Pixel test -- draw a single SpriteFont glyph at a known position on EasyGL.
+        cna_easygl_test(cna_test_easygl_spritefont_single_glyph
+                        examples/easygl_spritefont_single_glyph_test.cpp)
+        add_test(NAME EasyGL_SpriteFont_SingleGlyph
+                 COMMAND cna_test_easygl_spritefont_single_glyph)
+        set_tests_properties(EasyGL_SpriteFont_SingleGlyph PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0]
         cna_easygl_test(cna_test_easygl_sampler_state_effect
                         examples/easygl_sampler_state_effect_test.cpp)
