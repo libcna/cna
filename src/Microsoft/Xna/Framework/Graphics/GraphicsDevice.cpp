@@ -1687,7 +1687,14 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderTarget &&
             renderTarget->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
-            Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+            // Only ask for a depth-buffer clear when the target actually has one — a target
+            // created with DepthFormat::None has no depth-stencil buffer at all (matches
+            // RenderTarget2D's own constructor, which only allocates one when a depth format was
+            // requested), so backends with no depth-buffer concept at all (SDL_Renderer) must not
+            // be asked to clear a depth buffer that doesn't exist.
+            const bool hasDepthBuffer =
+                renderTarget->getDepthStencilFormatProperty() != DepthFormat::None;
+            Clear(hasDepthBuffer ? (ClearOptions::Target | ClearOptions::DepthBuffer) : ClearOptions::Target,
                   Color(0, 0, 0, 255), 1.0f, 0);
         }
     }
@@ -1746,7 +1753,10 @@ namespace Microsoft::Xna::Framework::Graphics
         if (first &&
             first->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
-            Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+            // See SetRenderTarget(RenderTarget2D*)'s identical guard for the rationale.
+            const bool hasDepthBuffer =
+                first->getDepthStencilFormatProperty() != DepthFormat::None;
+            Clear(hasDepthBuffer ? (ClearOptions::Target | ClearOptions::DepthBuffer) : ClearOptions::Target,
                   Color(0, 0, 0, 255), 1.0f, 0);
         }
     }
