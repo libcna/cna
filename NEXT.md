@@ -328,13 +328,21 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   resume-prompt note below) — no build errors anywhere. Verified again after Task 878's Vulkan
   changes landed.
 
-### Test status (last verified: Task 865, 2026-07-08)
+### Test status (last verified: Task 915, 2026-07-08)
 - **`CnaTests` (gtest unit-test binary, `tests/*.cpp` only — does NOT cover the `examples/*.cpp`
-  pixel tests below), all 3 backends:** EasyGL 4272/4274 passed (2 known skips, 0 failed), Bgfx
+  pixel tests below), all 3 original backends:** EasyGL 4272/4274 passed (2 known skips, 0 failed), Bgfx
   4276/4278 passed (2 known skips, 0 failed), Vulkan 4272/4274 passed (2 known skips, 0 failed)
   when filtering out `ContentManagerSkinnedModelTest.*` (see below). Higher totals than the
   pre-merge baseline (~3501-3505) are expected — the feature/devices+audio+input merge added
   substantial new test coverage, plus this session's own additions (Tasks 663/865/875/877/912/913).
+- **SDL_Renderer (`cmake-build-sdl`, new this session, first full baseline established via Task
+  915)**: `CnaTests` (filtered) 4262/4274 passed, 2 skips, 10 known/expected failures; the full
+  unfiltered `ctest` suite (4339 tests) found 3 more in the excluded `ContentManagerSkinnedModelTest`
+  suite for the same reason — all 13 failures throw `"SDL_Renderer does not support 3D"`, matching
+  this backend's already-documented, accepted 2D-only architectural scope (`EffectApplyTest`,
+  `GraphicsDeviceValidationTest.SetRenderTargets_*`, `SkinnedModelEXTPartTest.*`,
+  `ContentManagerSkinnedModelTest.*` — all exercise 3D vertex/skinning paths). Not a regression;
+  this is simply the first time this backend's test suite has been run this systematically.
 - **`examples/*.cpp` pixel tests, full `ctest` suite (all tests, both `CnaTests`-discovered gtest
   cases AND the `examples/*.cpp` pixel tests, run one-per-process): DONE for EasyGL and Vulkan
   this session (Bgfx still pending).** This session fixed the blocker (`CNA_TEST_DISPLAY` cache
@@ -496,6 +504,16 @@ designed so XNA/FNA game code can be ported to C++ with minimal API-surface chan
   corruption (higher mip levels' writes land back inside level 0's only allocated memory), not
   just a silent no-op. Bgfx's half remains open, split to Task 914 (currently unverifiable — see
   §5).
+- **`GraphicsDevice.GetBackBufferData` now works on SDL_Renderer** (Task 915 fix) — this backend
+  never overrode `ReadBackbuffer` at all (hard `throw`), which blocked the *entire* SDL_Renderer
+  pixel-test audit phase (`plan_graphics.md` Tasks 666–861) before any of it could start. Fixed via
+  `SDL_RenderReadPixels()`. Real subtlety found: that call is in *physical* output coordinates,
+  while every other backend uses *logical* coordinates, and this project's default presentation
+  mode (`FixedHeightDynamicWidth`) deliberately does NOT map 1:1 between them — exact-pixel tests
+  on this backend must request `PresentationMode::NativeBackBuffer` to get true 1:1 correspondence.
+  Also fixed a real, unrelated CMakeLists.txt bug found while wiring up the first SDL_Renderer test:
+  a ~2850-line block (lines 579–3436) intended to be EasyGL/Vulkan-only was silently swallowing any
+  new registration placed inside it for any other backend.
 - **`SpriteBatch`'s `SamplerState` now works on all 3 backends** (Task 750 fix) — Bgfx never
   overrode `SetSamplerFilter`/`SetSamplerAddressMode` at all, so `Begin()`'s requested sampler had
   zero effect; fixed by threading the pending filter/address values into the existing
@@ -736,6 +754,7 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Fixed, EasyGL and Bgfx; Vulkan deliberately deferred | EasyGL and Bgfx now honor the exact requested `DepthStencilFormat` (`None`/`Depth16`/`Depth24`/`Depth24Stencil8`) for a render target's depth/stencil attachment, on both `RenderTarget2D` and `RenderTargetCube` (Bgfx's cube previously had NO depth attachment support at all — new capability, not just a format fix). Vulkan still uses one device-global depth format for every render target — a real render-pass/pipeline-sharing architectural constraint (split to Task 911), not an oversight. Core depth-test functionality itself works everywhere it's honored (Task 335). | Task 877 (done, EasyGL+Bgfx) / 911 (Vulkan, open) |
 | Confirmed, architectural, deliberate | `GraphicsDevice` stores state objects by value, unlike FNA's reference-type aliasing. No game code here relies on FNA's behavior. | Task 869 |
 | Fixed, all 3 backends | `SpriteBatch`'s `SamplerState` (`Begin()`) now works on all 3 backends (EasyGL/Task 269, Vulkan/Task 665, Bgfx/Task 750 — never overrode `SetSamplerFilter`/`SetSamplerAddressMode` at all). | Task 750 (done) |
+| Fixed, SDL_Renderer | `GraphicsDevice.GetBackBufferData` was a hard `throw` on SDL_Renderer (no `ReadBackbuffer` override at all) — blocked the entire SDL_Renderer pixel-test audit phase. Fixed via `SDL_RenderReadPixels()`; exact-pixel tests must request `PresentationMode::NativeBackBuffer` for true 1:1 logical/physical correspondence (the default `FixedHeightDynamicWidth` mode deliberately does not give 1:1 mapping). | Task 915 (done) |
 | Confirmed, pre-existing | `EasyGL_MRT_TwoAttachments`: attachment 1 stays black with 2 render targets. | Task 145 |
 | Fixed, all 3 backends | `SetRenderTargets`'s simultaneous-target cap now matches FNA's real `MAX_RENDERTARGET_BINDINGS=4` via a single shared C++ check. | Task 881 (done) |
 | Confirmed, real, not fixed, separately found | CNA's `RenderTargetBinding` (unlike FNA's, whose constructors throw on a null target) has a default constructor wrapping a null `Texture*`; passing several through `SetRenderTargets` segfaults. Unreachable in practice given FNA's own API shape (a real game can never construct one this way), found while testing Task 881. | — |
@@ -1010,7 +1029,11 @@ superseded by later, higher-numbered rediscoveries of the same underlying bug.
 Read NEXT.md first, in full — this section is intentionally the only thing you need before
 touching any code.
 
-## Repo state as of 2026-07-08 (end of Task 750 session) — READ THIS FIRST
+## Repo state as of 2026-07-08 (end of Task 915 session) — READ THIS FIRST
+
+**New this session**: a 4th build directory, `cmake-build-sdl` (`CNA_GRAPHICS_BACKEND=SDL_RENDERER`),
+was configured for the first time to start the Task 666+ SDL_Renderer audit phase. If resuming,
+either reuse it or recreate via `cmake -S . -B cmake-build-sdl -DCNA_GRAPHICS_BACKEND=SDL_RENDERER`.
 
 No unusual repo state this time (unlike the Task 896 session's big external merge) — just resume
 normally. All 3 `cmake-build-{debug,vulkan,bgfx}` directories exist and were verified building
@@ -1081,14 +1104,19 @@ findings: Task 911 (Vulkan's own per-RT depth-format fidelity — real architect
 same class as Task 910) and Task 914 (Bgfx's `Texture3D`/`TextureCube` mip fix, currently
 unverifiable — needs a real `bgfx::readTexture()` readback path first). Also closed Task 750
 (`SpriteBatch`'s `SamplerState` fixed on Bgfx — never overrode `SetSamplerFilter`/
-`SetSamplerAddressMode` at all, closing the last of the 3 backends for this bug shape). Next up:
-whatever the project owner scopes for the remaining decision-blocked items (Task 902/910/911/914,
-all need their own dedicated scoping pass), or the older, not-yet-triaged backlog below Task 900 in
-`plan_graphics.md` (many ⬜ rows in the 421–861 range — audits, reference-value generation, and
-per-backend pixel-test parity tasks from earlier phases that were never folded into this §8 list;
-worth a dedicated triage pass before working through in bulk, since some (e.g. Task 750) may
-already be superseded by later, higher-numbered rediscoveries of the same bug).
-starting).
+`SetSamplerAddressMode` at all, closing the last of the 3 backends for this bug shape) and Task 915
+(`GraphicsDevice.GetBackBufferData` implemented for the first time on SDL_Renderer via
+`SDL_RenderReadPixels()` — previously a hard `throw`, blocking the entire Task 666+ SDL_Renderer
+pixel-test audit phase before it could start; also fixed a real CMakeLists.txt scoping bug found
+while wiring up the first test). Next up: continue the SDL_Renderer audit phase (Task 666's
+remaining scope — write pixel tests for SpriteBatch/SpriteFont/BlendState/SamplerState/
+RenderTarget2D/Viewport/GraphicsDevice-lifecycle on this backend, Tasks 667–861 in
+`plan_graphics.md`, all now unblocked by Task 915), or whatever the project owner scopes for the
+remaining decision-blocked items (Task 902/910/911/914, all need their own dedicated scoping
+pass). The older, not-yet-triaged backlog in the 421–500 range of `plan_graphics.md` (audits,
+reference-value generation, and other per-backend tasks from earlier phases never folded into
+this §8 list) is worth a dedicated triage pass before working through in bulk, since some entries
+(e.g. Task 750) may already be superseded by later, higher-numbered rediscoveries of the same bug.
 
 **Standing instructions (still in force):**
 - Commit AND push after every finished task without waiting to be asked.

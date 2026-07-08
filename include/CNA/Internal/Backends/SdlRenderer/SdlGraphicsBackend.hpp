@@ -88,6 +88,11 @@ namespace CNA::Internal::Backends::SdlRenderer
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        // Task 666: real SDL_RenderReadPixels-based backbuffer/render-target readback --
+        // GraphicsDevice::GetBackBufferData was previously a hard throw on this backend (the
+        // shared IGraphicsBackend::ReadBackbuffer default), blocking every pixel-verification
+        // test this project's methodology relies on.
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;

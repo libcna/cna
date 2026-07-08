@@ -3435,6 +3435,39 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
 
 endif()
 
+# SDL_Renderer integration tests (Task 666 audit phase)
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+   AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
+
+    enable_testing()
+
+    # --- helper macro: build a headless SDL_Renderer test exe --------------------
+    macro(cna_sdl_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    # Task 666: GetBackBufferData readback -- foundational prerequisite for the whole
+    # SDL_Renderer pixel-test audit phase (Tasks 666-861).
+    cna_sdl_test(cna_test_sdl_readback
+                 examples/sdlrenderer_readback_test.cpp)
+    add_test(NAME SDL_Renderer_Readback
+             COMMAND cna_test_sdl_readback)
+    set_tests_properties(SDL_Renderer_Readback PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+endif()
+
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
    AND CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
 

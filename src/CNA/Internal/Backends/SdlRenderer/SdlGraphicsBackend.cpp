@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/SdlRenderer/SdlGraphicsBackend.hpp"
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <filesystem>
@@ -411,6 +412,69 @@ namespace CNA::Internal::Backends::SdlRenderer
         // so the game always works in its own coordinate space.
         width = logicalWidth;
         height = logicalHeight;
+    }
+
+    // Task 666: SDL_RenderReadPixels operates in physical output coordinates, but callers
+    // (GraphicsDevice::GetBackBufferData) pass logical (virtual-resolution) coordinates,
+    // matching every other backend's convention and GetViewportSize()'s own logical values.
+    // When targeting the actual window backbuffer (SDL_GetRenderTarget == nullptr), map through
+    // SDL_GetRenderLogicalPresentationRect() -- this project's pixel tests always create a window
+    // matching the virtual resolution 1:1 (no letterbox/stretch scaling), so the mapped rect's
+    // size should exactly match the logical size; if it doesn't, something is scaling and
+    // exact-pixel readback can't be trusted, so this throws clearly rather than silently
+    // returning wrong/aliased data. When a custom render target is bound instead, logical
+    // presentation doesn't apply at all -- the requested coordinates already address the target
+    // texture directly.
+    void SdlGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
+    {
+        if (!renderer)
+            throw std::runtime_error("ReadBackbuffer: no renderer");
+
+        int originX = 0, originY = 0;
+        if (SDL_GetRenderTarget(renderer) == nullptr)
+        {
+            SDL_FRect presentRect{};
+            SDL_GetRenderLogicalPresentationRect(renderer, &presentRect);
+            const int physW = static_cast<int>(presentRect.w);
+            const int physH = static_cast<int>(presentRect.h);
+            if (physW != logicalWidth || physH != logicalHeight)
+            {
+                throw std::runtime_error("ReadBackbuffer: physical/logical size mismatch "
+                                          "(letterbox or stretch scaling active) -- exact-pixel "
+                                          "readback unsupported");
+            }
+            originX = static_cast<int>(presentRect.x);
+            originY = static_cast<int>(presentRect.y);
+        }
+
+        SDL_Rect region{ originX + x, originY + y, w, h };
+        SDL_Surface* surface = SDL_RenderReadPixels(renderer, &region);
+        if (!surface)
+            throw std::runtime_error(std::string("SDL_RenderReadPixels failed: ") + SDL_GetError());
+
+        SDL_Surface* converted = surface;
+        bool ownsConverted = false;
+        if (surface->format != SDL_PIXELFORMAT_RGBA32)
+        {
+            converted = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
+            if (!converted)
+            {
+                SDL_DestroySurface(surface);
+                throw std::runtime_error(std::string("SDL_ConvertSurface failed: ") + SDL_GetError());
+            }
+            ownsConverted = true;
+        }
+
+        const auto* base = static_cast<const uint8_t*>(converted->pixels);
+        for (int row = 0; row < h; ++row)
+        {
+            const uint8_t* src = base + static_cast<std::size_t>(row) * converted->pitch;
+            std::memcpy(pixels + static_cast<std::size_t>(row) * w * 4, src, static_cast<std::size_t>(w) * 4);
+        }
+
+        if (ownsConverted)
+            SDL_DestroySurface(converted);
+        SDL_DestroySurface(surface);
     }
 
     void SdlGraphicsBackend::ApplyBlendState(int colorSrcBlend, int /*alphaSrcBlend*/,
