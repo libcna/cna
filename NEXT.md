@@ -844,7 +844,8 @@ and cause transient, non-representative test failures unrelated to any code chan
 | Fixed (verify-only — not a distinct bug) | Bgfx: sampling a render target (2D or cube) back out via `SpriteBatch` immediately after filling and unbinding it (no intervening `bgfx::frame()` boundary) can read back stale/black content on the first `GetBackBufferData()` call. Root-caused to the SAME already-documented "first read per rendered frame" quirk below (not `DepthStencilState`/`RasterizerState` leakage or 3D-vs-2D dispatch, both ruled out by bisection) — fixed by applying the existing retry-until-non-black convention; `rendertarget2d_depth_test.cpp` now registered for Bgfx too. | Task 912 (done) |
 | Fixed, SDL_Renderer; Vulkan/Bgfx still open | `SpriteBatch::Begin`'s `transformMatrix` was completely silently ignored on SDL_Renderer (`SetTransformMatrix` defaults to a no-op; only EasyGL ever overrode it). Fixed via a new `SDL_RenderTextureAffine()`-based path used only for non-Identity transforms (the existing `SDL_RenderTextureRotated()` path is unchanged for the common Identity case). Vulkan/Bgfx have the identical gap — Bgfx's own equivalent is still-open Task 808; no dedicated Vulkan row currently tracks it. | Task 675 (done, SDL_Renderer) |
 | Fixed (now throws), SDL_Renderer; Vulkan/Bgfx still silently no-op | `Texture2D::SetData(level>0, ...)` silently no-oped on SDL_Renderer instead of updating the GPU texture (`ITextureBackend::UpdatePixelsLevel` defaults to a silent no-op; only EasyGL genuinely implements it via `glTexImage2D`). Decided to throw `std::runtime_error` on SDL_Renderer instead, since its 2D blit pipeline has no native mip chain or per-level LOD sampling at all — a stored-but-never-sampled mip level would be equally misleading. Vulkan/Bgfx have the identical silent-no-op gap, already tracked separately (Tasks 855/817). | Task 681 (done, SDL_Renderer) |
-| Confirmed, real, SDL_Renderer, not yet fixed | `TextureAddressMode::Wrap`/`Mirror` are not honored via `SpriteBatch` on SDL_Renderer — `SdlSpriteBatchBackend::Draw` uses `SDL_RenderTexture`/`SDL_RenderTextureRotated`, whose `srcrect` handling has one fixed (Clamp-like) edge behavior regardless of requested `SamplerState`. SDL3's real `SDL_SetRenderTextureAddressMode` API exists but only affects `SDL_RenderGeometry()` calls (confirmed via its own doc comment and empirically), so it cannot fix this Draw() path — a genuine native fix would need a `SDL_RenderGeometry`-based Draw() rewrite. `TextureAddressMode::Clamp` already happens to produce the correct result (an accident of the fixed edge behavior, not real SamplerState honoring). | Task 685 (done, found gap); Task 686 (Wrap decision, open); Task 687 (Mirror decision, open) |
+| Confirmed, real, SDL_Renderer, not yet fixed | `TextureAddressMode::Wrap`/`Mirror` are not honored via `SpriteBatch` on SDL_Renderer — `SdlSpriteBatchBackend::Draw` uses `SDL_RenderTexture`/`SDL_RenderTextureRotated`, whose `srcrect` handling has one fixed (Clamp-like) edge behavior regardless of requested `SamplerState`. SDL3's real `SDL_SetRenderTextureAddressMode` API exists but only affects `SDL_RenderGeometry()` calls (confirmed via its own doc comment and empirically), so it cannot fix this Draw() path — a genuine native fix would need a `SDL_RenderGeometry`-based Draw() rewrite. `TextureAddressMode::Clamp` already happens to produce the correct result (an accident of the fixed edge behavior, not real SamplerState honoring). | Task 685 (done, found gap); Task 686 (Wrap decision, **BLOCKED**); Task 687 (Mirror decision, **BLOCKED**) |
+| **BLOCKED — needs project-owner decision** | Tasks 686/687 (`TextureAddressMode::Wrap`/`Mirror` on SDL_Renderer): 3 options, none guessed at — (a) throw unconditionally whenever a Wrap/Mirror `SamplerState` is requested via `SpriteBatch::Begin` (small, safe, but could break a game that passes Wrap defensively without ever sampling out-of-bounds); (b) rewrite `SdlSpriteBatchBackend::Draw` to build explicit `SDL_Vertex`/UV geometry and use `SDL_RenderGeometry` (real fix, but a materially larger change touching code already verified correct across Tasks 671-675/685); (c) a hybrid that only throws when a specific `Draw()` call's `sourceRectangle` actually exceeds the texture bounds. Full technical detail in `plan_graphics.md` rows 686/687. | — |
 | Confirmed, pre-existing, environment-only | A `ContentManagerSkinnedModelTest`-area segfault occurs when running the full `CnaTests` suite on Vulkan under `Xvfb`+`llvmpipe`, non-deterministic in exactly where it lands — reproduces identically with/without Task 878's changes (confirmed via `git stash`), and the same test passes cleanly in isolation. Matches this file's already-documented general Vulkan/Xvfb/llvmpipe full-suite flakiness; not a regression, not investigated further. | — |
 
 ---
@@ -1001,7 +1002,7 @@ All 4 tasks the project owner explicitly approved "Implement now" this stretch (
 are now closed. Now working through the standing backlog: **Tasks 667, 668, 669, and 670 are
 done** (see §3 — every `SpriteSortMode` value now pixel-verified on SDL_Renderer, no bugs found;
 new tests cover `BackToFront` and `Texture` grouping for the first time on any backend). Next:
-Task 671 is already done from an earlier session (SpriteBatch rotation) — continue at Task 686 (Tasks 672-685 also done this session, see §3).
+Task 671 is already done from an earlier session (SpriteBatch rotation) — continue at Task 688 (Tasks 672-685 also done this session, see §3; Tasks 686/687 are BLOCKED on a project-owner architecture decision, see §5 and their own plan_graphics.md rows).
 Triage note on the Task 666+ SDL_Renderer audit phase (Tasks 667–861): most remaining rows are
 concrete, well-scoped
 "verify/pixel-test X on SDL_Renderer" items that fit this project's established
@@ -1094,7 +1095,7 @@ closed. Now working the standing backlog (§8): **Tasks 667, 668, 669, and 670 a
 session** (every `SpriteSortMode` value — `Deferred`/`Texture`/`FrontToBack`/`BackToFront`/
 `Immediate` — confirmed already correct on SDL_Renderer, no bugs found). Next up: continue the
 Task 666+ SDL_Renderer audit phase in order (Task 671 is already done from an earlier session —
-continue at Task 686), and/or the untriaged 421–500 range of
+continue at Task 688; Tasks 686/687 are BLOCKED, see §5), and/or the untriaged 421–500 range of
 `plan_graphics.md` (see §8's own triage note on why 667+ is the
 better source of well-scoped single-commit tasks right now).
 
@@ -1193,7 +1194,7 @@ verifying it: an initial 1-line sabotage produced a false-negative-passing test 
 a silent-drop bug instead of the intended defer-to-`End()` bug; a 2nd, correct sabotage genuinely
 reproduced it and the test failed as predicted). **Every `SpriteSortMode` value is now
 pixel-verified on SDL_Renderer.** Next up: continue the SDL_Renderer audit phase (Task 671 is
-already done from an earlier session — continue at Task 686 — write pixel tests for
+already done from an earlier session — continue at Task 688 (Tasks 686/687 BLOCKED, see §5) — write pixel tests for
 SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/GraphicsDevice-lifecycle on
 this backend, Tasks 672–861 in `plan_graphics.md`, all unblocked by Task 915), and/or the older,
 not-yet-triaged backlog in the
