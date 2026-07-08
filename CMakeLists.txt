@@ -4004,6 +4004,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 726: all 5 stock 3D effects' Apply()+property setters do NOT throw on SDL_Renderer,
+    # but drawing with them does.
+    cna_sdl_test(cna_test_sdl_stock3deffects_apply
+                 examples/sdlrenderer_stock3deffects_apply_test.cpp)
+    add_test(NAME SDL_Renderer_Stock3DEffectsApply
+             COMMAND cna_test_sdl_stock3deffects_apply)
+    set_tests_properties(SDL_Renderer_Stock3DEffectsApply PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
