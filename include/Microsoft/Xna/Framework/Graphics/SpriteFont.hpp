@@ -8,6 +8,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/Text/StringBuilder.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -95,6 +96,14 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return The width and height of the rendered text, in pixels.
          */
         [[nodiscard]] Vector2 MeasureString(const String& text) const;
+
+        /**
+         * @brief Measures the size of a StringBuilder's text when drawn with this font.
+         *
+         * @param text The text to measure.
+         * @return The width and height of the rendered text, in pixels.
+         */
+        [[nodiscard]] Vector2 MeasureString(const System::Text::StringBuilder& text) const;
 
     private:
         Texture2D textureValue_;

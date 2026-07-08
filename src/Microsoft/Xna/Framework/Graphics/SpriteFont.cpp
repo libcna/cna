@@ -135,4 +135,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         return result;
     }
+
+    Vector2 SpriteFont::MeasureString(const System::Text::StringBuilder& text) const
+    {
+        return MeasureString(text.ToString());
+    }
 }

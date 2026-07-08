@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/Text/StringBuilder.hpp"
 
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
@@ -17,6 +18,7 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using SharpRuntime::charcs;
+using System::Text::StringBuilder;
 
 // -----------------------------------------------------------------------
 // Test fixtures / helpers
@@ -314,6 +316,64 @@ TEST(SpriteFontTest, UnknownCharWithDefaultFallsBackToDefault)
     // default='A' → 'B' is rendered as 'A'
     SpriteFont font = makeFontA(0.0f, u'A');
     Vector2 fallback = font.MeasureString(std::string("B"));
+    Vector2 expected = font.MeasureString(std::string("A"));
+    EXPECT_FLOAT_EQ(fallback.X, expected.X);
+    EXPECT_FLOAT_EQ(fallback.Y, expected.Y);
+}
+
+// -----------------------------------------------------------------------
+// MeasureString(StringBuilder) — Task 423: FNA has both a MeasureString(string)
+// and a MeasureString(StringBuilder) overload; the latter was entirely missing
+// from CNA until now. Forwards to MeasureString(string) via ToString(),
+// mirroring SpriteBatch::DrawString's existing StringBuilder-overload
+// convention. Mirrors a representative subset of the MeasureString(string)
+// suite above rather than duplicating every case, since the implementation
+// is a straightforward forwarding call.
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, MeasureStringBuilderEmptyReturnsZero)
+{
+    SpriteFont font = makeFontA();
+    Vector2 size = font.MeasureString(StringBuilder(""));
+    EXPECT_FLOAT_EQ(size.X, 0.0f);
+    EXPECT_FLOAT_EQ(size.Y, 0.0f);
+}
+
+TEST(SpriteFontTest, MeasureStringBuilderMatchesStringOverloadForSingleChar)
+{
+    SpriteFont font = makeFontA();
+    Vector2 fromString  = font.MeasureString(std::string("A"));
+    Vector2 fromBuilder = font.MeasureString(StringBuilder("A"));
+    EXPECT_FLOAT_EQ(fromBuilder.X, fromString.X);
+    EXPECT_FLOAT_EQ(fromBuilder.Y, fromString.Y);
+}
+
+TEST(SpriteFontTest, MeasureStringBuilderMatchesStringOverloadForMultiLineAppended)
+{
+    // Built up via Append() calls rather than a single literal, exercising the
+    // actual StringBuilder buffer-accumulation path, not just a wrapped literal.
+    StringBuilder sb;
+    sb.Append("A").Append('\n').Append("AA");
+
+    SpriteFont font = makeFontA(0.0f);
+    Vector2 fromBuilder = font.MeasureString(sb);
+    Vector2 fromString  = font.MeasureString(std::string("A\nAA"));
+    EXPECT_FLOAT_EQ(fromBuilder.X, fromString.X);
+    EXPECT_FLOAT_EQ(fromBuilder.Y, fromString.Y);
+}
+
+TEST(SpriteFontTest, MeasureStringBuilderUnknownCharWithNoDefaultThrows)
+{
+    SpriteFont font = makeFontA();   // no default character
+    EXPECT_THROW(
+        { [[maybe_unused]] auto r = font.MeasureString(StringBuilder("B")); },
+        std::invalid_argument);
+}
+
+TEST(SpriteFontTest, MeasureStringBuilderUnknownCharWithDefaultFallsBackToDefault)
+{
+    SpriteFont font = makeFontA(0.0f, u'A');
+    Vector2 fallback = font.MeasureString(StringBuilder("B"));
     Vector2 expected = font.MeasureString(std::string("A"));
     EXPECT_FLOAT_EQ(fallback.X, expected.X);
     EXPECT_FLOAT_EQ(fallback.Y, expected.Y);
