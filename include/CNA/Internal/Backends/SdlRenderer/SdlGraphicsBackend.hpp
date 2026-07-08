@@ -148,6 +148,11 @@ namespace CNA::Internal::Backends::SdlRenderer
         void SetDepthWriteEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        // Task 727: the shared IGraphicsBackend::CreateOcclusionQuery default silently returns
+        // nullptr (no throw) -- OcclusionQuery::Begin/End then silently no-op instead of ever
+        // running a real occlusion query, unlike every other 3D-only entry point on this backend
+        // (which all throw loudly and immediately). Throw here too for consistency.
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;

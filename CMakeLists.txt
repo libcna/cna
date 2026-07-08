@@ -4014,6 +4014,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 727: OcclusionQuery::Begin/End throw correctly on SDL_Renderer -- construction now
+    # throws (fixed a real silent-no-op gap; the only inconsistent 3D-only entry point).
+    cna_sdl_test(cna_test_sdl_occlusionquery_throws
+                 examples/sdlrenderer_occlusionquery_throws_test.cpp)
+    add_test(NAME SDL_Renderer_OcclusionQueryThrows
+             COMMAND cna_test_sdl_occlusionquery_throws)
+    set_tests_properties(SDL_Renderer_OcclusionQueryThrows PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32

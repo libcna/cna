@@ -788,6 +788,12 @@ namespace CNA::Internal::Backends::SdlRenderer
         return nullptr;
     }
 
+    std::unique_ptr<IOcclusionQueryBackend> SdlGraphicsBackend::CreateOcclusionQuery()
+    {
+        ThrowNo3D("CreateOcclusionQuery");
+        return nullptr;
+    }
+
     void SdlGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
                                                    const Matrix&, const Matrix&, const Matrix&,
                                                    PrimitiveType, int) { ThrowNo3D("DrawColoredPrimitives"); }
