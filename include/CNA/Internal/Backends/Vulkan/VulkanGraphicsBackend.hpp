@@ -453,12 +453,16 @@ namespace CNA::Internal::Backends::Vulkan
                                           public IVulkanCubeSamplable
     {
     public:
-        VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size, bool mipMap = false);
+        VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size, bool mipMap = false,
+                                       int requestedMultiSampleCount = 0);
         ~VulkanRenderTargetCubeBackend() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
+        /// Task 903: real applied MSAA sample count (0 if MSAA wasn't engaged), mirroring
+        /// VulkanRenderTargetBackend::GetMultiSampleCount()'s identical Task 878/879 pattern.
+        [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
 
         // IVulkanCubeSamplable — returns a VK_IMAGE_VIEW_TYPE_CUBE view over all 6 faces.
         [[nodiscard]] VkImageView GetVkCubeImageView() const override { return cubeView_; }
@@ -467,18 +471,23 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 907: per-face proxy also knows how to regenerate its OWN layer's mip chain
         // (levels 0..levelCount-1 of the shared 6-layer `image_`, layer = faceIndex) via a
         // vkCmdBlitImage cascade, mirroring VulkanRenderTargetBackend::MaybeGenerateMips (Task 878).
+        // Task 903: also knows how to report/serve its own MSAA framebuffer + render pass, when
+        // this cube engaged MSAA -- mirrors VulkanRenderTargetBackend's msaaFramebuffer_ pattern.
         struct FaceProxy : public VulkanRTSource {
-            VkFramebuffer framebuffer  = VK_NULL_HANDLE;
-            VkRenderPass  renderPass   = VK_NULL_HANDLE;
+            VkFramebuffer framebuffer     = VK_NULL_HANDLE;
+            VkRenderPass  renderPass      = VK_NULL_HANDLE;
+            VkFramebuffer msaaFramebuffer = VK_NULL_HANDLE;
+            VkRenderPass  msaaRenderPass  = VK_NULL_HANDLE;
             int           size         = 0;
             VkImage       image        = VK_NULL_HANDLE;
             int           levelCount   = 1;
             int           faceIndex    = 0;
-            VkFramebuffer GetFramebuffer()          const override { return framebuffer; }
-            VkRenderPass  GetRenderPass()            const override { return renderPass; }
+            VkFramebuffer GetFramebuffer()          const override { return (msaaFramebuffer != VK_NULL_HANDLE) ? msaaFramebuffer : framebuffer; }
+            VkRenderPass  GetRenderPass()            const override { return (msaaFramebuffer != VK_NULL_HANDLE) ? msaaRenderPass : renderPass; }
             int GetWidth()                          const override { return size; }
             int GetHeight()                         const override { return size; }
             uint32_t GetColorAttachmentCount()      const override { return 1; }
+            bool WantsMsaa()                        const override { return msaaFramebuffer != VK_NULL_HANDLE; }
             void MaybeGenerateMips(VkCommandBuffer cb) override;
         };
 
@@ -491,9 +500,18 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceMemory             depthMemory_ = VK_NULL_HANDLE;
         VkImageView                depthView_   = VK_NULL_HANDLE;
         std::array<VkFramebuffer, 6> framebuffers_ = {};
+        // Task 903: one shared MSAA color image, reused across all 6 faces (mirrors depthImage_'s
+        // existing shared-across-faces pattern) since only one face is ever rendered into at a
+        // time -- TRANSIENT_ATTACHMENT only, resolved into that face's own faceViews_[face]/image_
+        // layer at vkCmdEndRenderPass via rtRenderPassMsaa_'s pResolveAttachments.
+        VkImage                       msaaColorImage_  = VK_NULL_HANDLE;
+        VkDeviceMemory                msaaColorMemory_ = VK_NULL_HANDLE;
+        VkImageView                   msaaColorView_   = VK_NULL_HANDLE;
+        std::array<VkFramebuffer, 6>  msaaFramebuffers_ = {};
         std::array<FaceProxy, 6>     faceProxies_;
         int                        size_      = 0;
         int                        levelCount_ = 1;
+        int                        appliedMultiSampleCount_ = 0;
     };
 
     // -------------------------------------------------------------------------

@@ -4927,9 +4927,19 @@ namespace CNA::Internal::Backends::Vulkan
                             inds.data(), ibBytes);
 
                 // Select pipeline: custom SPIR-V effect (Task 119) or built-in 2D.
-                // For backbuffer (targetRT == nullptr) with MSAA, use the MSAA pipeline variant.
-                const bool useMsaaPipe = (targetRT == nullptr) && (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
-                                         && (pipeline2DMsaa_ != VK_NULL_HANDLE);
+                // Task 903 finding: this previously only checked the BACKBUFFER's own MSAA state
+                // (targetRT == nullptr && sampleCount_ > 1), never an RT's -- meaning a SpriteBatch
+                // fill into an MSAA-enabled RenderTarget2D/RenderTargetCube face always bound the
+                // non-MSAA pipeline against the RT's real 3-attachment MSAA render pass, a genuine
+                // render-pass-compatibility validation error (VUID-vkCmdDraw-multisampledRenderTo
+                // SingleSampled-07284/VUID-vkCmdDraw-renderPass-02684), invisible until this task's
+                // own RenderTargetCube MSAA test was the first to fill an MSAA target via
+                // SpriteBatch (every prior MSAA RT test used a 3D BasicEffect fill instead, whose
+                // own pipeline selection already checks rt->WantsMsaa() correctly). Fixed to check
+                // the actual bound target's WantsMsaa() when targeting an RT, same as the 3D path.
+                const bool targetWantsMsaa = (targetRT == nullptr) ? (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
+                                                                    : targetRT->WantsMsaa();
+                const bool useMsaaPipe = targetWantsMsaa && (pipeline2DMsaa_ != VK_NULL_HANDLE);
                 VkPipeline       activePipe   = useMsaaPipe ? pipeline2DMsaa_ : pipeline2D_;
                 VkPipelineLayout activeLayout = pipelineLayout2D_;
                 const float*     customPC     = nullptr;
@@ -6207,23 +6217,18 @@ namespace CNA::Internal::Backends::Vulkan
         return std::make_unique<VulkanTextureCubeBackend>(this, size, mipMap);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, int /*depthFormat*/, bool mipMap, int /*multiSampleCount*/)
+    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, int /*depthFormat*/, bool mipMap, int multiSampleCount)
     {
         // mipMap (Task 907): real per-face vkCmdBlitImage cascade, mirroring Task 878's
         // RenderTarget2D fix -- see VulkanRenderTargetCubeBackend::FaceProxy::MaybeGenerateMips.
-        // multiSampleCount: FNA's real RenderTargetCube(GraphicsDevice, size, mipMap,
-        // preferredFormat, preferredDepthFormat, preferredMultiSampleCount, usage) constructor
-        // DOES have a multiSampleCount parameter (confirmed against FNA source), so this is not
-        // moot the way it would be if RenderTargetCube had no such parameter at all — but wiring
-        // it up needs the same per-face MSAA render-pass/framebuffer treatment
-        // VulkanRenderTargetBackend just got for RenderTarget2D (Task 878/879), applied 6× across
-        // VulkanRenderTargetCubeBackend's per-face framebuffers. Deliberately out of scope for
-        // this pass (RenderTarget2D MSAA only, per the task's own test-file list) — accepted and
-        // ignored here, tracked as a follow-up in plan_graphics.md. depthFormat (Task 877) is
-        // accepted but not yet acted upon -- see VulkanRenderTargetBackend's constructor comment
-        // (Task 911); this cube backend already always allocates a combined depth+stencil buffer
-        // via the device-wide depthFormat_, same as before this task.
-        return std::make_unique<VulkanRenderTargetCubeBackend>(this, size, mipMap);
+        // multiSampleCount (Task 903): now wired up -- mirrors VulkanRenderTargetBackend's
+        // Task 878/879 "piggyback on the backend's own sampleCount_" MSAA treatment, applied per
+        // cube face via a shared MSAA color image (see VulkanRenderTargetCubeBackend's
+        // constructor). depthFormat (Task 877) is accepted but not yet acted upon -- see
+        // VulkanRenderTargetBackend's constructor comment (Task 911); this cube backend already
+        // always allocates a combined depth+stencil buffer via the device-wide depthFormat_, same
+        // as before this task.
+        return std::make_unique<VulkanRenderTargetCubeBackend>(this, size, mipMap, multiSampleCount);
     }
 
     void VulkanGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
@@ -6719,7 +6724,8 @@ namespace CNA::Internal::Backends::Vulkan
 
     // --- VulkanRenderTargetCubeBackend ---
 
-    VulkanRenderTargetCubeBackend::VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size, bool mipMap)
+    VulkanRenderTargetCubeBackend::VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size, bool mipMap,
+                                                                  int requestedMultiSampleCount)
         : owner_(owner), size_(size)
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
@@ -6727,9 +6733,16 @@ namespace CNA::Internal::Backends::Vulkan
         const auto  us   = static_cast<uint32_t>(size);
         levelCount_ = mipMap ? CalculateVulkanRTMipLevels(size, size) : 1;
 
-        // Ensure RT render pass exists.
+        // Task 903: mirrors VulkanRenderTargetBackend's identical "piggyback on the backend's own
+        // sampleCount_" scope decision (Task 878/879) -- see plan_graphics.md.
+        const bool wantsMsaa = requestedMultiSampleCount > 0 &&
+                               owner_->sampleCount_ > VK_SAMPLE_COUNT_1_BIT;
+
+        // Ensure RT render pass(es) exist.
         if (owner_->rtRenderPass_ == VK_NULL_HANDLE)
             owner_->CreateRTRenderPass();
+        if (wantsMsaa && owner_->rtRenderPassMsaa_ == VK_NULL_HANDLE)
+            owner_->CreateRTRenderPassMsaa();
 
         // --- Color image: 6-layer cube-compatible, color attachment + sampled ---
         VkImageCreateInfo colorInfo{};
@@ -6818,7 +6831,8 @@ namespace CNA::Internal::Backends::Vulkan
             owner_->EndOneTimeCommands(initCb);
         }
 
-        // --- Shared depth image (one 2D image reused across all faces) ---
+        // --- Shared depth image (one 2D image reused across all faces; promoted to MSAA samples
+        // when this cube engages MSAA, mirroring VulkanRenderTargetBackend's depthImage_) ---
         VkImageCreateInfo depthInfo{};
         depthInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         depthInfo.imageType     = VK_IMAGE_TYPE_2D;
@@ -6826,7 +6840,7 @@ namespace CNA::Internal::Backends::Vulkan
         depthInfo.extent        = { us, us, 1 };
         depthInfo.mipLevels     = 1;
         depthInfo.arrayLayers   = 1;
-        depthInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+        depthInfo.samples       = wantsMsaa ? owner_->sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         depthInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
         depthInfo.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         depthInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
@@ -6854,22 +6868,92 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkCreateImageView(dev, &dv, nullptr, &depthView_) != VK_SUCCESS)
             throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateImageView (depth) failed");
 
-        // --- 6 framebuffers (one per face, sharing the depth view) ---
-        for (int face = 0; face < 6; ++face) {
-            VkImageView atts[] = { faceViews_[face], depthView_ };
-            VkFramebufferCreateInfo fbInfo{};
-            fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            fbInfo.renderPass      = owner_->rtRenderPass_;
-            fbInfo.attachmentCount = 2;
-            fbInfo.pAttachments    = atts;
-            fbInfo.width           = us;
-            fbInfo.height          = us;
-            fbInfo.layers          = 1;
-            if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &framebuffers_[face]) != VK_SUCCESS)
-                throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateFramebuffer failed");
+        // --- Shared MSAA color image (Task 903): one 2D image reused across all 6 faces, same
+        // "shared across faces" pattern as depthImage_ above -- only one face is ever rendered
+        // into at a time. TRANSIENT_ATTACHMENT only (never sampled directly), resolved into that
+        // face's own faceViews_[face]/image_ layer via rtRenderPassMsaa_'s pResolveAttachments,
+        // mirroring VulkanRenderTargetBackend::msaaColorImage_ exactly. ---
+        if (wantsMsaa)
+        {
+            VkImageCreateInfo msaaColorInfo{};
+            msaaColorInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+            msaaColorInfo.imageType     = VK_IMAGE_TYPE_2D;
+            msaaColorInfo.format        = owner_->swapchainFormat_;
+            msaaColorInfo.extent        = { us, us, 1 };
+            msaaColorInfo.mipLevels     = 1;
+            msaaColorInfo.arrayLayers   = 1;
+            msaaColorInfo.samples       = owner_->sampleCount_;
+            msaaColorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+            msaaColorInfo.usage         = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+                                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            msaaColorInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+            msaaColorInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (vkCreateImage(dev, &msaaColorInfo, nullptr, &msaaColorImage_) != VK_SUCCESS)
+                throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateImage (MSAA color) failed");
 
-            faceProxies_[face].framebuffer = framebuffers_[face];
-            faceProxies_[face].renderPass  = owner_->rtRenderPass_;
+            VkMemoryRequirements msaaColorReq;
+            vkGetImageMemoryRequirements(dev, msaaColorImage_, &msaaColorReq);
+            VkMemoryAllocateInfo msaaColorAlloc{};
+            msaaColorAlloc.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            msaaColorAlloc.allocationSize  = msaaColorReq.size;
+            msaaColorAlloc.memoryTypeIndex = owner_->FindMemoryType(msaaColorReq.memoryTypeBits,
+                                                                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            if (vkAllocateMemory(dev, &msaaColorAlloc, nullptr, &msaaColorMemory_) != VK_SUCCESS)
+                throw std::runtime_error("VulkanRenderTargetCubeBackend: vkAllocateMemory (MSAA color) failed");
+            vkBindImageMemory(dev, msaaColorImage_, msaaColorMemory_, 0);
+
+            VkImageViewCreateInfo msaaColorView{};
+            msaaColorView.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            msaaColorView.image    = msaaColorImage_;
+            msaaColorView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            msaaColorView.format   = owner_->swapchainFormat_;
+            msaaColorView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+            if (vkCreateImageView(dev, &msaaColorView, nullptr, &msaaColorView_) != VK_SUCCESS)
+                throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateImageView (MSAA color) failed");
+
+            appliedMultiSampleCount_ = SampleCountToInt(owner_->sampleCount_);
+        }
+
+        // --- 6 framebuffers (one per face, sharing the depth view) -- MSAA variant (att0=MSAA
+        // color, att1=resolve into this face's own view, att2=MSAA depth) when this cube engages
+        // MSAA, else the plain 2-attachment variant, mirroring VulkanRenderTargetBackend's
+        // mutually-exclusive framebuffer_/msaaFramebuffer_ pattern exactly. ---
+        for (int face = 0; face < 6; ++face) {
+            if (wantsMsaa)
+            {
+                VkImageView atts[] = { msaaColorView_, faceViews_[face], depthView_ };
+                VkFramebufferCreateInfo fbInfo{};
+                fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+                fbInfo.renderPass      = owner_->rtRenderPassMsaa_;
+                fbInfo.attachmentCount = 3;
+                fbInfo.pAttachments    = atts;
+                fbInfo.width           = us;
+                fbInfo.height          = us;
+                fbInfo.layers          = 1;
+                if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &msaaFramebuffers_[face]) != VK_SUCCESS)
+                    throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateFramebuffer (MSAA) failed");
+
+                faceProxies_[face].msaaFramebuffer = msaaFramebuffers_[face];
+                faceProxies_[face].msaaRenderPass  = owner_->rtRenderPassMsaa_;
+            }
+            else
+            {
+                VkImageView atts[] = { faceViews_[face], depthView_ };
+                VkFramebufferCreateInfo fbInfo{};
+                fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+                fbInfo.renderPass      = owner_->rtRenderPass_;
+                fbInfo.attachmentCount = 2;
+                fbInfo.pAttachments    = atts;
+                fbInfo.width           = us;
+                fbInfo.height          = us;
+                fbInfo.layers          = 1;
+                if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &framebuffers_[face]) != VK_SUCCESS)
+                    throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateFramebuffer failed");
+
+                faceProxies_[face].framebuffer = framebuffers_[face];
+                faceProxies_[face].renderPass  = owner_->rtRenderPass_;
+            }
+
             faceProxies_[face].size        = size;
             faceProxies_[face].image       = image_;
             faceProxies_[face].levelCount  = levelCount_;
@@ -6891,6 +6975,8 @@ namespace CNA::Internal::Backends::Vulkan
         for (int i = 0; i < 6; ++i) {
             if (framebuffers_[i] != VK_NULL_HANDLE)
                 vkDestroyFramebuffer(dev, framebuffers_[i], nullptr);
+            if (msaaFramebuffers_[i] != VK_NULL_HANDLE)
+                vkDestroyFramebuffer(dev, msaaFramebuffers_[i], nullptr);
             if (faceViews_[i] != VK_NULL_HANDLE)
                 vkDestroyImageView(dev, faceViews_[i], nullptr);
         }
@@ -6898,6 +6984,9 @@ namespace CNA::Internal::Backends::Vulkan
         if (depthView_   != VK_NULL_HANDLE) vkDestroyImageView(dev, depthView_, nullptr);
         if (depthImage_  != VK_NULL_HANDLE) vkDestroyImage(dev, depthImage_, nullptr);
         if (depthMemory_ != VK_NULL_HANDLE) vkFreeMemory(dev, depthMemory_, nullptr);
+        if (msaaColorView_   != VK_NULL_HANDLE) vkDestroyImageView(dev, msaaColorView_, nullptr);
+        if (msaaColorImage_  != VK_NULL_HANDLE) vkDestroyImage(dev, msaaColorImage_, nullptr);
+        if (msaaColorMemory_ != VK_NULL_HANDLE) vkFreeMemory(dev, msaaColorMemory_, nullptr);
         if (image_       != VK_NULL_HANDLE) vkDestroyImage(dev, image_, nullptr);
         if (memory_      != VK_NULL_HANDLE) vkFreeMemory(dev, memory_, nullptr);
     }

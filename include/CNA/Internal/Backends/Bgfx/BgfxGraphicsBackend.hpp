@@ -205,13 +205,18 @@ namespace CNA::Internal::Backends::Bgfx
         // bound in BindAsRenderTargetFace, same as the color attachment's per-face rebuild.
         bgfx::TextureHandle depthTex = BGFX_INVALID_HANDLE;
         int size_ = 0;
+        // Task 903: real, backend-clamped applied MultiSampleCount (0 = no MSAA), mirroring
+        // BgfxRenderTargetBackend's identical Task 878/879 field.
+        int  multiSampleCount = 0;
 
-        BgfxRenderTargetCubeBackend(int size, int depthFormat, bool mipMap = false);
+        BgfxRenderTargetCubeBackend(int size, int depthFormat, bool mipMap = false,
+                                     int requestedMultiSampleCount = 0);
         ~BgfxRenderTargetCubeBackend() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
+        int GetMultiSampleCount() const override { return multiSampleCount; }
         [[nodiscard]] unsigned int GetGLHandle() const override { return 0; }
         bgfx::TextureHandle GetBgfxCubeTextureHandle() const override { return cubeTex; }
     };

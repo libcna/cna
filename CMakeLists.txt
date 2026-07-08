@@ -2945,6 +2945,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 903: RenderTargetCube MSAA is genuinely generated per-face (shared MSAA colour
+        # image + promoted MSAA depth + 3-attachment render pass), split out of Task 878/879's
+        # original RenderTarget2D-only scope.
+        cna_vulkan_test(cna_test_vulkan_rendertargetcube_msaa
+                        examples/vulkan_rendertargetcube_msaa_test.cpp)
+        add_test(NAME Vulkan_RenderTargetCube_MsaaResolve
+                 COMMAND cna_test_vulkan_rendertargetcube_msaa)
+        set_tests_properties(Vulkan_RenderTargetCube_MsaaResolve PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 148: RenderTarget2D full cycle — red quad into RT, blit to backbuffer
         cna_vulkan_test(cna_test_vulkan_rt2d
                         examples/vulkan_rt2d_test.cpp)
@@ -3887,6 +3898,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_RenderTargetCube_MipChain
              COMMAND cna_test_bgfx_rendertargetcube_mip)
     set_tests_properties(Bgfx_RenderTargetCube_MipChain PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 903: RenderTargetCube MSAA (property fidelity + no-corruption sanity check -- see this
+    # test's own header comment for why a genuine sub-pixel AA differential isn't attempted).
+    cna_bgfx_test(cna_test_bgfx_rendertargetcube_msaa
+                  examples/bgfx_rendertargetcube_msaa_test.cpp)
+    add_test(NAME Bgfx_RenderTargetCube_MsaaResolve
+             COMMAND cna_test_bgfx_rendertargetcube_msaa)
+    set_tests_properties(Bgfx_RenderTargetCube_MsaaResolve PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
