@@ -3844,6 +3844,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 750: SpriteBatch Begin()'s SamplerState (TextureAddressMode) must take effect
+    cna_bgfx_test(cna_test_bgfx_texture_address_mode
+                  examples/bgfx_texture_address_mode_test.cpp)
+    add_test(NAME Bgfx_TextureAddressMode
+             COMMAND cna_test_bgfx_texture_address_mode)
+    set_tests_properties(Bgfx_TextureAddressMode PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 899: EnvironmentMapEffect/SkinnedEffect fog on Bgfx (opportunistic bonus scope)
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_fog
                   examples/bgfx_environmentmapeffect_fog_test.cpp)

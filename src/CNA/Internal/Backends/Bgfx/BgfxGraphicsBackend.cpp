@@ -736,9 +736,23 @@ namespace CNA::Internal::Backends::Bgfx
         const auto* samplable = dynamic_cast<const IBgfxSamplable*>(&texture);
         bgfx::TextureHandle handle = BGFX_INVALID_HANDLE;
         if (samplable) handle = samplable->GetBgfxTextureHandle();
+        // Task 750: apply this Begin()'s SamplerState to slot 0 right before each submit,
+        // mirroring EasyGL's/Vulkan's identical FlushBatch()-time ApplySamplerState() call.
+        graphicsBackend.ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
         graphicsBackend.SubmitSprite(handle, texture.GetWidth(), texture.GetHeight(),
                                      destinationRectangle, sourceRectangle, color, rotation, origin, effects,
                                      layerDepth);
+    }
+
+    void BgfxSpriteBatchBackend::SetSamplerFilter(int textureFilter)
+    {
+        pendingFilter_ = textureFilter;
+    }
+
+    void BgfxSpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
+    {
+        pendingAddressU_ = addressU;
+        pendingAddressV_ = addressV;
     }
 
     void BgfxCnaCallback::fatal(const char* /*_file*/, uint16_t /*_line*/,

@@ -278,6 +278,17 @@ namespace CNA::Internal::Backends::Bgfx
                   const Vector2& origin,
                   SpriteEffects effects,
                   float layerDepth) override;
+
+        // Task 750: SpriteBatch::Begin()'s SamplerState (Filter/AddressU/AddressV) previously had
+        // no effect at all on this backend (silent no-op via ISpriteBatchBackend's default empty
+        // bodies) -- same bug shape already fixed on EasyGL (Task 269) and Vulkan (Task 665).
+        void SetSamplerFilter(int textureFilter) override;
+        void SetSamplerAddressMode(int addressU, int addressV) override;
+
+    private:
+        int pendingFilter_   = 0; // TextureFilter::Linear
+        int pendingAddressU_ = 1; // TextureAddressMode::Clamp
+        int pendingAddressV_ = 1; // TextureAddressMode::Clamp
     };
 
     class BgfxGraphicsBackend : public IGraphicsBackend
