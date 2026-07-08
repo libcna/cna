@@ -4033,6 +4033,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 729: RasterizerState/DepthStencilState construction and assignment do NOT throw on
+    # SDL_Renderer -- pure data, mirrors Task 724's VertexDeclaration pattern.
+    cna_sdl_test(cna_test_sdl_rasterizer_depthstencil_construction
+                 examples/sdlrenderer_rasterizer_depthstencil_construction_test.cpp)
+    add_test(NAME SDL_Renderer_RasterizerDepthStencilConstruction
+             COMMAND cna_test_sdl_rasterizer_depthstencil_construction)
+    set_tests_properties(SDL_Renderer_RasterizerDepthStencilConstruction PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
