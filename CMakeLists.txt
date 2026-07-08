@@ -3638,6 +3638,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 683: SaveAsPng/SaveAsJpeg round-trip real-render pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_saveas_roundtrip
+                 examples/sdlrenderer_texture2d_saveas_roundtrip_test.cpp)
+    add_test(NAME SDL_Renderer_Texture2D_SaveAsRoundTrip
+             COMMAND cna_test_sdl_texture2d_saveas_roundtrip)
+    set_tests_properties(SDL_Renderer_Texture2D_SaveAsRoundTrip PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
