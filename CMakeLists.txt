@@ -3496,6 +3496,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 669: SpriteSortMode::FrontToBack layerDepth ordering on SDL_Renderer -- direct port of
+    # Task 420's EasyGL test (PresentationMode::NativeBackBuffer required for exact-pixel readback,
+    # see Task 915).
+    cna_sdl_test(cna_test_sdl_spritebatch_layerdepth
+                 examples/sdlrenderer_spritebatch_layerdepth_test.cpp)
+    add_test(NAME SDL_Renderer_SpriteBatch_LayerDepth
+             COMMAND cna_test_sdl_spritebatch_layerdepth)
+    set_tests_properties(SDL_Renderer_SpriteBatch_LayerDepth PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32

@@ -584,6 +584,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `pending` | 669 | **No bug found — `SpriteSortMode::FrontToBack`/`BackToFront` already work correctly on SDL_Renderer.** Sort logic lives entirely in the shared, backend-agnostic `SpriteBatch.cpp`, already proven correct on EasyGL (Tasks 415/416/420); this task confirmed SDL_Renderer's draw-dispatch doesn't itself reorder anything after that shared sort. New `sdlrenderer_spritebatch_layerdepth_test.cpp`: a direct port of Task 420's `FrontToBack` scenario plus a brand-new `BackToFront` scenario (no prior test on any backend exercised it with real pixels) — both use the established "submit in the wrong order so the test discriminates real sorting from submission order" methodology. Requires `PresentationMode::NativeBackBuffer` (Task 915). All 6 checks pass. Full regression: `ctest` 4274/4289 passed, 2 skipped, 13 failed (same already-documented "SDL_Renderer does not support 3D" baseline as Task 915 — zero new failures). |
 | `a8c9b032` | 914 | **`Texture3D`/`TextureCube::GetData` is now real on Bgfx (previously a total no-op silently leaving the caller's buffer untouched), and Task 864's mip-allocation fix (`mipMap` genuinely threaded through, previously hardcoded `false`) now applies to Bgfx too.** `bgfx::readTexture()` requires its source texture to have `BGFX_TEXTURE_READ_BACK`, incompatible with a normally shader-sampled texture — `GetData()` instead blits the requested region into a small temporary `BGFX_TEXTURE_BLIT_DST|READ_BACK` texture (2D for cube faces, 3D for volume slices) via `bgfx::blit()`, then reads that via `bgfx::readTexture()`; a new `AdvanceFramesUntil()` helper loops `bgfx::frame()` until the returned future frame number is reached, mirroring `ReadBackbuffer`'s own established retry-until-ready convention. Confirmed both `BGFX_CAPS_TEXTURE_BLIT`/`READ_BACK` are actually supported in this sandbox via a throwaway caps check before implementing — resolving the real open question Task 864's own scoping note had flagged. Registered the same 4 backend-agnostic example tests already shared by EasyGL/Vulkan (Tasks 173/275/862/864) for Bgfx too, rather than writing new ones. `git stash` confirmed all 4 fail exactly as predicted without the fix; restored and reconfirmed all 4 pass 100%. Full regression: `ctest` 4342/4344 passed (2 pre-existing: `Bgfx_RenderTarget2D_MsaaResolve`/`MipChain`, the same already-documented Xvfb/environment limitations carried since Task 750/877 — zero new failures). |
 | `11642341` | 911 | **Every Vulkan `RenderTarget2D`/`RenderTargetCube` now gets a real, distinct depth `VkFormat` picked for its own instance (or genuinely no depth attachment at all for `DepthFormat::None`), instead of silently sharing the backbuffer's device-wide `depthFormat_` regardless of what was requested.** New `PickDepthFormat()` maps each `DepthFormat` to a real, probed `VkFormat`; the old single shared RT render pass members became 3 `std::unordered_map<VkFormat, VkRenderPass>` caches (`GetOrCreateRTRenderPass`/`GetOrCreateRTRenderPassMsaa`); `VulkanRenderTargetBackend`/`VulkanRenderTargetCubeBackend` both now genuinely act on their `depthFormat` constructor parameter (previously silently dropped). All 9 3D pipeline functions plus the 2D sprite pipeline (converted from eager singletons to the same lazy depth-format-keyed cache pattern) gained a `targetDepthFmt` parameter, folded into their cache key and used to select the render pass via new `PickRTPipelineRenderPass()`; MRT deliberately stays out of scope (always the device-wide `depthFormat_`, XNA/FNA's own multi-target depth semantics being inherently ambiguous). **Real regression found and fixed while testing this task**: `VulkanMRTProxy` previously borrowed `rts[0]->GetDepthView()` directly, an invariant broken by this task's own `DepthFormat::None` fix (null `depthView_`) — reproduced as a live `vkCreateFramebuffer` validation error + abort on `SetRenderTargets_FourTargets_DoesNotThrow`; fixed by giving the proxy its own dedicated depth image, always in `depthFormat_`. Also fixed a second, pre-existing, unrelated leak found in the process: `mrtProxy_` was never explicitly reset before device teardown. New `Vulkan_RenderTarget2D_DepthFormatFidelity` test proves genuine per-format fidelity (a `None`-format RT can't depth-reject a later draw; `Depth24Stencil8`/`Depth16` RTs can, coexisting correctly in one frame). `git stash` confirmed both the depth-format bug and the MRT regression fail exactly as predicted without the fix. Full regression: `ctest` 4369/4378 passed (9 failures, identical set to Task 870's own documented baseline — zero new failures). |
 | `8764d201` | 870 | **Vulkan's `DepthStencilState` support was almost entirely fake — `DepthBufferFunction` hardcoded (2 pipelines `LESS`, 5 `LESS_OR_EQUAL`, unrelated to what's requested), entire stencil-test parameter set dropped by `ApplyDepthStencilState`. Now fixed: real per-pipeline `depthCompareOp` + full front/back `VkStencilOpState` (`ToVkCompareOp`/`ToVkStencilOp` mirror EasyGL's exact ordinal mapping), stencil reference/masks as true Vulkan dynamic state, `FindDepthFormat()` reordered to prefer stencil-capable formats.** Fixes 6 of the 12 pre-existing Vulkan `ctest` failures (`CompareFunction`, `StencilEnable`, `StencilMask`, `StencilOps`, `StencilTwoSided`, `GraphicsDevice.ReferenceStencil`); the remaining 6 are the separate, already-tracked Task 868 `BlendState` bug (5) + 1 known `DepthBias` sub-case. **Found and fixed a 2nd bug as a prerequisite**: `GraphicsDevice.ReferenceStencil`'s setter never reached any backend at all (new `IGraphicsBackend::SetReferenceStencil`, mirroring `SetBlendFactor`'s pattern) — EasyGL/Bgfx have the identical gap, deliberately left open. **A genuinely surprising empirical finding**: stencil `front`/`back` needed the OPPOSITE assignment from what culling's own (already-correct) `frontFace` convention would suggest — likely an llvmpipe/Mesa quirk specific to asymmetric `VkStencilOpState`, not a general winding bug (culling itself is unaffected). Also updated `vulkan_depth_bias_test.cpp`, which relied on the old buggy hardcoded `LESS` behavior — XNA's real default is `LessEqual`, under which the test's premise can't discriminate anything, so it now explicitly requests `CompareFunction::Less`. `git stash` confirmed all 6 previously-failing tests fail exactly as predicted without the fix. Full regression: `ctest` 4368/4377 (9 pre-existing, unrelated), `CnaTests` (filtered) 4278/4280 passed, 2 skipped, 0 failed. |
@@ -977,11 +978,17 @@ texture, unblocking Task 864's mip-allocation fix for Bgfx too — confirmed `BG
 BLIT`/`READ_BACK` are both actually supported in this sandbox.
 
 All 4 tasks the project owner explicitly approved "Implement now" this stretch (902/910/911/914)
-are now closed. The standing backlog (see the paragraph above this list) is next: continue the
-Task 666+ SDL_Renderer audit phase (Tasks 667–861 in `plan_graphics.md`, all unblocked by Task
-915's real `ReadBackbuffer`), and/or the older, not-yet-triaged backlog in the 421–500 range —
-worth a dedicated triage pass before working through either in bulk, since some entries may
-already be superseded by later, higher-numbered rediscoveries of the same bug.
+are now closed. Now working through the standing backlog: **Task 669 is done** (see §3 —
+`SpriteSortMode::FrontToBack`/`BackToFront` confirmed already correct on SDL_Renderer, no bug
+found, new test covers both modes for the first time on any backend). Triage note on the Task
+666+ SDL_Renderer audit phase (Tasks 667–861): most remaining rows are concrete, well-scoped
+"verify/pixel-test X on SDL_Renderer" items that fit this project's established
+test-first/`git stash`-verify methodology directly — good source of the next several tasks. The
+421–500 range is a different shape: mostly cross-cutting audit/documentation/infrastructure tasks
+(SpriteFont/Model/OcclusionQuery audits, backend feature matrix, golden-image infra, FNA reference
+generator, coverage docs, final 1.0 milestone declaration) rather than single-commit bug-hunting
+tasks — several (e.g. 481–490, 499–500) explicitly depend on finishing everything else first, so
+they're not good candidates to pick up out of order. Prefer continuing in Tasks 667+ order next.
 
 ---
 
@@ -1051,16 +1058,21 @@ already be superseded by later, higher-numbered rediscoveries of the same bug.
 Read NEXT.md first, in full — this section is intentionally the only thing you need before
 touching any code.
 
-## Repo state as of 2026-07-08 (end of Task 914 session) — READ THIS FIRST
+## Repo state as of 2026-07-08 (end of Task 669 session) — READ THIS FIRST
 
 All 4 `cmake-build-{debug,vulkan,bgfx,sdl}` directories exist and were verified building clean at
-the end of this session. Working tree should be clean (this session's work is committed and
+the end of this session (`cmake-build-sdl` needed `-DCNA_TEST_DISPLAY=:99` — it was still pointing
+at the real `:0` display from an earlier configure; always double check this cache variable before
+running `ctest` there, see §4). Working tree should be clean (this session's work is committed and
 pushed). **Tasks 902, 870, 911, and 914 (`GraphicsDevice::Reset()` real backend wiring; Vulkan
 `DepthStencilState`/stencil-test fidelity; Vulkan per-instance `DepthStencilFormat` fidelity; Bgfx
 real `Texture3D`/`TextureCube::GetData` readback + mip-allocation fix) are all now done** — every
 task the project owner explicitly approved "Implement now" this stretch (902/910/911/914) is
-closed. Next up is the standing backlog (§8): the Task 666+ SDL_Renderer audit phase, and/or the
-untriaged 421–500 range of `plan_graphics.md`.
+closed. Now working the standing backlog (§8): **Task 669 is also done this session**
+(`SpriteSortMode::FrontToBack`/`BackToFront` confirmed already correct on SDL_Renderer, no bug
+found). Next up: continue the Task 666+ SDL_Renderer audit phase in order (Task 667 next), and/or
+the untriaged 421–500 range of `plan_graphics.md` (see §8's own triage note on why 667+ is the
+better source of well-scoped single-commit tasks right now).
 
 **First action on resume, before any feature work** (run these in order):
   1. `git log --oneline -5` and `git status --short` — confirm clean tree, note current HEAD.
@@ -1145,11 +1157,14 @@ session (`Texture3D`/`TextureCube::GetData` now real on Bgfx via a temporary
 `BGFX_TEXTURE_BLIT_DST|READ_BACK` texture + `bgfx::blit()`/`bgfx::readTexture()`, unblocking Task
 864's mip-allocation fix for Bgfx too — confirmed `BGFX_CAPS_TEXTURE_BLIT`/`READ_BACK` are both
 actually supported in this sandbox before implementing). **All 4 project-owner-approved
-"Implement now" tasks (902/910/911/914) are now closed.** Next up: continue the SDL_Renderer
-audit phase (Task 666's remaining scope — write pixel tests for SpriteBatch/SpriteFont/
-BlendState/SamplerState/RenderTarget2D/Viewport/GraphicsDevice-lifecycle on this backend, Tasks
-667–861 in `plan_graphics.md`, all unblocked by Task 915), and/or the older, not-yet-triaged
-backlog in the 421–500 range of `plan_graphics.md` (audits, reference-value generation, and other
+"Implement now" tasks (902/910/911/914) are now closed.** Also closed Task 669 this session
+(`SpriteSortMode::FrontToBack`/`BackToFront` confirmed already correct on SDL_Renderer, no bug
+found — new test covers `BackToFront` with real pixels for the first time on any backend). Next
+up: continue the SDL_Renderer audit phase in order (Task 667's remaining scope — write pixel
+tests for SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/
+GraphicsDevice-lifecycle on this backend, Tasks 667–861 in `plan_graphics.md`, all unblocked by
+Task 915), and/or the older, not-yet-triaged backlog in the 421–500 range of `plan_graphics.md`
+(audits, reference-value generation, and other
 per-backend tasks from earlier phases never folded into this §8 list) — worth a dedicated triage
 pass before working through in bulk, since some entries (e.g. Task 750) may already be superseded
 by later, higher-numbered rediscoveries of the
