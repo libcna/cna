@@ -3791,6 +3791,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 702: default SamplerState (LinearClamp) verification pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_samplerstate_default
+                 examples/sdlrenderer_samplerstate_default_test.cpp)
+    add_test(NAME SDL_Renderer_SamplerState_Default
+             COMMAND cna_test_sdl_samplerstate_default)
+    set_tests_properties(SDL_Renderer_SamplerState_Default PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
