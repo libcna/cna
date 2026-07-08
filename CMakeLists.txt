@@ -3584,6 +3584,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 677: SpriteBatch Begin/End sequencing guard end-to-end integration test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritebatch_begin_end_guard
+                 examples/sdlrenderer_spritebatch_begin_end_guard_test.cpp)
+    add_test(NAME SDL_Renderer_SpriteBatch_BeginEndGuard
+             COMMAND cna_test_sdl_spritebatch_begin_end_guard)
+    set_tests_properties(SDL_Renderer_SpriteBatch_BeginEndGuard PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
