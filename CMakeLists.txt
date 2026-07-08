@@ -3908,6 +3908,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 715: DeviceResetting/DeviceReset events fire correctly on SDL_Renderer backbuffer resize.
+    cna_sdl_test(cna_test_sdl_devicereset_events
+                 examples/sdlrenderer_devicereset_events_test.cpp)
+    add_test(NAME SDL_Renderer_DeviceReset_Events
+             COMMAND cna_test_sdl_devicereset_events)
+    set_tests_properties(SDL_Renderer_DeviceReset_Events PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
