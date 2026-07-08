@@ -3534,6 +3534,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 672: scalar/Vector2 scale overload pixel test on SDL_Renderer -- direct port of
+    # Task 418's EasyGL test.
+    cna_sdl_test(cna_test_sdl_spritebatch_scale
+                 examples/sdlrenderer_spritebatch_scale_test.cpp)
+    add_test(NAME SDL_Renderer_SpriteBatch_Scale
+             COMMAND cna_test_sdl_spritebatch_scale)
+    set_tests_properties(SDL_Renderer_SpriteBatch_Scale PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32

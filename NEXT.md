@@ -584,6 +584,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `pending` | 672 | **No bug found — scalar/`Vector2` scale overloads already work correctly on SDL_Renderer.** `SpriteBatch.cpp` computes `destRect.Width/Height = sourceRect.Width/Height * scale` entirely in the shared layer before reaching the backend. New `sdlrenderer_spritebatch_scale_test.cpp`: direct port of Task 418's EasyGL test — scalar `3.0f` and non-uniform `Vector2(2,4)` scale, with checks ruling out "X-for-both-axes"/"Y-for-both-axes" bugs. Requires `PresentationMode::NativeBackBuffer` (Task 915). All 5 checks pass. Full regression: `ctest` 4278/4293 passed, 2 skipped, 13 failed (same baseline as Tasks 667-670 — zero new failures). |
 | `1442194d` | 670 | **No bug found — `SpriteSortMode::Immediate` genuinely flushes per-draw on SDL_Renderer, end-to-end.** New `sdlrenderer_spritebatch_immediate_flush_test.cpp`: draws a sprite, then `Clear(Green)` (a plain `GraphicsDevice` call outside `SpriteBatch`'s queue), then `End()` — correct behavior wipes the already-drawn sprite (region reads Green); a "silently `Deferred`" bug would draw the sprite AFTER the clear instead (region would read Red). **Methodology finding**: an initial single-line sabotage produced a false negative (it caused a silent-drop bug instead of a defer-to-`End()` bug, since `End()`'s own `Immediate`-skip meant the queued sprite was never flushed at all) — corrected by also making `End()` unconditionally flush, which genuinely reproduced the intended bug and failed as predicted; restored and reconfirmed passing. Requires `PresentationMode::NativeBackBuffer` (Task 915). Full regression: `ctest` 4277/4292 passed, 2 skipped, 13 failed (same baseline as Task 667/668/669 — zero new failures). |
 | `f27356a5` | 668 | **No bug found — `SpriteSortMode::Texture` grouping already works correctly on SDL_Renderer.** The pointer-order contract (which texture group ends up first) is already covered at the logic level by the mock-backend Task 414 test; this task pixel-verifies that SDL_Renderer's draw dispatch still binds the correct texture per reordered call. New `sdlrenderer_spritebatch_texture_sort_test.cpp`: 4 non-overlapping sprites, 2 textures, scrambled A/B/A/B submission — each destination shows its own colour regardless of reordering. Requires `PresentationMode::NativeBackBuffer` (Task 915). All 4 checks pass. Full regression: `ctest` 4276/4291 passed, 2 skipped, 13 failed (same baseline as Task 667/669 — zero new failures). |
 | `803b2c0c` | 667 | **No bug found — `SpriteSortMode::Deferred` (the default) already correctly preserves submission order on SDL_Renderer, ignoring `layerDepth`.** `SpriteBatch::flushBatch()` confirmed: `Deferred` takes the "no sort" fall-through branch. New `sdlrenderer_spritebatch_deferred_order_test.cpp`: 2 overlapping-sprite pairs with `layerDepth` values chosen to flip the outcome if `Deferred` secretly sorted like `FrontToBack` or `BackToFront` — both pairs confirm the submitted-last sprite always wins the overlap regardless of depth. Requires `PresentationMode::NativeBackBuffer` (Task 915). All 6 checks pass. Full regression: `ctest` 4275/4290 passed, 2 skipped, 13 failed (same already-documented baseline as Task 669 — zero new failures). |
@@ -984,7 +985,7 @@ All 4 tasks the project owner explicitly approved "Implement now" this stretch (
 are now closed. Now working through the standing backlog: **Tasks 667, 668, 669, and 670 are
 done** (see §3 — every `SpriteSortMode` value now pixel-verified on SDL_Renderer, no bugs found;
 new tests cover `BackToFront` and `Texture` grouping for the first time on any backend). Next:
-Task 671 is already done from an earlier session (SpriteBatch rotation) — continue at Task 672.
+Task 671 is already done from an earlier session (SpriteBatch rotation) — continue at Task 673 (Task 672 also done this session, see §3).
 Triage note on the Task 666+ SDL_Renderer audit phase (Tasks 667–861): most remaining rows are
 concrete, well-scoped
 "verify/pixel-test X on SDL_Renderer" items that fit this project's established
@@ -1077,7 +1078,7 @@ closed. Now working the standing backlog (§8): **Tasks 667, 668, 669, and 670 a
 session** (every `SpriteSortMode` value — `Deferred`/`Texture`/`FrontToBack`/`BackToFront`/
 `Immediate` — confirmed already correct on SDL_Renderer, no bugs found). Next up: continue the
 Task 666+ SDL_Renderer audit phase in order (Task 671 is already done from an earlier session —
-continue at Task 672), and/or the untriaged 421–500 range of
+continue at Task 673), and/or the untriaged 421–500 range of
 `plan_graphics.md` (see §8's own triage note on why 667+ is the
 better source of well-scoped single-commit tasks right now).
 
@@ -1176,7 +1177,7 @@ verifying it: an initial 1-line sabotage produced a false-negative-passing test 
 a silent-drop bug instead of the intended defer-to-`End()` bug; a 2nd, correct sabotage genuinely
 reproduced it and the test failed as predicted). **Every `SpriteSortMode` value is now
 pixel-verified on SDL_Renderer.** Next up: continue the SDL_Renderer audit phase (Task 671 is
-already done from an earlier session — continue at Task 672 — write pixel tests for
+already done from an earlier session — continue at Task 673 — write pixel tests for
 SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/GraphicsDevice-lifecycle on
 this backend, Tasks 672–861 in `plan_graphics.md`, all unblocked by Task 915), and/or the older,
 not-yet-triaged backlog in the
