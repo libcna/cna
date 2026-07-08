@@ -3964,6 +3964,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 721: all 5 DrawUserPrimitives typed + VertexDeclaration overloads throw the
+    # correct exception type+message on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_drawuserprimitives_throws
+                 examples/sdlrenderer_drawuserprimitives_throws_test.cpp)
+    add_test(NAME SDL_Renderer_DrawUserPrimitivesThrows
+             COMMAND cna_test_sdl_drawuserprimitives_throws)
+    set_tests_properties(SDL_Renderer_DrawUserPrimitivesThrows PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
