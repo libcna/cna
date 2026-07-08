@@ -3755,6 +3755,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 698: BlendState::NonPremultiplied pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_nonpremultiplied
+                 examples/sdlrenderer_blendstate_nonpremultiplied_test.cpp)
+    add_test(NAME SDL_Renderer_BlendState_NonPremultiplied
+             COMMAND cna_test_sdl_blendstate_nonpremultiplied)
+    set_tests_properties(SDL_Renderer_BlendState_NonPremultiplied PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
