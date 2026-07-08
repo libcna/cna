@@ -19,6 +19,7 @@ namespace CNA::Internal::Backends::SdlRenderer
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return texture; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
+        void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
     };
 
     /// SDL_TEXTUREACCESS_TARGET-based off-screen render target.

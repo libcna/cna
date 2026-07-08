@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <filesystem>
 #include <SDL3/SDL_gpu.h>
 
@@ -45,6 +46,14 @@ namespace CNA::Internal::Backends::SdlRenderer
     {
         if (!texture || !rgba) return;
         SDL_UpdateTexture(texture, nullptr, rgba, stride);
+    }
+
+    void SdlTextureBackend::UpdatePixelsLevel(int level, const uint8_t*, int, int)
+    {
+        throw std::runtime_error(
+            "SDL_Renderer does not support mip-level texture uploads (level " + std::to_string(level) +
+            "): SDL_Renderer's 2D texture API has no native mip chain or per-level LOD sampling. "
+            "Use Texture2D::SetData(level=0, ...) only, or generate mips via a mipMap-aware backend.");
     }
 
     // --- SdlSpriteBatchBackend ---

@@ -3620,6 +3620,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 681: Texture2D mip-level SetData/GetData decision test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_miplevel_throws
+                 examples/sdlrenderer_texture2d_miplevel_throws_test.cpp)
+    add_test(NAME SDL_Renderer_Texture2D_MipLevelThrows
+             COMMAND cna_test_sdl_texture2d_miplevel_throws)
+    set_tests_properties(SDL_Renderer_Texture2D_MipLevelThrows PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
