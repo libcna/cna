@@ -584,6 +584,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `pending` | 689 | **No bug found — `Texture2D::Dispose()` is safely idempotent and correctly shared-ownership-aware on SDL_Renderer.** `backend_` is a `shared_ptr<ITextureBackend>`; `.reset()` is idempotent, so double-`Dispose()` can't double-free. Verified the CNA-specific wrinkle too: `Texture2D` is a copyable value type here (unlike XNA's reference-type original) — copying shares `backend_`, so Disposing one copy only decrements the refcount; the real `SDL_Texture` is only destroyed when the last copy releases it, and the surviving copy stays fully usable. New `sdlrenderer_texture2d_dispose_test.cpp`: `tex1`/copy `tex2`, draw+Dispose+draw-again+double-Dispose sequence, all 7 checks pass under both a normal build and a throwaway `-DCNA_SANITIZE=address,undefined` build (this project's existing diagnostics-only `CNA_SANITIZE` option). **Discriminating power verified**: sabotaging `Texture2D::Dispose` to force-destroy the native handle unconditionally (bypassing the shared_ptr refcount) crashed the surviving copy exactly as predicted (`SDL_SetTextureColorMod failed: Parameter 'texture' is invalid`) under both builds; restored and reconfirmed. Full regression: `ctest` 4285/4308 passed, 2 skipped, 13 failed (same baseline as Tasks 667-688 — zero new failures). |
 | `93dda815` | 688 | **No bug found — `TextureFilter::Point`/`Linear` already correctly maps to `SDL_SCALEMODE_NEAREST`/`SDL_SCALEMODE_LINEAR` on SDL_Renderer.** `SetSamplerFilter` maps `Linear` (0) to `SDL_SCALEMODE_LINEAR`, else `SDL_SCALEMODE_NEAREST`, applied per-draw via `SDL_SetTextureScaleMode`. (Tasks 686/687 are BLOCKED — see §5 — so this continues the Texture2D-area backlog at 688.) New `sdlrenderer_texture_filter_point_vs_linear_test.cpp`: SpriteBatch counterpart to Task 297's 3D test, scoped to magnification — 2x1 (Red\|Green) texture stretched wide, sampled at the exact texel boundary with `PointClamp` (pure colour) vs `LinearClamp` (~50/50 blend). Both pass. **Discriminating power verified**: inverting the filter mapping flipped both results as predicted; restored and reconfirmed. Full regression: `ctest` 4285/4307 passed, 2 skipped, 13 failed (same baseline as Tasks 667-685 — zero new failures). |
 | `89d49706` | 685 | **No bug found, with a nuance — `TextureAddressMode::Clamp` already works on SDL_Renderer, but not via real SamplerState honoring.** `SetSamplerAddressMode` was a silent no-op; investigated fixing via SDL3's `SDL_SetRenderTextureAddressMode`, but its doc comment scopes it to `SDL_RenderGeometry()` only — `SdlSpriteBatchBackend::Draw` uses `SDL_RenderTexture`/`SDL_RenderTextureRotated`/`SDL_RenderTextureAffine` instead, completely unaffected by it (confirmed empirically: wiring it up changed nothing). Reverted the dead-code override. `SDL_RenderTexture`'s `srcrect` handling has ONE fixed behavior regardless of requested SamplerState, and it happens to already match Clamp semantics. New `sdlrenderer_texture_address_mode_clamp_test.cpp` (ports Task 269): `PointClamp` check passes; a sibling `PointWrap` check is printed for context only (not asserted) since it currently does NOT match XNA either — Task 686's real, now-better-understood gap (no native SDL_Renderer fix available for this Draw() path; would need a `SDL_RenderGeometry`-based rewrite). **Discriminating power verified**: sabotaging the texture upload to all-zero failed the `PointClamp` check as predicted; restored (zero net production changes). Full regression: `ctest` 4285/4306 passed, 2 skipped, 13 failed (same baseline as Tasks 667-684 — zero new failures). |
 | `990ac282` | 684 | **No bug found — non-power-of-two texture upload+sample works correctly on SDL_Renderer for both 3x5 and 7x11.** `SdlTextureBackend` creates textures via `SDL_CreateTexture`+`SDL_UpdateTexture`, abstracting POT/NPOT handling away entirely (unlike EasyGL's raw GL calls — Task 268's own motivation). New `sdlrenderer_npot_texture_test.cpp`: ports Task 268's EasyGL test, extended to both 3x5 AND 7x11 (Task 268 only covered 3x5) — distinct colour per row, drawn full-viewport and read back for real. All 16 checks pass. **Discriminating power verified**: sabotaged the upload pitch to round up to the next power-of-two width — leaves POT-width textures from every prior task unaffected while genuinely misaligning NPOT widths; reproduced the predicted row-corruption failure (12/16 checks failed); restored and reconfirmed. Full regression: `ctest` 4285/4305 passed, 2 skipped, 13 failed (same baseline as Tasks 667-683 — zero new failures). |
@@ -1003,7 +1004,7 @@ All 4 tasks the project owner explicitly approved "Implement now" this stretch (
 are now closed. Now working through the standing backlog: **Tasks 667, 668, 669, and 670 are
 done** (see §3 — every `SpriteSortMode` value now pixel-verified on SDL_Renderer, no bugs found;
 new tests cover `BackToFront` and `Texture` grouping for the first time on any backend). Next:
-Task 671 is already done from an earlier session (SpriteBatch rotation) — continue at Task 689 (Tasks 672-685 and 688 also done this session, see §3; Tasks 686/687 are BLOCKED on a project-owner architecture decision, see §5 and their own plan_graphics.md rows).
+Task 671 is already done from an earlier session (SpriteBatch rotation). The entire Texture2D section (667-689, excluding BLOCKED 686/687) is now done — continue at Task 690, the start of the SpriteFont section (Tasks 672-685, 688, 689 also done this session, see §3; Tasks 686/687 are BLOCKED on a project-owner architecture decision, see §5 and their own plan_graphics.md rows).
 Triage note on the Task 666+ SDL_Renderer audit phase (Tasks 667–861): most remaining rows are
 concrete, well-scoped
 "verify/pixel-test X on SDL_Renderer" items that fit this project's established
@@ -1095,8 +1096,9 @@ task the project owner explicitly approved "Implement now" this stretch (902/910
 closed. Now working the standing backlog (§8): **Tasks 667, 668, 669, and 670 are also done this
 session** (every `SpriteSortMode` value — `Deferred`/`Texture`/`FrontToBack`/`BackToFront`/
 `Immediate` — confirmed already correct on SDL_Renderer, no bugs found). Next up: continue the
-Task 666+ SDL_Renderer audit phase in order (Task 671 is already done from an earlier session —
-continue at Task 689; Tasks 686/687 are BLOCKED, see §5), and/or the untriaged 421–500 range of
+Task 666+ SDL_Renderer audit phase in order — the Texture2D section (667-689) is now fully done
+except BLOCKED 686/687 (see §5) — continue at Task 690 (start of the SpriteFont section), and/or
+the untriaged 421–500 range of
 `plan_graphics.md` (see §8's own triage note on why 667+ is the
 better source of well-scoped single-commit tasks right now).
 
@@ -1195,7 +1197,8 @@ verifying it: an initial 1-line sabotage produced a false-negative-passing test 
 a silent-drop bug instead of the intended defer-to-`End()` bug; a 2nd, correct sabotage genuinely
 reproduced it and the test failed as predicted). **Every `SpriteSortMode` value is now
 pixel-verified on SDL_Renderer.** Next up: continue the SDL_Renderer audit phase (Task 671 is
-already done from an earlier session — continue at Task 689 (Tasks 686/687 BLOCKED, see §5) — write pixel tests for
+already done from an earlier session; the Texture2D section (667-689) is now fully done except
+BLOCKED 686/687 (see §5) — continue at Task 690 — write pixel tests for
 SpriteBatch/SpriteFont/BlendState/SamplerState/RenderTarget2D/Viewport/GraphicsDevice-lifecycle on
 this backend, Tasks 672–861 in `plan_graphics.md`, all unblocked by Task 915), and/or the older,
 not-yet-triaged backlog in the

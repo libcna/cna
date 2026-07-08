@@ -3674,6 +3674,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 689: Texture2D::Dispose double-free/lifetime verification on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_dispose
+                 examples/sdlrenderer_texture2d_dispose_test.cpp)
+    add_test(NAME SDL_Renderer_Texture2D_Dispose
+             COMMAND cna_test_sdl_texture2d_dispose)
+    set_tests_properties(SDL_Renderer_Texture2D_Dispose PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
