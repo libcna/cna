@@ -32,6 +32,33 @@ This document compares the CNA public C++ API surface against:
 | **Missing** | No header in CNA at all. |
 | **Intentionally excluded** | Deliberately not ported; reason documented below. |
 
+### Coverage axes (Task 482, 2026-07-09)
+
+The single "Status" column above (Implemented/Partial/Stub/Missing/Intentionally excluded) is a
+useful at-a-glance tier, but it conflates several genuinely independent questions — a member can
+be present in a header, do something real at runtime, and still never have been checked against
+FNA's actual behavior. Percentages in §8 and elsewhere in this doc mix these together, which is
+exactly the "ambiguous percentages" this task exists to prevent. When a coverage claim needs to be
+precise (a new audit, a per-class table like §8, a bug report), qualify it against these 5
+orthogonal axes instead of a single blended number:
+
+| Axis | Question it answers | Example of a "no" |
+|------|---------------------|---------------------|
+| **Present** | Does a C++ declaration exist with the FNA/XNA 4.0 name (class/method/property/enum/constant)? | `ResourceContentManager` — no header exists in CNA at all. |
+| **Implemented** | Does that declaration have a real `.cpp` body that does the actual thing, not a stub/no-op/throw? | `INTERNAL_applyReverb` — present, but a documented no-op (no aux-send bus in SDL3_mixer). |
+| **Tested** | Does at least one automated test (`tests/`) or example (`examples/`) exercise this specific member, such that a regression would be caught? | Several `Microphone`/`BufferReady` real-hardware-capture-exceeds-threshold paths — implemented, but only the below-threshold case is tested (`NEXT.md`'s own documented gap). |
+| **FNA-compatible** | Has the implemented behavior been directly checked against FNA's own source or real running output — not just "looks reasonable," but verified value-by-value or line-by-line? | `IndexElementSize`'s numeric values — implemented, tested (the test itself is what's wrong), but NOT FNA-compatible: CNA uses `16`/`32`, real FNA uses `0`/`1` (Task 921, found by literally running FNA and diffing the output, Task 479). |
+| **Intentionally unsupported** | Is a specific deviation from FNA behavior a deliberate, documented decision — not a "not yet done" gap? | Audio reverb, 3D HRTF/elevation — SDL3_mixer has no backend primitive for either; documented in `CHECKLIST.md`, not tracked as an open bug. |
+
+These axes are not mutually exclusive tiers on one scale. A member is typically
+Present+Implemented+Tested well before anyone directly re-verifies it against FNA line-by-line —
+that's normal, not a red flag, and most of this codebase sits there. The axis that actually
+predicts hidden bugs is **FNA-compatible**: Tasks 471-479's entire FNA reference harness
+(`docs/fna-reference-harness.md`) exists specifically to check that axis independently of the
+other four, by running the real FNA implementation rather than re-reading its source a second
+time — which is how the `IndexElementSize` divergence above was found despite the member being
+present, implemented, and already tested for years.
+
 ### What counts as "public XNA 4.0 API"
 
 - `public` and `protected` members of non-internal classes/structs/enums in the `Microsoft.Xna.*` namespace.
