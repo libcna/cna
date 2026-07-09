@@ -195,3 +195,70 @@ supported, throws · ⛔ BLOCKED, needs a project-owner decision.
 | `BlendState::Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` | ✅ | Correct on EasyGL/Bgfx/SDL_Renderer; **Vulkan hardcodes one blend equation regardless of the preset** (Task 868, open) — don't rely on non-`Opaque` blending if targeting Vulkan today. |
 | `SamplerState::PointClamp`/`PointWrap`/`LinearClamp`/`LinearWrap`/`AnisotropicClamp`/`AnisotropicWrap` | ✅ | except `TextureFilter::Anisotropic` silently falls back to trilinear on EasyGL only (Task 918, open); genuinely supported on Vulkan/Bgfx. |
 | `TextureAddressMode::Wrap`/`Mirror` on SDL_Renderer specifically | ⛔ BLOCKED | Tasks 686/687 — works on all 3 other backends. |
+
+## 3D compatibility checklist (Task 488)
+
+A scannable, tick-through-your-own-source checklist for 3D games (the 5 stock Effects, `Model`,
+`VertexBuffer`/`IndexBuffer`/`VertexDeclaration`). Unlike the 2D checklist above, 3D behavior
+genuinely differs by backend, so every row below is qualified per backend. Every constructor/
+overload listed was checked against the real current CNA header **and** the real FNA `.cs` source
+at `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/` — the same
+overload-diffing discipline that found Task 487's `SpriteBatch::Draw` gap (Task 922) — not assumed
+from memory. **`SDL_Renderer` is not in the per-backend columns below because it doesn't support
+3D at all** — every member on this page throws `"SDL_Renderer does not support 3D"` there by
+design; if you're 2D-only, see the checklist above instead and skip this section entirely. Legend:
+✅ ports as-is (after the property rewrite) · ⚠️ ports with a caveat, read the note · ❌ known gap
+· ⛔ BLOCKED.
+
+**The 5 stock Effects — construction**
+
+Real FNA has exactly one public constructor per effect, `EffectName(GraphicsDevice device)`, plus
+a `Clone()` override backed by a `protected` copy constructor (confirmed by reading each of
+`BasicEffect.cs`/`AlphaTestEffect.cs`/`DualTextureEffect.cs`/`EnvironmentMapEffect.cs`/
+`SkinnedEffect.cs` directly). CNA matches this exactly for all 5: one public
+`explicit EffectName(GraphicsDevice&)` constructor (device passed by reference, this project's
+established convention throughout — see `docs/xna-4-api-coverage.md`'s deviations list) plus a
+`Clone()` override backed by a `private` copy constructor (CNA's accepted mapping for FNA's
+`protected`, per `CLAUDE.md`'s visibility table). No signature or overload-count mismatch found —
+unlike `SpriteBatch::Draw` (Task 922), this area checked out clean.
+
+| Effect | Construction | Core rendering (EasyGL / Vulkan / Bgfx) | Known caveats |
+|---|---|---|---|
+| `BasicEffect` | ✅ | ✅ / ✅ / ✅ | None — no open gaps on any 3D backend (per Task 483's table). |
+| `AlphaTestEffect` | ✅ | ✅ / ✅ / ✅ | `VertexColorEnabled` missing on Vulkan/Bgfx (Task 887). |
+| `DualTextureEffect` | ✅ | ✅ / ✅ / ✅ | `VertexColorEnabled` missing on all 3 3D backends (Task 889). |
+| `EnvironmentMapEffect` | ✅ | ✅ / ✅ / ✅ | `DirectionalLight1`/`2` and base-lerp alpha scaling missing on Vulkan/Bgfx (Tasks 890/891). |
+| `SkinnedEffect` | ✅ | ✅ / ✅ / ✅ | `DirectionalLight1`/`2`, `SpecularColor`/`Power`, `WeightsPerVertex` GPU enforcement missing on Vulkan/Bgfx (Tasks 893-895). |
+| Fog (all 5 effects) | — | ✅ / ✅ / ✅ | Fully implemented on every 3D backend for every effect, including Vulkan's `env_map3d`/`skinned3d` (Task 899, closed 2026-07-07) — a stale "Vulkan still lacks fog" claim in this same file's own per-backend table (Task 484) was found and corrected while writing this checklist. |
+| `ShaderEffect` (NOXNA custom shader) | ✅ (constructor exists on all 3) | ✅ / ✅ / ❌ | Bgfx's `CreateEffectBackend` returns `nullptr` for it — the one whole-feature 3D gap left. |
+
+**`Model` / `ModelMesh` / `ModelBone`**
+
+Real FNA's own `Model` constructor is `internal` — ordinary XNA/FNA game code never calls it
+directly, only via `ContentManager.Load<Model>()`'s content pipeline (confirmed in `Model.cs`).
+CNA exposes two `NOXNA`-marked public constructors instead (there being no real public FNA
+constructor to match against) so hand-built models are possible without content loading — this is
+an intentional, documented CNA convenience, not a signature mismatch.
+
+| Member | Status | Note |
+|---|---|---|
+| `Model::Draw(Matrix world, Matrix view, Matrix projection)` | ✅ | Correct on EasyGL/Vulkan/Bgfx; throws on SDL_Renderer by design. |
+| Constructing a `Model` by hand (`NOXNA` constructors) | ⚠️ | Auto-defaults `Root` to `bones[0]` — no parameter to specify a different root bone (Task 916, open). Only matters if your model's true root isn't the first bone in your `bones` list. |
+| Loading a `Model` via `ContentManager` | ⚠️ | CNA's own `.model.json` format, not FNA's `.xnb` — real gaps versus FNA's loader (no bone hierarchy/`ParentBone`/`BoundingSphere`/`Tag` wiring, Task 440). Don't expect an FNA-authored `.xnb` model to load as-is; see "Content pipeline" above. |
+| `ModelMesh`/`ModelBone` collections (`ModelMeshCollection`, `ModelBoneCollection`) | ✅ | `TryGetValue`/`Contains`/`begin()`/`end()` all present (Tasks 432/433). |
+| `Model::CopyBoneTransformsFrom`/`To` | ⚠️ | Loop bound is `Bones.Count`, not the caller array's length like FNA — an intentional, safer deviation (see "Known deviations" list), not a bug. |
+
+**`VertexBuffer` / `IndexBuffer` / `VertexDeclaration`**
+
+Real FNA has exactly 2 public constructors each for `VertexBuffer`/`IndexBuffer` and 2 for
+`VertexDeclaration` (confirmed against `VertexBuffer.cs`/`IndexBuffer.cs`/`VertexDeclaration.cs`);
+CNA has all of FNA's overloads plus extra `NOXNA` convenience overloads (e.g.
+`VertexBuffer(GraphicsDevice&, int vertexCount)` without an explicit `VertexDeclaration`) — purely
+additive, no missing or mismatched FNA-facing overload found.
+
+| Member | Status | Note |
+|---|---|---|
+| `VertexBuffer`/`IndexBuffer` construction (both FNA overloads) | ✅ | No open gaps (Task 483's table). |
+| `VertexDeclaration` construction (both FNA overloads + `initializer_list` convenience) | ✅ | Construction/assignment confirmed never throws (Task 729). |
+| `IndexElementSize::ThirtyTwoBits` — **only if your code reads the enum's raw numeric value** | ❌ | CNA's `16`/`32` don't match FNA's real `0`/`1` (Task 921, open). Ordinary symbolic use (passing the enum to `IndexBuffer`'s constructor) is unaffected. |
+| `SetDataOptions`/`BufferUsage` | ✅ | No open gaps. |
