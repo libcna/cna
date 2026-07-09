@@ -2356,6 +2356,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 427: Pixel test -- SpriteFont default character fallback renders the expected
+        # glyph on EasyGL.
+        cna_easygl_test(cna_test_easygl_spritefont_default_char
+                        examples/easygl_spritefont_default_char_test.cpp)
+        add_test(NAME EasyGL_SpriteFont_DefaultChar
+                 COMMAND cna_test_easygl_spritefont_default_char)
+        set_tests_properties(EasyGL_SpriteFont_DefaultChar PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0]
         cna_easygl_test(cna_test_easygl_sampler_state_effect
                         examples/easygl_sampler_state_effect_test.cpp)
