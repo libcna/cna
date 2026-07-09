@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: MS-PL
+// Task 752: verify BlendState::Opaque genuinely discards destination content and ignores source
+// alpha on Bgfx.
+//
+// Bgfx-specific copy of examples/easygl_blendstate_opaque_test.cpp (Task 303, already reused
+// verbatim on Vulkan). Not a verbatim reuse: that file calls the legacy
+// GraphicsDevice::SetDepthTestEnabled(false) convenience method, which throws on Bgfx
+// ("SetDepthTestEnabled / SetBlend* are not yet wired into bgfx state flags" -- a pre-existing,
+// deliberate stub, not a bug introduced by this task). Replaced with the equivalent
+// DepthStencilState-based call. Everything else is identical -- this test does exactly 1 Draw + 1
+// GetBackBufferData read per frame, so Bgfx's own "first read per rendered frame" quirk (Task 406)
+// does not apply here.
+//
+// Clears to GREEN, then draws a quad with a PARTIALLY TRANSPARENT red (alpha=128) using
+// BlendState::Opaque (colorSourceBlend=One, colorDestinationBlend=Zero, same for alpha). Per FNA's
+// blend equation, output = fragColor*colorSourceBlend + dest*colorDestinationBlend
+// = fragColor*1 + dest*0 = fragColor exactly — the destination (green) must be completely
+// discarded and the low source alpha must NOT cause any blending, unlike AlphaBlend/
+// NonPremultiplied, which would produce a visible red/green mix at alpha=128.
+//
+// Exit code 0 = PASS (pure red, no green bleed-through), 1 = FAIL.
+
+#include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+
+#include <cstdio>
+
+using namespace Microsoft::Xna::Framework;
+using namespace Microsoft::Xna::Framework::Graphics;
+
+class BgfxBlendStateOpaqueTest : public Game
+{
+    bool done_   = false;
+    int  result_ = 1;
+
+protected:
+    void Draw(const GameTime&) override
+    {
+        if (done_) return;
+        done_ = true;
+
+        auto& dev = getGraphicsDeviceProperty();
+        const auto& vp = dev.getViewportProperty();
+
+        dev.Clear(Color(0, 255, 0, 255)); // green background
+        DepthStencilState ds;
+        ds.setDepthBufferEnableProperty(false);
+        dev.setDepthStencilStateProperty(ds);
+        dev.setBlendStateProperty(BlendState::Opaque);
+
+        const Color kTranslucentRed(255, 0, 0, 128);
+        const VertexPositionColor verts[6] = {
+            { Vector3(-1.0f,  1.0f, 0.0f), kTranslucentRed },
+            { Vector3(-1.0f, -1.0f, 0.0f), kTranslucentRed },
+            { Vector3( 1.0f, -1.0f, 0.0f), kTranslucentRed },
+            { Vector3(-1.0f,  1.0f, 0.0f), kTranslucentRed },
+            { Vector3( 1.0f, -1.0f, 0.0f), kTranslucentRed },
+            { Vector3( 1.0f,  1.0f, 0.0f), kTranslucentRed },
+        };
+
+        BasicEffect fx(dev);
+        fx.VertexColorEnabled = true;
+        fx.Apply();
+
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real
+        // default RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+
+        const Rectangle reg(vp.getWidthProperty() / 2, vp.getHeightProperty() / 2, 1, 1);
+        Color got(0, 0, 0, 0);
+        dev.GetBackBufferData(&reg, &got, 0, 1);
+
+        const bool isPureRed = got.getRProperty() >= 200 && got.getGProperty() <= 50 && got.getBProperty() <= 50;
+
+        if (isPureRed)
+        {
+            std::printf("[PASS] BlendState::Opaque with alpha=128 source: centre=(%d,%d,%d) is pure red\n",
+                        got.getRProperty(), got.getGProperty(), got.getBProperty());
+            result_ = 0;
+        }
+        else
+        {
+            std::printf("[FAIL] BlendState::Opaque did not discard destination/alpha: centre=(%d,%d,%d),\n"
+                        "       expected pure red (R>=200,G<=50,B<=50) - green background must not bleed through.\n",
+                        got.getRProperty(), got.getGProperty(), got.getBProperty());
+        }
+        Exit();
+    }
+
+public:
+    int getResult() const { return result_; }
+};
+
+int main()
+{
+    BgfxBlendStateOpaqueTest game;
+    game.Run();
+    return game.getResult();
+}

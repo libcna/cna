@@ -5125,6 +5125,45 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Tasks 752-755 (Phase 72 Bgfx gap closure): BlendState::Opaque/AlphaBlend/NonPremultiplied/
+    # Additive on Bgfx -- each is a Bgfx-specific copy of the backend-agnostic EasyGL source (also
+    # reused verbatim on Vulkan above), differing only in replacing the legacy
+    # GraphicsDevice::SetDepthTestEnabled(false) call (throws on Bgfx -- a pre-existing, deliberate
+    # stub) with the equivalent DepthStencilState-based call. Each still does exactly 1 Draw + 1
+    # GetBackBufferData read per frame, so Bgfx's own "first read per rendered frame" quirk (Task
+    # 406) does not apply -- no other restructuring needed.
+    cna_bgfx_test(cna_test_bgfx_blendstate_opaque
+                  examples/bgfx_blendstate_opaque_test.cpp)
+    add_test(NAME Bgfx_BlendState_Opaque
+             COMMAND cna_test_bgfx_blendstate_opaque)
+    set_tests_properties(Bgfx_BlendState_Opaque PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_bgfx_test(cna_test_bgfx_blendstate_alphablend
+                  examples/bgfx_blendstate_alphablend_test.cpp)
+    add_test(NAME Bgfx_BlendState_AlphaBlend
+             COMMAND cna_test_bgfx_blendstate_alphablend)
+    set_tests_properties(Bgfx_BlendState_AlphaBlend PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_bgfx_test(cna_test_bgfx_blendstate_nonpremultiplied
+                  examples/bgfx_blendstate_nonpremultiplied_test.cpp)
+    add_test(NAME Bgfx_BlendState_NonPremultiplied
+             COMMAND cna_test_bgfx_blendstate_nonpremultiplied)
+    set_tests_properties(Bgfx_BlendState_NonPremultiplied PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_bgfx_test(cna_test_bgfx_blendstate_additive
+                  examples/bgfx_blendstate_additive_test.cpp)
+    add_test(NAME Bgfx_BlendState_Additive
+             COMMAND cna_test_bgfx_blendstate_additive)
+    set_tests_properties(Bgfx_BlendState_Additive PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

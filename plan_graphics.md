@@ -736,9 +736,10 @@ header. No task content changed, only the file location and numbering.
 > **Full row-by-row triage completed 2026-07-09** (the first ever full pass — Task 861 had only
 > spot-checked a sample of Phase 73, and this phase had never been triaged at all): of 85 rows,
 > 34 were SUPERSEDED by later work and closed here as a backlog-hygiene pass, 38 were confirmed
-> REAL GAPS. **Tasks 758-768 (10 of those 38, the entire `DepthStencilState` row group plus all 3
-> testable `RasterizerState` rows) were picked up as real work the same session** — the first-ever
-> Bgfx `DepthStencilState`/`RasterizerState` pixel tests found 6 genuine, confirmed, previously-
+> REAL GAPS. **Tasks 752-755/758-768 (14 of those 38, the entire `DepthStencilState` row group,
+> all 3 testable `RasterizerState` rows, and all 4 `BlendState` preset rows) were picked up as real
+> work the same session** — the first-ever Bgfx `DepthStencilState`/`RasterizerState` pixel tests
+> found 6 genuine, confirmed, previously-
 > undiscovered bugs/gaps: `DepthBufferWriteEnable=false` had zero effect on any 3D draw (all 4
 > draw-dispatch functions unconditionally wrote depth regardless), fixed at Task 758/759;
 > `TwoSidedStencilMode`'s front/back stencil slots were swapped relative to the intended raw
@@ -765,14 +766,23 @@ header. No task content changed, only the file location and numbering.
 > bias support anywhere (no state flag, nothing in its vendored `renderer_gl.cpp`), matching
 > EasyGL's own identical gap; a real fix needs shader-level Z-offset emulation across every 3D
 > shader, a cross-cutting architecture decision spanning multiple backends, not a Bgfx-scoped fix.
-> **All 4 `RasterizerState` rows in this triage (765-768) are now closed or flagged** — 28 REAL
-> GAPS remain, 1 of which (Task 767) is flagged `NEEDS_HUMAN` rather than a plain untouched row.
+> **All 4 `RasterizerState` rows in this triage (765-768) are now closed or flagged.** Tasks
+> 752-755 (`BlendState::Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive`) each found their
+> mapping already correct too (confirmed already-fixed by Task 923 this session) — each is a
+> Bgfx-specific copy of the shared EasyGL source, needed only because the shared file's legacy
+> `SetDepthTestEnabled(false)` call throws on Bgfx (a pre-existing, deliberate stub); discriminating
+> power verified once for all 4 via a single sabotage (swapped `SourceAlpha`/`InverseSourceAlpha`
+> in `XnaBlendToBgfxFactor`), caught cleanly by `Additive`. 23 REAL GAPS remain (of the original 38;
+> 15 have now been closed or flagged this session — 752-755, 758-768), 1 of which (Task
+> 767) is flagged `NEEDS_HUMAN` rather than a plain untouched row.
 > 13 are UNCERTAIN (no test found either way, needs closer individual investigation before
 > concluding). **Bgfx is dramatically less pixel-test-covered than Vulkan for the same
 > categories**: `DepthStencilState` (0/7 rows remaining, all 7 closed this session), `RasterizerState`
-> (1/4 remaining — only Task 767, NEEDS_HUMAN — 4 closed/flagged this session), `SpriteFont`
-> (3/3), `Model` (2/2), `SpriteBatch` behavior (6/6), and most `BlendState` presets (4/5) have
-> ZERO Bgfx-specific tests at all, while Vulkan is mostly done in these same categories. This is
+> (1/4 remaining — only Task 767, NEEDS_HUMAN — 4 closed/flagged this session), `BlendState` presets
+> (0/5 remaining — 4 closed this session, the 5th being a custom/general-purpose row not part of
+> this preset group), `SpriteFont`
+> (3/3), `Model` (2/2), and `SpriteBatch` behavior (6/6) still have ZERO Bgfx-specific tests at
+> all, while Vulkan is mostly done in these same categories. This is
 > the single largest real remaining gap in this project's pixel-verification
 > coverage — a genuine, substantial undertaking if picked up, not a quick pass.
 
@@ -802,10 +812,10 @@ header. No task content changed, only the file location and numbering.
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
 | 751 | Audit `BlendState` preset mapping to `BGFX_STATE_BLEND_*` | ⬜ | |
-| 752 | Pixel test: `BlendState::Opaque` on Bgfx | ⬜ | |
-| 753 | Pixel test: `BlendState::AlphaBlend` premultiplied alpha on Bgfx | ⬜ | |
-| 754 | Pixel test: `BlendState::NonPremultiplied` on Bgfx | ⬜ | |
-| 755 | Pixel test: `BlendState::Additive` saturation on Bgfx | ⬜ | |
+| 752 | Pixel test: `BlendState::Opaque` on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed.** New `Bgfx_BlendState_Opaque` test — a Bgfx-specific copy of `examples/easygl_blendstate_opaque_test.cpp` (Task 303, already reused verbatim on Vulkan): could not reuse verbatim because that file calls the legacy `GraphicsDevice::SetDepthTestEnabled(false)` convenience method, which throws on Bgfx (`"SetDepthTestEnabled / SetBlend* are not yet wired into bgfx state flags"` — a pre-existing, deliberate stub, not a bug); replaced with the equivalent `DepthStencilState`-based call, everything else identical (this test does exactly 1 Draw + 1 `GetBackBufferData` read per frame, so Bgfx's own "first read per rendered frame" quirk, Task 406, does not apply). PASS on first attempt: centre=(255,0,0), pure red, no green bleed-through from the alpha=128 source. Confirms `BgfxGraphicsBackend::ApplyBlendState`'s `Opaque` mapping (already fixed by Task 923 this session) is correct. See Task 755's row for the shared sabotage-and-revert discriminating-power verification across all 4 of Tasks 752-755. |
+| 753 | Pixel test: `BlendState::AlphaBlend` premultiplied alpha on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed.** New `Bgfx_BlendState_AlphaBlend` test — Bgfx-specific copy of `examples/easygl_blendstate_alphablend_test.cpp` (Task 304), same `SetDepthTestEnabled`→`DepthStencilState` substitution as Task 752's row explains. PASS: centre=(128,127,0), matching the exact expected premultiplied-alpha result (not the ~64 double-multiply value that would indicate `NonPremultiplied`'s equation was used instead). See Task 755's row for the shared discriminating-power verification. |
+| 754 | Pixel test: `BlendState::NonPremultiplied` on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed.** New `Bgfx_BlendState_NonPremultiplied` test — Bgfx-specific copy of `examples/easygl_blendstate_nonpremultiplied_test.cpp` (Task 305), same `SetDepthTestEnabled`→`DepthStencilState` substitution. PASS: centre=(128,127,0), matching the exact expected raw-alpha-multiply result. Unlike this test's own Vulkan history (Task 305's file header documents a coincidental pass there, since Vulkan's blend state was almost entirely fake pre-Task-868), this Bgfx result is NOT coincidental — see Task 755's row for the discriminating verification. |
+| 755 | Pixel test: `BlendState::Additive` saturation on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed (last of 4 BlendState preset rows, 752-755).** New `Bgfx_BlendState_Additive` test — Bgfx-specific copy of `examples/easygl_blendstate_additive_test.cpp` (Task 306), same `SetDepthTestEnabled`→`DepthStencilState` substitution as Tasks 752-754. PASS: centre=(255,150,0) — R correctly saturates (255+200 clamped, no wraparound) and G correctly adds the full destination (100+50=150, not ~100, which would mean the destination was incorrectly dropped — the exact failure mode Task 868 originally found on Vulkan pre-fix). **Discriminating power verified via sabotage-and-revert, covering all 4 of Tasks 752-755 in one pass** (no production fix existed to git-stash — `BgfxGraphicsBackend::ApplyBlendState`'s mapping was already fixed by Task 923 this session): temporarily swapped `XnaBlendToBgfxFactor`'s `SourceAlpha`/`InverseSourceAlpha` cases (4↔5) — the Additive test correctly FAILED as predicted (centre dropped to (200,50,0), destination incorrectly not added, matching Additive's own color-source-factor dependency on `SourceAlpha`); Opaque/AlphaBlend/NonPremultiplied were numerically insensitive to this specific swap at their own chosen alpha=128 (0.502 ≈ 1-0.502, so `SRC_ALPHA`↔`INV_SRC_ALPHA` are nearly indistinguishable at ~50% alpha) — an expected, understood result, not a coverage gap, since Additive alone already proves the mapping is live and load-bearing. Reverted and reconfirmed all 4 pass. Full Bgfx regression: `ctest` 4434/4436 passed, 2 pre-existing (`Bgfx_RenderTarget2D_MsaaResolve`/DRI3 limitation, `Bgfx_RenderTarget2D_MipChain`/~1-in-8 timing flake, reconfirmed flaky by re-running in isolation), zero new. |
 | 756 | Verify separate color/alpha blend function + factor combinations on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_BlendState_SeparateFunctions` (Task 923) covers color/alpha function independence; factor independence explicitly documented as not independently pixel-verifiable in this sandbox, Task 923's own row.  |
 | 757 | Verify `BlendFactor` constant-color blending on Bgfx | ⬜ | |
 
