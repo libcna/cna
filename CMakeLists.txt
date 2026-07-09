@@ -4999,6 +4999,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Matches this project's established precedent for a sandbox limitation, not a CNA defect
     # (e.g. Task 448's occlusion query, Task 879's Bgfx_RenderTarget2D_MsaaResolve).
 
+    # Task 926 (split from Task 867, the last of the 3 backends -- closes the split in full):
+    # real Texture2D mip-level upload on Bgfx -- a Bgfx-specific adaptation of the EasyGL test
+    # source (Task 298; can't reuse it verbatim, same reasoning as Task 925's Vulkan copy: Bgfx's
+    # TextureFilter::Point has always mapped to BGFX_SAMPLER_MIP_POINT, genuinely mip-aware,
+    # unlike EasyGL's still-flat mapping -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_texture_mip_filter_effect
+                  examples/bgfx_texture_mip_filter_effect_test.cpp)
+    add_test(NAME Bgfx_TextureMipFilter_DualTextureEffect
+             COMMAND cna_test_bgfx_texture_mip_filter_effect)
+    set_tests_properties(Bgfx_TextureMipFilter_DualTextureEffect PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

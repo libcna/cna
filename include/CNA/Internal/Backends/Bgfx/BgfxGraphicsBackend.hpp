@@ -155,6 +155,10 @@ namespace CNA::Internal::Backends::Bgfx
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
         bgfx::TextureHandle GetBgfxTextureHandle() const override { return textureHandle; }
+        // Task 926 (split from Task 867): real GPU upload for level 0 and level>0, mirroring
+        // BgfxTextureCubeBackend::SetData's established bgfx::updateTextureCube pattern.
+        void UpdatePixels(const uint8_t* rgba, int stride) override;
+        void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
     };
 
     /// bgfx-backed cube map texture.

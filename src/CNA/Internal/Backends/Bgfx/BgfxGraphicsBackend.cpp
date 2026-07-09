@@ -224,21 +224,52 @@ namespace CNA::Internal::Backends::Bgfx
             throw std::runtime_error("Failed to create BGFX texture: image data is empty.");
         }
 
-        const bgfx::Memory* memory = bgfx::copy(data.pixels.data(), static_cast<uint32_t>(data.pixels.size()));
+        // Task 926: created WITHOUT initial _mem (mutable -- bgfx::createTexture2D's own doc:
+        // "If _mem is non-NULL, created texture will be immutable"), mirroring
+        // BgfxTextureCubeBackend's established pattern, so UpdatePixels/UpdatePixelsLevel below
+        // can genuinely re-upload later. hasMips now genuinely threaded through (was hardcoded
+        // false regardless of data.mipLevels) so a real mip chain can be allocated and later
+        // populated via UpdatePixelsLevel.
         textureHandle = bgfx::createTexture2D(
             static_cast<uint16_t>(width),
             static_cast<uint16_t>(height),
-            false,
+            data.mipLevels > 1,
             1,
             bgfx::TextureFormat::RGBA8,
-            BGFX_TEXTURE_NONE | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP,
-            memory
+            BGFX_TEXTURE_NONE | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP
         );
 
         if (!bgfx::isValid(textureHandle))
         {
             throw std::runtime_error("Failed to create BGFX texture handle.");
         }
+
+        const bgfx::Memory* memory = bgfx::copy(data.pixels.data(), static_cast<uint32_t>(data.pixels.size()));
+        bgfx::updateTexture2D(textureHandle, 0, 0, 0, 0,
+                               static_cast<uint16_t>(width), static_cast<uint16_t>(height), memory);
+    }
+
+    void BgfxTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    {
+        if (!bgfx::isValid(textureHandle) || !rgba) return;
+        const uint32_t size = static_cast<uint32_t>(stride) * static_cast<uint32_t>(height);
+        const bgfx::Memory* mem = bgfx::copy(rgba, size);
+        bgfx::updateTexture2D(textureHandle, 0, 0, 0, 0,
+                              static_cast<uint16_t>(width), static_cast<uint16_t>(height), mem,
+                              static_cast<uint16_t>(stride));
+    }
+
+    // Task 926 (split from Task 867): real GPU upload for level>0, mirroring
+    // BgfxTextureCubeBackend::SetData's established bgfx::updateTextureCube pattern --
+    // previously the shared IGraphicsBackend no-op default, silently discarding the caller's
+    // mip-level data.
+    void BgfxTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    {
+        if (!bgfx::isValid(textureHandle) || !rgba || level < 0) return;
+        const uint32_t size = static_cast<uint32_t>(levelW) * static_cast<uint32_t>(levelH) * 4u;
+        const bgfx::Memory* mem = bgfx::copy(rgba, size);
+        bgfx::updateTexture2D(textureHandle, 0, static_cast<uint8_t>(level), 0, 0,
+                              static_cast<uint16_t>(levelW), static_cast<uint16_t>(levelH), mem);
     }
 
     BgfxTextureBackend::~BgfxTextureBackend()
