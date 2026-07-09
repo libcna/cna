@@ -274,7 +274,7 @@ none are trivial engineering either.
 | `ContentTypeReaderManager` | Internal registry used by ContentReader. Not needed without XNB support. **Intentionally deferred.** |
 | `ContentExtensions` | Adds `GetLoadedAssets()` extension to ContentManager. FNA-internal convenience; not core XNA 4.0 public API. **Intentionally excluded.** |
 | `ContentSerializerAttribute` and siblings | Design-time attributes for the Content Pipeline build tool. Not a runtime concern. **Intentionally excluded** – see §6. |
-| `LzxDecoder` | XNB LZX decompressor. FNA internal. **Intentionally excluded.** |
+| `LzxDecoder` | XNB LZX decompressor. FNA internal. **Deferred, low priority** – see `xnb.md`. |
 
 ### `Microsoft::Xna::Framework::GamerServices`
 
@@ -666,8 +666,13 @@ FNA provides 13 TypeConverter subclasses (e.g. `BoundingBoxConverter`, `ColorCon
 ### `Microsoft::Xna::Framework::Content` — XNB pipeline classes
 
 CNA's `ContentManager` is not XNB-based. It uses file-extension readers instead of the XNB binary format.
+**Not permanently excluded** — a real binary `.xnb` loader is a plausible future addition, but low
+priority (no current CNA task is blocked on it) and a substantial undertaking (LZX decompression
+port, a reflection-free type-reader dispatch table, ~40 per-type readers). See `xnb.md` (repo root)
+for a from-source analysis of what it would actually require, written as planning material only —
+no implementation exists or is scheduled.
 
-**Excluded because of this design decision:**
+**Deferred (not implemented, low priority — see `xnb.md`):**
 - `ContentReader` (reads from an XNB stream)
 - `ContentTypeReaderManager` (manages XNB type reader registrations)
 - `ContentSerializerAttribute` and siblings (content pipeline build-tool attributes)

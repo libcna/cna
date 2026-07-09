@@ -190,6 +190,7 @@ All 100 original tasks addressed.
 | ~~114–116 Bgfx shaders~~ | ✅ Done |
 | ~~118 Vulkan per-slot sampler~~ | ✅ Done |
 | ~~104 / 108 EnvironmentMapEffect~~ | ✅ Done |
+| Real binary `.xnb` content-pipeline loader (`ContentReader`/`ContentTypeReaderManager`/`LzxDecoder`, per-type readers) | **Low priority, not scheduled.** A future, substantial undertaking, not blocked on anything today — no current CNA task needs `.xnb` support; CNA's own file-extension-based content loading already covers every asset type it supports. See `xnb.md` (repo root) for a from-source analysis of what it would actually require (XNB file layout, LZX compression, a reflection-free type-reader dispatch table, the ~40 real FNA type readers by priority) — analysis only, no implementation. |
 
 ---
 
