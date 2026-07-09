@@ -2,7 +2,14 @@
 
 **Date:** 2026-06-26 (updated 2026-06-26 — Tasks 197–199; updated 2026-07-03 — Input/Touch
 sections, `feature/input` Phases I1–I6; updated 2026-07-04 — final Input status, `feature/input`
-Phase I9, `plan_input.md` tasks 700–840, coverage split by category)  
+Phase I9, `plan_input.md` tasks 700–840, coverage split by category; updated 2026-07-09 — Task 481,
+Graphics sections rewritten after `plan_graphics.md` Phases 47–53: SDL_Renderer's own full 2D-only
+audit phase (Phase 70, 15 real bugs found and fixed), EasyGL/Vulkan/Bgfx gap-closure phases
+(Phases 71–73), the Model/OcclusionQuery correctness audits (Phases 49–50), a new golden-image
+pixel-testing infrastructure, and a new FNA-vs-CNA JSON comparison harness — §7/§8 and the Stock
+Effects/Recommended-next-steps sections below were stale by this entire stretch of work; see
+`docs/graphics-backend-feature-matrix.md` for the authoritative, currently-maintained per-backend
+detail this file now points to instead of duplicating)  
 **Reference:** FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src`  
 **CNA headers:** `include/Microsoft/Xna/Framework/`
 
@@ -104,8 +111,8 @@ so that XNA 4.0 game code that references them can at least compile:
 
 ### `Microsoft::Xna::Framework::Graphics` — Stock Effects
 
-- `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`: API surface complete; GPU shader logic fully implemented in EasyGL (pixel-tested, all property setters verified). Vulkan has working shaders for most effects but fewer pixel-test coverage points. Bgfx compiles effect objects but 3D rendering is blocked by unimplemented depth/blend state. See §7 for full backend parity table.
-- **Status:** Implemented (EasyGL); Partial (Vulkan); Blocked (Bgfx)
+- `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`: API surface complete on all 4 backends. **Stale claim corrected 2026-07-09 (Task 481):** Bgfx is no longer blocked on depth/blend state — Phase 72 ("Bgfx: full 2D+3D pixel-verified parity") closed that gap; all 5 stock effects' core rendering (MVP, lighting, texture, fog) now works and is pixel-verified on EasyGL, Vulkan, **and** Bgfx. Remaining per-effect gaps are narrow and tracked individually (e.g. `AlphaTestEffect.VertexColorEnabled` on Vulkan/Bgfx, Task 887; `EnvironmentMapEffect`'s `DirectionalLight1`/`2`, Task 890) — see `docs/graphics-backend-feature-matrix.md`'s "Stock Effects" table for the full, currently-accurate per-feature/per-backend breakdown. `ShaderEffect` (custom GLSL/SPIR-V) works on EasyGL/Vulkan; Bgfx's `CreateEffectBackend` still returns `nullptr` for it.
+- **Status:** Implemented (EasyGL, Vulkan, Bgfx — core rendering); a handful of named secondary-light/vertex-color extras remain per-backend gaps, see the feature matrix.
 
 ### `Microsoft::Xna::Framework::Graphics::PackedVector::*`
 
@@ -482,50 +489,44 @@ CNA's `ContentManager` is not XNB-based. It uses file-extension readers instead 
 
 ---
 
-## 7. Stock Effect Backend Parity (Task 196)
+## 7. Stock Effect Backend Parity
 
-This section documents which rendering backends support each stock XNA 4.0 effect and
-`ShaderEffect`, and at what level. Updated 2026-06-26.
+**Rewritten 2026-07-09 (Task 481) — the previous version of this section (dated 2026-06-26, Task
+196) was stale by an entire session's worth of work** (`plan_graphics.md` Phases 71–73: EasyGL
+final gap closure, Bgfx full 2D+3D pixel-verified parity, Vulkan gap closure) and its central claim
+— "Bgfx `SetDepthTestEnabled`/`SetBlendEnabled` still throw, no 3D pixel tests possible" — is no
+longer true. Rather than re-duplicate detailed per-effect/per-backend tables here (which drift
+stale again the same way), this section now points at the single, currently-maintained source:
 
-### Status symbols
+**See `docs/graphics-backend-feature-matrix.md`** (Task 451) for the authoritative "Stock Effects"
+table (all 5 stock effects × 4 backends, per-feature rows down to `DirectionalLight1`/`2`,
+`SpecularColor`/`Power`, `VertexColorEnabled`, `WeightsPerVertex`), the "2D SpriteBatch/SpriteFont"
+table, and the full list of currently-BLOCKED tasks (447 Vulkan OcclusionQuery, 686/687 SDL_Renderer
+`Wrap`/`Mirror`, 725 SDL_Renderer `Texture3D`/`TextureCube`, 732 EasyGL non-`Color` `SurfaceFormat`).
 
-| Symbol | Meaning |
-|--------|---------|
-| ✅ | Pixel-tested — integration test draws geometry and reads back pixels; output verified. |
-| ⚠️ | Compiles and links; effect object created and applied; **no pixel readback test**. |
-| ❌ | Not implemented; calling the effect throws or is silently ignored. |
-| N/A | Backend is 2D-only; 3D stock effects do not apply. |
+**Headline summary as of 2026-07-09** (see the matrix doc for detail and task numbers):
 
-### Backend overview
-
-| Backend | CMake option | Notes |
-|---------|-------------|-------|
-| **EasyGL** | `EASYGL` | OpenGL ES 3.2 via SDL3 window; primary backend; all stock effects shader-implemented. |
-| **Vulkan** | `VULKAN` | Custom SPIR-V pipelines; selected effects pixel-tested; others compile-only. |
-| **Bgfx** | `BGFX` | Community fork of bgfx; `SetDepthTestEnabled`/`SetBlendEnabled` still throw — no 3D pixel tests possible yet. |
-| **SDL\_Renderer** | `SDL_RENDERER` | 2D-only; all 3D calls throw `std::runtime_error`. Stock effects are N/A. |
-
-### Per-effect status
-
-| Effect | EasyGL | Vulkan | Bgfx | SDL\_Renderer | Notes |
-|--------|--------|--------|------|---------------|-------|
-| `BasicEffect` | ✅ | ⚠️ | ⚠️ | N/A | **EasyGL:** pixel-tested across all 4 shader variants (vertex-colour stride=16, texture stride=20, col+texture stride=24, lit+texture stride=32); fog, default lighting, and all property setters verified (Tasks 22, 189, 194, 195). **Vulkan:** used in `Vulkan_DrawInstanced_3Instances`, `Vulkan_RenderTarget2D_FullCycle`, `Vulkan_RenderTargetUsage` — compiles and applies correctly but no dedicated Basic-only pixel verification. **Bgfx:** shader compiled; no pixel test because `SetDepthTestEnabled` throws. |
-| `AlphaTestEffect` | ✅ | ⚠️ | ⚠️ | N/A | **EasyGL:** all 8 `CompareFunction` values pixel-tested at reference=pixel=128 (Tasks 118, 190). **Vulkan/Bgfx:** shader compiled; no pixel tests. |
-| `DualTextureEffect` | ✅ | ✅ | ⚠️ | N/A | **EasyGL:** 4 sub-tests incl. yellow×cyan→green (Tasks 136, 191). **Vulkan:** `Vulkan_DualTextureEffect_Blend` pixel-tests blend of two textures. **Bgfx:** dedicated shader compiled; no pixel test. |
-| `EnvironmentMapEffect` | ✅ | ✅ | ❌ | N/A | **EasyGL:** 4 sub-tests verifying EmissiveColor, EnvMapAmount, EnvMapSpecular independently (Tasks 134, 192). **Vulkan:** `Vulkan_EnvironmentMapEffect_Readback` pixel-tested. **Bgfx:** `CreateEffectBackend` returns a no-op stub; no SPIR-V/bgfx shaders compiled for this effect. |
-| `SkinnedEffect` | ✅ | ⚠️ | ⚠️ | N/A | **EasyGL:** stride-52 bone-weighted vertices tested with identity / translate / 2-bone-blend bones; pixel readback verifies vertex displacement (Tasks 134, 193). **Vulkan/Bgfx:** skinned shader compiled (`kSkinned3dShaders`); no pixel tests. |
-| `ShaderEffect` (custom GLSL / SPIR-V) | ✅ | ✅ | ❌ | N/A | **EasyGL:** custom GLSL shader compiled and pixel-tested (`EasyGL_ShaderEffect_GLSL`, Task 140). **Vulkan:** custom SPIR-V shader compiled and pixel-tested (`Vulkan_ShaderEffect_SpirV`). **Bgfx:** `CreateEffectBackend` returns a no-op stub; vertex/fragment sources ignored. |
-
-### Known gaps
-
-| Gap | Priority | Notes |
-|-----|----------|-------|
-| Vulkan `BasicEffect` pixel test | Medium | No dedicated test; only incidentally exercised via instanced/RT tests. |
-| Vulkan `AlphaTestEffect` pixel test | Medium | `CompareFunction` modes not pixel-verified on Vulkan. |
-| Vulkan `SkinnedEffect` pixel test | Medium | Bone displacement not pixel-verified on Vulkan. |
-| Bgfx 3D state (`SetDepthTestEnabled` / `SetBlendEnabled`) | High | Throws unconditionally; blocks all 3D pixel tests on Bgfx. |
-| Bgfx `EnvironmentMapEffect` / `ShaderEffect` | Low | No shaders compiled; needs dedicated bgfx shader authoring. |
-| EasyGL fog for `AlphaTestEffect` | Low | `AlphaTestEffect::FillGpuDrawParams` does not yet populate fog fields (fog only wired to `BasicEffect`). |
+- **Core rendering for all 5 stock effects** (MVP transform, lighting, texture sampling, fog) is
+  implemented and pixel-verified on **EasyGL, Vulkan, and Bgfx** — Bgfx's own 3D pipeline (depth
+  test, blend state) is real and working, not the blocked stub the previous version of this
+  section described.
+- Remaining gaps are narrow, named, per-feature items, not whole-backend blockers: e.g.
+  `AlphaTestEffect.VertexColorEnabled` (Vulkan/Bgfx, Task 887), `DualTextureEffect.
+  VertexColorEnabled` (all 3, Task 889), `EnvironmentMapEffect`'s secondary directional lights and
+  base-lerp alpha scaling (Vulkan/Bgfx, Tasks 890/891), `SkinnedEffect`'s secondary lights/specular/
+  `WeightsPerVertex` enforcement (Vulkan/Bgfx, Tasks 893-895).
+- `ShaderEffect` (custom shader source): implemented and pixel-tested on EasyGL (GLSL) and Vulkan
+  (SPIR-V); Bgfx's `CreateEffectBackend` still returns `nullptr` for it — the one remaining
+  whole-feature gap in this section.
+- **SDL_Renderer** is a 2D-only backend by design (stock 3D effects are N/A there) — but its own 2D
+  path (`SpriteBatch`/`SpriteFont`/`BlendState`/etc.) went through a full, dedicated audit phase
+  this session (`plan_graphics.md` Phase 70, 15 real bugs found and fixed) and is now comprehensively
+  pixel-verified; see `docs/sdl-renderer-2d-completeness.md`.
+- `GraphicsDevice` state objects (`BlendState`/`DepthStencilState`/`RasterizerState`/`SamplerState`)
+  have their own per-backend correctness table in the feature matrix, separate from the stock-effect
+  table above — notably Vulkan's `BlendState` is "almost entirely fake" (hardcodes one blend
+  equation regardless of request, Task 868, open) despite the stock effects themselves rendering
+  correctly.
 
 ---
 
@@ -533,6 +534,15 @@ This section documents which rendering backends support each stock XNA 4.0 effec
 
 Coverage is estimated as the fraction of public XNA 4.0 API surface that is usable
 (not merely declared) in a typical 2D or 3D game on the EasyGL backend.
+
+**Note (2026-07-09, Task 481):** this table's own framing is EasyGL-scoped by design (see line
+above) and its Graphics-related rows are still broadly accurate for that one backend. It does
+**not** describe Vulkan/Bgfx/SDL_Renderer coverage — those now differ meaningfully per feature
+(e.g. Vulkan's `BlendState` is almost entirely fake, Task 868; SDL_Renderer is comprehensively
+pixel-verified for 2D but has 5 named BLOCKED/architectural gaps). See
+`docs/graphics-backend-feature-matrix.md` for the current, per-backend, per-feature breakdown
+rather than relying on a single blended percentage across 4 backends with genuinely different
+maturity levels.
 
 | Subsystem | Estimated coverage | Notes |
 |-----------|-------------------|-------|
@@ -614,8 +624,26 @@ Coverage is estimated as the fraction of public XNA 4.0 API surface that is usab
 - `GamerServices` rich API (Gamer, SignedInGamer, etc.) — stubs can be added on demand
 - `ContentReader` XNB-based class (deferred; CNA uses non-XNB approach)
 - `ContentSerializerAttribute` family (intentionally excluded)
-- Vulkan pixel tests for BasicEffect, AlphaTestEffect, SkinnedEffect
-- Bgfx 3D state (depth test / blend enable) blocks all Bgfx 3D pixel tests
+- **Updated 2026-07-09 (Task 481):** the 2 items previously listed here ("Vulkan pixel tests for
+  BasicEffect/AlphaTestEffect/SkinnedEffect", "Bgfx 3D state blocks all Bgfx 3D pixel tests") are
+  now DONE — see Phases 71–73 in `plan_graphics.md` and `docs/graphics-backend-feature-matrix.md`.
+  Current real Graphics gaps, all individually tracked (not silently missing):
+  - 5 BLOCKED tasks needing a project-owner architecture decision: 447 (Vulkan OcclusionQuery),
+    686/687 (SDL_Renderer `Wrap`/`Mirror` via `SpriteBatch`), 725 (SDL_Renderer `Texture3D`/
+    `TextureCube`), 732 (EasyGL non-`Color` `SurfaceFormat` GPU forwarding).
+  - Vulkan `BlendState` is almost entirely fake — hardcodes one blend equation regardless of
+    request (Task 868, open).
+  - `GraphicsDevice.ReferenceStencil` has no backend connection on any of the 3 3D backends
+    (Task 872); `Clear` ignores `ClearOptions::Stencil` on all 3 (Task 871).
+  - `IndexElementSize`'s numeric values don't match real FNA — `SixteenBits`/`ThirtyTwoBits` are
+    `16`/`32` in CNA vs. `0`/`1` in real FNA (Task 921, found via the new FNA-vs-CNA JSON
+    comparison harness, `docs/fna-reference-harness.md`).
+  - A handful of narrow, named per-effect secondary-feature gaps on Vulkan/Bgfx (secondary
+    directional lights, specular, vertex-color-enabled variants, `WeightsPerVertex` GPU
+    enforcement) — see the feature matrix's "Stock Effects" table for the full list with task
+    numbers.
+  - `Model`'s content-pipeline loader (`ModelTypeReader`) has real gaps versus FNA's `.xnb` format
+    (no bone hierarchy, no `ParentBone` wiring) — `docs/model-content-pipeline-support.md`.
 
 ### What is intentionally excluded
 
@@ -631,7 +659,15 @@ See build run in task notes. Build must remain clean after each stub addition.
 
 ### Recommended next steps
 
-1. Add Vulkan pixel tests for `BasicEffect`, `AlphaTestEffect`, `SkinnedEffect` (see §7 known gaps).
-2. Unblock Bgfx 3D state (`SetDepthTestEnabled`, `SetBlendEnabled`) to enable 3D pixel tests on Bgfx.
-3. Add compile-compatibility stubs for `Gamer` / `SignedInGamer` / `GamerCollection` if target games need them.
-4. Audit `GraphicsDevice` public methods against FNA for any missing overloads or validation differences.
+**Updated 2026-07-09 (Task 481)** — items 1–2 below (Vulkan pixel tests, Bgfx 3D state) from the
+prior version of this list are DONE (Phases 71–73); replaced with the current real next steps:
+
+1. Resolve the 5 currently-BLOCKED architecture decisions (447, 686, 687, 725, 732 — see
+   `docs/graphics-backend-feature-matrix.md`'s own BLOCKED-task table) — each needs a
+   project-owner call, not more investigation.
+2. Fix `IndexElementSize`'s numeric-value mismatch vs. real FNA (Task 921 — low-risk, well-scoped,
+   purely mechanical).
+3. Fix Vulkan's fake `BlendState` (Task 868) and the `ReferenceStencil`/`ClearOptions::Stencil`
+   gaps shared across all 3 3D backends (Tasks 871/872).
+4. Add compile-compatibility stubs for `Gamer` / `SignedInGamer` / `GamerCollection` if target games need them.
+5. Audit `GraphicsDevice` public methods against FNA for any missing overloads or validation differences.
