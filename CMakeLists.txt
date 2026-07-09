@@ -1275,6 +1275,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 461: canary proving the new shared PixelTestGame helper (examples/common/) works
+        cna_easygl_test(cna_test_easygl_pixeltestgame_smoke
+                        examples/easygl_pixeltestgame_smoke_test.cpp)
+        add_test(NAME EasyGL_PixelTestGame_Smoke
+                 COMMAND cna_test_easygl_pixeltestgame_smoke)
+        set_tests_properties(EasyGL_PixelTestGame_Smoke PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)
