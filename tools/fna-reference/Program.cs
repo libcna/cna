@@ -42,10 +42,14 @@ namespace CNA.FnaReference
                 .Add("CornflowerBlue_A", (int)cornflowerBlue.A)
                 .Add("CornflowerBlue_PackedValue", (double)cornflowerBlue.PackedValue);
 
+            // Task 472: non-rendering-API reference values (enum numeric values, state presets).
+            JsonWriter nonRenderingApis = NonRenderingApiReference.Generate();
+
             var root = new JsonWriter()
                 .Add("fnaAssemblyVersion", typeof(Vector3).Assembly.GetName().Version.ToString())
                 .Add("MathHelper", mathHelper)
-                .Add("Color", colorConstants);
+                .Add("Color", colorConstants)
+                .Add("NonRenderingApis", nonRenderingApis);
 
             string json = root.ToString();
             File.WriteAllText(outputPath, json);
