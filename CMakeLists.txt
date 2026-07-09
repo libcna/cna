@@ -2616,6 +2616,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 918: real GL_EXT_texture_filter_anisotropic wiring, verified directly against
+        # easy-gl's own Sampler API rather than trusting the capability-dump log alone.
+        cna_easygl_test(cna_test_easygl_anisotropic_gl_state
+                        examples/easygl_anisotropic_gl_state_test.cpp)
+        target_link_libraries(cna_test_easygl_anisotropic_gl_state PRIVATE easy-gl)
+        add_test(NAME EasyGL_Anisotropic_GlState
+                 COMMAND cna_test_easygl_anisotropic_gl_state)
+        set_tests_properties(EasyGL_Anisotropic_GlState PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 303: BlendState::Opaque discards destination + source alpha entirely
         cna_easygl_test(cna_test_easygl_blendstate_opaque
                         examples/easygl_blendstate_opaque_test.cpp)
