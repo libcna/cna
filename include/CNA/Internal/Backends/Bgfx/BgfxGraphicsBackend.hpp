@@ -92,13 +92,21 @@ namespace CNA::Internal::Backends::Bgfx
     public:
         bgfx::OcclusionQueryHandle handle = BGFX_INVALID_HANDLE;
 
-        BgfxOcclusionQueryBackend();
+        explicit BgfxOcclusionQueryBackend(BgfxGraphicsBackend* owner);
         ~BgfxOcclusionQueryBackend() override;
 
-        void Begin() override {}
-        void End()   override {}
+        // Task 448: marks/unmarks this query as the backend's "active" occlusion query, so every
+        // 3D submit() call made in between is routed through bgfx's own occlusion-query submit()
+        // overload (see BgfxGraphicsBackend::SubmitViewProgram). bgfx submits synchronously
+        // (unlike Vulkan's deferred command recording -- see Task 447's own BLOCKED write-up), so
+        // no further correlation machinery is needed.
+        void Begin() override;
+        void End()   override;
         [[nodiscard]] bool IsComplete() const override;
         [[nodiscard]] int  PixelCount() const override;
+
+    private:
+        BgfxGraphicsBackend* owner_ = nullptr;
     };
 
     // -------------------------------------------------------------------------
@@ -361,6 +369,12 @@ namespace CNA::Internal::Backends::Bgfx
         // Stencil state (per-draw-call via bgfx::setStencil)
         uint32_t stencilFront_ = BGFX_STENCIL_NONE;
         uint32_t stencilBack_  = BGFX_STENCIL_NONE;
+        // Task 448: the OcclusionQuery currently "active" (between its Begin()/End() calls), set
+        // by BgfxOcclusionQueryBackend::Begin()/End(). Since bgfx submits every 3D draw call
+        // synchronously (unlike Vulkan's deferred RecordCommandBuffer -- see Task 447's own
+        // BLOCKED write-up), every 3D submit() call made while a query is active is routed through
+        // bgfx's own submit(id, program, occlusionQuery, ...) overload instead of the plain one.
+        bgfx::OcclusionQueryHandle activeOcclusionQuery_ = BGFX_INVALID_HANDLE;
         // Callback registered at bgfx init — captures screenshot data for ReadBackbuffer
         BgfxCnaCallback readbackCallback_;
         // Temporary MRT framebuffer (created on SetRenderTargets with count > 1)
@@ -523,5 +537,10 @@ namespace CNA::Internal::Backends::Bgfx
         // via SetViewport() and the current view is the backbuffer (view 0). RT passes are
         // deliberately left at their full-RT-size default -- see viewportX_/Y_/W_/H_'s comment.
         void ApplyViewportOverride();
+
+        // Task 448: submits a 3D draw call's already-configured bgfx state to currentViewId_,
+        // routing through bgfx's occlusion-query submit() overload when activeOcclusionQuery_ is
+        // a valid handle (set by BgfxOcclusionQueryBackend::Begin(), cleared by End()).
+        void SubmitViewProgram(bgfx::ProgramHandle program);
     };
 }

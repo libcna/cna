@@ -4248,6 +4248,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 448: real Bgfx occlusion-query pixel/query test — visible quad (PixelCount > 0) and
+    # occluded quad (PixelCount <= 0), proving BgfxOcclusionQueryBackend's Begin()/End() are now
+    # actually wired to bgfx's own submit(id, program, occlusionQuery, ...) overload.
+    cna_bgfx_test(cna_test_bgfx_occlusion_query
+                  examples/bgfx_occlusion_query_test.cpp)
+    add_test(NAME Bgfx_OcclusionQuery
+             COMMAND cna_test_bgfx_occlusion_query)
+    set_tests_properties(Bgfx_OcclusionQuery PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 278: EnvironmentMapEffect smoke test (no GPU readback available on Bgfx)
     cna_bgfx_test(cna_test_bgfx_env_map
                   examples/bgfx_env_map_test.cpp)

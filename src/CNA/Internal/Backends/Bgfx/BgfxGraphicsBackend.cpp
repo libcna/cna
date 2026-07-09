@@ -319,15 +319,29 @@ namespace CNA::Internal::Backends::Bgfx
 
     // --- BgfxOcclusionQueryBackend ---
 
-    BgfxOcclusionQueryBackend::BgfxOcclusionQueryBackend()
+    BgfxOcclusionQueryBackend::BgfxOcclusionQueryBackend(BgfxGraphicsBackend* owner)
+        : owner_(owner)
     {
         handle = bgfx::createOcclusionQuery();
     }
 
     BgfxOcclusionQueryBackend::~BgfxOcclusionQueryBackend()
     {
+        if (owner_ && bgfx::isValid(owner_->activeOcclusionQuery_)
+            && owner_->activeOcclusionQuery_.idx == handle.idx)
+            owner_->activeOcclusionQuery_ = BGFX_INVALID_HANDLE;
         if (bgfx::isValid(handle))
             bgfx::destroy(handle);
+    }
+
+    void BgfxOcclusionQueryBackend::Begin()
+    {
+        if (owner_) owner_->activeOcclusionQuery_ = handle;
+    }
+
+    void BgfxOcclusionQueryBackend::End()
+    {
+        if (owner_) owner_->activeOcclusionQuery_ = BGFX_INVALID_HANDLE;
     }
 
     bool BgfxOcclusionQueryBackend::IsComplete() const
@@ -347,7 +361,15 @@ namespace CNA::Internal::Backends::Bgfx
 
     std::unique_ptr<IOcclusionQueryBackend> BgfxGraphicsBackend::CreateOcclusionQuery()
     {
-        return std::make_unique<BgfxOcclusionQueryBackend>();
+        return std::make_unique<BgfxOcclusionQueryBackend>(this);
+    }
+
+    void BgfxGraphicsBackend::SubmitViewProgram(bgfx::ProgramHandle program)
+    {
+        if (bgfx::isValid(activeOcclusionQuery_))
+            bgfx::submit(currentViewId_, program, activeOcclusionQuery_);
+        else
+            bgfx::submit(currentViewId_, program);
     }
 
     // Task 914: advances bgfx frames until the given target frame number (as returned by
@@ -1776,7 +1798,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                        | blendFlags_ | depthFlags_ | cullFlags_)
                        | ToTopologyFlag(primitive), blendFactorPacked_);
-        bgfx::submit(currentViewId_, colored3DProgram_);
+        SubmitViewProgram(colored3DProgram_);
     }
 
     void BgfxGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb_in,
@@ -1809,7 +1831,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                        | blendFlags_ | depthFlags_ | cullFlags_)
                        | ToTopologyFlag(primitive), blendFactorPacked_);
-        bgfx::submit(currentViewId_, colored3DProgram_);
+        SubmitViewProgram(colored3DProgram_);
     }
 
     void BgfxGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb_in,
@@ -1876,7 +1898,7 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
                 }
             }
-            bgfx::submit(currentViewId_, dualTexture3DProgram_);
+            SubmitViewProgram(dualTexture3DProgram_);
         }
         else if (params.skinned && bgfx::isValid(skinned3DProgram_))
         {
@@ -1910,7 +1932,7 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            bgfx::submit(currentViewId_, skinned3DProgram_);
+            SubmitViewProgram(skinned3DProgram_);
         }
         else if (params.envMapping && bgfx::isValid(envMap3DProgram_))
         {
@@ -1958,7 +1980,7 @@ namespace CNA::Internal::Backends::Bgfx
                 if (const auto* samplable = dynamic_cast<const IBgfxCubeSamplable*>(params.envMap))
                     bgfx::setTexture(1, envMapSampler_, samplable->GetBgfxCubeTextureHandle());
             }
-            bgfx::submit(currentViewId_, envMap3DProgram_);
+            SubmitViewProgram(envMap3DProgram_);
         }
         else if (alphaTestActive && params.vertexColorEnabled
                  && bgfx::isValid(alphaTestColoredTextured3DProgram_))
@@ -1983,7 +2005,7 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            bgfx::submit(currentViewId_, alphaTestColoredTextured3DProgram_);
+            SubmitViewProgram(alphaTestColoredTextured3DProgram_);
         }
         else if (alphaTestActive && bgfx::isValid(alphaTest3DProgram_))
         {
@@ -2003,7 +2025,7 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            bgfx::submit(currentViewId_, alphaTest3DProgram_);
+            SubmitViewProgram(alphaTest3DProgram_);
         }
         else if (params.lightingEnabled && bgfx::isValid(litTextured3DProgram_))
         {
@@ -2069,7 +2091,7 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            bgfx::submit(currentViewId_, litTextured3DProgram_);
+            SubmitViewProgram(litTextured3DProgram_);
         }
         else if (params.textureEnabled && params.vertexColorEnabled
                  && bgfx::isValid(coloredTextured3DProgram_))
@@ -2091,7 +2113,7 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            bgfx::submit(currentViewId_, coloredTextured3DProgram_);
+            SubmitViewProgram(coloredTextured3DProgram_);
         }
         else if (params.textureEnabled && bgfx::isValid(textured3DProgram_))
         {
@@ -2110,7 +2132,7 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            bgfx::submit(currentViewId_, textured3DProgram_);
+            SubmitViewProgram(textured3DProgram_);
         }
         else
         {
@@ -2121,7 +2143,7 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             float vce[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(vertexColorEn3DUnif_, vce);
-            bgfx::submit(currentViewId_, colored3DProgram_);
+            SubmitViewProgram(colored3DProgram_);
         }
     }
 
@@ -2171,7 +2193,7 @@ namespace CNA::Internal::Backends::Bgfx
                                 | blendFlags_ | depthFlags_ | cullFlags_)
                                | ToTopologyFlag(primitive);
         bgfx::setState(state, blendFactorPacked_);
-        bgfx::submit(currentViewId_, instanced3DProgram_);
+        SubmitViewProgram(instanced3DProgram_);
         (void)primitiveCount;
     }
 }
