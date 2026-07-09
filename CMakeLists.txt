@@ -5025,6 +5025,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 760 (Phase 72 Bgfx gap closure): all 8 depth CompareFunction values on Bgfx -- a
+    # Bgfx-specific adaptation of the EasyGL source (Task 314; that file only covers 5 of 8 values
+    # and reads back 5 columns in one frame, which Bgfx's own GetBackBufferData quirk, Task 406,
+    # doesn't support reliably -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_depthstencilstate_compare_function
+                  examples/bgfx_depthstencilstate_compare_function_test.cpp)
+    add_test(NAME Bgfx_DepthStencilState_CompareFunction
+             COMMAND cna_test_bgfx_depthstencilstate_compare_function)
+    set_tests_properties(Bgfx_DepthStencilState_CompareFunction PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
