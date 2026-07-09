@@ -1342,6 +1342,27 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 468: golden-image cases reusing Phase 37's DepthStencilState write-enable scene
+        # (Task 313) and Phase 38's RasterizerState.CullMode scene (Task 323) -- two separate
+        # files, one per phase, since no existing test combines both areas.
+        cna_easygl_test(cna_test_easygl_depthstencilstate_write_enable_golden
+                        examples/easygl_depthstencilstate_write_enable_golden_test.cpp)
+        add_test(NAME EasyGL_DepthStencilState_WriteEnable_Golden
+                 COMMAND cna_test_easygl_depthstencilstate_write_enable_golden)
+        set_tests_properties(EasyGL_DepthStencilState_WriteEnable_Golden PROPERTIES
+            TIMEOUT 30
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode_golden
+                        examples/easygl_rasterizerstate_cullmode_golden_test.cpp)
+        add_test(NAME EasyGL_RasterizerState_CullMode_Golden
+                 COMMAND cna_test_easygl_rasterizerstate_cullmode_golden)
+        set_tests_properties(EasyGL_RasterizerState_CullMode_Golden PROPERTIES
+            TIMEOUT 30
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)
