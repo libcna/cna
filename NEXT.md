@@ -1249,7 +1249,7 @@ they're not good candidates to pick up out of order. Prefer continuing in Tasks 
 Read NEXT.md first, in full — this section is intentionally the only thing you need before
 touching any code.
 
-## Current state as of 2026-07-09 (end of this session) — READ THIS FIRST
+## Current state as of 2026-07-10 (end of this session) — READ THIS FIRST
 
 Phase 55 ("Final Graphics stabilization before declaring XNA 4.0 complete") is closed in full
 (Tasks 491-500). Task 500 declared a qualified **~90% XNA/FNA compatibility milestone** for
@@ -1329,26 +1329,59 @@ fixes (Task 868→923, Task 878→899):
 **Phase 71-73 triage, now complete** — Phase 72 (Bgfx, 85 rows) and Phase 73 (Vulkan, 37 rows)
 both got their first-ever full row-by-row triage this session (a fork did the cross-referencing
 research; the actual edits were applied and verified directly). Real findings, not just hygiene:
-- **Phase 72 (Bgfx)**: 34 SUPERSEDED (closed), **38 confirmed REAL GAPS still open**, 13 UNCERTAIN
-  (no test found either way, needs individual investigation). **Bgfx is dramatically less
-  pixel-test-covered than Vulkan for the same categories** — `DepthStencilState` (7/7 rows),
-  `SpriteFont` (3/3), `Model` (2/2), `SpriteBatch` behavior (6/6), and most `BlendState` presets
-  (4/5) have ZERO Bgfx-specific tests at all, while Vulkan is mostly done in these categories.
-  **This is now the single largest known real gap in this project's pixel-verification
-  coverage** — a genuine, substantial undertaking if picked up, not a quick pass.
+- **Phase 72 (Bgfx)**: 34 SUPERSEDED (closed), 38 confirmed REAL GAPS found. **15 of those 38 were
+  then picked up as real work the same session, closing the entire `DepthStencilState` row group
+  (758-764), all 3 testable `RasterizerState` rows (765-768, Task 767 flagged `NEEDS_HUMAN`), and
+  all 4 `BlendState` preset rows (752-755) — 23 REAL GAPS remain**, 13 UNCERTAIN (no test found
+  either way, needs individual investigation). **5 genuine, previously-undiscovered bugs were found
+  and fixed in this pass** (not just coverage-gap closures):
+  - Tasks 758/759 — `DepthBufferWriteEnable=false` had zero effect on any 3D draw (all 4
+    draw-dispatch functions unconditionally wrote depth).
+  - Task 763 — `TwoSidedStencilMode`'s front/back stencil slots were swapped relative to the
+    intended raw winding (bgfx's default `glFrontFace` is `GL_CW`, opposite EasyGL's effective
+    convention) — the exact same phenomenon Task 870 already fixed for Vulkan.
+  - Task 764 — `GraphicsDevice.ReferenceStencil`'s standalone setter was a silent no-op on Bgfx
+    (mirrors the EasyGL/Vulkan asymmetry this project had already found — only Vulkan had a real
+    `SetReferenceStencil` override before this).
+  - Task 766 — `FillMode::WireFrame` had NO implementation at all on Bgfx (not a mapping bug — a
+    genuinely missing feature; bgfx has no native polygon-fill-mode toggle). Implemented a
+    triangle-to-line-list expansion mirroring EasyGL's already-shipped `DrawWireframe` emulation.
+  - Task 768 — 2 bugs: none of the 4 3D draw-dispatch functions ever called `bgfx::setScissor`
+    (only the 2D `SpriteBatch` path did); and once fixed, `scissorW_`/`scissorH_`'s "zero means
+    disabled" sentinel conflated the enable flag with the rect's own coordinates.
+  Tasks 752-755/760-762/765 all found their respective mapping already correct (no bug, real
+  coverage gap closed); Task 761 additionally confirmed `StencilWriteMask` is a permanent bgfx API
+  ceiling (no per-draw write-mask concept exists anywhere in bgfx's own state flags). **Bgfx is
+  still dramatically less pixel-test-covered than Vulkan for the remaining categories** —
+  `SpriteFont` (3/3), `Model` (2/2), and `SpriteBatch` behavior (6/6) still have ZERO Bgfx-specific
+  tests at all, while Vulkan is mostly done in these categories. **This remains the single largest
+  known real gap in this project's pixel-verification coverage** — a genuine, substantial
+  undertaking if picked up, not a quick pass.
 - **Phase 73 (Vulkan)**: 26 SUPERSEDED (closed), 9 confirmed REAL GAPS (matches Task 861's own
   `SpriteBatch`/`SpriteFont`/`Model` finding, plus newly-found `Texture2D` partial-rect/NPOT/
   `Texture3D` box-region gaps), 2 UNCERTAIN (MRT mixed-format, `Viewport` math).
 - See both phases' own intro blockquotes in `plan_graphics.md` for the full breakdown.
 
 **What's left, honestly categorized** (see `plan_graphics.md`'s own rows for full detail):
-- **Phase 72 (Bgfx)'s 38 confirmed real gaps** — the single largest remaining piece of real work;
-  see the phase's own intro block for the category breakdown (DepthStencilState/SpriteFont/Model/
-  SpriteBatch/BlendState presets on Bgfx have zero tests). Genuinely substantial, not a quick pass.
+- **Phase 72 (Bgfx)'s 23 remaining confirmed real gaps** — still the single largest remaining
+  piece of real work; `SpriteFont`/`Model`/`SpriteBatch` behavior on Bgfx have zero tests, plus a
+  handful of remaining `DepthStencilState`-adjacent/stencil rows not yet triaged into this pass
+  (761's own row group was `StencilEnable`/masks/ops/two-sided/`ReferenceStencil` — check
+  `plan_graphics.md`'s Phase 72 table directly for exactly which rows remain open vs. UNCERTAIN).
+  Genuinely substantial, not a quick pass.
 - **Phase 73 (Vulkan)'s 9 confirmed real gaps** — smaller: `SpriteBatch`/`SpriteFont`/`Model`
   pixel tests (Task 861's own finding) plus `Texture2D`/`Texture3D` partial-region/NPOT tests.
 - **~30 UNCERTAIN rows across both phases** (13 Bgfx + 4 Vulkan, per-phase intro blocks) — not
   confirmed either way, need individual investigation before concluding real-gap or superseded.
+- **Task 767** (Bgfx depth bias/slope-scale depth bias) — **NEEDS_HUMAN**, bgfx has zero depth-bias
+  support anywhere (confirmed via source, matching EasyGL's own identical gap); a real fix needs
+  shader-level Z-offset emulation across every 3D shader, a cross-cutting architecture decision
+  spanning multiple backends, not a small Bgfx-scoped fix like this pass's other rows.
+- **2 adjacent, out-of-scope discoveries from Task 766's work, not fixed, worth their own tasks**:
+  `BgfxGraphicsBackend` never overrides `DrawIndexedPrimitivesEx` (silently falls back to
+  `DrawIndexedColoredPrimitives`, losing all `GpuDrawParams`-driven shader features — textures/
+  lighting/fog/etc. — for any indexed+effect draw); `DrawPrimitivesEx` never honors
+  `params.vertexStart` in its existing solid-fill path (pre-existing, separate bug).
 - **Task 863** (`Texture3D` shader-sampling architecture) — **NEEDS_HUMAN**, 2 named options,
   neither picked; see its own row for the tradeoffs.
 - **Task 869** (`GraphicsDevice` state value-vs-reference semantics) — **NEEDS_HUMAN**, this row's
