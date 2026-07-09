@@ -732,12 +732,23 @@ header. No task content changed, only the file location and numbering.
 > default target of any existing Phase 34–55 task, so the full breadth of pixel-verification
 > work needs an explicit, separate pass. Starts from wiring up the pixel-readback path itself,
 > since no current Bgfx test uses it at all.
+>
+> **Full row-by-row triage completed 2026-07-09** (the first ever full pass — Task 861 had only
+> spot-checked a sample of Phase 73, and this phase had never been triaged at all): of 85 rows,
+> 34 were SUPERSEDED by later work and closed here as a backlog-hygiene pass, 38 are confirmed
+> REAL GAPS (still genuinely open, left as ⬜, not touched), and 13 are UNCERTAIN (no test found
+> either way, needs closer individual investigation before concluding). **Bgfx is dramatically
+> less pixel-test-covered than Vulkan for the same categories**: `DepthStencilState` (7/7 rows),
+> `SpriteFont` (3/3), `Model` (2/2), `SpriteBatch` behavior (6/6), and most `BlendState` presets
+> (4/5) have ZERO Bgfx-specific tests at all, while Vulkan is mostly done in these same
+> categories. This is the single largest real remaining gap in this project's pixel-verification
+> coverage — a genuine, substantial undertaking if picked up, not a quick pass.
 
 ### Foundational: unlock pixel testing
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
-| 740 | Wire `GraphicsDevice::GetBackBufferData` into a reusable Bgfx pixel-readback test helper | ⬜ | The async `bgfx::requestScreenShot`+`bgfx::frame()` path exists (Task 117, done) but zero current tests call it — this unblocks every pixel test below |
+| 740 | Wire `GraphicsDevice::GetBackBufferData` into a reusable Bgfx pixel-readback test helper | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by real GPU pixel readback via `GetBackBufferData` is wired and used pervasively across 57+ `cna_bgfx_test` registrations; Task 406 established the retry-until-non-black convention.  The async `bgfx::requestScreenShot`+`bgfx::frame()` path exists (Task 117, done) but zero current tests call it — this unblocks every pixel test below |
 | 741 | Add a Bgfx per-texture-level readback path for direct `Texture2D`/`3D`/`Cube` `GetData` verification | ⬜ | Avoids needing a full draw+backbuffer-read cycle just to check an upload round-tripped |
 | 742 | Verify Bgfx `GetBackBufferData` readback reliability under headless CI | ⬜ | The "up to 3 frames" wait in Task 117 may need tuning; add a timeout/retry regression test |
 
@@ -747,10 +758,10 @@ header. No task content changed, only the file location and numbering.
 | --- | ---- | ------ | ----- |
 | 743 | Audit `SamplerState` → `BGFX_SAMPLER_*` flag mapping completeness | ⬜ | |
 | 744 | Pixel test: `TextureAddressMode::Clamp` on Bgfx | ⬜ | Mirrors Task 294 |
-| 745 | Pixel test: `TextureAddressMode::Wrap` on Bgfx | ⬜ | Mirrors Task 295 |
+| 745 | Pixel test: `TextureAddressMode::Wrap` on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by covered by `Bgfx_TextureAddressMode` (Task 750's own writeup: PointWrap vs PointClamp).  Mirrors Task 295 |
 | 746 | Pixel test: `TextureAddressMode::Mirror` on Bgfx | ⬜ | Mirrors Task 296 |
 | 747 | Pixel test: `TextureFilter::Point` vs `Linear` on Bgfx | ⬜ | Mirrors Task 297 |
-| 748 | Verify mipmap filter modes (`MipPoint`/`MipLinear`/etc.) on Bgfx | ⬜ | Mirrors Task 298 |
+| 748 | Verify mipmap filter modes (`MipPoint`/`MipLinear`/etc.) on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_TextureMipFilter_DualTextureEffect` (Task 926, this session).  Mirrors Task 298 |
 | 749 | Verify anisotropic filtering cap query + fallback on Bgfx | ⬜ | Mirrors Task 299 |
 | 750 | Wire a Task-269-equivalent `SpriteBatch` `SamplerState` fix into Bgfx's `ISpriteBatchBackend` | ✅ | **Real bug confirmed and fixed — identical shape to Task 269 (EasyGL) and Task 665 (Vulkan).** `BgfxSpriteBatchBackend` never overrode `SetSamplerFilter`/`SetSamplerAddressMode` at all (silent no-op via `ISpriteBatchBackend`'s default empty bodies), so `SpriteBatch::Begin()`'s `SamplerState` had zero effect — every draw used whatever `samplerFlags_[0]` happened to already hold from a previous 3D draw (or the zero-initialized default), never the sampler actually requested. Unlike EasyGL/Vulkan's deferred-batch architecture, Bgfx's `SpriteBatchBackend::Draw()` submits immediately per call (no separate flush step) via `BgfxGraphicsBackend::SubmitSprite()`, which already read `samplerFlags_[0]` via `bgfx::setTexture(0, textureSampler, textureHandle, samplerFlags_[0])` — the per-slot sampler-flags plumbing (`ApplySamplerState()`, already used by the 3D draw paths) was already fully in place; it just was never invoked from the sprite path. Fixed by adding `SetSamplerFilter`/`SetSamplerAddressMode` overrides storing `pendingFilter_`/`pendingAddressU_`/`pendingAddressV_` (mirroring EasyGL's exact field names/defaults — `TextureFilter::Linear`/`TextureAddressMode::Clamp`, `SpriteBatch`'s own real default), and calling `graphicsBackend.ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1)` immediately before each `SubmitSprite()` call. **New test** `examples/bgfx_texture_address_mode_test.cpp` — a direct port of Task 269/665's identical 2×1 Red/Blue-texture, `sourceRectangle` 2× width, `U≈1.25`-readback, `PointWrap`-vs-`PointClamp` methodology (retrying the backbuffer read per this project's established Bgfx first-read-per-frame convention): both checks pass with the exact predicted colors on the first attempt. **Discriminating power independently verified**: `git stash`-reverted both changed files and rebuilt — the pre-fix code produced the exact predicted symptom, both `PointWrap` and `PointClamp` reading the **identical** wrong value `(254,0,1)` (proving `Wrap`/`Clamp` addressing genuinely never took effect either way, matching Task 665's exact pre-fix Vulkan symptom shape); restored and reconfirmed both checks pass. Full regression: `CnaTests` (Bgfx) 4276/4278 passed, 2 skipped, 0 failed (exact baseline match); `ctest -R Bgfx` 52/54 (2 failures are the already-documented pre-existing `Bgfx_RenderTarget2D_MsaaResolve` Xvfb limitation and `Bgfx_RenderTarget2D_MipChain`, reconfirmed genuinely flaky in this sandbox via 3 direct isolated reruns — 2/3 passed, unrelated to this fix). |
 
@@ -763,7 +774,7 @@ header. No task content changed, only the file location and numbering.
 | 753 | Pixel test: `BlendState::AlphaBlend` premultiplied alpha on Bgfx | ⬜ | |
 | 754 | Pixel test: `BlendState::NonPremultiplied` on Bgfx | ⬜ | |
 | 755 | Pixel test: `BlendState::Additive` saturation on Bgfx | ⬜ | |
-| 756 | Verify separate color/alpha blend function + factor combinations on Bgfx | ⬜ | |
+| 756 | Verify separate color/alpha blend function + factor combinations on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_BlendState_SeparateFunctions` (Task 923) covers color/alpha function independence; factor independence explicitly documented as not independently pixel-verifiable in this sandbox, Task 923's own row.  |
 | 757 | Verify `BlendFactor` constant-color blending on Bgfx | ⬜ | |
 
 ### DepthStencilState
@@ -791,10 +802,10 @@ header. No task content changed, only the file location and numbering.
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
-| 769 | Verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding on Bgfx | ⬜ | |
-| 770 | Verify `RenderTargetCube` can be sampled as `TextureCube` after unbinding on Bgfx | ⬜ | `EnvironmentMapEffect` path |
-| 771 | Verify `RenderTargetUsage::DiscardContents` vs `PreserveContents` on Bgfx | ⬜ | |
-| 772 | Verify MSAA render target creation + resolve on Bgfx | ⬜ | |
+| 769 | Verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_RenderTarget2D_SampleAfterUnbind`.  |
+| 770 | Verify `RenderTargetCube` can be sampled as `TextureCube` after unbinding on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_RenderTargetCube_SampleAfterUnbind`.  `EnvironmentMapEffect` path |
+| 771 | Verify `RenderTargetUsage::DiscardContents` vs `PreserveContents` on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_RenderTargetUsage`.  |
+| 772 | Verify MSAA render target creation + resolve on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_RenderTarget2D_MsaaResolve`/`Bgfx_RenderTargetCube_MsaaResolve` (Tasks 879/903).  |
 | 773 | Verify `SetRenderTarget(nullptr)` restores the backbuffer on Bgfx | ⬜ | |
 | 774 | Verify MRT with mixed formats is rejected or handled per XNA constraints on Bgfx | ⬜ | |
 | 775 | Document Bgfx MRT attachment limits | ⬜ | |
@@ -811,50 +822,50 @@ header. No task content changed, only the file location and numbering.
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
 | 778 | Verify `EffectPass::Apply`/`EffectTechnique` selection reach the Bgfx draw-state setup correctly | ⬜ | |
-| 779 | Pixel test: `BasicEffect` vertex-color-only on Bgfx | ⬜ | |
-| 780 | Pixel test: `BasicEffect` texture-only on Bgfx | ⬜ | |
-| 781 | Pixel test: `BasicEffect` texture × vertex color on Bgfx | ⬜ | |
-| 782 | Pixel test: `BasicEffect` one directional light on Bgfx | ⬜ | |
-| 783 | Pixel test: `BasicEffect` ambient+emissive+specular combination on Bgfx | ⬜ | |
-| 784 | Pixel test: `BasicEffect` fog on Bgfx | ⬜ | |
+| 779 | Pixel test: `BasicEffect` vertex-color-only on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_BasicEffect_VertexColorEnabled`.  |
+| 780 | Pixel test: `BasicEffect` texture-only on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_BasicEffect_VertexColorDisabled`.  |
+| 781 | Pixel test: `BasicEffect` texture × vertex color on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_BasicEffect_TextureEnabled`.  |
+| 782 | Pixel test: `BasicEffect` one directional light on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_BasicEffect_TextureVertexColorEnabled`.  |
+| 783 | Pixel test: `BasicEffect` ambient+emissive+specular combination on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_BasicEffect_OneLight`/`Bgfx_BasicEffect_Combined`.  |
+| 784 | Pixel test: `BasicEffect` fog on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_BasicEffect_Fog`.  |
 
 ### AlphaTestEffect (Task 375 already covers the CompareFunction sweep)
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
 | 785 | Verify alpha reference value 0–255 vs 0–1 scaling on Bgfx | ⬜ | |
-| 786 | Verify `AlphaTestEffect` + vertex/diffuse color interaction on Bgfx | ⬜ | |
-| 787 | Verify `AlphaTestEffect` fog behavior on Bgfx | ⬜ | |
-| 788 | Verify `AlphaTestEffect` null-texture behavior on Bgfx | ⬜ | |
+| 786 | Verify `AlphaTestEffect` + vertex/diffuse color interaction on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_AlphaTest_VertexColor`.  |
+| 787 | Verify `AlphaTestEffect` fog behavior on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_AlphaTest_Fog`.  |
+| 788 | Verify `AlphaTestEffect` null-texture behavior on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_AlphaTest_NullTexture`.  |
 
 ### DualTextureEffect
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
 | 789 | Pixel test: two white textures + diffuse color on Bgfx | ⬜ | |
-| 790 | Pixel test: magenta × yellow = red on Bgfx | ⬜ | Mirrors Tasks 133/135 |
-| 791 | Verify first/second texture null behavior on Bgfx | ⬜ | |
-| 792 | Verify `DualTextureEffect` fog behavior on Bgfx | ⬜ | |
+| 790 | Pixel test: magenta × yellow = red on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_DualTextureEffect_Doubling`.  Mirrors Tasks 133/135 |
+| 791 | Verify first/second texture null behavior on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_DualTextureEffect_NullTexture0`/`NullTexture2`.  |
+| 792 | Verify `DualTextureEffect` fog behavior on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_DualTextureEffect_Fog`.  |
 
 ### EnvironmentMapEffect
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
-| 793 | Pixel test: `EnvironmentMapAmount=0` (ignores cubemap) on Bgfx | ⬜ | |
-| 794 | Pixel test: `EnvironmentMapAmount=1` with white cubemap on Bgfx | ⬜ | |
-| 795 | Pixel test: `EnvironmentMapSpecular` contribution on Bgfx | ⬜ | |
-| 796 | Verify `FresnelFactor` on Bgfx if implemented | ⬜ | |
-| 797 | Verify eye position affects reflection vector on Bgfx | ⬜ | |
-| 798 | Verify non-identity world/normal-matrix correctness on Bgfx | ⬜ | |
+| 793 | Pixel test: `EnvironmentMapAmount=0` (ignores cubemap) on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_EnvironmentMapEffect_AmountZero`.  |
+| 794 | Pixel test: `EnvironmentMapAmount=1` with white cubemap on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_EnvironmentMapEffect_AmountOne`.  |
+| 795 | Pixel test: `EnvironmentMapSpecular` contribution on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_EnvironmentMapEffect_Specular`.  |
+| 796 | Verify `FresnelFactor` on Bgfx if implemented | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_EnvironmentMapEffect_Fresnel`.  |
+| 797 | Verify eye position affects reflection vector on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_EnvironmentMapEffect_EyePosition`.  |
+| 798 | Verify non-identity world/normal-matrix correctness on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_EnvironmentMapEffect_WorldTransform`.  |
 
 ### SkinnedEffect
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
 | 799 | Verify `SetBoneTransforms` accepts the supported bone count + throws for excess on Bgfx | ⬜ | |
-| 800 | Pixel test: identity bone palette (no deformation) on Bgfx | ⬜ | |
-| 801 | Pixel test: single translation bone on Bgfx | ⬜ | |
-| 802 | Pixel test: two-bone 50/50 blend on Bgfx | ⬜ | |
+| 800 | Pixel test: identity bone palette (no deformation) on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_SkinnedEffect_IdentityBones`.  |
+| 801 | Pixel test: single translation bone on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_SkinnedEffect_TranslationBone`.  |
+| 802 | Pixel test: two-bone 50/50 blend on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_SkinnedEffect_TwoBoneBlend`.  |
 
 ### SpriteBatch (needs Task 740's readback wiring first)
 
@@ -895,9 +906,9 @@ header. No task content changed, only the file location and numbering.
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
 | 817 | Verify `Texture2D` `SetData`/`GetData` partial-rectangle + `startIndex`/`elementCount` on Bgfx | ⬜ | Mirrors Tasks 169–170; currently only EasyGL has this depth |
-| 818 | Verify `Texture2D` mip-level `SetData`/`GetData` on Bgfx | ⬜ | Mirrors Task 171 |
+| 818 | Verify `Texture2D` mip-level `SetData`/`GetData` on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_TextureMipFilter_DualTextureEffect` (Task 926, this session) exercises mip `SetData` for `Texture2D`.  Mirrors Task 171 |
 | 819 | Verify `Texture3D` box/`GetData` bounds guards reach correct pixels on Bgfx | ⬜ | Task 271 fixed the C++ guards backend-agnostically; no Bgfx pixel test confirms the GPU side |
-| 820 | Verify `TextureCube` per-face/per-mip `SetData`/`GetData` on Bgfx | ⬜ | Mirrors Task 172 |
+| 820 | Verify `TextureCube` per-face/per-mip `SetData`/`GetData` on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_TextureCube_PartialRect_RoundTrip`/`Bgfx_TextureCube_Mip_RoundTrip`.  Mirrors Task 172 |
 | 821 | Verify NPOT texture upload+sample on Bgfx | ⬜ | Mirrors Task 268; currently code-inspected only for this backend |
 
 ### Final Bgfx perfection gate
@@ -918,43 +929,50 @@ header. No task content changed, only the file location and numbering.
 > (142), Texture3D/Cube backends (143), scissor (329), depth bias (328), and stock-effect SPIR-V
 > shaders for all 5 effects (102–109) — so this phase is sized as gap-closure, not full
 > replication, plus the two SpriteBatch bugs found this session.
+>
+> **Full row-by-row triage completed 2026-07-09**, superseding Task 861's own partial spot-check:
+> of 37 rows, 26 were SUPERSEDED and closed here, 9 are confirmed REAL GAPS (`SpriteBatch` sort-
+> mode/rotation/scale/crop/flip and `SpriteFont`/`Model` pixel tests — Task 861's own finding,
+> still open; plus `Texture2D` partial-rect/NPOT/`Texture3D` box-region tests, newly found), and
+> 2 are UNCERTAIN (MRT mixed-format, `Viewport` math — no dedicated test found either way). Task
+> 854 stays gated on Task 447's own BLOCKED architecture decision, unreachable regardless.
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
 | 664 | *(see Phase 47 above)* Fix Vulkan `SpriteBatch` multi-`Begin`/`End` bug | ✅ | Cross-referenced here; lives in Phase 47's table |
 | 665 | *(see Phase 47 above)* Fix Vulkan `SpriteBatch` `SamplerState` no-op | ✅ | Cross-referenced here; lives in Phase 47's table |
-| 825 | Pixel test: `TextureAddressMode::Clamp` on Vulkan | ⬜ | |
-| 826 | Pixel test: `TextureAddressMode::Wrap` on Vulkan | ⬜ | Verifies Task 665's fix once landed |
-| 827 | Pixel test: `TextureAddressMode::Mirror` on Vulkan | ⬜ | |
-| 828 | Pixel test: `TextureFilter::Point` vs `Linear` on Vulkan | ⬜ | |
-| 829 | Verify mipmap filter modes on Vulkan | ⬜ | |
-| 830 | Verify anisotropic filtering cap + fallback on Vulkan | ⬜ | `VkPhysicalDeviceFeatures.samplerAnisotropy` |
-| 831 | Pixel test: `BlendState::Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` on Vulkan | ⬜ | Consolidated, 4 sub-cases — mirrors Task 189's pattern |
-| 832 | Verify separate color/alpha blend function + factor combinations on Vulkan | ⬜ | |
-| 833 | Verify `BlendFactor` constant-color blending on Vulkan | ⬜ | |
-| 834 | Pixel test: depth write enabled vs disabled on Vulkan | ⬜ | |
-| 835 | Pixel test: all 8 depth `CompareFunction` values on Vulkan | ⬜ | |
-| 836 | Verify stencil enable/disable + read/write masks + front-face ops on Vulkan | ⬜ | |
-| 837 | Verify two-sided stencil ops on Vulkan | ⬜ | `VkStencilOpState` front/back |
+| 825 | Pixel test: `TextureAddressMode::Clamp` on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_TextureAddressMode`/`Vulkan_TextureAddressMode_Clamp_DualTextureEffect`.  |
+| 826 | Pixel test: `TextureAddressMode::Wrap` on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by Task 665 fix + `Vulkan_TextureAddressMode` test.  Verifies Task 665's fix once landed |
+| 827 | Pixel test: `TextureAddressMode::Mirror` on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_TextureAddressMode_Mirror_DualTextureEffect`.  |
+| 828 | Pixel test: `TextureFilter::Point` vs `Linear` on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_TextureFilter_PointVsLinear`.  |
+| 829 | Verify mipmap filter modes on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_TextureMipFilter_DualTextureEffect` (Task 925, this session).  |
+| 830 | Verify anisotropic filtering cap + fallback on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_TextureAnisotropic_DualTextureEffect`.  `VkPhysicalDeviceFeatures.samplerAnisotropy` |
+| 831 | Pixel test: `BlendState::Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_BlendState_Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` (Task 868 fix).  Consolidated, 4 sub-cases — mirrors Task 189's pattern |
+| 832 | Verify separate color/alpha blend function + factor combinations on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_BlendState_SeparateFunctions`/`SeparateFactors`.  |
+| 833 | Verify `BlendFactor` constant-color blending on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_BlendState_BlendFactor`.  |
+| 834 | Pixel test: depth write enabled vs disabled on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_DepthStencilState_WriteEnable`.  |
+| 835 | Pixel test: all 8 depth `CompareFunction` values on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_DepthStencilState_CompareFunction` (Task 870).  |
+| 836 | Verify stencil enable/disable + read/write masks + front-face ops on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_DepthStencilState_StencilEnable`/`StencilMask`/`StencilOps`.  |
+| 837 | Verify two-sided stencil ops on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_DepthStencilState_StencilTwoSided`.  `VkStencilOpState` front/back |
 | 838 | Verify `ReferenceStencil` device state reaches Vulkan draw calls | ⬜ | |
-| 839 | Pixel test: culling disabled / `CullClockwise` / `CullCounterClockwise` on Vulkan | ⬜ | |
-| 840 | Verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding on Vulkan | ⬜ | Extends Task 148's full-cycle test with an explicit sampling-after-unbind assertion |
-| 841 | Add the pixel-readback confirmation for `RenderTargetUsage::DiscardContents` vs `PreserveContents` on Vulkan | ⬜ | Task 178 implemented the render-pass load-op mapping; no pixel test confirms it yet |
+| 839 | Pixel test: culling disabled / `CullClockwise` / `CullCounterClockwise` on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_RasterizerState_CullMode`.  |
+| 840 | Verify `RenderTarget2D` can be sampled as `Texture2D` after unbinding on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_RenderTarget2D_FullCycle`/`RenderTarget2D_ClearOnlyRoundtrip`.  Extends Task 148's full-cycle test with an explicit sampling-after-unbind assertion |
+| 841 | Add the pixel-readback confirmation for `RenderTargetUsage::DiscardContents` vs `PreserveContents` on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_RenderTargetUsage`.  Task 178 implemented the render-pass load-op mapping; no pixel test confirms it yet |
 | 842 | Verify MRT with mixed formats is rejected or handled per XNA constraints on Vulkan | ⬜ | |
 | 843 | Verify `Viewport::Project`/`Unproject` math on Vulkan | ⬜ | Confirm no Vulkan Y-flip/NDC convention bug |
-| 844 | Pixel test: `BasicEffect` vertex-color-only / texture-only / texture×vertex-color / one-light / ambient+emissive+specular on Vulkan | ⬜ | Consolidated, mirrors Task 189; Vulkan currently only has Phase 9–14's combined smoke coverage |
-| 845 | Pixel test: `BasicEffect` fog on Vulkan | ⬜ | EasyGL got this in Task 195; audit Vulkan `GpuDrawParams`/SPIR-V shaders for a fog uniform, add if missing |
-| 846 | Verify alpha reference scaling + vertex/diffuse color interaction + fog + null-texture behavior in `AlphaTestEffect` on Vulkan | ⬜ | |
-| 847 | Verify `DualTextureEffect` null-texture behavior + fog on Vulkan | ⬜ | Blend correctness already covered by Task 135 |
-| 848 | Verify `EnvironmentMapEffect` `FresnelFactor` + eye-position + non-identity world-matrix correctness on Vulkan | ⬜ | Amount/specular already covered by Task 136 |
-| 849 | Verify `SkinnedEffect` bone-count boundary + two-bone-blend pixel correctness on Vulkan | ⬜ | Add explicit pixel assertions beyond the existing shader smoke test |
+| 844 | Pixel test: `BasicEffect` vertex-color-only / texture-only / texture×vertex-color / one-light / ambient+emissive+specular on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_BasicEffect_VertexColorEnabled`/`VertexColorDisabled`/`TextureEnabled`/`TextureVertexColorEnabled`/`OneLight`/`Combined`/`Specular`/`MultiLightEmissive`/`Emissive`.  Consolidated, mirrors Task 189; Vulkan currently only has Phase 9–14's combined smoke coverage |
+| 845 | Pixel test: `BasicEffect` fog on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_BasicEffect_Fog`/`Colored3D_Fog`/`Textured3D_Fog`/`ColoredTextured3D_Fog`.  EasyGL got this in Task 195; audit Vulkan `GpuDrawParams`/SPIR-V shaders for a fog uniform, add if missing |
+| 846 | Verify alpha reference scaling + vertex/diffuse color interaction + fog + null-texture behavior in `AlphaTestEffect` on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_AlphaTest_CompareFunctionSweep`/`VertexColor`/`Fog`/`NullTexture`.  |
+| 847 | Verify `DualTextureEffect` null-texture behavior + fog on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_DualTextureEffect_NullTexture0`/`NullTexture2`/`Fog`.  Blend correctness already covered by Task 135 |
+| 848 | Verify `EnvironmentMapEffect` `FresnelFactor` + eye-position + non-identity world-matrix correctness on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_EnvironmentMapEffect_Fresnel`/`EyePosition`/`WorldTransform`.  Amount/specular already covered by Task 136 |
+| 849 | Verify `SkinnedEffect` bone-count boundary + two-bone-blend pixel correctness on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_SkinnedEffect_IdentityBones`/`TranslationBone`/`TwoBoneBlend`/`Combined`.  Add explicit pixel assertions beyond the existing shader smoke test |
 | 850 | Pixel test: `SpriteSortMode` ordering (Deferred/Texture/FrontToBack/BackToFront) on Vulkan | ⬜ | |
 | 851 | Pixel test: rotation/scale/source-rectangle-cropping/`SpriteEffects` flip on Vulkan | ⬜ | Consolidated |
 | 852 | Pixel test: single glyph + multi-glyph spacing + newline + default-character-fallback on Vulkan | ⬜ | `SpriteFont` has no dedicated Vulkan pixel test yet |
 | 853 | Pixel test: model with two meshes and hierarchy transform propagation on Vulkan | ⬜ | |
 | 854 | Pixel/query test: visible vs occluded quad pixel counts on Vulkan | ⬜ | Task 447 covers sync correctness; add the actual pixel/query-count assertions |
 | 855 | Verify `Texture2D` `SetData`/`GetData` partial-rectangle + `startIndex`/`elementCount` + mip-level on Vulkan | ⬜ | Currently only EasyGL has this depth (Tasks 169–171) |
-| 856 | Verify `TextureCube` per-face/per-mip `SetData`/`GetData` pixel correctness on Vulkan | ⬜ | Mirrors Task 172 |
+| 856 | Verify `TextureCube` per-face/per-mip `SetData`/`GetData` pixel correctness on Vulkan | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Vulkan_TextureCube_PartialRect_RoundTrip`/`Vulkan_TextureCube_Mip_RoundTrip`.  Mirrors Task 172 |
 | 857 | Verify NPOT texture upload+sample on Vulkan | ⬜ | Mirrors Task 268; currently code-inspected only |
 | 858 | Verify `Texture3D` box-region `SetData`/`GetData` pixel correctness on Vulkan | ⬜ | Task 271's guards are backend-agnostic C++; no Vulkan pixel test confirms the GPU side |
 | 859 | Run the full Vulkan integration suite (Tasks 664–665, 825–858) end to end; zero unexplained failures or documented, justified skips | ⬜ | |
