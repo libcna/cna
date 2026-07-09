@@ -138,3 +138,60 @@ hand-built `Model` via its public constructors works today, but loading one thro
    committing to a backend.
 5. If your game does anything numeric with `IndexElementSize` beyond passing it to `IndexBuffer`,
    watch for Task 921 landing (it will change the enum's underlying values to match FNA).
+
+## 2D compatibility checklist (Task 487)
+
+A scannable, tick-through-your-own-source checklist for 2D-only games (`SpriteBatch`/`SpriteFont`/
+`Texture2D`). Every row was checked against the real current header (not assumed from XNA docs)
+and against `docs/sdl-renderer-2d-completeness.md` (Task 731, the detailed source behind every
+✅/⚠️/❌ below — this list summarizes, it doesn't repeat that document's own rationale). Legend:
+✅ ports as-is (after the property rewrite) · ⚠️ ports with a caveat, read the note · ❌ not
+supported, throws · ⛔ BLOCKED, needs a project-owner decision.
+
+**`SpriteBatch`**
+
+| Member | Status | Note |
+|---|---|---|
+| `Begin()` (all 4 overloads: no-arg, sort+blend, +sampler/depth/raster, +effect/transform) | ✅ | |
+| `End()` | ✅ | |
+| `Draw(Texture2D, Vector2 position, Color)` | ✅ | |
+| `Draw(Texture2D, Vector2 position, Rectangle? source, Color)` | ✅ | |
+| `Draw(Texture2D, Vector2 position, Rectangle? source, Color, rotation, origin, float scale, SpriteEffects, layerDepth)` | ✅ | |
+| `Draw(Texture2D, Vector2 position, Rectangle? source, Color, rotation, origin, Vector2 scale, SpriteEffects, layerDepth)` | ✅ | |
+| `Draw(Texture2D, Rectangle destination, Color)` | ✅ | |
+| `Draw(Texture2D, Rectangle destination, Rectangle? source, Color)` | ✅ | |
+| `Draw(Texture2D, Rectangle destination, Rectangle? source, Color, rotation, origin, SpriteEffects, layerDepth)` | ⚠️ **not present as an XNA-compatible overload** | Real FNA has this as its 7th `Draw` overload (`Rectangle` destination + full rotation/origin/effects/depth). CNA's header only has a `NOXNA`-marked near-equivalent with a **required** `Rectangle` source parameter instead of FNA's `Rectangle?` (optional) — not a drop-in signature match. If your C# code calls this specific overload with a `null` source rectangle, it will not compile against CNA as-is. Not previously tracked; opened as new **Task 922** while verifying this checklist against the real header. |
+| `SpriteSortMode` (all 4 values) | ✅ | |
+| `transformMatrix` in `Begin()` | ✅ | |
+| Custom `Effect` via `Begin(effect)` | ⚠️ (SDL_Renderer only) | Throws by design on SDL_Renderer (no shader stage there); works on EasyGL/Vulkan/Bgfx. |
+| `DrawString` (6 overloads) | ✅ | |
+
+**`SpriteFont`**
+
+| Member | Status | Note |
+|---|---|---|
+| `MeasureString(String)` | ✅ | |
+| `MeasureString(StringBuilder)` | ✅ | Added by Task 423 — if you're on an older CNA checkout predating that task, this overload won't exist yet. |
+| Glyph placement, spacing/kerning, `\n` newlines, unknown-char fallback | ✅ | Pixel-verified (Tasks 424-427/690-693). |
+| `SpriteEffects` flip + rotation/origin/scale via `DrawString` | ✅ | Fixed in shared code this session (Task 694) — correct on every backend, not just where it was found. |
+
+**`Texture2D`**
+
+| Member | Status | Note |
+|---|---|---|
+| `Texture2D(GraphicsDevice&, int width, int height)` | ✅ | |
+| `Texture2D(GraphicsDevice&, int width, int height, bool mipMap, SurfaceFormat)` | ✅ | |
+| `FromStream(GraphicsDevice&, Stream&)` (2 overloads) | ✅ | PNG/JPEG/BMP/DDS auto-detected — see the "Known deviations" entry on `FromStream`'s DDS auto-detection differing from FNA's stricter contract. |
+| `SetData(Color* data, int elementCount)` | ✅ | |
+| `SetData(int level, Rectangle* rect, Color* data, int startIndex, int elementCount)` | ⚠️ | `level > 0` (mip levels) is a silent no-op on Vulkan/Bgfx (Task 867) and throws on SDL_Renderer by design (Task 681); `level == 0` is fully correct everywhere. |
+| `GetData` (3 overloads) | ✅ | Pure CPU-side cache read on every backend — backend-independent by construction. |
+| `SaveAsPng`/`SaveAsJpeg` (stream + file-path `NOXNA` overloads) | ✅ | |
+| Non-`Color` `SurfaceFormat` for real GPU sampling | ⛔ BLOCKED | Task 732 — file I/O round-trips fine; GPU texture upload of non-`Color` formats does not. |
+
+**`BlendState`/`SamplerState` (as used via `SpriteBatch::Begin`)**
+
+| Preset | Status | Note |
+|---|---|---|
+| `BlendState::Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` | ✅ | Correct on EasyGL/Bgfx/SDL_Renderer; **Vulkan hardcodes one blend equation regardless of the preset** (Task 868, open) — don't rely on non-`Opaque` blending if targeting Vulkan today. |
+| `SamplerState::PointClamp`/`PointWrap`/`LinearClamp`/`LinearWrap`/`AnisotropicClamp`/`AnisotropicWrap` | ✅ | except `TextureFilter::Anisotropic` silently falls back to trilinear on EasyGL only (Task 918, open); genuinely supported on Vulkan/Bgfx. |
+| `TextureAddressMode::Wrap`/`Mirror` on SDL_Renderer specifically | ⛔ BLOCKED | Tasks 686/687 — works on all 3 other backends. |
