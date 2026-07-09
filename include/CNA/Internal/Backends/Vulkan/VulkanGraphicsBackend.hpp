@@ -94,10 +94,21 @@ namespace CNA::Internal::Backends::Vulkan
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
+        // Task 925 (split from Task 867): real GPU upload for level>0, mirroring
+        // VulkanTexture3DBackend::SetData's established staging-buffer pattern (Task 864).
+        void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
     private:
+        // Task 925: transitions exactly ONE mip level's layout -- the shared
+        // VulkanGraphicsBackend::TransitionImageLayout always barriers level 0 regardless of
+        // which level is being copied (the same imprecision VulkanTexture3DBackend::SetData
+        // already has, Task 864); UpdatePixelsLevel needs the real target level barriered
+        // instead, confirmed via live Vulkan validation-layer errors otherwise.
+        void TransitionLevelLayout(int level, VkImageLayout from, VkImageLayout to);
+
         int                 width_         = 0;
         int                 height_        = 0;
+        int                 levelCount_    = 1;
         VkImage             image_         = VK_NULL_HANDLE;
         VkDeviceMemory      memory_        = VK_NULL_HANDLE;
         VkImageView         imageView_     = VK_NULL_HANDLE;

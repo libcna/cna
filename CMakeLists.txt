@@ -2961,9 +2961,19 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 298: NOT registered on Vulkan. Texture2D::SetData(level>0) is a silent no-op on
-        # Vulkan (UpdatePixelsLevel never overridden — Task 867 finding), which confounds this
-        # test's mip-filter-selection intent (it would fail for the wrong reason). See Task 867.
+        # Task 298: now registered on Vulkan too -- a Vulkan-specific adaptation of the EasyGL
+        # source (can't reuse it verbatim: Vulkan's TextureFilter::Point mapping has always been
+        # mip-aware, unlike EasyGL's still-flat mapping, so the expected result for that one check
+        # differs -- see the test's own file-header comment). Task 925 fixed the confound noted
+        # here previously (Texture2D::SetData(level>0) was a silent no-op on Vulkan,
+        # UpdatePixelsLevel never overridden; mipLevels/levelCount were also both hardcoded to 1).
+        cna_vulkan_test(cna_test_vulkan_texture_mip_filter_effect
+                        examples/vulkan_texture_mip_filter_effect_test.cpp)
+        add_test(NAME Vulkan_TextureMipFilter_DualTextureEffect
+                 COMMAND cna_test_vulkan_texture_mip_filter_effect)
+        set_tests_properties(Vulkan_TextureMipFilter_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 299: anisotropic filtering caps and fallback on Vulkan too (reuses the
         # backend-agnostic EasyGL test source). This is the one backend where MaxAnisotropy is

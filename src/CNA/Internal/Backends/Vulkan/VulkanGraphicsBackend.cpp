@@ -118,7 +118,8 @@ namespace CNA::Internal::Backends::Vulkan
     // =========================================================================
 
     VulkanTextureBackend::VulkanTextureBackend(const ImageData& data, VulkanGraphicsBackend* owner)
-        : width_(data.width), height_(data.height), owner_(owner)
+        : width_(data.width), height_(data.height),
+          levelCount_(data.mipLevels > 0 ? data.mipLevels : 1), owner_(owner)
     {
         VkDevice dev = owner_->device_;
 
@@ -142,7 +143,7 @@ namespace CNA::Internal::Backends::Vulkan
         imgInfo.imageType     = VK_IMAGE_TYPE_2D;
         imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
         imgInfo.extent        = { static_cast<uint32_t>(data.width), static_cast<uint32_t>(data.height), 1 };
-        imgInfo.mipLevels     = 1;
+        imgInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
         imgInfo.arrayLayers   = 1;
         imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
@@ -163,7 +164,8 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("vkAllocateMemory (image) failed");
         vkBindImageMemory(dev, image_, memory_, 0);
 
-        // Transition UNDEFINED → TRANSFER_DST_OPTIMAL, copy, → SHADER_READ_ONLY
+        // Transition UNDEFINED → TRANSFER_DST_OPTIMAL, copy, → SHADER_READ_ONLY (level 0 only --
+        // the shared TransitionImageLayout helper hardcodes a single-level range).
         owner_->TransitionImageLayout(image_,
             VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         owner_->CopyBufferToImage(stagingBuf, image_,
@@ -175,6 +177,29 @@ namespace CNA::Internal::Backends::Vulkan
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
 
+        // Task 925: levels 1..levelCount_-1 have no data yet (uploaded later via
+        // UpdatePixelsLevel) but still need a defined layout -- mirrors
+        // VulkanTexture3DBackend's own construction-time full-range barrier (Task 864).
+        if (levelCount_ > 1)
+        {
+            VkCommandBuffer initCb = owner_->BeginOneTimeCommands();
+            VkImageMemoryBarrier initBarrier{};
+            initBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            initBarrier.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+            initBarrier.newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            initBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            initBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            initBarrier.image               = image_;
+            initBarrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 1,
+                                                 static_cast<uint32_t>(levelCount_ - 1), 0, 1 };
+            initBarrier.srcAccessMask       = 0;
+            initBarrier.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(initCb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                                 0, nullptr, 0, nullptr, 1, &initBarrier);
+            owner_->EndOneTimeCommands(initCb);
+        }
+
         // --- VkImageView ---
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -183,7 +208,7 @@ namespace CNA::Internal::Backends::Vulkan
         viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
         viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.baseMipLevel   = 0;
-        viewInfo.subresourceRange.levelCount     = 1;
+        viewInfo.subresourceRange.levelCount     = static_cast<uint32_t>(levelCount_);
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount     = 1;
         if (vkCreateImageView(dev, &viewInfo, nullptr, &imageView_) != VK_SUCCESS)
@@ -268,6 +293,76 @@ namespace CNA::Internal::Backends::Vulkan
         owner_->CopyBufferToImage(stagingBuf, image_,
             static_cast<uint32_t>(width_), static_cast<uint32_t>(height_));
         owner_->TransitionImageLayout(image_,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+    }
+
+    // Task 925: transitions exactly ONE mip level's layout -- the shared TransitionImageLayout
+    // helper always barriers level 0 regardless of the level actually being copied (the same
+    // imprecision VulkanTexture3DBackend::SetData already has, Task 864 -- confirmed via live
+    // Vulkan validation-layer errors while building this test: reusing that helper for level>0
+    // barriers level 0 while vkCmdCopyBufferToImage targets the real level, a genuine mismatch).
+    void VulkanTextureBackend::TransitionLevelLayout(int level, VkImageLayout from, VkImageLayout to)
+    {
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkImageMemoryBarrier barrier{};
+        barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout           = from;
+        barrier.newLayout           = to;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image               = image_;
+        barrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 1, 0, 1 };
+        VkPipelineStageFlags srcStage, dstStage;
+        if (from == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && to == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        } else { // TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        owner_->EndOneTimeCommands(cb);
+    }
+
+    // Task 925 (split from Task 867): real GPU upload for level>0, mirroring
+    // VulkanTexture3DBackend::SetData's established staging-buffer pattern (Task 864) --
+    // previously the shared IGraphicsBackend no-op default, silently discarding the caller's
+    // mip-level data.
+    void VulkanTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    {
+        if (!owner_ || !owner_->device_ || !rgba || level < 0 || level >= levelCount_) return;
+        VkDevice dev = owner_->device_;
+        VkDeviceSize size = static_cast<VkDeviceSize>(levelW) * levelH * 4;
+
+        VkBuffer stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void* mapped = nullptr;
+        owner_->CreateBuffer(size,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+        std::memcpy(mapped, rgba, static_cast<std::size_t>(size));
+
+        TransitionLevelLayout(level,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
+        region.imageOffset      = { 0, 0, 0 };
+        region.imageExtent      = { static_cast<uint32_t>(levelW), static_cast<uint32_t>(levelH), 1 };
+        vkCmdCopyBufferToImage(cb, stagingBuf, image_,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        owner_->EndOneTimeCommands(cb);
+
+        TransitionLevelLayout(level,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
