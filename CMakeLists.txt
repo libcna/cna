@@ -1263,7 +1263,8 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_house3d_demo --smoke 3)
         set_tests_properties(EasyGL_House3D_SmokeTest PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+            LABELS GraphicsSmoke)
 
         # Task 86: textured quad pixel readback
         cna_easygl_test(cna_test_easygl_textured_quad
@@ -2668,7 +2669,8 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_demo_2d --smoke 3)
         set_tests_properties(Vulkan_Demo2D_SmokeTest PROPERTIES
             TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+            LABELS GraphicsSmoke)
 
         # Task 124: DrawInstancedPrimitives — 3 instances at different X positions
         cna_vulkan_test(cna_test_vulkan_instanced
@@ -4153,7 +4155,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_demo_2d --smoke 3)
     set_tests_properties(SDL_Renderer_Demo2D_SmokeTest PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS GraphicsSmoke)
 
     # Sample 2/5: bouncing sprite -- real multi-frame Update()+Draw() physics/bounce loop.
     cna_sdl_test(cna_test_sdl_sample_bouncing_sprite
@@ -4228,7 +4231,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
              COMMAND cna_demo_2d --smoke 3)
     set_tests_properties(Bgfx_Demo2D_SmokeTest PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS GraphicsSmoke)
 
     # Task 179: RenderTargetUsage DiscardContents/PreserveContents smoke test
     cna_bgfx_test(cna_test_bgfx_render_target_usage
