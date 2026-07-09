@@ -252,7 +252,7 @@ namespace Microsoft::Xna::Framework::Graphics
     // -----------------------------------------------------------------------
 
     // -----------------------------------------------------------------------
-    // Draw stubs — XNA 4.0 overloads not yet fully implemented
+    // Draw overloads — position/rectangle + optional source-rectangle variants
     // -----------------------------------------------------------------------
 
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position, Color color)
