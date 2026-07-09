@@ -2859,6 +2859,79 @@ namespace CNA::Internal::Backends::Vulkan
         }
     }
 
+    // Task 868: XNA Blend enum -> VkBlendFactor (mirrors EasyGL's ToEasyGLBlendFactor exactly):
+    // One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5,
+    // DestinationColor=6, InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9,
+    // BlendFactor=10, InverseBlendFactor=11, SourceAlphaSaturation=12
+    static VkBlendFactor ToVkBlendFactor(int xnaBlend)
+    {
+        switch (xnaBlend) {
+        case  1: return VK_BLEND_FACTOR_ZERO;
+        case  2: return VK_BLEND_FACTOR_SRC_COLOR;
+        case  3: return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+        case  4: return VK_BLEND_FACTOR_SRC_ALPHA;
+        case  5: return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        case  6: return VK_BLEND_FACTOR_DST_COLOR;
+        case  7: return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+        case  8: return VK_BLEND_FACTOR_DST_ALPHA;
+        case  9: return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        case 10: return VK_BLEND_FACTOR_CONSTANT_COLOR;
+        case 11: return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
+        case 12: return VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
+        default: return VK_BLEND_FACTOR_ONE; // Blend::One = 0
+        }
+    }
+
+    // Task 868: XNA BlendFunction enum -> VkBlendOp (mirrors EasyGL's ToEasyGLBlendEquation
+    // exactly): Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4
+    static VkBlendOp ToVkBlendOp(int xnaBlendFunc)
+    {
+        switch (xnaBlendFunc) {
+        case 1: return VK_BLEND_OP_SUBTRACT;
+        case 2: return VK_BLEND_OP_REVERSE_SUBTRACT;
+        case 3: return VK_BLEND_OP_MAX;
+        case 4: return VK_BLEND_OP_MIN;
+        default: return VK_BLEND_OP_ADD; // BlendFunction::Add = 0
+        }
+    }
+
+    // Task 868: packs BlendKeyParams into a uint32_t (4 bits per Blend value -- 13 real values fit;
+    // 3 bits per BlendFunction value -- 5 real values fit), 22 bits total. This is the pipeline
+    // cache key's own second half (see PipelineKey/PipelineKeyHash) -- a plain uint64_t ran out of
+    // free bit-width for this once a depth VkFormat is already folded in via
+    // FoldDepthFormatIntoKey. When blend is disabled, always collapses to 0 regardless of the
+    // requested (irrelevant) factors, so different disabled BlendStates don't create duplicate
+    // pipelines.
+    static uint32_t PackBlendBits(bool blend, const BlendKeyParams& bp)
+    {
+        if (!blend) return 0;
+        return (static_cast<uint32_t>(bp.colorSrc  & 0xF))
+             | (static_cast<uint32_t>(bp.colorDst  & 0xF) << 4)
+             | (static_cast<uint32_t>(bp.alphaSrc  & 0xF) << 8)
+             | (static_cast<uint32_t>(bp.alphaDst  & 0xF) << 12)
+             | (static_cast<uint32_t>(bp.colorFunc & 0x7) << 16)
+             | (static_cast<uint32_t>(bp.alphaFunc & 0x7) << 19);
+    }
+
+    // Task 868: fills a VkPipelineColorBlendAttachmentState's real blend factors/op from
+    // BlendKeyParams -- shared by every 3D pipeline-creation function so the exact same
+    // XNA->Vulkan mapping is used everywhere, mirroring FillDepthStencilState's own established
+    // pattern. Previously every call site hardcoded BlendState.NonPremultiplied's own equation
+    // here whenever blend was true, regardless of what was actually requested.
+    static void FillBlendAttachmentState(VkPipelineColorBlendAttachmentState& cba, bool blend,
+                                          const BlendKeyParams& bp)
+    {
+        cba.blendEnable = blend ? VK_TRUE : VK_FALSE;
+        if (blend) {
+            cba.srcColorBlendFactor = ToVkBlendFactor(bp.colorSrc);
+            cba.dstColorBlendFactor = ToVkBlendFactor(bp.colorDst);
+            cba.colorBlendOp        = ToVkBlendOp(bp.colorFunc);
+            cba.srcAlphaBlendFactor = ToVkBlendFactor(bp.alphaSrc);
+            cba.dstAlphaBlendFactor = ToVkBlendFactor(bp.alphaDst);
+            cba.alphaBlendOp        = ToVkBlendOp(bp.alphaFunc);
+        }
+    }
+
     // Packs every DepthStencilKeyParams field into 29 bits, meant to be OR'd (after shifting past
     // whatever bit range a caller's own existing key dimensions already occupy) into that
     // caller's uint64_t pipeline cache key.
@@ -2967,7 +3040,7 @@ namespace CNA::Internal::Backends::Vulkan
                                                              bool blend, int cullMode,
                                                              uint32_t colorAttachmentCount,
                                                              bool wireframe, bool msaa,
-                                                             const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+                                                             const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         // Create layout once
         if (pipelineLayout3D_ == VK_NULL_HANDLE) {
@@ -2981,7 +3054,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (3D) failed");
         }
 
-        uint64_t key = FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelines3D_.find(key);
         if (it != pipelines3D_.end()) return it->second;
 
@@ -3044,15 +3117,9 @@ namespace CNA::Internal::Backends::Vulkan
         FillDepthStencilState(ds, dsParams);
 
         VkPipelineColorBlendAttachmentState cba{};
-        if (blend) {
-            cba.blendEnable         = VK_TRUE;
-            cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            cba.colorBlendOp        = VK_BLEND_OP_ADD;
-            cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            cba.alphaBlendOp        = VK_BLEND_OP_ADD;
-        }
+        // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+        // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+        FillBlendAttachmentState(cba, blend, blendParams);
         cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         // Replicate the same blend state across all MRT outputs.
@@ -3337,7 +3404,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         if (pipelineLayoutAlphaTest3D_ == VK_NULL_HANDLE) {
             VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
@@ -3349,7 +3416,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (AlphaTest3D) failed");
         }
 
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesAlphaTest3D_.find(key);
         if (it != pipelinesAlphaTest3D_.end()) return it->second;
 
@@ -3426,13 +3493,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
 
         VkPipelineColorBlendStateCreateInfo cbs{};
@@ -3594,13 +3657,13 @@ namespace CNA::Internal::Backends::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureDualTexResources();
 
         // DualTexture always uses stride=20 (VertexPositionTexture); key encodes topology+state.
         constexpr std::size_t kDualStride = 20;
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(kDualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kDualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesDualTex3D_.find(key);
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
@@ -3662,13 +3725,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -3905,12 +3964,12 @@ namespace CNA::Internal::Backends::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureEnvMapResources();
 
         constexpr std::size_t kEnvStride = 32;
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesEnvMap3D_.find(key);
         if (it != pipelinesEnvMap3D_.end()) return it->second;
 
@@ -3970,13 +4029,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -4135,12 +4190,12 @@ namespace CNA::Internal::Backends::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureLitTexturedResources();
 
         constexpr std::size_t kLitStride = 32;
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesLitTextured3D_.find(key);
         if (it != pipelinesLitTextured3D_.end()) return it->second;
 
@@ -4200,13 +4255,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -4362,11 +4413,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureFogTex3DResources();
 
-        uint64_t key = FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesFogColored3D_.find(key);
         if (it != pipelinesFogColored3D_.end()) return it->second;
 
@@ -4421,15 +4472,9 @@ namespace CNA::Internal::Backends::Vulkan
         FillDepthStencilState(ds, dsParams);
 
         VkPipelineColorBlendAttachmentState cba{};
-        if (blend) {
-            cba.blendEnable         = VK_TRUE;
-            cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            cba.colorBlendOp        = VK_BLEND_OP_ADD;
-            cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            cba.alphaBlendOp        = VK_BLEND_OP_ADD;
-        }
+        // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+        // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+        FillBlendAttachmentState(cba, blend, blendParams);
         cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
@@ -4485,11 +4530,11 @@ namespace CNA::Internal::Backends::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureFogTex3DResources();
 
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesFogTex3D_.find(key);
         if (it != pipelinesFogTex3D_.end()) return it->second;
 
@@ -4564,15 +4609,9 @@ namespace CNA::Internal::Backends::Vulkan
         FillDepthStencilState(ds, dsParams);
 
         VkPipelineColorBlendAttachmentState cba{};
-        if (blend) {
-            cba.blendEnable         = VK_TRUE;
-            cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            cba.colorBlendOp        = VK_BLEND_OP_ADD;
-            cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            cba.alphaBlendOp        = VK_BLEND_OP_ADD;
-        }
+        // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+        // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+        FillBlendAttachmentState(cba, blend, blendParams);
         cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
@@ -4758,7 +4797,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureSkinnedResources();
 
@@ -4768,7 +4807,7 @@ namespace CNA::Internal::Backends::Vulkan
         // reference to the canonical VertexPositionNormalTextureSkinned::getVertexDeclarationStatic()
         // layout and why a shared-derivation refactor was investigated but deferred.
         constexpr std::size_t kSkinnedStride = 52;
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(kSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesSkinned3D_.find(key);
         if (it != pipelinesSkinned3D_.end()) return it->second;
 
@@ -4830,13 +4869,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -4882,7 +4917,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::size_t pvStride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         // Ensure pipelineLayoutExt3D_ exists (128-byte PC + 1 descriptor set for future texture use).
         if (pipelineLayoutExt3D_ == VK_NULL_HANDLE) {
@@ -4895,7 +4930,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (Ext3D/Instanced) failed");
         }
 
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesInstanced3D_.find(key);
         if (it != pipelinesInstanced3D_.end()) return it->second;
 
@@ -4965,13 +5000,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -5347,27 +5378,27 @@ namespace CNA::Internal::Backends::Vulkan
                 if (draw.useAlphaTest) {
                     pipe = GetOrCreatePipelineAlphaTest3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useDualTexture) {
                     pipe = GetOrCreatePipelineDualTex3D(draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useEnvMap) {
                     pipe = GetOrCreatePipelineEnvMap3D(draw.topology,
                                                        draw.depthTest, draw.depthWrite,
-                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useSkinned) {
                     pipe = GetOrCreatePipelineSkinned3D(draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useInstanced) {
                     pipe = GetOrCreatePipelineInstanced3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useLitTextured) {
                     pipe = GetOrCreatePipelineLitTextured3D(draw.topology,
                                                             draw.depthTest, draw.depthWrite,
-                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useFogTex3D) {
                     // Task 899: colored3d (stride 16) / textured3d (20) / colored_textured3d (24)
                     // fog-capable bundle. The legacy no-GpuDrawParams DrawColoredPrimitives()
@@ -5376,14 +5407,14 @@ namespace CNA::Internal::Backends::Vulkan
                     pipe = (draw.stride == 16)
                            ? GetOrCreatePipelineFogColored3D(draw.topology,
                                                              draw.depthTest, draw.depthWrite,
-                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt)
+                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt)
                            : GetOrCreatePipelineFogTex3D(draw.stride, draw.topology,
                                                          draw.depthTest, draw.depthWrite,
-                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else {
                     pipe = GetOrCreatePipeline3D(draw.topology,
                                                  draw.depthTest, draw.depthWrite,
-                                                 draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                 draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 }
                 if (pipe != lastPipe) {
                     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
@@ -6071,6 +6102,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.stencilWriteMask = stencilWriteMask_;
         d.referenceStencil = referenceStencil_;
         d.blend      = blendEnabled_;
+        d.blendParams = blendParams_;
         d.cullMode   = cullMode_;
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
@@ -6116,6 +6148,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.stencilWriteMask = stencilWriteMask_;
         d.referenceStencil = referenceStencil_;
         d.blend      = blendEnabled_;
+        d.blendParams = blendParams_;
         d.cullMode   = cullMode_;
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
@@ -6173,6 +6206,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.stencilWriteMask = stencilWriteMask_;
         d.referenceStencil = referenceStencil_;
         d.blend          = blendEnabled_;
+        d.blendParams = blendParams_;
         d.cullMode       = cullMode_;
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
@@ -6340,6 +6374,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.stencilWriteMask = stencilWriteMask_;
         d.referenceStencil = referenceStencil_;
         d.blend         = blendEnabled_;
+        d.blendParams = blendParams_;
         d.cullMode      = cullMode_;
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
@@ -6505,6 +6540,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.stencilWriteMask = stencilWriteMask_;
         d.referenceStencil = referenceStencil_;
         d.blend        = blendEnabled_;
+        d.blendParams = blendParams_;
         d.cullMode     = cullMode_;
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
@@ -6524,11 +6560,21 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                  int colorDstBlend, int alphaDstBlend,
-                                                 int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+                                                 int colorBlendFunc, int alphaBlendFunc)
     {
         // Blend::One=0, Blend::Zero=1 → Opaque preset: src=One, dst=Zero → no blending
         blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
                           alphaSrcBlend == 0 && alphaDstBlend == 1);
+        // Task 868: previously every one of these 6 real values was discarded except for the
+        // enabled/disabled boolean above -- every pipeline hardcoded BlendState.NonPremultiplied's
+        // own equation whenever blending was on at all. Now stored for real use by
+        // FillBlendAttachmentState() at pipeline-creation time.
+        blendParams_.colorSrc  = colorSrcBlend;
+        blendParams_.colorDst  = colorDstBlend;
+        blendParams_.alphaSrc  = alphaSrcBlend;
+        blendParams_.alphaDst  = alphaDstBlend;
+        blendParams_.colorFunc = colorBlendFunc;
+        blendParams_.alphaFunc = alphaBlendFunc;
     }
 
     void VulkanGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,

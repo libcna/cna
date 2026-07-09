@@ -578,6 +578,33 @@ namespace CNA::Internal::Backends::Vulkan
     // mask/write mask, which are true Vulkan dynamic state (vkCmdSetStencil*, no new pipeline
     // needed) -- is baked into a VkPipeline at creation time (depthCompareOp and the front/back
     // VkStencilOpState blocks), so must be part of every 3D pipeline's cache key.
+    // Task 868: the real per-channel Blend/BlendFunction values a BlendState requests, mirrors
+    // DepthStencilKeyParams -- fields baked into a pipeline at creation time (Vulkan has no
+    // per-draw dynamic blend-equation state). Defaults match BlendState.Opaque's own values
+    // (One/Zero, Add), though blendEnabled_ already gates Opaque out of blending entirely.
+    struct BlendKeyParams {
+        int colorSrc  = 0; // Blend::One
+        int colorDst  = 1; // Blend::Zero
+        int alphaSrc  = 0; // Blend::One
+        int alphaDst  = 1; // Blend::Zero
+        int colorFunc = 0; // BlendFunction::Add
+        int alphaFunc = 0; // BlendFunction::Add
+    };
+
+    // Task 868: pipeline caches now key on (existing uint64_t topology/depth/stencil/etc. bits,
+    // packed blend bits) -- a plain uint64_t ran out of free bit-width once the full 6-value
+    // Blend/BlendFunction state needed representing (the existing key already uses up through
+    // ~bit 52 once a depth VkFormat is folded in via FoldDepthFormatIntoKey), so blend state gets
+    // its own uint32_t half instead of being crammed into the same 64 bits. std::pair<uint64_t,
+    // uint32_t> has correct default operator== (member-wise); only a hash functor is needed.
+    struct PipelineKeyHash {
+        std::size_t operator()(const std::pair<uint64_t, uint32_t>& k) const noexcept
+        {
+            return std::hash<uint64_t>{}(k.first) ^ (std::hash<uint32_t>{}(k.second) * 0x9E3779B97F4A7C15ull);
+        }
+    };
+    using PipelineKey = std::pair<uint64_t, uint32_t>;
+
     struct DepthStencilKeyParams {
         int  depthFunc            = 3;      // CompareFunction::LessEqual (XNA DepthStencilState.Default)
         bool stencilEnable        = false;
@@ -792,14 +819,14 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 911: depth-format-keyed, mirrors pipelines2DMsaaByDepthFmt_ above.
         std::unordered_map<VkFormat, VkPipeline> pipelines2DByDepthFmt_;
         VkPipelineLayout      pipelineLayout3D_      = VK_NULL_HANDLE;
-        std::unordered_map<uint64_t, VkPipeline>             pipelines3D_;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelines3D_;
         VkPipelineLayout      pipelineLayoutExt3D_      = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutAlphaTest3D_ = VK_NULL_HANDLE;
-        std::unordered_map<uint64_t, VkPipeline>             pipelinesAlphaTest3D_;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesAlphaTest3D_;
         VkDescriptorSetLayout descriptorSetLayout2Tex_     = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPool2Tex_          = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutDualTex3D_     = VK_NULL_HANDLE;
-        std::unordered_map<uint64_t, VkPipeline>             pipelinesDualTex3D_;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesDualTex3D_;
         // Task 899: per-frame cache (was a single flat map) -- binding=2's fog UBO now makes the
         // descriptor set's buffer binding frame-specific, mirroring litTexturedDescSets_/skinnedDescSets_.
         std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
@@ -814,7 +841,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorSetLayout descriptorSetLayoutEnvMap_   = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPoolEnvMap_        = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutEnvMap3D_      = VK_NULL_HANDLE;
-        std::unordered_map<uint64_t, VkPipeline>             pipelinesEnvMap3D_;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesEnvMap3D_;
         // Per-frame descriptor set cache: key = hash(view2D, viewCube)
         std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
                    MaxFramesInFlight>                        envMapDescSets_;
@@ -832,7 +859,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorSetLayout descriptorSetLayoutLitTextured_ = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPoolLitTextured_      = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutLitTextured3D_    = VK_NULL_HANDLE;
-        std::unordered_map<uint64_t, VkPipeline>             pipelinesLitTextured3D_;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesLitTextured3D_;
         std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
                    MaxFramesInFlight>                        litTexturedDescSets_;
         // Per-frame UBO ring buffer for light1/light2/emissive (5×vec4 = 80 bytes used, padded to 256)
@@ -852,8 +879,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorSetLayout descriptorSetLayoutFogTex3D_ = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPoolFogTex3D_      = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutFogTex3D_      = VK_NULL_HANDLE;
-        std::unordered_map<uint64_t, VkPipeline>             pipelinesFogColored3D_;
-        std::unordered_map<uint64_t, VkPipeline>             pipelinesFogTex3D_; // textured+coloredTextured, keyed by stride
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesFogColored3D_;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesFogTex3D_; // textured+coloredTextured, keyed by stride
         std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
                    MaxFramesInFlight>                        fogTex3DDescSets_;
         static constexpr uint32_t kFogTex3DUBOStride   = 256;
@@ -865,7 +892,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorSetLayout descriptorSetLayoutSkinned_  = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPoolSkinned_       = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutSkinned3D_     = VK_NULL_HANDLE;
-        std::unordered_map<uint64_t, VkPipeline>              pipelinesSkinned3D_;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>              pipelinesSkinned3D_;
         std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
                    MaxFramesInFlight>                         skinnedDescSets_;
         // Per-frame bone matrix UBO ring buffer (4608 bytes/draw × 32 draws max)
@@ -884,7 +911,7 @@ namespace CNA::Internal::Backends::Vulkan
         // --- Instanced 3D pipeline (Task 111) ---
         // Uses pipelineLayoutExt3D_ (128-byte PC: [0..15]=VP, [16..31]=ext params).
         // Vertex binding=0: per-vertex VERTEX rate; binding=1: per-instance INSTANCE rate (stride=64).
-        std::unordered_map<uint64_t, VkPipeline> pipelinesInstanced3D_;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> pipelinesInstanced3D_;
 
         // Default 1×1 white texture used when DrawPrimitivesEx has no texture bound.
         VkImage               defaultWhiteImage_     = VK_NULL_HANDLE;
@@ -938,6 +965,7 @@ namespace CNA::Internal::Backends::Vulkan
             bool                    depthTest;
             bool                    depthWrite;
             bool                    blend;
+            BlendKeyParams          blendParams;  // Task 868: real per-channel blend factors/funcs
             int                     cullMode;     // XNA CullMode: 0=None, 1=CW, 2=CCW
             VkIndexType             indexType;    // VK_INDEX_TYPE_UINT16 or UINT32
             VulkanRTSource*         rt = nullptr; // nullptr = backbuffer
@@ -1028,6 +1056,9 @@ namespace CNA::Internal::Backends::Vulkan
         bool     depthTestEnabled_  = true;
         bool     depthWriteEnabled_ = true;
         bool     blendEnabled_      = false;
+        // Task 868: the real requested blend factors/functions, previously entirely discarded by
+        // ApplyBlendState (only the enabled-or-not boolean above was ever kept).
+        BlendKeyParams blendParams_;
         int      cullMode_          = 0;  // XNA CullMode: 0=None, 1=CW, 2=CCW
         // Task 870: full DepthStencilState, previously almost entirely dropped by
         // ApplyDepthStencilState (only depthTestEnabled_/depthWriteEnabled_ were ever stored).
@@ -1118,12 +1149,14 @@ namespace CNA::Internal::Backends::Vulkan
                                          bool blend, int cullMode,
                                          uint32_t colorAttachmentCount, bool wireframe,
                                          bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         VkPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
                                                    bool blend, int cullMode,
                                                    uint32_t colorAttachmentCount, bool wireframe,
                                                    bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void       EnsureDualTexResources();
         VkDescriptorSet GetOrCreateDualTexDescSet(uint32_t frameIdx, VkImageView view0, VkImageView view1,
@@ -1133,6 +1166,7 @@ namespace CNA::Internal::Backends::Vulkan
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         // EnvironmentMapEffect
         void       EnsureEnvMapResources();
@@ -1143,6 +1177,7 @@ namespace CNA::Internal::Backends::Vulkan
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void       FillEnvMapPushConst(float (&pc)[32], const Matrix& wvp, const Matrix& world);
         // SkinnedEffect
@@ -1153,6 +1188,7 @@ namespace CNA::Internal::Backends::Vulkan
                                                  bool blend, int cullMode,
                                                  uint32_t colorAttachmentCount, bool wireframe,
                                                  bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void       EnsureDefaultWhiteTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
@@ -1167,6 +1203,7 @@ namespace CNA::Internal::Backends::Vulkan
                                                      bool blend, int cullMode,
                                                      uint32_t colorAttachmentCount, bool wireframe,
                                                      bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         // BasicEffect fog bundle (Task 899) — shared by colored3d/textured3d/colored_textured3d.
         void       EnsureFogTex3DResources();
@@ -1176,12 +1213,14 @@ namespace CNA::Internal::Backends::Vulkan
                                                     bool blend, int cullMode,
                                                     uint32_t colorAttachmentCount, bool wireframe,
                                                     bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         VkPipeline GetOrCreatePipelineFogTex3D(std::size_t stride, VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         // --- Instanced 3D pipeline ---
         VkPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, VkPrimitiveTopology,
@@ -1189,6 +1228,7 @@ namespace CNA::Internal::Backends::Vulkan
                                                    bool blend, int cullMode,
                                                    uint32_t colorAttachmentCount, bool wireframe,
                                                    bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void FillInstancedPushConst(float (&pc)[32], const Matrix& view, const Matrix& proj,
                                     const GpuDrawParams& p);
