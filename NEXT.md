@@ -585,6 +585,8 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `32e505ca` | — | **Backlog hygiene — first-ever full row-by-row triage of Phase 72 (Bgfx, 85 rows) and Phase 73 (Vulkan, 37 rows)**, superseding Task 861's own partial spot-check. A fork cross-referenced every row against current `CMakeLists.txt` test registrations and later-closed tasks; 54 rows closed as SUPERSEDED (32 Bgfx + 23 Vulkan, minus 1 already-closed duplicate), all confirmed REAL GAP/UNCERTAIN rows left untouched. Key finding: Bgfx is dramatically less pixel-test-covered than Vulkan for the same categories (`DepthStencilState`/`SpriteFont`/`Model`/`SpriteBatch`/most `BlendState` presets have zero Bgfx tests) — now the single largest known real gap in this project's pixel-verification coverage, documented in both phases' own intro blocks. Pure documentation, no code changes. |
+| `98cd8178` | 738 | **CLOSED — backlog-hygiene closure, its own ask fully fulfilled.** Confirmed via a full scan of Phases 34-55: every row is now ✅ or an explicitly-DEFERRED row with its own documented real blocker (Tasks 474/475/477/478). Pure status correction, no code changes. |
 | `0298042d` | 926 | **CLOSED — the last of the 3 backends split from Task 867; the entire 3-way split (924 EasyGL/925 Vulkan/926 Bgfx) is now done.** Found a deeper prerequisite gap than the row's own diagnosis anticipated: `BgfxTextureBackend` never overrode `UpdatePixels` (level 0) OR `UpdatePixelsLevel` (level>0) at all, and its constructor passed real pixel data as bgfx's `_mem` parameter at creation time — per `bgfx::createTexture2D`'s own doc comment ("If `_mem` is non-NULL, created texture will be immutable"), this made every texture immutable, so `bgfx::updateTexture2D()` would have been invalid regardless of level even if it had been called. Fixed by creating the texture WITHOUT initial `_mem` (mutable, mirroring `BgfxTextureCubeBackend`'s already-established pattern) with `hasMips` genuinely threaded through (previously hardcoded `false`), then uploading the real initial level-0 data via `bgfx::updateTexture2D` immediately after creation; added real `UpdatePixels`/`UpdatePixelsLevel` overrides mirroring `BgfxTextureCubeBackend::SetData`'s exact shape. New `Bgfx_TextureMipFilter_DualTextureEffect` test (Bgfx-specific adaptation of Task 298's EasyGL source, same reasoning as Task 925's Vulkan copy — Bgfx's `TextureFilter::Point` has always mapped to a mip-aware sampler flag, unlike EasyGL's still-flat mapping) confirmed via `git stash` revert-and-rebuild. Full Bgfx regression: 4415/4416 passed, 1 pre-existing (`Bgfx_RenderTarget2D_MsaaResolve`, Xvfb/DRI3 limitation), zero new. Cross-backend compile clean (Bgfx-only files touched). See `plan_graphics.md` Task 926 for full detail. |
 | `da996046` | 925 | **CLOSED — split from Task 867, the Vulkan third; Task 926 (Bgfx) is the only remaining piece.** Confirmed 3 of the row's original 4 named sub-fixes were genuinely needed; the 4th (`ApplySamplerState`'s `minLod`/`maxLod`) turned out already fixed as a Task 878 prerequisite — a stale finding in Task 867's own original diagnosis, corrected here as a byproduct. Real fixes: `VulkanTextureBackend` gained a `levelCount_` member (threaded from the already-existing `ImageData::mipLevels` field, Task 924's own addition); `VkImageCreateInfo::mipLevels`/`VkImageViewCreateInfo::subresourceRange.levelCount` now use it instead of hardcoded `1`; a new construction-time full-range barrier (mirroring `VulkanTexture3DBackend`'s Task 864 pattern) puts levels 1..N-1 into a defined layout; `UpdatePixelsLevel` implemented for real (staging buffer + `vkCmdCopyBufferToImage`, mirroring `VulkanTexture3DBackend::SetData`). **Found and fixed a genuine live-validation-layer bug while verifying**: naively reusing the shared single-level `TransitionImageLayout()` helper (mirroring `VulkanTexture3DBackend::SetData`'s own existing pattern) barriers level 0 regardless of which level is actually copied — a real layout-tracking mismatch, confirmed via 7 live Vulkan validation errors (one per level 1-7), fixed with a new level-aware `TransitionLevelLayout()` private method (0 validation errors after). `VulkanTexture3DBackend`/`VulkanTextureCubeBackend` likely share this identical latent imprecision — not fixed here, out of this task's `Texture2D`-only scope. Registered `Vulkan_TextureMipFilter_DualTextureEffect` (Task 298's own pixel test, previously explicitly not registered on Vulkan because of this exact bug) — needed a Vulkan-specific test copy, not a verbatim EasyGL-source reuse: Vulkan's `TextureFilter::Point` has always mapped to `VK_SAMPLER_MIPMAP_MODE_NEAREST` (genuinely mip-aware, matching real XNA/D3D9 semantics), unlike EasyGL's still-flat `GL_NEAREST`-only mapping, so the shared test's own "Point stays RED" expectation doesn't hold for Vulkan post-fix — both checks now correctly expect GREEN. Verified via `git stash` revert-and-rebuild (both checks failed exactly as predicted). Full Vulkan regression: 4444/4448 passed, 4 pre-existing (3 `ContentManagerSkinnedModelTest` segfaults + 1 `Vulkan_DepthBias`), zero new. Cross-backend compile clean. See `plan_graphics.md` Task 925 for full detail. |
 | `a5d8772e` | 924 | **CLOSED — split from Task 867 (multi-backend Texture2D mip bug), the EasyGL third.** Task 867 was too large to attempt as one unit (3 backends, 4 distinct sub-fixes), so it was split into Task 924 (EasyGL, done here)/925 (Vulkan, open)/926 (Bgfx, open), mirroring this project's established precedent (Task 868→923, Task 878→899). Fixed EasyGL's `GL_TEXTURE_MAX_LEVEL` never being set to match a `Texture2D`'s real mip level count — GL's own default (1000) made every texture "mipmap-incomplete" under any `*Mip*`-suffixed `TextureFilter` (e.g. `Anisotropic`) unless every level up to 1000 was populated, even for an ordinary single-level (`mipMap=false`) texture, the overwhelmingly common case (`Texture2D::CreateFromPixels`) — rendered solid black. Added a new default-valued `ImageData::mipLevels` field (source-compatible with every existing `CreateTexture()` call site across all 4 backends, no signature change) threaded through from `Texture2D.cpp`'s 3 call sites where it can differ from the default 1; `EasyGLTextureBackend` now clamps `GL_TEXTURE_MAX_LEVEL` to `mipLevels-1` at construction and after context-loss recovery, using the already-existing `easygl::Texture::set_parameter`/`TextureParameter::MaxLevel` (no cross-repo edit needed, unlike Task 918). New `EasyGL_Texture2D_AnisotropicSingleLevel` test confirmed via `git stash` revert-and-rebuild (reproduced the exact predicted solid-black failure). Full EasyGL regression: 4535/4539 passed, 4 pre-existing failures (`EasyGL_MRT_TwoAttachments`/Task 145, `EasyGL_GraphicsDevice_ReferenceStencil`/Task 872, `easy-gl-resource-smoke-tests`/sibling-repo, 1 unrelated Audio flake), zero new. Cross-backend compile clean on Vulkan/Bgfx/SDL_Renderer. **Same session, separate activity**: a backlog-hygiene pass closed 6 more stale `plan_graphics.md` rows that were already fulfilled by later work but never marked done (Tasks 161-165 — fulfilled by Tasks 412-416's `SpriteSortMode` mock-backend tests; Task 226 — `GraphicsDeviceManager.ApplyChanges()` already real and exercised by 11+ existing tests; Tasks 253/254 — `DrawUserPrimitives`/`DrawUserIndexedPrimitives` already fully implemented and tested; Task 874 — already fixed by Task 907's `IBgfxCubeSamplable` fix), and flagged 2 rows as `NEEDS_HUMAN` (Task 863 — `Texture3D` shader-sampling architecture decision; Task 869 — `GraphicsDevice` state value-vs-reference-semantics architecture decision), both already self-identified as needing the project owner's own call, not attempted. See `plan_graphics.md` Tasks 161-165/226/253/254/863/867/869/874/924 for full detail. |
@@ -1274,36 +1276,70 @@ a time — all 5 of Task 500's original "confirmed bugs" are now closed**:
   plan_graphics.md Task 923's own row). **This closes all 5 of Task 500's original confirmed bugs
   on both Vulkan and Bgfx.**
 
-**Backlog-hygiene pass, round 2 (2026-07-09, continued autonomous session)**: worked through
+**Backlog-hygiene work, rounds 2-3 (2026-07-09, continued autonomous session)**: worked through
 `plan_graphics.md` sequentially, lowest task number first, per the project owner's own explicit
-autonomous-session instructions this round. Closed 6 stale rows already fulfilled by later work but
-never marked done — **Phase 20 (Tasks 161-165, SpriteSortMode conformance) is now fully closed**,
-resolving half of the backlog-hygiene issue flagged in the paragraph below; also closed Task 226
-(`GraphicsDeviceManager.ApplyChanges()`, already real and tested), Tasks 253/254
-(`DrawUserPrimitives`/`DrawUserIndexedPrimitives`, already fully implemented and tested), and Task
-874 (Bgfx `RenderTargetCube` handle-cast bug, already fixed by Task 907). Flagged 2 rows
-**NEEDS_HUMAN** rather than attempting them: Task 863 (`Texture3D` shader-sampling architecture —
-2 named options, neither picked) and Task 869 (`GraphicsDevice` state value-vs-reference semantics
-— a project-wide `shared_ptr`-ification with ripple effects); both already self-identified this as
-a real architecture decision, not attempted here. **Split Task 867** (multi-backend `Texture2D`
-mip-level bug, too large for one unit — 3 backends, 4 distinct sub-fixes) into Task 924
-(EasyGL `GL_TEXTURE_MAX_LEVEL` fix, **done**)/925 (Vulkan, open)/926 (Bgfx, open), mirroring this
-project's established precedent (Task 868→923, Task 878→899).
+autonomous-session instructions this round. Closed 61 stale rows total, all already fulfilled by
+later work but never marked done — no new code in any of these, pure status correction:
+- **Phase 20 (Tasks 161-165, SpriteSortMode conformance) is now fully closed** — fulfilled by
+  Tasks 412-416's mock-backend tests.
+- Task 226 (`GraphicsDeviceManager.ApplyChanges()`), Tasks 253/254 (`DrawUserPrimitives`/
+  `DrawUserIndexedPrimitives`), and Task 874 (Bgfx `RenderTargetCube` handle-cast, fixed by
+  Task 907) — all already real and tested, just never marked ✅.
+- **Task 738 closed** — its own ask (close the remaining EasyGL tasks in Phases 34-55) is now
+  fully fulfilled; every row in that range is ✅ or an explicitly-DEFERRED row with a real
+  documented blocker (474/475/477/478).
+- **Phase 72 (Bgfx) and Phase 73 (Vulkan) got their first-ever full row-by-row triage**
+  (superseding Task 861's own partial spot-check) — 54 more rows closed as SUPERSEDED. See the
+  "Phase 71-73 triage, now complete" paragraph below for the real findings this surfaced.
+- Flagged 2 rows **NEEDS_HUMAN** rather than attempting them: Task 863 (`Texture3D`
+  shader-sampling architecture — 2 named options, neither picked) and Task 869 (`GraphicsDevice`
+  state value-vs-reference semantics — a project-wide `shared_ptr`-ification with ripple effects);
+  both already self-identified this as a real architecture decision, not attempted here.
 
-**Phase 71-73's own individually-unchecked rows are STILL NOT resolved** — Phases 71-73 (Bgfx/
-Vulkan gap-closure, described elsewhere as "mature"/"pixel-verified parity") still have dozens of
-individually-unchecked `⬜` rows in their own raw task tables (Phase 72: 84⬜, Phase 73: 36⬜) —
-their real content was superseded by later, higher-numbered tasks without the original checklist
-ever being formally closed. **Nobody has done the actual triage yet** (confirm which rows are
-genuinely superseded vs. real remaining gaps) — this is a real, standing candidate for the next
-substantial piece of work, not urgent but not imaginary either; likely the single largest remaining
-"true first not-completed task by number" once Task 926 is picked up, since Phase 71-73's own
-task numbers (739-861ish) are lower than Phase 74's.
+**Task 867 (multi-backend `Texture2D` mip-level bug) was split into Tasks 924/925/926 and all
+three are now done** — mirroring this project's established precedent for large multi-backend
+fixes (Task 868→923, Task 878→899):
+- Task 924 (EasyGL): `GL_TEXTURE_MAX_LEVEL` was never clamped to a texture's real mip level
+  count, rendering solid black under any mip-aware `TextureFilter` even for an ordinary
+  single-level texture.
+- Task 925 (Vulkan): `mipLevels`/`levelCount` were hardcoded to 1 and `UpdatePixelsLevel` was
+  never overridden; also found and fixed a genuine live-validation-layer layout-tracking bug
+  while verifying (the shared `TransitionImageLayout` helper always barriers level 0 regardless
+  of the level actually being copied — `VulkanTexture3DBackend`/`VulkanTextureCubeBackend` likely
+  share this same latent imprecision, not fixed there, out of this task's scope).
+- Task 926 (Bgfx): found a deeper prerequisite gap than expected — `BgfxTextureBackend` never
+  overrode `UpdatePixels`/`UpdatePixelsLevel` at all, and its constructor created an IMMUTABLE
+  texture (real pixel data passed as bgfx's `_mem` at creation time), making any later update
+  invalid per bgfx's own API contract regardless of level. Fixed via a mutable-texture
+  restructuring mirroring `BgfxTextureCubeBackend`'s already-established pattern.
+- All 3 registered/adapted Task 298's own mip-filter pixel test per backend — Vulkan's and
+  Bgfx's own `TextureFilter::Point` sampler mappings turned out to ALREADY be mip-aware (unlike
+  EasyGL's still-flat mapping), a genuine XNA-faithfulness improvement once the underlying image
+  data allocation was fixed, not a regression to paper over.
 
-**Tasks 924, 925, and 926 (EasyGL/Vulkan/Bgfx halves of the split Task 867) are all now done** —
-the entire 3-way split is closed, no `Texture2D` mip-level gap remains open on any backend.
+**Phase 71-73 triage, now complete** — Phase 72 (Bgfx, 85 rows) and Phase 73 (Vulkan, 37 rows)
+both got their first-ever full row-by-row triage this session (a fork did the cross-referencing
+research; the actual edits were applied and verified directly). Real findings, not just hygiene:
+- **Phase 72 (Bgfx)**: 34 SUPERSEDED (closed), **38 confirmed REAL GAPS still open**, 13 UNCERTAIN
+  (no test found either way, needs individual investigation). **Bgfx is dramatically less
+  pixel-test-covered than Vulkan for the same categories** — `DepthStencilState` (7/7 rows),
+  `SpriteFont` (3/3), `Model` (2/2), `SpriteBatch` behavior (6/6), and most `BlendState` presets
+  (4/5) have ZERO Bgfx-specific tests at all, while Vulkan is mostly done in these categories.
+  **This is now the single largest known real gap in this project's pixel-verification
+  coverage** — a genuine, substantial undertaking if picked up, not a quick pass.
+- **Phase 73 (Vulkan)**: 26 SUPERSEDED (closed), 9 confirmed REAL GAPS (matches Task 861's own
+  `SpriteBatch`/`SpriteFont`/`Model` finding, plus newly-found `Texture2D` partial-rect/NPOT/
+  `Texture3D` box-region gaps), 2 UNCERTAIN (MRT mixed-format, `Viewport` math).
+- See both phases' own intro blockquotes in `plan_graphics.md` for the full breakdown.
 
 **What's left, honestly categorized** (see `plan_graphics.md`'s own rows for full detail):
+- **Phase 72 (Bgfx)'s 38 confirmed real gaps** — the single largest remaining piece of real work;
+  see the phase's own intro block for the category breakdown (DepthStencilState/SpriteFont/Model/
+  SpriteBatch/BlendState presets on Bgfx have zero tests). Genuinely substantial, not a quick pass.
+- **Phase 73 (Vulkan)'s 9 confirmed real gaps** — smaller: `SpriteBatch`/`SpriteFont`/`Model`
+  pixel tests (Task 861's own finding) plus `Texture2D`/`Texture3D` partial-region/NPOT tests.
+- **~30 UNCERTAIN rows across both phases** (13 Bgfx + 4 Vulkan, per-phase intro blocks) — not
+  confirmed either way, need individual investigation before concluding real-gap or superseded.
 - **Task 863** (`Texture3D` shader-sampling architecture) — **NEEDS_HUMAN**, 2 named options,
   neither picked; see its own row for the tradeoffs.
 - **Task 869** (`GraphicsDevice` state value-vs-reference semantics) — **NEEDS_HUMAN**, this row's
@@ -1318,7 +1354,12 @@ the entire 3-way split is closed, no `Texture2D` mip-level gap remains open on a
   from ordinary source/doc changes — it runs automatically on every future push once merged).
 - **Task 920** (2 Android-NDK build regressions in the sibling `sharp-runtime` repo) — needs
   `sharp-runtime` write access/context; out of this repo's own scope to fix directly.
-- **Phases 71-73's own individually-unchecked rows** — the backlog-hygiene question above.
+- **Task 871/872** (stencil `Clear`/`ReferenceStencil` backend gaps) — confirmed real, not fixed;
+  scoped but not started this session (touches 4 new backend virtual methods across 3 hardware
+  backends plus a genuinely new stencil-verification pixel test — comparable in size to Tasks
+  925/926, deliberately not started rather than left half-finished).
+- **Tasks 889-895** (`SkinnedEffect`/`EnvironmentMapEffect` multi-light/specular/weights gaps) —
+  confirmed real per §5, not re-investigated this session.
 - **Phase 74** (XNA compiled `.fx` bytecode via MojoShader, 10 open tasks) — untouched this
   session, no known blocker, just not yet picked up.
 - **`xnb.md`** (repo root) — a from-source analysis of what a real binary `.xnb` content-pipeline
