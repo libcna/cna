@@ -441,7 +441,18 @@ namespace CNA::Internal::Backends::Bgfx
             static_cast<uint16_t>(w), static_cast<uint16_t>(h),
             false, 1, bgfx::TextureFormat::RGBA8,
             BGFX_TEXTURE_BLIT_DST | BGFX_TEXTURE_READ_BACK);
-        if (!bgfx::isValid(readback)) return;
+        if (!bgfx::isValid(readback))
+        {
+            // Task 455: BGFX_CAPS_TEXTURE_BLIT/READ_BACK aren't guaranteed on every renderer this
+            // backend can select (confirmed present in this project's own Xvfb/llvmpipe/OpenGL
+            // sandbox, but not runtime-checked) -- log clearly instead of silently leaving the
+            // caller's buffer untouched, matching this file's own established diagnostic
+            // convention for other renderer-capability fallbacks.
+            std::cerr << "CNA: bgfx TextureCube::GetData readback texture creation failed -- "
+                          "BGFX_CAPS_TEXTURE_BLIT/READ_BACK may not be supported on "
+                       << bgfx::getRendererName(bgfx::getRendererType()) << "\n";
+            return;
+        }
 
         bgfx::blit(0, readback, 0, 0, 0, 0,
                    handle, static_cast<uint8_t>(level),
@@ -509,7 +520,15 @@ namespace CNA::Internal::Backends::Bgfx
             static_cast<uint16_t>(w), static_cast<uint16_t>(h), static_cast<uint16_t>(depth),
             false, bgfx::TextureFormat::RGBA8,
             BGFX_TEXTURE_BLIT_DST | BGFX_TEXTURE_READ_BACK);
-        if (!bgfx::isValid(readback)) return;
+        if (!bgfx::isValid(readback))
+        {
+            // Task 455: same finding as BgfxTextureCubeBackend::GetData above -- log clearly
+            // instead of silently leaving the caller's buffer untouched.
+            std::cerr << "CNA: bgfx Texture3D::GetData readback texture creation failed -- "
+                          "BGFX_CAPS_TEXTURE_BLIT/READ_BACK may not be supported on "
+                       << bgfx::getRendererName(bgfx::getRendererType()) << "\n";
+            return;
+        }
 
         bgfx::blit(0, readback, 0, 0, 0, 0,
                    handle, static_cast<uint8_t>(level),
