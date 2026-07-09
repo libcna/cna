@@ -226,3 +226,45 @@ TEST(ModelTest, FourArgConstructorThrowsWhenMeshParentBonesSizeMismatches)
 
     EXPECT_THROW(Model(nullptr, { &root }, { &meshA, &meshB }, { &root }), std::out_of_range);
 }
+
+// Task 916 finding: FNA's real Model constructor never sets Root at all -- ModelReader assigns it
+// externally afterward, from an explicit rootBoneIndex naming any bone (src/Content/ContentReaders/
+// ModelReader.cs: `model.Root = bones[rootBoneIndex]`). CNA's constructors always defaulted Root to
+// bones[0] with no way to specify otherwise. Fixed via a new optional rootBoneIndex parameter
+// (defaulting to 0) on the 4-arg constructor.
+
+TEST(ModelTest, FiveArgConstructorDefaultRootBoneIndexMatchesFourArgBehavior)
+{
+    ModelBone root{ 0, "Root" };
+    ModelBone child{ 1, "Child" };
+
+    Model model(nullptr, { &root, &child }, {}, {});
+
+    EXPECT_EQ(model.getRootProperty(), &root);
+}
+
+TEST(ModelTest, FiveArgConstructorHonorsNonZeroRootBoneIndex)
+{
+    ModelBone bone0{ 0, "Bone0" };
+    ModelBone bone1{ 1, "Bone1" };
+    ModelBone bone2{ 2, "Bone2" };
+
+    Model model(nullptr, { &bone0, &bone1, &bone2 }, {}, {}, 2);
+
+    EXPECT_EQ(model.getRootProperty(), &bone2);
+    EXPECT_NE(model.getRootProperty(), &bone0);
+}
+
+TEST(ModelTest, FiveArgConstructorThrowsWhenRootBoneIndexOutOfRange)
+{
+    ModelBone root{ 0, "Root" };
+
+    EXPECT_THROW(Model(nullptr, { &root }, {}, {}, 1), std::out_of_range);
+}
+
+TEST(ModelTest, FiveArgConstructorEmptyBonesLeavesRootNullEvenWithDefaultIndex)
+{
+    Model model(nullptr, {}, {}, {});
+
+    EXPECT_EQ(model.getRootProperty(), nullptr);
+}
