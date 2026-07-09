@@ -5102,3 +5102,17 @@ if(CNA_BUILD_TESTS)
         endforeach()
     endif()
 endif()
+
+# Task 470: headless-safe CTest skip convention. A test that self-detects "no GPU/display
+# available" (e.g. SDL_InitSubSystem(SDL_INIT_VIDEO) failing, see
+# examples/common/PixelTestGame.hpp's RunPixelTest()) and exits with this sentinel code is
+# reported by ctest as SKIPPED rather than FAILED. Applied here in one shot to every test
+# already registered anywhere in this file, rather than adding a SKIP_RETURN_CODE property to
+# each individual set_tests_properties() call across ~330 existing test registrations -- purely
+# additive: a test that never exits with this code is completely unaffected. 77 is the
+# conventional Automake/BSD "test skipped" exit code, also CMake's own documented example value
+# for SKIP_RETURN_CODE.
+get_property(_cna_all_tests DIRECTORY PROPERTY TESTS)
+if(_cna_all_tests)
+    set_tests_properties(${_cna_all_tests} PROPERTIES SKIP_RETURN_CODE 77)
+endif()

@@ -46,6 +46,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/IO/FileStream.hpp"
 
+#include <SDL3/SDL.h>
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -233,13 +235,37 @@ namespace CNA::Examples
         int result_ = 0; // 0 = pass until a check proves otherwise
     };
 
+    // The sentinel exit code a test uses to report "skipped, not failed" (Task 470) -- the
+    // conventional Automake/BSD "test skipped" code, also CMake's own documented example value
+    // for the CTest SKIP_RETURN_CODE test property. This project applies SKIP_RETURN_CODE 77 to
+    // every registered test in bulk (see the bottom of the root CMakeLists.txt), so any test
+    // that exits with this code is reported by ctest as SKIPPED rather than FAILED.
+    inline constexpr int kSkipExitCode = 77;
+
     // Constructs, runs, and returns the process exit code for a PixelTestGame-derived test in
     // one line, matching this project's existing single-shot example main() convention.
+    //
+    // Task 470: headless-safe pre-flight check. Constructing the real Game/GraphicsDevice below
+    // throws a std::runtime_error out of SDL_InitSubSystem(SDL_INIT_VIDEO) if no GPU/display is
+    // available at all (e.g. a machine with no X server and no Xvfb) -- detect that up front and
+    // skip cleanly (kSkipExitCode) instead of crashing with an uncaught exception.
     template <typename TGame>
     int RunPixelTest()
     {
         static_assert(std::is_base_of_v<PixelTestGame, TGame>,
                       "RunPixelTest<TGame>: TGame must derive from CNA::Examples::PixelTestGame");
+
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+        {
+            std::printf("[SKIP] no GPU/display available (SDL_InitSubSystem(SDL_INIT_VIDEO) "
+                        "failed: %s)\n", SDL_GetError());
+            return kSkipExitCode;
+        }
+        // Release the probe -- the real Game/GraphicsDevice construction below re-acquires the
+        // subsystem itself (SDL reference-counts SDL_InitSubSystem/SDL_QuitSubSystem pairs, so
+        // this leaves it exactly as this function found it).
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+
         TGame game;
         game.Run();
         return game.getResultProperty();
