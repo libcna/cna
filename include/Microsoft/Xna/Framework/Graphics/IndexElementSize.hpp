@@ -7,8 +7,8 @@ namespace Microsoft::Xna::Framework::Graphics
     enum class IndexElementSize
     {
         /** @brief 16-bit short/ushort index value. */
-        SixteenBits = 16,
+        SixteenBits = 0,
         /** @brief 32-bit int/uint index value. */
-        ThirtyTwoBits = 32,
+        ThirtyTwoBits = 1,
     };
 }
