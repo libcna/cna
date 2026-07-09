@@ -1309,6 +1309,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 465: golden-image case reusing Phase 47's already-verified SpriteBatch
+        # rotation-around-origin scene (Task 417).
+        cna_easygl_test(cna_test_easygl_spritebatch_rotation_golden
+                        examples/easygl_spritebatch_rotation_golden_test.cpp)
+        add_test(NAME EasyGL_SpriteBatch_Rotation_Golden
+                 COMMAND cna_test_easygl_spritebatch_rotation_golden)
+        set_tests_properties(EasyGL_SpriteBatch_Rotation_Golden PROPERTIES
+            TIMEOUT 30
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)
