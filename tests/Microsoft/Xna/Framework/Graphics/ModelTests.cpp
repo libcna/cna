@@ -150,3 +150,42 @@ TEST(ModelTest, CopyBoneTransformsFromAcceptsALargerSourceIgnoringExtraElements)
     EXPECT_TRUE(VectorNear(Vector3::Transform(Vector3(0, 0, 0), h.root.getTransformProperty()),
                             Vector3(5.0f, 0.0f, 0.0f)));
 }
+
+// --- Task 437: Model::CopyBoneTransformsTo ---
+//
+// The sibling method to Task 436's CopyBoneTransformsFrom -- same already-documented FNA loop-
+// bound deviation applies (see the comment above the Task 436 section): FNA loops by the
+// destination array's own Length, CNA loops by Bones.Count.
+
+TEST(ModelTest, CopyBoneTransformsToReadsEachBonesOwnLocalTransform)
+{
+    KnownHierarchy h;
+    std::vector<Matrix> dest(3);
+    h.model.CopyBoneTransformsTo(dest);
+
+    // Unlike CopyAbsoluteBoneTransformsTo, this reads each bone's own LOCAL Transform directly --
+    // no parent composition at all.
+    EXPECT_TRUE(VectorNear(Vector3::Transform(Vector3(0, 0, 0), dest[0]), Vector3(1.0f, 0.0f, 0.0f)));
+    EXPECT_TRUE(VectorNear(Vector3::Transform(Vector3(1, 0, 0), dest[1]), Vector3(2.0f, 0.0f, 0.0f)));
+    EXPECT_TRUE(VectorNear(Vector3::Transform(Vector3(0, 0, 0), dest[2]), Vector3(0.0f, 1.0f, 0.0f)));
+}
+
+TEST(ModelTest, CopyBoneTransformsToThrowsWhenDestinationTooSmall)
+{
+    KnownHierarchy h;
+    std::vector<Matrix> dest(2); // fewer than the 3 bones in this hierarchy
+    EXPECT_THROW(h.model.CopyBoneTransformsTo(dest), std::out_of_range);
+}
+
+TEST(ModelTest, CopyBoneTransformsToAcceptsALargerDestinationIgnoringExtraElements)
+{
+    // Deliberate CNA-vs-FNA deviation (see the Task 436 section comment above): FNA would throw
+    // here (its loop bound is destinationBoneTransforms.Length); CNA safely leaves the extra
+    // element untouched instead.
+    KnownHierarchy h;
+    std::vector<Matrix> dest(4, Matrix::CreateTranslation(42.0f, 42.0f, 42.0f)); // sentinel value
+    EXPECT_NO_THROW(h.model.CopyBoneTransformsTo(dest));
+    EXPECT_TRUE(VectorNear(Vector3::Transform(Vector3(0, 0, 0), dest[0]), Vector3(1.0f, 0.0f, 0.0f)));
+    // The 4th (extra) element must remain the untouched sentinel value.
+    EXPECT_TRUE(VectorNear(Vector3::Transform(Vector3(0, 0, 0), dest[3]), Vector3(42.0f, 42.0f, 42.0f)));
+}
