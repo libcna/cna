@@ -1597,6 +1597,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 438: Pixel test -- Model with two meshes, each using its own distinct Effect.
+        cna_easygl_test(cna_test_easygl_model_two_meshes_effects
+                        examples/easygl_model_two_meshes_effects_test.cpp)
+        add_test(NAME EasyGL_Model_TwoMeshesEffects
+                 COMMAND cna_test_easygl_model_two_meshes_effects)
+        set_tests_properties(EasyGL_Model_TwoMeshesEffects PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 145: MRT — SetRenderTargets({rt0,rt1}), draw green to attachment0, verify left=green right=blue
         cna_easygl_test(cna_test_easygl_mrt
                         examples/easygl_mrt_test.cpp)
