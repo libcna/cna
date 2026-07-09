@@ -12,7 +12,8 @@ Effects/Recommended-next-steps sections below were stale by this entire stretch 
 detail this file now points to instead of duplicating; updated 2026-07-09 — Task 482 added the
 "Coverage axes" section (Present/Implemented/Tested/FNA-compatible/Intentionally-unsupported as
 independent questions); Task 483 added a dense per-class Graphics coverage table; Task 484 added
-the complementary per-backend Graphics support summary)  
+the complementary per-backend Graphics support summary; Task 485 added a consolidated "Known
+deviations from XNA/FNA" list, closing the Tasks 481-485 documentation arc / Phase 54 in full)  
 **Reference:** FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src`  
 **CNA headers:** `include/Microsoft/Xna/Framework/`
 
@@ -119,6 +120,43 @@ adds nothing that source doesn't already contain in more detail.
 | **Vulkan** | Second-most mature — most rendering correct, but 2 of the 4 state classes have real, confirmed gaps | All 5 stock effects (core+lighting+specular+fog on `alpha_test3d`/`lit_textured3d`; `colored3d`/`textured3d`/`colored_textured3d`/`dual_texture3d`/`skinned3d` still lack fog, Task 899), `RenderTarget2D`/`Cube` (MSAA/mip/per-instance `DepthStencilFormat` fidelity via Task 911's format-keyed pipeline cache), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. Task 865's real GPU readback), `OcclusionQuery` (Task 448-equivalent — actually the one BLOCKED here, see below), `SamplerState`, `VertexBuffer`/`IndexBuffer`/`VertexDeclaration` | `DepthStencilState` compare-op + stencil ops now real (Task 870) but `ReferenceStencil` still unconnected (872); one isolated `RasterizerState.DepthBias=-1e6` sub-case unresolved; `Texture2D` mip-level `SetData(level>0)` a silent no-op (867) | `BlendState` is almost entirely fake — hardcodes one blend equation regardless of request, confirmed 5× via pixel tests (868, open, not ⛔ but a large multi-pipeline-site fix); `OcclusionQuery` is ⛔ **BLOCKED** — the deferred-draw-recording architecture can't correlate a query's Begin/End span with a specific deferred draw without a real design decision (447) | 9 — 5× `BlendState`/Task 868, 1 `RasterizerState.DepthBias` sub-case, 3 `ContentManagerSkinnedModelTest.*` segfaults (Xvfb/llvmpipe environment issue, confirmed pre-existing via `git stash`, each passes in isolation) — Task 911's own regression, 4369/4378. **Note:** `docs/graphics-backend-feature-matrix.md` cites "12" pre-existing for this same 4369/4378 run, which doesn't arithmetically match its own totals (4378−4369=9); this table uses the arithmetically-consistent 9, matching `NEXT.md` §2's own itemized breakdown for the identical Task 911 run. Not re-run since Task 911 (no Vulkan-touching task since) — treat as best-known, not a live guarantee. |
 | **Bgfx** | Third — full 2D+3D pixel-verified parity as of Phase 72, but occlusion-query correctness can't be confirmed in this sandbox | All 5 stock effects (core+lighting+specular+fog), `RenderTarget2D`/`Cube` (MSAA/mip/depth), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. Task 914's blit-based readback), all 4 state classes, `SpriteBatch` `SamplerState` (Task 750) | `OcclusionQuery` Begin/End wiring is real (Task 448) but correctness (visible vs. occluded pixel counts) can't be pixel-verified under this sandbox's software GL 2.1 driver — dedicated-view architecture gap open (917); `ShaderEffect` custom-source loading unsupported (`CreateEffectBackend` returns `nullptr`) | None | 1 — `Bgfx_RenderTarget2D_MsaaResolve` (this sandbox's Xvfb has no DRI3 support; a documented environment limitation, not a code bug) — Task 448's regression, 4413/4414 |
 | **SDL_Renderer** | Deliberately 2D-only by design — not a maturity gap, an architectural scope boundary; its own 2D path is comprehensively audited and pixel-verified (`docs/sdl-renderer-2d-completeness.md`, Phase 70, 15 real bugs found and fixed) | All `SpriteBatch`/`SpriteFont` draw paths, all `BlendState`/`SamplerState` behavior, `RenderTarget2D` basic round-trip, `GetBackBufferData` (Task 915) | `RenderTarget2D`'s `DepthStencilFormat` is emulated — echoes the requested format back with no real backing store; `ClearOptions::Stencil` is emulated too | `TextureAddressMode::Wrap`/`Mirror` via `SpriteBatch` (686/687 — no native support in the `Draw()` path used, 3 unpicked design options); `Texture3D`/`TextureCube` construction succeeds silently with a null backend, a 94-existing-test blast radius if changed (725) | 11 — all throwing/exercising `"SDL_Renderer does not support 3D"` (`EffectApplyTest`×2, `SkinnedModelEXTPartTest.*`×6, `ContentManagerSkinnedModelTest.*`×3), matching this backend's accepted 2D-only scope exactly. Corrected from an original 13 by Task 709's own fix; reconfirmed via Task 915/456. |
+
+### Known deviations from XNA/FNA (Task 485, 2026-07-09)
+
+Closes out the Tasks 481-485 documentation arc. Present/Implemented/Tested coverage (above) answers
+"does it exist and get exercised" — this list answers a narrower, more dangerous question: **for
+API surface that IS present, implemented, and tested, where does CNA's actual runtime behavior
+diverge from real XNA/FNA's**, whether that's a confirmed bug awaiting a fix or a permanent,
+deliberate design decision. Every entry below was re-checked against its cited task row /
+`CHECKLIST.md` / `AUDIT.md` entry before being listed here, not transcribed from memory. Scoped to
+`Microsoft::Xna::Framework::Graphics`, matching Task 481's own Graphics-only scoping for this file.
+
+#### Confirmed bugs, not yet fixed
+
+| Deviation | CNA behavior | Real FNA behavior | Tracked as |
+|---|---|---|---|
+| `IndexElementSize` numeric values | `SixteenBits=16`, `ThirtyTwoBits=32` (apparently assumed the enum encodes a literal bit-width) | Implicit, sequential `SixteenBits=0`, `ThirtyTwoBits=1` | Task 921 (this Tasks 479-485 arc's own headline finding, from running real `FNA.dll` and diffing its output) |
+| Vulkan `BlendState` | Hardcodes one blend equation (`NonPremultiplied`'s) for anything other than `Opaque`, ignoring the actual requested `Blend`/`BlendFunction` values entirely | Applies the exact requested blend factors/functions per `BlendState` | Task 868 (open; confirmed 5× via pixel tests on real hardware) |
+| EasyGL `TextureFilter::Anisotropic` | Silently falls back to plain trilinear filtering — no `GL_EXT_texture_filter_anisotropic` call anywhere in the backend | Applies real anisotropic filtering (Vulkan/Bgfx both do too) | Task 918 (open) |
+| `Model`'s non-default constructor | Auto-defaults `Root` to `bones[0]`, with no parameter to specify a different root bone index | Never sets `Root` in the constructor at all — `ModelReader` assigns it externally from an explicit `rootBoneIndex` naming any bone | Task 916 (open; low-risk, purely-additive fix identified, not yet applied) |
+
+#### Intentional, permanent deviations
+
+These will not change — they are documented design decisions, not gaps awaiting a task number.
+Full detail and rationale for each lives in `CHECKLIST.md`'s "Known acceptable C++ deviations from
+FNA/XNA" table or the cited `AUDIT.md` section; not re-derived here.
+
+| Deviation | Why |
+|---|---|
+| `GetHashCode()` returns `std::size_t`, not C#'s `int` | C++ has no fixed 32-bit hash convention; platform-native size is used project-wide (`CHECKLIST.md`) |
+| `ref`/`out` parameters become value-reference pairs (e.g. `TryGetValue`-style overloads) | No C# `ref`/`out` mechanism exists in C++ (`CHECKLIST.md`) |
+| `IEnumerable<T>` replaced by `begin()`/`end()` (NOXNA), e.g. on `ModelBoneCollection` | C++ iterator idiom, not a C# `IEnumerable` port (`CHECKLIST.md`) |
+| `Model::Draw()` defaults a mesh's parent-bone index to `0` when `ModelMesh::ParentBone` is `nullptr`, instead of FNA's `NullReferenceException` | A null dereference is undefined behavior in C++, not a catchable exception like C#'s; defaulting to bone 0 is a strictly safer failure mode (`CHECKLIST.md`, Task 431) |
+| `ModelMesh::Draw()` silently skips a mesh part whose `Effect` is `nullptr`, instead of FNA's `NullReferenceException` on `effect.CurrentTechnique` | Same rationale as the `Model::Draw()` row above — safer failure mode than a null-pointer dereference (`CHECKLIST.md`, Task 431, corrects an earlier inaccurate claim in Task 728) |
+| `Model::CopyBoneTransformsFrom`/`CopyBoneTransformsTo` loop over `Bones.Count`, not the caller-supplied array's length like FNA does | FNA's own loop bound (`sourceBoneTransforms.Length`) makes it throw partway through for an array larger than `Bones.Count`; CNA's bound is a deliberately safer, non-fragile alternative (`CHECKLIST.md`, Task 436) |
+| `Texture2D::FromStream` silently auto-detects and decodes DDS/DXT1/3/5 content internally (`TryDecodeDds`), with no separate `DDSFromStreamEXT` method matching FNA's API shape | Real FNA's `FromStream` never auto-detects DDS — it always goes through the ordinary image decoder and throws on unsupported formats. CNA's auto-detection is a usability improvement, but is a genuine behavioral divergence from FNA's stricter contract (`AUDIT.md`, Texture2D detailed audit) |
+| `Texture2D::SetData(const Color*, int elementCount)` silently returns (no exception) for `data == nullptr` or `elementCount <= 0`, while the 5-arg `SetData(level, ...)` overload throws `std::invalid_argument` for the same inputs | Real FNA's `SetData<T>(T[] data)` always throws (it delegates to the validated 5-arg overload) — CNA's inconsistency between its own two overloads is already encoded as expected/tested behavior, not corrected (`AUDIT.md`, Texture2D detailed audit) |
+| `Texture::GetFormatSizeEXT`/`ValidateGetDataFormat` are `public static` on `Texture`, not FNA's `internal` | CNA's class hierarchy has no reachable `protected`/friend equivalent across all 3 real call sites (`Texture3D`, `TextureCube`, `GraphicsDevice::GetBackBufferData`), since `Texture3D`/`TextureCube` don't inherit `Texture` in CNA (`AUDIT.md`, Texture3D detailed audit, Task 271-280) |
 
 ### What counts as "public XNA 4.0 API"
 
