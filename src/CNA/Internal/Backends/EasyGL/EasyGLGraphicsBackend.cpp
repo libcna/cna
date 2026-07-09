@@ -376,12 +376,18 @@ namespace CNA::Internal::Backends::EasyGL
     // --- EasyGLTextureBackend ---
 
     EasyGLTextureBackend::EasyGLTextureBackend(const ImageData& data, ::easygl::ResourceRegistry* registry)
-        : registry_(registry)
+        : registry_(registry), mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
         width = data.width;
         height = data.height;
         texture.create();
         texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0, width, height, data.pixels.data());
+        // Task 924: clamp GL_TEXTURE_MAX_LEVEL to the real level count -- otherwise a mipmap-
+        // requiring TextureFilter (e.g. Anisotropic) treats this as an incomplete mipmap chain
+        // (GL's own default max level is 1000) and renders solid black, even for an ordinary
+        // single-level (mipLevels_==1) texture that never uploads any level beyond 0.
+        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::metagl::TextureParameter::MaxLevel,
+                               mipLevels_ - 1);
         if (registry_) registry_->add(this);
     }
 
@@ -409,6 +415,10 @@ namespace CNA::Internal::Backends::EasyGL
             texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
                                  width, height, blank.data());
         }
+        // Task 924: the fresh GL texture object defaults GL_TEXTURE_MAX_LEVEL back to 1000 --
+        // reapply the same clamp the constructor set, matching this texture's real level count.
+        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::metagl::TextureParameter::MaxLevel,
+                               mipLevels_ - 1);
     }
 
     void EasyGLTextureBackend::BindGL() const

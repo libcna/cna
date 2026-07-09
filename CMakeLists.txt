@@ -2616,6 +2616,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 924 (split from Task 867): a single-level Texture2D sampled with a mipmap-requiring
+        # TextureFilter (Anisotropic) must not render solid black (GL_TEXTURE_MAX_LEVEL now
+        # clamped to the real level count instead of GL's own default of 1000).
+        cna_easygl_test(cna_test_easygl_texture2d_anisotropic_singlelevel
+                        examples/easygl_texture2d_anisotropic_singlelevel_test.cpp)
+        add_test(NAME EasyGL_Texture2D_AnisotropicSingleLevel
+                 COMMAND cna_test_easygl_texture2d_anisotropic_singlelevel)
+        set_tests_properties(EasyGL_Texture2D_AnisotropicSingleLevel PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 918: real GL_EXT_texture_filter_anisotropic wiring, verified directly against
         # easy-gl's own Sampler API rather than trusting the capability-dump log alone.
         cna_easygl_test(cna_test_easygl_anisotropic_gl_state

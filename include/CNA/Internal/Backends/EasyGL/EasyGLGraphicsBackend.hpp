@@ -34,6 +34,11 @@ namespace CNA::Internal::Backends::EasyGL
     private:
         std::shared_ptr<std::vector<uint8_t>> pixels_;
         ::easygl::ResourceRegistry* registry_ = nullptr;
+        // Task 924: real mip level count this texture was created with -- GL_TEXTURE_MAX_LEVEL
+        // must be clamped to match it (mipLevels_-1), or a mipmap-requiring TextureFilter (e.g.
+        // Anisotropic) treats the texture as an incomplete mipmap chain and renders solid black,
+        // even when mipLevels_==1 (the common non-mipmapped case).
+        int mipLevels_ = 1;
     };
 
     /// EasyGL render target: off-screen FBO with a color texture and optional depth renderbuffer.
