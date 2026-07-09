@@ -550,10 +550,13 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
         // the first (every texel is the same solid colour by construction).
         std::vector<Color> got(16, Color(0, 0, 0, 0));
         tex.GetData(faces[i], got.data(), 16);
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_VULKAN)
-        // Bgfx: TextureCube::GetData has no GPU readback path at all (accepted, already-
-        // documented, project-wide limitation — not a bug to fix), so this exact-colour
-        // assertion excludes it. Vulkan's own GetData is real as of Task 865.
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_BGFX)
+        // Vulkan's own GetData is real as of Task 865; Bgfx's real readback path landed in
+        // Task 914 (this exclusion previously also covered Bgfx, before that fix -- Task 458
+        // found it stale and confirmed real GetData data on Bgfx here). SDL_Renderer excludes
+        // this assertion: TextureCube construction succeeds silently with a null backend there
+        // (BLOCKED, Task 725), so GetData leaves the buffer untouched at its zero-initialized
+        // default rather than returning real data.
         EXPECT_EQ(got[0].getRProperty(), expected[i].getRProperty()) << "face " << i;
         EXPECT_EQ(got[0].getGProperty(), expected[i].getGProperty()) << "face " << i;
         EXPECT_EQ(got[0].getBProperty(), expected[i].getBProperty()) << "face " << i;
