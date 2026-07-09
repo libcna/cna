@@ -24,6 +24,9 @@
 //             device.Clear(Color(255, 0, 0, 255));
 //             // ... draw calls ...
 //             ExpectPixel("centre", Rectangle(W / 2, H / 2, 1, 1), Color(255, 0, 0, 255));
+//             // Or, for a channel known to legitimately vary a little by backend/driver
+//             // (Task 462 -- e.g. MSAA edge blending): pass a tolerance explicitly.
+//             ExpectPixel("edge", Rectangle(0, 0, 1, 1), Color(128, 128, 128, 255), /*tolerance=*/20);
 //         }
 //     };
 //
@@ -35,6 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <type_traits>
 
 namespace CNA::Examples
@@ -52,27 +56,48 @@ namespace CNA::Examples
 
         // Reads back a single-pixel region and compares it (R/G/B only, matching this
         // project's existing example convention of ignoring alpha unless a test cares about
-        // it explicitly) against expectedColor. Prints a "[PASS]"/"[FAIL]" line naming label,
-        // and marks the overall result as failed if this check does not match. Returns true
-        // if this specific check passed.
+        // it explicitly) against expectedColor, allowing each channel to differ by up to
+        // tolerance (Task 462; matches the per-channel abs-difference convention already used
+        // by ~98 existing hand-rolled example tests dealing with GPU/driver blending or
+        // rounding noise -- e.g. MSAA edge antialiasing, alpha-blend precision). tolerance
+        // defaults to 0 (exact match, Task 461's original behavior) since most pixel tests
+        // check flat, unblended colours where an exact match is both correct and desirable;
+        // pass a non-zero tolerance only for scenarios that are known to legitimately vary.
+        // Prints a "[PASS]"/"[FAIL]" line naming label, and marks the overall result as failed
+        // if this check does not match. Returns true if this specific check passed.
         bool ExpectPixel(const char* label,
                           const Microsoft::Xna::Framework::Rectangle& region,
-                          const Microsoft::Xna::Framework::Color& expectedColor)
+                          const Microsoft::Xna::Framework::Color& expectedColor,
+                          int tolerance = 0)
         {
             using Microsoft::Xna::Framework::Color;
 
             Color pixel(0, 0, 0, 0);
             getGraphicsDeviceProperty().GetBackBufferData(&region, &pixel, 0, 1);
 
-            const bool pass = pixel.getRProperty() == expectedColor.getRProperty() &&
-                               pixel.getGProperty() == expectedColor.getGProperty() &&
-                               pixel.getBProperty() == expectedColor.getBProperty();
+            const auto closeEnough = [tolerance](int a, int b)
+            {
+                return std::abs(a - b) <= tolerance;
+            };
+            const bool pass = closeEnough(pixel.getRProperty(), expectedColor.getRProperty()) &&
+                               closeEnough(pixel.getGProperty(), expectedColor.getGProperty()) &&
+                               closeEnough(pixel.getBProperty(), expectedColor.getBProperty());
 
             if (pass)
             {
                 std::printf("[PASS] %s: pixel=(%d,%d,%d,%d)\n", label,
                             pixel.getRProperty(), pixel.getGProperty(),
                             pixel.getBProperty(), pixel.getAProperty());
+            }
+            else if (tolerance > 0)
+            {
+                std::printf("[FAIL] %s: pixel=(%d,%d,%d,%d), expected (%d,%d,%d,*) +/- %d\n",
+                            label,
+                            pixel.getRProperty(), pixel.getGProperty(),
+                            pixel.getBProperty(), pixel.getAProperty(),
+                            expectedColor.getRProperty(), expectedColor.getGProperty(),
+                            expectedColor.getBProperty(), tolerance);
+                result_ = 1;
             }
             else
             {
