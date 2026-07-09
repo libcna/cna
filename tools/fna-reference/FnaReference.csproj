@@ -71,6 +71,7 @@
     <Compile Include="JsonWriter.cs" />
     <Compile Include="NonRenderingApiReference.cs" />
     <Compile Include="PackedVectorReference.cs" />
+    <Compile Include="ViewportReference.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

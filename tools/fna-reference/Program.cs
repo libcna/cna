@@ -49,12 +49,16 @@ namespace CNA.FnaReference
             // hand-derived tests/PackedVectorGolden.md.
             JsonWriter packedVectors = PackedVectorReference.Generate();
 
+            // Task 476: Viewport.Project/Unproject reference values, complementing Phase 40.
+            JsonWriter viewport = ViewportReference.Generate();
+
             var root = new JsonWriter()
                 .Add("fnaAssemblyVersion", typeof(Vector3).Assembly.GetName().Version.ToString())
                 .Add("MathHelper", mathHelper)
                 .Add("Color", colorConstants)
                 .Add("NonRenderingApis", nonRenderingApis)
-                .Add("PackedVector", packedVectors);
+                .Add("PackedVector", packedVectors)
+                .Add("Viewport", viewport);
 
             string json = root.ToString();
             File.WriteAllText(outputPath, json);
