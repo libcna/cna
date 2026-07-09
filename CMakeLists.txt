@@ -1363,6 +1363,45 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 469: golden-image cases reusing Phases 43-46's already-verified stock-effect
+        # scenes (AlphaTestEffect/Task 373, DualTextureEffect/Task 389, EnvironmentMapEffect/
+        # Task 399, SkinnedEffect/Task 409) -- 4 separate files, one per phase.
+        cna_easygl_test(cna_test_easygl_alphatesteffect_golden
+                        examples/easygl_alphatesteffect_golden_test.cpp)
+        add_test(NAME EasyGL_AlphaTestEffect_Golden
+                 COMMAND cna_test_easygl_alphatesteffect_golden)
+        set_tests_properties(EasyGL_AlphaTestEffect_Golden PROPERTIES
+            TIMEOUT 30
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_easygl_test(cna_test_easygl_dualtextureeffect_golden
+                        examples/easygl_dualtextureeffect_golden_test.cpp)
+        add_test(NAME EasyGL_DualTextureEffect_Golden
+                 COMMAND cna_test_easygl_dualtextureeffect_golden)
+        set_tests_properties(EasyGL_DualTextureEffect_Golden PROPERTIES
+            TIMEOUT 30
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_easygl_test(cna_test_easygl_environmentmapeffect_golden
+                        examples/easygl_environmentmapeffect_golden_test.cpp)
+        add_test(NAME EasyGL_EnvironmentMapEffect_Golden
+                 COMMAND cna_test_easygl_environmentmapeffect_golden)
+        set_tests_properties(EasyGL_EnvironmentMapEffect_Golden PROPERTIES
+            TIMEOUT 30
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_easygl_test(cna_test_easygl_skinnedeffect_golden
+                        examples/easygl_skinnedeffect_golden_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_Golden
+                 COMMAND cna_test_easygl_skinnedeffect_golden)
+        set_tests_properties(EasyGL_SkinnedEffect_Golden PROPERTIES
+            TIMEOUT 30
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)
