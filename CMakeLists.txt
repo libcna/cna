@@ -2782,6 +2782,56 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 498: build and run at least 5 small FNA/XNA sample ports on CNA as real
+        # compatibility proof -- EasyGL is the primary/most-mature backend, so most of this
+        # task's own new samples target it, with 3 genuinely 3D (Task 730 already proved 2D
+        # compatibility via SDL_Renderer's own 5 samples).
+        # Sample 1/5: reuse cna_demo_2d, closing the exact same kind of gap Task 730 closed for
+        # SDL_Renderer (already smoke-tested on Vulkan/Bgfx via Tasks 88/89, never on EasyGL).
+        add_test(NAME EasyGL_Demo2D_SmokeTest
+                 COMMAND cna_demo_2d --smoke 3)
+        set_tests_properties(EasyGL_Demo2D_SmokeTest PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+            LABELS GraphicsSmoke)
+
+        # Sample 2/5: moving 3D object -- Update()-driven World-space translation, BasicEffect.
+        cna_easygl_test(cna_test_easygl_sample_moving_quad3d
+                        examples/easygl_sample_moving_quad3d_test.cpp)
+        add_test(NAME EasyGL_Sample_MovingQuad3D
+                 COMMAND cna_test_easygl_sample_moving_quad3d)
+        set_tests_properties(EasyGL_Sample_MovingQuad3D PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Sample 3/5: reactive material swap -- Update()-driven DualTextureEffect.Texture2 swap.
+        cna_easygl_test(cna_test_easygl_sample_dualtexture_swap
+                        examples/easygl_sample_dualtexture_swap_test.cpp)
+        add_test(NAME EasyGL_Sample_DualTextureSwap
+                 COMMAND cna_test_easygl_sample_dualtexture_swap)
+        set_tests_properties(EasyGL_Sample_DualTextureSwap PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Sample 4/5: keyboard-driven 3D object -- the 3D counterpart to Task 730's keyboard
+        # sprite sample, using the same InputManager::SetKeyState injection seam.
+        cna_easygl_test(cna_test_easygl_sample_keyboard_cube3d
+                        examples/easygl_sample_keyboard_cube3d_test.cpp)
+        add_test(NAME EasyGL_Sample_KeyboardCube3D
+                 COMMAND cna_test_easygl_sample_keyboard_cube3d)
+        set_tests_properties(EasyGL_Sample_KeyboardCube3D PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Sample 5/5: layered UI fade -- Update()-driven SpriteBatch alpha-blend compositing.
+        cna_easygl_test(cna_test_easygl_sample_layered_blend
+                        examples/easygl_sample_layered_blend_test.cpp)
+        add_test(NAME EasyGL_Sample_LayeredBlend
+                 COMMAND cna_test_easygl_sample_layered_blend)
+        set_tests_properties(EasyGL_Sample_LayeredBlend PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
 
     # Vulkan integration tests
