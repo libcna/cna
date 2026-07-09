@@ -5012,6 +5012,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 759 (Phase 72 Bgfx gap closure): DepthStencilState.DepthBufferWriteEnable pixel test
+    # on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 313; already reused
+    # verbatim on Vulkan, but Bgfx's own GetBackBufferData only reliably reflects the first read
+    # per rendered frame, Task 406, so the EasyGL source's 2-reads-per-frame structure needed
+    # restructuring into 2 separately-read passes -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_depthstencilstate_write_enable
+                  examples/bgfx_depthstencilstate_write_enable_test.cpp)
+    add_test(NAME Bgfx_DepthStencilState_WriteEnable
+             COMMAND cna_test_bgfx_depthstencilstate_write_enable)
+    set_tests_properties(Bgfx_DepthStencilState_WriteEnable PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

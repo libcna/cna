@@ -735,13 +735,17 @@ header. No task content changed, only the file location and numbering.
 >
 > **Full row-by-row triage completed 2026-07-09** (the first ever full pass — Task 861 had only
 > spot-checked a sample of Phase 73, and this phase had never been triaged at all): of 85 rows,
-> 34 were SUPERSEDED by later work and closed here as a backlog-hygiene pass, 38 are confirmed
-> REAL GAPS (still genuinely open, left as ⬜, not touched), and 13 are UNCERTAIN (no test found
-> either way, needs closer individual investigation before concluding). **Bgfx is dramatically
-> less pixel-test-covered than Vulkan for the same categories**: `DepthStencilState` (7/7 rows),
-> `SpriteFont` (3/3), `Model` (2/2), `SpriteBatch` behavior (6/6), and most `BlendState` presets
-> (4/5) have ZERO Bgfx-specific tests at all, while Vulkan is mostly done in these same
-> categories. This is the single largest real remaining gap in this project's pixel-verification
+> 34 were SUPERSEDED by later work and closed here as a backlog-hygiene pass, 38 were confirmed
+> REAL GAPS. **Tasks 758/759 (2 of those 38) were picked up as real work the same session** —
+> the first-ever Bgfx `DepthStencilState` pixel test found a genuine, confirmed, previously-
+> undiscovered bug (`DepthBufferWriteEnable=false` had zero effect on any 3D draw, all 4 draw-
+> dispatch functions unconditionally wrote depth regardless) and fixed it; 36 REAL GAPS remain.
+> 13 are UNCERTAIN (no test found either way, needs closer individual investigation before
+> concluding). **Bgfx is dramatically less pixel-test-covered than Vulkan for the same
+> categories**: `DepthStencilState` (5/7 rows remaining, 2 closed this session), `SpriteFont`
+> (3/3), `Model` (2/2), `SpriteBatch` behavior (6/6), and most `BlendState` presets (4/5) have
+> ZERO Bgfx-specific tests at all, while Vulkan is mostly done in these same categories. This is
+> the single largest real remaining gap in this project's pixel-verification
 > coverage — a genuine, substantial undertaking if picked up, not a quick pass.
 
 ### Foundational: unlock pixel testing
@@ -781,8 +785,8 @@ header. No task content changed, only the file location and numbering.
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
-| 758 | Audit `DepthStencilState` preset mapping to Bgfx depth/stencil flags | ⬜ | |
-| 759 | Pixel test: depth write enabled vs disabled on Bgfx | ⬜ | |
+| 758 | Audit `DepthStencilState` preset mapping to Bgfx depth/stencil flags | ✅ | **CLOSED (2026-07-09) — real audit, found the same confirmed bug Task 759's pixel test independently caught (see that row for full detail): all 4 of Bgfx's 3D draw-dispatch functions (`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx`/`DrawInstancedPrimitivesEx`) unconditionally OR'd `BGFX_STATE_WRITE_Z` into the base draw state, completely bypassing `ApplyDepthStencilState`'s own correct conditional logic (`depthFlags_ = depthWriteEnable ? BGFX_STATE_WRITE_Z : 0`) — `DepthStencilState.DepthBufferWriteEnable=false` had zero effect on every 3D draw. Everything else in `ApplyDepthStencilState` itself (depth compare-func mapping, stencil enable/masks, front/back ops via `BuildBgfxStencil`, two-sided stencil, `ReferenceStencil` baked into the state) was already correctly implemented — this was purely a draw-dispatch-site bug, not a mapping-table gap. Fixed by removing the unconditional bit at all 4 sites (`depthFlags_`'s own default, `BGFX_STATE_DEPTH_TEST_LESS \| BGFX_STATE_WRITE_Z`, already matches FNA's real `DepthStencilState.Default`, so no behavior change for the untouched-state case). |
+| 759 | Pixel test: depth write enabled vs disabled on Bgfx | ✅ | **CLOSED — real, confirmed, previously-undiscovered bug found and fixed, the first genuine bug this Phase 72 gap-closure pass turned up.** New `Bgfx_DepthStencilState_WriteEnable` test — a Bgfx-specific adaptation of `examples/easygl_depthstencilstate_write_enable_test.cpp` (Task 313, already reused verbatim on Vulkan): can't reuse it as-is because that file reads back 2 spatially-separate regions in the SAME rendered frame, but Bgfx's `GetBackBufferData` only reliably reflects the first read per rendered frame (Task 406) — restructured into 2 separately-read passes instead. **First run failed exactly as a real bug would**: `WriteEnable=false` incorrectly showed GREEN (write not actually skipped) instead of the expected BLUE. Root-caused to all 4 of Bgfx's 3D draw-dispatch functions unconditionally including `BGFX_STATE_WRITE_Z` in their base state expression, completely independent of (and overriding) `depthFlags_`'s own correct conditional value from `ApplyDepthStencilState`. Fixed by removing the unconditional bit at all 4 sites, relying solely on `depthFlags_` (whose own default already includes `BGFX_STATE_WRITE_Z`, matching FNA's `DepthStencilState.Default`, so this is purely additive correctness, not a behavior change for existing untouched-state draws). **Discriminating power verified via `git stash` revert-and-rebuild**: reverting reproduced the exact predicted failure; restored and reconfirmed both checks pass. Full Bgfx regression: `ctest` 4415/4417 passed, 2 pre-existing (`Bgfx_RenderTarget2D_MsaaResolve`/DRI3 limitation, `Bgfx_RenderTarget2D_MipChain`/~1-in-8 timing flake), zero new. Cross-backend compile check: EasyGL/Vulkan/SDL_Renderer untouched (Bgfx-only fix). |
 | 760 | Pixel test: all 8 depth `CompareFunction` values on Bgfx | ⬜ | |
 | 761 | Verify stencil enable/disable + read/write masks on Bgfx | ⬜ | |
 | 762 | Verify front-face stencil ops (Keep/Replace/Increment/Decrement) on Bgfx | ⬜ | |

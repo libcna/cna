@@ -1889,7 +1889,12 @@ namespace CNA::Internal::Backends::Bgfx
 
         bgfx::setVertexBuffer(0, vb.handle);
         bgfx::setStencil(stencilFront_, stencilBack_);
-        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
+                       // here -- depthFlags_ (set by ApplyDepthStencilState from the real
+                       // DepthBufferWriteEnable) already carries it when writes are actually
+                       // requested; including it again here unconditionally made
+                       // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                        | blendFlags_ | depthFlags_ | cullFlags_)
                        | ToTopologyFlag(primitive), blendFactorPacked_);
         SubmitViewProgram(colored3DProgram_);
@@ -1922,7 +1927,12 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setVertexBuffer(0, vb.handle);
         bgfx::setIndexBuffer(ib.handle);
         bgfx::setStencil(stencilFront_, stencilBack_);
-        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
+                       // here -- depthFlags_ (set by ApplyDepthStencilState from the real
+                       // DepthBufferWriteEnable) already carries it when writes are actually
+                       // requested; including it again here unconditionally made
+                       // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                        | blendFlags_ | depthFlags_ | cullFlags_)
                        | ToTopologyFlag(primitive), blendFactorPacked_);
         SubmitViewProgram(colored3DProgram_);
@@ -1955,7 +1965,12 @@ namespace CNA::Internal::Backends::Bgfx
 
         bgfx::setVertexBuffer(0, vb.handle);
         bgfx::setStencil(stencilFront_, stencilBack_);
-        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
+                       // here -- depthFlags_ (set by ApplyDepthStencilState from the real
+                       // DepthBufferWriteEnable) already carries it when writes are actually
+                       // requested; including it again here unconditionally made
+                       // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                                 | blendFlags_ | depthFlags_ | cullFlags_)
                                | ToTopologyFlag(primitive);
         bgfx::setState(state, blendFactorPacked_);
@@ -2283,7 +2298,12 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setIndexBuffer(ib.handle);
         bgfx::setInstanceDataBuffer(&idb);
         bgfx::setStencil(stencilFront_, stencilBack_);
-        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
+                       // here -- depthFlags_ (set by ApplyDepthStencilState from the real
+                       // DepthBufferWriteEnable) already carries it when writes are actually
+                       // requested; including it again here unconditionally made
+                       // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                                 | blendFlags_ | depthFlags_ | cullFlags_)
                                | ToTopologyFlag(primitive);
         bgfx::setState(state, blendFactorPacked_);
