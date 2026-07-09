@@ -1320,6 +1320,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 466: golden-image case reusing Phase 35's already-verified texture-filter
+        # magnification/Linear scene (Task 297).
+        cna_easygl_test(cna_test_easygl_texture_filter_linear_golden
+                        examples/easygl_texture_filter_linear_golden_test.cpp)
+        add_test(NAME EasyGL_TextureFilter_Linear_Golden
+                 COMMAND cna_test_easygl_texture_filter_linear_golden)
+        set_tests_properties(EasyGL_TextureFilter_Linear_Golden PROPERTIES
+            TIMEOUT 30
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)
