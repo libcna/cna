@@ -22,6 +22,21 @@ namespace Microsoft::Xna::Framework::Graphics
             root_ = bones_.bones_[0];
     }
 
+    Model::Model(GraphicsDevice* graphicsDevice,
+                 std::vector<ModelBone*> bones,
+                 std::vector<ModelMesh*> meshes,
+                 std::vector<ModelBone*> meshParentBones)
+        : Model(graphicsDevice, std::move(bones), std::move(meshes))
+    {
+        if (meshParentBones.empty())
+            return;
+        if (meshParentBones.size() != meshes_.meshes_.size())
+            throw std::out_of_range("meshParentBones");
+
+        for (std::size_t i = 0; i < meshParentBones.size(); ++i)
+            meshes_.meshes_[i]->parentBone_ = meshParentBones[i];
+    }
+
     void Model::setOwnedResources(std::shared_ptr<void> resources) {
         ownedResources_ = std::move(resources);
     }

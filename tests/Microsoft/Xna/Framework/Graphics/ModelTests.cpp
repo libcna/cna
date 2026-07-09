@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -188,4 +189,40 @@ TEST(ModelTest, CopyBoneTransformsToAcceptsALargerDestinationIgnoringExtraElemen
     EXPECT_TRUE(VectorNear(Vector3::Transform(Vector3(0, 0, 0), dest[0]), Vector3(1.0f, 0.0f, 0.0f)));
     // The 4th (extra) element must remain the untouched sentinel value.
     EXPECT_TRUE(VectorNear(Vector3::Transform(Vector3(0, 0, 0), dest[3]), Vector3(42.0f, 42.0f, 42.0f)));
+}
+
+// Task 439 finding: ModelMesh::parentBone_ (declares `friend class Model;` for exactly this
+// purpose) was never actually set by any public construction path -- not even Model's own 3-arg
+// constructor -- so ModelMesh::ParentBone was permanently nullptr for every hand-built model,
+// making Model::Draw's `mesh->getParentBoneProperty() ? ... : 0` branch dead code. Fixed via a new
+// 4-arg Model constructor overload taking a parallel per-mesh parent-bone vector.
+TEST(ModelTest, FourArgConstructorSetsMeshParentBone)
+{
+    ModelBone root{ 0, "Root" };
+    ModelBone child{ 1, "Child" };
+    root.AddChild(&child);
+    ModelMesh mesh(nullptr, {});
+
+    Model model(nullptr, { &root, &child }, { &mesh }, { &child });
+
+    EXPECT_EQ(mesh.getParentBoneProperty(), &child);
+}
+
+TEST(ModelTest, FourArgConstructorEmptyMeshParentBonesLeavesParentBoneNull)
+{
+    ModelBone root{ 0, "Root" };
+    ModelMesh mesh(nullptr, {});
+
+    Model model(nullptr, { &root }, { &mesh }, {});
+
+    EXPECT_EQ(mesh.getParentBoneProperty(), nullptr);
+}
+
+TEST(ModelTest, FourArgConstructorThrowsWhenMeshParentBonesSizeMismatches)
+{
+    ModelBone root{ 0, "Root" };
+    ModelMesh meshA(nullptr, {});
+    ModelMesh meshB(nullptr, {});
+
+    EXPECT_THROW(Model(nullptr, { &root }, { &meshA, &meshB }, { &root }), std::out_of_range);
 }

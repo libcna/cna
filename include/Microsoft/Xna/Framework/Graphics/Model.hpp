@@ -36,6 +36,21 @@ namespace Microsoft::Xna::Framework::Graphics
                     std::vector<ModelMesh*> meshes);
 
         /**
+         * @brief Constructs a model from a graphics device, bones, meshes, and each mesh's parent bone.
+         *
+         * @param graphicsDevice A valid reference to the GraphicsDevice.
+         * @param bones The collection of bones.
+         * @param meshes The collection of meshes.
+         * @param meshParentBones Per-mesh parent bone, in the same order as @p meshes. Must either
+         *        be empty (every mesh's ParentBone stays nullptr, matching the 3-argument
+         *        constructor) or have exactly one entry per mesh.
+         */
+        NOXNA Model(GraphicsDevice* graphicsDevice,
+                    std::vector<ModelBone*> bones,
+                    std::vector<ModelMesh*> meshes,
+                    std::vector<ModelBone*> meshParentBones);
+
+        /**
          * @brief Gets the collection of bones that describe how each mesh relates to its parent.
          * @return The model's bone collection.
          */

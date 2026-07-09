@@ -1606,6 +1606,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 439: Pixel test -- a child mesh's ParentBone's absolute transform actually moves it.
+        cna_easygl_test(cna_test_easygl_model_hierarchy_child_mesh
+                        examples/easygl_model_hierarchy_child_mesh_test.cpp)
+        add_test(NAME EasyGL_Model_HierarchyChildMesh
+                 COMMAND cna_test_easygl_model_hierarchy_child_mesh)
+        set_tests_properties(EasyGL_Model_HierarchyChildMesh PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 145: MRT — SetRenderTargets({rt0,rt1}), draw green to attachment0, verify left=green right=blue
         cna_easygl_test(cna_test_easygl_mrt
                         examples/easygl_mrt_test.cpp)
