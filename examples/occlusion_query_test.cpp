@@ -16,6 +16,11 @@
 // FNA3D_QueryBegin with no state tracking, so there is no "FNA exception" to match here either.
 // Confirms CNA's own Begin() correctly mirrors that lack of validation too.
 //
+// Task 444: invalid call sequence -- double End() (a valid Begin()/End() cycle followed by a
+// second, unmatched End()). Same Task 441 finding applies once more: FNA's End() is a pure
+// one-line forward to FNA3D_QueryEnd with no state tracking, so there is no "FNA exception" to
+// match here either. This closes the Tasks 442-444 invalid-call-sequence trio.
+//
 // Exit code 0 = PASS, 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -106,6 +111,28 @@ protected:
             bool complete3 = q3.getIsCompleteProperty();
             (void)complete3;
             check(true, "getIsCompleteProperty() does not crash after double-Begin");
+        }
+
+        // Task 444: invalid sequence -- double End() (a valid Begin()/End() cycle followed by an
+        // extra, unmatched End()). Closes the Tasks 442-444 invalid-sequence trio.
+        {
+            OcclusionQuery q4(device);
+            q4.Begin();
+            q4.End();
+            bool threw = false;
+            try
+            {
+                q4.End(); // second, unmatched End()
+            }
+            catch (...)
+            {
+                threw = true;
+            }
+            check(!threw, "double End() does not throw (matches FNA's own lack of validation)");
+            check(q4.getPixelCountProperty() >= 0, "PixelCount >= 0 after double-End");
+            bool complete4 = q4.getIsCompleteProperty();
+            (void)complete4;
+            check(true, "getIsCompleteProperty() does not crash after double-End");
         }
 
         Exit();
