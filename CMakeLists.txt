@@ -1373,6 +1373,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 446: Pixel/query test -- fully occluded quad returns a zero occlusion-query pixel count.
+        cna_easygl_test(cna_test_easygl_occlusion_query_occluded_quad
+                        examples/easygl_occlusion_query_occluded_quad_test.cpp)
+        add_test(NAME EasyGL_OcclusionQuery_OccludedQuad
+                 COMMAND cna_test_easygl_occlusion_query_occluded_quad)
+        set_tests_properties(EasyGL_OcclusionQuery_OccludedQuad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 122: AlphaTestEffect GPU alpha cutout + pixel readback
         cna_easygl_test(cna_test_alpha_test_integration
                         examples/alpha_test_integration_test.cpp)
