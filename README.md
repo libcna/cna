@@ -20,9 +20,10 @@ ctest --test-dir build --output-on-failure
 ### Project Status
 
 - **Overall maturity:** Active, incremental framework development; XNA API coverage is partial and expanding.
-- **`SDL_RENDERER` backend:** Implemented path focused on practical 2D rendering workflows.
-- **`EASYGL` backend:** Implemented OpenGL-based path through `easy-gl`, used for backend-level rendering control.
-- **`VULKAN` backend:** Architecture scaffold present, but implementation is currently incomplete.
+- **`SDL_RENDERER` backend:** Implemented path focused on practical 2D rendering workflows; 2D-only by design (3D calls throw).
+- **`EASYGL` backend:** Most mature backend overall — implemented OpenGL-based path through `easy-gl`, full 2D+3D pixel-verified coverage.
+- **`VULKAN` backend:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state) — second-most mature backend, with a few named open gaps (e.g. `BlendState` doesn't yet honor arbitrary blend modes; `OcclusionQuery` is architecturally blocked). See `docs/xna-4-api-coverage.md`'s per-backend table for current detail.
+- **`BGFX` backend:** Full 2D+3D pixel-verified parity with EasyGL/Vulkan as of this project's Phase 72; occlusion-query correctness can't be pixel-verified under every sandbox's software GL driver.
 
 ## 2. 🎯 Goals
 
@@ -395,9 +396,7 @@ int main()
 ## 12. 🛣 Roadmap
 
 - Continue expanding XNA API coverage and behavior parity (incremental, class-by-class).
-- Improve backend parity and complete missing/stubbed backend functionality.
-- Advance Vulkan backend from scaffold to practical rendering path.
-- Extend rendering capabilities beyond current 2D-focused workflows.
+- Close the remaining named backend gaps (Vulkan `BlendState`/`OcclusionQuery`, EasyGL anisotropic filtering, `IndexElementSize`'s FNA-compatible numeric values) — see `docs/xna-4-api-coverage.md`.
 - Strengthen cross-platform execution targets and validation coverage.
 
 ## 13. 📜 License

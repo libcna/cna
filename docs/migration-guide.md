@@ -262,3 +262,50 @@ additive, no missing or mismatched FNA-facing overload found.
 | `VertexDeclaration` construction (both FNA overloads + `initializer_list` convenience) | ✅ | Construction/assignment confirmed never throws (Task 729). |
 | `IndexElementSize::ThirtyTwoBits` — **only if your code reads the enum's raw numeric value** | ❌ | CNA's `16`/`32` don't match FNA's real `0`/`1` (Task 921, open). Ordinary symbolic use (passing the enum to `IndexBuffer`'s constructor) is unaffected. |
 | `SetDataOptions`/`BufferUsage` | ✅ | No open gaps. |
+
+## Troubleshooting graphics backend selection (Task 489)
+
+Practical fixes for real configure-time and runtime problems, not another compatibility list —
+see the sections above for "is this a bug or a known limitation." Every command and env var below
+was verified against the actual current `CMakeLists.txt`/source, not assumed from general CMake/XNA
+knowledge.
+
+### Picking/overriding the backend at configure time
+
+```bash
+cmake -S . -B build -DCNA_GRAPHICS_BACKEND=EASYGL      # or SDL_RENDERER / VULKAN / BGFX
+cmake --build build --target CNA CnaTests
+```
+
+`CNA_GRAPHICS_BACKEND` defaults to `EASYGL` on Linux/Emscripten, `SDL_RENDERER` elsewhere. See the
+top-level `README.md` §9 for the full per-platform build matrix (Windows/MinGW cross-compile
+included) — not repeated here.
+
+### Common configure-time failures
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `CNA: Missing sibling repository 'sharp-runtime'` / `'easy-gl'` | These are sibling checkouts next to this repo, **not** git submodules — `git submodule update --init` will not fetch them | `cd ..` and `git clone` the missing repo next to this one (the error message prints the exact URL) |
+| `Missing vendored 'SDL' …` right after a fresh clone | Downloaded a ZIP/release archive instead of cloning with Git, or forgot to init submodules — vendored `third_party/SDL`/`SDL_image`/`SDL_mixer` are empty | `git submodule update --init --recursive`, or pass `-DCNA_USE_SYSTEM_SDL=ON` to use system SDL3 packages instead |
+| `Could not find a package configuration file for Vulkan` (`VULKAN` backend) | `find_package(Vulkan REQUIRED)` — no Vulkan SDK/loader installed | Install your distro's `vulkan-sdk`/`libvulkan-dev` package (or the LunarG SDK) before configuring |
+| CMake FetchContent hangs/fails on `bgfx.cmake` clone (`BGFX` backend) | `BGFX` fetches `bgfx.cmake` from GitHub at configure time — needs network access and can be slow the first time | Retry, or pre-seed a local clone and point `FETCHCONTENT_SOURCE_DIR_BGFX_CMAKE` at it |
+| Video/`VideoPlayer`-related link errors | Missing FFmpeg dev packages — not a graphics-backend issue, but hits every backend | `CLAUDE.md`'s "System Dependencies (Linux)" section: `sudo apt-get install libavcodec-dev libavformat-dev libavutil-dev libswresample-dev` |
+
+### Common runtime failures
+
+| Symptom | Cause | Fix / is it a bug? |
+|---|---|---|
+| Any 3D call (`BasicEffect`, `Model::Draw`, render targets with depth, etc.) throws `std::runtime_error` | You're on **SDL_Renderer** | Not a bug — SDL_Renderer is 2D-only by design (see "Choosing a backend" above). Switch to EasyGL/Vulkan/Bgfx for 3D. |
+| `bgfx::init failed` or a native-window-handle error on the `BGFX` backend | No usable native window handle for bgfx's chosen renderer under your current SDL video driver | Check `SDL_GetCurrentVideoDriver()` output (included in the real error message); try forcing a renderer via `CNA_BGFX_RENDERER` below |
+| Bgfx picks the wrong graphics API (e.g. tries Vulkan on a machine without a Vulkan ICD) | Bgfx's renderer auto-detection (`bgfx::RendererType::Count`) picked something unavailable | Set the `CNA_BGFX_RENDERER` environment variable to force one: `AUTO`, `OPENGL`, `OPENGLES`, `VULKAN`, `METAL`, `DIRECT3D11`, `DIRECT3D12`, or `NOOP` (case-insensitive; an unsupported value throws immediately with this exact list) |
+| Blank/black window, or GL-based backends (EasyGL/Bgfx-OpenGL) fail to create a context in CI/headless environments | No real X server / GPU driver — common under Xvfb with only a software (`llvmpipe`) GL driver | Expected in headless CI; tests still run against software rendering. If entire runs fail rather than just individual pixel-tolerance edge cases, confirm an X server is actually reachable (`DISPLAY` env var, or pass `-DCNA_TEST_DISPLAY=:99` at configure time to point the whole `ctest` suite at a specific Xvfb display) |
+| Pixel-comparison example/tests fail after an intentional rendering change | Golden images are stale references, not a bug | Re-run the specific test with `CNA_UPDATE_GOLDEN=1` set to regenerate the golden PNG, then review the diff before committing it |
+| Flaky/inconsistent test failures that don't reproduce in isolation | **Never run multiple backends' full `ctest` suites concurrently** — confirmed to cause transient GPU/driver-contention false failures (`NEXT.md` §2) | Run backend test suites sequentially; re-run any single anomalous test in isolation (`ctest -R <TestName>`) before treating it as a real regression |
+
+### Is it a bug, or a known limitation?
+
+Before filing anything, check `docs/xna-4-api-coverage.md`'s "Per-backend Graphics support" table
+(Task 484) and "Known deviations from XNA/FNA" list (Task 485) — most currently-open gaps already
+have a task number and a documented root cause (e.g. Vulkan's fake `BlendState`/868, EasyGL's
+anisotropic-filtering fallback/918, the `IndexElementSize` numeric mismatch/921). If your symptom
+isn't listed there, it's more likely a genuinely new finding worth its own task.
