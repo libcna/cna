@@ -1598,14 +1598,35 @@ namespace CNA::Internal::Backends::Bgfx
 
         if (stencilEnable)
         {
-            stencilFront_ = BuildBgfxStencil(stencilFunc, stencilPass, stencilFail,
-                                             stencilDepthFail, stencilMask, stencilWriteMask,
-                                             referenceStencil);
-            stencilBack_ = twoSidedStencilMode
-                ? BuildBgfxStencil(ccwStencilFunc, ccwStencilPass, ccwStencilFail,
-                                   ccwStencilDepthFail, stencilMask, stencilWriteMask,
-                                   referenceStencil)
-                : stencilFront_;
+            if (twoSidedStencilMode)
+            {
+                // Task 763 empirical finding, mirrors Task 870's identical Vulkan fix: this
+                // backend never sets BGFX_STATE_FRONT_CCW in ApplyRasterizerState, so bgfx's own
+                // default glFrontFace is GL_CW (see bgfx's renderer_gl.cpp) -- the OPPOSITE of
+                // EasyGL's effective convention (EasyGL never overrides GL's own hardware default
+                // of GL_CCW-is-front). CullMode itself is unaffected by this (BGFX_STATE_CULL_CW/
+                // CCW already cull the correct raw winding regardless of glFrontFace, verified by
+                // this whole project's existing cull-mode test suite) -- only bgfx::setStencil's
+                // own front/back split follows raw glFrontFace directly, with no equivalent
+                // compensating indirection. Confirmed via a genuinely differential
+                // stencil_twosided test (a back-facing triangle's CounterClockwiseStencilFunction/
+                // Fail must apply and did not until front/back were swapped here). Swapped
+                // pragmatically so XNA's "front"/"CounterClockwise" stencil settings land on
+                // whichever bgfx slot the GPU actually evaluates for each raw winding.
+                stencilFront_ = BuildBgfxStencil(ccwStencilFunc, ccwStencilPass, ccwStencilFail,
+                                                 ccwStencilDepthFail, stencilMask, stencilWriteMask,
+                                                 referenceStencil);
+                stencilBack_ = BuildBgfxStencil(stencilFunc, stencilPass, stencilFail,
+                                                stencilDepthFail, stencilMask, stencilWriteMask,
+                                                referenceStencil);
+            }
+            else
+            {
+                stencilFront_ = BuildBgfxStencil(stencilFunc, stencilPass, stencilFail,
+                                                 stencilDepthFail, stencilMask, stencilWriteMask,
+                                                 referenceStencil);
+                stencilBack_ = stencilFront_;
+            }
         }
         else
         {
