@@ -13,8 +13,9 @@ detail this file now points to instead of duplicating; updated 2026-07-09 — Ta
 "Coverage axes" section (Present/Implemented/Tested/FNA-compatible/Intentionally-unsupported as
 independent questions); Task 483 added a dense per-class Graphics coverage table; Task 484 added
 the complementary per-backend Graphics support summary; Task 485 added a consolidated "Known
-deviations from XNA/FNA" list, closing the Tasks 481-485 documentation arc — Phase 54 itself
-continues, Tasks 486-490 remain open)  
+deviations from XNA/FNA" list, closing the Tasks 481-485 documentation arc; Task 490 added a
+release checklist gating 90%/95%/100% compatibility milestone claims against concrete criteria,
+closing Phase 54 in full, Tasks 481-490)  
 **Reference:** FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src`  
 **CNA headers:** `include/Microsoft/Xna/Framework/`
 
@@ -158,6 +159,82 @@ FNA/XNA" table or the cited `AUDIT.md` section; not re-derived here.
 | `Texture2D::FromStream` silently auto-detects and decodes DDS/DXT1/3/5 content internally (`TryDecodeDds`), with no separate `DDSFromStreamEXT` method matching FNA's API shape | Real FNA's `FromStream` never auto-detects DDS — it always goes through the ordinary image decoder and throws on unsupported formats. CNA's auto-detection is a usability improvement, but is a genuine behavioral divergence from FNA's stricter contract (`AUDIT.md`, Texture2D detailed audit) |
 | `Texture2D::SetData(const Color*, int elementCount)` silently returns (no exception) for `data == nullptr` or `elementCount <= 0`, while the 5-arg `SetData(level, ...)` overload throws `std::invalid_argument` for the same inputs | Real FNA's `SetData<T>(T[] data)` always throws (it delegates to the validated 5-arg overload) — CNA's inconsistency between its own two overloads is already encoded as expected/tested behavior, not corrected (`AUDIT.md`, Texture2D detailed audit) |
 | `Texture::GetFormatSizeEXT`/`ValidateGetDataFormat` are `public static` on `Texture`, not FNA's `internal` | CNA's class hierarchy has no reachable `protected`/friend equivalent across all 3 real call sites (`Texture3D`, `TextureCube`, `GraphicsDevice::GetBackBufferData`), since `Texture3D`/`TextureCube` don't inherit `Texture` in CNA (`AUDIT.md`, Texture3D detailed audit, Task 271-280) |
+
+### Release checklist for Graphics compatibility milestones (Task 490, 2026-07-09)
+
+This project has historically used informal per-subsystem percentage estimates (see the old
+Phase 9–14 coverage table earlier in `plan_graphics.md`) to describe Graphics maturity. Those
+estimates are useful color commentary but are not a checklist — nothing gates a "~95%" claim
+against a concrete, falsifiable condition. This section replaces ad-hoc percentages with pass/fail
+criteria, built directly on the axes/tables Tasks 482–485 already established. **Don't estimate a
+new percentage from this checklist — use it to gate whether a round-number milestone claim
+(90%/95%/100%) is honest, using the counts already tracked in this file and `plan_graphics.md`.**
+
+**Before claiming any milestone at all**, the counts below must be pulled fresh from the real
+current state of Task 483's per-class table, Task 484's per-backend table, and Task 485's known-
+deviations list plus any newer findings (e.g. Task 922, found by Task 487 after Task 485's table
+was written and not yet folded into it) — do not reuse cached numbers from an old audit.
+
+#### Before claiming "Graphics is ~90% XNA/FNA-compatible"
+
+- [ ] Every class in Task 483's per-class table is rated Present ✅ and Implemented ✅ on **at least
+      one** backend (no class is entirely ❌/missing).
+- [ ] Every class is rated Tested ✅ on at least one backend (no class has zero automated coverage).
+- [ ] At least one backend (currently EasyGL) has zero ❌-rated classes in Task 483's table.
+- [ ] The BLOCKED-task count (Task 484's per-backend table; currently 5: 447, 686, 687, 725, 732)
+      is stable and each one has a written, current rationale — not silently stale.
+- [ ] `docs/migration-guide.md`'s "what doesn't work at all yet" list matches the current BLOCKED
+      list exactly (no drift between the two documents).
+
+#### Before claiming "Graphics is ~95% XNA/FNA-compatible"
+
+- [ ] All "before 90%" items above still hold.
+- [ ] Every stock Effect (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
+      `SkinnedEffect`) has its core rendering (MVP, lighting, texture, fog) pixel-verified on
+      **all three** 3D backends (EasyGL, Vulkan, Bgfx), not just EasyGL.
+  - Currently true per Task 483/484's tables; the residual gaps are named per-effect secondary
+    features (887, 889, 890, 891, 893–895), not core rendering.
+- [ ] The "Confirmed bugs, not yet fixed" list (Task 485) has a hard ceiling — **currently 5 items**
+      (921 `IndexElementSize`, 868 Vulkan `BlendState`, 918 EasyGL `Anisotropic`, 916 `Model` `Root`
+      default, and 922 `SpriteBatch::Draw`'s 7th-overload signature gap — note Task 922 postdates
+      Task 485's own table and is not yet folded into it there, but must be counted here). A 95%
+      claim requires this count to be ≤5 **and** every remaining item to have a documented low-risk
+      fix plan (as 921/916/922 already do) — not an open-ended unknown.
+- [ ] `IndexElementSize`'s FNA-compatible axis specifically (Task 921) does not silently block a 95%
+      claim on its own — it's a narrow, symbolically-isolated enum-value bug, not a systemic one —
+      but it must remain tracked, not quietly dropped from this list once claimed.
+
+#### Before claiming "Graphics is 100% XNA/FNA-compatible"
+
+- [ ] Zero entries remain in the "Confirmed bugs, not yet fixed" list (Task 485 plus any newer
+      findings like 922) — all fixed, tested, and moved to "closed" in `plan_graphics.md`.
+- [ ] Zero BLOCKED tasks remain (currently 5) — each has either shipped a real implementation or an
+      explicit, project-owner-approved permanent exclusion moved into the "Intentional, permanent
+      deviations" list instead of staying BLOCKED indefinitely.
+- [ ] Every class in Task 483's table is ✅ across Present/Implemented/Tested **on every backend**
+      that supports that class's feature domain at all (SDL_Renderer is exempt for 3D-only classes,
+      per its own documented 2D-only architectural scope).
+- [ ] The FNA-compatible axis (Task 482) has been **independently verified**, not assumed, for every
+      class that has a running-FNA reference available — via the Tasks 471–479 FNA-vs-CNA JSON
+      comparison harness (`tools/fna-reference/`, `tools/cna-reference/`,
+      `scripts/compare-fna-reference.py`) or an equivalent direct comparison — for classes outside
+      that harness's current 4 categories (enums/state-presets/PackedVector/Viewport), an
+      equally-direct FNA source line-by-line comparison is the floor, not "looks reasonable."
+- [ ] Every "Intentional, permanent deviation" (Task 485's second table) has been re-confirmed as
+      still permanent, not just carried forward from an old audit — a deviation accepted 6 months
+      ago may no longer be the right call once a backend's real capabilities change.
+- [ ] Full regression suite passes on all 4 backends (not run concurrently, per this project's own
+      established convention) with **zero** known-pre-existing-failure carve-outs left unexplained
+      by an environment-limitation note (e.g. `docs/xna-4-api-coverage.md`'s per-backend table's own
+      "known pre-existing test-failure baseline" column must read 0 for a genuine 100% claim, not
+      just "documented and accepted").
+
+**Current status against this checklist (2026-07-09, informational only — not itself a milestone
+claim):** the ~90% bar looks achievable soon (all classes already rate ✅/⚠️ rather than ❌ per Task
+483); the ~95% bar is blocked on the 5-item confirmed-bugs list above; 100% additionally requires
+closing all 5 currently-BLOCKED tasks, which each need a project-owner architecture decision first
+(see `docs/graphics-backend-feature-matrix.md`'s BLOCKED-task table) — none are silent gaps, but
+none are trivial engineering either.
 
 ### What counts as "public XNA 4.0 API"
 
