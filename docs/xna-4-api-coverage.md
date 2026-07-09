@@ -9,7 +9,9 @@ audit phase (Phase 70, 15 real bugs found and fixed), EasyGL/Vulkan/Bgfx gap-clo
 pixel-testing infrastructure, and a new FNA-vs-CNA JSON comparison harness — §7/§8 and the Stock
 Effects/Recommended-next-steps sections below were stale by this entire stretch of work; see
 `docs/graphics-backend-feature-matrix.md` for the authoritative, currently-maintained per-backend
-detail this file now points to instead of duplicating)  
+detail this file now points to instead of duplicating; updated 2026-07-09 — Task 482 added the
+"Coverage axes" section (Present/Implemented/Tested/FNA-compatible/Intentionally-unsupported as
+independent questions); Task 483 added a dense per-class Graphics coverage table, §1)  
 **Reference:** FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src`  
 **CNA headers:** `include/Microsoft/Xna/Framework/`
 
@@ -58,6 +60,49 @@ predicts hidden bugs is **FNA-compatible**: Tasks 471-479's entire FNA reference
 other four, by running the real FNA implementation rather than re-reading its source a second
 time — which is how the `IndexElementSize` divergence above was found despite the member being
 present, implemented, and already tested for years.
+
+### Per-class Graphics coverage (Task 483, 2026-07-09)
+
+The tables above rate coverage per-namespace and per-subsystem; this table rates the ~26 major
+`Microsoft::Xna::Framework::Graphics` classes individually against the 5 axes above. It is
+deliberately dense, not exhaustive — for full per-backend/per-feature detail behind any ⚠️/❌/⛔
+below, see `docs/graphics-backend-feature-matrix.md` (Task 451, the authoritative current source)
+and `AUDIT.md`'s own per-class FNA-vs-CNA rows (`AUDIT.md` lines ~110–1341); this table does not
+re-derive either, only summarizes and points to them. Legend matches the feature matrix: ✅ correct/
+verified · ⚠️ partial/emulated/known gap · ❌ known gap, not fixed · ⛔ BLOCKED (needs a
+project-owner decision) · N/A not applicable (e.g. a NOXNA class has no "FNA-compatible" axis).
+Every row below was checked against the real header/`.cpp` and its own `AUDIT.md` entry before
+being rated — not filled in from memory (see Task 482's own post-merge correction above for why
+that check matters).
+
+| Class | Present | Implemented | Tested | FNA-compatible | Key gaps (task #) |
+|---|---|---|---|---|---|
+| `GraphicsDevice` | ✅ | ✅ (some overloads stub) | ✅ | ⚠️ | `ReferenceStencil` unconnected on EasyGL/Vulkan/Bgfx (872); `Clear` ignores `ClearOptions::Stencil` on all 3 (871) |
+| `Texture2D` | ✅ | ⚠️ Partial (🔄 in AUDIT.md) | ✅ | ✅ core | Mip-level `SetData(level>0)` a no-op on Vulkan/Bgfx (867), throws on SDL_Renderer (681); missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`; Color-only format |
+| `Texture3D` | ✅ | ✅ (EasyGL/Vulkan/Bgfx) | ✅ | ✅ | ⛔ SDL_Renderer construction silently null-backed (725); not sampled in shaders on any backend, architectural (863) |
+| `TextureCube` | ✅ | ✅ (EasyGL/Vulkan/Bgfx) | ✅ | ✅ | Same ⛔ 725 as `Texture3D`; `DDSFromStreamEXT` real DXT1/3/5 decode (663) |
+| `RenderTarget2D` | ✅ | ✅ | ✅ | ✅ | `DepthStencilFormat` fidelity real on EasyGL/Vulkan(911)/Bgfx; SDL_Renderer emulates (echoes format, no real backing store) |
+| `RenderTargetCube` | ✅ | ✅ | ✅ | ✅ | Same shape as `RenderTarget2D` |
+| `SpriteBatch` | ✅ | ✅ | ✅ | ⚠️ | `TextureAddressMode::Wrap`/`Mirror` ⛔ BLOCKED on SDL_Renderer (686/687); all other backends correct |
+| `SpriteFont` | ✅ | ✅ | ✅ | ✅ | `MeasureString(StringBuilder)` overload added (423); glyph placement/spacing/flip pixel-verified (424-429, 690-694) |
+| `BasicEffect` | ✅ | ✅ | ✅ | ✅ | Core MVP/lighting/texture/specular pixel-verified on all 3 3D backends, no open gaps |
+| `AlphaTestEffect` | ✅ | ✅ | ✅ | ⚠️ | `VertexColorEnabled` missing on Vulkan/Bgfx (887) |
+| `DualTextureEffect` | ✅ | ✅ | ✅ | ⚠️ | `VertexColorEnabled` missing on all 3 3D backends (889) |
+| `EnvironmentMapEffect` | ✅ | ✅ | ✅ | ⚠️ | `DirectionalLight1`/`2` (890) and base-lerp alpha scaling (891) missing on Vulkan/Bgfx |
+| `SkinnedEffect` | ✅ | ✅ | ✅ | ⚠️ | `DirectionalLight1`/`2` (893), `SpecularColor`/`Power` (894), `WeightsPerVertex` GPU enforcement (895) missing on Vulkan/Bgfx |
+| `ShaderEffect` (NOXNA) | ✅ | ⚠️ | ✅ | N/A — not XNA API | Only EasyGL honors the documented "load from GLSL source" contract; Vulkan/Bgfx expect pre-compiled SPIR-V/binary despite the shared constructor signature |
+| `BlendState` | ✅ | ⚠️ | ✅ | ❌ Vulkan | Vulkan hardcodes one blend equation regardless of request, confirmed 5× via pixel tests (868, open); EasyGL/Bgfx/SDL_Renderer correct |
+| `DepthStencilState` | ✅ | ✅ | ✅ | ⚠️ | Compare-op + full stencil ops real on Vulkan (870, fixed); `ReferenceStencil`/`ClearOptions::Stencil` gaps are tracked under `GraphicsDevice` above (871/872) |
+| `RasterizerState` | ✅ | ✅ | ✅ | ⚠️ | One isolated Vulkan `DepthBias=-1e6` sub-case failure, unresolved; `FillMode::WireFrame` correctly feature-gated on Vulkan (454) |
+| `SamplerState` | ✅ | ✅ | ✅ | ⚠️ | `TextureFilter::Anisotropic` silently falls back to trilinear on EasyGL — zero real anisotropic filtering call (918, open); Vulkan/Bgfx genuinely support it |
+| `VertexBuffer` | ✅ | ✅ | ✅ | ✅ | No open gaps |
+| `IndexBuffer` | ✅ | ✅ | ✅ | ❌ | `IndexElementSize`'s underlying numeric values don't match FNA (921, open — see Coverage axes example above) |
+| `VertexDeclaration` | ✅ | ✅ | ✅ | ✅ | Construction/assignment confirmed never throws (729) |
+| `Model`/`ModelMesh`/`ModelBone` | ✅ | ✅ runtime API | ✅ | ⚠️ | Constructor auto-defaults `Root` to `bones[0]`, no explicit root-bone-index param (916, open); content-pipeline loader (`ModelTypeReader`) has real gaps vs. FNA's `.xnb` (no bone hierarchy/`ParentBone`/`BoundingSphere`/`Tag`, zero loader test coverage, 440) |
+| `OcclusionQuery` | ✅ | ⚠️ | ✅ | ⚠️ | EasyGL fully correct both directions (445/446); ⛔ Vulkan functionally inert, deferred-draw architecture can't correlate Begin/End spans (447); Bgfx fixed (448) but can't be pixel-verified in this sandbox's software GL driver, dedicated-view gap open (917) |
+| `Viewport` | ✅ | ✅ | ✅ | ✅ | The one class with a direct running-FNA cross-check beyond source-reading (`Project`/`Unproject`, Tasks 476/479) — all cases matched exactly |
+| `PresentationParameters` | ✅ | ✅ | ✅ | ✅ | No open gaps |
+| `GraphicsAdapter` | ✅ | ✅ | ✅ | ✅ | No open gaps |
 
 ### What counts as "public XNA 4.0 API"
 
