@@ -4954,6 +4954,30 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 923: BlendState ColorBlendFunction/AlphaBlendFunction independence on Bgfx -- a Bgfx-
+    # specific adaptation of the EasyGL source (Task 307; can't reuse it verbatim like Vulkan's
+    # Task 868 registration does, since it calls GraphicsDevice.SetDepthTestEnabled(false), an
+    # unconditional throw on Bgfx -- see the test's own file-header comment). Discriminates Bgfx's
+    # colorBlendFunc-always-Add gap (Check A expects Subtract; failed before this task's fix).
+    cna_bgfx_test(cna_test_bgfx_blendstate_separate_functions
+                  examples/bgfx_blendstate_separate_functions_test.cpp)
+    add_test(NAME Bgfx_BlendState_SeparateFunctions
+             COMMAND cna_test_bgfx_blendstate_separate_functions)
+    set_tests_properties(Bgfx_BlendState_SeparateFunctions PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 923: BlendState AlphaSourceBlend/AlphaDestinationBlend independence from the colour
+    # factors -- fixed in ApplyBlendState (real BGFX_STATE_BLEND_FUNC_SEPARATE, confirmed correct
+    # against bgfx's own renderer_gl.cpp bit-decode logic), but NOT independently pixel-verified:
+    # a two-draw indirect-alpha-observation test was built and empirically found to report the
+    # SAME (wrong) result whether or not the fix is applied -- this sandbox's bgfx GL2.1/Mesa-
+    # llvmpipe software renderer does not appear to honor separately-requested alpha blend factors
+    # when they differ from the colour channel's own (confirmed via 3 independent probes; not
+    # investigated further, out of this task's scope -- see plan_graphics.md Task 923 for detail).
+    # Matches this project's established precedent for a sandbox limitation, not a CNA defect
+    # (e.g. Task 448's occlusion query, Task 879's Bgfx_RenderTarget2D_MsaaResolve).
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

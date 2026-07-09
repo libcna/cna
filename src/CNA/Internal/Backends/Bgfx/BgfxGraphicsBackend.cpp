@@ -1420,16 +1420,44 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
-    void BgfxGraphicsBackend::ApplyBlendState(int colorSrcBlend, int /*alphaSrcBlend*/,
-                                               int colorDstBlend, int /*alphaDstBlend*/,
-                                               int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+    // Task 923: XNA BlendFunction enum -> bgfx blend-equation state bits (mirrors Task 868's own
+    // Vulkan ToVkBlendOp mapping exactly): Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4
+    static uint64_t XnaBlendFunctionToBgfxEquation(int blendFunc)
     {
-        if (colorSrcBlend == 0 && colorDstBlend == 1)
-            blendFlags_ = 0;  // One, Zero → Opaque (no blend)
+        switch (blendFunc)
+        {
+        case 1:  return BGFX_STATE_BLEND_EQUATION_SUB;
+        case 2:  return BGFX_STATE_BLEND_EQUATION_REVSUB;
+        case 3:  return BGFX_STATE_BLEND_EQUATION_MAX;
+        case 4:  return BGFX_STATE_BLEND_EQUATION_MIN;
+        default: return BGFX_STATE_BLEND_EQUATION_ADD;
+        }
+    }
+
+    void BgfxGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                               int colorDstBlend, int alphaDstBlend,
+                                               int colorBlendFunc, int alphaBlendFunc)
+    {
+        // Blend::One=0, Blend::Zero=1 → Opaque preset (all 4 factors): src=One, dst=Zero → no blend
+        if (colorSrcBlend == 0 && colorDstBlend == 1 &&
+            alphaSrcBlend == 0 && alphaDstBlend == 1)
+        {
+            blendFlags_ = 0;
+        }
         else
-            blendFlags_ = BGFX_STATE_BLEND_FUNC(
-                XnaBlendToBgfxFactor(colorSrcBlend),
-                XnaBlendToBgfxFactor(colorDstBlend));
+        {
+            // Task 923: previously alphaSrcBlend/alphaDstBlend were unused parameters (the alpha
+            // channel silently reused the colour channel's own factors via BGFX_STATE_BLEND_FUNC),
+            // and colorBlendFunc/alphaBlendFunc were entirely ignored (always implicitly Add).
+            blendFlags_ = BGFX_STATE_BLEND_FUNC_SEPARATE(
+                              XnaBlendToBgfxFactor(colorSrcBlend),
+                              XnaBlendToBgfxFactor(colorDstBlend),
+                              XnaBlendToBgfxFactor(alphaSrcBlend),
+                              XnaBlendToBgfxFactor(alphaDstBlend))
+                        | BGFX_STATE_BLEND_EQUATION_SEPARATE(
+                              XnaBlendFunctionToBgfxEquation(colorBlendFunc),
+                              XnaBlendFunctionToBgfxEquation(alphaBlendFunc));
+        }
     }
 
     static uint32_t XnaCompareFuncToBgfxStencilTest(int f)
