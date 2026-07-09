@@ -11,6 +11,11 @@
 // framing). This instead confirms CNA's own OcclusionQuery correctly mirrors that lack of
 // validation: End() before Begin() must not throw or crash, matching FNA's own unvalidated shape.
 //
+// Task 443: invalid call sequence -- double Begin() (Begin() called twice with no intervening
+// End()). Same Task 441 finding applies: FNA's Begin() is a pure one-line forward to
+// FNA3D_QueryBegin with no state tracking, so there is no "FNA exception" to match here either.
+// Confirms CNA's own Begin() correctly mirrors that lack of validation too.
+//
 // Exit code 0 = PASS, 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -80,6 +85,27 @@ protected:
             bool complete2 = q2.getIsCompleteProperty();
             (void)complete2;
             check(true, "getIsCompleteProperty() does not crash after End-before-Begin");
+        }
+
+        // Task 443: invalid sequence -- double Begin() with no intervening End().
+        {
+            OcclusionQuery q3(device);
+            bool threw = false;
+            try
+            {
+                q3.Begin();
+                q3.Begin(); // second Begin() with no End() in between
+            }
+            catch (...)
+            {
+                threw = true;
+            }
+            check(!threw, "double Begin() does not throw (matches FNA's own lack of validation)");
+            q3.End();
+            check(q3.getPixelCountProperty() >= 0, "PixelCount >= 0 after double-Begin then End");
+            bool complete3 = q3.getIsCompleteProperty();
+            (void)complete3;
+            check(true, "getIsCompleteProperty() does not crash after double-Begin");
         }
 
         Exit();
