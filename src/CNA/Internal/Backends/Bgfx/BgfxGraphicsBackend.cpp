@@ -1110,6 +1110,22 @@ namespace CNA::Internal::Backends::Bgfx
             const bgfx::RendererType::Enum rendererType = bgfx::getRendererType();
             std::cout << "BGFX backend requested renderer: " << RendererTypeName(requestedRendererType)
                 << ", active renderer: " << bgfx::getRendererName(rendererType) << std::endl;
+
+            // Task 456: one-time startup capability dump.
+            {
+                const bgfx::Caps* caps = bgfx::getCaps();
+                std::cout << "CNA: Bgfx capabilities -- MRT up to "
+                          << std::min<int>(static_cast<int>(caps->limits.maxFBAttachments), 4)
+                          << " targets (FNA MAX_RENDERTARGET_BINDINGS, device supports up to "
+                          << static_cast<int>(caps->limits.maxFBAttachments) << "); "
+                             "occlusion query: " << ((caps->supported & BGFX_CAPS_OCCLUSION_QUERY) ? "supported" : "NOT supported")
+                          << "; texture blit/readback: "
+                          << ((caps->supported & (BGFX_CAPS_TEXTURE_BLIT | BGFX_CAPS_TEXTURE_READ_BACK))
+                                  == (BGFX_CAPS_TEXTURE_BLIT | BGFX_CAPS_TEXTURE_READ_BACK) ? "supported" : "NOT supported")
+                          << "; anisotropic filtering: applied via BGFX_SAMPLER_ANISOTROPIC flags "
+                             "(device-dependent effect, no separate capability flag); "
+                             "SurfaceFormat: Color only (Task 176)" << std::endl;
+            }
         }
         catch (...)
         {

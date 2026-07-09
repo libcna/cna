@@ -439,6 +439,16 @@ namespace CNA::Internal::Backends::SdlRenderer
             SDL_Log("SDL_Renderer backend: %s", name);
             std::cout << "SDL_Renderer backend: " << name << std::endl;
         }
+
+        // Task 456: one-time startup capability dump. This backend is 2D-only by design (Tasks
+        // 720-729's own exhaustive audit) -- no MSAA/MRT/anisotropic-filtering/3D capability at
+        // all, every 3D construction path throws clearly rather than silently degrading.
+        std::cout << "CNA: SDL_Renderer capabilities -- 2D-only backend; no MSAA, no MRT "
+                     "(more than 1 simultaneous render target throws), no anisotropic filtering; "
+                     "VertexBuffer/IndexBuffer/OcclusionQuery throw at construction; "
+                     "Texture3D/TextureCube construction currently succeeds silently with no real "
+                     "backend (BLOCKED, Task 725, see docs/sdl-renderer-2d-completeness.md); "
+                     "SurfaceFormat: Color only (Task 176)" << std::endl;
     }
 
     SdlGraphicsBackend::~SdlGraphicsBackend()

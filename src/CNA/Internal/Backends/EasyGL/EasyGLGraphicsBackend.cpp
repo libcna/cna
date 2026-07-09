@@ -1254,6 +1254,22 @@ void main()
         std::cout << "EasyGLGraphicsBackend initialized with OpenGL "
             << device.capabilities().context_info().version_string << std::endl;
 
+        // Task 456: one-time startup capability dump. MaxAnisotropy is intentionally reported as
+        // NOT supported -- confirmed by reading this file's own ApplySamplerState: TextureFilter::
+        // Anisotropic silently falls back to plain trilinear filtering (LinearMipmapLinear/Linear)
+        // with no GL_EXT_texture_filter_anisotropic/glSamplerParameterf(MAX_ANISOTROPY_EXT, ...)
+        // call anywhere in this backend or the underlying easy-gl library -- a real, previously-
+        // undocumented gap (SamplerState.MaxAnisotropy is silently ignored), tracked as new Task
+        // 918 rather than fixed here (out of this logging task's own scope).
+        {
+            GLint maxSamplesCap = 0;
+            metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamplesCap);
+            std::cout << "CNA: EasyGL capabilities -- MSAA up to " << maxSamplesCap
+                      << "x; MRT up to 4 targets (FNA MAX_RENDERTARGET_BINDINGS); "
+                         "anisotropic filtering: NOT supported (Task 918, falls back to trilinear); "
+                         "SurfaceFormat: Color only (Task 176)" << std::endl;
+        }
+
         SDL_GL_SetSwapInterval(swapInterval_);
 
         registry_.register_with_meta_gl();

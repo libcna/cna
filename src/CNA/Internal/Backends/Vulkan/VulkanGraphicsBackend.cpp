@@ -7,6 +7,7 @@
 #include <SDL3/SDL_vulkan.h>
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 #include <limits>
 #include <optional>
 #include <set>
@@ -1383,6 +1384,24 @@ namespace CNA::Internal::Backends::Vulkan
         vkGetDeviceQueue(device_, presentQueueFamily_,  0, &presentQueue_);
         pfnCmdInsertDebugLabel_ = reinterpret_cast<PFN_vkCmdInsertDebugUtilsLabelEXT>(
             vkGetDeviceProcAddr(device_, "vkCmdInsertDebugUtilsLabelEXT"));
+
+        // Task 456: one-time startup capability dump. This backend previously had NO startup log
+        // at all (unlike EasyGL/Bgfx/SDL_Renderer, which all print something at initialization) --
+        // a real, previously-undocumented gap on its own.
+        {
+            VkPhysicalDeviceProperties devProps{};
+            vkGetPhysicalDeviceProperties(physicalDevice_, &devProps);
+            const int maxMsaa = SampleCountToInt(PickSampleCount(physicalDevice_, 64));
+            std::cout << "CNA: Vulkan capabilities -- device=" << devProps.deviceName
+                      << "; MSAA up to " << maxMsaa
+                      << "x; MRT up to 4 targets (FNA MAX_RENDERTARGET_BINDINGS); "
+                         "anisotropic filtering: "
+                      << (anisotropySupported_
+                              ? ("supported, max " + std::to_string(static_cast<int>(maxSamplerAnisotropy_)) + "x")
+                              : std::string("NOT supported on this device"))
+                      << "; wireframe fill mode: " << (fillModeNonSolidSupported_ ? "supported" : "NOT supported")
+                      << "; SurfaceFormat: Color only (Task 176)" << std::endl;
+        }
     }
 
     // =========================================================================
