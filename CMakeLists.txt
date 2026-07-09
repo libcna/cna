@@ -49,14 +49,14 @@ set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
 # sharp-runtime is a SIBLING repository checkout, not a git submodule of this
 # repo (Task DEV-BUILD-001) -- `git submodule update --init` cannot fetch it.
 # It must be cloned next to this repo's own directory, so that
-# "${CMAKE_SOURCE_DIR}/../sharp-runtime" resolves to a real checkout.
-if(NOT EXISTS "${CMAKE_SOURCE_DIR}/../sharp-runtime/CMakeLists.txt")
+# "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime" resolves to a real checkout.
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime/CMakeLists.txt")
     message(FATAL_ERROR
         "CNA: Missing sibling repository 'sharp-runtime' at "
-        "${CMAKE_SOURCE_DIR}/../sharp-runtime -- this is a separate git "
+        "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime -- this is a separate git "
         "checkout expected next to this repo's own directory, not a git "
         "submodule (git submodule update --init will not fetch it). Fix: "
-        "cd ${CMAKE_SOURCE_DIR}/.. && "
+        "cd ${CMAKE_CURRENT_SOURCE_DIR}/.. && "
         "git clone https://github.com/openeggbert/sharp-runtime.git")
 endif()
 add_subdirectory(../sharp-runtime SHARP_RUNTIME)
@@ -114,13 +114,13 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     # easy-gl is a SIBLING repository checkout, not a git submodule of this
     # repo (Task DEV-BUILD-001) -- see sharp-runtime's identical check above
     # for the full rationale.
-    if(NOT EXISTS "${CMAKE_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
         message(FATAL_ERROR
             "CNA: Missing sibling repository 'easy-gl' at "
-            "${CMAKE_SOURCE_DIR}/../easy-gl -- this is a separate git "
+            "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl -- this is a separate git "
             "checkout expected next to this repo's own directory, not a git "
             "submodule (git submodule update --init will not fetch it). Fix: "
-            "cd ${CMAKE_SOURCE_DIR}/.. && "
+            "cd ${CMAKE_CURRENT_SOURCE_DIR}/.. && "
             "git clone https://github.com/openeggbert/easy-gl.git")
     endif()
     add_subdirectory(../easy-gl easy-gl)
@@ -1309,7 +1309,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_goldenimage_smoke)
         set_tests_properties(EasyGL_GoldenImage_Smoke PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 464: first real (non-canary) golden-image case, reusing Phase 42's already-
@@ -1320,7 +1320,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_basiceffect_golden)
         set_tests_properties(EasyGL_BasicEffect_Golden PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 465: golden-image case reusing Phase 47's already-verified SpriteBatch
@@ -1331,7 +1331,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_spritebatch_rotation_golden)
         set_tests_properties(EasyGL_SpriteBatch_Rotation_Golden PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 466: golden-image case reusing Phase 35's already-verified texture-filter
@@ -1342,7 +1342,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_texture_filter_linear_golden)
         set_tests_properties(EasyGL_TextureFilter_Linear_Golden PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 467: golden-image case reusing Phase 36's already-verified BlendState::Additive
@@ -1353,7 +1353,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_blendstate_additive_golden)
         set_tests_properties(EasyGL_BlendState_Additive_Golden PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 468: golden-image cases reusing Phase 37's DepthStencilState write-enable scene
@@ -1365,7 +1365,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_depthstencilstate_write_enable_golden)
         set_tests_properties(EasyGL_DepthStencilState_WriteEnable_Golden PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode_golden
@@ -1374,7 +1374,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_rasterizerstate_cullmode_golden)
         set_tests_properties(EasyGL_RasterizerState_CullMode_Golden PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 469: golden-image cases reusing Phases 43-46's already-verified stock-effect
@@ -1386,7 +1386,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_alphatesteffect_golden)
         set_tests_properties(EasyGL_AlphaTestEffect_Golden PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_dualtextureeffect_golden
@@ -1395,7 +1395,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_dualtextureeffect_golden)
         set_tests_properties(EasyGL_DualTextureEffect_Golden PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_environmentmapeffect_golden
@@ -1404,7 +1404,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_environmentmapeffect_golden)
         set_tests_properties(EasyGL_EnvironmentMapEffect_Golden PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_skinnedeffect_golden
@@ -1413,7 +1413,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                  COMMAND cna_test_easygl_skinnedeffect_golden)
         set_tests_properties(EasyGL_SkinnedEffect_Golden PROPERTIES
             TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 87: RenderTarget2D → texture → readback
