@@ -14,9 +14,9 @@ fixed · ⛔ BLOCKED, needs a project-owner architecture decision.
 
 | Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer |
 |---|---|---|---|---|
-| All `Draw` overloads, sort modes, rotation/flip/scale/crop | ✅ | ✅ | ✅ | ✅ (2 real bugs fixed: rotation pivot, `transformMatrix`) |
+| All `Draw` overloads, sort modes, rotation/flip/scale/crop | ✅ | not separately re-audited (Task 861) | not separately re-audited | ✅ (2 real bugs fixed: rotation pivot, `transformMatrix`) |
 | Custom `Effect` via `Begin(effect)` | ✅ | ✅ | ✅ | ❌ throws by design (no shader stage, 2D-only backend) |
-| SpriteFont — glyph placement/spacing/newline/fallback/flip | ✅ pixel-verified (Tasks 424-429) | not separately re-audited | not separately re-audited | ✅ (1 real cross-backend bug found and fixed, Task 694) |
+| SpriteFont — glyph placement/spacing/newline/fallback/flip | ✅ pixel-verified (Tasks 424-429) | not separately re-audited (Task 861) | not separately re-audited | ✅ (1 real cross-backend bug found and fixed, Task 694) |
 | `TextureAddressMode::Wrap`/`Mirror` via SpriteBatch | ✅ | ✅ | ✅ | ⛔ **BLOCKED** (Tasks 686/687) |
 
 ## Stock Effects
@@ -133,16 +133,69 @@ contention false failures):
   test's Vulkan-renderer workaround fails to negotiate and falls back to GL 2.1, where MSAA
   doesn't resolve — an environment limitation, not a code bug). Reconfirmed via Task 448's own
   regression (4413/4414).
-- **Vulkan**: last full run (Task 911) was 4369/4378 — 12 known pre-existing (5× `BlendState`/
-  Task 868, several `DepthStencilState`-adjacent, `ReferenceStencil`/Task 872, 1 `DepthBias`
-  sub-case) plus 3 non-deterministic `ContentManagerSkinnedModelTest.*` segfaults under this
-  sandbox's Vulkan/Xvfb/llvmpipe combination (confirmed via `git stash` to be pre-existing and
-  unrelated to any session's changes, and to pass cleanly in isolation). Not re-run this session
-  (no Vulkan-touching task since Task 911) — treat as the best-known baseline, not a guarantee.
+- **Vulkan**: last full run (Task 911) was 4369/4378 — **9** known pre-existing (5× `BlendState`/
+  Task 868, 1 `RasterizerState.DepthBias` sub-case, 3 non-deterministic
+  `ContentManagerSkinnedModelTest.*` segfaults under this sandbox's Vulkan/Xvfb/llvmpipe combination
+  — confirmed via `git stash` to be pre-existing and unrelated to any session's changes, and to pass
+  cleanly in isolation). **Correction (2026-07-09, Task 861):** this row previously said "12" and
+  additionally claimed "several `DepthStencilState`-adjacent" failures — both wrong; `4378-4369=9`,
+  and `DepthStencilState`'s own compare-op/stencil-op tests all pass (Task 870 fixed this), leaving
+  only the 6 integration-suite failures (5 `BlendState` + 1 `DepthBias`) plus the 3 segfaults.
+  Independently reconfirmed via a fresh `ctest -R "^Vulkan_"` rerun (Task 495, 87/93 — exactly those
+  6, same names) plus the matching correction already made in `docs/xna-4-api-coverage.md` (Task
+  484/499). Not re-run as a full suite this session (no Vulkan-touching task since Task 911) —
+  treat as the best-known baseline, not a guarantee.
 - **SDL_Renderer**: 13 known pre-existing, all throwing `"SDL_Renderer does not support 3D"` —
   matches this backend's accepted 2D-only architectural scope exactly (`EffectApplyTest`,
   `GraphicsDeviceValidationTest.SetRenderTargets_*`, `SkinnedModelEXTPartTest.*`,
   `ContentManagerSkinnedModelTest.*`). Confirmed via Task 915's own systematic full-suite run.
+
+## Remaining genuine Vulkan limitations (Task 861, 2026-07-09)
+
+Phase 73 (Tasks 664-665, 825-861) was written as a checklist of individual Vulkan pixel-test tasks,
+but Tasks 825-860 were never checked off — later, higher-numbered work (Tasks 484/495/499/500,
+plus the fog/lighting/effect fixes at 885-900) independently established most of the same ground,
+superseding the original per-row checklist without formally closing each row. This section is
+Task 861's real deliverable: the actual current state, confirmed by spot-checking a representative
+sample of Tasks 825-860 against real test coverage rather than re-verifying all 36 rows from
+scratch (that would be Task 738-scale work, out of this task's own scope).
+
+**Genuinely already covered by real, current Vulkan tests** (confirmed via
+`ctest --test-dir cmake-build-vulkan -N -R "^Vulkan_"`, 93 real tests): `TextureAddressMode`
+(Clamp/Mirror), `TextureFilter` (Point vs. Linear), anisotropic filtering, all 7 `BlendState`
+presets, all 6 `DepthStencilState` aspects, `CullMode`, `Viewport`, render-target lifecycle
+(sample-after-unbind, MSAA, mip chains, depth-format fidelity, MRT-adjacent), and all 5 stock
+effects including fog and several per-effect sub-features (specular, Fresnel, eye position, bone
+blending) — this maps directly onto Tasks 825-849's own topics. **Confirmed genuine bugs found by
+this later work, not silently passing**: `BlendState` (Task 868, still open), one isolated
+`RasterizerState.DepthBias` sub-case (still open) — these are the real content behind Tasks 831-833
+and 839's own topics, not clean passes.
+
+**A real, previously-undocumented gap found by this spot-check**: unlike EasyGL and SDL_Renderer,
+Vulkan has **no dedicated pixel test** for `SpriteBatch`'s sort-mode ordering, rotation/scale/
+source-rectangle-cropping/`SpriteEffects` flip (Task 851/850's own topics), `SpriteFont` glyph
+placement (Task 852), or `Model` multi-mesh hierarchy transform propagation (Task 853) —
+confirmed via `grep`/`ctest -N` finding zero `Vulkan_SpriteFont*`/`Vulkan_Model*`/
+`Vulkan_SpriteSortMode*` test names, despite `Vulkan_SpriteBatch_MultiBeginEnd` and
+`Vulkan_Demo2D_SmokeTest` confirming basic `SpriteBatch` drawing works. Corrected the feature
+matrix's own "2D SpriteBatch/SpriteFont" table above, which previously (incorrectly) rated Vulkan
+✅ for this without a backing test, to "not separately re-audited" — matching the honest phrasing
+already used for the adjacent SpriteFont row. This is a **test-coverage gap, not a confirmed
+behavioral bug** — the underlying `SpriteBatch`/`SpriteFont`/`Model` code is backend-agnostic C++
+already pixel-verified on EasyGL/SDL_Renderer, so a regression specifically on Vulkan is unlikely,
+but it is genuinely unverified there. Not opened as a new numbered task here (that's Task 738-scale
+triage work); flagging it in this matrix is this task's own real scope.
+
+**`OcclusionQuery` visible-vs-occluded pixel test on Vulkan (Task 854's own topic)**: not a new
+finding — this is exactly Task 447's already-tracked ⛔ BLOCKED status (Vulkan's deferred-draw
+architecture can't correlate a query's Begin/End span with a draw at all yet, so no pixel test is
+even possible until that's resolved).
+
+**Bottom line**: Vulkan's real, current, confirmed-open limitations are exactly 2 — `BlendState`
+(Task 868) and the isolated `RasterizerState.DepthBias` sub-case — plus the already-tracked
+`OcclusionQuery` BLOCKED status (Task 447) and `ReferenceStencil` gap (Task 872, shared across all
+3 3D backends). The 2D SpriteBatch/SpriteFont/Model-hierarchy test-coverage gap above is real but
+distinct in kind (untested, not un-implemented or known-broken).
 
 ## New tracked follow-up tasks opened this session
 
