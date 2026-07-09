@@ -1178,8 +1178,12 @@ they're not good candidates to pick up out of order. Prefer continuing in Tasks 
 - **No API renames or namespace moves** — XNA API names and shapes are frozen by the FNA reference.
 - **No mass Doxygen or NOXNA cleanup passes** — fix tags only on files you're already touching for
   a real reason.
-- **No opportunistic fix for Task 868/870 (Vulkan blend/depth-stencil state)** bundled into an
-  unrelated task — both are large, multi-pipeline-site changes; each needs its own dedicated task.
+- **Tasks 868 and 870 are both done** (Vulkan `BlendState` now has a real per-`Blend`/
+  `BlendFunction` mapping across all 9 3D pipeline-creation sites, widening the pipeline cache key
+  to `std::pair<uint64_t, uint32_t>`; `DepthStencilState` compare-op + full stencil ops are real —
+  see §3/§5). Bgfx's own narrower blend gap (alpha factors unused, blend function always `Add`) is
+  split out to new **Task 923**, not yet started — no opportunistic fix, it needs its own scoped
+  pass mirroring Task 868's `ToVkBlendOp`/`FillBlendAttachmentState` approach.
 - **No opportunistic fix for Task 871/872 (stencil `Clear`/`ReferenceStencil` backend gaps)** —
   verify with a real test first.
 - **Tasks 906/907 are done** (`RenderTarget2D`/`RenderTargetCube` mip on all 3 backends — Bgfx
@@ -1224,579 +1228,87 @@ they're not good candidates to pick up out of order. Prefer continuing in Tasks 
 Read NEXT.md first, in full — this section is intentionally the only thing you need before
 touching any code.
 
-## Repo state as of 2026-07-08 (end of Task 669 session) — READ THIS FIRST
+## Current state as of 2026-07-09 (end of this session) — READ THIS FIRST
 
-All 4 `cmake-build-{debug,vulkan,bgfx,sdl}` directories exist and were verified building clean at
-the end of this session (`cmake-build-sdl` needed `-DCNA_TEST_DISPLAY=:99` — it was still pointing
-at the real `:0` display from an earlier configure; always double check this cache variable before
-running `ctest` there, see §4). Working tree should be clean (this session's work is committed and
-pushed). **Tasks 902, 870, 911, and 914 (`GraphicsDevice::Reset()` real backend wiring; Vulkan
-`DepthStencilState`/stencil-test fidelity; Vulkan per-instance `DepthStencilFormat` fidelity; Bgfx
-real `Texture3D`/`TextureCube::GetData` readback + mip-allocation fix) are all now done** — every
-task the project owner explicitly approved "Implement now" this stretch (902/910/911/914) is
-closed. Now working the standing backlog (§8): **Tasks 667, 668, 669, and 670 are also done this
-session** (every `SpriteSortMode` value — `Deferred`/`Texture`/`FrontToBack`/`BackToFront`/
-`Immediate` — confirmed already correct on SDL_Renderer, no bugs found). Next up: continue the
-Task 666+ SDL_Renderer audit phase in order — the Texture2D section (667-689) is now fully done
-except BLOCKED 686/687 (see §5), the entire SpriteFont section (690-694) is also done, the entire
-BlendState section (695-700) is now done (Task 695 found+fixed 2 real bugs), and the entire
-SamplerState section (701-703) is now done too (Task 701 found+fixed a real `TextureFilter`
-mapping bug; Task 702 confirmed the no-arg `Begin()` genuinely resolves to `LinearClamp`; Task 703
-confirmed per-draw `SamplerState` switches both directions across consecutive `Begin()` calls —
-both no bugs found), and Task 704 (start of RenderTarget2D) found+fixed a real SHARED-code bug in
-`GraphicsDevice.cpp` (`SetRenderTarget`/`SetRenderTargets` crashed on SDL_Renderer for any plain
-`RenderTarget2D` by unconditionally clearing a nonexistent depth buffer on bind). Task 705 found+
-fixed a real memory-safety bug (all 3 `SdlSpriteBatchBackend::Draw()` overloads unconditionally
-downcast to `SdlTextureBackend` even for the unrelated sibling `SdlRenderTargetBackend`, caught via
-a UBSan scratchpad build), Task 706 confirmed `DiscardContents`/`PreserveContents` are genuinely
-different, Task 707 confirmed `GetBackBufferData` genuinely reads the real backbuffer after
-unbinding (both no bugs found), and Task 708 decided SDL_Renderer silently ignores requested
-`DepthFormat` (matching its 2D-only design intent) — found+fixed one more real bug along the way
-(a shared `HasRealDepthBuffer` backend query), and Task 709 found+fixed a real bug too
-(`SetRenderTargets` silently bound only the first target for 2+ bindings; now throws clearly),
-closing the entire RenderTarget2D section (704-709) and correcting the known-failure baseline
-from 13 to 11 along the way (see §5), and Task 710 (start of Viewport/PresentationParameters)
-confirmed `Viewport::Project`/`Unproject` correctly handle a non-zero offset tied to the live
-device viewport (no bug found), and Task 711 confirmed the same for backbuffer resize via
-`PresentationParameters` (no bug found; real window resize is asynchronous under X11, fixed the
-test's own call pattern rather than production code), and Task 712 confirmed the fullscreen toggle
-round-trips correctly through `Reset()` (no bug found), and Task 713 found+fixed a real bug
-(`SetSwapInterval` silently collapsed `PresentInterval::Two` down to `One`, discarding its
-half-refresh-rate semantics; SDL3 genuinely supports passing 2 directly, confirmed via a raw
-probe though not pixel-observable on this sandbox's driver), and Task 714 decided
-accept-and-ignore-with-log for `MultiSampleCount` (matches Task 708's `DepthFormat` decision shape,
-no bug found), and Task 715 confirmed `DeviceResetting`/`DeviceReset` fire correctly on backbuffer
-resize (no bug found), closing the entire Viewport/PresentationParameters section (710-715), and
-Task 716 (start of GraphicsDevice-lifecycle) confirmed all 8 `ClearOptions` combinations behave
-correctly (no bug found, reconfirms Task 871's already-tracked `Stencil` gap), and Task 717 found+
-fixed THREE real bugs in shared code (`SpriteBatch::Draw` crash on a disposed `Texture2D`,
-`SetRenderTargets` missing a disposed-check, `RenderTarget2D::Dispose` leaving a dangling pointer),
-and Task 718 confirmed double-`Dispose()` is safe across all remaining resource types (no bug
-found), and Task 719 confirmed the leak-check (`Texture2D`/`RenderTarget2D`, mirrors Task 219)
-returns cleanly to baseline (no bug found), closing the entire GraphicsDevice-lifecycle section
-(716-719), and Task 720 confirmed `DrawPrimitives`/`DrawIndexedPrimitives`/`DrawInstancedPrimitives`
-throw the exact expected exception type+message on SDL_Renderer (no bug found), and Task 721
-confirmed all 5 `DrawUserPrimitives` typed + `VertexDeclaration` overloads throw the exact
-expected message on both of their reachable paths (no bug found), and Task 722 confirmed the
-same for all 10 `DrawUserIndexedPrimitives` overloads (no bug found), and Task 723 re-verified
-all 8 buffer-construction overloads/variants with Task-261-style rigor (no bug found), and Task 724
-confirmed `VertexDeclaration` construction never throws (pure data, no bug found); Task 725 is
-now BLOCKED (`Texture3D`/`TextureCube` construction decision, not guessed at — see §5), and
-Task 726 confirmed all 5 stock 3D effects never throw on construction/setters/`Apply()` but
-drawing with them does (no bug found), and Task 727 found+fixed a real bug (`OcclusionQuery::
-Begin`/`End` silently no-op'd instead of throwing; added the missing `CreateOcclusionQuery`
-throw), and Task 728 confirmed `Model::Draw` throws via the same shared path Task 720
-established (no bug found), and Task 729 confirmed `RasterizerState`/`DepthStencilState`
-construction/assignment never throw (no bug found), closing the entire 720-729 range, and
-Task 730 closed a genuine pre-existing `cna_demo_2d`/SDL_Renderer smoke-test registration gap
-and authored 4 new minimal 2D samples (real compatibility proof, not a bug-hunt), and Task 731
-(pure documentation) wrote `docs/sdl-renderer-2d-completeness.md`, a final per-feature support
-table with full rationale for every decision task including both still-BLOCKED ones (686/687,
-725), closing the entire SDL_Renderer audit phase (666-731), and Task 732 (start of Phase 71,
-EasyGL final gap closure) is now BLOCKED too — conflicts with Task 176's already-shipped,
-already-tested `Texture::ValidateFormat` contract and a deeper `Color*`-only `SetData`/`GetData`
-API gap, 3 options presented, none picked (see §5 and plan_graphics.md row 732), and Task 733
-is CLOSED — no real gap: `FillMode::WireFrame` was already emulated on EasyGL (`GL_LINES`
-re-expansion, not the geometry-shader technique proposed) and already had passing test coverage
-(`EasyGL_FillMode_Solid`), reconfirmed 3/3 fresh this session with discriminating power verified,
-and Task 734 is CLOSED too — moot, existed only as a fallback for the geometry-shader WireFrame
-path Task 733 found unnecessary, and Task 735 is CLOSED too — already implemented (`mipMap`
-pre-allocation loop already exists, fixed by Task 862/864), confirmed via a fresh passing rerun
-of `EasyGL_Texture3D_Mip_RoundTrip`, and Task 736 is CLOSED too — same shape, `EasyGLTextureCubeBackend`'s
-`mipMap` pre-allocation loop already exists (same Task 862/864 fix), confirmed via a fresh passing
-rerun of `EasyGL_TextureCube_Mip_RoundTrip`, and Task 737 is CLOSED too — real test-coverage gap
-closed (new `EasyGL_TextureAddressMode_Mirror` test, `SpriteBatch`-based Mirror verification at
-`U=1.6`, no production bug, discriminating power verified). Task 738 was scoped, not attempted
-atomically — it's a meta/tracking pointer; confirmed its real remaining scope is exactly
-Tasks 421-500 (Phases 48-55; 34-46 archived, 47 done). Task 421 (start of Phase 48) is done —
-`SpriteFont` audit found one real gap, a missing `MeasureString(StringBuilder)` overload
-(`SpriteBatch::DrawString` already supports `StringBuilder`, `SpriteFont::MeasureString` never
-got the equivalent) — deferred to Task 423, and Task 422 is CLOSED too — no bug found
-(`MeasureString(string)` re-verified against FNA, 3 new edge-case tests added — consecutive
-`\r`s, leading/trailing `\n` — discriminating power verified via sabotage-and-revert), and Task 423
-is CLOSED too — real gap fixed, added the missing `MeasureString(StringBuilder)` overload
-(1-line forward to `text.ToString()`, mirroring `SpriteBatch::DrawString`'s convention; 5 new
-tests; discriminating power verified; spot-checked SDL_Renderer too), and Task 424 is CLOSED
-too — no bug found (new `EasyGL_SpriteFont_SingleGlyph` test; found and fixed a real
-methodology weakness first — diagonal-corner checks don't discriminate a single-axis
-mis-placement, replaced with edge-midpoint checks; discriminating power verified), and Task 425
-is CLOSED too — no bug found, new `EasyGL_SpriteFont_MultiGlyphSpacing` test (horizontal-center-line
-checks, applying Task 424's lesson), discriminating power verified via sabotage of the shared
-spacing term, and Task 426 is CLOSED too — no bug found, new `EasyGL_SpriteFont_Newline` test,
-discriminating power verified by sabotaging the shared newline-advance to hardcode glyph-height
-instead of the font's real `lineSpacing_`, and Task 427 is CLOSED too — no bug found, new
-`EasyGL_SpriteFont_DefaultChar` test, discriminating power verified by sabotaging the shared
-fallback lookup — this closes the entire Tasks 424-427 SpriteFont pixel-test range on EasyGL,
-mirroring Tasks 690-693 on SDL_Renderer, and Task 428 is CLOSED too — the EasyGL counterpart of
-Task 694's own combined SDL_Renderer test, no NEW bug (Task 694 already fixed the shared-code
-bug), new `EasyGL_SpriteFont_EffectsFlip` test confirms the fix renders correctly on EasyGL too,
-discriminating power verified via sabotage of the shared axis-index lookup, and Task 429 is
-CLOSED too — EasyGL counterpart of Task 694's own "Test 2", no bug (already correct
-pre-Task-694), discriminating power verified via sabotage of the shared scale multiplication —
-this closes Tasks 424-429 on EasyGL (mirroring Tasks 690-694 on SDL_Renderer), and Task 430 is
-CLOSED too — pure docs, wrote `docs/spritefont-support.md`, closing Phase 48 in full, and Task 431
-is CLOSED too — audit complete (property/method surface matches FNA closely; 2 real deviations
-documented in `CHECKLIST.md`, corrects Task 728's own inaccurate claim; gaps deferred to Tasks
-432/433; new Task 916 opened), and Task 432 is CLOSED too — real gaps fixed: added
-`TryGetValue`/`Contains`/`begin`/`end` to `ModelBoneCollection`, fixed `ModelBone::Children` to
-return a real `ModelBoneCollection`, 15 new tests, discriminating power verified, and Task 433
-is CLOSED too — real bugs found and fixed (`operator[](int)` was genuine UB via raw `[]`;
-`operator[](string)` silently returned `nullptr` instead of throwing, contradicting its own doc
-comment), same `TryGetValue`/`Contains` gap fixed, new test file, int-indexer sabotage segfaulted
-(accepted as discriminating evidence), and Task 434 is CLOSED too — no bug found, new
-`ModelMeshPartTests.cpp` (didn't exist before), 22 tests confirming `setEffectProperty`'s
-parent-collection logic faithfully ports FNA, discriminating power verified, and Task 435 is
-CLOSED too — no bug found, new `ModelTests.cpp` with an order-sensitive `KnownHierarchy`
-fixture, discriminating power verified by swapping the multiply order, and Task 436 is CLOSED
-too — no bug in CNA, found and documented a real FNA loop-bound deviation (`CopyBoneTransformsFrom`/
-`CopyBoneTransformsTo` loop by caller-array-length in FNA vs. `Bones.Count` in CNA), 3 new tests,
-discriminating power verified, and Task 437 is CLOSED too — no bug found, sibling method, 3 more
-tests (10 total), discriminating power verified — **this closes Tasks 435-437 in full** —
-and Task 438 is CLOSED too — no bug found, new `EasyGL_Model_TwoMeshesEffects` pixel test proves
-`Model::Draw` applies each mesh's own `Effect` (Red-left/Blue-right half-quads, 2 separate
-`BasicEffect` instances), discriminating power verified by sabotaging `meshCount` to hardcode `1`,
-full EasyGL regression 4504/4507 passed (exactly the 3 known pre-existing failures, 0 new) —
-and Task 439 is CLOSED too — real gap found and fixed while designing the test:
-`ModelMesh::parentBone_` was never assigned by any public path (`Model::Draw`'s bone-resolution
-ternary's true branch was dead code); fixed via a new 4-arg `Model` constructor overload
-(`meshParentBones`), 3 new unit tests, discriminating power verified; new
-`EasyGL_Model_HierarchyChildMesh` pixel test confirms no bug once a mesh could actually be
-parented to a non-root bone, discriminating power verified by hardcoding `boneIdx` to 0, full
-EasyGL regression 4508/4511 passed (exactly the 3 known pre-existing failures, 0 new) —
-and Task 440 is CLOSED too — pure docs, wrote `docs/model-content-pipeline-support.md`
-documenting real gaps in `ModelTypeReader`'s content-loading path versus FNA's real
-`ModelReader.cs` (CNA's Model format is an original `.model.json` scheme, not FNA's `.xnb`; no
-bone-hierarchy/`ParentBone`/`BoundingSphere`/`Tag` support in the loader; zero test coverage of
-`ModelTypeReader` confirmed via repo-wide search) — **this closes Phase 49 in full (Tasks
-431-440)** — and Task 441 is CLOSED too — audit complete: FNA's real `OcclusionQuery.cs` has
-zero C#-level Begin/End sequence validation (Tasks 442-444's "Match FNA exception" framing needs
-reframing); found 2 real functional gaps (Vulkan always reports 0 visible pixels, Bgfx's
-Begin/End are empty no-ops with no `setCondition` wiring), both mapping onto already-planned
-Tasks 447/448, not fixed here — and Task 442 is CLOSED too — no bug found, extended
-`examples/occlusion_query_test.cpp` with a new check confirming `End()` before any `Begin()`
-does not throw (matches FNA's own zero-validation shape), discriminating power verified by
-sabotaging `End()` to unconditionally throw (whole test aborted, accepted as valid crash-as-signal
-evidence), full EasyGL regression 4508/4511 passed (exactly the 3 known pre-existing failures, 0
-new) —
-and Task 443 is CLOSED too — no bug found, same reframing: extended
-`examples/occlusion_query_test.cpp` with a new check confirming double `Begin()` (no
-intervening `End()`) does not throw, matching FNA's own zero-validation shape,
-discriminating power verified by sabotaging `Begin()` to unconditionally throw (whole test
-aborted, same crash-as-signal shape as Task 442), full EasyGL regression 4508/4511 passed
-(exactly the 3 known pre-existing failures, 0 new) —
-and Task 444 is CLOSED too — no bug found, closes the entire 442-444 trio: extended
-`examples/occlusion_query_test.cpp` with a final check confirming a second, unmatched
-`End()` does not throw, matching FNA's own zero-validation shape, discriminating power
-verified by sabotaging `End()` to unconditionally throw (whole test aborted, same
-crash-as-signal shape as Tasks 442/443), full EasyGL regression 4508/4511 passed (exactly
-the 3 known pre-existing failures, 0 new). FNA has zero C#-level Begin/End sequence
-validation for any of the 3 invalid orderings tested; CNA correctly mirrors that across
-all 3 —
-and Task 445 is CLOSED too — no bug found, the first genuine occlusion-query
-correctness test: new `EasyGL_OcclusionQuery_VisibleQuad` draws a full-NDC Red quad
-wrapped in Begin()/End(), uses GetBackBufferData to force GL sync, confirms the quad
-renders/query completes/PixelCount() > 0, discriminating power verified by sabotaging
-PixelCount() to unconditionally return 0 after the IsComplete() gate (1 of 3 checks failed
-as predicted), full EasyGL regression 4509/4512 passed (exactly the 3 known pre-existing
-failures, 0 new) —
-and Task 446 is CLOSED too — no bug found, mirror counterpart to Task 445, closes the
-entire Tasks 441-446 EasyGL OcclusionQuery correctness section: new
-`EasyGL_OcclusionQuery_OccludedQuad` draws a Blue occluder then a Red target rejected by
-depth test, wrapped in Begin()/End(); confirms genuine occlusion, query completes,
-PixelCount() <= 0; discriminating power verified by sabotaging PixelCount() to
-unconditionally return 1 (1 of 3 checks failed as predicted), full EasyGL regression
-4510/4513 passed (exactly the 3 known pre-existing failures, 0 new). The 2 real functional
-gaps Task 441 found (Vulkan always-0, Bgfx unwired) remain open, scoped to Tasks 447/448 —
-and Task 447 is now BLOCKED too — investigated before writing code and found a genuinely
-risky architecture decision: `VulkanOcclusionQueryBackend::Begin()`/`End()` never inject
-`vkCmdBeginQuery`/`vkCmdEndQuery` since this backend defers ALL 3D/2D draws into real
-Vulkan commands only once per frame (`RecordCommandBuffer`), well after `Begin()`/`End()`
-already returned; correlating them requires resolving 3 genuinely non-obvious design
-questions (deferred-draw tagging, multi-draw query span policy, per-frame query-pool
-reset for reuse), none guessed at — see §5/plan_graphics.md row 447. Moving to Task 448
-(Bgfx) instead, which investigation shows is substantially simpler (bgfx's synchronous
-submission model + its own `submit(..., occlusionQuery, ...)` overload) —
-and Task 448 is CLOSED too — real fix shipped: `activeOcclusionQuery_`/`SubmitViewProgram()`
-genuinely attach `BgfxOcclusionQueryBackend::Begin()`/`End()` to a real bgfx submit call,
-matching bgfx's own documented API and official example. Sabotage-and-revert found
-discriminating power for `IsComplete()`/`PixelCount()` could NOT be established in this
-sandbox (identical behavior even reverted to no-ops — a genuine driver limitation, not a
-CNA bug); the new test honestly asserts only what does discriminate. New Task 917 opened
-(not blocking) for a deeper dedicated-view gap. Full Bgfx regression 4413/4414 passed
-(exactly the 1 known pre-existing failure, 0 new) —
-and Task 449 is CLOSED too — no bug found: extended `examples/occlusion_query_test.cpp`
-with 50 iterations of constructâBegin()âdestroy-with-no-End(), confirming no crash,
-`GetTrackedResourceCount()` returns to baseline (reusing Task 719's own mechanism), and a
-fresh query works normally afterward. Full EasyGL regression 4510/4513 passed (exactly the
-3 known pre-existing failures, 0 new) —
-and Task 450 is CLOSED too — pure docs, `docs/occlusionquery-support.md`, closes Phase 50
-in full (Tasks 441-450): FNA API audit + full per-backend support matrix (EasyGL correct,
-Vulkan BLOCKED, Bgfx fixed with caveats, SDL_Renderer correctly throws) —
-and Task 451 is CLOSED too — pure docs, `docs/graphics-backend-feature-matrix.md`, begins
-Phase 51: comprehensive all-4-backend matrix superseding stale `docs/coverage.md`, dedicated
-BLOCKED-task table, known failure baselines, Task 916/917 pointers —
-and Task 452 is CLOSED too — CONFIRMED, not a real gap: already done by Tasks 720-729's own
-"3D throws correctly" sweep; the one exception (Task 725, Texture3D/TextureCube) is already
-BLOCKED, not a silent gap. Zero code changes —
-and Task 453 is CLOSED too — CONFIRMED, not a real gap: every currently-known EasyGL
-unsupported feature is already tracked (ReferenceStencil/872, ClearOptions::Stencil/871,
-Texture3D/TextureCube shader-sampling/863, SurfaceFormat already throws via Task 176); no
-new undocumented gap found. Zero code changes —
-and Task 454 is CLOSED too — no bug found: Vulkan's only 2 optional device features
-(fillModeNonSolid/samplerAnisotropy) are both correctly gated behind real device-support
-queries; already correct, just undocumented, now recorded. Zero code changes —
-and Task 455 is CLOSED too — found and fixed 1 real gap (silent Bgfx GetData readback
-failures now log clearly), confirmed 1 already-adequate design (ShaderEffect), and
-discovered a NEW unrelated pre-existing flaky test (Bgfx_RenderTarget2D_MipChain) while
-closing, documented in §5. Full Bgfx regression 4413/4414 passed (exactly the 1 known
-pre-existing failure, 0 new) —
-continue at Task 738 (close the remaining
-EasyGL-scoped tasks in Phases 34-55; Tasks 921/922/918/916 are now closed within this scope -- fixed
-`IndexElementSize`'s numeric values, added `SpriteBatch::Draw`'s real 7th overload, added
-real anisotropic filtering to EasyGL via a genuine cross-repo `meta-gl` fix, added
-`Model`'s `rootBoneIndex` parameter, and fixed Task 868's own Vulkan blend-state mapping
-(a real per-`Blend`/`BlendFunction` mapping across all 9 pipeline-creation functions),
-see §3 -- this closes Task 738's own low-risk actionable scope entirely AND all 5 of
-Task 500's original confirmed bugs on Vulkan; Bgfx's own narrower gap split out to new
-Task 923, not yet started. Task 861 is done (documented Vulkan's real
-remaining limitations, see `docs/graphics-backend-feature-matrix.md`); Phase 73's own
-Tasks 825-860 remain individually unchecked -- a separate, unresolved backlog-hygiene
-question outside Task 738's own Phases-34-55 scope. Task 500 declared a qualified ~90%
-Graphics compatibility milestone, see `docs/graphics-compatibility-report.md`. Phase 55
-is the last active phase before the hard-forbidden WebGPU block (Phases 56-69) -- do not
-open it.
+Phase 55 ("Final Graphics stabilization before declaring XNA 4.0 complete") is closed in full
+(Tasks 491-500). Task 500 declared a qualified **~90% XNA/FNA compatibility milestone** for
+`Microsoft::Xna::Framework::Graphics` — test-execution-verified, not estimated; see
+`docs/graphics-compatibility-report.md` for the real computed numbers. All 4
+`cmake-build-{debug,vulkan,bgfx,sdl}` directories exist and build clean (only the pre-existing,
+unrelated `cna_demo_xact` Content-copy error on every backend — not a regression, don't chase it).
+Working tree is clean; everything below is committed and pushed to `origin/feature/graphics`.
 
-**First action on resume, before any feature work** (run these in order):
-  1. `git log --oneline -5` and `git status --short` — confirm clean tree, note current HEAD.
-  2. `cmake --build cmake-build-debug --target CNA CnaTests -j4` (EasyGL)
-  3. `cmake --build cmake-build-vulkan --target CNA CnaTests -j4` (Vulkan)
-  4. `cmake --build cmake-build-bgfx --target CNA CnaTests -j4` (Bgfx)
+**Since Task 500, Task 738's real remaining scope (see its own row) was worked through one item at
+a time — all 5 of Task 500's original "confirmed bugs" are now closed**:
+- Task 921 — `IndexElementSize` numeric values now match real FNA (`0`/`1`, not `16`/`32`).
+- Task 922 — `SpriteBatch::Draw`'s real 7th overload added (`Rectangle` destination +
+  `std::optional<Rectangle>` source, matching FNA's actual signature).
+- Task 918 — EasyGL now has real `GL_EXT_texture_filter_anisotropic` support. This required a
+  genuine cross-repo fix in the sibling `meta-gl` library (added `SamplerParameter::MaxAnisotropy`/
+  `GetParameter::MaxTextureMaxAnisotropy`) — committed there locally (`meta-gl`'s own `fc1289e`,
+  **not pushed** — check with the project owner before pushing that repo). Cross-repo edits outside
+  `cna_graphics` need the project owner's own real-time approval at the point of the actual tool
+  call — a conversational "yes" earlier in a session is not sufficient on its own; expect this if a
+  future task needs another sibling-repo change (`easy-gl`, `sharp-runtime`, etc.).
+- Task 916 — `Model`'s 4-arg constructor gained an optional `rootBoneIndex` parameter (default `0`,
+  additive-only).
+- Task 868 — Vulkan `BlendState` now has a real per-`Blend`/`BlendFunction` mapping across all 9
+  3D pipeline-creation sites (previously every non-`Opaque` blend state silently used
+  `NonPremultiplied`'s equation). Widened the pipeline cache key to `std::pair<uint64_t, uint32_t>`
+  to fit the blend descriptor. **Bgfx's own narrower version of this same bug (alpha factors
+  unused, blend function always `Add`) was deliberately split into new Task 923** — not yet
+  started.
 
-If any of these fail on a fresh checkout, reconfigure first (`cmake -S . -B cmake-build-debug
--DCNA_GRAPHICS_BACKEND=EASYGL`, `=VULKAN`, `=BGFX` respectively) before treating it as a real
-break. If they all succeed, proceed straight to the backlog below — no baseline re-verification
-needed, this session already did a full `CnaTests` + targeted `ctest` pass on all 3 backends.
+**A real backlog-hygiene issue was found, twice, and is NOT yet resolved**: Phases 71-73 (Bgfx/
+Vulkan gap-closure, described elsewhere as "mature"/"pixel-verified parity") still have dozens of
+individually-unchecked `⬜` rows in their own raw task tables (Phase 72: 84⬜, Phase 73: 36⬜) —
+their real content was superseded by later, higher-numbered tasks without the original checklist
+ever being formally closed. The same pattern was spotted in Phase 20 (SpriteBatch sort-mode
+conformance, 5⬜) during a routine status check — this may be broader than just 71-73. **Nobody
+has done the actual triage yet** (confirm which rows are genuinely superseded vs. real remaining
+gaps) — this is a real, standing candidate for the next substantial piece of work, not urgent but
+not imaginary either.
 
-**Environment, non-negotiable:** never run any GPU/window-creating binary against the real
-`DISPLAY=:0` — confirmed disruptive to the human developer's desktop in an earlier session
-(window/keyboard-focus stealing). Start a virtual display first: `Xvfb :99 -screen 0 1280x1024x24
-&`, then always `SDL_VIDEODRIVER=x11 DISPLAY=:99 <binary>` (this session used `:99`, already
-running — check `pgrep -a Xvfb` before starting a second one). `ctest`'s GPU tests read
-`CNA_TEST_DISPLAY` (cache variable, default `:0`) — either pass `-DCNA_TEST_DISPLAY=:99` at
-configure time or keep using direct binary invocation for GPU tests. Full details in §4. Run all
-3 backends' test suites **sequentially, never concurrently** — concurrent runs cause transient
-GPU/driver-contention false failures (this session hit exactly this with `Bgfx_RenderTarget2D_
-MipChain`: failed once inside a broader `ctest -R` batch, passed cleanly 4/4 times in isolation —
-re-run any anomaly in isolation before treating it as a regression).
+**What's left, honestly categorized** (see `plan_graphics.md`'s own rows for full detail):
+- **Task 923** (Bgfx's narrower BlendState gap, split from 868) — real, scoped, not started.
+- **Tasks 474/475/477/478** (FNA reference-value generation for `BasicEffect`/`SpriteFont`) —
+  DEFERRED, blocked on a real native `FNA3D`/nested `MojoShader` submodule build this sandbox
+  doesn't have; a substantially larger undertaking than every other task in that phase.
+- **Task 917** (Bgfx occlusion-query dedicated-view architecture) — needs a real design decision;
+  also can't be visually verified in this sandbox's software GL driver anyway.
+- **Task 919** (wire `GraphicsSmoke` ctest label into real CI) — BLOCKED on project-owner
+  authorization (creating/modifying a `.github/workflows/*.yml` file is qualitatively different
+  from ordinary source/doc changes — it runs automatically on every future push once merged).
+- **Task 920** (2 Android-NDK build regressions in the sibling `sharp-runtime` repo) — needs
+  `sharp-runtime` write access/context; out of this repo's own scope to fix directly.
+- **Phases 71-73's own individually-unchecked rows** — the backlog-hygiene question above.
+- **Phase 74** (XNA compiled `.fx` bytecode via MojoShader, 10 open tasks) — untouched this
+  session, no known blocker, just not yet picked up.
+- **`xnb.md`** (repo root) — a from-source analysis of what a real binary `.xnb` content-pipeline
+  loader would require, written this session as **planning only, no implementation**, low priority,
+  not scheduled. Don't start implementing it without a fresh, explicit decision to do so.
+- **Phases 56-69 (WebGPU) remain hard-forbidden** — do not open, plan, or stub anything there
+  regardless of what else is done; see `CLAUDE.md`.
 
 ## What to do next
 
-Work through `plan_graphics.md` autonomously, one task at a time, following the established
-per-task methodology: research → implement → write a discriminating test FIRST → verify via
-`git stash`-revert-and-rebuild (or targeted backend-only sabotage when a full interface-signature
-stash would break the build, as this session did for Task 877) that the new test actually fails
-without the fix → full regression per affected backend(s) → update `plan_graphics.md` (verbose
-writeup) and `NEXT.md` (concise) → commit → push → a small follow-up commit filling in the
-just-created commit hash into NEXT.md's `TBD` placeholder (Task 877's own row already has its real
-hash filled in, `7d883ee5` — this describes the pattern for the *next* task). One task = one
-commit; never bundle unrelated tasks.
+Same established methodology as always: research → implement → write a discriminating test FIRST
+→ verify via `git stash`-revert-and-rebuild (or targeted sabotage when a full stash would break the
+build) that the new test actually fails without the fix → full regression per affected backend(s)
+→ update `plan_graphics.md` (verbose writeup) and `NEXT.md` (concise, §3) → commit → push → a small
+follow-up commit filling in the just-created hash into NEXT.md's `(fill in)` placeholder. One task
+= one commit; never bundle unrelated tasks. Chain to the next non-decision task automatically —
+don't stop to ask "should I continue?" for ordinary backlog progression; do stop and ask for a
+genuine decision only the project owner can make (an architecture choice, a cross-repo edit, a
+scope call on something large/risky).
 
-**Skip without asking**: any WebGPU task (`plan_webgpu.md`, hard project-wide prohibition, see
-CLAUDE.md). All 4 tasks the project owner explicitly approved "Implement now" this stretch
-(902/910/911/914) are now closed — continue automatically into the standing backlog (§8) one task
-at a time, without stopping to ask permission between ordinary backlog items.
-
-**Backlog, in priority order:** see §8. This session closed Task 902 (`GraphicsDevice::Reset()`
-now really reaches the backend — `GraphicsDeviceManager.PreferMultiSampling` reaches
-`VulkanGraphicsBackend::ApplyMultiSampleCount()`, fixing `vulkan_msaa_test.cpp`'s Task 147 false
-positive; scoped to the backbuffer only) and Task 910 (every Bgfx render target now gets its own
-distinct bgfx view id instead of sharing one hardcoded id, fixing the "only the last-bound render
-target actually renders within one un-advanced frame" bug found while verifying Task 907). A
-prior session closed Task 877 (`DepthStencilFormat`
-fidelity on EasyGL/Bgfx, including new `RenderTargetCube` depth support on Bgfx), Task 875
-(Vulkan `Clear()`-only render targets never recording a render pass), Task 876 (Vulkan
-`RenderTargetCube`-via-`EnvironmentMapEffect` black-after-unbind — re-checked while investigating
-and found to no longer reproduce at all, closed verify-only), Task 912 (Bgfx render-target
-sampling bug — bisected and root-caused to the already-documented Bgfx "first read per rendered
-frame" quirk, not a distinct bug; fixed via the established retry-until-non-black convention,
-`rendertarget2d_depth_test.cpp` now registered for Bgfx too), Task 663
-(`TextureCube::DDSFromStreamEXT` — real DDS header parsing + DXT1/3/5 decode, tested against a
-hand-built in-memory DDS fixture), Task 913 (`TextureCube`/`Texture3D`'s `SetData`/`GetData`
-not validating `elementCount` against the region size, a genuine heap-corruption bug found while
-building Task 663's fixture — fixed by mirroring `Texture2D`'s already-correct pattern), and Task
-865 (real Vulkan `GetData` readback for `Texture3D`/`TextureCube` via `vkCmdCopyImageToBuffer` +
-staging buffer, reusing 2 existing backend-agnostic example tests rather than writing new ones),
-and Task 862/864 (`Texture3D`/`TextureCube` mip-level allocation fixed on EasyGL and Vulkan —
-reverting either fix reproduces real GPU memory corruption, not just a silent no-op), and Task 903
-(`RenderTargetCube` MSAA on Vulkan and Bgfx, mirroring `RenderTarget2D`'s Task 878/879 support —
-also found and fixed a real Vulkan bug along the way: the 2D `SpriteBatch` pipeline's MSAA
-selection never checked an RT's own `WantsMsaa()`, only the backbuffer's). Also closed Task 750
-(`SpriteBatch`'s `SamplerState` fixed on Bgfx — never overrode `SetSamplerFilter`/
-`SetSamplerAddressMode` at all, closing the last of the 3 backends for this bug shape) and Task 915
-(`GraphicsDevice.GetBackBufferData` implemented for the first time on SDL_Renderer via
-`SDL_RenderReadPixels()` — previously a hard `throw`, blocking the entire Task 666+ SDL_Renderer
-pixel-test audit phase before it could start; also fixed a real CMakeLists.txt scoping bug found
-while wiring up the first test). Also closed Task 870 this session (Vulkan `DepthStencilState`
-support was almost entirely fake -- `DepthBufferFunction` and the entire stencil-test parameter
-set now real, see §3/§5; a project-owner reprioritization inserted this ahead of Task 911 given
-its severity), Task 911 this session (Vulkan render targets now get true per-instance
-`DepthStencilFormat` fidelity — a depth-format-keyed render-pass+pipeline cache across all 9 3D
-pipeline functions plus the 2D sprite pipeline; MRT deliberately stays on the device-wide format;
-also found and fixed a real `VulkanMRTProxy` regression this surfaced, plus a pre-existing
-unrelated `mrtProxy_` teardown leak — the project owner's "push through full scope even when
-large" instruction was followed rather than landing a narrower alternative), and Task 914 this
-session (`Texture3D`/`TextureCube::GetData` now real on Bgfx via a temporary
-`BGFX_TEXTURE_BLIT_DST|READ_BACK` texture + `bgfx::blit()`/`bgfx::readTexture()`, unblocking Task
-864's mip-allocation fix for Bgfx too — confirmed `BGFX_CAPS_TEXTURE_BLIT`/`READ_BACK` are both
-actually supported in this sandbox before implementing). **All 4 project-owner-approved
-"Implement now" tasks (902/910/911/914) are now closed.** Also closed Task 669 this session
-(`SpriteSortMode::FrontToBack`/`BackToFront` confirmed already correct on SDL_Renderer, no bug
-found — new test covers `BackToFront` with real pixels for the first time on any backend), Task
-667 (`SpriteSortMode::Deferred` submission order also confirmed already correct, no bug found),
-and Task 668 (`SpriteSortMode::Texture` grouping also confirmed already correct, no bug found —
-new test pixel-verifies texture bindings survive the sort's reordering, complementing the
-existing mock-backend adjacency/stability test), and Task 670 (`SpriteSortMode::Immediate`
-per-draw flush also confirmed already correct end-to-end — a real methodology finding while
-verifying it: an initial 1-line sabotage produced a false-negative-passing test because it caused
-a silent-drop bug instead of the intended defer-to-`End()` bug; a 2nd, correct sabotage genuinely
-reproduced it and the test failed as predicted). **Every `SpriteSortMode` value is now
-pixel-verified on SDL_Renderer.** Next up: continue the SDL_Renderer audit phase (Task 671 is
-already done from an earlier session; the Texture2D section (667-689) is now fully done except
-BLOCKED 686/687 (see §5); the SpriteFont section (690-694) and the entire BlendState section
-(695-700) are also fully done (Task 695 found+fixed 2 real bugs), and the entire SamplerState
-section (701-703) is now fully done too (Task 701 found+fixed a real `TextureFilter` mapping bug;
-Tasks 702/703 confirmed `LinearClamp` defaulting and per-draw switching both work, no bugs found),
-and Task 704 (start of RenderTarget2D) found+fixed a real SHARED-code bug in `GraphicsDevice.cpp`
-(`SetRenderTarget`/`SetRenderTargets` crashed on SDL_Renderer for any plain `RenderTarget2D` by
-unconditionally clearing a nonexistent depth buffer on bind), and Task 705 found+fixed a real
-memory-safety bug (all 3 `SdlSpriteBatchBackend::Draw()` overloads unconditionally downcast to
-`SdlTextureBackend` even for the unrelated sibling `SdlRenderTargetBackend`, caught via a UBSan
-scratchpad build), Task 706 confirmed `DiscardContents`/`PreserveContents` are genuinely
-different, Task 707 confirmed `GetBackBufferData` genuinely reads the real backbuffer after
-unbinding (both no bugs found), and Task 708 decided SDL_Renderer silently ignores requested
-`DepthFormat` — found+fixed one more real bug along the way — and Task 709 found+fixed a real bug
-too (`SetRenderTargets` silently bound only the first target for 2+ bindings), closing the entire
-RenderTarget2D section (704-709) and correcting the known-failure baseline from 13 to 11 (see §5),
-and Task 710 confirmed `Viewport::Project`/`Unproject` correctly handle a non-zero offset tied to
-the live device viewport (no bug found), and Task 711 confirmed backbuffer resize via
-`PresentationParameters` genuinely works (no bug found; real window resize is asynchronous
-under X11, fixed the test's own call pattern rather than production code), and Task 712 confirmed
-the fullscreen toggle round-trips correctly through `Reset()` (no bug found), and Task 713
-found+fixed a real bug (`SetSwapInterval` silently collapsed `PresentInterval::Two` down to `One`),
-and Task 714 decided accept-and-ignore-with-log for `MultiSampleCount` (no bug found), and Task 715
-confirmed `DeviceResetting`/`DeviceReset` fire correctly (no bug found), closing the entire
-Viewport/PresentationParameters section (710-715), and Task 716 confirmed all 8 `ClearOptions`
-combinations behave correctly (no bug found), and Task 717 found+fixed THREE real bugs in shared
-code (`SpriteBatch::Draw` crashed on a disposed `Texture2D`; `SetRenderTargets` missing a
-disposed-check; `RenderTarget2D::Dispose` left a dangling pointer), and Task 718 confirmed
-double-`Dispose()` is safe across all remaining resource types (no bug found), and Task 719
-confirmed the `Texture2D`/`RenderTarget2D` leak-check returns cleanly to baseline (no bug found),
-closing the entire GraphicsDevice-lifecycle section (716-719), and Task 720 confirmed the 3
-draw-primitive entry points throw the exact expected exception type+message (no bug found), and
-Task 721 confirmed all 5 `DrawUserPrimitives` overloads throw the exact expected message on both
-reachable paths (no bug found), and Task 722 confirmed the same for all 10
-`DrawUserIndexedPrimitives` overloads (no bug found), and Task 723 re-verified all 8
-buffer-construction overloads/variants with Task-261-style rigor (no bug found), and Task 724
-confirmed `VertexDeclaration` construction never throws (no bug found); Task 725 is now BLOCKED
-(`Texture3D`/`TextureCube` construction decision touches 94 existing shared tests with zero
-backend guards, not guessed at — see §5), and Task 726 confirmed all 5 stock 3D effects'
-construction/setters/`Apply()` never throw but drawing with them does (no bug found), and Task 727
-found+fixed a real bug (`OcclusionQuery::Begin`/`End` silently no-op'd; added the missing
-`CreateOcclusionQuery` throw), and Task 728 confirmed `Model::Draw` throws correctly via the
-same shared path (no bug found), and Task 729 confirmed `RasterizerState`/`DepthStencilState`
-construction/assignment never throw (no bug found), closing the entire 720-729 3D-drawing-call
-exception-behavior range, and Task 730 closed a genuine pre-existing `cna_demo_2d`/SDL_Renderer
-smoke-test gap and authored 4 new minimal 2D samples proving real compatibility, not a bug-hunt,
-and Task 731 (pure documentation) wrote `docs/sdl-renderer-2d-completeness.md` — a final
-per-feature support table with full rationale for every decision task, including both still-BLOCKED
-ones (686/687, 725) — closing the entire SDL_Renderer audit phase (Tasks 666-731) — and
-Task 732 (start of Phase 71) is now BLOCKED too, conflicting with Task 176's already-shipped
-`Texture::ValidateFormat` contract and a deeper `Color*`-only `SetData`/`GetData` API gap, and
-Task 733 is CLOSED — no real gap, `FillMode::WireFrame` was already emulated on EasyGL via
-`GL_LINES` re-expansion (not the geometry-shader technique proposed) and already had passing
-test coverage, reconfirmed fresh this session with discriminating power verified, and Task 734
-is CLOSED too — moot, existed only as a fallback for the geometry-shader WireFrame path Task 733
-found unnecessary, and Task 735 is CLOSED too — already implemented (the `mipMap` parameter IS
-honored via a per-level pre-allocation loop, fixed by Task 862/864), reconfirmed via a fresh
-passing rerun of `EasyGL_Texture3D_Mip_RoundTrip`, and Task 736 is CLOSED too — same shape,
-`EasyGLTextureCubeBackend`'s `mipMap` pre-allocation loop already exists (same Task 862/864 fix),
-reconfirmed via a fresh passing rerun of `EasyGL_TextureCube_Mip_RoundTrip`, and Task 737 is
-CLOSED too — real test-coverage gap closed (new `EasyGL_TextureAddressMode_Mirror` test, no
-production bug, discriminating power verified). Task 738 was scoped, not attempted atomically —
-confirmed Phases 34-46 are archived and 47 is done, so its real remaining scope is exactly
-Tasks 421-500 (Phases 48-55). Task 421 (start of Phase 48) is done — `SpriteFont` audit found a
-missing `MeasureString(StringBuilder)` overload, deferred to Task 423, and Task 422 is CLOSED
-too — no bug found, `MeasureString(string)` re-verified against FNA with 3 new edge-case tests
-(discriminating power verified), and Task 423 is CLOSED too — real gap fixed, added the missing
-`MeasureString(StringBuilder)` overload (1-line forward, mirroring `SpriteBatch::DrawString`'s
-convention; 5 new tests; discriminating power verified; spot-checked SDL_Renderer), and Task 424
-is CLOSED too — no bug found, new `EasyGL_SpriteFont_SingleGlyph` test, plus a real methodology
-weakness found and fixed (diagonal-corner checks don't discriminate a single-axis mis-placement,
-replaced with edge-midpoint checks), and Task 425 is CLOSED too — no bug found, new
-`EasyGL_SpriteFont_MultiGlyphSpacing` test, discriminating power verified via sabotage of the
-shared spacing term, and Task 426 is CLOSED too — no bug found, new `EasyGL_SpriteFont_Newline`
-test, discriminating power verified by sabotaging the shared newline-advance to hardcode
-glyph-height instead of `lineSpacing_`, and Task 427 is CLOSED too — no bug found, new
-`EasyGL_SpriteFont_DefaultChar` test, discriminating power verified via sabotage of the shared
-fallback lookup — this closes Tasks 424-427 on EasyGL (mirroring Tasks 690-693 on SDL_Renderer)
-, and Task 428 is CLOSED too — EasyGL counterpart of Task 694's own test, no NEW bug, new
-`EasyGL_SpriteFont_EffectsFlip` test confirms the shared fix renders correctly, discriminating
-power verified via sabotage of the shared axis-index lookup, and Task 429 is CLOSED too —
-EasyGL counterpart of Task 694's own "Test 2", no bug (already correct pre-Task-694), new
-`EasyGL_SpriteFont_EffectsRotationScale` test confirms it renders correctly, discriminating power
-verified via sabotage of the shared scale multiplication — this closes Tasks 424-429 on EasyGL
-(mirroring Tasks 690-694 on SDL_Renderer), and Task 430 is CLOSED too — pure docs,
-`docs/spritefont-support.md`, closing Phase 48 in full, and Task 431 is CLOSED too — audit of
-`Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone`/collections against FNA complete, 2 real
-deviations documented in `CHECKLIST.md` (corrects Task 728's own inaccurate claim), gaps deferred
-to Tasks 432/433, new Task 916 opened, and Task 432 is CLOSED too — real gaps fixed: added
-`TryGetValue`/`Contains`/`begin`/`end` to `ModelBoneCollection`, fixed `ModelBone::Children` to
-return a real `ModelBoneCollection` instead of a plain vector, 15 new tests, discriminating power
-verified via sabotage-and-revert, and Task 433 is CLOSED too — real bugs fixed (`operator[](int)`
-was genuine UB, `operator[](string)` silently returned `nullptr` instead of throwing), same
-`TryGetValue`/`Contains` gap fixed, new test file, int-indexer sabotage segfaulted (accepted as
-discriminating evidence per this project's crash-as-valid-signal precedent), and Task 434 is
-CLOSED too — no bug found, new `ModelMeshPartTests.cpp` (didn't exist before), 22 tests, sabotage
-of the sibling-check logic confirmed discriminating power, and Task 435 is CLOSED too — no bug
-found, new `ModelTests.cpp` with an order-sensitive `KnownHierarchy` fixture, discriminating
-power verified by swapping the multiply order, and Task 436 is CLOSED too — no bug in CNA,
-found and documented a real FNA loop-bound deviation, 3 new tests, discriminating power
-verified, and Task 437 is CLOSED too — no bug found, sibling method, 3 more tests (10 total),
-discriminating power verified — **this closes Tasks 435-437 in full** — and Task 438 is CLOSED
-too — no bug found, new `EasyGL_Model_TwoMeshesEffects` pixel test proves `Model::Draw` applies
-each mesh's own `Effect` (Red-left/Blue-right half-quads, 2 separate `BasicEffect` instances),
-discriminating power verified by sabotaging `meshCount` to hardcode `1`, full EasyGL regression
-4504/4507 passed (exactly the 3 known pre-existing failures, 0 new), and Task 439 is CLOSED too —
-a real gap found and fixed while designing the test: `ModelMesh::parentBone_` was never assigned
-by any public path, making `Model::Draw`'s bone-resolution ternary's true branch dead code; fixed
-via a new 4-arg `Model` constructor overload (`meshParentBones`), 3 new unit tests, discriminating
-power verified; new `EasyGL_Model_HierarchyChildMesh` pixel test confirms no bug once a mesh could
-actually be parented to a non-root bone, discriminating power verified by hardcoding `boneIdx` to
-0, full EasyGL regression 4508/4511 passed (exactly the 3 known pre-existing failures, 0 new), and
-Task 440 is CLOSED too — pure docs, `docs/model-content-pipeline-support.md`, documenting real
-gaps in `ModelTypeReader`'s content-loading path versus FNA's real `ModelReader.cs` (CNA's Model
-format is an original `.model.json` scheme, not FNA's `.xnb`; no bone-hierarchy/`ParentBone`/
-`BoundingSphere`/`Tag` support in the loader; zero test coverage confirmed) — **this closes Phase
-49 in full (Tasks 431-440)**, and Task 441 is CLOSED too — audit complete: FNA's real
-`OcclusionQuery.cs` has zero C#-level Begin/End sequence validation, so Tasks 442-444's "Match FNA
-exception" framing needs reframing when picked up; found 2 real functional gaps mapping onto
-already-planned Tasks 447/448 (Vulkan never records real queries, always reports 0 visible
-pixels; Bgfx's Begin/End are empty no-ops with no `setCondition` wiring at all), not fixed here,
-and Task 442 is CLOSED too — no bug found, extended `examples/occlusion_query_test.cpp` with a new
-check confirming `End()` before any `Begin()` does not throw (matches FNA's own zero-validation
-shape), discriminating power verified by sabotaging `End()` to unconditionally throw (whole test
-aborted, accepted as valid crash-as-signal evidence), full EasyGL regression 4508/4511 passed
-(exactly the 3 known pre-existing failures, 0 new) —
-and Task 443 is CLOSED too — no bug found, same reframing: extended
-`examples/occlusion_query_test.cpp` with a new check confirming double `Begin()` (no
-intervening `End()`) does not throw, matching FNA's own zero-validation shape,
-discriminating power verified by sabotaging `Begin()` to unconditionally throw (whole test
-aborted, same crash-as-signal shape as Task 442), full EasyGL regression 4508/4511 passed
-(exactly the 3 known pre-existing failures, 0 new) —
-and Task 444 is CLOSED too — no bug found, closes the entire 442-444 trio: extended
-`examples/occlusion_query_test.cpp` with a final check confirming a second, unmatched
-`End()` does not throw, matching FNA's own zero-validation shape, discriminating power
-verified by sabotaging `End()` to unconditionally throw (whole test aborted, same
-crash-as-signal shape as Tasks 442/443), full EasyGL regression 4508/4511 passed (exactly
-the 3 known pre-existing failures, 0 new) —
-and Task 445 is CLOSED too — no bug found, the first genuine occlusion-query
-correctness test: new `EasyGL_OcclusionQuery_VisibleQuad` draws a full-NDC Red quad
-wrapped in Begin()/End(), uses GetBackBufferData to force GL sync, confirms the quad
-renders/query completes/PixelCount() > 0, discriminating power verified by sabotaging
-PixelCount() to unconditionally return 0 after the IsComplete() gate (1 of 3 checks failed
-as predicted), full EasyGL regression 4509/4512 passed (exactly the 3 known pre-existing
-failures, 0 new) —
-and Task 446 is CLOSED too — no bug found, mirror counterpart to Task 445, closes the
-entire Tasks 441-446 EasyGL OcclusionQuery correctness section: new
-`EasyGL_OcclusionQuery_OccludedQuad` draws a Blue occluder then a Red target rejected by
-depth test, wrapped in Begin()/End(); confirms genuine occlusion, query completes,
-PixelCount() <= 0; discriminating power verified by sabotaging PixelCount() to
-unconditionally return 1 (1 of 3 checks failed as predicted), full EasyGL regression
-4510/4513 passed (exactly the 3 known pre-existing failures, 0 new). The 2 real functional
-gaps Task 441 found (Vulkan always-0, Bgfx unwired) remain open, scoped to Tasks 447/448 —
-and Task 447 is now BLOCKED too — investigated before writing code and found a genuinely
-risky architecture decision: `VulkanOcclusionQueryBackend::Begin()`/`End()` never inject
-`vkCmdBeginQuery`/`vkCmdEndQuery` since this backend defers ALL 3D/2D draws into real
-Vulkan commands only once per frame (`RecordCommandBuffer`), well after `Begin()`/`End()`
-already returned; correlating them requires resolving 3 genuinely non-obvious design
-questions (deferred-draw tagging, multi-draw query span policy, per-frame query-pool
-reset for reuse), none guessed at — see §5/plan_graphics.md row 447. Moving to Task 448
-(Bgfx) instead, which investigation shows is substantially simpler (bgfx's synchronous
-submission model + its own `submit(..., occlusionQuery, ...)` overload) —
-and Task 448 is CLOSED too — real fix shipped: `activeOcclusionQuery_`/`SubmitViewProgram()`
-genuinely attach `BgfxOcclusionQueryBackend::Begin()`/`End()` to a real bgfx submit call,
-matching bgfx's own documented API and official example. Sabotage-and-revert found
-discriminating power for `IsComplete()`/`PixelCount()` could NOT be established in this
-sandbox (identical behavior even reverted to no-ops — a genuine driver limitation, not a
-CNA bug); the new test honestly asserts only what does discriminate. New Task 917 opened
-(not blocking) for a deeper dedicated-view gap. Full Bgfx regression 4413/4414 passed
-(exactly the 1 known pre-existing failure, 0 new) —
-and Task 449 is CLOSED too — no bug found: extended `examples/occlusion_query_test.cpp`
-with 50 iterations of construct-Begin()-destroy-with-no-End(), confirming no crash,
-`GetTrackedResourceCount()` returns to baseline (reusing Task 719's own mechanism), and a
-fresh query works normally afterward. Full EasyGL regression 4510/4513 passed (exactly the
-3 known pre-existing failures, 0 new) —
-and Task 450 is CLOSED too — pure docs, `docs/occlusionquery-support.md`, closes Phase 50
-in full (Tasks 441-450): FNA API audit + full per-backend support matrix (EasyGL correct,
-Vulkan BLOCKED, Bgfx fixed with caveats, SDL_Renderer correctly throws) —
-and Task 451 is CLOSED too — pure docs, `docs/graphics-backend-feature-matrix.md`, begins
-Phase 51: comprehensive all-4-backend matrix superseding stale `docs/coverage.md`, dedicated
-BLOCKED-task table, known failure baselines, Task 916/917 pointers —
-and Task 452 is CLOSED too — CONFIRMED, not a real gap: already done by Tasks 720-729's own
-"3D throws correctly" sweep; the one exception (Task 725, Texture3D/TextureCube) is already
-BLOCKED, not a silent gap. Zero code changes —
-and Task 453 is CLOSED too — CONFIRMED, not a real gap: every currently-known EasyGL
-unsupported feature is already tracked (ReferenceStencil/872, ClearOptions::Stencil/871,
-Texture3D/TextureCube shader-sampling/863, SurfaceFormat already throws via Task 176); no
-new undocumented gap found. Zero code changes —
-and Task 454 is CLOSED too — no bug found: Vulkan's only 2 optional device features
-(fillModeNonSolid/samplerAnisotropy) are both correctly gated behind real device-support
-queries; already correct, just undocumented, now recorded. Zero code changes —
-and Task 455 is CLOSED too — found and fixed 1 real gap (silent Bgfx GetData readback
-failures now log clearly), confirmed 1 already-adequate design (ShaderEffect), and
-discovered a NEW unrelated pre-existing flaky test (Bgfx_RenderTarget2D_MipChain) while
-closing, documented in §5. Full Bgfx regression 4413/4414 passed (exactly the 1 known
-pre-existing failure, 0 new) —
-continue at
-Task 738, closing the remaining EasyGL-scoped tasks in Phases 34-55 (Tasks 921/922/918/916 are now
-closed within this scope -- fixed `IndexElementSize`'s numeric values, added
-`SpriteBatch::Draw`'s real 7th overload, added real anisotropic filtering to EasyGL
-via a genuine cross-repo `meta-gl` fix, added `Model`'s `rootBoneIndex` parameter, and
-fixed Task 868's own Vulkan blend-state mapping (all 9 pipeline-creation functions),
-see §3 -- this closes Task 738's own low-risk actionable scope entirely AND all 5 of
-Task 500's original confirmed bugs on Vulkan; Bgfx's own narrower gap split out to new
-Task 923, not yet started; Task 861 is done
--- documented Vulkan's real remaining limitations, see
-`docs/graphics-backend-feature-matrix.md`; Phase 73's own Tasks 825-860 remain
-individually unchecked, a separate unresolved backlog-hygiene question outside Task
-738's own scope; Task 500 declared a qualified ~90% Graphics compatibility milestone,
-test-execution-verified, see
-`docs/graphics-compatibility-report.md` -- Phase 55, Tasks 491-500, is now closed in
-full; Phases 56-69 are WebGPU, hard-forbidden per CLAUDE.md, do not open them; note
-Phases 71-73 still show many individually-unchecked rows in their own raw task tables
-despite being described elsewhere as mature -- a real triage question not yet resolved).
-And/or the older,
-not-yet-triaged backlog in the
-498–500 range of `plan_graphics.md`
-(audits, reference-value generation, and other
-per-backend tasks from earlier phases never folded into this §8 list) — worth a dedicated triage
-pass before working through in bulk, since some entries (e.g. Task 750) may already be superseded
-by later, higher-numbered rediscoveries of the
-same bug.
-
-**Standing instructions (still in force):**
-- Commit AND push after every finished task without waiting to be asked.
-- Chain to the next non-decision task automatically once one finishes — don't stop to ask
-  "should I continue?" for ordinary backlog progression.
-- Update both `plan_graphics.md` (verbose, full FNA-comparison detail) and `NEXT.md` (concise,
-  one-line-per-task in §3) after every task.
-- If genuinely blocked on a decision only the project owner can make, stop and ask — don't guess
-  and don't skip silently without noting it in NEXT.md §8/§9.
-
-For the full history of what every task through Task 896 found and fixed, read `plan_graphics.md`
-directly (or `git log`) rather than this file — NEXT.md intentionally keeps only a one-line
-summary per task (§3) to stay a genuinely quick-to-read handoff document. (A much longer version
-of this resume-prompt section existed before 2026-07-07 and had drifted into a 700-line historical
-dump that violated this file's own stated purpose; it was replaced with this concise version —
-if you need that old narrative detail, it's preserved in this file's git history.)
+**Environment, non-negotiable:** never run any GPU/window-creating binary against the real
+`DISPLAY=:0` — confirmed disruptive to the human developer's desktop (window/keyboard-focus
+stealing). Use a virtual display (`Xvfb :99 -screen 0 1280x1024x24 &`, then
+`SDL_VIDEODRIVER=x11 DISPLAY=:99 <binary>` — check `pgrep -a Xvfb` before starting a second one).
+`ctest`'s GPU tests read the `CNA_TEST_DISPLAY` cache variable (default `:0`) — pass
+`-DCNA_TEST_DISPLAY=:99` at configure time if a build dir doesn't already have it set. **Run all 4
+backends' test suites sequentially, never concurrently** — concurrent runs cause transient
+GPU/driver-contention false failures and can corrupt results; check `ps aux | grep ctest` before
+starting any run.
 ```
