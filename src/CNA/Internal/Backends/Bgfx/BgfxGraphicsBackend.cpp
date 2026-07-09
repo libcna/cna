@@ -1416,8 +1416,9 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setTexture(0, textureSampler, textureHandle, samplerFlags_[0]);
         bgfx::setVertexBuffer(0, &vertexBuffer);
         bgfx::setIndexBuffer(&indexBuffer);
-        if (scissorW_ > 0 && scissorH_ > 0)
-            bgfx::setScissor(scissorX_, scissorY_, scissorW_, scissorH_);
+        // Task 768: gated on scissorEnabled_, not just a non-zero rect -- see that member's own
+        // declaration comment for why the two must be tracked independently.
+        ApplyScissorOverride();
         bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_MSAA
                        | blendFlags_ | depthFlags_ | cullFlags_, blendFactorPacked_);
         bgfx::setStencil(stencilFront_, stencilBack_);
@@ -1678,9 +1679,11 @@ namespace CNA::Internal::Backends::Bgfx
         case 2:  cullFlags_ = BGFX_STATE_CULL_CCW; break;
         default: cullFlags_ = 0;                    break;
         }
-        // Scissor test state — disable by zeroing the rect
-        if (!scissorTestEnable)
-            scissorW_ = scissorH_ = 0;
+        // Task 768: scissorEnabled_ is a genuinely independent flag, NOT derived from whether the
+        // rect happens to be non-zero -- SetScissorRect() can be called before or after this, in
+        // either order, and must not silently re-enable a disabled scissor test (see
+        // scissorEnabled_'s own declaration comment).
+        scissorEnabled_ = scissorTestEnable;
         // FillMode: Solid=0, WireFrame=1 (Task 766; see ExpandWireframeIndices).
         wireframe_ = (fillMode == 1);
     }
@@ -1764,6 +1767,16 @@ namespace CNA::Internal::Backends::Bgfx
         // frame-global stored value (mirrors Vulkan's identical RT-pass scoping decision).
         if (viewportSet_ && currentViewId_ == 0 && viewportW_ > 0 && viewportH_ > 0)
             bgfx::setViewRect(currentViewId_, viewportX_, viewportY_, viewportW_, viewportH_);
+    }
+
+    void BgfxGraphicsBackend::ApplyScissorOverride()
+    {
+        // Task 768: bgfx::setScissor is per-draw-call state (bgfx::RenderDraw::m_scissor resets
+        // to "no scissor" for every draw unless set again) -- must be called before every 3D
+        // submit(). Gated on scissorEnabled_ (not just a non-zero rect -- see that member's own
+        // declaration comment for why the two must be tracked independently).
+        if (scissorEnabled_ && scissorW_ > 0 && scissorH_ > 0)
+            bgfx::setScissor(scissorX_, scissorY_, scissorW_, scissorH_);
     }
 
     void BgfxGraphicsBackend::ApplySamplerState(int slot, int filter,
@@ -2001,6 +2014,7 @@ namespace CNA::Internal::Backends::Bgfx
         const bool useWireframe = wireframe_
             && ExpandWireframeIndices(nullptr, primitive, primitiveCount, 0, 0, 0, wireTib);
         if (useWireframe) bgfx::setIndexBuffer(&wireTib);
+        ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
@@ -2045,6 +2059,7 @@ namespace CNA::Internal::Backends::Bgfx
             && ExpandWireframeIndices(&ib, primitive, primitiveCount, 0, 0, 0, wireTib);
         if (useWireframe) bgfx::setIndexBuffer(&wireTib);
         else              bgfx::setIndexBuffer(ib.handle);
+        ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
@@ -2090,6 +2105,7 @@ namespace CNA::Internal::Backends::Bgfx
             && ExpandWireframeIndices(nullptr, primitive, primitiveCount, 0, 0,
                                       params.vertexStart, wireTib);
         if (useWireframe) bgfx::setIndexBuffer(&wireTib);
+        ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
         const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
@@ -2429,6 +2445,7 @@ namespace CNA::Internal::Backends::Bgfx
         if (useWireframe) bgfx::setIndexBuffer(&wireTib);
         else              bgfx::setIndexBuffer(ib.handle);
         bgfx::setInstanceDataBuffer(&idb);
+        ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
         const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included

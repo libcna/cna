@@ -5112,6 +5112,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 768 (Phase 72 Bgfx gap closure): ScissorTestEnable/ScissorRectangle interaction on Bgfx
+    # -- a Bgfx-specific adaptation of the EasyGL source (Task 209; that file reads 2 columns per
+    # frame across 3 draws, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see the
+    # test's own file-header comment). Found and fixed a genuine bug: none of Bgfx's 4 3D
+    # draw-dispatch functions ever called bgfx::setScissor (only the 2D SpriteBatch path did).
+    cna_bgfx_test(cna_test_bgfx_scissor
+                  examples/bgfx_scissor_test.cpp)
+    add_test(NAME Bgfx_Scissor
+             COMMAND cna_test_bgfx_scissor)
+    set_tests_properties(Bgfx_Scissor PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

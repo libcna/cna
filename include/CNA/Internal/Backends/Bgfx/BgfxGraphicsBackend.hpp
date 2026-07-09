@@ -371,8 +371,14 @@ namespace CNA::Internal::Backends::Bgfx
         // Blend color for BGFX_STATE_BLEND_FACTOR
         float blendFactorR_ = 1.f, blendFactorG_ = 1.f, blendFactorB_ = 1.f, blendFactorA_ = 1.f;
         uint32_t blendFactorPacked_ = 0xFFFFFFFFu; // packed RGBA8, passed to bgfx::setState
-        // Scissor rect (0,0,0,0 = disabled)
+        // Scissor rect, plus a genuinely independent enable flag (Task 768 finding: the rect's own
+        // coordinates and RasterizerState.ScissorTestEnable are set via 2 separate GraphicsDevice
+        // calls that can happen in either order -- a zero-sized rect can NOT double as "disabled"
+        // sentinel, since SetScissorRect() is free to set a real, non-zero rect while
+        // ScissorTestEnable is still false, and vice versa. Mirrors EasyGL's own
+        // set_scissor_test_enabled(...)/set_scissor(...) split, which are two independent GL calls.
         uint16_t scissorX_ = 0, scissorY_ = 0, scissorW_ = 0, scissorH_ = 0;
+        bool     scissorEnabled_ = false;
         // Viewport rect (Task 880) -- storage-only; applied via an explicit bgfx::setViewRect
         // override right before each 3D submit (see DrawPrimitivesEx), deliberately NOT folded
         // into EnsureViewState() to avoid entangling the shared 2D SpriteBatch view-rect reset.
@@ -582,6 +588,13 @@ namespace CNA::Internal::Backends::Bgfx
         // via SetViewport() and the current view is the backbuffer (view 0). RT passes are
         // deliberately left at their full-RT-size default -- see viewportX_/Y_/W_/H_'s comment.
         void ApplyViewportOverride();
+
+        // Task 768: applies the current scissor rect (if any) to the pending 3D draw. Previously
+        // only the 2D SpriteBatch path called bgfx::setScissor -- none of the 4 3D draw-dispatch
+        // functions did, so RasterizerState.ScissorTestEnable/GraphicsDevice.ScissorRectangle had
+        // zero effect on any 3D draw. bgfx resets scissor state per submit() call (does not
+        // persist from a prior draw), so this must be called before every 3D bgfx::submit().
+        void ApplyScissorOverride();
 
         // Task 448: submits a 3D draw call's already-configured bgfx state to currentViewId_,
         // routing through bgfx's occlusion-query submit() overload when activeOcclusionQuery_ is
