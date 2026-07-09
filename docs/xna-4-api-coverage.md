@@ -13,7 +13,8 @@ detail this file now points to instead of duplicating; updated 2026-07-09 — Ta
 "Coverage axes" section (Present/Implemented/Tested/FNA-compatible/Intentionally-unsupported as
 independent questions); Task 483 added a dense per-class Graphics coverage table; Task 484 added
 the complementary per-backend Graphics support summary; Task 485 added a consolidated "Known
-deviations from XNA/FNA" list, closing the Tasks 481-485 documentation arc / Phase 54 in full)  
+deviations from XNA/FNA" list, closing the Tasks 481-485 documentation arc — Phase 54 itself
+continues, Tasks 486-490 remain open)  
 **Reference:** FNA source at `/rv/data/library/github.com/FNA-XNA/FNA/src`  
 **CNA headers:** `include/Microsoft/Xna/Framework/`
 
