@@ -1284,6 +1284,20 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 463: canary proving PixelTestGame::CompareGoldenImage() (examples/common/) works.
+        # WORKING_DIRECTORY is set to the repo root so the test's relative
+        # "examples/golden/*.png" path resolves the same way regardless of which
+        # cmake-build-* directory this is run from (CMake's default test working directory is
+        # CMAKE_CURRENT_BINARY_DIR, not the source tree).
+        cna_easygl_test(cna_test_easygl_goldenimage_smoke
+                        examples/easygl_goldenimage_smoke_test.cpp)
+        add_test(NAME EasyGL_GoldenImage_Smoke
+                 COMMAND cna_test_easygl_goldenimage_smoke)
+        set_tests_properties(EasyGL_GoldenImage_Smoke PROPERTIES
+            TIMEOUT 30
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)

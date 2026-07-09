@@ -27,19 +27,31 @@
 //             // Or, for a channel known to legitimately vary a little by backend/driver
 //             // (Task 462 -- e.g. MSAA edge blending): pass a tolerance explicitly.
 //             ExpectPixel("edge", Rectangle(0, 0, 1, 1), Color(128, 128, 128, 255), /*tolerance=*/20);
+//             // Or, to verify a whole small rendered region at once against a checked-in
+//             // reference PNG (Task 463) instead of a handful of hand-picked sample pixels:
+//             CompareGoldenImage("scene", Rectangle(0, 0, 16, 16),
+//                                "examples/golden/my_test.png", /*tolerance=*/20);
 //         }
 //     };
 //
 //     int main() { return CNA::Examples::RunPixelTest<MyTest>(); }
+//
+// To create or intentionally update a golden image, run the test once with
+// CNA_UPDATE_GOLDEN=1 in the environment, review the written PNG, then commit it.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/IO/FileStream.hpp"
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 namespace CNA::Examples
 {
@@ -111,8 +123,100 @@ namespace CNA::Examples
             return pass;
         }
 
-        // The process exit code to return from main(): 0 if every ExpectPixel() call so far
-        // has passed, 1 if at least one has failed.
+        // Compares a region of the live rendered backbuffer against a small, checked-in
+        // reference PNG image at goldenPath (Task 463), per-channel, with the same tolerance
+        // convention as ExpectPixel (0 = exact match). Reuses Texture2D::FromStream/SaveAsPng
+        // (both already existing, independently verified by Task 683's own round-trip test) --
+        // no new image-decoding/encoding code is added here.
+        //
+        // Set the CNA_UPDATE_GOLDEN environment variable to any non-empty value to instead
+        // (re)write goldenPath from the current live render and report [UPDATE] -- the intended
+        // workflow for an intentional rendering change: run once with CNA_UPDATE_GOLDEN=1 to
+        // regenerate the reference, review the new file with `git diff`/an image viewer, then
+        // commit it; every subsequent run without the env var compares against it normally.
+        //
+        // Exact pixel-perfect reproduction across this project's 4 backends/drivers is already
+        // known unreliable (Task 462's own 98-file tolerance survey) -- pass a non-zero
+        // tolerance for any golden image that isn't a single flat, unblended colour.
+        bool CompareGoldenImage(const char* label,
+                                 const Microsoft::Xna::Framework::Rectangle& region,
+                                 const std::string& goldenPath,
+                                 int tolerance = 0)
+        {
+            using Microsoft::Xna::Framework::Color;
+            using Microsoft::Xna::Framework::Graphics::Texture2D;
+
+            auto& device = getGraphicsDeviceProperty();
+            const int w = region.Width;
+            const int h = region.Height;
+            const std::size_t count = static_cast<std::size_t>(w) * static_cast<std::size_t>(h);
+
+            std::vector<Color> live(count, Color(0, 0, 0, 0));
+            device.GetBackBufferData(&region, live.data(), 0, static_cast<int>(count));
+
+            if (std::getenv("CNA_UPDATE_GOLDEN") != nullptr)
+            {
+                std::vector<std::uint8_t> rgba(count * 4);
+                for (std::size_t i = 0; i < count; ++i)
+                {
+                    rgba[i * 4 + 0] = static_cast<std::uint8_t>(live[i].getRProperty());
+                    rgba[i * 4 + 1] = static_cast<std::uint8_t>(live[i].getGProperty());
+                    rgba[i * 4 + 2] = static_cast<std::uint8_t>(live[i].getBProperty());
+                    rgba[i * 4 + 3] = static_cast<std::uint8_t>(live[i].getAProperty());
+                }
+                Texture2D golden = Texture2D::CreateFromPixels(device, w, h, rgba);
+                golden.SaveAsPng(goldenPath);
+                std::printf("[UPDATE] %s: wrote golden image to %s\n", label, goldenPath.c_str());
+                return true;
+            }
+
+            System::IO::FileStream fileStream(goldenPath);
+            Texture2D golden = Texture2D::FromStream(device, fileStream);
+
+            if (golden.getWidthProperty() != w || golden.getHeightProperty() != h)
+            {
+                std::printf("[FAIL] %s: golden image %s is %dx%d, region is %dx%d\n", label,
+                            goldenPath.c_str(), golden.getWidthProperty(),
+                            golden.getHeightProperty(), w, h);
+                result_ = 1;
+                return false;
+            }
+
+            std::vector<Color> expected(count, Color(0, 0, 0, 0));
+            golden.GetData(expected.data(), 0, static_cast<int>(count));
+
+            const auto closeEnough = [tolerance](int a, int b)
+            {
+                return std::abs(a - b) <= tolerance;
+            };
+
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                const Color& got = live[i];
+                const Color& want = expected[i];
+                if (!closeEnough(got.getRProperty(), want.getRProperty()) ||
+                    !closeEnough(got.getGProperty(), want.getGProperty()) ||
+                    !closeEnough(got.getBProperty(), want.getBProperty()))
+                {
+                    std::printf("[FAIL] %s: pixel %zu of %dx%d mismatches golden image %s: "
+                                "got=(%d,%d,%d,%d) want=(%d,%d,%d,%d) +/- %d\n",
+                                label, i, w, h, goldenPath.c_str(),
+                                got.getRProperty(), got.getGProperty(),
+                                got.getBProperty(), got.getAProperty(),
+                                want.getRProperty(), want.getGProperty(),
+                                want.getBProperty(), want.getAProperty(), tolerance);
+                    result_ = 1;
+                    return false;
+                }
+            }
+
+            std::printf("[PASS] %s: %dx%d region matches golden image %s\n", label, w, h,
+                        goldenPath.c_str());
+            return true;
+        }
+
+        // The process exit code to return from main(): 0 if every ExpectPixel()/
+        // CompareGoldenImage() call so far has passed, 1 if at least one has failed.
         [[nodiscard]] int getResultProperty() const { return result_; }
 
     protected:
