@@ -116,3 +116,44 @@ Based on the real numbers in this report:
   (e.g. a qualified "~90%, test-execution-verified" milestone per Task 490's own 90% bar, which
   *is* satisfied — every class rates ✅/⚠️ rather than ❌ on Present/Implemented per §2 above — rather
   than an unqualified "1.0"/"100%" claim the real numbers don't yet support).
+
+## 6. Milestone declaration (Task 500, 2026-07-09)
+
+**`Microsoft::Xna::Framework::Graphics` has reached a qualified ~90% XNA/FNA compatibility
+milestone — test-execution-verified, not estimated.** This is a project-owner decision (made
+directly, not inferred), matching Task 490's own release-checklist "~90%" tier rather than an
+unqualified "1.0"/"100%" claim, which the real numbers in this report do not yet support.
+
+**What "~90%, test-execution-verified" means concretely:**
+
+- Tasks 491–499 (this entire Phase 55) all genuinely pass their own stated criteria. Every test
+  failure encountered across all 4 backends — EasyGL, Vulkan, Bgfx, SDL_Renderer, both
+  integration-only and full-suite runs (§1 above) — is a previously-documented, understood issue.
+  None is an unexplained new regression.
+- Per §2 above, **100% of the 26 major Graphics classes rate ✅ on Present and ✅ on Tested**, and
+  **0 of the 26 rate ❌ on Implemented** (22 fully ✅, 4 rated ⚠️ partial) — this is what "~90%" is
+  measuring: the API surface is complete and exercised, not merely declared.
+- The gap to 100% is exactly **10 named, tracked, non-silent items** — nothing is missing or
+  undocumented:
+  - **5 confirmed bugs, not yet fixed**: Task 921 (`IndexElementSize`'s numeric values don't match
+    FNA — `16`/`32` vs. FNA's real `0`/`1`), Task 868 (Vulkan `BlendState` hardcodes one blend
+    equation regardless of request), Task 918 (EasyGL `TextureFilter::Anisotropic` silently falls
+    back to trilinear), Task 916 (`Model`'s non-default constructor auto-defaults `Root` to
+    `bones[0]`, no way to specify otherwise), Task 922 (`SpriteBatch::Draw`'s 7th overload is
+    `NOXNA`-tagged with a **required** `Rectangle source`, where real FNA's equivalent overload
+    takes an **optional** `Rectangle?`).
+  - **5 BLOCKED tasks**, each needing a project-owner architecture decision before implementation
+    (not just engineering time): Task 447 (Vulkan `OcclusionQuery` — the deferred-draw-recording
+    architecture can't correlate a query's Begin/End span with a specific draw without a design
+    decision), Tasks 686/687 (SDL_Renderer `TextureAddressMode::Wrap`/`Mirror` via `SpriteBatch` —
+    no native support in the draw path used, 3 unpicked design options), Task 725 (SDL_Renderer
+    `Texture3D`/`TextureCube` construction — touches 94 existing shared tests with zero backend
+    guards), Task 732 (EasyGL non-`Color` `SurfaceFormat` GPU forwarding — conflicts with the
+    already-shipped `Texture::ValidateFormat` contract, Task 176).
+- **Reaching 100%** requires closing all 10 of the above — 5 real (but individually small, already
+  root-caused) bug fixes, plus 5 project-owner architecture decisions followed by their
+  implementation. None of the 10 is silent, unknown, or newly discovered by this declaration; all
+  were already tracked before this milestone was written.
+
+This declaration lives here (the report with the real computed numbers backing it) and is
+summarized in `README.md`'s "Project Status" section as the single external-facing entry point.
