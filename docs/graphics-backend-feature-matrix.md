@@ -75,6 +75,27 @@ not rewritten here (out of this task's own scope).
 | `GraphicsDevice.ReferenceStencil` | ❌ **no backend connection, all 3** (Task 872, open) | ❌ | ❌ | N/A |
 | `Clear` honors `ClearOptions::Stencil` | ❌ **ignored, all 3** (Task 871, open) | ❌ | ❌ | ⚠️ emulated |
 
+### Vulkan optional device-feature gating (Task 454)
+
+Investigated whether Vulkan's `VkPhysicalDeviceFeatures`-gated optional capabilities are requested
+safely (a device that doesn't support a requested optional feature makes `vkCreateDevice` fail
+outright, unlike GL/bgfx's more forgiving capability model). Confirmed the device-creation code
+(`VulkanGraphicsBackend`'s constructor) only ever requests the 2 optional features CNA actually
+uses — `fillModeNonSolid` (`FillMode::WireFrame`) and `samplerAnisotropy` (anisotropic texture
+filtering) — and both are correctly gated behind a real `vkGetPhysicalDeviceFeatures` query first
+(`if (supported.fillModeNonSolid) { feat.fillModeNonSolid = VK_TRUE; fillModeNonSolidSupported_ =
+true; }`, same shape for `samplerAnisotropy`). Neither is ever unconditionally requested. Downstream
+usage sites correctly gate on the resulting `fillModeNonSolidSupported_`/`anisotropySupported_`
+flags (e.g. `fillModeWireframe_ = (fillMode == 1) && fillModeNonSolidSupported_` — a device without
+`fillModeNonSolid` silently falls back to solid fill rather than requesting an invalid pipeline
+state), and `maxSamplerAnisotropy_` is read from real `VkPhysicalDeviceLimits` and used to clamp any
+requested anisotropy level. MSAA sample-count selection (`PickSampleCount`) also respects the
+device's real `framebufferColorSampleCounts` limit, picking the best available count ≤ the
+requested one rather than assuming an arbitrary count is always supported. **No gap found** — this
+was already correctly implemented, just not previously documented anywhere; recorded here per Task
+454's own "throw or document fallback behavior" framing (this backend's own answer is "gracefully
+falls back," which is the idiomatic Vulkan pattern for optional features, not a bug needing a fix).
+
 ## OcclusionQuery (Phase 50, closed this session — see `docs/occlusionquery-support.md` for full detail)
 
 | Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer |
