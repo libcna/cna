@@ -342,6 +342,24 @@ namespace Microsoft::Xna::Framework::Graphics
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
+    void SpriteBatch::Draw(const Texture2D& texture,
+                           const Rectangle& destinationRectangle,
+                           std::optional<Rectangle> sourceRectangle,
+                           Color color,
+                           float rotation_rad,
+                           Vector2 origin,
+                           SpriteEffects effect,
+                           float layerDepth)
+    {
+        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!backend_) return;
+        const int w = texture.getWidthProperty();
+        const int h = texture.getHeightProperty();
+        const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
+        pushSprite(texture, destinationRectangle, src,
+                   color, rotation_rad, origin, effect, layerDepth);
+    }
+
     // -----------------------------------------------------------------------
     // DrawString overloads
     // -----------------------------------------------------------------------

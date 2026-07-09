@@ -273,6 +273,27 @@ namespace Microsoft::Xna::Framework::Graphics
         void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle,
                   std::optional<Rectangle> sourceRectangle, Color color);
+        /**
+         * @brief Draws an optional source region of a texture into a destination rectangle with
+         *        rotation, origin, effects, and depth.
+         *
+         * @param texture              Texture to draw.
+         * @param destinationRectangle Draw destination in screen space.
+         * @param sourceRectangle      Optional source rectangle; draws the whole texture if empty.
+         * @param color                Tint color.
+         * @param rotation_rad         Rotation angle in radians.
+         * @param origin               Point within the texture used as the rotation origin.
+         * @param effect               Sprite flipping flags.
+         * @param layerDepth           Depth value for sort ordering (0 = front, 1 = back).
+         */
+        void Draw(const Texture2D& texture,
+                  const Rectangle& destinationRectangle,
+                  std::optional<Rectangle> sourceRectangle,
+                  Color color,
+                  float rotation_rad,
+                  Vector2 origin,
+                  SpriteEffects effect,
+                  float layerDepth);
 
         /**
          * @brief Draws a string of text using the given font.
