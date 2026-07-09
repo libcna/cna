@@ -1364,6 +1364,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 445: Pixel/query test -- fully visible quad returns a positive occlusion-query pixel count.
+        cna_easygl_test(cna_test_easygl_occlusion_query_visible_quad
+                        examples/easygl_occlusion_query_visible_quad_test.cpp)
+        add_test(NAME EasyGL_OcclusionQuery_VisibleQuad
+                 COMMAND cna_test_easygl_occlusion_query_visible_quad)
+        set_tests_properties(EasyGL_OcclusionQuery_VisibleQuad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 122: AlphaTestEffect GPU alpha cutout + pixel readback
         cna_easygl_test(cna_test_alpha_test_integration
                         examples/alpha_test_integration_test.cpp)
