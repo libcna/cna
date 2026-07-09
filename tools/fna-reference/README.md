@@ -40,8 +40,20 @@ dependent FNA API call executes correctly (`MathHelper.Pi`/`PiOver2`/`PiOver4`/`
 `JsonWriter.cs` (a tiny, dependency-free hand-rolled writer — no NuGet-fetched JSON library is
 viable in this sandbox).
 
-Tasks 472-480 (the rest of Phase 53) build real per-class reference-value coverage on top of this
-scaffold — not yet started. Task 474 onward (`BasicEffect` defaults, and anything else
-constructed via `BasicEffect(GraphicsDevice device)`/similar) will need a real, live
-`GraphicsDevice` — FNA's own equivalent of the same windowing/GPU-context problem this project's
-own CNA test suite already solves via Xvfb; not yet investigated for the FNA/mono side.
+Task 472 (`NonRenderingApiReference.cs`) is done: reflection-based dump of 20 Graphics-namespace
+enum types and all 16 built-in `BlendState`/`DepthStencilState`/`RasterizerState`/`SamplerState`
+presets — no `GraphicsDevice` needed. Surfaced one genuine, previously-unremarked finding purely
+from the generic reflection approach: `BlendState` has 4 separate `ColorWriteChannels`/`1`/`2`/`3`
+properties (one per MRT render-target slot).
+
+Task 473 (`PackedVectorReference.cs`) is done: all 17 `PackedVector` types, using the exact same
+input values as Task 197's own hand-derived `tests/PackedVectorGolden.md` (Python re-implementing
+FNA's bit-packing formulas from reading the source, not from running FNA). **Every single value
+across all 17 types matches Task 197's golden table exactly** — a genuine, comprehensive
+cross-validation confirming Task 197's hand-derived formulas were correct, not just an assumption.
+
+Tasks 474-480 (the rest of Phase 53) build further per-class reference-value coverage — not yet
+started. Task 474 onward (`BasicEffect` defaults, and anything else constructed via
+`BasicEffect(GraphicsDevice device)`/similar) will need a real, live `GraphicsDevice` — FNA's own
+equivalent of the same windowing/GPU-context problem this project's own CNA test suite already
+solves via Xvfb; not yet investigated for the FNA/mono side.

@@ -45,11 +45,16 @@ namespace CNA.FnaReference
             // Task 472: non-rendering-API reference values (enum numeric values, state presets).
             JsonWriter nonRenderingApis = NonRenderingApiReference.Generate();
 
+            // Task 473: PackedVector reference values, complementing Task 197's own
+            // hand-derived tests/PackedVectorGolden.md.
+            JsonWriter packedVectors = PackedVectorReference.Generate();
+
             var root = new JsonWriter()
                 .Add("fnaAssemblyVersion", typeof(Vector3).Assembly.GetName().Version.ToString())
                 .Add("MathHelper", mathHelper)
                 .Add("Color", colorConstants)
-                .Add("NonRenderingApis", nonRenderingApis);
+                .Add("NonRenderingApis", nonRenderingApis)
+                .Add("PackedVector", packedVectors);
 
             string json = root.ToString();
             File.WriteAllText(outputPath, json);

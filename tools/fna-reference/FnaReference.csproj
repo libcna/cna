@@ -70,6 +70,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="JsonWriter.cs" />
     <Compile Include="NonRenderingApiReference.cs" />
+    <Compile Include="PackedVectorReference.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>
