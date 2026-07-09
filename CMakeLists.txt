@@ -1298,6 +1298,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 464: first real (non-canary) golden-image case, reusing Phase 42's already-
+        # verified BasicEffect capstone scene (Task 370).
+        cna_easygl_test(cna_test_easygl_basiceffect_golden
+                        examples/easygl_basiceffect_golden_test.cpp)
+        add_test(NAME EasyGL_BasicEffect_Golden
+                 COMMAND cna_test_easygl_basiceffect_golden)
+        set_tests_properties(EasyGL_BasicEffect_Golden PROPERTIES
+            TIMEOUT 30
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)
