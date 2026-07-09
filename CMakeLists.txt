@@ -2347,6 +2347,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 426: Pixel test -- SpriteFont newline advances by line spacing on EasyGL.
+        cna_easygl_test(cna_test_easygl_spritefont_newline
+                        examples/easygl_spritefont_newline_test.cpp)
+        add_test(NAME EasyGL_SpriteFont_Newline
+                 COMMAND cna_test_easygl_spritefont_newline)
+        set_tests_properties(EasyGL_SpriteFont_Newline PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0]
         cna_easygl_test(cna_test_easygl_sampler_state_effect
                         examples/easygl_sampler_state_effect_test.cpp)
