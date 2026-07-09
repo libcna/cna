@@ -36,6 +36,21 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] int getCountProperty() const;
 
+        /**
+         * @brief Finds a mesh with the given name if it exists in the collection.
+         * @param meshName The name of the mesh to find.
+         * @param value Receives the mesh named @p meshName, if found.
+         * @return true if the mesh was found; otherwise false.
+         */
+        bool TryGetValue(const std::string& meshName, ModelMesh*& value) const;
+
+        /**
+         * @brief Determines whether the collection contains the specified mesh.
+         * @param item The mesh to locate.
+         * @return true if the mesh is present in the collection; otherwise false.
+         */
+        [[nodiscard]] bool Contains(ModelMesh* item) const;
+
         using iterator = std::vector<ModelMesh*>::iterator;
         using const_iterator = std::vector<ModelMesh*>::const_iterator;
 
