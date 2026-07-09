@@ -12,11 +12,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     ModelBone* ModelBoneCollection::operator[](const std::string& name) const
     {
-        for (ModelBone* bone : bones_)
-        {
-            if (bone && bone->getNameProperty() == name)
-                return bone;
-        }
+        ModelBone* value = nullptr;
+        if (TryGetValue(name, value))
+            return value;
         throw std::out_of_range("ModelBoneCollection: bone not found: " + name);
     }
 
@@ -24,4 +22,33 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         return static_cast<int>(bones_.size());
     }
+
+    bool ModelBoneCollection::TryGetValue(const std::string& boneName, ModelBone*& value) const
+    {
+        for (ModelBone* bone : bones_)
+        {
+            if (bone && bone->getNameProperty() == boneName)
+            {
+                value = bone;
+                return true;
+            }
+        }
+        value = nullptr;
+        return false;
+    }
+
+    bool ModelBoneCollection::Contains(ModelBone* item) const
+    {
+        for (ModelBone* bone : bones_)
+        {
+            if (bone == item)
+                return true;
+        }
+        return false;
+    }
+
+    ModelBoneCollection::iterator ModelBoneCollection::begin() { return bones_.begin(); }
+    ModelBoneCollection::iterator ModelBoneCollection::end() { return bones_.end(); }
+    ModelBoneCollection::const_iterator ModelBoneCollection::begin() const { return bones_.begin(); }
+    ModelBoneCollection::const_iterator ModelBoneCollection::end() const { return bones_.end(); }
 }

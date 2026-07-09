@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     class ModelBone;
@@ -37,8 +39,36 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] int getCountProperty() const;
 
+        /**
+         * @brief Finds a bone with the given name if it exists in the collection.
+         * @param boneName The name of the bone to find.
+         * @param value Receives the bone named @p boneName, if found.
+         * @return true if the bone was found; otherwise false.
+         */
+        bool TryGetValue(const std::string& boneName, ModelBone*& value) const;
+
+        /**
+         * @brief Determines whether the collection contains the specified bone.
+         * @param item The bone to locate.
+         * @return true if the bone is present in the collection; otherwise false.
+         */
+        [[nodiscard]] bool Contains(ModelBone* item) const;
+
+        using iterator = std::vector<ModelBone*>::iterator;
+        using const_iterator = std::vector<ModelBone*>::const_iterator;
+
+        /** @brief Returns an iterator to the beginning of the collection. */
+        NOXNA iterator begin();
+        /** @brief Returns an iterator past the end of the collection. */
+        NOXNA iterator end();
+        /** @brief Returns a const iterator to the beginning of the collection. */
+        NOXNA const_iterator begin() const;
+        /** @brief Returns a const iterator past the end of the collection. */
+        NOXNA const_iterator end() const;
+
     private:
         std::vector<ModelBone*> bones_;
         friend class Model;
+        friend class ModelBone;
     };
 }

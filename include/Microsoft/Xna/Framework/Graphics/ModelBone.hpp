@@ -2,15 +2,13 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 #include "CNA/CNAHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    class ModelBoneCollection;
-
     /**
      * @brief Represents bone data for a model.
      */
@@ -59,9 +57,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Gets a collection of bones that are children of this bone.
-         * @return A vector of child bone pointers.
+         * @return The collection of child bones.
          */
-        [[nodiscard]] const std::vector<ModelBone*>& getChildrenProperty() const;
+        [[nodiscard]] const ModelBoneCollection& getChildrenProperty() const;
 
         /**
          * @brief Adds a child bone to this bone.
@@ -74,7 +72,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int index_ = 0;
         Matrix transform_ = Matrix::getIdentityProperty();
         ModelBone* parent_ = nullptr;
-        std::vector<ModelBone*> children_;
+        ModelBoneCollection children_;
 
         friend class Model;
     };

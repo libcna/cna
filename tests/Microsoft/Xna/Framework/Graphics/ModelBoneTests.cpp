@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <stdexcept>
+#include <vector>
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 
@@ -30,7 +32,7 @@ TEST(ModelBoneTest, DefaultParentNull)
 TEST(ModelBoneTest, DefaultChildrenEmpty)
 {
     ModelBone bone;
-    EXPECT_TRUE(bone.getChildrenProperty().empty());
+    EXPECT_EQ(bone.getChildrenProperty().getCountProperty(), 0);
 }
 
 TEST(ModelBoneTest, DefaultTransformIdentity)
@@ -84,7 +86,7 @@ TEST(ModelBoneTest, AddChildAppearsInChildren)
     ModelBone parent(0, "Root");
     ModelBone child(1, "Arm");
     parent.AddChild(&child);
-    ASSERT_EQ(parent.getChildrenProperty().size(), 1u);
+    ASSERT_EQ(parent.getChildrenProperty().getCountProperty(), 1);
     EXPECT_EQ(parent.getChildrenProperty()[0], &child);
 }
 
@@ -95,5 +97,73 @@ TEST(ModelBoneTest, MultipleChildren)
     ModelBone right(2, "Right");
     root.AddChild(&left);
     root.AddChild(&right);
-    EXPECT_EQ(root.getChildrenProperty().size(), 2u);
+    EXPECT_EQ(root.getChildrenProperty().getCountProperty(), 2);
+}
+
+// --- Children is a real ModelBoneCollection (by-name lookup, TryGetValue, iteration) ---
+
+TEST(ModelBoneTest, ChildrenIndexableByName)
+{
+    ModelBone root(0, "Root");
+    ModelBone left(1, "Left");
+    ModelBone right(2, "Right");
+    root.AddChild(&left);
+    root.AddChild(&right);
+    EXPECT_EQ(root.getChildrenProperty()["Left"], &left);
+    EXPECT_EQ(root.getChildrenProperty()["Right"], &right);
+}
+
+TEST(ModelBoneTest, ChildrenByNameThrowsWhenNotFound)
+{
+    ModelBone root(0, "Root");
+    ModelBone left(1, "Left");
+    root.AddChild(&left);
+    EXPECT_THROW({ [[maybe_unused]] auto* b = root.getChildrenProperty()["Nope"]; }, std::out_of_range);
+}
+
+TEST(ModelBoneTest, ChildrenTryGetValueFindsExistingChild)
+{
+    ModelBone root(0, "Root");
+    ModelBone left(1, "Left");
+    root.AddChild(&left);
+    ModelBone* found = nullptr;
+    EXPECT_TRUE(root.getChildrenProperty().TryGetValue("Left", found));
+    EXPECT_EQ(found, &left);
+}
+
+TEST(ModelBoneTest, ChildrenTryGetValueFailsForMissingChild)
+{
+    ModelBone root(0, "Root");
+    ModelBone left(1, "Left");
+    root.AddChild(&left);
+    ModelBone* found = nullptr;
+    EXPECT_FALSE(root.getChildrenProperty().TryGetValue("Nope", found));
+    EXPECT_EQ(found, nullptr);
+}
+
+TEST(ModelBoneTest, ChildrenContains)
+{
+    ModelBone root(0, "Root");
+    ModelBone left(1, "Left");
+    ModelBone right(2, "Right");
+    root.AddChild(&left);
+    EXPECT_TRUE(root.getChildrenProperty().Contains(&left));
+    EXPECT_FALSE(root.getChildrenProperty().Contains(&right));
+}
+
+TEST(ModelBoneTest, ChildrenSupportsRangeBasedForLoop)
+{
+    ModelBone root(0, "Root");
+    ModelBone left(1, "Left");
+    ModelBone right(2, "Right");
+    root.AddChild(&left);
+    root.AddChild(&right);
+
+    std::vector<ModelBone*> visited;
+    for (ModelBone* bone : root.getChildrenProperty())
+        visited.push_back(bone);
+
+    ASSERT_EQ(visited.size(), 2u);
+    EXPECT_EQ(visited[0], &left);
+    EXPECT_EQ(visited[1], &right);
 }

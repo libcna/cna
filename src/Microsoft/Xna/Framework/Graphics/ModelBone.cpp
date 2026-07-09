@@ -12,11 +12,11 @@ namespace Microsoft::Xna::Framework::Graphics
     const Matrix&      ModelBone::getTransformProperty()       const { return transform_; }
     void               ModelBone::setTransformProperty(const Matrix& value) { transform_ = value; }
     ModelBone*         ModelBone::getParentProperty()          const { return parent_; }
-    const std::vector<ModelBone*>& ModelBone::getChildrenProperty() const { return children_; }
+    const ModelBoneCollection& ModelBone::getChildrenProperty() const { return children_; }
 
     void ModelBone::AddChild(ModelBone* child)
     {
         child->parent_ = this;
-        children_.push_back(child);
+        children_.bones_.push_back(child);
     }
 }
