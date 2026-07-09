@@ -52,8 +52,29 @@ FNA's bit-packing formulas from reading the source, not from running FNA). **Eve
 across all 17 types matches Task 197's golden table exactly** — a genuine, comprehensive
 cross-validation confirming Task 197's hand-derived formulas were correct, not just an assumption.
 
-Tasks 474-480 (the rest of Phase 53) build further per-class reference-value coverage — not yet
-started. Task 474 onward (`BasicEffect` defaults, and anything else constructed via
-`BasicEffect(GraphicsDevice device)`/similar) will need a real, live `GraphicsDevice` — FNA's own
-equivalent of the same windowing/GPU-context problem this project's own CNA test suite already
-solves via Xvfb; not yet investigated for the FNA/mono side.
+Tasks 474/475/477/478 are DEFERRED: they all fundamentally need a real, live `GraphicsDevice`
+(`BasicEffect(GraphicsDevice device)`'s only constructor, screenshot generation via a real
+render+present+readback cycle), which needs a native `FNA3D` shared library not built in this
+sandbox and with its own multi-layer dependency chain (a separately-uninitialized nested
+`MojoShader` submodule inside `lib/FNA3D`, plus unresolved SDL2/SDL3 linkage) — a substantially
+larger undertaking than every other task in this phase, deferred rather than attempted blind. See
+`plan_graphics.md` Tasks 474/475/477/478 for the full investigation.
+
+Task 476 (`ViewportReference.cs`) is done: `Viewport.Project`/`Unproject`, genuinely tractable
+without a `GraphicsDevice` (a plain value struct, pure `Matrix`/`Vector3` math). Covers 3
+identity-matrix cases (hand-derived and cross-checked before trusting the real output) plus a real
+non-identity camera case; every case round-trips through `Unproject(Project(source))` as a
+self-consistency check.
+
+Task 479 (`tools/cna-reference/` + `scripts/compare-fna-reference.py`) is done: the CNA-side C++
+mirror of Tasks 472/473/476's own categories (enums, state presets, PackedVector, Viewport) plus a
+Python script that diffs the two JSON outputs key-for-key. Running it for real found exactly one
+genuine divergence — see `plan_graphics.md` Task 921 (`IndexElementSize`'s numeric values: FNA
+uses `SixteenBits=0`/`ThirtyTwoBits=1`, CNA uses `16`/`32`) — after several tooling bugs in the new
+comparison harness itself were found and fixed first (`ostringstream`'s default 6-significant-digit
+precision silently truncating large packed-value integers and sub-millimeter float differences; a
+few state-preset properties and 7 `SurfaceFormat` `*EXT` enum members omitted from the first draft
+of the C++ dump). See `tools/cna-reference/README.md` for how to run the comparison.
+
+Task 480 (the rest of this phase) documents how to regenerate this reference data — not yet
+started.

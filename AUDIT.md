@@ -158,7 +158,7 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | IEffectMatrices | ✅ | Complete |
 | IGraphicsDeviceService | ✅ | Complete |
 | IndexBuffer | ✅ | API complete |
-| IndexElementSize (enum) | ✅ | Complete |
+| IndexElementSize (enum) | ⚠️ | Member names match FNA, but the underlying numeric values do not (Task 921 finding, 2026-07-09, from Task 479's real FNA-vs-CNA JSON comparison) — real FNA uses implicit, sequential `SixteenBits=0`/`ThirtyTwoBits=1`; CNA uses `SixteenBits=16`/`ThirtyTwoBits=32` (apparently assuming the enum encodes a literal bit-width). Confirmed via both reading FNA's `IndexElementSize.cs` directly and the real running `FNA.dll`'s own reflection dump. Tracked, not yet fixed (Task 921). |
 | IRenderTarget | ✅ | Complete |
 | IVertexType | ✅ | Complete |
 | Model | ✅ | API complete, but the only non-default constructor auto-defaults `Root` to `bones[0]` with no way to specify a different root bone index (Task 916 finding, 2026-07-09 re-audit) — FNA's real `Model` constructor never sets `Root` at all (`ModelReader` assigns it externally from an explicit `rootBoneIndex`). A hand-built CNA model whose true root isn't the first bone in `bones` currently can't be represented correctly. Tracked, not yet fixed. |

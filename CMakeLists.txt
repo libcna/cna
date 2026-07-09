@@ -576,6 +576,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA)
     endif()
 endif()
 
+# ---- Task 479: CNA-side reference-value dump tool (no window/GraphicsDevice needed) -----------
+# Dumps enums, state presets, PackedVector, and Viewport reference values as JSON, mirroring
+# tools/fna-reference/*.cs exactly so scripts/compare-fna-reference.py can diff the two outputs.
+# Not registered as a ctest: comparing against the FNA-side harness additionally requires mono/
+# xbuild and a locally-built FNA.dll (tools/fna-reference/README.md), which isn't guaranteed on
+# every machine that builds CNA -- this is a manually-invoked developer verification tool.
+if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_reference_dump tools/cna-reference/CnaReferenceDump.cpp)
+    target_link_libraries(cna_reference_dump PRIVATE CNA)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_reference_dump PRIVATE SDL3::SDL3main)
+    endif()
+endif()
+
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHICS_BACKEND STREQUAL "VULKAN"))
     # ---- 3D house demo (EasyGL and Vulkan) -----------------------------------
     add_executable(cna_house3d_demo examples/house3d_demo.cpp)
