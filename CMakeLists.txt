@@ -5087,6 +5087,31 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 765 (Phase 72 Bgfx gap closure): CullMode (None/CullClockwiseFace/
+    # CullCounterClockwiseFace) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task
+    # 323/324/325; that file reads back 2 columns in one frame, incompatible with Bgfx's
+    # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_rasterizerstate_cullmode
+                  examples/bgfx_rasterizerstate_cullmode_test.cpp)
+    add_test(NAME Bgfx_RasterizerState_CullMode
+             COMMAND cna_test_bgfx_rasterizerstate_cullmode)
+    set_tests_properties(Bgfx_RasterizerState_CullMode PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 766 (Phase 72 Bgfx gap closure): FillMode::WireFrame on Bgfx -- adapted from
+    # vulkan_fill_mode_test.cpp (Task 327; no EasyGL/shared source exists for this property, no
+    # dedicated pixel test existed anywhere in this project before this task -- see the test's own
+    # file-header comment). Exercises the new ExpandWireframeIndices triangle-to-line-list
+    # emulation (bgfx has no native polygon-fill-mode toggle).
+    cna_bgfx_test(cna_test_bgfx_rasterizerstate_fillmode_wireframe
+                  examples/bgfx_rasterizerstate_fillmode_wireframe_test.cpp)
+    add_test(NAME Bgfx_RasterizerState_FillMode_WireFrame
+             COMMAND cna_test_bgfx_rasterizerstate_fillmode_wireframe)
+    set_tests_properties(Bgfx_RasterizerState_FillMode_WireFrame PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

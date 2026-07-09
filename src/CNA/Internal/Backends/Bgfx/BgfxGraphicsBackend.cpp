@@ -1666,7 +1666,7 @@ namespace CNA::Internal::Backends::Bgfx
         RebuildStencilState();
     }
 
-    void BgfxGraphicsBackend::ApplyRasterizerState(int cullMode, int /*fillMode*/,
+    void BgfxGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
                                                     bool scissorTestEnable,
                                                     float /*depthBias*/,
                                                     float /*slopeScaleDepthBias*/)
@@ -1681,6 +1681,55 @@ namespace CNA::Internal::Backends::Bgfx
         // Scissor test state — disable by zeroing the rect
         if (!scissorTestEnable)
             scissorW_ = scissorH_ = 0;
+        // FillMode: Solid=0, WireFrame=1 (Task 766; see ExpandWireframeIndices).
+        wireframe_ = (fillMode == 1);
+    }
+
+    bool BgfxGraphicsBackend::ExpandWireframeIndices(const BgfxIndexBufferBackend* ib,
+                                                      PrimitiveType primitive, int primitiveCount,
+                                                      int startIndex, int baseVertex,
+                                                      int firstVertex,
+                                                      bgfx::TransientIndexBuffer& outTib)
+    {
+        // Only triangle geometry needs expanding; line/point primitives are already "wireframe".
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
+            return false;
+        if (primitiveCount <= 0) return false;
+
+        auto readSrc = [&](int pos) -> uint32_t {
+            if (!ib) return static_cast<uint32_t>(firstVertex + pos);
+            const auto& bytes = ib->cpuData;
+            if (ib->IsThirtyTwoBit()) {
+                uint32_t v;
+                std::memcpy(&v, bytes.data() + static_cast<std::size_t>(startIndex + pos) * 4, 4);
+                return v + static_cast<uint32_t>(baseVertex);
+            }
+            uint16_t v;
+            std::memcpy(&v, bytes.data() + static_cast<std::size_t>(startIndex + pos) * 2, 2);
+            return static_cast<uint32_t>(v) + static_cast<uint32_t>(baseVertex);
+        };
+
+        const int edgeCount = primitiveCount * 3; // 3 edges per triangle, 2 indices per edge
+        if (bgfx::getAvailTransientIndexBuffer(static_cast<uint32_t>(edgeCount * 2), true) <
+            static_cast<uint32_t>(edgeCount * 2))
+            return false;
+        bgfx::allocTransientIndexBuffer(&outTib, static_cast<uint32_t>(edgeCount * 2), true);
+        auto* dst = reinterpret_cast<uint32_t*>(outTib.data);
+
+        int w = 0;
+        auto edge = [&](uint32_t a, uint32_t b) { dst[w++] = a; dst[w++] = b; };
+        if (primitive == PrimitiveType::TriangleList) {
+            for (int t = 0; t < primitiveCount; ++t) {
+                const uint32_t a = readSrc(3 * t), b = readSrc(3 * t + 1), c = readSrc(3 * t + 2);
+                edge(a, b); edge(b, c); edge(c, a);
+            }
+        } else { // TriangleStrip: primitiveCount triangles over primitiveCount+2 vertices
+            for (int t = 0; t < primitiveCount; ++t) {
+                const uint32_t a = readSrc(t), b = readSrc(t + 1), c = readSrc(t + 2);
+                edge(a, b); edge(b, c); edge(c, a);
+            }
+        }
+        return true;
     }
 
     void BgfxGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
@@ -1887,14 +1936,20 @@ namespace CNA::Internal::Backends::Bgfx
     void BgfxIndexBufferBackend::SetData16(const void* data, int index_count)
     {
         indexCount = index_count;
-        if (!bgfx::isValid(handle) || !data || index_count <= 0) return;
+        if (!data || index_count <= 0) { cpuData.clear(); return; }
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        cpuData.assign(bytes, bytes + static_cast<std::size_t>(index_count) * 2u);
+        if (!bgfx::isValid(handle)) return;
         bgfx::update(handle, 0, bgfx::copy(data, static_cast<uint32_t>(index_count) * 2u));
     }
 
     void BgfxIndexBufferBackend::SetData32(const void* data, int index_count)
     {
         indexCount = index_count;
-        if (!bgfx::isValid(handle) || !data || index_count <= 0) return;
+        if (!data || index_count <= 0) { cpuData.clear(); return; }
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        cpuData.assign(bytes, bytes + static_cast<std::size_t>(index_count) * 4u);
+        if (!bgfx::isValid(handle)) return;
         bgfx::update(handle, 0, bgfx::copy(data, static_cast<uint32_t>(index_count) * 4u));
     }
 
@@ -1940,6 +1995,12 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(vertexColorEn3DUnif_, vceOn);
 
         bgfx::setVertexBuffer(0, vb.handle);
+        // Task 766: FillMode::WireFrame -- re-expand triangle vertices into a line-list edge
+        // buffer (bgfx has no native polygon-fill-mode toggle, unlike D3D9/Vulkan).
+        bgfx::TransientIndexBuffer wireTib;
+        const bool useWireframe = wireframe_
+            && ExpandWireframeIndices(nullptr, primitive, primitiveCount, 0, 0, 0, wireTib);
+        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
@@ -1948,7 +2009,8 @@ namespace CNA::Internal::Backends::Bgfx
                        // requested; including it again here unconditionally made
                        // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                        | blendFlags_ | depthFlags_ | cullFlags_)
-                       | ToTopologyFlag(primitive), blendFactorPacked_);
+                       | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive)),
+                       blendFactorPacked_);
         SubmitViewProgram(colored3DProgram_);
     }
 
@@ -1977,7 +2039,12 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(vertexColorEn3DUnif_, vceOn);
 
         bgfx::setVertexBuffer(0, vb.handle);
-        bgfx::setIndexBuffer(ib.handle);
+        // Task 766: see DrawColoredPrimitives above.
+        bgfx::TransientIndexBuffer wireTib;
+        const bool useWireframe = wireframe_
+            && ExpandWireframeIndices(&ib, primitive, primitiveCount, 0, 0, 0, wireTib);
+        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
+        else              bgfx::setIndexBuffer(ib.handle);
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
@@ -1986,7 +2053,8 @@ namespace CNA::Internal::Backends::Bgfx
                        // requested; including it again here unconditionally made
                        // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                        | blendFlags_ | depthFlags_ | cullFlags_)
-                       | ToTopologyFlag(primitive), blendFactorPacked_);
+                       | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive)),
+                       blendFactorPacked_);
         SubmitViewProgram(colored3DProgram_);
     }
 
@@ -2016,6 +2084,12 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(fogParamsUnif_, fogParams4);
 
         bgfx::setVertexBuffer(0, vb.handle);
+        // Task 766: see DrawColoredPrimitives above.
+        bgfx::TransientIndexBuffer wireTib;
+        const bool useWireframe = wireframe_
+            && ExpandWireframeIndices(nullptr, primitive, primitiveCount, 0, 0,
+                                      params.vertexStart, wireTib);
+        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
         bgfx::setStencil(stencilFront_, stencilBack_);
         const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
@@ -2024,7 +2098,7 @@ namespace CNA::Internal::Backends::Bgfx
                        // requested; including it again here unconditionally made
                        // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                                 | blendFlags_ | depthFlags_ | cullFlags_)
-                               | ToTopologyFlag(primitive);
+                               | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive));
         bgfx::setState(state, blendFactorPacked_);
 
         const bool alphaTestActive = (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
@@ -2347,7 +2421,13 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(vpInstanced3DUnif_, vp_col);
 
         bgfx::setVertexBuffer(0, vb.handle);
-        bgfx::setIndexBuffer(ib.handle);
+        // Task 766: see DrawColoredPrimitives above.
+        bgfx::TransientIndexBuffer wireTib;
+        const bool useWireframe = wireframe_
+            && ExpandWireframeIndices(&ib, primitive, primitiveCount, params.startIndex,
+                                      params.baseVertex, 0, wireTib);
+        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
+        else              bgfx::setIndexBuffer(ib.handle);
         bgfx::setInstanceDataBuffer(&idb);
         bgfx::setStencil(stencilFront_, stencilBack_);
         const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
@@ -2357,10 +2437,9 @@ namespace CNA::Internal::Backends::Bgfx
                        // requested; including it again here unconditionally made
                        // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                                 | blendFlags_ | depthFlags_ | cullFlags_)
-                               | ToTopologyFlag(primitive);
+                               | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive));
         bgfx::setState(state, blendFactorPacked_);
         SubmitViewProgram(instanced3DProgram_);
-        (void)primitiveCount;
     }
 }
 

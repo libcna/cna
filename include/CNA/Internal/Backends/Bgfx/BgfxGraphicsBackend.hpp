@@ -288,6 +288,10 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::DynamicIndexBufferHandle handle = BGFX_INVALID_HANDLE;
         int indexCount = 0;
         bool is32bit = false;
+        /// Task 766: CPU copy of the raw index bytes, needed to re-expand triangle indices into a
+        /// line-list for FillMode::WireFrame emulation (mirrors EasyGLIndexBufferBackend's own
+        /// GetCpuBytes(), bgfx has no equivalent read-back API for a DynamicIndexBufferHandle).
+        std::vector<uint8_t> cpuData;
 
         explicit BgfxIndexBufferBackend(int capacity, bool thirtyTwoBit = false);
         ~BgfxIndexBufferBackend() override;
@@ -357,6 +361,10 @@ namespace CNA::Internal::Backends::Bgfx
         uint64_t blendFlags_  = BGFX_STATE_BLEND_ALPHA;
         uint64_t depthFlags_  = BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_WRITE_Z;
         uint64_t cullFlags_   = BGFX_STATE_CULL_CCW;
+        // Task 766: FillMode::WireFrame (fillMode==1), set by ApplyRasterizerState. bgfx has no
+        // native polygon-fill-mode toggle (unlike D3D9/Vulkan) -- emulated by re-expanding
+        // triangle indices into a line list at draw time, mirroring EasyGL's DrawWireframe.
+        bool wireframe_ = false;
         // Sampler flags per slot (slots 0–15)
         static constexpr int kMaxSamplerSlots = 16;
         uint32_t samplerFlags_[kMaxSamplerSlots] = {};
@@ -390,6 +398,14 @@ namespace CNA::Internal::Backends::Bgfx
         int  ccwStencilDepthFailCached_ = 0;
         int  referenceStencilCached_    = 0;
         void RebuildStencilState();
+        // Task 766: expands a TriangleList/TriangleStrip draw's indices into a line-list edge
+        // buffer for FillMode::WireFrame emulation. `ib` is null for non-indexed draws (sequential
+        // vertex indices are synthesized starting at `firstVertex`). Returns false (nothing
+        // allocated) for non-triangle primitives or an empty draw -- caller falls through to the
+        // normal solid-fill submission in that case. Mirrors EasyGLGraphicsBackend::DrawWireframe.
+        bool ExpandWireframeIndices(const BgfxIndexBufferBackend* ib, PrimitiveType primitive,
+                                    int primitiveCount, int startIndex, int baseVertex,
+                                    int firstVertex, bgfx::TransientIndexBuffer& outTib);
         // Task 448: the OcclusionQuery currently "active" (between its Begin()/End() calls), set
         // by BgfxOcclusionQueryBackend::Begin()/End(). Since bgfx submits every 3D draw call
         // synchronously (unlike Vulkan's deferred RecordCommandBuffer -- see Task 447's own
