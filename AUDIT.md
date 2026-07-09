@@ -117,7 +117,7 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | BasicEffect | ✅ | API complete |
 | Blend (enum) | ✅ | Complete |
 | BlendFunction (enum) | ✅ | Complete |
-| BlendState | ✅ | API complete |
+| BlendState | ✅ | API complete, but **Vulkan's implementation is almost entirely fake** (Task 868, still open as of 2026-07-09 re-audit): blend equations/factors are hardcoded per-pipeline, largely disconnected from what `BlendState` actually requests — confirmed repeatedly via pixel tests (5 known-failing Vulkan regression tests every run this session, e.g. `Vulkan_BlendState_AlphaBlend`/`Additive`/`SeparateFunctions`/`SeparateFactors`/`BlendFactor`). A large, multi-pipeline-site fix, not yet attempted. EasyGL/Bgfx are correct and pixel-verified (see e.g. Task 467's `BlendState::Additive` golden-image case, EasyGL-only). |
 | BufferUsage (enum) | ✅ | Complete |
 | ClearOptions (enum) | ✅ | Complete |
 | ColorWriteChannels (enum) | ✅ | Complete |
@@ -125,7 +125,7 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | CubeMapFace (enum) | ✅ | Complete |
 | CullMode (enum) | ✅ | Complete |
 | DepthFormat (enum) | ✅ | Complete |
-| DepthStencilState | ✅ | API complete |
+| DepthStencilState | ✅ | API complete. Vulkan's implementation used to be almost entirely fake (hardcoded `depthCompareOp`, stencil parameters dropped entirely) — **fixed, Task 870** (2026-07-09 re-audit confirms this is resolved, not still-open): real per-pipeline depth-compare op, full front/back `VkStencilOpState`, stencil reference/masks as true dynamic state. `GraphicsDevice.ReferenceStencil`'s independent-override behavior still has zero backend connection on all 3 backends that support it (EasyGL/Vulkan/Bgfx) — Task 872, still open. `ClearOptions::Stencil` is also still ignored by `GraphicsDevice::Clear` on all backends — Task 871, still open. |
 | DeviceLostException | ✅ | Complete |
 | DeviceNotResetException | ✅ | Complete |
 | DirectionalLight | ✅ | API complete |
@@ -137,6 +137,7 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | Effect | ✅ | API complete |
 | EffectAnnotation | ✅ | API complete |
 | EffectAnnotationCollection | ✅ | API complete |
+| EffectMaterial | ✅ | API complete — trivial class in both FNA (single `EffectMaterial(Effect cloneSource) : base(cloneSource)` constructor, no other members) and CNA; previously missing from this table entirely, added 2026-07-09 re-audit. |
 | EffectParameter | ✅ | API complete |
 | EffectParameterClass (enum) | ✅ | Complete |
 | EffectParameterCollection | ✅ | API complete |
@@ -160,7 +161,7 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | IndexElementSize (enum) | ✅ | Complete |
 | IRenderTarget | ✅ | Complete |
 | IVertexType | ✅ | Complete |
-| Model | ✅ | API complete |
+| Model | ✅ | API complete, but the only non-default constructor auto-defaults `Root` to `bones[0]` with no way to specify a different root bone index (Task 916 finding, 2026-07-09 re-audit) — FNA's real `Model` constructor never sets `Root` at all (`ModelReader` assigns it externally from an explicit `rootBoneIndex`). A hand-built CNA model whose true root isn't the first bone in `bones` currently can't be represented correctly. Tracked, not yet fixed. |
 | ModelBone | ✅ | API complete |
 | ModelBoneCollection | ✅ | API complete |
 | ModelEffectCollection | ✅ | API complete |
@@ -169,22 +170,23 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | ModelMeshPart | ✅ | API complete |
 | ModelMeshPartCollection | ✅ | API complete |
 | NoSuitableGraphicsDeviceException | ✅ | Complete |
-| OcclusionQuery | ✅ | API complete |
+| OcclusionQuery | ✅ | API complete; full 4-backend correctness audit done (Tasks 441-450, `docs/occlusionquery-support.md`). EasyGL: fully correct, pixel-verified both directions. **Vulkan: BLOCKED, functionally inert** — `Begin`/`End` never inject `vkCmdBeginQuery`/`vkCmdEndQuery` because the deferred command-recording architecture has no way to associate a query with the draw calls issued inside its span; a real fix needs a genuinely new design (3 open questions, Task 447), not guessed at. Bgfx: real fix shipped (Task 448) matching bgfx's own documented API, but this sandbox's software GL driver couldn't discriminate whether it changes observable behavior at all; a further gap (query attached to the same view as other geometry rather than a dedicated view, unlike bgfx's own reference example) is tracked as Task 917. SDL_Renderer correctly throws (2D-only, no occlusion queries in FNA's own 2D path either). |
 | PresentationParameters | ✅ | API complete |
 | PresentInterval (enum) | ✅ | Complete |
 | PrimitiveType (enum) | ✅ | Complete |
-| RasterizerState | ✅ | API complete |
+| RasterizerState | ✅ | API complete (2026-07-09 re-audit: `CullMode` cross-backend correctness confirmed via a new golden-image case, Task 468). `FillMode::WireFrame` genuinely supported on Vulkan, correctly gated behind a real `vkGetPhysicalDeviceFeatures.fillModeNonSolid` query (Task 454). One known, unresolved `DepthBias` sub-case failure on Vulkan (`DepthBias=-1e6`; other sub-cases pass) — a narrow, already-isolated pre-existing failure, not investigated further this session. |
 | RenderTarget2D | ✅ | API complete |
 | RenderTargetBinding | ✅ | API complete |
 | RenderTargetCube | ✅ | API complete |
 | RenderTargetUsage (enum) | ✅ | Complete |
 | ResourceCreatedEventArgs | ✅ | API complete |
 | ResourceDestroyedEventArgs | ✅ | API complete |
-| SamplerState | ✅ | API complete |
+| SamplerState | ✅ | API complete, but `MaxAnisotropy`/`TextureFilter::Anisotropic` has real, inconsistent cross-backend support (2026-07-09 re-audit): Vulkan has genuine `samplerAnisotropy`-device-feature-gated support (Task 454); Bgfx applies real `BGFX_SAMPLER_ANISOTROPIC` flags; **EasyGL has zero real implementation at all** — `TextureFilter::Anisotropic` silently falls back to plain trilinear filtering, with no `GL_EXT_texture_filter_anisotropic` call anywhere in the backend (Task 918 finding, still open, low-risk/well-scoped fix not yet done). SDL_Renderer has no anisotropic filtering at all (2D-only, by design). |
 | SamplerStateCollection | ✅ | API complete |
 | SetDataOptions (enum) | ✅ | Complete |
+| ShaderEffect | ✅ | NOXNA — not part of the XNA 4.0 API. GLSL-source-based custom effect, previously missing from this table entirely, added 2026-07-09 re-audit. Cross-backend support is narrower than the class's own doc comment ("GLSL-source-based … loaded from vertex and fragment shader strings") implies: `ShaderEffect`'s constructor forwards its `vertSrc`/`fragSrc` strings unmodified to whichever backend is active, with no GLSL→SPIR-V conversion in `ShaderEffect.cpp` itself. **EasyGL**: genuine live GLSL compilation via the real GL driver. **Vulkan**: `VulkanEffectBackend::CompileProgram`'s own parameters are named `vertSpv`/`fragSpv` and it validates `size() % 4 == 0` before calling `vkCreateShaderModule` — it expects pre-compiled raw SPIR-V bytecode, not GLSL text, despite sharing the same constructor signature; passing real GLSL source through on a Vulkan-backed device would fail immediately. **Bgfx**: already documented (Task 455) as requiring pre-compiled binary shaders too (`CompileProgram` always returns `false`); this is a non-silent, queryable-status design (`IsValid()`/`GetCompileError()`/`IsEffectValid()`), not a bug. **SDL_Renderer**: no `IEffectBackend` implementation at all (2D-only, no programmable shader stage). Net effect: only EasyGL currently supports the class's own documented "load from GLSL source" contract as written. |
 | SkinnedEffect | ✅ | API surface present (stub behavior) |
-| SpriteBatch | ✅ | Missing Draw overloads added as stubs; `SamplerState`/`TextureAddressMode` now actually applied on EasyGL (Task 269) — see "NPOT textures and SpriteBatch edge sampling" below. Still a no-op on Vulkan/Bgfx. |
+| SpriteBatch | ✅ | Missing Draw overloads added as stubs. `SamplerState`/`TextureAddressMode` real cross-backend status (2026-07-09 re-audit, corrects a stale claim below): **EasyGL** — fully applied (Task 269). **Vulkan** — `Filter`+`AddressU`/`AddressV` now genuinely applied (Task 665, fixed a real bug where `Begin()`'s SamplerState had no effect at all); see "NPOT textures and SpriteBatch edge sampling" below for the original EasyGL finding. **Bgfx** — also genuinely applies both (`BgfxSpriteBatchBackend::SetSamplerFilter`/`SetSamplerAddressMode`, verified wired through to `ApplySamplerState` before each flush) — not a no-op. **SDL_Renderer** — `Filter` (Point/Linear) is honored, but `TextureAddressMode::Wrap`/`Mirror` are not (`SDL_RenderTexture`'s fixed edge behavior; a real fix needs an `SDL_RenderGeometry`-based rewrite) — **BLOCKED, Tasks 686/687**, awaiting a project-owner decision on scope (3 options, `docs/sdl-renderer-2d-completeness.md` §11). |
 | SpriteEffect | ✅ | API surface present |
 | SpriteEffects (enum) | ✅ | Complete |
 | SpriteFont | ✅ | API complete |
@@ -193,10 +195,10 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | SurfaceFormat (enum) | ✅ | Complete |
 | Texture | ✅ | API complete |
 | Texture2D | 🔄 | Detailed re-audit (Task 261, Phase 32); 2 memory-safety bugs fixed (Task 266); missing `FromStream(w,h,zoom)` overload added + format support verified (Task 262); `SaveAsPng`/`SaveAsJpeg` round-trip verified + JPEG quality fixed (Tasks 263–264); missing `NOXNA` tags fixed. Still open: missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`/`DDSFromStreamEXT`, and Color-only format support — see below |
-| Texture3D | ✅ | Detailed audit (Task 271, Phase 33): fixed `LevelCount` hardcoded to 1 (ignored `mipMap`), fixed missing null/count/startIndex/box-bounds guards on `SetData`/`GetData` (crash + OOB read/write risks), fixed missing `Dispose(bool)` override (GPU resource leak on explicit Dispose). See below. |
+| Texture3D | ✅ | Detailed audit (Task 271, Phase 33): fixed `LevelCount` hardcoded to 1 (ignored `mipMap`), fixed missing null/count/startIndex/box-bounds guards on `SetData`/`GetData` (crash + OOB read/write risks), fixed missing `Dispose(bool)` override (GPU resource leak on explicit Dispose). See below. **SDL_Renderer note (2026-07-09 re-audit)**: construction currently succeeds silently with a permanently-null backend on this one backend (`SdlGraphicsBackend` never overrides `CreateTexture3D`), and `SetData`/`GetData` silently no-op rather than throw — **BLOCKED, Task 725**, awaiting a project-owner decision (94 existing shared cross-backend tests construct this type directly with no backend-specific guard today, giving any fix here a real, non-trivial blast radius; 3 options considered, none guessed at, see `docs/sdl-renderer-2d-completeness.md` §11). EasyGL/Vulkan/Bgfx are unaffected. |
 | TextureAddressMode (enum) | ✅ | Complete |
 | TextureCollection | ✅ | API complete |
-| TextureCube | ✅ | Detailed audit (Task 272, Phase 33): fixed the same 3 bug classes as `Texture3D` (hardcoded `LevelCount`, missing `SetData`/`GetData` guards, missing `Dispose(bool)`), plus 2 `TextureCube`-specific findings: a missing `SetData`/`GetData(face,data,startIndex,elementCount)` overload (added), and a `rect==nullptr`-at-`level>0` bug that ignored mip-level dimensions entirely (fixed). `DDSFromStreamEXT` is now a real implementation (Task 663) — DDS header parsing (mirrors FNA's `Texture.ParseDDS`), per-face/per-level DXT1/3/5 decode via `DxtUtil`, uploaded as `SurfaceFormat::Color` (CNA doesn't implement compressed GPU formats end-to-end on any backend, matching `Texture2D::FromStream`'s own established precedent). See below. |
+| TextureCube | ✅ | Detailed audit (Task 272, Phase 33): fixed the same 3 bug classes as `Texture3D` (hardcoded `LevelCount`, missing `SetData`/`GetData` guards, missing `Dispose(bool)`), plus 2 `TextureCube`-specific findings: a missing `SetData`/`GetData(face,data,startIndex,elementCount)` overload (added), and a `rect==nullptr`-at-`level>0` bug that ignored mip-level dimensions entirely (fixed). `DDSFromStreamEXT` is now a real implementation (Task 663) — DDS header parsing (mirrors FNA's `Texture.ParseDDS`), per-face/per-level DXT1/3/5 decode via `DxtUtil`, uploaded as `SurfaceFormat::Color` (CNA doesn't implement compressed GPU formats end-to-end on any backend, matching `Texture2D::FromStream`'s own established precedent). See below. **SDL_Renderer note (2026-07-09 re-audit)**: same silent-null-backend construction gap as `Texture3D` above, same **BLOCKED, Task 725** decision (94 existing tests span both types; a single decision covers both). **Bgfx note**: `GetData`'s real GPU readback path (Task 914) can silently fail with zero diagnostic on hardware lacking `BGFX_CAPS_TEXTURE_BLIT`/`READ_BACK` — now logs clearly instead (Task 455). |
 | TextureFilter (enum) | ✅ | Complete |
 | VertexBuffer | ✅ | API complete |
 | VertexBufferBinding | ✅ | API complete |
