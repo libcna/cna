@@ -373,6 +373,23 @@ namespace CNA::Internal::Backends::Bgfx
         // Stencil state (per-draw-call via bgfx::setStencil)
         uint32_t stencilFront_ = BGFX_STENCIL_NONE;
         uint32_t stencilBack_  = BGFX_STENCIL_NONE;
+        // Task 764: cached stencil parameters from the last ApplyDepthStencilState call (every
+        // field except the reference value itself), so SetReferenceStencil can rebuild
+        // stencilFront_/stencilBack_ standalone -- see RebuildStencilState().
+        bool stencilEnableCached_       = false;
+        int  stencilFuncCached_         = 0;
+        int  stencilPassCached_         = 0;
+        int  stencilFailCached_         = 0;
+        int  stencilDepthFailCached_    = 0;
+        int  stencilMaskCached_         = 0x7FFFFFFF;
+        int  stencilWriteMaskCached_    = 0x7FFFFFFF;
+        bool twoSidedStencilModeCached_ = false;
+        int  ccwStencilFuncCached_      = 0;
+        int  ccwStencilPassCached_      = 0;
+        int  ccwStencilFailCached_      = 0;
+        int  ccwStencilDepthFailCached_ = 0;
+        int  referenceStencilCached_    = 0;
+        void RebuildStencilState();
         // Task 448: the OcclusionQuery currently "active" (between its Begin()/End() calls), set
         // by BgfxOcclusionQueryBackend::Begin()/End(). Since bgfx submits every 3D draw call
         // synchronously (unlike Vulkan's deferred RecordCommandBuffer -- see Task 447's own
@@ -496,6 +513,11 @@ namespace CNA::Internal::Backends::Bgfx
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
+        // Task 764: GraphicsDevice.ReferenceStencil is a real, independent device property that
+        // must take effect standalone, without a full DepthStencilState re-application (mirrors
+        // Vulkan's SetReferenceStencil, Task 870/319). Rebuilds stencilFront_/stencilBack_ from
+        // the cached stencil parameters below plus the new reference value.
+        void SetReferenceStencil(int value) override;
 
         // 3D pipeline — vertex/index buffers implemented; draw calls need colored3DProgram_.
         // @note SetDepth* / SetBlend still throw (not wired to state flags yet).

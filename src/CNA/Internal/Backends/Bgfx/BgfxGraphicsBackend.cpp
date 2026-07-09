@@ -1596,9 +1596,31 @@ namespace CNA::Internal::Backends::Bgfx
             }
         }
 
-        if (stencilEnable)
+        // Task 764: cache every stencil parameter except the reference value itself, so a later
+        // standalone SetReferenceStencil() call can rebuild stencilFront_/stencilBack_ without
+        // requiring a full ApplyDepthStencilState re-application (mirrors Vulkan's
+        // referenceStencil_ member, Task 870/319).
+        stencilEnableCached_       = stencilEnable;
+        stencilFuncCached_         = stencilFunc;
+        stencilPassCached_         = stencilPass;
+        stencilFailCached_         = stencilFail;
+        stencilDepthFailCached_    = stencilDepthFail;
+        stencilMaskCached_         = stencilMask;
+        stencilWriteMaskCached_    = stencilWriteMask;
+        twoSidedStencilModeCached_ = twoSidedStencilMode;
+        ccwStencilFuncCached_      = ccwStencilFunc;
+        ccwStencilPassCached_      = ccwStencilPass;
+        ccwStencilFailCached_      = ccwStencilFail;
+        ccwStencilDepthFailCached_ = ccwStencilDepthFail;
+        referenceStencilCached_    = referenceStencil;
+        RebuildStencilState();
+    }
+
+    void BgfxGraphicsBackend::RebuildStencilState()
+    {
+        if (stencilEnableCached_)
         {
-            if (twoSidedStencilMode)
+            if (twoSidedStencilModeCached_)
             {
                 // Task 763 empirical finding, mirrors Task 870's identical Vulkan fix: this
                 // backend never sets BGFX_STATE_FRONT_CCW in ApplyRasterizerState, so bgfx's own
@@ -1613,18 +1635,21 @@ namespace CNA::Internal::Backends::Bgfx
                 // Fail must apply and did not until front/back were swapped here). Swapped
                 // pragmatically so XNA's "front"/"CounterClockwise" stencil settings land on
                 // whichever bgfx slot the GPU actually evaluates for each raw winding.
-                stencilFront_ = BuildBgfxStencil(ccwStencilFunc, ccwStencilPass, ccwStencilFail,
-                                                 ccwStencilDepthFail, stencilMask, stencilWriteMask,
-                                                 referenceStencil);
-                stencilBack_ = BuildBgfxStencil(stencilFunc, stencilPass, stencilFail,
-                                                stencilDepthFail, stencilMask, stencilWriteMask,
-                                                referenceStencil);
+                stencilFront_ = BuildBgfxStencil(ccwStencilFuncCached_, ccwStencilPassCached_,
+                                                 ccwStencilFailCached_, ccwStencilDepthFailCached_,
+                                                 stencilMaskCached_, stencilWriteMaskCached_,
+                                                 referenceStencilCached_);
+                stencilBack_ = BuildBgfxStencil(stencilFuncCached_, stencilPassCached_,
+                                                stencilFailCached_, stencilDepthFailCached_,
+                                                stencilMaskCached_, stencilWriteMaskCached_,
+                                                referenceStencilCached_);
             }
             else
             {
-                stencilFront_ = BuildBgfxStencil(stencilFunc, stencilPass, stencilFail,
-                                                 stencilDepthFail, stencilMask, stencilWriteMask,
-                                                 referenceStencil);
+                stencilFront_ = BuildBgfxStencil(stencilFuncCached_, stencilPassCached_,
+                                                 stencilFailCached_, stencilDepthFailCached_,
+                                                 stencilMaskCached_, stencilWriteMaskCached_,
+                                                 referenceStencilCached_);
                 stencilBack_ = stencilFront_;
             }
         }
@@ -1633,6 +1658,12 @@ namespace CNA::Internal::Backends::Bgfx
             stencilFront_ = BGFX_STENCIL_NONE;
             stencilBack_  = BGFX_STENCIL_NONE;
         }
+    }
+
+    void BgfxGraphicsBackend::SetReferenceStencil(int value)
+    {
+        referenceStencilCached_ = value;
+        RebuildStencilState();
     }
 
     void BgfxGraphicsBackend::ApplyRasterizerState(int cullMode, int /*fillMode*/,

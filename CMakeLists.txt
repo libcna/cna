@@ -5075,6 +5075,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 764 (Phase 72 Bgfx gap closure): GraphicsDevice.ReferenceStencil standalone override
+    # reaching Bgfx draw calls -- a Bgfx-specific adaptation of the EasyGL source (Task 319; that
+    # file reads back 2 regions in one frame, incompatible with Bgfx's GetBackBufferData quirk,
+    # Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_graphicsdevice_reference_stencil
+                  examples/bgfx_graphicsdevice_reference_stencil_test.cpp)
+    add_test(NAME Bgfx_GraphicsDevice_ReferenceStencil
+             COMMAND cna_test_bgfx_graphicsdevice_reference_stencil)
+    set_tests_properties(Bgfx_GraphicsDevice_ReferenceStencil PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
