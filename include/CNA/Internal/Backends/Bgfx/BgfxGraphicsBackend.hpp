@@ -332,6 +332,13 @@ namespace CNA::Internal::Backends::Bgfx
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
 
+        // Task 808: SpriteBatch::Begin()'s transformMatrix parameter previously had no effect at
+        // all on this backend (same "silent no-op via ISpriteBatchBackend's default empty body"
+        // shape as Task 750's SamplerState fix). Stored on the owning BgfxGraphicsBackend (not
+        // here) since the combined transform is applied in EnsureViewState(), which every 2D/3D
+        // draw path calls.
+        void SetTransformMatrix(const Matrix& m) override;
+
     private:
         int pendingFilter_   = 0; // TextureFilter::Linear
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
@@ -354,6 +361,13 @@ namespace CNA::Internal::Backends::Bgfx
         uint16_t currentRtWidth_ = 0;
         uint16_t currentRtHeight_ = 0;
         uint32_t clearRgba = 0x000000ff;
+        // Task 808: SpriteBatch::Begin()'s transformMatrix, set by BgfxSpriteBatchBackend::
+        // SetTransformMatrix(). Combined with the sprite view's own ortho projection in
+        // EnsureViewState() (`orthoWithTransform = ortho * spriteTransform_`, bx::mtxMul order --
+        // matches EasyGL's `transform_ * orthoM` combined-matrix semantics, just computed in raw
+        // column-major float space since bgfx's setViewTransform takes raw arrays, not a Matrix).
+        // Defaults to identity, matching every SpriteBatch::Begin() overload's own null default.
+        Matrix spriteTransform_ = Matrix::getIdentityProperty();
         bool initialized = false;
         uint32_t resetFlags_ = BGFX_RESET_VSYNC;
 

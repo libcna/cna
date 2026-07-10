@@ -960,6 +960,11 @@ namespace CNA::Internal::Backends::Bgfx
         pendingAddressV_ = addressV;
     }
 
+    void BgfxSpriteBatchBackend::SetTransformMatrix(const Matrix& m)
+    {
+        graphicsBackend.spriteTransform_ = m;
+    }
+
     void BgfxCnaCallback::fatal(const char* /*_file*/, uint16_t /*_line*/,
                                 bgfx::Fatal::Enum /*_code*/, const char* _str)
     {
@@ -1274,7 +1279,20 @@ namespace CNA::Internal::Backends::Bgfx
         bx::mtxOrtho(ortho, 0.0f, static_cast<float>(viewWidth), static_cast<float>(viewHeight), 0.0f, 0.0f,
                      1000.0f, 0.0f,
                      bgfx::getCaps()->homogeneousDepth);
-        bgfx::setViewTransform(spriteViewId, nullptr, ortho);
+        // Task 808: fold in SpriteBatch::Begin()'s transformMatrix (identity when not explicitly
+        // set, so this is a no-op for ordinary 3D draws sharing this same view -- 3D draws supply
+        // their own world-view-projection via a per-draw uniform and never read bgfx's built-in
+        // view/proj, so this view-level transform only ever affects the embedded sprite shader's
+        // u_viewProj). bx's own vector convention is ROW-vector (bx::vec4MulMtx documents
+        // "row vector _vec by matrix _mat", i.e. v' = v * M) -- matches EasyGL's own
+        // `transform_ * orthoM` combined-matrix semantics exactly (apply the caller's transform
+        // first, then project): bx::mtxMul(result, a, b) computes result = a * b, so the combined
+        // matrix for v' = v * transform * ortho is orthoWithTransform = transformColMajor * ortho.
+        float transformColMajor[16];
+        spriteTransform_.ToColumnMajor(transformColMajor);
+        float orthoWithTransform[16];
+        bx::mtxMul(orthoWithTransform, transformColMajor, ortho);
+        bgfx::setViewTransform(spriteViewId, nullptr, orthoWithTransform);
         bgfx::setViewClear(spriteViewId, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, clearRgba, 1.0f, 0);
     }
 
