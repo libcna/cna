@@ -5272,6 +5272,31 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 812 (Phase 72 Bgfx gap closure): Model with two meshes, each using its own distinct
+    # Effect, on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 438; that file uses
+    # SetDepthTestEnabled(false), which throws on Bgfx, and reads back 2 regions from one rendered
+    # frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see the test's own
+    # file-header comment).
+    cna_bgfx_test(cna_test_bgfx_model_two_meshes_effects
+                  examples/bgfx_model_two_meshes_effects_test.cpp)
+    add_test(NAME Bgfx_Model_TwoMeshesEffects
+             COMMAND cna_test_bgfx_model_two_meshes_effects)
+    set_tests_properties(Bgfx_Model_TwoMeshesEffects PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 813 (Phase 72 Bgfx gap closure): Model hierarchy transform propagation (child mesh's
+    # own ParentBone) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 439; same
+    # SetDepthTestEnabled/GetBackBufferData substitutions as Task 812 above). Closes the entire
+    # Phase 72 Model row group (812-813).
+    cna_bgfx_test(cna_test_bgfx_model_hierarchy_child_mesh
+                  examples/bgfx_model_hierarchy_child_mesh_test.cpp)
+    add_test(NAME Bgfx_Model_HierarchyChildMesh
+             COMMAND cna_test_bgfx_model_hierarchy_child_mesh)
+    set_tests_properties(Bgfx_Model_HierarchyChildMesh PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
