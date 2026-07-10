@@ -511,8 +511,16 @@ namespace Microsoft::Xna::Framework::Content
 
                             if (stride <= 0) continue;
                             const int numVertices = static_cast<int>(vertBytes.size()) / stride;
-                            const int numIndices  = static_cast<int>(idxBytes.size())
-                                                    / static_cast<int>(sizeof(std::uint16_t));
+                            // Task 931: real XNA's stock ModelProcessor auto-selects 32-bit
+                            // indices (IndexElementSize.ThirtyTwoBits) once a mesh exceeds 65535
+                            // vertices -- mirror that selection here rather than hardcoding
+                            // 16-bit, which silently mis-decoded the index buffer (wrong element
+                            // count, wrong byte offsets) for any larger mesh.
+                            const bool use32BitIndices = numVertices > 65535;
+                            const int  indexSize  = use32BitIndices
+                                                        ? static_cast<int>(sizeof(std::uint32_t))
+                                                        : static_cast<int>(sizeof(std::uint16_t));
+                            const int numIndices  = static_cast<int>(idxBytes.size()) / indexSize;
                             const int primCount   = numIndices / 3;
 
                             // Task 927: `stride` is always one of XNA's own "clean" (tightly
@@ -587,9 +595,18 @@ namespace Microsoft::Xna::Framework::Content
                                 vb->SetData(verts.data(), numVertices);
                             }
 
-                            auto ib = std::make_unique<Graphics::IndexBuffer>(device, numIndices);
-                            ib->SetData(reinterpret_cast<const std::uint16_t*>(
-                                idxBytes.data()), numIndices);
+                            auto ib = std::make_unique<Graphics::IndexBuffer>(
+                                device,
+                                use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
+                                                : Graphics::IndexElementSize::SixteenBits,
+                                numIndices, Graphics::BufferUsage::None);
+                            if (use32BitIndices) {
+                                ib->SetData(reinterpret_cast<const std::uint32_t*>(
+                                    idxBytes.data()), numIndices);
+                            } else {
+                                ib->SetData(reinterpret_cast<const std::uint16_t*>(
+                                    idxBytes.data()), numIndices);
+                            }
 
                             auto part = std::make_unique<Graphics::ModelMeshPart>(
                                 vb.get(), ib.get(), numVertices, primCount, 0, 0);

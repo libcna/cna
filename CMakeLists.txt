@@ -1769,6 +1769,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 931: ModelTypeReader::Read() auto-selecting 32-bit indices once a mesh exceeds
+        # 65535 vertices, mirroring real XNA's stock ModelProcessor.
+        cna_easygl_test(cna_test_easygl_model_json_reader_32bit_indices
+                        examples/easygl_model_json_reader_32bit_indices_test.cpp)
+        add_test(NAME EasyGL_ModelJsonReader_32BitIndices
+                 COMMAND cna_test_easygl_model_json_reader_32bit_indices)
+        set_tests_properties(EasyGL_ModelJsonReader_32BitIndices PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 438: Pixel test -- Model with two meshes, each using its own distinct Effect.
         cna_easygl_test(cna_test_easygl_model_two_meshes_effects
                         examples/easygl_model_two_meshes_effects_test.cpp)
@@ -3931,6 +3941,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_ModelJsonReader_Quad
                  COMMAND cna_test_vulkan_model_json_reader)
         set_tests_properties(Vulkan_ModelJsonReader_Quad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 931: ModelTypeReader::Read()'s 32-bit index auto-selection fix is in SHARED code
+        # (ContentManager.cpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_model_json_reader_32bit_indices
+                        examples/easygl_model_json_reader_32bit_indices_test.cpp)
+        add_test(NAME Vulkan_ModelJsonReader_32BitIndices
+                 COMMAND cna_test_vulkan_model_json_reader_32bit_indices)
+        set_tests_properties(Vulkan_ModelJsonReader_32BitIndices PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
