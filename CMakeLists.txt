@@ -3769,6 +3769,173 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
+        # Task 842 (Phase 73 Vulkan gap closure): verify MRT with mixed formats is rejected or
+        # handled per XNA constraints on Vulkan -- verbatim reuse of the backend-agnostic test
+        # (Task 774's own file, no Bgfx-specific code at all: pure GraphicsDevice/RenderTarget2D
+        # API calls, no rendering). Confirms Task 774's shared-code Texture::ValidateFormat fix
+        # (RenderTarget2D/RenderTargetCube's own delegating constructors previously skipped it)
+        # also holds on Vulkan.
+        cna_vulkan_test(cna_test_vulkan_mrt_mixed_formats
+                        examples/bgfx_mrt_mixed_formats_test.cpp)
+        add_test(NAME Vulkan_MRT_MixedFormats
+                 COMMAND cna_test_vulkan_mrt_mixed_formats)
+        set_tests_properties(Vulkan_MRT_MixedFormats PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 842 (verbatim reuse): Task 176's own SurfaceFormat-validation contract, confirmed
+        # backend-agnostic -- reused unmodified from EasyGL to directly confirm the same
+        # Color-only constraint holds on Vulkan too.
+        cna_vulkan_test(cna_test_vulkan_surface_format_throws
+                        examples/easygl_surface_format_throws_test.cpp)
+        add_test(NAME Vulkan_SurfaceFormat_Throws
+                 COMMAND cna_test_vulkan_surface_format_throws)
+        set_tests_properties(Vulkan_SurfaceFormat_Throws PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 850 (Phase 73 Vulkan gap closure): SpriteSortMode ordering pixel test on Vulkan --
+        # verbatim reuse of the shared EasyGL source (Task 420); no Vulkan-specific restructuring
+        # needed (Vulkan has no Bgfx-style "first GetBackBufferData read per frame" quirk).
+        cna_vulkan_test(cna_test_vulkan_spritebatch_layerdepth
+                        examples/easygl_spritebatch_layerdepth_test.cpp)
+        add_test(NAME Vulkan_SpriteBatch_LayerDepthOrder
+                 COMMAND cna_test_vulkan_spritebatch_layerdepth)
+        set_tests_properties(Vulkan_SpriteBatch_LayerDepthOrder PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 851 (Phase 73 Vulkan gap closure): SpriteBatch rotation/scale/source-rectangle-
+        # cropping/SpriteEffects flip on Vulkan -- verbatim reuse of the shared EasyGL sources
+        # (Tasks 417/418/419/167).
+        cna_vulkan_test(cna_test_vulkan_spritebatch_rotation
+                        examples/easygl_spritebatch_rotation_test.cpp)
+        add_test(NAME Vulkan_SpriteBatch_Rotation
+                 COMMAND cna_test_vulkan_spritebatch_rotation)
+        set_tests_properties(Vulkan_SpriteBatch_Rotation PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritebatch_scale
+                        examples/easygl_spritebatch_scale_test.cpp)
+        add_test(NAME Vulkan_SpriteBatch_Scale
+                 COMMAND cna_test_vulkan_spritebatch_scale)
+        set_tests_properties(Vulkan_SpriteBatch_Scale PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritebatch_sourcerect
+                        examples/easygl_spritebatch_sourcerect_test.cpp)
+        add_test(NAME Vulkan_SpriteBatch_SourceRectangleCropping
+                 COMMAND cna_test_vulkan_spritebatch_sourcerect)
+        set_tests_properties(Vulkan_SpriteBatch_SourceRectangleCropping PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_sprite_effects
+                        examples/easygl_sprite_effects_test.cpp)
+        add_test(NAME Vulkan_SpriteEffects_Flip
+                 COMMAND cna_test_vulkan_sprite_effects)
+        set_tests_properties(Vulkan_SpriteEffects_Flip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 852 (Phase 73 Vulkan gap closure): SpriteFont single-glyph placement, multi-glyph
+        # spacing + newline, and default-character fallback on Vulkan -- verbatim reuse of the
+        # shared EasyGL sources (Tasks 424/425/426/427).
+        cna_vulkan_test(cna_test_vulkan_spritefont_single_glyph
+                        examples/easygl_spritefont_single_glyph_test.cpp)
+        add_test(NAME Vulkan_SpriteFont_SingleGlyph
+                 COMMAND cna_test_vulkan_spritefont_single_glyph)
+        set_tests_properties(Vulkan_SpriteFont_SingleGlyph PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritefont_multiglyph_spacing
+                        examples/easygl_spritefont_multiglyph_spacing_test.cpp)
+        add_test(NAME Vulkan_SpriteFont_MultiGlyphSpacing
+                 COMMAND cna_test_vulkan_spritefont_multiglyph_spacing)
+        set_tests_properties(Vulkan_SpriteFont_MultiGlyphSpacing PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritefont_newline
+                        examples/easygl_spritefont_newline_test.cpp)
+        add_test(NAME Vulkan_SpriteFont_Newline
+                 COMMAND cna_test_vulkan_spritefont_newline)
+        set_tests_properties(Vulkan_SpriteFont_Newline PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritefont_default_char
+                        examples/easygl_spritefont_default_char_test.cpp)
+        add_test(NAME Vulkan_SpriteFont_DefaultCharacterFallback
+                 COMMAND cna_test_vulkan_spritefont_default_char)
+        set_tests_properties(Vulkan_SpriteFont_DefaultCharacterFallback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 853 (Phase 73 Vulkan gap closure): Model with two meshes and distinct per-mesh
+        # Effects, and Model hierarchy transform propagation, on Vulkan -- verbatim reuse of the
+        # shared EasyGL sources (Tasks 438/439); Vulkan's own SetDepthTestEnabled is a real,
+        # working method (unlike Bgfx's throwing stub), so no substitution is needed at all.
+        cna_vulkan_test(cna_test_vulkan_model_two_meshes_effects
+                        examples/easygl_model_two_meshes_effects_test.cpp)
+        add_test(NAME Vulkan_Model_TwoMeshesEffects
+                 COMMAND cna_test_vulkan_model_two_meshes_effects)
+        set_tests_properties(Vulkan_Model_TwoMeshesEffects PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_model_hierarchy_child_mesh
+                        examples/easygl_model_hierarchy_child_mesh_test.cpp)
+        add_test(NAME Vulkan_Model_HierarchyChildMesh
+                 COMMAND cna_test_vulkan_model_hierarchy_child_mesh)
+        set_tests_properties(Vulkan_Model_HierarchyChildMesh PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 855 (Phase 73 Vulkan gap closure): Texture2D SetData/GetData partial-rectangle +
+        # startIndex/elementCount + mip-level on Vulkan -- verbatim reuse of the shared EasyGL
+        # sources (Tasks 169-171); both operate entirely on a backend-agnostic CPU-side shadow
+        # buffer (Texture2D.cpp), no GPU readback involved at all.
+        cna_vulkan_test(cna_test_vulkan_texture2d_partial_rect
+                        examples/easygl_texture2d_partial_rect_test.cpp)
+        add_test(NAME Vulkan_Texture2D_PartialRect_RoundTrip
+                 COMMAND cna_test_vulkan_texture2d_partial_rect)
+        set_tests_properties(Vulkan_Texture2D_PartialRect_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_texture2d_mip
+                        examples/easygl_texture2d_mip_test.cpp)
+        add_test(NAME Vulkan_Texture2D_Mip_RoundTrip
+                 COMMAND cna_test_vulkan_texture2d_mip)
+        set_tests_properties(Vulkan_Texture2D_Mip_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 857 (Phase 73 Vulkan gap closure): NPOT texture upload+sample on Vulkan --
+        # verbatim reuse of the shared EasyGL source (Task 268).
+        cna_vulkan_test(cna_test_vulkan_npot_texture
+                        examples/easygl_npot_texture_test.cpp)
+        add_test(NAME Vulkan_NpotTexture
+                 COMMAND cna_test_vulkan_npot_texture)
+        set_tests_properties(Vulkan_NpotTexture PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 858 (Phase 73 Vulkan gap closure): Texture3D box-region SetData/GetData pixel
+        # correctness on Vulkan -- verbatim reuse of the shared EasyGL source (Task 274). Vulkan's
+        # Texture3D::GetData already has a real per-backend GPU round-trip (Task 865).
+        cna_vulkan_test(cna_test_vulkan_texture3d_partial_box_readback
+                        examples/easygl_texture3d_partial_box_readback_test.cpp)
+        add_test(NAME Vulkan_Texture3D_PartialBox_Readback
+                 COMMAND cna_test_vulkan_texture3d_partial_box_readback)
+        set_tests_properties(Vulkan_Texture3D_PartialBox_Readback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
 
 endif()

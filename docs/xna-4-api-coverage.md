@@ -732,6 +732,16 @@ Every `GraphicsDevice` state-object category (`DepthStencilState`/`RasterizerSta
 `TextureCube`/`RenderTarget2D`/`RenderTargetCube`/`Viewport` row group is now fully pixel-verified
 on Bgfx — see `plan_graphics.md`'s own Phase 72 intro blockquote for the complete session log.
 
+**Update (2026-07-10, Task 860) — Phase 73 (Vulkan gap closure) is now closed in full too**: of
+the phase's 8 confirmed real gaps (`SpriteBatch` sort-mode/rotation/scale/crop/flip, `SpriteFont`,
+`Model` hierarchy — Task 861's own finding — plus `Texture2D`/`Texture3D` partial-region/NPOT
+tests) and 2 UNCERTAIN rows (MRT mixed-format, `Viewport` math), every one is now ✅ — no bugs
+found on Vulkan itself in any of them (Task 774's shared-code `SurfaceFormat`-validation fix,
+found while closing Bgfx's identical row, already covered Vulkan too). Only Task 854
+(`OcclusionQuery` pixel/query test) remains open, `BLOCKED` on Task 447's own already-tracked
+architecture decision (Vulkan's deferred-draw model can't yet correlate a query's `Begin`/`End`
+span with a draw call). See `plan_graphics.md`'s own Phase 73 intro blockquote for detail.
+
 **Headline summary as of 2026-07-09** (see the matrix doc for detail and task numbers):
 
 - **Core rendering for all 5 stock effects** (MVP transform, lighting, texture sampling, fog) is
