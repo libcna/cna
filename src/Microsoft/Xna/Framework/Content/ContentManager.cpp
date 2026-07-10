@@ -494,6 +494,10 @@ namespace Microsoft::Xna::Framework::Content
                     boneRawPtrs.push_back(bone.get());
                     res->boneOwners.push_back(std::move(bone));
                 }
+                // Task 937: root_ is always bones_.bones_[0] once the model is constructed below
+                // (see Model::Model), so the just-pushed root bone stays at a stable, known index
+                // regardless of how many per-mesh child bones get appended after it.
+                Graphics::ModelBone* rootBone = boneRawPtrs.front();
 
                 // Meshes
                 const std::size_t mk = json.find("\"meshes\"");
@@ -635,6 +639,21 @@ namespace Microsoft::Xna::Framework::Content
                             auto mesh = std::make_unique<Graphics::ModelMesh>(
                                 &device, meshName.empty() ? "mesh" : meshName,
                                 std::vector<Graphics::ModelMeshPart*>{partPtr});
+
+                            // Task 937: give this mesh its own real ModelBone (a child of the
+                            // model's Root, named after the mesh) instead of leaving ParentBone
+                            // null -- unblocks samples whose own game code looks up a named bone
+                            // per rigid part (e.g. SplitScreen/TankOnAHeightMap's wheel/turret/
+                            // cannon/hatch bone lookups) via Model.Bones["PartName"]. Mesh names
+                            // in every currently-known .model.json asset already match the bone
+                            // names real ported game code expects.
+                            auto meshBone = std::make_unique<Graphics::ModelBone>(
+                                static_cast<int>(boneRawPtrs.size()),
+                                meshName.empty() ? "mesh" : meshName);
+                            rootBone->AddChild(meshBone.get());
+                            mesh->setParentBoneProperty(meshBone.get());
+                            boneRawPtrs.push_back(meshBone.get());
+                            res->boneOwners.push_back(std::move(meshBone));
 
                             // Load effect and register it in the mesh's effect collection.
                             std::shared_ptr<Graphics::Effect> fx;

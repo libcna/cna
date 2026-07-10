@@ -1798,6 +1798,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 937: ModelTypeReader::Read() gives each mesh its own real ModelBone (a child of
+        # Root, named after the mesh) instead of leaving ParentBone null. Pure structural test,
+        # no rendering.
+        cna_easygl_test(cna_test_easygl_model_json_reader_bone_hierarchy
+                        examples/easygl_model_json_reader_bone_hierarchy_test.cpp)
+        add_test(NAME EasyGL_ModelJsonReader_BoneHierarchy
+                 COMMAND cna_test_easygl_model_json_reader_bone_hierarchy)
+        set_tests_properties(EasyGL_ModelJsonReader_BoneHierarchy PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 438: Pixel test -- Model with two meshes, each using its own distinct Effect.
         cna_easygl_test(cna_test_easygl_model_two_meshes_effects
                         examples/easygl_model_two_meshes_effects_test.cpp)
@@ -3990,6 +4001,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_TextureCube_ContentLoad
                  COMMAND cna_test_vulkan_texturecube_content_load)
         set_tests_properties(Vulkan_TextureCube_ContentLoad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 937: ModelTypeReader::Read()'s per-mesh-bone fix is in SHARED code
+        # (ContentManager.cpp) -- verbatim reuse of the EasyGL source (pure structural test).
+        cna_vulkan_test(cna_test_vulkan_model_json_reader_bone_hierarchy
+                        examples/easygl_model_json_reader_bone_hierarchy_test.cpp)
+        add_test(NAME Vulkan_ModelJsonReader_BoneHierarchy
+                 COMMAND cna_test_vulkan_model_json_reader_bone_hierarchy)
+        set_tests_properties(Vulkan_ModelJsonReader_BoneHierarchy PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
