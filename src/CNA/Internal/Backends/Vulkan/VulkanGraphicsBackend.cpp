@@ -2011,6 +2011,17 @@ namespace CNA::Internal::Backends::Vulkan
         swapchainImages_.clear();
         if (swapchain_) { vkDestroySwapchainKHR(device_, swapchain_, nullptr); swapchain_ = VK_NULL_HANDLE; }
         // NOTE: renderPass_/renderPassMsaa_ are NOT destroyed here; permanent for backend lifetime
+
+        // Defensive: the swapchain (and therefore its real pixel extent) is about to be torn
+        // down and rebuilt at a possibly-different size by RecreateSwapchain() -- a
+        // previously game-set custom Viewport should not be trusted to still be meaningful
+        // relative to the new extent until GraphicsDevice::UpdateViewportFromWindow() (which
+        // runs on every Present()/Reset()/SetVirtualResolution() call, i.e. immediately after
+        // every path that reaches this point) re-confirms or replaces it. Currently a no-op in
+        // practice, since that re-confirmation already always happens on the very next frame
+        // regardless -- kept as a belt-and-braces guard against a future code path that might
+        // call CleanupSwapchain()/RecreateSwapchain() without an immediate follow-up refresh.
+        viewportSet_ = false;
     }
 
     void VulkanGraphicsBackend::RecreateSwapchain()
@@ -6069,7 +6080,28 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanGraphicsBackend::GetViewportSize(int& width, int& height)
     {
-        SDL_GetWindowSize(window_, &width, &height);
+        // Real fix for the reported resize/viewport bug: this used to call
+        // SDL_GetWindowSize() (logical/DPI-scaled "points"), while the swapchain itself is
+        // always created in PHYSICAL pixels (CreateSwapchain() uses caps.currentExtent or
+        // SDL_GetWindowSizeInPixels() as a fallback -- both real device pixels). On any
+        // display where the OS DPI scale != 1.0 (mobile devices, Retina, Wayland fractional
+        // scaling), that mismatch made GraphicsDevice::UpdateViewportFromWindow() compute a
+        // Viewport smaller than the real framebuffer, rendering into only a corner of the
+        // screen.
+        //
+        // Deliberately still a LIVE query (matching CreateSwapchain()'s own fallback), not a
+        // read of the cached swapchainExtent_ member -- an earlier version of this fix read
+        // swapchainExtent_ directly, which regressed 51 gtest cases (TextureCubeTest,
+        // AlphaTestReferenceScalingTest, etc., confirmed via git-stash to be clean on the
+        // pre-fix baseline): those tests construct many short-lived GraphicsDevice/window
+        // instances in quick succession, and swapchainExtent_ only reflects whatever the
+        // window's real size happened to be at the moment CreateSwapchain() last ran --
+        // wrong/stale if the window wasn't fully realized by the windowing system yet at
+        // that exact moment, with nothing to refresh it until a future resize event. A live
+        // SDL_GetWindowSizeInPixels() query self-corrects on every call, exactly like the
+        // original SDL_GetWindowSize() call this replaces -- just in the correct (physical,
+        // not logical) units.
+        SDL_GetWindowSizeInPixels(window_, &width, &height);
     }
 
     void VulkanGraphicsBackend::SetVirtualResolution(int width, int height)
