@@ -1820,6 +1820,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 942: Pixel test -- AnimationPlayer::GetSkinTransforms() fed into a real, Content.
+        # Load<Model>()-loaded mesh's SkinnedEffect::SetBoneTransforms() before Model.Draw()
+        # actually deforms the rendered mesh as the clip advances.
+        cna_easygl_test(cna_test_easygl_model_skinned_animation_playback
+                        examples/easygl_model_skinned_animation_playback_test.cpp)
+        add_test(NAME EasyGL_Model_SkinnedAnimationPlayback
+                 COMMAND cna_test_easygl_model_skinned_animation_playback)
+        set_tests_properties(EasyGL_Model_SkinnedAnimationPlayback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 438: Pixel test -- Model with two meshes, each using its own distinct Effect.
         cna_easygl_test(cna_test_easygl_model_two_meshes_effects
                         examples/easygl_model_two_meshes_effects_test.cpp)
@@ -4033,6 +4044,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_ModelJsonReader_Skeleton
                  COMMAND cna_test_vulkan_model_json_reader_skeleton)
         set_tests_properties(Vulkan_ModelJsonReader_Skeleton PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 942: AnimationPlayer -> SkinnedEffect -> Model.Draw() wiring is in SHARED code
+        # (ContentManager.cpp/AnimationPlayer.cpp/SkinnedEffect) -- verbatim reuse of the EasyGL
+        # source (pixel test).
+        cna_vulkan_test(cna_test_vulkan_model_skinned_animation_playback
+                        examples/easygl_model_skinned_animation_playback_test.cpp)
+        add_test(NAME Vulkan_Model_SkinnedAnimationPlayback
+                 COMMAND cna_test_vulkan_model_skinned_animation_playback)
+        set_tests_properties(Vulkan_Model_SkinnedAnimationPlayback PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
