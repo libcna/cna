@@ -1803,8 +1803,14 @@ namespace CNA::Internal::Backends::Bgfx
     {
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
         uint32_t flags = 0;
-        // TextureFilter → bgfx sampler flags
-        // Linear=0, Point=1, Anisotropic=2, *MipPoint=3, *MipLinear=4, ...
+        // TextureFilter → bgfx sampler flags. XNA: Linear=0, Point=1, Anisotropic=2,
+        // LinearMipPoint=3, PointMipLinear=4, MinLinearMagPointMipLinear=5,
+        // MinLinearMagPointMipPoint=6, MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8.
+        // Task 743 finding: cases 3-8 previously all fell through to the `default` (plain linear)
+        // branch, silently ignoring the Min/Mag/Point-vs-Linear split entirely -- unlike
+        // EasyGLGraphicsBackend::ApplySamplerState, which already maps all 9 values correctly via
+        // GL's combined min-filter enum. bgfx's 3 independent per-axis bits (MIN/MAG/MIP_POINT)
+        // let every value be represented exactly, more directly than GL's combined enum approach.
         switch (filter)
         {
         case 1:  // Point
@@ -1812,6 +1818,24 @@ namespace CNA::Internal::Backends::Bgfx
             break;
         case 2:  // Anisotropic — bgfx handles via ANISOTROPIC flag
             flags |= BGFX_SAMPLER_MIN_ANISOTROPIC | BGFX_SAMPLER_MAG_ANISOTROPIC;
+            break;
+        case 3:  // LinearMipPoint: Min=Linear, Mag=Linear, Mip=Point
+            flags |= BGFX_SAMPLER_MIP_POINT;
+            break;
+        case 4:  // PointMipLinear: Min=Point, Mag=Point, Mip=Linear
+            flags |= BGFX_SAMPLER_MIN_POINT | BGFX_SAMPLER_MAG_POINT;
+            break;
+        case 5:  // MinLinearMagPointMipLinear: Min=Linear, Mag=Point, Mip=Linear
+            flags |= BGFX_SAMPLER_MAG_POINT;
+            break;
+        case 6:  // MinLinearMagPointMipPoint: Min=Linear, Mag=Point, Mip=Point
+            flags |= BGFX_SAMPLER_MAG_POINT | BGFX_SAMPLER_MIP_POINT;
+            break;
+        case 7:  // MinPointMagLinearMipLinear: Min=Point, Mag=Linear, Mip=Linear
+            flags |= BGFX_SAMPLER_MIN_POINT;
+            break;
+        case 8:  // MinPointMagLinearMipPoint: Min=Point, Mag=Linear, Mip=Point
+            flags |= BGFX_SAMPLER_MIN_POINT | BGFX_SAMPLER_MIP_POINT;
             break;
         default: // Linear and variants
             break; // BGFX_SAMPLER default is linear

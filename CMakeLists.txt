@@ -4501,6 +4501,59 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 744 (Phase 72 Bgfx gap closure): TextureAddressMode::Clamp -- already covered by
+    # Task 750's own Bgfx_TextureAddressMode test (PointWrap-vs-PointClamp comparison, both
+    # asserted); no new test needed, see plan_graphics.md Task 744 for the closure note.
+
+    # Task 746 (Phase 72 Bgfx gap closure): TextureAddressMode::Mirror on Bgfx -- a Bgfx-specific
+    # adaptation of the EasyGL source (Task 737; that file uses SetDepthTestEnabled(false), which
+    # throws on Bgfx, and takes 3 samples within one Draw() tick, incompatible with Bgfx's
+    # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_texture_address_mode_mirror
+                  examples/bgfx_texture_address_mode_mirror_test.cpp)
+    add_test(NAME Bgfx_TextureAddressMode_Mirror
+             COMMAND cna_test_bgfx_texture_address_mode_mirror)
+    set_tests_properties(Bgfx_TextureAddressMode_Mirror PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 747 (Phase 72 Bgfx gap closure): TextureFilter::Point vs Linear (magnification and
+    # minification) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 297; that
+    # file uses SetDepthTestEnabled(false), which throws on Bgfx, and draws 4 columns in one
+    # rendered frame before 4 separate reads, incompatible with Bgfx's GetBackBufferData quirk,
+    # Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_texture_filter_point_vs_linear
+                  examples/bgfx_texture_filter_point_vs_linear_test.cpp)
+    add_test(NAME Bgfx_TextureFilter_PointVsLinear
+             COMMAND cna_test_bgfx_texture_filter_point_vs_linear)
+    set_tests_properties(Bgfx_TextureFilter_PointVsLinear PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 749 (Phase 72 Bgfx gap closure): anisotropic filtering cap query + fallback on Bgfx --
+    # a Bgfx-specific adaptation of the EasyGL source (Task 299; that file uses
+    # SetDepthTestEnabled(false), which throws on Bgfx -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_texture_anisotropic_effect
+                  examples/bgfx_texture_anisotropic_effect_test.cpp)
+    add_test(NAME Bgfx_TextureAnisotropicEffect
+             COMMAND cna_test_bgfx_texture_anisotropic_effect)
+    set_tests_properties(Bgfx_TextureAnisotropicEffect PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 743 (Phase 72 Bgfx gap closure): audit SamplerState -> BGFX_SAMPLER_* flag mapping
+    # completeness -- found and fixed a real, previously-undiscovered bug: BgfxGraphicsBackend::
+    # ApplySamplerState's filter switch only handled Point/Anisotropic, silently collapsing all 6
+    # split Min/Mag/Mip TextureFilter values (LinearMipPoint, PointMipLinear, etc.) to plain Linear.
+    # Closes the entire Phase 72 SamplerState/TextureAddressMode row group (743-749).
+    cna_bgfx_test(cna_test_bgfx_texturefilter_split_minmag
+                  examples/bgfx_texturefilter_split_minmag_test.cpp)
+    add_test(NAME Bgfx_TextureFilter_SplitMinMag
+             COMMAND cna_test_bgfx_texturefilter_split_minmag)
+    set_tests_properties(Bgfx_TextureFilter_SplitMinMag PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 179: RenderTargetUsage DiscardContents/PreserveContents smoke test
     cna_bgfx_test(cna_test_bgfx_render_target_usage
                   examples/bgfx_render_target_usage_test.cpp)
