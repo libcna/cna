@@ -54,6 +54,21 @@ not rewritten here (out of this task's own scope).
 | Mip chains (both RT types) | ✅ | ✅ | ✅ | N/A |
 | Per-instance `DepthStencilFormat` fidelity | ✅ | ✅ (Task 911) | ✅ | ⚠️ emulated (echoes the requested format back, no real backing storage) |
 
+### Bgfx MRT attachment limits (Task 775)
+
+`GraphicsDevice::SetRenderTargets` throws `std::invalid_argument` above **4** targets in shared C++
+code (`MAX_RENDERTARGET_BINDINGS`, Task 881) — mirroring FNA's own real
+`internal const int MAX_RENDERTARGET_BINDINGS = 4` cap — before any backend ever sees the call, so
+this is the practical, enforced limit on Bgfx (and every other backend) regardless of what the
+underlying device itself could support. `BgfxGraphicsBackend::SetRenderTargets`'s own MRT
+framebuffer-construction path (`BgfxGraphicsBackend.cpp`) separately caps at a local
+`kMaxAttachments = 8`, matching bgfx's own `BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS` compile-time
+default — unreachable in practice today since the shared 4-target gate rejects anything larger
+first, kept only as defense-in-depth (same reasoning as Task 881's own EasyGL/Bgfx ad-hoc-cap
+notes). The real device capability, `bgfx::getCaps()->limits.maxFBAttachments`, is logged at
+startup (Task 456) and is typically 8 on desktop GL/Vulkan hardware — always ≥ the FNA-mandated 4,
+so it has never been the binding constraint in this project.
+
 ## Texture2D / Texture3D / TextureCube
 
 | Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer |

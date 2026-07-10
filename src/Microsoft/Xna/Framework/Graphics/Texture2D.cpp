@@ -146,6 +146,11 @@ namespace Microsoft::Xna::Framework::Graphics
                          int lvlCount, std::shared_ptr<ITextureBackend> backend)
         : Texture(&device), width(w), height(h), backend_(std::move(backend))
     {
+        // Task 774 finding: this constructor (used exclusively by RenderTarget2D) previously
+        // skipped ValidateFormat entirely, silently accepting any SurfaceFormat even though
+        // CreateRenderTarget2D's own backend call never actually forwards it -- a RenderTarget2D
+        // could report a non-Color Format() while its real GPU resource was always Color.
+        ValidateFormat(fmt);
         format_     = fmt;
         levelCount_ = lvlCount;
     }

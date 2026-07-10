@@ -4575,6 +4575,29 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 774 (Phase 72 Bgfx gap closure): verify MRT with mixed formats is rejected or handled
+    # per XNA constraints on Bgfx -- Texture::ValidateFormat (shared code, all 4 backends) already
+    # throws for every SurfaceFormat except Color, so mixed-format MRT is unreachable, not merely
+    # rejected at bind time -- see the test's own file-header comment for the full research finding.
+    cna_bgfx_test(cna_test_bgfx_mrt_mixed_formats
+                  examples/bgfx_mrt_mixed_formats_test.cpp)
+    add_test(NAME Bgfx_MRT_MixedFormats
+             COMMAND cna_test_bgfx_mrt_mixed_formats)
+    set_tests_properties(Bgfx_MRT_MixedFormats PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 774 (verbatim reuse): Task 176's own SurfaceFormat-validation contract, confirmed
+    # backend-agnostic (pure CPU-side construction, no rendering) -- reused unmodified from EasyGL
+    # to directly confirm the same Color-only constraint holds on Bgfx too.
+    cna_bgfx_test(cna_test_bgfx_surface_format_throws
+                  examples/easygl_surface_format_throws_test.cpp)
+    add_test(NAME Bgfx_SurfaceFormat_Throws
+             COMMAND cna_test_bgfx_surface_format_throws)
+    set_tests_properties(Bgfx_SurfaceFormat_Throws PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 249: Bgfx vertex layout mapping tests — all 12 VertexElementFormat values
     cna_bgfx_test(cna_test_bgfx_vertex_format
                   examples/bgfx_vertex_format_test.cpp)
