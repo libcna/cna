@@ -21,7 +21,7 @@
 #include "System/IDisposable.hpp"
 
 namespace Microsoft::Xna::Framework::Audio  { class SoundEffect; }
-namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; class Texture2D; }
+namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; class Texture2D; class TextureCube; }
 namespace CNA::Internal::Backends { class ITextureBackend; }
 
 namespace Microsoft::Xna::Framework::Content
@@ -236,4 +236,12 @@ namespace Microsoft::Xna::Framework::Content
     // CopyConstructible) is skipped entirely for this type.
     template<>
     Audio::SoundEffect ContentManager::Load<Audio::SoundEffect>(const std::string& assetName);
+
+    // Explicit specialisation: TextureCube is move-only (NOXNA, copy constructor deleted --
+    // unlike Texture2D, which supports reference-counted backend sharing via its own weak-cache
+    // specialisation above), so it cannot be held in the generic strong (std::any-based) cache
+    // either. Mirrors SoundEffect's own identical not-cached specialisation: each call gets its
+    // own independently-decoded instance.
+    template<>
+    Graphics::TextureCube ContentManager::Load<Graphics::TextureCube>(const std::string& assetName);
 }

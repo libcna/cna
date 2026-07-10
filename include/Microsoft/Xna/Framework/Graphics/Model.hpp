@@ -44,11 +44,16 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param meshParentBones Per-mesh parent bone, in the same order as @p meshes. Must either
          *        be empty (every mesh's ParentBone stays nullptr, matching the 3-argument
          *        constructor) or have exactly one entry per mesh.
+         * @param rootBoneIndex Index into @p bones naming the model's root bone. Defaults to `0`,
+         *        matching the 3-argument constructor's own default. FNA's real content-pipeline
+         *        loader (`ModelReader`) can assign an arbitrary root bone this way; this parameter
+         *        is the public equivalent for hand-built models.
          */
         NOXNA Model(GraphicsDevice* graphicsDevice,
                     std::vector<ModelBone*> bones,
                     std::vector<ModelMesh*> meshes,
-                    std::vector<ModelBone*> meshParentBones);
+                    std::vector<ModelBone*> meshParentBones,
+                    std::size_t rootBoneIndex = 0);
 
         /**
          * @brief Gets the collection of bones that describe how each mesh relates to its parent.

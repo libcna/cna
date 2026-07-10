@@ -51,6 +51,11 @@ namespace Microsoft::Xna::Framework::Graphics
         , levelCount_(levelCount)
         , backend_(std::move(backend))
     {
+        // Task 774 finding: this constructor (used exclusively by RenderTargetCube) previously
+        // skipped ValidateFormat entirely, silently accepting any SurfaceFormat even though
+        // CreateTextureCube's own backend call never actually forwards it -- a RenderTargetCube
+        // could report a non-Color Format() while its real GPU resource was always Color.
+        Texture::ValidateFormat(format);
     }
 
     void TextureCube::Dispose(bool disposing)

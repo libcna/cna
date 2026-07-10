@@ -75,6 +75,12 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] ModelBone* getParentBoneProperty() const;
 
         /**
+         * @brief Sets the parent bone for this mesh.
+         * @param value Pointer to the new parent ModelBone.
+         */
+        void setParentBoneProperty(ModelBone* value);
+
+        /**
          * @brief Gets the custom object attached to this mesh.
          * @return Pointer to the tag object, or nullptr.
          */

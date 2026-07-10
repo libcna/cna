@@ -25,9 +25,19 @@ namespace Microsoft::Xna::Framework::Graphics
     Model::Model(GraphicsDevice* graphicsDevice,
                  std::vector<ModelBone*> bones,
                  std::vector<ModelMesh*> meshes,
-                 std::vector<ModelBone*> meshParentBones)
+                 std::vector<ModelBone*> meshParentBones,
+                 std::size_t rootBoneIndex)
         : Model(graphicsDevice, std::move(bones), std::move(meshes))
     {
+        // Matches the 3-argument constructor's own leniency: an empty bones vector leaves root_
+        // as nullptr regardless of rootBoneIndex, rather than throwing on the default value 0.
+        if (!bones_.bones_.empty())
+        {
+            if (rootBoneIndex >= bones_.bones_.size())
+                throw std::out_of_range("rootBoneIndex");
+            root_ = bones_.bones_[rootBoneIndex];
+        }
+
         if (meshParentBones.empty())
             return;
         if (meshParentBones.size() != meshes_.meshes_.size())

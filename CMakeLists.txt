@@ -1757,6 +1757,58 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 927: Content.Load<Model>() via a real .model.json + binary vertex/index file
+        # fixture -- exercises ModelTypeReader::Read() itself (the vertex-stride/vtable-size
+        # corruption bug found while porting ../cna-samples), unlike Task 144's hand-built-in-C++
+        # model above.
+        cna_easygl_test(cna_test_easygl_model_json_reader
+                        examples/easygl_model_json_reader_test.cpp)
+        add_test(NAME EasyGL_ModelJsonReader_Quad
+                 COMMAND cna_test_easygl_model_json_reader)
+        set_tests_properties(EasyGL_ModelJsonReader_Quad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 931: ModelTypeReader::Read() auto-selecting 32-bit indices once a mesh exceeds
+        # 65535 vertices, mirroring real XNA's stock ModelProcessor.
+        cna_easygl_test(cna_test_easygl_model_json_reader_32bit_indices
+                        examples/easygl_model_json_reader_32bit_indices_test.cpp)
+        add_test(NAME EasyGL_ModelJsonReader_32BitIndices
+                 COMMAND cna_test_easygl_model_json_reader_32bit_indices)
+        set_tests_properties(EasyGL_ModelJsonReader_32BitIndices PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 932: ModelTypeReader::Read() binding a per-mesh "texture" field to BasicEffect.
+        cna_easygl_test(cna_test_easygl_model_json_reader_texture
+                        examples/easygl_model_json_reader_texture_test.cpp)
+        add_test(NAME EasyGL_ModelJsonReader_Texture
+                 COMMAND cna_test_easygl_model_json_reader_texture)
+        set_tests_properties(EasyGL_ModelJsonReader_Texture PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 934: Content.Load<TextureCube>() via a real .dds cubemap file fixture --
+        # exercises the new TextureCubeTypeReader (ContentManager.cpp).
+        cna_easygl_test(cna_test_easygl_texturecube_content_load
+                        examples/easygl_texturecube_content_load_test.cpp)
+        add_test(NAME EasyGL_TextureCube_ContentLoad
+                 COMMAND cna_test_easygl_texturecube_content_load)
+        set_tests_properties(EasyGL_TextureCube_ContentLoad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 937: ModelTypeReader::Read() gives each mesh its own real ModelBone (a child of
+        # Root, named after the mesh) instead of leaving ParentBone null. Pure structural test,
+        # no rendering.
+        cna_easygl_test(cna_test_easygl_model_json_reader_bone_hierarchy
+                        examples/easygl_model_json_reader_bone_hierarchy_test.cpp)
+        add_test(NAME EasyGL_ModelJsonReader_BoneHierarchy
+                 COMMAND cna_test_easygl_model_json_reader_bone_hierarchy)
+        set_tests_properties(EasyGL_ModelJsonReader_BoneHierarchy PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 438: Pixel test -- Model with two meshes, each using its own distinct Effect.
         cna_easygl_test(cna_test_easygl_model_two_meshes_effects
                         examples/easygl_model_two_meshes_effects_test.cpp)
@@ -2216,6 +2268,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 60
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        cna_easygl_test(cna_test_easygl_vertexbuffer_indexbuffer_getdata
+                        examples/easygl_vertexbuffer_indexbuffer_getdata_test.cpp)
+        add_test(NAME EasyGL_VertexBufferIndexBufferGetData
+                 COMMAND cna_test_easygl_vertexbuffer_indexbuffer_getdata)
+        set_tests_properties(EasyGL_VertexBufferIndexBufferGetData PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
         add_test(NAME EasyGL_EffectClone
@@ -2616,6 +2676,28 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 924 (split from Task 867): a single-level Texture2D sampled with a mipmap-requiring
+        # TextureFilter (Anisotropic) must not render solid black (GL_TEXTURE_MAX_LEVEL now
+        # clamped to the real level count instead of GL's own default of 1000).
+        cna_easygl_test(cna_test_easygl_texture2d_anisotropic_singlelevel
+                        examples/easygl_texture2d_anisotropic_singlelevel_test.cpp)
+        add_test(NAME EasyGL_Texture2D_AnisotropicSingleLevel
+                 COMMAND cna_test_easygl_texture2d_anisotropic_singlelevel)
+        set_tests_properties(EasyGL_Texture2D_AnisotropicSingleLevel PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 918: real GL_EXT_texture_filter_anisotropic wiring, verified directly against
+        # easy-gl's own Sampler API rather than trusting the capability-dump log alone.
+        cna_easygl_test(cna_test_easygl_anisotropic_gl_state
+                        examples/easygl_anisotropic_gl_state_test.cpp)
+        target_link_libraries(cna_test_easygl_anisotropic_gl_state PRIVATE easy-gl)
+        add_test(NAME EasyGL_Anisotropic_GlState
+                 COMMAND cna_test_easygl_anisotropic_gl_state)
+        set_tests_properties(EasyGL_Anisotropic_GlState PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 303: BlendState::Opaque discards destination + source alpha entirely
         cna_easygl_test(cna_test_easygl_blendstate_opaque
                         examples/easygl_blendstate_opaque_test.cpp)
@@ -2764,6 +2846,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 767: depth bias / slope-scale depth bias via real glPolygonOffset.
+        cna_easygl_test(cna_test_easygl_depth_bias
+                        examples/easygl_depth_bias_test.cpp)
+        add_test(NAME EasyGL_DepthBias
+                 COMMAND cna_test_easygl_depth_bias)
+        set_tests_properties(EasyGL_DepthBias PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 331: RenderTarget2D constructor/property audit against FNA.
         cna_easygl_test(cna_test_easygl_rendertarget2d_properties
                         examples/easygl_rendertarget2d_properties_test.cpp)
@@ -2779,6 +2870,56 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME EasyGL_RenderTargetCube_Properties
                  COMMAND cna_test_easygl_rendertargetcube_properties)
         set_tests_properties(EasyGL_RenderTargetCube_Properties PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 498: build and run at least 5 small FNA/XNA sample ports on CNA as real
+        # compatibility proof -- EasyGL is the primary/most-mature backend, so most of this
+        # task's own new samples target it, with 3 genuinely 3D (Task 730 already proved 2D
+        # compatibility via SDL_Renderer's own 5 samples).
+        # Sample 1/5: reuse cna_demo_2d, closing the exact same kind of gap Task 730 closed for
+        # SDL_Renderer (already smoke-tested on Vulkan/Bgfx via Tasks 88/89, never on EasyGL).
+        add_test(NAME EasyGL_Demo2D_SmokeTest
+                 COMMAND cna_demo_2d --smoke 3)
+        set_tests_properties(EasyGL_Demo2D_SmokeTest PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+            LABELS GraphicsSmoke)
+
+        # Sample 2/5: moving 3D object -- Update()-driven World-space translation, BasicEffect.
+        cna_easygl_test(cna_test_easygl_sample_moving_quad3d
+                        examples/easygl_sample_moving_quad3d_test.cpp)
+        add_test(NAME EasyGL_Sample_MovingQuad3D
+                 COMMAND cna_test_easygl_sample_moving_quad3d)
+        set_tests_properties(EasyGL_Sample_MovingQuad3D PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Sample 3/5: reactive material swap -- Update()-driven DualTextureEffect.Texture2 swap.
+        cna_easygl_test(cna_test_easygl_sample_dualtexture_swap
+                        examples/easygl_sample_dualtexture_swap_test.cpp)
+        add_test(NAME EasyGL_Sample_DualTextureSwap
+                 COMMAND cna_test_easygl_sample_dualtexture_swap)
+        set_tests_properties(EasyGL_Sample_DualTextureSwap PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Sample 4/5: keyboard-driven 3D object -- the 3D counterpart to Task 730's keyboard
+        # sprite sample, using the same InputManager::SetKeyState injection seam.
+        cna_easygl_test(cna_test_easygl_sample_keyboard_cube3d
+                        examples/easygl_sample_keyboard_cube3d_test.cpp)
+        add_test(NAME EasyGL_Sample_KeyboardCube3D
+                 COMMAND cna_test_easygl_sample_keyboard_cube3d)
+        set_tests_properties(EasyGL_Sample_KeyboardCube3D PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Sample 5/5: layered UI fade -- Update()-driven SpriteBatch alpha-blend compositing.
+        cna_easygl_test(cna_test_easygl_sample_layered_blend
+                        examples/easygl_sample_layered_blend_test.cpp)
+        add_test(NAME EasyGL_Sample_LayeredBlend
+                 COMMAND cna_test_easygl_sample_layered_blend)
+        set_tests_properties(EasyGL_Sample_LayeredBlend PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -2889,9 +3030,19 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 298: NOT registered on Vulkan. Texture2D::SetData(level>0) is a silent no-op on
-        # Vulkan (UpdatePixelsLevel never overridden — Task 867 finding), which confounds this
-        # test's mip-filter-selection intent (it would fail for the wrong reason). See Task 867.
+        # Task 298: now registered on Vulkan too -- a Vulkan-specific adaptation of the EasyGL
+        # source (can't reuse it verbatim: Vulkan's TextureFilter::Point mapping has always been
+        # mip-aware, unlike EasyGL's still-flat mapping, so the expected result for that one check
+        # differs -- see the test's own file-header comment). Task 925 fixed the confound noted
+        # here previously (Texture2D::SetData(level>0) was a silent no-op on Vulkan,
+        # UpdatePixelsLevel never overridden; mipLevels/levelCount were also both hardcoded to 1).
+        cna_vulkan_test(cna_test_vulkan_texture_mip_filter_effect
+                        examples/vulkan_texture_mip_filter_effect_test.cpp)
+        add_test(NAME Vulkan_TextureMipFilter_DualTextureEffect
+                 COMMAND cna_test_vulkan_texture_mip_filter_effect)
+        set_tests_properties(Vulkan_TextureMipFilter_DualTextureEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 299: anisotropic filtering caps and fallback on Vulkan too (reuses the
         # backend-agnostic EasyGL test source). This is the one backend where MaxAnisotropy is
@@ -3687,6 +3838,246 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
                 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
+        # Task 842 (Phase 73 Vulkan gap closure): verify MRT with mixed formats is rejected or
+        # handled per XNA constraints on Vulkan -- verbatim reuse of the backend-agnostic test
+        # (Task 774's own file, no Bgfx-specific code at all: pure GraphicsDevice/RenderTarget2D
+        # API calls, no rendering). Confirms Task 774's shared-code Texture::ValidateFormat fix
+        # (RenderTarget2D/RenderTargetCube's own delegating constructors previously skipped it)
+        # also holds on Vulkan.
+        cna_vulkan_test(cna_test_vulkan_mrt_mixed_formats
+                        examples/bgfx_mrt_mixed_formats_test.cpp)
+        add_test(NAME Vulkan_MRT_MixedFormats
+                 COMMAND cna_test_vulkan_mrt_mixed_formats)
+        set_tests_properties(Vulkan_MRT_MixedFormats PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 842 (verbatim reuse): Task 176's own SurfaceFormat-validation contract, confirmed
+        # backend-agnostic -- reused unmodified from EasyGL to directly confirm the same
+        # Color-only constraint holds on Vulkan too.
+        cna_vulkan_test(cna_test_vulkan_surface_format_throws
+                        examples/easygl_surface_format_throws_test.cpp)
+        add_test(NAME Vulkan_SurfaceFormat_Throws
+                 COMMAND cna_test_vulkan_surface_format_throws)
+        set_tests_properties(Vulkan_SurfaceFormat_Throws PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 850 (Phase 73 Vulkan gap closure): SpriteSortMode ordering pixel test on Vulkan --
+        # verbatim reuse of the shared EasyGL source (Task 420); no Vulkan-specific restructuring
+        # needed (Vulkan has no Bgfx-style "first GetBackBufferData read per frame" quirk).
+        cna_vulkan_test(cna_test_vulkan_spritebatch_layerdepth
+                        examples/easygl_spritebatch_layerdepth_test.cpp)
+        add_test(NAME Vulkan_SpriteBatch_LayerDepthOrder
+                 COMMAND cna_test_vulkan_spritebatch_layerdepth)
+        set_tests_properties(Vulkan_SpriteBatch_LayerDepthOrder PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 851 (Phase 73 Vulkan gap closure): SpriteBatch rotation/scale/source-rectangle-
+        # cropping/SpriteEffects flip on Vulkan -- verbatim reuse of the shared EasyGL sources
+        # (Tasks 417/418/419/167).
+        cna_vulkan_test(cna_test_vulkan_spritebatch_rotation
+                        examples/easygl_spritebatch_rotation_test.cpp)
+        add_test(NAME Vulkan_SpriteBatch_Rotation
+                 COMMAND cna_test_vulkan_spritebatch_rotation)
+        set_tests_properties(Vulkan_SpriteBatch_Rotation PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritebatch_scale
+                        examples/easygl_spritebatch_scale_test.cpp)
+        add_test(NAME Vulkan_SpriteBatch_Scale
+                 COMMAND cna_test_vulkan_spritebatch_scale)
+        set_tests_properties(Vulkan_SpriteBatch_Scale PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritebatch_sourcerect
+                        examples/easygl_spritebatch_sourcerect_test.cpp)
+        add_test(NAME Vulkan_SpriteBatch_SourceRectangleCropping
+                 COMMAND cna_test_vulkan_spritebatch_sourcerect)
+        set_tests_properties(Vulkan_SpriteBatch_SourceRectangleCropping PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_sprite_effects
+                        examples/easygl_sprite_effects_test.cpp)
+        add_test(NAME Vulkan_SpriteEffects_Flip
+                 COMMAND cna_test_vulkan_sprite_effects)
+        set_tests_properties(Vulkan_SpriteEffects_Flip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 852 (Phase 73 Vulkan gap closure): SpriteFont single-glyph placement, multi-glyph
+        # spacing + newline, and default-character fallback on Vulkan -- verbatim reuse of the
+        # shared EasyGL sources (Tasks 424/425/426/427).
+        cna_vulkan_test(cna_test_vulkan_spritefont_single_glyph
+                        examples/easygl_spritefont_single_glyph_test.cpp)
+        add_test(NAME Vulkan_SpriteFont_SingleGlyph
+                 COMMAND cna_test_vulkan_spritefont_single_glyph)
+        set_tests_properties(Vulkan_SpriteFont_SingleGlyph PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritefont_multiglyph_spacing
+                        examples/easygl_spritefont_multiglyph_spacing_test.cpp)
+        add_test(NAME Vulkan_SpriteFont_MultiGlyphSpacing
+                 COMMAND cna_test_vulkan_spritefont_multiglyph_spacing)
+        set_tests_properties(Vulkan_SpriteFont_MultiGlyphSpacing PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritefont_newline
+                        examples/easygl_spritefont_newline_test.cpp)
+        add_test(NAME Vulkan_SpriteFont_Newline
+                 COMMAND cna_test_vulkan_spritefont_newline)
+        set_tests_properties(Vulkan_SpriteFont_Newline PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritefont_default_char
+                        examples/easygl_spritefont_default_char_test.cpp)
+        add_test(NAME Vulkan_SpriteFont_DefaultCharacterFallback
+                 COMMAND cna_test_vulkan_spritefont_default_char)
+        set_tests_properties(Vulkan_SpriteFont_DefaultCharacterFallback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 853 (Phase 73 Vulkan gap closure): Model with two meshes and distinct per-mesh
+        # Effects, and Model hierarchy transform propagation, on Vulkan -- verbatim reuse of the
+        # shared EasyGL sources (Tasks 438/439); Vulkan's own SetDepthTestEnabled is a real,
+        # working method (unlike Bgfx's throwing stub), so no substitution is needed at all.
+        cna_vulkan_test(cna_test_vulkan_model_two_meshes_effects
+                        examples/easygl_model_two_meshes_effects_test.cpp)
+        add_test(NAME Vulkan_Model_TwoMeshesEffects
+                 COMMAND cna_test_vulkan_model_two_meshes_effects)
+        set_tests_properties(Vulkan_Model_TwoMeshesEffects PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_model_hierarchy_child_mesh
+                        examples/easygl_model_hierarchy_child_mesh_test.cpp)
+        add_test(NAME Vulkan_Model_HierarchyChildMesh
+                 COMMAND cna_test_vulkan_model_hierarchy_child_mesh)
+        set_tests_properties(Vulkan_Model_HierarchyChildMesh PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 927: ModelTypeReader::Read()'s vertex-stride/vtable-size corruption fix is in
+        # SHARED code (ContentManager.cpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_model_json_reader
+                        examples/easygl_model_json_reader_test.cpp)
+        add_test(NAME Vulkan_ModelJsonReader_Quad
+                 COMMAND cna_test_vulkan_model_json_reader)
+        set_tests_properties(Vulkan_ModelJsonReader_Quad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 931: ModelTypeReader::Read()'s 32-bit index auto-selection fix is in SHARED code
+        # (ContentManager.cpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_model_json_reader_32bit_indices
+                        examples/easygl_model_json_reader_32bit_indices_test.cpp)
+        add_test(NAME Vulkan_ModelJsonReader_32BitIndices
+                 COMMAND cna_test_vulkan_model_json_reader_32bit_indices)
+        set_tests_properties(Vulkan_ModelJsonReader_32BitIndices PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 932: ModelTypeReader::Read()'s per-mesh texture-binding fix is in SHARED code
+        # (ContentManager.cpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_model_json_reader_texture
+                        examples/easygl_model_json_reader_texture_test.cpp)
+        add_test(NAME Vulkan_ModelJsonReader_Texture
+                 COMMAND cna_test_vulkan_model_json_reader_texture)
+        set_tests_properties(Vulkan_ModelJsonReader_Texture PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 934: TextureCubeTypeReader / Content.Load<TextureCube>() fix is in SHARED code
+        # (ContentManager.cpp/.hpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_texturecube_content_load
+                        examples/easygl_texturecube_content_load_test.cpp)
+        add_test(NAME Vulkan_TextureCube_ContentLoad
+                 COMMAND cna_test_vulkan_texturecube_content_load)
+        set_tests_properties(Vulkan_TextureCube_ContentLoad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 937: ModelTypeReader::Read()'s per-mesh-bone fix is in SHARED code
+        # (ContentManager.cpp) -- verbatim reuse of the EasyGL source (pure structural test).
+        cna_vulkan_test(cna_test_vulkan_model_json_reader_bone_hierarchy
+                        examples/easygl_model_json_reader_bone_hierarchy_test.cpp)
+        add_test(NAME Vulkan_ModelJsonReader_BoneHierarchy
+                 COMMAND cna_test_vulkan_model_json_reader_bone_hierarchy)
+        set_tests_properties(Vulkan_ModelJsonReader_BoneHierarchy PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 930: VertexBuffer/IndexBuffer::GetData() is a CPU-side shadow buffer in SHARED
+        # code (VertexBuffer.cpp/IndexBuffer.cpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_vertexbuffer_indexbuffer_getdata
+                        examples/easygl_vertexbuffer_indexbuffer_getdata_test.cpp)
+        add_test(NAME Vulkan_VertexBufferIndexBufferGetData
+                 COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata)
+        set_tests_properties(Vulkan_VertexBufferIndexBufferGetData PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 855 (Phase 73 Vulkan gap closure): Texture2D SetData/GetData partial-rectangle +
+        # startIndex/elementCount + mip-level on Vulkan -- verbatim reuse of the shared EasyGL
+        # sources (Tasks 169-171); both operate entirely on a backend-agnostic CPU-side shadow
+        # buffer (Texture2D.cpp), no GPU readback involved at all.
+        cna_vulkan_test(cna_test_vulkan_texture2d_partial_rect
+                        examples/easygl_texture2d_partial_rect_test.cpp)
+        add_test(NAME Vulkan_Texture2D_PartialRect_RoundTrip
+                 COMMAND cna_test_vulkan_texture2d_partial_rect)
+        set_tests_properties(Vulkan_Texture2D_PartialRect_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_texture2d_mip
+                        examples/easygl_texture2d_mip_test.cpp)
+        add_test(NAME Vulkan_Texture2D_Mip_RoundTrip
+                 COMMAND cna_test_vulkan_texture2d_mip)
+        set_tests_properties(Vulkan_Texture2D_Mip_RoundTrip PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 857 (Phase 73 Vulkan gap closure): NPOT texture upload+sample on Vulkan --
+        # verbatim reuse of the shared EasyGL source (Task 268).
+        cna_vulkan_test(cna_test_vulkan_npot_texture
+                        examples/easygl_npot_texture_test.cpp)
+        add_test(NAME Vulkan_NpotTexture
+                 COMMAND cna_test_vulkan_npot_texture)
+        set_tests_properties(Vulkan_NpotTexture PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 858 (Phase 73 Vulkan gap closure): Texture3D box-region SetData/GetData pixel
+        # correctness on Vulkan -- verbatim reuse of the shared EasyGL source (Task 274). Vulkan's
+        # Texture3D::GetData already has a real per-backend GPU round-trip (Task 865).
+        cna_vulkan_test(cna_test_vulkan_texture3d_partial_box_readback
+                        examples/easygl_texture3d_partial_box_readback_test.cpp)
+        add_test(NAME Vulkan_Texture3D_PartialBox_Readback
+                 COMMAND cna_test_vulkan_texture3d_partial_box_readback)
+        set_tests_properties(Vulkan_Texture3D_PartialBox_Readback PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Tasks 447/854 (Phase 73 Vulkan gap closure): real per-draw-call OcclusionQuery
+        # correlation -- previously entirely-stubbed Begin()/End() (always returned PixelCount=0).
+        # Draws are now tagged with the active query (VulkanGraphicsBackend::PushPending3DDraw)
+        # and RecordCommandBuffer() wraps the tagged run in a real vkCmdBeginQuery/vkCmdEndQuery
+        # pair with correct per-frame vkCmdResetQueryPool sequencing.
+        cna_vulkan_test(cna_test_vulkan_occlusionquery_pixelcount
+                        examples/vulkan_occlusionquery_pixelcount_test.cpp)
+        add_test(NAME Vulkan_OcclusionQuery_PixelCount
+                 COMMAND cna_test_vulkan_occlusionquery_pixelcount)
+        set_tests_properties(Vulkan_OcclusionQuery_PixelCount PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
 
 endif()
@@ -4375,12 +4766,167 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS GraphicsSmoke)
 
+    # Task 817 (Phase 72 Bgfx gap closure): Texture2D SetData/GetData partial-rectangle +
+    # startIndex/elementCount on Bgfx -- verbatim reuse of the shared EasyGL source (Tasks
+    # 169-170), same as several Vulkan registrations above. Texture2D::SetData/GetData operate
+    # entirely on a backend-agnostic CPU-side cpuPixels_ shadow buffer (Texture2D.cpp) -- confirmed
+    # via source that ITextureBackend doesn't even declare a GetData() method (only
+    # UpdatePixels/UpdatePixelsLevel, one-way CPU-to-GPU), so this test exercises zero
+    # Bgfx-specific code and needs no restructuring, unlike the GetBackBufferData-based tests above.
+    cna_bgfx_test(cna_test_bgfx_texture2d_partial_rect
+                  examples/easygl_texture2d_partial_rect_test.cpp)
+    add_test(NAME Bgfx_Texture2D_PartialRect_RoundTrip
+             COMMAND cna_test_bgfx_texture2d_partial_rect)
+    set_tests_properties(Bgfx_Texture2D_PartialRect_RoundTrip PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 819 (Phase 72 Bgfx gap closure): Texture3D partial-box GetData bounds/offset
+    # verification on Bgfx -- verbatim reuse of the shared EasyGL source (Task 274). Unlike
+    # Texture2D, Texture3D::GetData genuinely delegates to the per-backend
+    # ITexture3DBackend::GetData -- BgfxTexture3DBackend already has a real GPU readback
+    # implementation (Task 914: blit into a temporary BGFX_TEXTURE_BLIT_DST|READ_BACK texture,
+    # then bgfx::readTexture()), so this is a real per-backend verification, not a no-op reuse of
+    # shared CPU-only code like Task 817 above. No GetBackBufferData/rendered-frame involved at
+    # all (direct texture-to-CPU readback), so no Bgfx-specific restructuring is needed either.
+    cna_bgfx_test(cna_test_bgfx_texture3d_partial_box_readback
+                  examples/easygl_texture3d_partial_box_readback_test.cpp)
+    add_test(NAME Bgfx_Texture3D_PartialBox_Readback
+             COMMAND cna_test_bgfx_texture3d_partial_box_readback)
+    set_tests_properties(Bgfx_Texture3D_PartialBox_Readback PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 821 (Phase 72 Bgfx gap closure): NPOT texture upload + GPU sampling on Bgfx -- a
+    # Bgfx-specific adaptation of the EasyGL source (Task 268; that file uses
+    # SetDepthTestEnabled(false), which throws on Bgfx, and reads back 5 rows from one rendered
+    # frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see the test's own
+    # file-header comment). Closes the entire Phase 72 Texture2D/3D/Cube depth row group (817-821).
+    cna_bgfx_test(cna_test_bgfx_npot_texture
+                  examples/bgfx_npot_texture_test.cpp)
+    add_test(NAME Bgfx_NpotTexture
+             COMMAND cna_test_bgfx_npot_texture)
+    set_tests_properties(Bgfx_NpotTexture PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 744 (Phase 72 Bgfx gap closure): TextureAddressMode::Clamp -- already covered by
+    # Task 750's own Bgfx_TextureAddressMode test (PointWrap-vs-PointClamp comparison, both
+    # asserted); no new test needed, see plan_graphics.md Task 744 for the closure note.
+
+    # Task 746 (Phase 72 Bgfx gap closure): TextureAddressMode::Mirror on Bgfx -- a Bgfx-specific
+    # adaptation of the EasyGL source (Task 737; that file uses SetDepthTestEnabled(false), which
+    # throws on Bgfx, and takes 3 samples within one Draw() tick, incompatible with Bgfx's
+    # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_texture_address_mode_mirror
+                  examples/bgfx_texture_address_mode_mirror_test.cpp)
+    add_test(NAME Bgfx_TextureAddressMode_Mirror
+             COMMAND cna_test_bgfx_texture_address_mode_mirror)
+    set_tests_properties(Bgfx_TextureAddressMode_Mirror PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 747 (Phase 72 Bgfx gap closure): TextureFilter::Point vs Linear (magnification and
+    # minification) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 297; that
+    # file uses SetDepthTestEnabled(false), which throws on Bgfx, and draws 4 columns in one
+    # rendered frame before 4 separate reads, incompatible with Bgfx's GetBackBufferData quirk,
+    # Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_texture_filter_point_vs_linear
+                  examples/bgfx_texture_filter_point_vs_linear_test.cpp)
+    add_test(NAME Bgfx_TextureFilter_PointVsLinear
+             COMMAND cna_test_bgfx_texture_filter_point_vs_linear)
+    set_tests_properties(Bgfx_TextureFilter_PointVsLinear PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 749 (Phase 72 Bgfx gap closure): anisotropic filtering cap query + fallback on Bgfx --
+    # a Bgfx-specific adaptation of the EasyGL source (Task 299; that file uses
+    # SetDepthTestEnabled(false), which throws on Bgfx -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_texture_anisotropic_effect
+                  examples/bgfx_texture_anisotropic_effect_test.cpp)
+    add_test(NAME Bgfx_TextureAnisotropicEffect
+             COMMAND cna_test_bgfx_texture_anisotropic_effect)
+    set_tests_properties(Bgfx_TextureAnisotropicEffect PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 743 (Phase 72 Bgfx gap closure): audit SamplerState -> BGFX_SAMPLER_* flag mapping
+    # completeness -- found and fixed a real, previously-undiscovered bug: BgfxGraphicsBackend::
+    # ApplySamplerState's filter switch only handled Point/Anisotropic, silently collapsing all 6
+    # split Min/Mag/Mip TextureFilter values (LinearMipPoint, PointMipLinear, etc.) to plain Linear.
+    # Closes the entire Phase 72 SamplerState/TextureAddressMode row group (743-749).
+    cna_bgfx_test(cna_test_bgfx_texturefilter_split_minmag
+                  examples/bgfx_texturefilter_split_minmag_test.cpp)
+    add_test(NAME Bgfx_TextureFilter_SplitMinMag
+             COMMAND cna_test_bgfx_texturefilter_split_minmag)
+    set_tests_properties(Bgfx_TextureFilter_SplitMinMag PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 179: RenderTargetUsage DiscardContents/PreserveContents smoke test
     cna_bgfx_test(cna_test_bgfx_render_target_usage
                   examples/bgfx_render_target_usage_test.cpp)
     add_test(NAME Bgfx_RenderTargetUsage
              COMMAND cna_test_bgfx_render_target_usage)
     set_tests_properties(Bgfx_RenderTargetUsage PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 773 (Phase 72 Bgfx gap closure): verify SetRenderTarget(nullptr) genuinely restores the
+    # real backbuffer with real pixel verification, superseding Task 179's own stale "pixel-level
+    # verification is not available" comment (predates Task 406's readback convention and Task
+    # 901's EnsureViewState() fix) -- see the test's own file-header comment.
+    cna_bgfx_test(cna_test_bgfx_setrendertarget_null_restore
+                  examples/bgfx_setrendertarget_null_restore_test.cpp)
+    add_test(NAME Bgfx_SetRenderTarget_NullRestore
+             COMMAND cna_test_bgfx_setrendertarget_null_restore)
+    set_tests_properties(Bgfx_SetRenderTarget_NullRestore PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 774 (Phase 72 Bgfx gap closure): verify MRT with mixed formats is rejected or handled
+    # per XNA constraints on Bgfx -- Texture::ValidateFormat (shared code, all 4 backends) already
+    # throws for every SurfaceFormat except Color, so mixed-format MRT is unreachable, not merely
+    # rejected at bind time -- see the test's own file-header comment for the full research finding.
+    cna_bgfx_test(cna_test_bgfx_mrt_mixed_formats
+                  examples/bgfx_mrt_mixed_formats_test.cpp)
+    add_test(NAME Bgfx_MRT_MixedFormats
+             COMMAND cna_test_bgfx_mrt_mixed_formats)
+    set_tests_properties(Bgfx_MRT_MixedFormats PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 774 (verbatim reuse): Task 176's own SurfaceFormat-validation contract, confirmed
+    # backend-agnostic (pure CPU-side construction, no rendering) -- reused unmodified from EasyGL
+    # to directly confirm the same Color-only constraint holds on Bgfx too.
+    cna_bgfx_test(cna_test_bgfx_surface_format_throws
+                  examples/easygl_surface_format_throws_test.cpp)
+    add_test(NAME Bgfx_SurfaceFormat_Throws
+             COMMAND cna_test_bgfx_surface_format_throws)
+    set_tests_properties(Bgfx_SurfaceFormat_Throws PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 757 (Phase 72 Bgfx gap closure): BlendFactor constant-color blending on Bgfx -- a
+    # Bgfx-specific adaptation of the EasyGL source (Task 309; that file uses
+    # SetDepthTestEnabled(false), which throws on Bgfx -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_blendstate_blendfactor
+                  examples/bgfx_blendstate_blendfactor_test.cpp)
+    add_test(NAME Bgfx_BlendState_BlendFactor
+             COMMAND cna_test_bgfx_blendstate_blendfactor)
+    set_tests_properties(Bgfx_BlendState_BlendFactor PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 777 (Phase 72 Bgfx gap closure): verify Viewport reset after backbuffer resize on Bgfx
+    # -- verbatim reuse of the shared, 100% backend-agnostic source (Task 349, already reused
+    # verbatim on Vulkan). Exercises only GraphicsDevice/GraphicsDeviceManager C++ state
+    # (UpdateViewportFromWindow()/Present()), no pixel readback, no backend-specific code at all.
+    cna_bgfx_test(cna_test_bgfx_viewport_reset_after_resize
+                  examples/viewport_reset_after_resize_test.cpp)
+    add_test(NAME Bgfx_ViewportResetAfterResize
+             COMMAND cna_test_bgfx_viewport_reset_after_resize)
+    set_tests_properties(Bgfx_ViewportResetAfterResize PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -4890,6 +5436,380 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_TextureCube_Mip_RoundTrip
              COMMAND cna_test_bgfx_texturecube_mip)
     set_tests_properties(Bgfx_TextureCube_Mip_RoundTrip PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 923: BlendState ColorBlendFunction/AlphaBlendFunction independence on Bgfx -- a Bgfx-
+    # specific adaptation of the EasyGL source (Task 307; can't reuse it verbatim like Vulkan's
+    # Task 868 registration does, since it calls GraphicsDevice.SetDepthTestEnabled(false), an
+    # unconditional throw on Bgfx -- see the test's own file-header comment). Discriminates Bgfx's
+    # colorBlendFunc-always-Add gap (Check A expects Subtract; failed before this task's fix).
+    cna_bgfx_test(cna_test_bgfx_blendstate_separate_functions
+                  examples/bgfx_blendstate_separate_functions_test.cpp)
+    add_test(NAME Bgfx_BlendState_SeparateFunctions
+             COMMAND cna_test_bgfx_blendstate_separate_functions)
+    set_tests_properties(Bgfx_BlendState_SeparateFunctions PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 923: BlendState AlphaSourceBlend/AlphaDestinationBlend independence from the colour
+    # factors -- fixed in ApplyBlendState (real BGFX_STATE_BLEND_FUNC_SEPARATE, confirmed correct
+    # against bgfx's own renderer_gl.cpp bit-decode logic), but NOT independently pixel-verified:
+    # a two-draw indirect-alpha-observation test was built and empirically found to report the
+    # SAME (wrong) result whether or not the fix is applied -- this sandbox's bgfx GL2.1/Mesa-
+    # llvmpipe software renderer does not appear to honor separately-requested alpha blend factors
+    # when they differ from the colour channel's own (confirmed via 3 independent probes; not
+    # investigated further, out of this task's scope -- see plan_graphics.md Task 923 for detail).
+    # Matches this project's established precedent for a sandbox limitation, not a CNA defect
+    # (e.g. Task 448's occlusion query, Task 879's Bgfx_RenderTarget2D_MsaaResolve).
+
+    # Task 926 (split from Task 867, the last of the 3 backends -- closes the split in full):
+    # real Texture2D mip-level upload on Bgfx -- a Bgfx-specific adaptation of the EasyGL test
+    # source (Task 298; can't reuse it verbatim, same reasoning as Task 925's Vulkan copy: Bgfx's
+    # TextureFilter::Point has always mapped to BGFX_SAMPLER_MIP_POINT, genuinely mip-aware,
+    # unlike EasyGL's still-flat mapping -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_texture_mip_filter_effect
+                  examples/bgfx_texture_mip_filter_effect_test.cpp)
+    add_test(NAME Bgfx_TextureMipFilter_DualTextureEffect
+             COMMAND cna_test_bgfx_texture_mip_filter_effect)
+    set_tests_properties(Bgfx_TextureMipFilter_DualTextureEffect PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 759 (Phase 72 Bgfx gap closure): DepthStencilState.DepthBufferWriteEnable pixel test
+    # on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 313; already reused
+    # verbatim on Vulkan, but Bgfx's own GetBackBufferData only reliably reflects the first read
+    # per rendered frame, Task 406, so the EasyGL source's 2-reads-per-frame structure needed
+    # restructuring into 2 separately-read passes -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_depthstencilstate_write_enable
+                  examples/bgfx_depthstencilstate_write_enable_test.cpp)
+    add_test(NAME Bgfx_DepthStencilState_WriteEnable
+             COMMAND cna_test_bgfx_depthstencilstate_write_enable)
+    set_tests_properties(Bgfx_DepthStencilState_WriteEnable PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 760 (Phase 72 Bgfx gap closure): all 8 depth CompareFunction values on Bgfx -- a
+    # Bgfx-specific adaptation of the EasyGL source (Task 314; that file only covers 5 of 8 values
+    # and reads back 5 columns in one frame, which Bgfx's own GetBackBufferData quirk, Task 406,
+    # doesn't support reliably -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_depthstencilstate_compare_function
+                  examples/bgfx_depthstencilstate_compare_function_test.cpp)
+    add_test(NAME Bgfx_DepthStencilState_CompareFunction
+             COMMAND cna_test_bgfx_depthstencilstate_compare_function)
+    set_tests_properties(Bgfx_DepthStencilState_CompareFunction PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 761 (Phase 72 Bgfx gap closure): StencilEnable + StencilMask (read mask) +
+    # StencilWriteMask on Bgfx -- a Bgfx-specific adaptation of the EasyGL sources (Tasks 315/316;
+    # those files sample multiple regions in one frame, incompatible with Bgfx's GetBackBufferData
+    # quirk, Task 406 -- see the test's own file-header comment). StencilWriteMask is verified
+    # informationally only: bgfx's own state API has no per-draw stencil write-mask flag at all
+    # (confirmed against bgfx/defines.h), a permanent backend limitation, not a bug in this codebase.
+    cna_bgfx_test(cna_test_bgfx_depthstencilstate_stencil_mask
+                  examples/bgfx_depthstencilstate_stencil_mask_test.cpp)
+    add_test(NAME Bgfx_DepthStencilState_StencilMask
+             COMMAND cna_test_bgfx_depthstencilstate_stencil_mask)
+    set_tests_properties(Bgfx_DepthStencilState_StencilMask PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 762 (Phase 72 Bgfx gap closure): front-facing StencilFail/StencilDepthBufferFail/
+    # StencilPass operation slots on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task
+    # 317; that file reads back 4 columns in one frame, incompatible with Bgfx's GetBackBufferData
+    # quirk, Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_depthstencilstate_stencil_ops
+                  examples/bgfx_depthstencilstate_stencil_ops_test.cpp)
+    add_test(NAME Bgfx_DepthStencilState_StencilOps
+             COMMAND cna_test_bgfx_depthstencilstate_stencil_ops)
+    set_tests_properties(Bgfx_DepthStencilState_StencilOps PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 763 (Phase 72 Bgfx gap closure): TwoSidedStencilMode (separate CCW stencil func/ops for
+    # back-facing triangles) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 318;
+    # that file reads back 2 columns in one frame, incompatible with Bgfx's GetBackBufferData
+    # quirk, Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_depthstencilstate_stencil_twosided
+                  examples/bgfx_depthstencilstate_stencil_twosided_test.cpp)
+    add_test(NAME Bgfx_DepthStencilState_StencilTwoSided
+             COMMAND cna_test_bgfx_depthstencilstate_stencil_twosided)
+    set_tests_properties(Bgfx_DepthStencilState_StencilTwoSided PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 764 (Phase 72 Bgfx gap closure): GraphicsDevice.ReferenceStencil standalone override
+    # reaching Bgfx draw calls -- a Bgfx-specific adaptation of the EasyGL source (Task 319; that
+    # file reads back 2 regions in one frame, incompatible with Bgfx's GetBackBufferData quirk,
+    # Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_graphicsdevice_reference_stencil
+                  examples/bgfx_graphicsdevice_reference_stencil_test.cpp)
+    add_test(NAME Bgfx_GraphicsDevice_ReferenceStencil
+             COMMAND cna_test_bgfx_graphicsdevice_reference_stencil)
+    set_tests_properties(Bgfx_GraphicsDevice_ReferenceStencil PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 765 (Phase 72 Bgfx gap closure): CullMode (None/CullClockwiseFace/
+    # CullCounterClockwiseFace) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task
+    # 323/324/325; that file reads back 2 columns in one frame, incompatible with Bgfx's
+    # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_rasterizerstate_cullmode
+                  examples/bgfx_rasterizerstate_cullmode_test.cpp)
+    add_test(NAME Bgfx_RasterizerState_CullMode
+             COMMAND cna_test_bgfx_rasterizerstate_cullmode)
+    set_tests_properties(Bgfx_RasterizerState_CullMode PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 766 (Phase 72 Bgfx gap closure): FillMode::WireFrame on Bgfx -- adapted from
+    # vulkan_fill_mode_test.cpp (Task 327; no EasyGL/shared source exists for this property, no
+    # dedicated pixel test existed anywhere in this project before this task -- see the test's own
+    # file-header comment). Exercises the new ExpandWireframeIndices triangle-to-line-list
+    # emulation (bgfx has no native polygon-fill-mode toggle).
+    cna_bgfx_test(cna_test_bgfx_rasterizerstate_fillmode_wireframe
+                  examples/bgfx_rasterizerstate_fillmode_wireframe_test.cpp)
+    add_test(NAME Bgfx_RasterizerState_FillMode_WireFrame
+             COMMAND cna_test_bgfx_rasterizerstate_fillmode_wireframe)
+    set_tests_properties(Bgfx_RasterizerState_FillMode_WireFrame PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 767 (Phase 72 Bgfx gap closure, project-owner decision 2026-07-10): RasterizerState.
+    # DepthBias on Bgfx -- bgfx has no native polygon-offset mechanism, emulated via a per-draw
+    # vertex-shader Z-offset (see BgfxGraphicsBackend::SetDepthBiasUniform, u_depthBias in every
+    # 3D vertex shader). SlopeScaleDepthBias deliberately NOT emulated (documented gap, checked
+    # informationally only -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_rasterizerstate_depthbias
+                  examples/bgfx_rasterizerstate_depthbias_test.cpp)
+    add_test(NAME Bgfx_RasterizerState_DepthBias
+             COMMAND cna_test_bgfx_rasterizerstate_depthbias)
+    set_tests_properties(Bgfx_RasterizerState_DepthBias PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 768 (Phase 72 Bgfx gap closure): ScissorTestEnable/ScissorRectangle interaction on Bgfx
+    # -- a Bgfx-specific adaptation of the EasyGL source (Task 209; that file reads 2 columns per
+    # frame across 3 draws, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see the
+    # test's own file-header comment). Found and fixed a genuine bug: none of Bgfx's 4 3D
+    # draw-dispatch functions ever called bgfx::setScissor (only the 2D SpriteBatch path did).
+    cna_bgfx_test(cna_test_bgfx_scissor
+                  examples/bgfx_scissor_test.cpp)
+    add_test(NAME Bgfx_Scissor
+             COMMAND cna_test_bgfx_scissor)
+    set_tests_properties(Bgfx_Scissor PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Tasks 752-755 (Phase 72 Bgfx gap closure): BlendState::Opaque/AlphaBlend/NonPremultiplied/
+    # Additive on Bgfx -- each is a Bgfx-specific copy of the backend-agnostic EasyGL source (also
+    # reused verbatim on Vulkan above), differing only in replacing the legacy
+    # GraphicsDevice::SetDepthTestEnabled(false) call (throws on Bgfx -- a pre-existing, deliberate
+    # stub) with the equivalent DepthStencilState-based call. Each still does exactly 1 Draw + 1
+    # GetBackBufferData read per frame, so Bgfx's own "first read per rendered frame" quirk (Task
+    # 406) does not apply -- no other restructuring needed.
+    cna_bgfx_test(cna_test_bgfx_blendstate_opaque
+                  examples/bgfx_blendstate_opaque_test.cpp)
+    add_test(NAME Bgfx_BlendState_Opaque
+             COMMAND cna_test_bgfx_blendstate_opaque)
+    set_tests_properties(Bgfx_BlendState_Opaque PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_bgfx_test(cna_test_bgfx_blendstate_alphablend
+                  examples/bgfx_blendstate_alphablend_test.cpp)
+    add_test(NAME Bgfx_BlendState_AlphaBlend
+             COMMAND cna_test_bgfx_blendstate_alphablend)
+    set_tests_properties(Bgfx_BlendState_AlphaBlend PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_bgfx_test(cna_test_bgfx_blendstate_nonpremultiplied
+                  examples/bgfx_blendstate_nonpremultiplied_test.cpp)
+    add_test(NAME Bgfx_BlendState_NonPremultiplied
+             COMMAND cna_test_bgfx_blendstate_nonpremultiplied)
+    set_tests_properties(Bgfx_BlendState_NonPremultiplied PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_bgfx_test(cna_test_bgfx_blendstate_additive
+                  examples/bgfx_blendstate_additive_test.cpp)
+    add_test(NAME Bgfx_BlendState_Additive
+             COMMAND cna_test_bgfx_blendstate_additive)
+    set_tests_properties(Bgfx_BlendState_Additive PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 803 (Phase 72 Bgfx gap closure): SpriteSortMode ordering affects on-screen draw order
+    # on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 420; that file reads back 3
+    # regions from one rendered frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406
+    # -- see the test's own file-header comment for full scope notes).
+    cna_bgfx_test(cna_test_bgfx_spritebatch_layerdepth
+                  examples/bgfx_spritebatch_layerdepth_test.cpp)
+    add_test(NAME Bgfx_SpriteBatch_LayerDepthOrder
+             COMMAND cna_test_bgfx_spritebatch_layerdepth)
+    set_tests_properties(Bgfx_SpriteBatch_LayerDepthOrder PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 804 (Phase 72 Bgfx gap closure): SpriteBatch::Draw rotation-around-origin on Bgfx -- a
+    # Bgfx-specific adaptation of the EasyGL source (Task 417; that file reads back 3 regions from
+    # one rendered frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see the
+    # test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_spritebatch_rotation
+                  examples/bgfx_spritebatch_rotation_test.cpp)
+    add_test(NAME Bgfx_SpriteBatch_Rotation
+             COMMAND cna_test_bgfx_spritebatch_rotation)
+    set_tests_properties(Bgfx_SpriteBatch_Rotation PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 805 (Phase 72 Bgfx gap closure): SpriteBatch::Draw scalar/Vector2 scale overloads on
+    # Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 418; that file reads back 5
+    # regions from one rendered frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406
+    # -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_spritebatch_scale
+                  examples/bgfx_spritebatch_scale_test.cpp)
+    add_test(NAME Bgfx_SpriteBatch_Scale
+             COMMAND cna_test_bgfx_spritebatch_scale)
+    set_tests_properties(Bgfx_SpriteBatch_Scale PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 806 (Phase 72 Bgfx gap closure): SpriteBatch::Draw sourceRectangle cropping on Bgfx --
+    # a Bgfx-specific adaptation of the EasyGL source (Task 419; that file reads back 3 regions
+    # from one rendered frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see
+    # the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_spritebatch_sourcerect
+                  examples/bgfx_spritebatch_sourcerect_test.cpp)
+    add_test(NAME Bgfx_SpriteBatch_SourceRectangleCropping
+             COMMAND cna_test_bgfx_spritebatch_sourcerect)
+    set_tests_properties(Bgfx_SpriteBatch_SourceRectangleCropping PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 807 (Phase 72 Bgfx gap closure): SpriteEffects::FlipHorizontally/FlipVertically on
+    # Bgfx (mirrors Task 167) -- a Bgfx-specific adaptation of the EasyGL source (that file reads
+    # back 8 points from 4 draws in one rendered frame, incompatible with Bgfx's
+    # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_sprite_effects
+                  examples/bgfx_sprite_effects_test.cpp)
+    add_test(NAME Bgfx_SpriteEffects_Flip
+             COMMAND cna_test_bgfx_sprite_effects)
+    set_tests_properties(Bgfx_SpriteEffects_Flip PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 808 (Phase 72 Bgfx gap closure): SpriteBatch::Begin's transformMatrix parameter on
+    # Bgfx (mirrors Task 168) -- a Bgfx-specific adaptation of the EasyGL source (that file reads
+    # back 2 regions from one rendered frame, incompatible with Bgfx's GetBackBufferData quirk,
+    # Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_transform_matrix
+                  examples/bgfx_transform_matrix_test.cpp)
+    add_test(NAME Bgfx_SpriteBatch_TransformMatrix
+             COMMAND cna_test_bgfx_transform_matrix)
+    set_tests_properties(Bgfx_SpriteBatch_TransformMatrix PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 809 (Phase 72 Bgfx gap closure): SpriteFont single-glyph placement on Bgfx -- a
+    # Bgfx-specific adaptation of the EasyGL source (Task 424; that file reads back 5 regions from
+    # one rendered frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see the
+    # test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_spritefont_single_glyph
+                  examples/bgfx_spritefont_single_glyph_test.cpp)
+    add_test(NAME Bgfx_SpriteFont_SingleGlyph
+             COMMAND cna_test_bgfx_spritefont_single_glyph)
+    set_tests_properties(Bgfx_SpriteFont_SingleGlyph PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 810 (Phase 72 Bgfx gap closure): SpriteFont multi-glyph spacing + newline advance on
+    # Bgfx -- a Bgfx-specific adaptation combining the EasyGL sources (Tasks 425/426; those files
+    # read back several regions from one rendered frame, incompatible with Bgfx's
+    # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_spritefont_multiglyph_newline
+                  examples/bgfx_spritefont_multiglyph_newline_test.cpp)
+    add_test(NAME Bgfx_SpriteFont_MultiGlyphSpacingNewline
+             COMMAND cna_test_bgfx_spritefont_multiglyph_newline)
+    set_tests_properties(Bgfx_SpriteFont_MultiGlyphSpacingNewline PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 811 (Phase 72 Bgfx gap closure): SpriteFont default-character fallback on Bgfx -- a
+    # Bgfx-specific adaptation of the EasyGL source (Task 427; that file reads back 3 regions from
+    # one rendered frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see the
+    # test's own file-header comment). Closes the entire Phase 72 SpriteFont row group (809-811).
+    cna_bgfx_test(cna_test_bgfx_spritefont_default_char
+                  examples/bgfx_spritefont_default_char_test.cpp)
+    add_test(NAME Bgfx_SpriteFont_DefaultCharacterFallback
+             COMMAND cna_test_bgfx_spritefont_default_char)
+    set_tests_properties(Bgfx_SpriteFont_DefaultCharacterFallback PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 812 (Phase 72 Bgfx gap closure): Model with two meshes, each using its own distinct
+    # Effect, on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 438; that file uses
+    # SetDepthTestEnabled(false), which throws on Bgfx, and reads back 2 regions from one rendered
+    # frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see the test's own
+    # file-header comment).
+    cna_bgfx_test(cna_test_bgfx_model_two_meshes_effects
+                  examples/bgfx_model_two_meshes_effects_test.cpp)
+    add_test(NAME Bgfx_Model_TwoMeshesEffects
+             COMMAND cna_test_bgfx_model_two_meshes_effects)
+    set_tests_properties(Bgfx_Model_TwoMeshesEffects PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 927: ModelTypeReader::Read()'s vertex-stride/vtable-size corruption fix is in SHARED
+    # code (ContentManager.cpp) -- a Bgfx-specific adaptation of the EasyGL source, restructured
+    # into per-check RunCheck() passes for Bgfx's own GetBackBufferData "first read per frame"
+    # quirk (Task 406).
+    cna_bgfx_test(cna_test_bgfx_model_json_reader
+                  examples/bgfx_model_json_reader_test.cpp)
+    add_test(NAME Bgfx_ModelJsonReader_Quad
+             COMMAND cna_test_bgfx_model_json_reader)
+    set_tests_properties(Bgfx_ModelJsonReader_Quad PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 813 (Phase 72 Bgfx gap closure): Model hierarchy transform propagation (child mesh's
+    # own ParentBone) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 439; same
+    # SetDepthTestEnabled/GetBackBufferData substitutions as Task 812 above). Closes the entire
+    # Phase 72 Model row group (812-813).
+    cna_bgfx_test(cna_test_bgfx_model_hierarchy_child_mesh
+                  examples/bgfx_model_hierarchy_child_mesh_test.cpp)
+    add_test(NAME Bgfx_Model_HierarchyChildMesh
+             COMMAND cna_test_bgfx_model_hierarchy_child_mesh)
+    set_tests_properties(Bgfx_Model_HierarchyChildMesh PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Tasks 814/815 (Phase 72 Bgfx gap closure): OcclusionQuery visible/occluded pixel counts on
+    # Bgfx -- Bgfx-specific counterpart of the EasyGL sources (Tasks 445/446), combined into one
+    # file since both scenarios share the same fixture (see the test's own file-header comment).
+    # Real, pixel-verified assertions cover the underlying rendering/depth-occlusion behavior;
+    # OcclusionQuery.IsComplete()/PixelCount() are reported informational-only -- a scratch probe
+    # confirmed PixelCount() does not discriminate visible from occluded geometry in this sandbox's
+    # software GL renderer (same class of limitation as Task 448/923).
+    cna_bgfx_test(cna_test_bgfx_occlusionquery_pixelcount
+                  examples/bgfx_occlusionquery_pixelcount_test.cpp)
+    add_test(NAME Bgfx_OcclusionQuery_PixelCount
+             COMMAND cna_test_bgfx_occlusionquery_pixelcount)
+    set_tests_properties(Bgfx_OcclusionQuery_PixelCount PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 816 (Phase 72 Bgfx gap closure): explicit Dispose() on an ACTIVE OcclusionQuery is safe
+    # on Bgfx -- distinct from Task 449's own EasyGL-only occlusion_query_test.cpp, which covers
+    # C++ destruction, not the explicit .Dispose() API call (see the test's own file-header
+    # comment). Closes the entire Phase 72 OcclusionQuery row group (814-816).
+    cna_bgfx_test(cna_test_bgfx_occlusionquery_dispose_active
+                  examples/bgfx_occlusionquery_dispose_active_test.cpp)
+    add_test(NAME Bgfx_OcclusionQuery_DisposeActive
+             COMMAND cna_test_bgfx_occlusionquery_dispose_active)
+    set_tests_properties(Bgfx_OcclusionQuery_DisposeActive PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

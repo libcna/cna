@@ -28,9 +28,12 @@ behavior closely, real bugs found and fixed along the way:
   vector<ModelMesh*> meshes, vector<ModelBone*> meshParentBones)`) now lets hand-built/test code
   give each mesh an arbitrary parent bone, matching what FNA's real `ModelReader` always did
   internally (`mesh.ParentBone = bones[parentBoneIndex]`).
-- **Still open**: Task 916 — `Model`'s constructors always default `Root` to `bones[0]`; there is
-  still no way to specify an arbitrary root bone index (FNA: `model.Root = bones[rootBoneIndex]`,
-  any index). Low-risk, purely-additive, not yet picked up.
+- **Fixed (Task 916, 2026-07-09)**: `Model`'s constructors used to always default `Root` to
+  `bones[0]`, with no way to specify an arbitrary root bone index (FNA:
+  `model.Root = bones[rootBoneIndex]`, any index). The 4-arg constructor now takes an optional 5th
+  `rootBoneIndex` parameter (default `0`, preserving prior behavior); throws `std::out_of_range` for
+  an out-of-bounds index, matches the 3-arg constructor's own empty-bones leniency (no throw, `Root`
+  stays `nullptr`) when `bones` is empty regardless of the requested index.
 
 None of the above is about *loading* a model from content, though — that's a separate system,
 covered below, and it does **not** yet take advantage of the Task 439 fix.
@@ -62,7 +65,7 @@ author (or generate) the `.model.json` + sidecar format directly.
 |---|---|---|
 | Reads N bones with names/transforms, then a full parent/child bone hierarchy (`ReadBoneReference`, `AddChild`) | Always synthesizes exactly **one** `ModelBone` (index 0). The JSON `"bones"` array is only ever consulted for its **first element's `"name"`** field — no other bones are created, no hierarchy, no `AddChild` calls at all | **Real gap.** Any content-authored multi-bone hierarchy (needed to exercise the Task 439 per-mesh-ParentBone / Task 435-437 `Copy*`-transform machinery through real loaded content) is unrepresentable via this loader today |
 | `mesh.ParentBone = bones[parentBoneIndex]` per mesh, arbitrary bone | Every mesh is constructed via the OLD 3-arg `Model`/`ModelMesh` path — `ParentBone` is never assigned, so it's always `nullptr` (defaults to bone 0 at draw time, Task 431's finding) | **Real gap**, and notably **not yet fixed even though the underlying API now can** (Task 439's new 4-arg `Model` constructor exists but `ModelTypeReader` doesn't call it) |
-| `model.Root = bones[rootBoneIndex]`, arbitrary bone | Always defaults to `bones[0]` (the only bone that ever exists) | Same shape as the still-open Task 916 gap, moot here since only one bone ever exists anyway |
+| `model.Root = bones[rootBoneIndex]`, arbitrary bone | Always defaults to `bones[0]` (the only bone that ever exists) | The runtime constructor API now supports an arbitrary `rootBoneIndex` (Task 916, fixed), but `ModelTypeReader` doesn't call it — moot regardless, since the loader only ever creates one bone |
 | Reads a real per-mesh `BoundingSphere` from content | `ModelMesh::boundingSphere_` is **never set** — stays default-constructed for every loaded mesh | **Real gap.** Any game code relying on `Model.Meshes[i].BoundingSphere` for culling/hit-testing will silently get a degenerate (zero-radius) sphere for every content-loaded model |
 | Reads a `Tag` per model and per mesh (`reader.ReadObject<object>()`) | Neither `Model::Tag` nor any `ModelMesh::Tag` is ever set by the loader | **Real gap**, low-severity (an optional, game-defined field) |
 | `VertexBuffer`/`IndexBuffer`/`Effect` are `ReadSharedResource<T>` — the SAME buffer/effect object can be shared across multiple meshes/parts if the source content says so (resource deduplication) | Every mesh gets its own freshly-allocated `VertexBuffer`/`IndexBuffer`; every part with a non-`"BasicEffect"` name gets its own `Effect` via a fresh `cm.Load<...>()` call | Intentional simplification, not a correctness bug — just means CNA's loader can't reproduce a source asset that intentionally shares one mesh's buffers across several `ModelMeshPart`s |
@@ -93,7 +96,7 @@ Everything in this document is about the **plain, XNA-shaped** `Model`/`ModelTyp
 
 | Area | Status |
 |---|---|
-| `Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone` runtime API | ✅ Fully audited and tested against FNA (Tasks 431-439); 1 documented safe deviation, 1 still-open low-risk gap (Task 916) |
+| `Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone` runtime API | ✅ Fully audited and tested against FNA (Tasks 431-439); 1 documented safe deviation; Task 916's `rootBoneIndex` gap fixed 2026-07-09, zero known open gaps in the runtime API |
 | `Model` binary `.xnb` loading | ❌ Not implemented — CNA uses an original `.model.json` + binary-sidecar format instead, not wire-compatible with any real XNA/FNA content asset |
 | Multi-bone hierarchy via content pipeline | ❌ Not implemented — loader always synthesizes exactly 1 bone, even though the runtime API fully supports arbitrary hierarchies |
 | Per-mesh `ParentBone` via content pipeline | ❌ Not implemented — loader never assigns it, even though Task 439 added the runtime API needed to do so |

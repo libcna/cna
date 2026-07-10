@@ -47,17 +47,17 @@ TEST(BufferUsageTest, NoneAndWriteOnlyAreDistinct)
 }
 
 // -----------------------------------------------------------------------
-// IndexElementSize — XNA 4.0: SixteenBits=16, ThirtyTwoBits=32
+// IndexElementSize — XNA 4.0: SixteenBits=0, ThirtyTwoBits=1
 // -----------------------------------------------------------------------
 
 TEST(IndexElementSizeTest, SixteenBitsIssixteen)
 {
-    EXPECT_EQ(static_cast<int>(IndexElementSize::SixteenBits), 16);
+    EXPECT_EQ(static_cast<int>(IndexElementSize::SixteenBits), 0);
 }
 
 TEST(IndexElementSizeTest, ThirtyTwoBitsIsThirtyTwo)
 {
-    EXPECT_EQ(static_cast<int>(IndexElementSize::ThirtyTwoBits), 32);
+    EXPECT_EQ(static_cast<int>(IndexElementSize::ThirtyTwoBits), 1);
 }
 
 TEST(IndexElementSizeTest, SixteenAndThirtyTwoAreDistinct)

@@ -6,10 +6,13 @@ $output v_texcoord0, v_color0, v_fogFactor
 uniform mat4 u_wvp;
 uniform vec4 u_diffuseColor;
 uniform vec4 u_fogParams;
+uniform vec4 u_depthBias;
 
 void main()
 {
     gl_Position  = mul(u_wvp, vec4(a_position, 1.0));
+    // Task 767: RasterizerState.DepthBias emulation (see vs_colored3d.sc for the full comment).
+    gl_Position.z += u_depthBias.x * gl_Position.w;
     v_texcoord0  = a_texcoord0;
     v_color0     = u_diffuseColor;
     // Task 888: fog factor from raw object-space Z (matches EasyGL's established formula

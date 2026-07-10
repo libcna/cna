@@ -103,6 +103,21 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetData(const VertexPositionColor* data, int startIndex, int elementCount);
 
         /**
+         * @brief Reads back VertexPositionColor vertex data previously uploaded via `SetData`.
+         * @param data  Destination array to receive the vertex data.
+         * @param count Number of vertices to read.
+         */
+        void GetData(VertexPositionColor* data, int count);
+
+        /**
+         * @brief Reads back a slice of VertexPositionColor vertex data previously uploaded via `SetData`.
+         * @param data         Destination array to receive the vertex data.
+         * @param startIndex   Index of the first element to write in @p data.
+         * @param elementCount Number of vertices to read.
+         */
+        void GetData(VertexPositionColor* data, int startIndex, int elementCount);
+
+        /**
          * @brief Uploads VertexPositionColorTexture vertex data to the GPU buffer.
          * @param data  Pointer to the source vertex array.
          * @param count Number of vertices to upload.
@@ -116,6 +131,21 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of vertices to upload.
          */
         void SetData(const VertexPositionColorTexture* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Reads back VertexPositionColorTexture vertex data previously uploaded via `SetData`.
+         * @param data  Destination array to receive the vertex data.
+         * @param count Number of vertices to read.
+         */
+        void GetData(VertexPositionColorTexture* data, int count);
+
+        /**
+         * @brief Reads back a slice of VertexPositionColorTexture vertex data previously uploaded via `SetData`.
+         * @param data         Destination array to receive the vertex data.
+         * @param startIndex   Index of the first element to write in @p data.
+         * @param elementCount Number of vertices to read.
+         */
+        void GetData(VertexPositionColorTexture* data, int startIndex, int elementCount);
 
         /**
          * @brief Uploads VertexPositionNormalTexture vertex data to the GPU buffer.
@@ -133,6 +163,21 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetData(const VertexPositionNormalTexture* data, int startIndex, int elementCount);
 
         /**
+         * @brief Reads back VertexPositionNormalTexture vertex data previously uploaded via `SetData`.
+         * @param data  Destination array to receive the vertex data.
+         * @param count Number of vertices to read.
+         */
+        void GetData(VertexPositionNormalTexture* data, int count);
+
+        /**
+         * @brief Reads back a slice of VertexPositionNormalTexture vertex data previously uploaded via `SetData`.
+         * @param data         Destination array to receive the vertex data.
+         * @param startIndex   Index of the first element to write in @p data.
+         * @param elementCount Number of vertices to read.
+         */
+        void GetData(VertexPositionNormalTexture* data, int startIndex, int elementCount);
+
+        /**
          * @brief Uploads VertexPositionTexture vertex data to the GPU buffer.
          * @param data  Pointer to the source vertex array.
          * @param count Number of vertices to upload.
@@ -146,6 +191,21 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of vertices to upload.
          */
         void SetData(const VertexPositionTexture* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Reads back VertexPositionTexture vertex data previously uploaded via `SetData`.
+         * @param data  Destination array to receive the vertex data.
+         * @param count Number of vertices to read.
+         */
+        void GetData(VertexPositionTexture* data, int count);
+
+        /**
+         * @brief Reads back a slice of VertexPositionTexture vertex data previously uploaded via `SetData`.
+         * @param data         Destination array to receive the vertex data.
+         * @param startIndex   Index of the first element to write in @p data.
+         * @param elementCount Number of vertices to read.
+         */
+        void GetData(VertexPositionTexture* data, int startIndex, int elementCount);
 
         /**
          * @brief Uploads VertexPositionNormalTextureSkinned vertex data to the GPU buffer.
@@ -167,6 +227,27 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of vertices to upload.
          */
         NOXNA void SetData(const VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Reads back VertexPositionNormalTextureSkinned vertex data previously uploaded via `SetData`.
+         *
+         * NOXNA overload for the GPU-skinned vertex type.
+         *
+         * @param data  Destination array to receive the vertex data.
+         * @param count Number of vertices to read.
+         */
+        NOXNA void GetData(VertexPositionNormalTextureSkinned* data, int count);
+
+        /**
+         * @brief Reads back a slice of VertexPositionNormalTextureSkinned vertex data previously uploaded via `SetData`.
+         *
+         * NOXNA overload for the GPU-skinned vertex type.
+         *
+         * @param data         Destination array to receive the vertex data.
+         * @param startIndex   Index of the first element to write in @p data.
+         * @param elementCount Number of vertices to read.
+         */
+        NOXNA void GetData(VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount);
 
         /**
          * @brief Uploads raw vertex data with an explicit per-vertex byte stride.
@@ -242,5 +323,11 @@ namespace Microsoft::Xna::Framework::Graphics
         VertexDeclaration vertexDeclaration_;
         BufferUsage bufferUsage_{BufferUsage::None};
         int vertexCount_{0};
+        // Task 930: CPU-side shadow of the most recent SetData call's compact GPU-layout bytes,
+        // enabling GetData() without a real per-backend GPU readback path (mirrors Texture2D's
+        // own SetData/GetData shadow-buffer precedent) -- nothing in the XNA 4.0 pipeline writes
+        // back into a VertexBuffer from the GPU side, so a CPU shadow is a fully faithful
+        // implementation, not an approximation.
+        std::vector<std::uint8_t> cpuShadow_;
     };
 }

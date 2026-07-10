@@ -155,6 +155,10 @@ namespace CNA::Internal::Backends::Bgfx
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
         bgfx::TextureHandle GetBgfxTextureHandle() const override { return textureHandle; }
+        // Task 926 (split from Task 867): real GPU upload for level 0 and level>0, mirroring
+        // BgfxTextureCubeBackend::SetData's established bgfx::updateTextureCube pattern.
+        void UpdatePixels(const uint8_t* rgba, int stride) override;
+        void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
     };
 
     /// bgfx-backed cube map texture.
@@ -284,6 +288,10 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::DynamicIndexBufferHandle handle = BGFX_INVALID_HANDLE;
         int indexCount = 0;
         bool is32bit = false;
+        /// Task 766: CPU copy of the raw index bytes, needed to re-expand triangle indices into a
+        /// line-list for FillMode::WireFrame emulation (mirrors EasyGLIndexBufferBackend's own
+        /// GetCpuBytes(), bgfx has no equivalent read-back API for a DynamicIndexBufferHandle).
+        std::vector<uint8_t> cpuData;
 
         explicit BgfxIndexBufferBackend(int capacity, bool thirtyTwoBit = false);
         ~BgfxIndexBufferBackend() override;
@@ -324,6 +332,13 @@ namespace CNA::Internal::Backends::Bgfx
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
 
+        // Task 808: SpriteBatch::Begin()'s transformMatrix parameter previously had no effect at
+        // all on this backend (same "silent no-op via ISpriteBatchBackend's default empty body"
+        // shape as Task 750's SamplerState fix). Stored on the owning BgfxGraphicsBackend (not
+        // here) since the combined transform is applied in EnsureViewState(), which every 2D/3D
+        // draw path calls.
+        void SetTransformMatrix(const Matrix& m) override;
+
     private:
         int pendingFilter_   = 0; // TextureFilter::Linear
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
@@ -346,6 +361,13 @@ namespace CNA::Internal::Backends::Bgfx
         uint16_t currentRtWidth_ = 0;
         uint16_t currentRtHeight_ = 0;
         uint32_t clearRgba = 0x000000ff;
+        // Task 808: SpriteBatch::Begin()'s transformMatrix, set by BgfxSpriteBatchBackend::
+        // SetTransformMatrix(). Combined with the sprite view's own ortho projection in
+        // EnsureViewState() (`orthoWithTransform = ortho * spriteTransform_`, bx::mtxMul order --
+        // matches EasyGL's `transform_ * orthoM` combined-matrix semantics, just computed in raw
+        // column-major float space since bgfx's setViewTransform takes raw arrays, not a Matrix).
+        // Defaults to identity, matching every SpriteBatch::Begin() overload's own null default.
+        Matrix spriteTransform_ = Matrix::getIdentityProperty();
         bool initialized = false;
         uint32_t resetFlags_ = BGFX_RESET_VSYNC;
 
@@ -353,14 +375,32 @@ namespace CNA::Internal::Backends::Bgfx
         uint64_t blendFlags_  = BGFX_STATE_BLEND_ALPHA;
         uint64_t depthFlags_  = BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_WRITE_Z;
         uint64_t cullFlags_   = BGFX_STATE_CULL_CCW;
+        // Task 766: FillMode::WireFrame (fillMode==1), set by ApplyRasterizerState. bgfx has no
+        // native polygon-fill-mode toggle (unlike D3D9/Vulkan) -- emulated by re-expanding
+        // triangle indices into a line list at draw time, mirroring EasyGL's DrawWireframe.
+        bool wireframe_ = false;
+        // Task 767: RasterizerState.DepthBias, set by ApplyRasterizerState. bgfx has no native
+        // polygon-offset mechanism (unlike D3D9/Vulkan/GL) -- emulated via a per-draw uniform
+        // added to clip-space Z in every 3D vertex shader (see u_depthBias in the .sc sources).
+        // SlopeScaleDepthBias is deliberately NOT emulated (project-owner decision, 2026-07-10):
+        // a true per-fragment slope computation would force every 3D shader off the early-Z path,
+        // even at DepthBias=0, unless duplicate shader variants were added -- documented as a
+        // remaining gap instead.
+        float depthBias_ = 0.0f;
         // Sampler flags per slot (slots 0–15)
         static constexpr int kMaxSamplerSlots = 16;
         uint32_t samplerFlags_[kMaxSamplerSlots] = {};
         // Blend color for BGFX_STATE_BLEND_FACTOR
         float blendFactorR_ = 1.f, blendFactorG_ = 1.f, blendFactorB_ = 1.f, blendFactorA_ = 1.f;
         uint32_t blendFactorPacked_ = 0xFFFFFFFFu; // packed RGBA8, passed to bgfx::setState
-        // Scissor rect (0,0,0,0 = disabled)
+        // Scissor rect, plus a genuinely independent enable flag (Task 768 finding: the rect's own
+        // coordinates and RasterizerState.ScissorTestEnable are set via 2 separate GraphicsDevice
+        // calls that can happen in either order -- a zero-sized rect can NOT double as "disabled"
+        // sentinel, since SetScissorRect() is free to set a real, non-zero rect while
+        // ScissorTestEnable is still false, and vice versa. Mirrors EasyGL's own
+        // set_scissor_test_enabled(...)/set_scissor(...) split, which are two independent GL calls.
         uint16_t scissorX_ = 0, scissorY_ = 0, scissorW_ = 0, scissorH_ = 0;
+        bool     scissorEnabled_ = false;
         // Viewport rect (Task 880) -- storage-only; applied via an explicit bgfx::setViewRect
         // override right before each 3D submit (see DrawPrimitivesEx), deliberately NOT folded
         // into EnsureViewState() to avoid entangling the shared 2D SpriteBatch view-rect reset.
@@ -369,6 +409,31 @@ namespace CNA::Internal::Backends::Bgfx
         // Stencil state (per-draw-call via bgfx::setStencil)
         uint32_t stencilFront_ = BGFX_STENCIL_NONE;
         uint32_t stencilBack_  = BGFX_STENCIL_NONE;
+        // Task 764: cached stencil parameters from the last ApplyDepthStencilState call (every
+        // field except the reference value itself), so SetReferenceStencil can rebuild
+        // stencilFront_/stencilBack_ standalone -- see RebuildStencilState().
+        bool stencilEnableCached_       = false;
+        int  stencilFuncCached_         = 0;
+        int  stencilPassCached_         = 0;
+        int  stencilFailCached_         = 0;
+        int  stencilDepthFailCached_    = 0;
+        int  stencilMaskCached_         = 0x7FFFFFFF;
+        int  stencilWriteMaskCached_    = 0x7FFFFFFF;
+        bool twoSidedStencilModeCached_ = false;
+        int  ccwStencilFuncCached_      = 0;
+        int  ccwStencilPassCached_      = 0;
+        int  ccwStencilFailCached_      = 0;
+        int  ccwStencilDepthFailCached_ = 0;
+        int  referenceStencilCached_    = 0;
+        void RebuildStencilState();
+        // Task 766: expands a TriangleList/TriangleStrip draw's indices into a line-list edge
+        // buffer for FillMode::WireFrame emulation. `ib` is null for non-indexed draws (sequential
+        // vertex indices are synthesized starting at `firstVertex`). Returns false (nothing
+        // allocated) for non-triangle primitives or an empty draw -- caller falls through to the
+        // normal solid-fill submission in that case. Mirrors EasyGLGraphicsBackend::DrawWireframe.
+        bool ExpandWireframeIndices(const BgfxIndexBufferBackend* ib, PrimitiveType primitive,
+                                    int primitiveCount, int startIndex, int baseVertex,
+                                    int firstVertex, bgfx::TransientIndexBuffer& outTib);
         // Task 448: the OcclusionQuery currently "active" (between its Begin()/End() calls), set
         // by BgfxOcclusionQueryBackend::Begin()/End(). Since bgfx submits every 3D draw call
         // synchronously (unlike Vulkan's deferred RecordCommandBuffer -- see Task 447's own
@@ -395,6 +460,8 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ProgramHandle envMap3DProgram_          = BGFX_INVALID_HANDLE;
         // Uniforms shared across 3D draw calls
         bgfx::UniformHandle wvpUniform_         = BGFX_INVALID_HANDLE;
+        /// Task 767: RasterizerState.DepthBias vertex-shader Z-offset emulation, x component only.
+        bgfx::UniformHandle depthBiasUnif_      = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle diffuseColor3DUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle ambientColor3DUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle light0Dir3DUnif_    = BGFX_INVALID_HANDLE;
@@ -474,6 +541,9 @@ namespace CNA::Internal::Backends::Bgfx
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc) override;
+        // Task 923: alphaSrcBlend/alphaDstBlend/colorBlendFunc/alphaBlendFunc are now genuinely
+        // honored (BGFX_STATE_BLEND_FUNC_SEPARATE/BGFX_STATE_BLEND_EQUATION_SEPARATE), not just
+        // colorSrcBlend/colorDstBlend applied to both channels with an implicit Add equation.
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                     bool stencilEnable, int stencilFunc,
                                     int stencilPass, int stencilFail, int stencilDepthFail,
@@ -489,6 +559,11 @@ namespace CNA::Internal::Backends::Bgfx
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
+        // Task 764: GraphicsDevice.ReferenceStencil is a real, independent device property that
+        // must take effect standalone, without a full DepthStencilState re-application (mirrors
+        // Vulkan's SetReferenceStencil, Task 870/319). Rebuilds stencilFront_/stencilBack_ from
+        // the cached stencil parameters below plus the new reference value.
+        void SetReferenceStencil(int value) override;
 
         // 3D pipeline — vertex/index buffers implemented; draw calls need colored3DProgram_.
         // @note SetDepth* / SetBlend still throw (not wired to state flags yet).
@@ -510,6 +585,11 @@ namespace CNA::Internal::Backends::Bgfx
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
                               const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb,
+                                     const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
         void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
                                        const IIndexBufferBackend& ib,
                                        const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -537,6 +617,17 @@ namespace CNA::Internal::Backends::Bgfx
         // via SetViewport() and the current view is the backbuffer (view 0). RT passes are
         // deliberately left at their full-RT-size default -- see viewportX_/Y_/W_/H_'s comment.
         void ApplyViewportOverride();
+
+        // Task 768: applies the current scissor rect (if any) to the pending 3D draw. Previously
+        // only the 2D SpriteBatch path called bgfx::setScissor -- none of the 4 3D draw-dispatch
+        // functions did, so RasterizerState.ScissorTestEnable/GraphicsDevice.ScissorRectangle had
+        // zero effect on any 3D draw. bgfx resets scissor state per submit() call (does not
+        // persist from a prior draw), so this must be called before every 3D bgfx::submit().
+        void ApplyScissorOverride();
+
+        /// Task 767: uploads depthBias_ (scaled by kDepthBiasScale) to u_depthBias. bgfx resets
+        /// uniform state per submit() call, so this must be called before every 3D bgfx::submit().
+        void SetDepthBiasUniform();
 
         // Task 448: submits a 3D draw call's already-configured bgfx state to currentViewId_,
         // routing through bgfx's occlusion-query submit() overload when activeOcclusionQuery_ is

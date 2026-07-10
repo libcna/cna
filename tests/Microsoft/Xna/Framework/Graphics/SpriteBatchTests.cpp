@@ -250,6 +250,16 @@ TEST(SpriteBatchTest, DrawRectOptSrcColorBeforeBeginThrows)
         std::runtime_error);
 }
 
+TEST(SpriteBatchTest, DrawRectOptSrcColorRotOriEffLayerBeforeBeginThrows)
+{
+    SpriteBatch batch;
+    Texture2D tex;
+    EXPECT_THROW(
+        batch.Draw(tex, Rectangle(0, 0, 32, 32), std::optional<Rectangle>{}, Color::White,
+                   0.0f, Vector2::Zero, SpriteEffects::None, 0.0f),
+        std::runtime_error);
+}
+
 // -----------------------------------------------------------------------
 // Tasks 157–159: DrawString(StringBuilder,…) — guard throws
 // -----------------------------------------------------------------------
@@ -373,6 +383,73 @@ TEST(SpriteBatchBackendInjectionTest, DrawIsRecordedWithExactParameters)
     EXPECT_EQ(call.texture, &texBackend);
     EXPECT_EQ(call.destinationRectangle, dest);
     EXPECT_EQ(call.sourceRectangle, src);
+    EXPECT_EQ(call.color, color);
+    EXPECT_FLOAT_EQ(call.rotation, 0.75f);
+    EXPECT_EQ(call.origin, origin);
+    EXPECT_EQ(call.effects, SpriteEffects::FlipHorizontally);
+    EXPECT_FLOAT_EQ(call.layerDepth, 0.25f);
+}
+
+// Task 922: the real, XNA-faithful 7th SpriteBatch::Draw overload -- Rectangle destination +
+// optional (nullable) Rectangle source + rotation/origin/effects/depth. FNA's real equivalent
+// takes Rectangle? sourceRectangle (src/Graphics/SpriteBatch.cs); the pre-existing NOXNA overload
+// wrongly required a non-optional Rectangle instead.
+
+TEST(SpriteBatchBackendInjectionTest, DrawRectOptSrcRotOriEffLayerWithSourceIsRecordedWithExactParameters)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackend(16, 16);
+    Texture2D tex = Texture2D::CreateWithBackendForTests(16, 16,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+
+    const Rectangle dest(10, 20, 16, 16);
+    const Rectangle src(2, 3, 8, 8);
+    const Color color(1, 2, 3, 4);
+    const Vector2 origin(1.5f, 2.5f);
+
+    batch.Begin();
+    batch.Draw(tex, dest, std::optional<Rectangle>(src), color, 0.75f, origin,
+               SpriteEffects::FlipHorizontally, 0.25f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 1u);
+    const auto& call = rec->drawCalls[0];
+    EXPECT_EQ(call.texture, &texBackend);
+    EXPECT_EQ(call.destinationRectangle, dest);
+    EXPECT_EQ(call.sourceRectangle, src);
+    EXPECT_EQ(call.color, color);
+    EXPECT_FLOAT_EQ(call.rotation, 0.75f);
+    EXPECT_EQ(call.origin, origin);
+    EXPECT_EQ(call.effects, SpriteEffects::FlipHorizontally);
+    EXPECT_FLOAT_EQ(call.layerDepth, 0.25f);
+}
+
+TEST(SpriteBatchBackendInjectionTest, DrawRectOptSrcRotOriEffLayerWithNulloptDrawsWholeTexture)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackend(16, 16);
+    Texture2D tex = Texture2D::CreateWithBackendForTests(16, 16,
+        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+
+    const Rectangle dest(10, 20, 16, 16);
+    const Color color(1, 2, 3, 4);
+    const Vector2 origin(1.5f, 2.5f);
+
+    batch.Begin();
+    batch.Draw(tex, dest, std::optional<Rectangle>{}, color, 0.75f, origin,
+               SpriteEffects::FlipHorizontally, 0.25f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 1u);
+    const auto& call = rec->drawCalls[0];
+    EXPECT_EQ(call.destinationRectangle, dest);
+    EXPECT_EQ(call.sourceRectangle, Rectangle(0, 0, 16, 16));
     EXPECT_EQ(call.color, color);
     EXPECT_FLOAT_EQ(call.rotation, 0.75f);
     EXPECT_EQ(call.origin, origin);

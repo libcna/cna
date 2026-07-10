@@ -118,7 +118,8 @@ namespace CNA::Internal::Backends::Vulkan
     // =========================================================================
 
     VulkanTextureBackend::VulkanTextureBackend(const ImageData& data, VulkanGraphicsBackend* owner)
-        : width_(data.width), height_(data.height), owner_(owner)
+        : width_(data.width), height_(data.height),
+          levelCount_(data.mipLevels > 0 ? data.mipLevels : 1), owner_(owner)
     {
         VkDevice dev = owner_->device_;
 
@@ -142,7 +143,7 @@ namespace CNA::Internal::Backends::Vulkan
         imgInfo.imageType     = VK_IMAGE_TYPE_2D;
         imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
         imgInfo.extent        = { static_cast<uint32_t>(data.width), static_cast<uint32_t>(data.height), 1 };
-        imgInfo.mipLevels     = 1;
+        imgInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
         imgInfo.arrayLayers   = 1;
         imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
@@ -163,7 +164,8 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("vkAllocateMemory (image) failed");
         vkBindImageMemory(dev, image_, memory_, 0);
 
-        // Transition UNDEFINED → TRANSFER_DST_OPTIMAL, copy, → SHADER_READ_ONLY
+        // Transition UNDEFINED → TRANSFER_DST_OPTIMAL, copy, → SHADER_READ_ONLY (level 0 only --
+        // the shared TransitionImageLayout helper hardcodes a single-level range).
         owner_->TransitionImageLayout(image_,
             VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         owner_->CopyBufferToImage(stagingBuf, image_,
@@ -175,6 +177,29 @@ namespace CNA::Internal::Backends::Vulkan
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
 
+        // Task 925: levels 1..levelCount_-1 have no data yet (uploaded later via
+        // UpdatePixelsLevel) but still need a defined layout -- mirrors
+        // VulkanTexture3DBackend's own construction-time full-range barrier (Task 864).
+        if (levelCount_ > 1)
+        {
+            VkCommandBuffer initCb = owner_->BeginOneTimeCommands();
+            VkImageMemoryBarrier initBarrier{};
+            initBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            initBarrier.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+            initBarrier.newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            initBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            initBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            initBarrier.image               = image_;
+            initBarrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 1,
+                                                 static_cast<uint32_t>(levelCount_ - 1), 0, 1 };
+            initBarrier.srcAccessMask       = 0;
+            initBarrier.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(initCb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                                 0, nullptr, 0, nullptr, 1, &initBarrier);
+            owner_->EndOneTimeCommands(initCb);
+        }
+
         // --- VkImageView ---
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -183,7 +208,7 @@ namespace CNA::Internal::Backends::Vulkan
         viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
         viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.baseMipLevel   = 0;
-        viewInfo.subresourceRange.levelCount     = 1;
+        viewInfo.subresourceRange.levelCount     = static_cast<uint32_t>(levelCount_);
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount     = 1;
         if (vkCreateImageView(dev, &viewInfo, nullptr, &imageView_) != VK_SUCCESS)
@@ -268,6 +293,76 @@ namespace CNA::Internal::Backends::Vulkan
         owner_->CopyBufferToImage(stagingBuf, image_,
             static_cast<uint32_t>(width_), static_cast<uint32_t>(height_));
         owner_->TransitionImageLayout(image_,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+    }
+
+    // Task 925: transitions exactly ONE mip level's layout -- the shared TransitionImageLayout
+    // helper always barriers level 0 regardless of the level actually being copied (the same
+    // imprecision VulkanTexture3DBackend::SetData already has, Task 864 -- confirmed via live
+    // Vulkan validation-layer errors while building this test: reusing that helper for level>0
+    // barriers level 0 while vkCmdCopyBufferToImage targets the real level, a genuine mismatch).
+    void VulkanTextureBackend::TransitionLevelLayout(int level, VkImageLayout from, VkImageLayout to)
+    {
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkImageMemoryBarrier barrier{};
+        barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout           = from;
+        barrier.newLayout           = to;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image               = image_;
+        barrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 1, 0, 1 };
+        VkPipelineStageFlags srcStage, dstStage;
+        if (from == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && to == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        } else { // TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        owner_->EndOneTimeCommands(cb);
+    }
+
+    // Task 925 (split from Task 867): real GPU upload for level>0, mirroring
+    // VulkanTexture3DBackend::SetData's established staging-buffer pattern (Task 864) --
+    // previously the shared IGraphicsBackend no-op default, silently discarding the caller's
+    // mip-level data.
+    void VulkanTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    {
+        if (!owner_ || !owner_->device_ || !rgba || level < 0 || level >= levelCount_) return;
+        VkDevice dev = owner_->device_;
+        VkDeviceSize size = static_cast<VkDeviceSize>(levelW) * levelH * 4;
+
+        VkBuffer stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void* mapped = nullptr;
+        owner_->CreateBuffer(size,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+        std::memcpy(mapped, rgba, static_cast<std::size_t>(size));
+
+        TransitionLevelLayout(level,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
+        region.imageOffset      = { 0, 0, 0 };
+        region.imageExtent      = { static_cast<uint32_t>(levelW), static_cast<uint32_t>(levelH), 1 };
+        vkCmdCopyBufferToImage(cb, stagingBuf, image_,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        owner_->EndOneTimeCommands(cb);
+
+        TransitionLevelLayout(level,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
@@ -1916,6 +2011,17 @@ namespace CNA::Internal::Backends::Vulkan
         swapchainImages_.clear();
         if (swapchain_) { vkDestroySwapchainKHR(device_, swapchain_, nullptr); swapchain_ = VK_NULL_HANDLE; }
         // NOTE: renderPass_/renderPassMsaa_ are NOT destroyed here; permanent for backend lifetime
+
+        // Defensive: the swapchain (and therefore its real pixel extent) is about to be torn
+        // down and rebuilt at a possibly-different size by RecreateSwapchain() -- a
+        // previously game-set custom Viewport should not be trusted to still be meaningful
+        // relative to the new extent until GraphicsDevice::UpdateViewportFromWindow() (which
+        // runs on every Present()/Reset()/SetVirtualResolution() call, i.e. immediately after
+        // every path that reaches this point) re-confirms or replaces it. Currently a no-op in
+        // practice, since that re-confirmation already always happens on the very next frame
+        // regardless -- kept as a belt-and-braces guard against a future code path that might
+        // call CleanupSwapchain()/RecreateSwapchain() without an immediate follow-up refresh.
+        viewportSet_ = false;
     }
 
     void VulkanGraphicsBackend::RecreateSwapchain()
@@ -2859,6 +2965,79 @@ namespace CNA::Internal::Backends::Vulkan
         }
     }
 
+    // Task 868: XNA Blend enum -> VkBlendFactor (mirrors EasyGL's ToEasyGLBlendFactor exactly):
+    // One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5,
+    // DestinationColor=6, InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9,
+    // BlendFactor=10, InverseBlendFactor=11, SourceAlphaSaturation=12
+    static VkBlendFactor ToVkBlendFactor(int xnaBlend)
+    {
+        switch (xnaBlend) {
+        case  1: return VK_BLEND_FACTOR_ZERO;
+        case  2: return VK_BLEND_FACTOR_SRC_COLOR;
+        case  3: return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+        case  4: return VK_BLEND_FACTOR_SRC_ALPHA;
+        case  5: return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        case  6: return VK_BLEND_FACTOR_DST_COLOR;
+        case  7: return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+        case  8: return VK_BLEND_FACTOR_DST_ALPHA;
+        case  9: return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        case 10: return VK_BLEND_FACTOR_CONSTANT_COLOR;
+        case 11: return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
+        case 12: return VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
+        default: return VK_BLEND_FACTOR_ONE; // Blend::One = 0
+        }
+    }
+
+    // Task 868: XNA BlendFunction enum -> VkBlendOp (mirrors EasyGL's ToEasyGLBlendEquation
+    // exactly): Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4
+    static VkBlendOp ToVkBlendOp(int xnaBlendFunc)
+    {
+        switch (xnaBlendFunc) {
+        case 1: return VK_BLEND_OP_SUBTRACT;
+        case 2: return VK_BLEND_OP_REVERSE_SUBTRACT;
+        case 3: return VK_BLEND_OP_MAX;
+        case 4: return VK_BLEND_OP_MIN;
+        default: return VK_BLEND_OP_ADD; // BlendFunction::Add = 0
+        }
+    }
+
+    // Task 868: packs BlendKeyParams into a uint32_t (4 bits per Blend value -- 13 real values fit;
+    // 3 bits per BlendFunction value -- 5 real values fit), 22 bits total. This is the pipeline
+    // cache key's own second half (see PipelineKey/PipelineKeyHash) -- a plain uint64_t ran out of
+    // free bit-width for this once a depth VkFormat is already folded in via
+    // FoldDepthFormatIntoKey. When blend is disabled, always collapses to 0 regardless of the
+    // requested (irrelevant) factors, so different disabled BlendStates don't create duplicate
+    // pipelines.
+    static uint32_t PackBlendBits(bool blend, const BlendKeyParams& bp)
+    {
+        if (!blend) return 0;
+        return (static_cast<uint32_t>(bp.colorSrc  & 0xF))
+             | (static_cast<uint32_t>(bp.colorDst  & 0xF) << 4)
+             | (static_cast<uint32_t>(bp.alphaSrc  & 0xF) << 8)
+             | (static_cast<uint32_t>(bp.alphaDst  & 0xF) << 12)
+             | (static_cast<uint32_t>(bp.colorFunc & 0x7) << 16)
+             | (static_cast<uint32_t>(bp.alphaFunc & 0x7) << 19);
+    }
+
+    // Task 868: fills a VkPipelineColorBlendAttachmentState's real blend factors/op from
+    // BlendKeyParams -- shared by every 3D pipeline-creation function so the exact same
+    // XNA->Vulkan mapping is used everywhere, mirroring FillDepthStencilState's own established
+    // pattern. Previously every call site hardcoded BlendState.NonPremultiplied's own equation
+    // here whenever blend was true, regardless of what was actually requested.
+    static void FillBlendAttachmentState(VkPipelineColorBlendAttachmentState& cba, bool blend,
+                                          const BlendKeyParams& bp)
+    {
+        cba.blendEnable = blend ? VK_TRUE : VK_FALSE;
+        if (blend) {
+            cba.srcColorBlendFactor = ToVkBlendFactor(bp.colorSrc);
+            cba.dstColorBlendFactor = ToVkBlendFactor(bp.colorDst);
+            cba.colorBlendOp        = ToVkBlendOp(bp.colorFunc);
+            cba.srcAlphaBlendFactor = ToVkBlendFactor(bp.alphaSrc);
+            cba.dstAlphaBlendFactor = ToVkBlendFactor(bp.alphaDst);
+            cba.alphaBlendOp        = ToVkBlendOp(bp.alphaFunc);
+        }
+    }
+
     // Packs every DepthStencilKeyParams field into 29 bits, meant to be OR'd (after shifting past
     // whatever bit range a caller's own existing key dimensions already occupy) into that
     // caller's uint64_t pipeline cache key.
@@ -2967,7 +3146,7 @@ namespace CNA::Internal::Backends::Vulkan
                                                              bool blend, int cullMode,
                                                              uint32_t colorAttachmentCount,
                                                              bool wireframe, bool msaa,
-                                                             const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+                                                             const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         // Create layout once
         if (pipelineLayout3D_ == VK_NULL_HANDLE) {
@@ -2981,7 +3160,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (3D) failed");
         }
 
-        uint64_t key = FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelines3D_.find(key);
         if (it != pipelines3D_.end()) return it->second;
 
@@ -3044,15 +3223,9 @@ namespace CNA::Internal::Backends::Vulkan
         FillDepthStencilState(ds, dsParams);
 
         VkPipelineColorBlendAttachmentState cba{};
-        if (blend) {
-            cba.blendEnable         = VK_TRUE;
-            cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            cba.colorBlendOp        = VK_BLEND_OP_ADD;
-            cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            cba.alphaBlendOp        = VK_BLEND_OP_ADD;
-        }
+        // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+        // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+        FillBlendAttachmentState(cba, blend, blendParams);
         cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         // Replicate the same blend state across all MRT outputs.
@@ -3337,7 +3510,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         if (pipelineLayoutAlphaTest3D_ == VK_NULL_HANDLE) {
             VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
@@ -3349,7 +3522,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (AlphaTest3D) failed");
         }
 
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesAlphaTest3D_.find(key);
         if (it != pipelinesAlphaTest3D_.end()) return it->second;
 
@@ -3426,13 +3599,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
 
         VkPipelineColorBlendStateCreateInfo cbs{};
@@ -3594,13 +3763,13 @@ namespace CNA::Internal::Backends::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureDualTexResources();
 
         // DualTexture always uses stride=20 (VertexPositionTexture); key encodes topology+state.
         constexpr std::size_t kDualStride = 20;
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(kDualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kDualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesDualTex3D_.find(key);
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
@@ -3662,13 +3831,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -3905,12 +4070,12 @@ namespace CNA::Internal::Backends::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureEnvMapResources();
 
         constexpr std::size_t kEnvStride = 32;
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesEnvMap3D_.find(key);
         if (it != pipelinesEnvMap3D_.end()) return it->second;
 
@@ -3970,13 +4135,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -4135,12 +4296,12 @@ namespace CNA::Internal::Backends::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureLitTexturedResources();
 
         constexpr std::size_t kLitStride = 32;
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesLitTextured3D_.find(key);
         if (it != pipelinesLitTextured3D_.end()) return it->second;
 
@@ -4200,13 +4361,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -4362,11 +4519,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureFogTex3DResources();
 
-        uint64_t key = FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesFogColored3D_.find(key);
         if (it != pipelinesFogColored3D_.end()) return it->second;
 
@@ -4421,15 +4578,9 @@ namespace CNA::Internal::Backends::Vulkan
         FillDepthStencilState(ds, dsParams);
 
         VkPipelineColorBlendAttachmentState cba{};
-        if (blend) {
-            cba.blendEnable         = VK_TRUE;
-            cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            cba.colorBlendOp        = VK_BLEND_OP_ADD;
-            cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            cba.alphaBlendOp        = VK_BLEND_OP_ADD;
-        }
+        // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+        // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+        FillBlendAttachmentState(cba, blend, blendParams);
         cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
@@ -4485,11 +4636,11 @@ namespace CNA::Internal::Backends::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureFogTex3DResources();
 
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesFogTex3D_.find(key);
         if (it != pipelinesFogTex3D_.end()) return it->second;
 
@@ -4564,15 +4715,9 @@ namespace CNA::Internal::Backends::Vulkan
         FillDepthStencilState(ds, dsParams);
 
         VkPipelineColorBlendAttachmentState cba{};
-        if (blend) {
-            cba.blendEnable         = VK_TRUE;
-            cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            cba.colorBlendOp        = VK_BLEND_OP_ADD;
-            cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            cba.alphaBlendOp        = VK_BLEND_OP_ADD;
-        }
+        // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+        // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+        FillBlendAttachmentState(cba, blend, blendParams);
         cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
@@ -4758,7 +4903,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureSkinnedResources();
 
@@ -4768,7 +4913,7 @@ namespace CNA::Internal::Backends::Vulkan
         // reference to the canonical VertexPositionNormalTextureSkinned::getVertexDeclarationStatic()
         // layout and why a shared-derivation refactor was investigated but deferred.
         constexpr std::size_t kSkinnedStride = 52;
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(kSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesSkinned3D_.find(key);
         if (it != pipelinesSkinned3D_.end()) return it->second;
 
@@ -4830,13 +4975,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -4882,7 +5023,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::size_t pvStride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         // Ensure pipelineLayoutExt3D_ exists (128-byte PC + 1 descriptor set for future texture use).
         if (pipelineLayoutExt3D_ == VK_NULL_HANDLE) {
@@ -4895,7 +5036,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (Ext3D/Instanced) failed");
         }
 
-        uint64_t key = FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesInstanced3D_.find(key);
         if (it != pipelinesInstanced3D_.end()) return it->second;
 
@@ -4965,13 +5106,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& ba : blendAttachments) {
             ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                               | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            ba.blendEnable         = blend ? VK_TRUE : VK_FALSE;
-            ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            ba.colorBlendOp        = VK_BLEND_OP_ADD;
-            ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            ba.alphaBlendOp        = VK_BLEND_OP_ADD;
+            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
+            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
+            FillBlendAttachmentState(ba, blend, blendParams);
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -5195,6 +5332,28 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkBeginCommandBuffer(cb, &bi) != VK_SUCCESS)
             throw std::runtime_error("vkBeginCommandBuffer failed");
 
+        // Task 447/854: reset every OcclusionQuery pool actually tagged on a pending draw this
+        // frame, before any render pass begins (vkCmdResetQueryPool must not be called inside a
+        // render pass instance). Replaces the old "reset once at construction only" bug -- a
+        // query reused across frames (the real, idiomatic XNA usage pattern: Begin()/End() called
+        // once per Draw()) now gets a fresh reset every time it's actually used, not just the
+        // first. recordedThisFrame_ is cleared here too, so draw3DFor's own contiguous-run
+        // tracking starts fresh each frame.
+        {
+            std::vector<VulkanOcclusionQueryBackend*> queriesThisFrame;
+            for (const auto& draw : pending3D_) {
+                if (draw.occlusionQuery &&
+                    std::find(queriesThisFrame.begin(), queriesThisFrame.end(), draw.occlusionQuery)
+                        == queriesThisFrame.end())
+                    queriesThisFrame.push_back(draw.occlusionQuery);
+            }
+            for (auto* q : queriesThisFrame) {
+                q->recordedThisFrame_ = false;
+                if (q->pool_ != VK_NULL_HANDLE)
+                    vkCmdResetQueryPool(cb, q->pool_, 0, 1);
+            }
+        }
+
         // Helper: draw all 2D batches for a specific RT (nullptr = backbuffer) into current render pass.
         // Sprite VB/IB ring buffers are shared across all passes in a frame — each snapshot is
         // memcpy'd/bound at its own running byte offset (vbOff/ibOff below), mirroring draw3DFor's
@@ -5301,6 +5460,10 @@ namespace CNA::Internal::Backends::Vulkan
             VkDeviceSize vbOff    = 0;
             VkDeviceSize ibOff    = 0;
             VkDeviceSize instVbOff = 0;
+            // Task 447/854: the OcclusionQuery currently wrapped in a real vkCmdBeginQuery for
+            // this render pass, if any -- tracks contiguous runs of draws sharing the same
+            // occlusionQuery tag so they land in one vkCmdBeginQuery/vkCmdEndQuery pair.
+            VulkanOcclusionQueryBackend* openQuery = nullptr;
             for (const auto& draw : pending3D_) {
                 if (draw.rt != targetRT) continue;
                 if (draw.isMarker) {
@@ -5318,6 +5481,27 @@ namespace CNA::Internal::Backends::Vulkan
                 if (vbOff + draw.vbData.size() > kFrame3DVBSize) continue;
                 if (!draw.ibData.empty() && ibOff + draw.ibData.size() > kFrame3DIBSize) continue;
                 if (draw.useInstanced && instVbOff + draw.instVbData.size() > kFrame3DInstVBSize) continue;
+
+                // Task 447/854: this draw is definitely about to be recorded -- open/close real
+                // vkCmdBeginQuery/vkCmdEndQuery pairs around contiguous runs of draws sharing the
+                // same occlusionQuery tag. A query already recorded once this frame (an earlier
+                // contiguous run, in this render pass or an earlier one) is deliberately NOT
+                // reopened -- Vulkan requires a reset between two vkCmdBeginQuery calls on the
+                // same query, and re-resetting mid-frame would corrupt the first run's own
+                // in-flight result; this implements the approved "reject additional spans beyond
+                // the first contiguous run" policy.
+                if (draw.occlusionQuery != openQuery) {
+                    if (openQuery && openQuery->pool_ != VK_NULL_HANDLE) {
+                        vkCmdEndQuery(cb, openQuery->pool_, 0);
+                        openQuery->recordedThisFrame_ = true;
+                    }
+                    openQuery = nullptr;
+                    if (draw.occlusionQuery && draw.occlusionQuery->pool_ != VK_NULL_HANDLE
+                        && !draw.occlusionQuery->recordedThisFrame_) {
+                        vkCmdBeginQuery(cb, draw.occlusionQuery->pool_, 0, 0);
+                        openQuery = draw.occlusionQuery;
+                    }
+                }
 
                 std::memcpy(static_cast<uint8_t*>(frame3DVBPtr_[currentFrame_]) + vbOff,
                             draw.vbData.data(), draw.vbData.size());
@@ -5347,27 +5531,27 @@ namespace CNA::Internal::Backends::Vulkan
                 if (draw.useAlphaTest) {
                     pipe = GetOrCreatePipelineAlphaTest3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useDualTexture) {
                     pipe = GetOrCreatePipelineDualTex3D(draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useEnvMap) {
                     pipe = GetOrCreatePipelineEnvMap3D(draw.topology,
                                                        draw.depthTest, draw.depthWrite,
-                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useSkinned) {
                     pipe = GetOrCreatePipelineSkinned3D(draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useInstanced) {
                     pipe = GetOrCreatePipelineInstanced3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useLitTextured) {
                     pipe = GetOrCreatePipelineLitTextured3D(draw.topology,
                                                             draw.depthTest, draw.depthWrite,
-                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useFogTex3D) {
                     // Task 899: colored3d (stride 16) / textured3d (20) / colored_textured3d (24)
                     // fog-capable bundle. The legacy no-GpuDrawParams DrawColoredPrimitives()
@@ -5376,14 +5560,14 @@ namespace CNA::Internal::Backends::Vulkan
                     pipe = (draw.stride == 16)
                            ? GetOrCreatePipelineFogColored3D(draw.topology,
                                                              draw.depthTest, draw.depthWrite,
-                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt)
+                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt)
                            : GetOrCreatePipelineFogTex3D(draw.stride, draw.topology,
                                                          draw.depthTest, draw.depthWrite,
-                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else {
                     pipe = GetOrCreatePipeline3D(draw.topology,
                                                  draw.depthTest, draw.depthWrite,
-                                                 draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, targetDepthFmt);
+                                                 draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 }
                 if (pipe != lastPipe) {
                     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
@@ -5536,6 +5720,12 @@ namespace CNA::Internal::Backends::Vulkan
                 if (draw.useInstanced)
                     instVbOff += static_cast<VkDeviceSize>(draw.instVbData.size());
                 vbOff += static_cast<VkDeviceSize>(draw.vbData.size());
+            }
+            // Task 447/854: close a query left open at the end of this render pass's own draw
+            // list (its span ran through the last tagged draw with no following untagged one).
+            if (openQuery && openQuery->pool_ != VK_NULL_HANDLE) {
+                vkCmdEndQuery(cb, openQuery->pool_, 0);
+                openQuery->recordedThisFrame_ = true;
             }
         };
 
@@ -5890,7 +6080,28 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanGraphicsBackend::GetViewportSize(int& width, int& height)
     {
-        SDL_GetWindowSize(window_, &width, &height);
+        // Real fix for the reported resize/viewport bug: this used to call
+        // SDL_GetWindowSize() (logical/DPI-scaled "points"), while the swapchain itself is
+        // always created in PHYSICAL pixels (CreateSwapchain() uses caps.currentExtent or
+        // SDL_GetWindowSizeInPixels() as a fallback -- both real device pixels). On any
+        // display where the OS DPI scale != 1.0 (mobile devices, Retina, Wayland fractional
+        // scaling), that mismatch made GraphicsDevice::UpdateViewportFromWindow() compute a
+        // Viewport smaller than the real framebuffer, rendering into only a corner of the
+        // screen.
+        //
+        // Deliberately still a LIVE query (matching CreateSwapchain()'s own fallback), not a
+        // read of the cached swapchainExtent_ member -- an earlier version of this fix read
+        // swapchainExtent_ directly, which regressed 51 gtest cases (TextureCubeTest,
+        // AlphaTestReferenceScalingTest, etc., confirmed via git-stash to be clean on the
+        // pre-fix baseline): those tests construct many short-lived GraphicsDevice/window
+        // instances in quick succession, and swapchainExtent_ only reflects whatever the
+        // window's real size happened to be at the moment CreateSwapchain() last ran --
+        // wrong/stale if the window wasn't fully realized by the windowing system yet at
+        // that exact moment, with nothing to refresh it until a future resize event. A live
+        // SDL_GetWindowSizeInPixels() query self-corrects on every call, exactly like the
+        // original SDL_GetWindowSize() call this replaces -- just in the correct (physical,
+        // not logical) units.
+        SDL_GetWindowSizeInPixels(window_, &width, &height);
     }
 
     void VulkanGraphicsBackend::SetVirtualResolution(int width, int height)
@@ -6031,6 +6242,12 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::SetBlendEnabled(bool v)      { blendEnabled_      = v; }
     void VulkanGraphicsBackend::SetDepthWriteEnabled(bool v) { depthWriteEnabled_ = v; }
 
+    void VulkanGraphicsBackend::PushPending3DDraw(Pending3DDraw&& d)
+    {
+        d.occlusionQuery = activeOcclusionQuery_;
+        pending3D_.push_back(std::move(d));
+    }
+
     void VulkanGraphicsBackend::SetStringMarkerEXT(const char* marker)
     {
         if (!marker || !marker[0]) return;
@@ -6038,7 +6255,7 @@ namespace CNA::Internal::Backends::Vulkan
         m.isMarker   = true;
         m.markerLabel = marker;
         m.rt          = currentRT_;
-        pending3D_.push_back(std::move(m));
+        PushPending3DDraw(std::move(m));
     }
 
     void VulkanGraphicsBackend::DrawColoredPrimitives(
@@ -6071,13 +6288,14 @@ namespace CNA::Internal::Backends::Vulkan
         d.stencilWriteMask = stencilWriteMask_;
         d.referenceStencil = referenceStencil_;
         d.blend      = blendEnabled_;
+        d.blendParams = blendParams_;
         d.cullMode   = cullMode_;
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
         d.slopeScaleDepthBias = slopeScaleDepthBias_;
         d.indexType  = VK_INDEX_TYPE_UINT16;  // non-indexed, not used
         d.rt         = currentRT_;
-        pending3D_.push_back(std::move(d));
+        PushPending3DDraw(std::move(d));
     }
 
     void VulkanGraphicsBackend::DrawIndexedColoredPrimitives(
@@ -6116,13 +6334,14 @@ namespace CNA::Internal::Backends::Vulkan
         d.stencilWriteMask = stencilWriteMask_;
         d.referenceStencil = referenceStencil_;
         d.blend      = blendEnabled_;
+        d.blendParams = blendParams_;
         d.cullMode   = cullMode_;
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
         d.slopeScaleDepthBias = slopeScaleDepthBias_;
         d.indexType  = vulkanIB.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
         d.rt         = currentRT_;
-        pending3D_.push_back(std::move(d));
+        PushPending3DDraw(std::move(d));
     }
 
     // ---- Extended 3D draws (Tasks 53-55) ----
@@ -6173,6 +6392,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.stencilWriteMask = stencilWriteMask_;
         d.referenceStencil = referenceStencil_;
         d.blend          = blendEnabled_;
+        d.blendParams = blendParams_;
         d.cullMode       = cullMode_;
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
@@ -6287,7 +6507,7 @@ namespace CNA::Internal::Backends::Vulkan
                 d.fogTex3DUboData[6] = 0.f; d.fogTex3DUboData[7] = 0.f;
             }
         }
-        pending3D_.push_back(std::move(d));
+        PushPending3DDraw(std::move(d));
     }
 
     void VulkanGraphicsBackend::DrawIndexedPrimitivesEx(
@@ -6340,6 +6560,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.stencilWriteMask = stencilWriteMask_;
         d.referenceStencil = referenceStencil_;
         d.blend         = blendEnabled_;
+        d.blendParams = blendParams_;
         d.cullMode      = cullMode_;
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
@@ -6449,7 +6670,7 @@ namespace CNA::Internal::Backends::Vulkan
                 d.fogTex3DUboData[6] = 0.f; d.fogTex3DUboData[7] = 0.f;
             }
         }
-        pending3D_.push_back(std::move(d));
+        PushPending3DDraw(std::move(d));
     }
 
     void VulkanGraphicsBackend::DrawInstancedPrimitivesEx(
@@ -6505,6 +6726,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.stencilWriteMask = stencilWriteMask_;
         d.referenceStencil = referenceStencil_;
         d.blend        = blendEnabled_;
+        d.blendParams = blendParams_;
         d.cullMode     = cullMode_;
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
@@ -6517,18 +6739,28 @@ namespace CNA::Internal::Backends::Vulkan
         d.baseVertex   = static_cast<int32_t>(params.baseVertex);
         d.useInstanced = true;
         d.descSet      = defaultWhiteDescSet_;  // no per-draw texture for now
-        pending3D_.push_back(std::move(d));
+        PushPending3DDraw(std::move(d));
     }
 
     // ---- Graphics state ----
 
     void VulkanGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                  int colorDstBlend, int alphaDstBlend,
-                                                 int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+                                                 int colorBlendFunc, int alphaBlendFunc)
     {
         // Blend::One=0, Blend::Zero=1 → Opaque preset: src=One, dst=Zero → no blending
         blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
                           alphaSrcBlend == 0 && alphaDstBlend == 1);
+        // Task 868: previously every one of these 6 real values was discarded except for the
+        // enabled/disabled boolean above -- every pipeline hardcoded BlendState.NonPremultiplied's
+        // own equation whenever blending was on at all. Now stored for real use by
+        // FillBlendAttachmentState() at pipeline-creation time.
+        blendParams_.colorSrc  = colorSrcBlend;
+        blendParams_.colorDst  = colorDstBlend;
+        blendParams_.alphaSrc  = alphaSrcBlend;
+        blendParams_.alphaDst  = alphaDstBlend;
+        blendParams_.colorFunc = colorBlendFunc;
+        blendParams_.alphaFunc = alphaBlendFunc;
     }
 
     void VulkanGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
@@ -7145,19 +7377,26 @@ namespace CNA::Internal::Backends::Vulkan
     {
         if (!owner_ || pool_ == VK_NULL_HANDLE) return;
         ended_ = false;
-        // Occlusion queries in Vulkan must be recorded inside a render pass.
-        // CNA's Vulkan backend defers all draws to RecordCommandBuffer, so we
-        // cannot inject query begin/end here. The result is always 0 (not visible)
-        // until proper per-draw-call query injection is implemented.
+        // Task 447/854: occlusion queries in Vulkan must be recorded inside a render pass, and
+        // CNA's Vulkan backend defers all draws to RecordCommandBuffer -- so Begin()/End() don't
+        // inject any Vulkan commands directly. Instead, this marks the query "active": every
+        // Pending3DDraw pushed via PushPending3DDraw() between now and End() gets tagged with
+        // `this`, and RecordCommandBuffer() later wraps whichever contiguous run of tagged draws
+        // land in the same render pass in a real vkCmdBeginQuery/vkCmdEndQuery pair.
+        owner_->activeOcclusionQuery_ = this;
     }
 
     void VulkanOcclusionQueryBackend::End()
     {
         if (!owner_ || pool_ == VK_NULL_HANDLE) return;
         ended_ = true;
-        // See Begin(): draw-level query injection is not yet implemented.
-        // Report 0 visible pixels as a safe default.
-        pixelCount_ = 0;
+        // Guard rather than unconditionally clearing: XNA's own OcclusionQuery API doesn't
+        // support nested Begin() calls, so this should always already be `this` in practice.
+        if (owner_->activeOcclusionQuery_ == this)
+            owner_->activeOcclusionQuery_ = nullptr;
+        // pixelCount_ is no longer hardcoded to 0 here -- IsComplete() populates it once the
+        // real GPU query result (recorded by RecordCommandBuffer(), see Begin()'s comment) is
+        // ready, matching every other backend's own async completion timing.
     }
 
     bool VulkanOcclusionQueryBackend::IsComplete() const

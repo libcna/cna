@@ -33,6 +33,7 @@ namespace Microsoft::Xna::Framework::Graphics
     const ModelMeshPartCollection& ModelMesh::getMeshPartsProperty()    const { return meshParts_; }
     const std::string&             ModelMesh::getNameProperty()         const { return name_; }
     ModelBone*                     ModelMesh::getParentBoneProperty()   const { return parentBone_; }
+    void                           ModelMesh::setParentBoneProperty(ModelBone* value) { parentBone_ = value; }
     System::Object*                ModelMesh::getTagProperty()          const { return tag_; }
     void                           ModelMesh::setTagProperty(System::Object* value) { tag_ = value; }
 

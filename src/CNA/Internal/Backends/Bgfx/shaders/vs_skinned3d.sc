@@ -7,6 +7,7 @@ uniform mat4 u_wvp;
 uniform vec4 u_diffuseColor;
 uniform mat4 u_bones[72];
 uniform vec4 u_fogParams;
+uniform vec4 u_depthBias;
 
 void main()
 {
@@ -15,6 +16,8 @@ void main()
                  + u_bones[int(a_indices.z)] * a_weight.z
                  + u_bones[int(a_indices.w)] * a_weight.w;
     gl_Position  = mul(u_wvp, mul(skinMat, vec4(a_position, 1.0)));
+    // Task 767: RasterizerState.DepthBias emulation (see vs_colored3d.sc for the full comment).
+    gl_Position.z += u_depthBias.x * gl_Position.w;
     v_normal     = normalize(skinMat[0].xyz * a_normal.x
                            + skinMat[1].xyz * a_normal.y
                            + skinMat[2].xyz * a_normal.z);

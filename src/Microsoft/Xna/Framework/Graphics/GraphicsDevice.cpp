@@ -233,12 +233,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Clear(const Color& color)
     {
-        Clear(
-            static_cast<float>(color.getRProperty()) / 255.0f,
-            static_cast<float>(color.getGProperty()) / 255.0f,
-            static_cast<float>(color.getBProperty()) / 255.0f,
-            static_cast<float>(color.getAProperty()) / 255.0f
-        );
+        // Task 928: real XNA/FNA's single-argument overload clears the target, depth buffer,
+        // AND stencil together -- Clear(ClearOptions.Target | ClearOptions.DepthBuffer |
+        // ClearOptions.Stencil, color, Viewport.MaxDepth, 0) -- not just the color target. The
+        // depth value used is the device's own CURRENT viewport's MaxDepth (not a hardcoded 1.0),
+        // matching FNA's exact `Viewport.MaxDepth` reference (a GraphicsDevice property, not a
+        // static constant).
+        Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+              color, getViewportProperty().getMaxDepthProperty(), 0);
     }
 
     void GraphicsDevice::Clear(float r, float g, float b, float a)

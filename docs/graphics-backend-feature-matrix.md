@@ -14,9 +14,9 @@ fixed · ⛔ BLOCKED, needs a project-owner architecture decision.
 
 | Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer |
 |---|---|---|---|---|
-| All `Draw` overloads, sort modes, rotation/flip/scale/crop | ✅ | ✅ | ✅ | ✅ (2 real bugs fixed: rotation pivot, `transformMatrix`) |
+| All `Draw` overloads, sort modes, rotation/flip/scale/crop | ✅ | not separately re-audited (Task 861) | not separately re-audited | ✅ (2 real bugs fixed: rotation pivot, `transformMatrix`) |
 | Custom `Effect` via `Begin(effect)` | ✅ | ✅ | ✅ | ❌ throws by design (no shader stage, 2D-only backend) |
-| SpriteFont — glyph placement/spacing/newline/fallback/flip | ✅ pixel-verified (Tasks 424-429) | not separately re-audited | not separately re-audited | ✅ (1 real cross-backend bug found and fixed, Task 694) |
+| SpriteFont — glyph placement/spacing/newline/fallback/flip | ✅ pixel-verified (Tasks 424-429) | not separately re-audited (Task 861) | not separately re-audited | ✅ (1 real cross-backend bug found and fixed, Task 694) |
 | `TextureAddressMode::Wrap`/`Mirror` via SpriteBatch | ✅ | ✅ | ✅ | ⛔ **BLOCKED** (Tasks 686/687) |
 
 ## Stock Effects
@@ -53,6 +53,21 @@ not rewritten here (out of this task's own scope).
 | MSAA (both RT types) | ✅ | ✅ | ✅ (`Bgfx_RenderTarget2D_MsaaResolve` fails only under this session's Xvfb/no-DRI3 sandbox, not a code bug) | N/A (2D-only, no AA needed) |
 | Mip chains (both RT types) | ✅ | ✅ | ✅ | N/A |
 | Per-instance `DepthStencilFormat` fidelity | ✅ | ✅ (Task 911) | ✅ | ⚠️ emulated (echoes the requested format back, no real backing storage) |
+
+### Bgfx MRT attachment limits (Task 775)
+
+`GraphicsDevice::SetRenderTargets` throws `std::invalid_argument` above **4** targets in shared C++
+code (`MAX_RENDERTARGET_BINDINGS`, Task 881) — mirroring FNA's own real
+`internal const int MAX_RENDERTARGET_BINDINGS = 4` cap — before any backend ever sees the call, so
+this is the practical, enforced limit on Bgfx (and every other backend) regardless of what the
+underlying device itself could support. `BgfxGraphicsBackend::SetRenderTargets`'s own MRT
+framebuffer-construction path (`BgfxGraphicsBackend.cpp`) separately caps at a local
+`kMaxAttachments = 8`, matching bgfx's own `BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS` compile-time
+default — unreachable in practice today since the shared 4-target gate rejects anything larger
+first, kept only as defense-in-depth (same reasoning as Task 881's own EasyGL/Bgfx ad-hoc-cap
+notes). The real device capability, `bgfx::getCaps()->limits.maxFBAttachments`, is logged at
+startup (Task 456) and is typically 8 on desktop GL/Vulkan hardware — always ≥ the FNA-mandated 4,
+so it has never been the binding constraint in this project.
 
 ## Texture2D / Texture3D / TextureCube
 
@@ -100,8 +115,8 @@ falls back," which is the idiomatic Vulkan pattern for optional features, not a 
 
 | Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer |
 |---|---|---|---|---|
-| Wired to real GPU work (`Begin`/`End`) | ✅ | ⛔ **BLOCKED**, functionally inert, always reports 0 (Task 447) | ✅ (Task 448) | N/A — throws at construction (Task 727) |
-| Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | N/A | ⚠️ can't verify in this sandbox's software GL2.1 driver; dedicated-view architecture gap open (Task 917) | N/A |
+| Wired to real GPU work (`Begin`/`End`) | ✅ | ✅ **FIXED (Task 447, 2026-07-10)** — real per-draw-call query correlation via `Pending3DDraw::occlusionQuery` tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording in `RecordCommandBuffer()` | ✅ (Task 448) | N/A — throws at construction (Task 727) |
+| Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | ✅ verified both directions, plus a multi-draw-span check (Task 854) — this sandbox's software Vulkan driver (Mesa Lavapipe) reports fully accurate, discriminating pixel counts (4096 visible / 0 occluded on a 64×64 quad) | ⚠️ can't verify in this sandbox's software GL2.1 driver; dedicated-view architecture gap open (Task 917) | N/A |
 
 ## Model (Phase 49, closed this session — see `docs/model-content-pipeline-support.md` for full detail)
 
@@ -115,7 +130,6 @@ falls back," which is the idiomatic Vulkan pattern for optional features, not a 
 
 | Task | Backend | One-line reason |
 |---|---|---|
-| 447 | Vulkan | Occlusion query — backend defers ALL draws to `RecordCommandBuffer`; no way to correlate a query's Begin/End span with a deferred draw without a real design decision (3 sub-questions, none guessed at) |
 | 686 | SDL_Renderer | `TextureAddressMode::Wrap` via `SpriteBatch` — no native support in the `Draw()` path used; 3 options (throw / rewrite to `SDL_RenderGeometry` / hybrid), none picked |
 | 687 | SDL_Renderer | Same underlying constraint as 686, for `Mirror` — resolving 686 resolves this too |
 | 725 | SDL_Renderer | `Texture3D`/`TextureCube` construction succeeds silently with a null backend; 94 existing tests rely on that silent-success behavior, so fixing needs a blast-radius-aware architecture decision |
@@ -129,20 +143,136 @@ contention false failures):
 
 - **EasyGL**: 3 — `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`,
   `easy-gl-resource-smoke-tests`. Reconfirmed as recently as Task 449's own regression (4510/4513).
-- **Bgfx**: 1 — `Bgfx_RenderTarget2D_MsaaResolve` (this sandbox's Xvfb has no DRI3 support; the
-  test's Vulkan-renderer workaround fails to negotiate and falls back to GL 2.1, where MSAA
-  doesn't resolve — an environment limitation, not a code bug). Reconfirmed via Task 448's own
-  regression (4413/4414).
-- **Vulkan**: last full run (Task 911) was 4369/4378 — 12 known pre-existing (5× `BlendState`/
-  Task 868, several `DepthStencilState`-adjacent, `ReferenceStencil`/Task 872, 1 `DepthBias`
-  sub-case) plus 3 non-deterministic `ContentManagerSkinnedModelTest.*` segfaults under this
-  sandbox's Vulkan/Xvfb/llvmpipe combination (confirmed via `git stash` to be pre-existing and
-  unrelated to any session's changes, and to pass cleanly in isolation). Not re-run this session
-  (no Vulkan-touching task since Task 911) — treat as the best-known baseline, not a guarantee.
+- **Bgfx**: **updated 2026-07-10 (Task 948 fixed)** — back down to 6 (was briefly 7 while Task 948
+  was still open): 6 `RenderTarget2D`/`RenderTargetCube` `glReadPixels`/Xvfb-no-DRI3 sandbox crashes
+  (`DepthBuffer`, `MsaaResolve`, `MipChain` ×2 for `RenderTarget2D` and `RenderTargetCube`, plus
+  `RenderTargetCube_DepthFormat` — see the "Remaining genuine Bgfx limitations" section above) —
+  environment limitations, not code bugs. `Bgfx_ModelJsonReader_Quad` (Task 927/948:
+  `DrawIndexedPrimitivesEx` was never overridden on Bgfx) is now fixed and passes 2/2 — a real
+  `BgfxGraphicsBackend::DrawIndexedPrimitivesEx` override was added, mirroring `DrawPrimitivesEx`'s
+  own full `GpuDrawParams` dispatch. Reconfirmed via `ctest -R "^Bgfx_"` (98 cases, 92/98 passed —
+  exactly these 6) plus `CnaTests` (4361/4363, 2 pre-existing hardware skips, 0 failures, run twice).
+- **Vulkan**: last full run (Task 911) was 4369/4378 — **9** known pre-existing (5× `BlendState`/
+  Task 868, 1 `RasterizerState.DepthBias` sub-case, 3 non-deterministic
+  `ContentManagerSkinnedModelTest.*` segfaults under this sandbox's Vulkan/Xvfb/llvmpipe combination
+  — confirmed via `git stash` to be pre-existing and unrelated to any session's changes, and to pass
+  cleanly in isolation). **Correction (2026-07-09, Task 861):** this row previously said "12" and
+  additionally claimed "several `DepthStencilState`-adjacent" failures — both wrong; `4378-4369=9`,
+  and `DepthStencilState`'s own compare-op/stencil-op tests all pass (Task 870 fixed this), leaving
+  only the 6 integration-suite failures (5 `BlendState` + 1 `DepthBias`) plus the 3 segfaults.
+  Independently reconfirmed via a fresh `ctest -R "^Vulkan_"` rerun (Task 495, 87/93 — exactly those
+  6, same names) plus the matching correction already made in `docs/xna-4-api-coverage.md` (Task
+  484/499). Not re-run as a full suite this session (no Vulkan-touching task since Task 911) —
+  treat as the best-known baseline, not a guarantee.
 - **SDL_Renderer**: 13 known pre-existing, all throwing `"SDL_Renderer does not support 3D"` —
   matches this backend's accepted 2D-only architectural scope exactly (`EffectApplyTest`,
   `GraphicsDeviceValidationTest.SetRenderTargets_*`, `SkinnedModelEXTPartTest.*`,
   `ContentManagerSkinnedModelTest.*`). Confirmed via Task 915's own systematic full-suite run.
+
+## Remaining genuine Vulkan limitations (Task 861, 2026-07-09)
+
+Phase 73 (Tasks 664-665, 825-861) was written as a checklist of individual Vulkan pixel-test tasks,
+but Tasks 825-860 were never checked off — later, higher-numbered work (Tasks 484/495/499/500,
+plus the fog/lighting/effect fixes at 885-900) independently established most of the same ground,
+superseding the original per-row checklist without formally closing each row. This section is
+Task 861's real deliverable: the actual current state, confirmed by spot-checking a representative
+sample of Tasks 825-860 against real test coverage rather than re-verifying all 36 rows from
+scratch (that would be Task 738-scale work, out of this task's own scope).
+
+**Genuinely already covered by real, current Vulkan tests** (confirmed via
+`ctest --test-dir cmake-build-vulkan -N -R "^Vulkan_"`, 93 real tests): `TextureAddressMode`
+(Clamp/Mirror), `TextureFilter` (Point vs. Linear), anisotropic filtering, all 7 `BlendState`
+presets, all 6 `DepthStencilState` aspects, `CullMode`, `Viewport`, render-target lifecycle
+(sample-after-unbind, MSAA, mip chains, depth-format fidelity, MRT-adjacent), and all 5 stock
+effects including fog and several per-effect sub-features (specular, Fresnel, eye position, bone
+blending) — this maps directly onto Tasks 825-849's own topics. **Confirmed genuine bugs found by
+this later work, not silently passing**: `BlendState` (Task 868, still open), one isolated
+`RasterizerState.DepthBias` sub-case (still open) — these are the real content behind Tasks 831-833
+and 839's own topics, not clean passes.
+
+**A real, previously-undocumented gap found by this spot-check**: unlike EasyGL and SDL_Renderer,
+Vulkan has **no dedicated pixel test** for `SpriteBatch`'s sort-mode ordering, rotation/scale/
+source-rectangle-cropping/`SpriteEffects` flip (Task 851/850's own topics), `SpriteFont` glyph
+placement (Task 852), or `Model` multi-mesh hierarchy transform propagation (Task 853) —
+confirmed via `grep`/`ctest -N` finding zero `Vulkan_SpriteFont*`/`Vulkan_Model*`/
+`Vulkan_SpriteSortMode*` test names, despite `Vulkan_SpriteBatch_MultiBeginEnd` and
+`Vulkan_Demo2D_SmokeTest` confirming basic `SpriteBatch` drawing works. Corrected the feature
+matrix's own "2D SpriteBatch/SpriteFont" table above, which previously (incorrectly) rated Vulkan
+✅ for this without a backing test, to "not separately re-audited" — matching the honest phrasing
+already used for the adjacent SpriteFont row. This is a **test-coverage gap, not a confirmed
+behavioral bug** — the underlying `SpriteBatch`/`SpriteFont`/`Model` code is backend-agnostic C++
+already pixel-verified on EasyGL/SDL_Renderer, so a regression specifically on Vulkan is unlikely,
+but it is genuinely unverified there. Not opened as a new numbered task here (that's Task 738-scale
+triage work); flagging it in this matrix is this task's own real scope.
+
+**`OcclusionQuery` visible-vs-occluded pixel test on Vulkan (Task 854's own topic)**: **FIXED,
+2026-07-10** — was Task 447's ⛔ BLOCKED status (Vulkan's deferred-draw architecture couldn't
+correlate a query's Begin/End span with a draw at all); now resolved via real per-draw-call query
+tagging and `vkCmdBeginQuery`/`vkCmdEndQuery` recording, see the `OcclusionQuery` table above.
+
+**Bottom line**: Vulkan's real, current, confirmed-open limitations are exactly 2 — `BlendState`
+(Task 868) and the isolated `RasterizerState.DepthBias` sub-case — plus the `ReferenceStencil` gap
+(Task 872, shared across all 3 3D backends). The 2D SpriteBatch/SpriteFont/Model-hierarchy
+test-coverage gap above is real but distinct in kind (untested, not un-implemented or
+known-broken). `OcclusionQuery` (Task 447/854) is no longer on this list — fixed in full.
+
+## Remaining genuine Bgfx limitations (Task 824, 2026-07-10)
+
+Phase 72 (Bgfx full 2D+3D pixel-verified parity, Tasks 740-824) is now closed in full: of the
+original 38 confirmed real gaps found in a first-ever complete row-by-row triage, 37 are ✅ closed
+this session and exactly 1 remains open, explicitly flagged (not silently skipped). Three genuine,
+confirmed limitations survive this closure — none of them a code bug in this project, each already
+root-caused rather than merely observed:
+
+- **Constant `DepthBias` (Task 767): FIXED, 2026-07-10.** Project-owner decision received: bgfx's
+  high-level state API has zero depth-bias/polygon-offset mechanism anywhere (confirmed via
+  `bgfx/defines.h` — no `BIAS`/`OFFSET` flag exists — and the vendored `renderer_gl.cpp` — no
+  `glPolygonOffset` call in the whole file), so constant `DepthBias` is now emulated via a per-draw
+  vertex-shader Z-offset (`BgfxGraphicsBackend::SetDepthBiasUniform`, a new `u_depthBias` uniform
+  added to every 3D vertex shader, scaled by `kDepthBiasScale` to roughly match the visual magnitude
+  a real GL/Vulkan polygon-offset implementation would produce). New `Bgfx_RasterizerState_DepthBias`
+  test confirms both the zero-bias baseline (stays RED) and a large negative bias (pulls a coplanar
+  redraw in front, turns GREEN); verified via `git stash` revert-and-rebuild.
+  **`SlopeScaleDepthBias` remains an intentionally undone gap** (project-owner decision, not
+  attempted): a true per-fragment screen-space-slope computation would force every 3D shader off the
+  early-Z path, even at `DepthBias=0`, unless duplicate shader variants were added — not worth the
+  cost for this one property. EasyGL, by contrast, needed no shader emulation at all: it already had
+  real `glPolygonOffset` support in the vendored `easy-gl` library, just never wired up — fixed with
+  a native call, covering both constant and slope-scale bias in one shot (see Task 767's own
+  `plan_graphics.md` entry). Only Vulkan implements real hardware depth bias (`vkCmdSetDepthBias`,
+  dynamic state, including real slope-scale).
+- **`RenderTarget2D`/`RenderTargetCube` `glReadPixels` crashes under this sandbox's software GL
+  driver** (`Bgfx_RenderTarget2D_DepthBuffer`/`MsaaResolve`/`MipChain`,
+  `Bgfx_RenderTargetCube_MipChain`/`MsaaResolve`/`DepthFormat` — 6 tests, all pre-existing, none
+  introduced by this session's own work): all abort with the same class of
+  `GL_INVALID_OPERATION`/MSAA-resolve-vs-depth-attachment assertion, pointing at this project's
+  Xvfb/software-GL (Mesa llvmpipe, no DRI3) sandbox ceiling rather than a CNA defect — matches the
+  already-established precedent (Task 448/879/903's own identical-class findings). A real
+  GPU-backed environment would be needed to distinguish "still broken" from "sandbox-only."
+- **`OcclusionQuery.PixelCount()` doesn't discriminate visible from occluded geometry in this
+  sandbox** (Tasks 814/815): a dedicated scratch probe confirmed the exact same numeric value is
+  returned regardless of scene content, extending Task 448's own already-documented finding
+  (`IsComplete()`/`PixelCount()` can't distinguish a wired-up query from a never-submitted one) to
+  the actual pixel-count magnitude too — the underlying rendering/depth-occlusion behavior each
+  scenario depends on IS reliably pixel-verified instead (`Bgfx_OcclusionQuery_PixelCount`'s own 2
+  real, sabotage-verified checks). Same software-renderer ceiling as above, not a CNA defect.
+
+**FIXED, 2026-07-10 (Task 927/948): `BgfxGraphicsBackend` never overrode `DrawIndexedPrimitivesEx`**
+— was a **real CNA gap**, not an environment limitation, first flagged as an "adjacent, out-of-scope
+discovery" by Task 766 and concretely reproduced by `Bgfx_ModelJsonReader_Quad` (previously a
+documented 1/2 known failure). Any indexed, `Effect`-bound draw with a vertex format lacking a
+`Color` attribute (`VertexPositionNormalTexture`/`VertexPositionTexture` — i.e. any
+`Content.Load<Model>()`-loaded mesh) silently fell back to the base `IGraphicsBackend`'s default
+`DrawIndexedPrimitivesEx`, which discarded `GpuDrawParams` entirely and rendered via the `colored3D`
+pipeline instead — reading an unbound `a_color0` attribute (GL default `(0,0,0,1)`), so the mesh
+rendered solid black regardless of its real `DiffuseColor`/texture/lighting. Fixed by adding a real
+`BgfxGraphicsBackend::DrawIndexedPrimitivesEx` override mirroring `DrawPrimitivesEx`'s own full
+`GpuDrawParams` dispatch; `Bgfx_ModelJsonReader_Quad` now passes 2/2.
+
+**Bottom line**: Bgfx's only remaining code-level gap is Task 767 (depth bias), already flagged for
+a project-owner decision; the other 2 items are sandbox/environment ceilings, already root-caused,
+that would need a real GPU-backed test environment to resolve or re-confirm — not further Bgfx
+backend code work.
 
 ## New tracked follow-up tasks opened this session
 

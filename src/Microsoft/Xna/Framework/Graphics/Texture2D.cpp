@@ -132,8 +132,9 @@ namespace Microsoft::Xna::Framework::Graphics
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(w, h) : 1;
         ImageData data;
-        data.width  = w;
-        data.height = h;
+        data.width     = w;
+        data.height    = h;
+        data.mipLevels = levelCount_;
         data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
@@ -145,6 +146,11 @@ namespace Microsoft::Xna::Framework::Graphics
                          int lvlCount, std::shared_ptr<ITextureBackend> backend)
         : Texture(&device), width(w), height(h), backend_(std::move(backend))
     {
+        // Task 774 finding: this constructor (used exclusively by RenderTarget2D) previously
+        // skipped ValidateFormat entirely, silently accepting any SurfaceFormat even though
+        // CreateRenderTarget2D's own backend call never actually forwards it -- a RenderTarget2D
+        // could report a non-Color Format() while its real GPU resource was always Color.
+        ValidateFormat(fmt);
         format_     = fmt;
         levelCount_ = lvlCount;
     }
@@ -183,8 +189,9 @@ namespace Microsoft::Xna::Framework::Graphics
         if (elementCount < total)
             throw std::out_of_range("Texture2D::SetData: elementCount is less than the number of pixels in the texture");
         ImageData img;
-        img.width  = width;
-        img.height = height;
+        img.width     = width;
+        img.height    = height;
+        img.mipLevels = levelCount_;
         img.pixels.resize(static_cast<std::size_t>(total) * 4);
         for (int i = 0; i < total; ++i)
         {
@@ -257,9 +264,10 @@ namespace Microsoft::Xna::Framework::Graphics
             else if (graphicsDevice_)
             {
                 ImageData img;
-                img.width  = width;
-                img.height = height;
-                img.pixels = buf;
+                img.width     = width;
+                img.height    = height;
+                img.mipLevels = levelCount_;
+                img.pixels    = buf;
                 backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
                 backend_->ShareCpuPixels(cpuPixels_);
             }

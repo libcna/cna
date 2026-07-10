@@ -19,6 +19,7 @@ ctest --test-dir build --output-on-failure
 
 ### Project Status
 
+- **`Microsoft::Xna::Framework::Graphics` milestone:** qualified **~90% XNA/FNA compatibility, test-execution-verified** (not estimated) — every one of the ~26 major Graphics classes is present, implemented, and tested; the gap to 100% is 10 named, tracked items (5 confirmed bugs + 5 architecture decisions pending project-owner sign-off). See `docs/graphics-compatibility-report.md` for the full computed breakdown.
 - **Overall maturity:** Active, incremental framework development; XNA API coverage is partial and expanding.
 - **`SDL_RENDERER` backend:** Implemented path focused on practical 2D rendering workflows; 2D-only by design (3D calls throw).
 - **`EASYGL` backend:** Most mature backend overall — implemented OpenGL-based path through `easy-gl`, full 2D+3D pixel-verified coverage.

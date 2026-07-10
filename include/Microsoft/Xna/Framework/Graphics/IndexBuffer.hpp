@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
@@ -95,6 +96,21 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetData(const std::uint16_t* data, int startIndex, int elementCount);
 
         /**
+         * @brief Reads back 16-bit index data previously uploaded via `SetData`.
+         * @param data  Destination array to receive the index data.
+         * @param count Number of indices to read.
+         */
+        void GetData(std::uint16_t* data, int count);
+
+        /**
+         * @brief Reads back a slice of 16-bit index data previously uploaded via `SetData`.
+         * @param data         Destination array to receive the index data.
+         * @param startIndex   Index of the first element to write in @p data.
+         * @param elementCount Number of indices to read.
+         */
+        void GetData(std::uint16_t* data, int startIndex, int elementCount);
+
+        /**
          * @brief Uploads 32-bit index data to the buffer (replaces previous content).
          * @param data  Pointer to the source index array.
          * @param count Number of indices to upload.
@@ -108,6 +124,21 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of indices to upload.
          */
         void SetData(const std::uint32_t* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Reads back 32-bit index data previously uploaded via `SetData`.
+         * @param data  Destination array to receive the index data.
+         * @param count Number of indices to read.
+         */
+        void GetData(std::uint32_t* data, int count);
+
+        /**
+         * @brief Reads back a slice of 32-bit index data previously uploaded via `SetData`.
+         * @param data         Destination array to receive the index data.
+         * @param startIndex   Index of the first element to write in @p data.
+         * @param elementCount Number of indices to read.
+         */
+        void GetData(std::uint32_t* data, int startIndex, int elementCount);
 
         /**
          * @brief Internal accessor used by the backend draw paths.
@@ -168,5 +199,9 @@ namespace Microsoft::Xna::Framework::Graphics
         IndexElementSize indexElementSize_{IndexElementSize::SixteenBits};
         BufferUsage bufferUsage_{BufferUsage::None};
         int indexCount_{0};
+        // Task 930: CPU-side shadow of the most recent SetData call's raw index bytes, enabling
+        // GetData() without a real per-backend GPU readback path (see VertexBuffer's own
+        // identical cpuShadow_ precedent for the full rationale).
+        std::vector<std::uint8_t> cpuShadow_;
     };
 }

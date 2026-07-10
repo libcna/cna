@@ -224,21 +224,52 @@ namespace CNA::Internal::Backends::Bgfx
             throw std::runtime_error("Failed to create BGFX texture: image data is empty.");
         }
 
-        const bgfx::Memory* memory = bgfx::copy(data.pixels.data(), static_cast<uint32_t>(data.pixels.size()));
+        // Task 926: created WITHOUT initial _mem (mutable -- bgfx::createTexture2D's own doc:
+        // "If _mem is non-NULL, created texture will be immutable"), mirroring
+        // BgfxTextureCubeBackend's established pattern, so UpdatePixels/UpdatePixelsLevel below
+        // can genuinely re-upload later. hasMips now genuinely threaded through (was hardcoded
+        // false regardless of data.mipLevels) so a real mip chain can be allocated and later
+        // populated via UpdatePixelsLevel.
         textureHandle = bgfx::createTexture2D(
             static_cast<uint16_t>(width),
             static_cast<uint16_t>(height),
-            false,
+            data.mipLevels > 1,
             1,
             bgfx::TextureFormat::RGBA8,
-            BGFX_TEXTURE_NONE | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP,
-            memory
+            BGFX_TEXTURE_NONE | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP
         );
 
         if (!bgfx::isValid(textureHandle))
         {
             throw std::runtime_error("Failed to create BGFX texture handle.");
         }
+
+        const bgfx::Memory* memory = bgfx::copy(data.pixels.data(), static_cast<uint32_t>(data.pixels.size()));
+        bgfx::updateTexture2D(textureHandle, 0, 0, 0, 0,
+                               static_cast<uint16_t>(width), static_cast<uint16_t>(height), memory);
+    }
+
+    void BgfxTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    {
+        if (!bgfx::isValid(textureHandle) || !rgba) return;
+        const uint32_t size = static_cast<uint32_t>(stride) * static_cast<uint32_t>(height);
+        const bgfx::Memory* mem = bgfx::copy(rgba, size);
+        bgfx::updateTexture2D(textureHandle, 0, 0, 0, 0,
+                              static_cast<uint16_t>(width), static_cast<uint16_t>(height), mem,
+                              static_cast<uint16_t>(stride));
+    }
+
+    // Task 926 (split from Task 867): real GPU upload for level>0, mirroring
+    // BgfxTextureCubeBackend::SetData's established bgfx::updateTextureCube pattern --
+    // previously the shared IGraphicsBackend no-op default, silently discarding the caller's
+    // mip-level data.
+    void BgfxTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    {
+        if (!bgfx::isValid(textureHandle) || !rgba || level < 0) return;
+        const uint32_t size = static_cast<uint32_t>(levelW) * static_cast<uint32_t>(levelH) * 4u;
+        const bgfx::Memory* mem = bgfx::copy(rgba, size);
+        bgfx::updateTexture2D(textureHandle, 0, static_cast<uint8_t>(level), 0, 0,
+                              static_cast<uint16_t>(levelW), static_cast<uint16_t>(levelH), mem);
     }
 
     BgfxTextureBackend::~BgfxTextureBackend()
@@ -929,6 +960,11 @@ namespace CNA::Internal::Backends::Bgfx
         pendingAddressV_ = addressV;
     }
 
+    void BgfxSpriteBatchBackend::SetTransformMatrix(const Matrix& m)
+    {
+        graphicsBackend.spriteTransform_ = m;
+    }
+
     void BgfxCnaCallback::fatal(const char* /*_file*/, uint16_t /*_line*/,
                                 bgfx::Fatal::Enum /*_code*/, const char* _str)
     {
@@ -1059,6 +1095,7 @@ namespace CNA::Internal::Backends::Bgfx
                                                              "env_map3d");
 
                 wvpUniform_         = bgfx::createUniform("u_wvp",            bgfx::UniformType::Mat4);
+                depthBiasUnif_      = bgfx::createUniform("u_depthBias",      bgfx::UniformType::Vec4);
                 diffuseColor3DUnif_ = bgfx::createUniform("u_diffuseColor",   bgfx::UniformType::Vec4);
                 ambientColor3DUnif_ = bgfx::createUniform("u_ambientColor",   bgfx::UniformType::Vec4);
                 light0Dir3DUnif_    = bgfx::createUniform("u_light0Dir",      bgfx::UniformType::Vec4);
@@ -1154,6 +1191,7 @@ namespace CNA::Internal::Backends::Bgfx
         auto destroyP = [](bgfx::ProgramHandle& h) { if (bgfx::isValid(h)) { bgfx::destroy(h); h = BGFX_INVALID_HANDLE; } };
 
         destroyU(wvpUniform_);
+        destroyU(depthBiasUnif_);
         destroyU(diffuseColor3DUnif_);
         destroyU(ambientColor3DUnif_);
         destroyU(light0Dir3DUnif_);
@@ -1243,7 +1281,20 @@ namespace CNA::Internal::Backends::Bgfx
         bx::mtxOrtho(ortho, 0.0f, static_cast<float>(viewWidth), static_cast<float>(viewHeight), 0.0f, 0.0f,
                      1000.0f, 0.0f,
                      bgfx::getCaps()->homogeneousDepth);
-        bgfx::setViewTransform(spriteViewId, nullptr, ortho);
+        // Task 808: fold in SpriteBatch::Begin()'s transformMatrix (identity when not explicitly
+        // set, so this is a no-op for ordinary 3D draws sharing this same view -- 3D draws supply
+        // their own world-view-projection via a per-draw uniform and never read bgfx's built-in
+        // view/proj, so this view-level transform only ever affects the embedded sprite shader's
+        // u_viewProj). bx's own vector convention is ROW-vector (bx::vec4MulMtx documents
+        // "row vector _vec by matrix _mat", i.e. v' = v * M) -- matches EasyGL's own
+        // `transform_ * orthoM` combined-matrix semantics exactly (apply the caller's transform
+        // first, then project): bx::mtxMul(result, a, b) computes result = a * b, so the combined
+        // matrix for v' = v * transform * ortho is orthoWithTransform = transformColMajor * ortho.
+        float transformColMajor[16];
+        spriteTransform_.ToColumnMajor(transformColMajor);
+        float orthoWithTransform[16];
+        bx::mtxMul(orthoWithTransform, transformColMajor, ortho);
+        bgfx::setViewTransform(spriteViewId, nullptr, orthoWithTransform);
         bgfx::setViewClear(spriteViewId, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, clearRgba, 1.0f, 0);
     }
 
@@ -1385,8 +1436,9 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setTexture(0, textureSampler, textureHandle, samplerFlags_[0]);
         bgfx::setVertexBuffer(0, &vertexBuffer);
         bgfx::setIndexBuffer(&indexBuffer);
-        if (scissorW_ > 0 && scissorH_ > 0)
-            bgfx::setScissor(scissorX_, scissorY_, scissorW_, scissorH_);
+        // Task 768: gated on scissorEnabled_, not just a non-zero rect -- see that member's own
+        // declaration comment for why the two must be tracked independently.
+        ApplyScissorOverride();
         bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_MSAA
                        | blendFlags_ | depthFlags_ | cullFlags_, blendFactorPacked_);
         bgfx::setStencil(stencilFront_, stencilBack_);
@@ -1420,16 +1472,44 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
-    void BgfxGraphicsBackend::ApplyBlendState(int colorSrcBlend, int /*alphaSrcBlend*/,
-                                               int colorDstBlend, int /*alphaDstBlend*/,
-                                               int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+    // Task 923: XNA BlendFunction enum -> bgfx blend-equation state bits (mirrors Task 868's own
+    // Vulkan ToVkBlendOp mapping exactly): Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4
+    static uint64_t XnaBlendFunctionToBgfxEquation(int blendFunc)
     {
-        if (colorSrcBlend == 0 && colorDstBlend == 1)
-            blendFlags_ = 0;  // One, Zero → Opaque (no blend)
+        switch (blendFunc)
+        {
+        case 1:  return BGFX_STATE_BLEND_EQUATION_SUB;
+        case 2:  return BGFX_STATE_BLEND_EQUATION_REVSUB;
+        case 3:  return BGFX_STATE_BLEND_EQUATION_MAX;
+        case 4:  return BGFX_STATE_BLEND_EQUATION_MIN;
+        default: return BGFX_STATE_BLEND_EQUATION_ADD;
+        }
+    }
+
+    void BgfxGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                               int colorDstBlend, int alphaDstBlend,
+                                               int colorBlendFunc, int alphaBlendFunc)
+    {
+        // Blend::One=0, Blend::Zero=1 → Opaque preset (all 4 factors): src=One, dst=Zero → no blend
+        if (colorSrcBlend == 0 && colorDstBlend == 1 &&
+            alphaSrcBlend == 0 && alphaDstBlend == 1)
+        {
+            blendFlags_ = 0;
+        }
         else
-            blendFlags_ = BGFX_STATE_BLEND_FUNC(
-                XnaBlendToBgfxFactor(colorSrcBlend),
-                XnaBlendToBgfxFactor(colorDstBlend));
+        {
+            // Task 923: previously alphaSrcBlend/alphaDstBlend were unused parameters (the alpha
+            // channel silently reused the colour channel's own factors via BGFX_STATE_BLEND_FUNC),
+            // and colorBlendFunc/alphaBlendFunc were entirely ignored (always implicitly Add).
+            blendFlags_ = BGFX_STATE_BLEND_FUNC_SEPARATE(
+                              XnaBlendToBgfxFactor(colorSrcBlend),
+                              XnaBlendToBgfxFactor(colorDstBlend),
+                              XnaBlendToBgfxFactor(alphaSrcBlend),
+                              XnaBlendToBgfxFactor(alphaDstBlend))
+                        | BGFX_STATE_BLEND_EQUATION_SEPARATE(
+                              XnaBlendFunctionToBgfxEquation(colorBlendFunc),
+                              XnaBlendFunctionToBgfxEquation(alphaBlendFunc));
+        }
     }
 
     static uint32_t XnaCompareFuncToBgfxStencilTest(int f)
@@ -1537,16 +1617,62 @@ namespace CNA::Internal::Backends::Bgfx
             }
         }
 
-        if (stencilEnable)
+        // Task 764: cache every stencil parameter except the reference value itself, so a later
+        // standalone SetReferenceStencil() call can rebuild stencilFront_/stencilBack_ without
+        // requiring a full ApplyDepthStencilState re-application (mirrors Vulkan's
+        // referenceStencil_ member, Task 870/319).
+        stencilEnableCached_       = stencilEnable;
+        stencilFuncCached_         = stencilFunc;
+        stencilPassCached_         = stencilPass;
+        stencilFailCached_         = stencilFail;
+        stencilDepthFailCached_    = stencilDepthFail;
+        stencilMaskCached_         = stencilMask;
+        stencilWriteMaskCached_    = stencilWriteMask;
+        twoSidedStencilModeCached_ = twoSidedStencilMode;
+        ccwStencilFuncCached_      = ccwStencilFunc;
+        ccwStencilPassCached_      = ccwStencilPass;
+        ccwStencilFailCached_      = ccwStencilFail;
+        ccwStencilDepthFailCached_ = ccwStencilDepthFail;
+        referenceStencilCached_    = referenceStencil;
+        RebuildStencilState();
+    }
+
+    void BgfxGraphicsBackend::RebuildStencilState()
+    {
+        if (stencilEnableCached_)
         {
-            stencilFront_ = BuildBgfxStencil(stencilFunc, stencilPass, stencilFail,
-                                             stencilDepthFail, stencilMask, stencilWriteMask,
-                                             referenceStencil);
-            stencilBack_ = twoSidedStencilMode
-                ? BuildBgfxStencil(ccwStencilFunc, ccwStencilPass, ccwStencilFail,
-                                   ccwStencilDepthFail, stencilMask, stencilWriteMask,
-                                   referenceStencil)
-                : stencilFront_;
+            if (twoSidedStencilModeCached_)
+            {
+                // Task 763 empirical finding, mirrors Task 870's identical Vulkan fix: this
+                // backend never sets BGFX_STATE_FRONT_CCW in ApplyRasterizerState, so bgfx's own
+                // default glFrontFace is GL_CW (see bgfx's renderer_gl.cpp) -- the OPPOSITE of
+                // EasyGL's effective convention (EasyGL never overrides GL's own hardware default
+                // of GL_CCW-is-front). CullMode itself is unaffected by this (BGFX_STATE_CULL_CW/
+                // CCW already cull the correct raw winding regardless of glFrontFace, verified by
+                // this whole project's existing cull-mode test suite) -- only bgfx::setStencil's
+                // own front/back split follows raw glFrontFace directly, with no equivalent
+                // compensating indirection. Confirmed via a genuinely differential
+                // stencil_twosided test (a back-facing triangle's CounterClockwiseStencilFunction/
+                // Fail must apply and did not until front/back were swapped here). Swapped
+                // pragmatically so XNA's "front"/"CounterClockwise" stencil settings land on
+                // whichever bgfx slot the GPU actually evaluates for each raw winding.
+                stencilFront_ = BuildBgfxStencil(ccwStencilFuncCached_, ccwStencilPassCached_,
+                                                 ccwStencilFailCached_, ccwStencilDepthFailCached_,
+                                                 stencilMaskCached_, stencilWriteMaskCached_,
+                                                 referenceStencilCached_);
+                stencilBack_ = BuildBgfxStencil(stencilFuncCached_, stencilPassCached_,
+                                                stencilFailCached_, stencilDepthFailCached_,
+                                                stencilMaskCached_, stencilWriteMaskCached_,
+                                                referenceStencilCached_);
+            }
+            else
+            {
+                stencilFront_ = BuildBgfxStencil(stencilFuncCached_, stencilPassCached_,
+                                                 stencilFailCached_, stencilDepthFailCached_,
+                                                 stencilMaskCached_, stencilWriteMaskCached_,
+                                                 referenceStencilCached_);
+                stencilBack_ = stencilFront_;
+            }
         }
         else
         {
@@ -1555,9 +1681,15 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
-    void BgfxGraphicsBackend::ApplyRasterizerState(int cullMode, int /*fillMode*/,
+    void BgfxGraphicsBackend::SetReferenceStencil(int value)
+    {
+        referenceStencilCached_ = value;
+        RebuildStencilState();
+    }
+
+    void BgfxGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
                                                     bool scissorTestEnable,
-                                                    float /*depthBias*/,
+                                                    float depthBias,
                                                     float /*slopeScaleDepthBias*/)
     {
         // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
@@ -1567,9 +1699,65 @@ namespace CNA::Internal::Backends::Bgfx
         case 2:  cullFlags_ = BGFX_STATE_CULL_CCW; break;
         default: cullFlags_ = 0;                    break;
         }
-        // Scissor test state — disable by zeroing the rect
-        if (!scissorTestEnable)
-            scissorW_ = scissorH_ = 0;
+        // Task 768: scissorEnabled_ is a genuinely independent flag, NOT derived from whether the
+        // rect happens to be non-zero -- SetScissorRect() can be called before or after this, in
+        // either order, and must not silently re-enable a disabled scissor test (see
+        // scissorEnabled_'s own declaration comment).
+        scissorEnabled_ = scissorTestEnable;
+        // FillMode: Solid=0, WireFrame=1 (Task 766; see ExpandWireframeIndices).
+        wireframe_ = (fillMode == 1);
+        // Task 767: bgfx has no native polygon-offset mechanism, so DepthBias is emulated via a
+        // per-draw vertex-shader Z-offset (see u_depthBias in every 3D vertex shader source).
+        // SlopeScaleDepthBias is deliberately NOT emulated (project-owner decision, 2026-07-10)
+        // and remains a documented, separately-tracked gap -- see depthBias_'s own declaration.
+        depthBias_ = depthBias;
+    }
+
+    bool BgfxGraphicsBackend::ExpandWireframeIndices(const BgfxIndexBufferBackend* ib,
+                                                      PrimitiveType primitive, int primitiveCount,
+                                                      int startIndex, int baseVertex,
+                                                      int firstVertex,
+                                                      bgfx::TransientIndexBuffer& outTib)
+    {
+        // Only triangle geometry needs expanding; line/point primitives are already "wireframe".
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
+            return false;
+        if (primitiveCount <= 0) return false;
+
+        auto readSrc = [&](int pos) -> uint32_t {
+            if (!ib) return static_cast<uint32_t>(firstVertex + pos);
+            const auto& bytes = ib->cpuData;
+            if (ib->IsThirtyTwoBit()) {
+                uint32_t v;
+                std::memcpy(&v, bytes.data() + static_cast<std::size_t>(startIndex + pos) * 4, 4);
+                return v + static_cast<uint32_t>(baseVertex);
+            }
+            uint16_t v;
+            std::memcpy(&v, bytes.data() + static_cast<std::size_t>(startIndex + pos) * 2, 2);
+            return static_cast<uint32_t>(v) + static_cast<uint32_t>(baseVertex);
+        };
+
+        const int edgeCount = primitiveCount * 3; // 3 edges per triangle, 2 indices per edge
+        if (bgfx::getAvailTransientIndexBuffer(static_cast<uint32_t>(edgeCount * 2), true) <
+            static_cast<uint32_t>(edgeCount * 2))
+            return false;
+        bgfx::allocTransientIndexBuffer(&outTib, static_cast<uint32_t>(edgeCount * 2), true);
+        auto* dst = reinterpret_cast<uint32_t*>(outTib.data);
+
+        int w = 0;
+        auto edge = [&](uint32_t a, uint32_t b) { dst[w++] = a; dst[w++] = b; };
+        if (primitive == PrimitiveType::TriangleList) {
+            for (int t = 0; t < primitiveCount; ++t) {
+                const uint32_t a = readSrc(3 * t), b = readSrc(3 * t + 1), c = readSrc(3 * t + 2);
+                edge(a, b); edge(b, c); edge(c, a);
+            }
+        } else { // TriangleStrip: primitiveCount triangles over primitiveCount+2 vertices
+            for (int t = 0; t < primitiveCount; ++t) {
+                const uint32_t a = readSrc(t), b = readSrc(t + 1), c = readSrc(t + 2);
+                edge(a, b); edge(b, c); edge(c, a);
+            }
+        }
+        return true;
     }
 
     void BgfxGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
@@ -1606,14 +1794,30 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setViewRect(currentViewId_, viewportX_, viewportY_, viewportW_, viewportH_);
     }
 
+    void BgfxGraphicsBackend::ApplyScissorOverride()
+    {
+        // Task 768: bgfx::setScissor is per-draw-call state (bgfx::RenderDraw::m_scissor resets
+        // to "no scissor" for every draw unless set again) -- must be called before every 3D
+        // submit(). Gated on scissorEnabled_ (not just a non-zero rect -- see that member's own
+        // declaration comment for why the two must be tracked independently).
+        if (scissorEnabled_ && scissorW_ > 0 && scissorH_ > 0)
+            bgfx::setScissor(scissorX_, scissorY_, scissorW_, scissorH_);
+    }
+
     void BgfxGraphicsBackend::ApplySamplerState(int slot, int filter,
                                                  int addressU, int addressV,
                                                  int /*maxAnisotropy*/)
     {
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
         uint32_t flags = 0;
-        // TextureFilter → bgfx sampler flags
-        // Linear=0, Point=1, Anisotropic=2, *MipPoint=3, *MipLinear=4, ...
+        // TextureFilter → bgfx sampler flags. XNA: Linear=0, Point=1, Anisotropic=2,
+        // LinearMipPoint=3, PointMipLinear=4, MinLinearMagPointMipLinear=5,
+        // MinLinearMagPointMipPoint=6, MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8.
+        // Task 743 finding: cases 3-8 previously all fell through to the `default` (plain linear)
+        // branch, silently ignoring the Min/Mag/Point-vs-Linear split entirely -- unlike
+        // EasyGLGraphicsBackend::ApplySamplerState, which already maps all 9 values correctly via
+        // GL's combined min-filter enum. bgfx's 3 independent per-axis bits (MIN/MAG/MIP_POINT)
+        // let every value be represented exactly, more directly than GL's combined enum approach.
         switch (filter)
         {
         case 1:  // Point
@@ -1621,6 +1825,24 @@ namespace CNA::Internal::Backends::Bgfx
             break;
         case 2:  // Anisotropic — bgfx handles via ANISOTROPIC flag
             flags |= BGFX_SAMPLER_MIN_ANISOTROPIC | BGFX_SAMPLER_MAG_ANISOTROPIC;
+            break;
+        case 3:  // LinearMipPoint: Min=Linear, Mag=Linear, Mip=Point
+            flags |= BGFX_SAMPLER_MIP_POINT;
+            break;
+        case 4:  // PointMipLinear: Min=Point, Mag=Point, Mip=Linear
+            flags |= BGFX_SAMPLER_MIN_POINT | BGFX_SAMPLER_MAG_POINT;
+            break;
+        case 5:  // MinLinearMagPointMipLinear: Min=Linear, Mag=Point, Mip=Linear
+            flags |= BGFX_SAMPLER_MAG_POINT;
+            break;
+        case 6:  // MinLinearMagPointMipPoint: Min=Linear, Mag=Point, Mip=Point
+            flags |= BGFX_SAMPLER_MAG_POINT | BGFX_SAMPLER_MIP_POINT;
+            break;
+        case 7:  // MinPointMagLinearMipLinear: Min=Point, Mag=Linear, Mip=Linear
+            flags |= BGFX_SAMPLER_MIN_POINT;
+            break;
+        case 8:  // MinPointMagLinearMipPoint: Min=Point, Mag=Linear, Mip=Point
+            flags |= BGFX_SAMPLER_MIN_POINT | BGFX_SAMPLER_MIP_POINT;
             break;
         default: // Linear and variants
             break; // BGFX_SAMPLER default is linear
@@ -1776,14 +1998,20 @@ namespace CNA::Internal::Backends::Bgfx
     void BgfxIndexBufferBackend::SetData16(const void* data, int index_count)
     {
         indexCount = index_count;
-        if (!bgfx::isValid(handle) || !data || index_count <= 0) return;
+        if (!data || index_count <= 0) { cpuData.clear(); return; }
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        cpuData.assign(bytes, bytes + static_cast<std::size_t>(index_count) * 2u);
+        if (!bgfx::isValid(handle)) return;
         bgfx::update(handle, 0, bgfx::copy(data, static_cast<uint32_t>(index_count) * 2u));
     }
 
     void BgfxIndexBufferBackend::SetData32(const void* data, int index_count)
     {
         indexCount = index_count;
-        if (!bgfx::isValid(handle) || !data || index_count <= 0) return;
+        if (!data || index_count <= 0) { cpuData.clear(); return; }
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        cpuData.assign(bytes, bytes + static_cast<std::size_t>(index_count) * 4u);
+        if (!bgfx::isValid(handle)) return;
         bgfx::update(handle, 0, bgfx::copy(data, static_cast<uint32_t>(index_count) * 4u));
     }
 
@@ -1793,6 +2021,19 @@ namespace CNA::Internal::Backends::Bgfx
     }
 
     // --- 3D draw calls ---
+
+    // Task 767: scale factor for the DepthBias vertex-shader Z-offset emulation. Real GL/Vulkan
+    // polygon-offset hardware multiplies the raw DepthBias value by an implementation-defined
+    // "minimum resolvable difference" of the depth buffer format (commonly ~1/(2^24-1) for a
+    // 24-bit depth buffer) before adding it to window-space depth -- mirrored here so a given
+    // DepthBias value produces a roughly comparable visual shift on Bgfx as on EasyGL/Vulkan.
+    static constexpr float kDepthBiasScale = 1.0f / 16777215.0f;
+
+    void BgfxGraphicsBackend::SetDepthBiasUniform()
+    {
+        const float depthBias4[4] = { depthBias_ * kDepthBiasScale, 0.0f, 0.0f, 0.0f };
+        bgfx::setUniform(depthBiasUnif_, depthBias4);
+    }
 
     static uint64_t ToTopologyFlag(PrimitiveType p)
     {
@@ -1820,6 +2061,7 @@ namespace CNA::Internal::Backends::Bgfx
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         bgfx::setUniform(wvpUniform_, wvp_col);
+        SetDepthBiasUniform();
         // This path carries no BasicEffect diffuse/VertexColorEnabled (no GpuDrawParams at
         // all); preserve the historical behavior of outputting the raw vertex colors
         // unmodified (diffuseColor=white, vertexColorEnabled=true — Task 364).
@@ -1829,10 +2071,23 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(vertexColorEn3DUnif_, vceOn);
 
         bgfx::setVertexBuffer(0, vb.handle);
+        // Task 766: FillMode::WireFrame -- re-expand triangle vertices into a line-list edge
+        // buffer (bgfx has no native polygon-fill-mode toggle, unlike D3D9/Vulkan).
+        bgfx::TransientIndexBuffer wireTib;
+        const bool useWireframe = wireframe_
+            && ExpandWireframeIndices(nullptr, primitive, primitiveCount, 0, 0, 0, wireTib);
+        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
+        ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
-        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
+                       // here -- depthFlags_ (set by ApplyDepthStencilState from the real
+                       // DepthBufferWriteEnable) already carries it when writes are actually
+                       // requested; including it again here unconditionally made
+                       // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                        | blendFlags_ | depthFlags_ | cullFlags_)
-                       | ToTopologyFlag(primitive), blendFactorPacked_);
+                       | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive)),
+                       blendFactorPacked_);
         SubmitViewProgram(colored3DProgram_);
     }
 
@@ -1853,6 +2108,7 @@ namespace CNA::Internal::Backends::Bgfx
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         bgfx::setUniform(wvpUniform_, wvp_col);
+        SetDepthBiasUniform();
         // See DrawColoredPrimitives above: preserve the historical raw-vertex-color output
         // for this no-GpuDrawParams legacy path (Task 364).
         const float whiteDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -1861,11 +2117,23 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(vertexColorEn3DUnif_, vceOn);
 
         bgfx::setVertexBuffer(0, vb.handle);
-        bgfx::setIndexBuffer(ib.handle);
+        // Task 766: see DrawColoredPrimitives above.
+        bgfx::TransientIndexBuffer wireTib;
+        const bool useWireframe = wireframe_
+            && ExpandWireframeIndices(&ib, primitive, primitiveCount, 0, 0, 0, wireTib);
+        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
+        else              bgfx::setIndexBuffer(ib.handle);
+        ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
-        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
+                       // here -- depthFlags_ (set by ApplyDepthStencilState from the real
+                       // DepthBufferWriteEnable) already carries it when writes are actually
+                       // requested; including it again here unconditionally made
+                       // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                        | blendFlags_ | depthFlags_ | cullFlags_)
-                       | ToTopologyFlag(primitive), blendFactorPacked_);
+                       | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive)),
+                       blendFactorPacked_);
         SubmitViewProgram(colored3DProgram_);
     }
 
@@ -1884,6 +2152,7 @@ namespace CNA::Internal::Backends::Bgfx
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         bgfx::setUniform(wvpUniform_, wvp_col);
+        SetDepthBiasUniform();
 
         // Task 888: fog uniforms are set unconditionally (not per-branch) since bgfx uniforms
         // are shared by name across every program -- any program declaring u_fogColor/
@@ -1895,10 +2164,357 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(fogParamsUnif_, fogParams4);
 
         bgfx::setVertexBuffer(0, vb.handle);
+        // Task 766: see DrawColoredPrimitives above.
+        bgfx::TransientIndexBuffer wireTib;
+        const bool useWireframe = wireframe_
+            && ExpandWireframeIndices(nullptr, primitive, primitiveCount, 0, 0,
+                                      params.vertexStart, wireTib);
+        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
+        ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
-        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
+                       // here -- depthFlags_ (set by ApplyDepthStencilState from the real
+                       // DepthBufferWriteEnable) already carries it when writes are actually
+                       // requested; including it again here unconditionally made
+                       // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                                 | blendFlags_ | depthFlags_ | cullFlags_)
-                               | ToTopologyFlag(primitive);
+                               | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive));
+        bgfx::setState(state, blendFactorPacked_);
+
+        const bool alphaTestActive = (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
+        if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            if (bgfx::isValid(texColor3DSampler2_))
+            {
+                if (params.texture1)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
+                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
+                }
+                else
+                {
+                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
+                    // instead of leaving the previous draw's texture bound.
+                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
+                }
+            }
+            SubmitViewProgram(dualTexture3DProgram_);
+        }
+        else if (params.skinned && bgfx::isValid(skinned3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float amb[4]  = { params.ambientColor[0],  params.ambientColor[1],  params.ambientColor[2],  0.0f };
+            bgfx::setUniform(ambientColor3DUnif_, amb);
+            float dir[4]  = { params.light0Dir[0],     params.light0Dir[1],     params.light0Dir[2],     0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir);
+            float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff);
+            float litEn[4] = { params.lightingEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(lightingEn3DUnif_, litEn);
+            // Task 899: EmissiveColor was never forwarded to the skinned3d shader at all -- see
+            // fs_skinned3d.sc's comment for the full finding.
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
+                bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(skinned3DProgram_);
+        }
+        else if (params.envMapping && bgfx::isValid(envMap3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_,  params.diffuseColor);
+            bgfx::setUniform(world3DUnif_,          params.worldColMajor);
+            float normalMatrix[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrix);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrix);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            float dir[4]  = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir);
+            float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
+                               params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff);
+            float amount[4] = { params.envMapAmount, params.fresnelEnabled ? 1.0f : 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(envMapAmountUnif_, amount);
+            float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],
+                                   params.envMapSpecular[2], params.fresnelFactor };
+            bgfx::setUniform(envMapSpecularUnif_, specular);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            if (params.envMap && bgfx::isValid(envMapSampler_))
+            {
+                // Task 907 (closes Task 874): dynamic_cast to the common cube-samplable
+                // interface instead of an unsafe static_cast<const BgfxTextureCubeBackend&> --
+                // params.envMap may be a BgfxRenderTargetCubeBackend (a sampled RenderTargetCube),
+                // whose layout differs entirely from BgfxTextureCubeBackend's.
+                if (const auto* samplable = dynamic_cast<const IBgfxCubeSamplable*>(params.envMap))
+                    bgfx::setTexture(1, envMapSampler_, samplable->GetBgfxCubeTextureHandle());
+            }
+            SubmitViewProgram(envMap3DProgram_);
+        }
+        else if (alphaTestActive && params.vertexColorEnabled
+                 && bgfx::isValid(alphaTestColoredTextured3DProgram_))
+        {
+            // Task 887: stride-24 (VertexPositionColorTexture) variant — reads a_color0 and
+            // gates it by VertexColorEnabled, mirroring BasicEffect's coloredTextured3DProgram_.
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
+            bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(alphaTestColoredTextured3DProgram_);
+        }
+        else if (alphaTestActive && bgfx::isValid(alphaTest3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(alphaTest3DProgram_);
+        }
+        else if (params.lightingEnabled && bgfx::isValid(litTextured3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float amb[4] = { params.ambientColor[0], params.ambientColor[1],
+                             params.ambientColor[2], 0.0f };
+            bgfx::setUniform(ambientColor3DUnif_, amb);
+            float dir[4] = { params.light0Dir[0], params.light0Dir[1],
+                             params.light0Dir[2], 0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir);
+            float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
+                              params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff);
+            float litEn[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(lightingEn3DUnif_, litEn);
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1],
+                               params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1],
+                               params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            // Task 892 fix: correct inverse-transpose normal matrix, not the raw World/WVP.
+            float normalMatrixLit[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixLit);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrixLit);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            float spec0[4] = { params.light0Specular[0], params.light0Specular[1],
+                                params.light0Specular[2], 0.0f };
+            bgfx::setUniform(light0Spec3DUnif_, spec0);
+            float spec1[4] = { params.light1Specular[0], params.light1Specular[1],
+                                params.light1Specular[2], 0.0f };
+            bgfx::setUniform(light1Spec3DUnif_, spec1);
+            float spec2[4] = { params.light2Specular[0], params.light2Specular[1],
+                                params.light2Specular[2], 0.0f };
+            bgfx::setUniform(light2Spec3DUnif_, spec2);
+            float specColorPower[4] = { params.specularColor[0], params.specularColor[1],
+                                         params.specularColor[2], params.specularPower };
+            bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
+
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(litTextured3DProgram_);
+        }
+        else if (params.textureEnabled && params.vertexColorEnabled
+                 && bgfx::isValid(coloredTextured3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(coloredTextured3DProgram_);
+        }
+        else if (params.textureEnabled && bgfx::isValid(textured3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(textured3DProgram_);
+        }
+        else
+        {
+            if (!bgfx::isValid(colored3DProgram_)) return;
+            // BasicEffect no-texture path (Task 364): honor DiffuseColor and gate the
+            // per-vertex color multiply on VertexColorEnabled, matching FNA's
+            // ComputeCommonVSOutput()/`vout.Diffuse *= vin.Color` semantics.
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vce[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vce);
+            SubmitViewProgram(colored3DProgram_);
+        }
+    }
+
+    void BgfxGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb_in,
+                                                      const IIndexBufferBackend& ib_in,
+                                                      const Matrix& world, const Matrix& view,
+                                                      const Matrix& projection,
+                                                      PrimitiveType primitive, int primitiveCount,
+                                                      const GpuDrawParams& params)
+    {
+        // Task 948: indexed counterpart of DrawPrimitivesEx -- previously unimplemented, so
+        // every indexed Effect-bound draw (e.g. any Content.Load<Model>() mesh) silently fell
+        // back to the base IGraphicsBackend default (DrawIndexedColoredPrimitives), discarding
+        // GpuDrawParams entirely (diffuse color, texture, lighting, fog all lost). Mirrors
+        // DrawPrimitivesEx's own full GpuDrawParams dispatch exactly -- see that function for
+        // per-branch comments -- with an index buffer bound instead of a plain vertex draw.
+        auto& vb = static_cast<const BgfxVertexBufferBackend&>(vb_in);
+        auto& ib = static_cast<const BgfxIndexBufferBackend&>(ib_in);
+        if (!bgfx::isValid(vb.handle) || !bgfx::isValid(ib.handle)) return;
+
+        ApplyViewportOverride();
+
+        const Matrix wvp = world * view * projection;
+        float wvp_col[16];
+        wvp.ToColumnMajor(wvp_col);
+        bgfx::setUniform(wvpUniform_, wvp_col);
+        SetDepthBiasUniform();
+
+        // Task 888: fog uniforms are set unconditionally (not per-branch) since bgfx uniforms
+        // are shared by name across every program -- any program declaring u_fogColor/
+        // u_fogParams as inputs picks these up automatically; programs that don't simply ignore
+        // them, no error.
+        float fogColor4[4]  = { params.fogColor[0], params.fogColor[1], params.fogColor[2], 0.0f };
+        bgfx::setUniform(fogColorUnif_, fogColor4);
+        float fogParams4[4] = { params.fogEnabled ? 1.0f : 0.0f, params.fogStart, params.fogEnd, 0.0f };
+        bgfx::setUniform(fogParamsUnif_, fogParams4);
+
+        bgfx::setVertexBuffer(0, vb.handle);
+        // Task 766: see DrawColoredPrimitives above.
+        bgfx::TransientIndexBuffer wireTib;
+        const bool useWireframe = wireframe_
+            && ExpandWireframeIndices(&ib, primitive, primitiveCount, params.startIndex,
+                                      params.baseVertex, 0, wireTib);
+        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
+        else              bgfx::setIndexBuffer(ib.handle);
+        ApplyScissorOverride();
+        bgfx::setStencil(stencilFront_, stencilBack_);
+        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
+                       // here -- depthFlags_ (set by ApplyDepthStencilState from the real
+                       // DepthBufferWriteEnable) already carries it when writes are actually
+                       // requested; including it again here unconditionally made
+                       // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
+                                | blendFlags_ | depthFlags_ | cullFlags_)
+                               | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive));
         bgfx::setState(state, blendFactorPacked_);
 
         const bool alphaTestActive = (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
@@ -2219,17 +2835,29 @@ namespace CNA::Internal::Backends::Bgfx
         float vp_col[16];
         vp.ToColumnMajor(vp_col);
         bgfx::setUniform(vpInstanced3DUnif_, vp_col);
+        SetDepthBiasUniform();
 
         bgfx::setVertexBuffer(0, vb.handle);
-        bgfx::setIndexBuffer(ib.handle);
+        // Task 766: see DrawColoredPrimitives above.
+        bgfx::TransientIndexBuffer wireTib;
+        const bool useWireframe = wireframe_
+            && ExpandWireframeIndices(&ib, primitive, primitiveCount, params.startIndex,
+                                      params.baseVertex, 0, wireTib);
+        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
+        else              bgfx::setIndexBuffer(ib.handle);
         bgfx::setInstanceDataBuffer(&idb);
+        ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
-        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
+                       // here -- depthFlags_ (set by ApplyDepthStencilState from the real
+                       // DepthBufferWriteEnable) already carries it when writes are actually
+                       // requested; including it again here unconditionally made
+                       // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
                                 | blendFlags_ | depthFlags_ | cullFlags_)
-                               | ToTopologyFlag(primitive);
+                               | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive));
         bgfx::setState(state, blendFactorPacked_);
         SubmitViewProgram(instanced3DProgram_);
-        (void)primitiveCount;
     }
 }
 

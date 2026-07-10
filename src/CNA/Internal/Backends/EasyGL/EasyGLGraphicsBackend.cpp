@@ -9,6 +9,7 @@
 #include <emscripten.h>
 #include <metagl/Emscripten.hpp>
 #endif
+#include <metagl/Capabilities.hpp>
 #include <metagl/Context.hpp>
 #include <metagl/ContextEvents.hpp>
 #include <metagl/Functions.hpp>
@@ -375,12 +376,18 @@ namespace CNA::Internal::Backends::EasyGL
     // --- EasyGLTextureBackend ---
 
     EasyGLTextureBackend::EasyGLTextureBackend(const ImageData& data, ::easygl::ResourceRegistry* registry)
-        : registry_(registry)
+        : registry_(registry), mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
         width = data.width;
         height = data.height;
         texture.create();
         texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0, width, height, data.pixels.data());
+        // Task 924: clamp GL_TEXTURE_MAX_LEVEL to the real level count -- otherwise a mipmap-
+        // requiring TextureFilter (e.g. Anisotropic) treats this as an incomplete mipmap chain
+        // (GL's own default max level is 1000) and renders solid black, even for an ordinary
+        // single-level (mipLevels_==1) texture that never uploads any level beyond 0.
+        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::metagl::TextureParameter::MaxLevel,
+                               mipLevels_ - 1);
         if (registry_) registry_->add(this);
     }
 
@@ -408,6 +415,10 @@ namespace CNA::Internal::Backends::EasyGL
             texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
                                  width, height, blank.data());
         }
+        // Task 924: the fresh GL texture object defaults GL_TEXTURE_MAX_LEVEL back to 1000 --
+        // reapply the same clamp the constructor set, matching this texture's real level count.
+        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::metagl::TextureParameter::MaxLevel,
+                               mipLevels_ - 1);
     }
 
     void EasyGLTextureBackend::BindGL() const
@@ -1254,20 +1265,22 @@ void main()
         std::cout << "EasyGLGraphicsBackend initialized with OpenGL "
             << device.capabilities().context_info().version_string << std::endl;
 
-        // Task 456: one-time startup capability dump. MaxAnisotropy is intentionally reported as
-        // NOT supported -- confirmed by reading this file's own ApplySamplerState: TextureFilter::
-        // Anisotropic silently falls back to plain trilinear filtering (LinearMipmapLinear/Linear)
-        // with no GL_EXT_texture_filter_anisotropic/glSamplerParameterf(MAX_ANISOTROPY_EXT, ...)
-        // call anywhere in this backend or the underlying easy-gl library -- a real, previously-
-        // undocumented gap (SamplerState.MaxAnisotropy is silently ignored), tracked as new Task
-        // 918 rather than fixed here (out of this logging task's own scope).
+        // Task 456: one-time startup capability dump. Task 918 wired up real
+        // GL_EXT_texture_filter_anisotropic support in ApplySamplerState(); report the real,
+        // runtime-detected status here instead of a hardcoded claim.
         {
             GLint maxSamplesCap = 0;
             metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamplesCap);
+            const bool hasAniso = metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
+            GLfloat maxAnisoCap = 1.0f;
+            if (hasAniso)
+                metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
             std::cout << "CNA: EasyGL capabilities -- MSAA up to " << maxSamplesCap
                       << "x; MRT up to 4 targets (FNA MAX_RENDERTARGET_BINDINGS); "
-                         "anisotropic filtering: NOT supported (Task 918, falls back to trilinear); "
-                         "SurfaceFormat: Color only (Task 176)" << std::endl;
+                         "anisotropic filtering: "
+                      << (hasAniso ? ("supported (Task 918, up to " + std::to_string(static_cast<int>(maxAnisoCap)) + "x)")
+                                   : std::string("NOT supported (falls back to trilinear)"))
+                      << "; SurfaceFormat: Color only (Task 176)" << std::endl;
         }
 
         SDL_GL_SetSwapInterval(swapInterval_);
@@ -1883,8 +1896,8 @@ void main()
 
     void EasyGLGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
                                                       bool scissorTestEnable,
-                                                      float /*depthBias*/,
-                                                      float /*slopeScaleDepthBias*/)
+                                                      float depthBias,
+                                                      float slopeScaleDepthBias)
     {
         if (metagl::IsContextLost()) return;
         // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
@@ -1903,6 +1916,13 @@ void main()
         // OpenGL ES has no glPolygonMode; FillMode::WireFrame (1) is emulated at draw
         // time by re-expanding triangles into GL_LINES (see DrawWireframe).
         wireframe_ = (fillMode == 1);
+        // Task 767: DepthBias/SlopeScaleDepthBias map directly onto real GL polygon offset
+        // (matches this project's own already-established Vulkan convention, see
+        // VulkanGraphicsBackend::ApplyRasterizerState's comment: "matching FNA's
+        // glPolygonOffset(slopeScaleDepthBias, depthBias)"). Always enabled -- factor=0/units=0
+        // is a genuine no-op in GL, so there is no need to conditionally disable it.
+        device.set_polygon_offset_fill_enabled(true);
+        device.set_polygon_offset(slopeScaleDepthBias, depthBias);
     }
 
     void EasyGLGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
@@ -2011,6 +2031,19 @@ void main()
         }
         s.set_parameter(::easygl::SamplerParameter::MinFilter, static_cast<int>(minF));
         s.set_parameter(::easygl::SamplerParameter::MagFilter, static_cast<int>(magF));
+
+        // Task 918: real anisotropic filtering via GL_EXT_texture_filter_anisotropic, gated on
+        // the extension genuinely being available; falls back to the plain trilinear filter set
+        // above (unchanged) when it isn't, exactly like before this fix.
+        if (filter == 2 && metagl::HasExtension("GL_EXT_texture_filter_anisotropic"))
+        {
+            GLfloat maxAnisoCap = 1.0f;
+            metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
+            float requested = static_cast<float>(maxAnisotropy);
+            float clamped = (maxAnisoCap > 0.0f && requested > maxAnisoCap) ? maxAnisoCap : requested;
+            if (clamped < 1.0f) clamped = 1.0f;
+            s.set_parameter(::easygl::SamplerParameter::MaxAnisotropy, clamped);
+        }
 
         // TextureAddressMode → GL wrap: Wrap=0→Repeat, Clamp=1→ClampToEdge, Mirror=2→MirroredRepeat
         auto toWrap = [](int mode) -> int {
