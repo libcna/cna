@@ -857,15 +857,19 @@ header. No task content changed, only the file location and numbering.
 > and 749 (anisotropic cap/fallback) each needed a new Bgfx-specific restructured test (the usual
 > `SetDepthTestEnabled`→`DepthStencilState` + per-check `RunCheck()` substitutions) and all
 > confirmed already-correct behavior. **This closes the entire Phase 72 `SamplerState`/
-> `TextureAddressMode` row group too (743-749, all 7/7 done).** 4 REAL GAPS remain (of the
-> original 38; 34 have now been closed or flagged this session — 741-749, 752-755, 758-768,
+> `TextureAddressMode` row group too (743-749, all 7/7 done).** Task 751 (audit `BlendState`
+> preset mapping to `BGFX_STATE_BLEND_*`) also closes clean: read `XnaBlendToBgfxFactor` in full,
+> confirmed all 13 real XNA `Blend` enum values are already correctly mapped (fixed by Task 923 in
+> a prior session, already pixel-verified by Tasks 752-755/923 this session) — no bug, no new test
+> needed. 3 REAL GAPS remain (of the
+> original 38; 35 have now been closed or flagged this session — 741-751, 752-755, 758-768,
 > 803-821), 1 of which (Task 767) is flagged `NEEDS_HUMAN` rather than a plain untouched row.
 > 13 are UNCERTAIN (no test found either way, needs closer individual investigation before
 > concluding). **Bgfx is dramatically less pixel-test-covered than Vulkan for the same
 > categories**: `DepthStencilState` (0/7 rows remaining, all 7 closed this session), `RasterizerState`
 > (1/4 remaining — only Task 767, NEEDS_HUMAN — 4 closed/flagged this session), `BlendState` presets
-> (0/5 remaining — 4 closed this session, the 5th being a custom/general-purpose row not part of
-> this preset group), `SpriteBatch` behavior (0/6 remaining, all 6 closed this session — 2 real
+> (0/5 remaining, all 5 closed this session, including the audit row 751), `SpriteBatch` behavior
+> (0/6 remaining, all 6 closed this session — 2 real
 > bugs found and fixed, Tasks 803/808), `SpriteFont` (0/3 remaining, all 3 closed this session, no
 > bugs found — glyph placement/spacing/newline/fallback all correctly reach the sprite draw path),
 > `Model` (0/2 remaining, both closed this session, no bugs found), `OcclusionQuery` (0/3 remaining,
@@ -912,7 +916,7 @@ header. No task content changed, only the file location and numbering.
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
-| 751 | Audit `BlendState` preset mapping to `BGFX_STATE_BLEND_*` | ⬜ | |
+| 751 | Audit `BlendState` preset mapping to `BGFX_STATE_BLEND_*` | ✅ | **2026-07-10 — audit confirms the mapping is already complete and correct, no bug found, no new test needed.** Read `XnaBlendToBgfxFactor` (`BgfxGraphicsBackend.cpp`) in full: all 13 real XNA `Blend` enum values (`One`=0 through `SourceAlphaSaturation`=12, including `BlendFactor`/`InverseBlendFactor`) are explicitly, correctly mapped to their `BGFX_STATE_BLEND_*` equivalent — no gaps, no silent fallback beyond the documented `default: BGFX_STATE_BLEND_ONE` (matching an XNA-invalid input, not a real enum value). `ApplyBlendState` itself already applies both colour AND alpha factors independently via `BGFX_STATE_BLEND_FUNC_SEPARATE` plus the real `BlendFunction` (not always implicitly `Add`) via `BGFX_STATE_BLEND_EQUATION_SEPARATE` — both fixed by Task 923 in a prior session, already pixel-verified by Tasks 752-755 (all 4 presets) and `Bgfx_BlendState_SeparateFunctions` (Task 923's own test) this session. This audit's own real, additional value: cross-checked the bit-packing against bgfx's own vendored `renderer_gl.cpp` decode logic (same verification Task 923 already did) and confirmed no 14th XNA `Blend` value or undocumented preset silently escapes this mapping. No new test added — Tasks 752-755/923 already provide complete pixel-level coverage of this exact mapping. |
 | 752 | Pixel test: `BlendState::Opaque` on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed.** New `Bgfx_BlendState_Opaque` test — a Bgfx-specific copy of `examples/easygl_blendstate_opaque_test.cpp` (Task 303, already reused verbatim on Vulkan): could not reuse verbatim because that file calls the legacy `GraphicsDevice::SetDepthTestEnabled(false)` convenience method, which throws on Bgfx (`"SetDepthTestEnabled / SetBlend* are not yet wired into bgfx state flags"` — a pre-existing, deliberate stub, not a bug); replaced with the equivalent `DepthStencilState`-based call, everything else identical (this test does exactly 1 Draw + 1 `GetBackBufferData` read per frame, so Bgfx's own "first read per rendered frame" quirk, Task 406, does not apply). PASS on first attempt: centre=(255,0,0), pure red, no green bleed-through from the alpha=128 source. Confirms `BgfxGraphicsBackend::ApplyBlendState`'s `Opaque` mapping (already fixed by Task 923 this session) is correct. See Task 755's row for the shared sabotage-and-revert discriminating-power verification across all 4 of Tasks 752-755. |
 | 753 | Pixel test: `BlendState::AlphaBlend` premultiplied alpha on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed.** New `Bgfx_BlendState_AlphaBlend` test — Bgfx-specific copy of `examples/easygl_blendstate_alphablend_test.cpp` (Task 304), same `SetDepthTestEnabled`→`DepthStencilState` substitution as Task 752's row explains. PASS: centre=(128,127,0), matching the exact expected premultiplied-alpha result (not the ~64 double-multiply value that would indicate `NonPremultiplied`'s equation was used instead). See Task 755's row for the shared discriminating-power verification. |
 | 754 | Pixel test: `BlendState::NonPremultiplied` on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed.** New `Bgfx_BlendState_NonPremultiplied` test — Bgfx-specific copy of `examples/easygl_blendstate_nonpremultiplied_test.cpp` (Task 305), same `SetDepthTestEnabled`→`DepthStencilState` substitution. PASS: centre=(128,127,0), matching the exact expected raw-alpha-multiply result. Unlike this test's own Vulkan history (Task 305's file header documents a coincidental pass there, since Vulkan's blend state was almost entirely fake pre-Task-868), this Bgfx result is NOT coincidental — see Task 755's row for the discriminating verification. |
