@@ -736,10 +736,20 @@ header. No task content changed, only the file location and numbering.
 > **Full row-by-row triage completed 2026-07-09** (the first ever full pass — Task 861 had only
 > spot-checked a sample of Phase 73, and this phase had never been triaged at all): of 85 rows,
 > 34 were SUPERSEDED by later work and closed here as a backlog-hygiene pass, 38 were confirmed
-> REAL GAPS. **Tasks 752-755/758-768 (14 of those 38, the entire `DepthStencilState` row group,
-> all 3 testable `RasterizerState` rows, and all 4 `BlendState` preset rows) were picked up as real
-> work the same session** — the first-ever Bgfx `DepthStencilState`/`RasterizerState` pixel tests
-> found 6 genuine, confirmed, previously-
+> REAL GAPS. **Tasks 752-755/758-768/803 (15 of those 38, the entire `DepthStencilState` row group,
+> all 3 testable `RasterizerState` rows, all 4 `BlendState` preset rows, and the first `SpriteBatch`
+> row) were picked up as real work the same session** — **Task 803's own finding is arguably the
+> single most impactful bug found in this entire pass**: `SpriteBatch::Begin()`'s final overload
+> never applied its `depthStencilState` parameter at all (silently discarded, matching this
+> project's now-familiar "commented-out unused parameter" shape), so SpriteBatch draws inherited
+> whatever `DepthStencilState` a game's 3D rendering last configured instead of FNA's real default
+> of `DepthStencilState.None` — a bug in **shared code affecting all 4 backends**, previously
+> masked on EasyGL/Vulkan purely because OpenGL's own hardware default happens to have depth
+> testing disabled (coincidence, not correctness), while Bgfx's own non-trivial `depthFlags_`
+> default exposed it for the first time. Fixed in `SpriteBatch.cpp` directly; verified with a full
+> regression across all 4 backends (Bgfx/EasyGL/Vulkan/SDL_Renderer), zero new failures anywhere.
+> The first-ever Bgfx `DepthStencilState`/`RasterizerState` pixel tests
+> found 6 more genuine, confirmed, previously-
 > undiscovered bugs/gaps: `DepthBufferWriteEnable=false` had zero effect on any 3D draw (all 4
 > draw-dispatch functions unconditionally wrote depth regardless), fixed at Task 758/759;
 > `TwoSidedStencilMode`'s front/back stencil slots were swapped relative to the intended raw
@@ -772,9 +782,12 @@ header. No task content changed, only the file location and numbering.
 > Bgfx-specific copy of the shared EasyGL source, needed only because the shared file's legacy
 > `SetDepthTestEnabled(false)` call throws on Bgfx (a pre-existing, deliberate stub); discriminating
 > power verified once for all 4 via a single sabotage (swapped `SourceAlpha`/`InverseSourceAlpha`
-> in `XnaBlendToBgfxFactor`), caught cleanly by `Additive`. 23 REAL GAPS remain (of the original 38;
-> 15 have now been closed or flagged this session — 752-755, 758-768), 1 of which (Task
-> 767) is flagged `NEEDS_HUMAN` rather than a plain untouched row.
+> in `XnaBlendToBgfxFactor`), caught cleanly by `Additive`. **Task 803 also found that
+> `SpriteBatch::Begin()`'s `rasterizerState` parameter is similarly unused** (adjacent to the
+> `depthStencilState` bug it fixed, same "commented-out unused parameter" shape) — not fixed here,
+> deliberately out of this task's own scope, noted for a future task. 22 REAL GAPS remain (of the
+> original 38; 16 have now been closed or flagged this session — 752-755, 758-768, 803), 1 of which
+> (Task 767) is flagged `NEEDS_HUMAN` rather than a plain untouched row.
 > 13 are UNCERTAIN (no test found either way, needs closer individual investigation before
 > concluding). **Bgfx is dramatically less pixel-test-covered than Vulkan for the same
 > categories**: `DepthStencilState` (0/7 rows remaining, all 7 closed this session), `RasterizerState`
@@ -913,7 +926,7 @@ header. No task content changed, only the file location and numbering.
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
-| 803 | Pixel test: `SpriteSortMode` ordering (Deferred/Texture/FrontToBack/BackToFront) on Bgfx | ⬜ | |
+| 803 | Pixel test: `SpriteSortMode` ordering (Deferred/Texture/FrontToBack/BackToFront) on Bgfx | ✅ | **CLOSED — real, confirmed, previously-undiscovered bug found and fixed, in SHARED code affecting all 4 backends, not just Bgfx.** New `Bgfx_SpriteBatch_LayerDepthOrder` test — a Bgfx-specific adaptation of `examples/easygl_spritebatch_layerdepth_test.cpp` (Task 420 — that file reads back 3 spatially-separate regions from ONE rendered frame, incompatible with Bgfx's `GetBackBufferData` "first read per frame" quirk, Task 406; restructured into one separately-read `RunCheck()` pass per region, mirroring Tasks 759-768's established Bgfx pattern), matching Task 420's own established scope note: Tasks 415/416 already prove the CPU-side `SpriteSortMode` sort logic itself is correct and backend-agnostic (mock-backend tests, all 4 modes); this task (like Task 420 before it) verifies the remaining backend-specific question — that whatever order the backend receives sorted draws in is actually reflected on screen via painter's algorithm, using `FrontToBack` as the representative mode. **First run failed exactly as a real bug would**: the overlap region showed the WRONG sprite on top (Red instead of the expected Blue), even though `SpriteBatch::flushBatch()`'s CPU-side sort correctly reordered the draws before dispatch. **Root-caused to `SpriteBatch::Begin()`'s final overload never applying its `depthStencilState` parameter at all** (`DepthStencilState* /*depthStencilState*/` — silently discarded, matching this project's now-familiar "commented-out unused parameter" bug shape) — SpriteBatch draws therefore inherited whatever `DepthStencilState` a game's own 3D rendering last configured (or each backend's own construction-time default) instead of FNA's real default of `DepthStencilState.None` when the caller passes null. **This is genuinely SHARED code** (`src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp`), not Bgfx-specific — it was masked on EasyGL/Vulkan purely by coincidence: OpenGL's own true hardware default has depth testing DISABLED (never explicitly enabled by Task 420's own test, which never calls any DepthStencilState-setting method), so simple painter's algorithm worked there by accident, not because SpriteBatch correctly managed the state. Bgfx's own `BgfxGraphicsBackend::depthFlags_` class member defaults to a NON-trivial, depth-test-ENABLED value (`BGFX_STATE_DEPTH_TEST_LESS \| BGFX_STATE_WRITE_Z`), which doesn't coincidentally match, exposing the real, pre-existing gap for the first time. With depth test active and all sprite vertices at the same implicit Z, `DEPTH_TEST_LESS` rejects the second-drawn (later) sprite's fragments at any overlap, always leaving whichever sprite was drawn FIRST on top — regardless of the CPU-side sort's own correct decision about which sprite should visually win. **Fixed** by applying `depthStencilState ? *depthStencilState : DepthStencilState::None` via `graphicsDevice_->setDepthStencilStateProperty(...)` in `SpriteBatch::Begin()`'s final overload, mirroring the already-correct `samplerState` handling immediately below it (null always means the FNA-documented default, and the state is always re-applied, never left over from a previous `Begin()`). A speculative first attempt at fixing this via `bgfx::setViewMode(spriteViewId, bgfx::ViewMode::Sequential)` (bgfx's own default `ViewMode::Default` sorts by internal state/program key, not submission order) turned out to be unnecessary once the real depth-state bug was fixed — tested and removed to keep the fix minimal, not left in as unnecessary defensive code. **Discriminating power verified via `git stash` revert-and-rebuild**: reverting reproduced the exact predicted failure; restored and reconfirmed all 3 checks pass. **Full regression run on all 4 backends, since this is shared code**: Bgfx `ctest` 4435/4437 passed (2 pre-existing: `Bgfx_RenderTarget2D_MsaaResolve`/DRI3 limitation, 1 unrelated Audio flake reconfirmed via isolation re-run); EasyGL 4536/4539 passed (3 pre-existing: `EasyGL_MRT_TwoAttachments`/Task 145, `EasyGL_GraphicsDevice_ReferenceStencil`/Task 872, `easy-gl-resource-smoke-tests`/sibling-repo); Vulkan 4451/4455 passed (4 pre-existing: 3 `ContentManagerSkinnedModelTest` segfaults + `Vulkan_DepthBias`); SDL_Renderer 4417/4428 passed (11 pre-existing, all confirmed via git-stash-revert re-run to fail identically without this fix too — SDL_Renderer's own documented 2D-only-backend limitations, e.g. `CreateIndexBuffer16` throws). **Zero new failures on any of the 4 backends.** This is arguably the most impactful single finding of this session's entire Phase 72 pass, since it affects every game's SpriteBatch rendering on every backend whenever depth state happens to be non-default when SpriteBatch.Begin() is called (e.g., drawing a HUD/UI overlay via SpriteBatch immediately after 3D depth-tested content). |
 | 804 | Pixel test: rotation around origin on Bgfx | ⬜ | |
 | 805 | Pixel test: scale overloads on Bgfx | ⬜ | |
 | 806 | Pixel test: source rectangle cropping on Bgfx | ⬜ | |

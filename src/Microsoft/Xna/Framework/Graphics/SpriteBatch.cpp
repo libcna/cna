@@ -81,7 +81,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Begin(SpriteSortMode sortMode,
                             BlendState blendState,
                             SamplerState* samplerState,
-                            DepthStencilState* /*depthStencilState*/,
+                            DepthStencilState* depthStencilState,
                             RasterizerState* /*rasterizerState*/,
                             Effect* effect,
                             Matrix transformMatrix)
@@ -90,7 +90,18 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("Begin has been called before calling End.");
 
         if (graphicsDevice_)
+        {
             graphicsDevice_->setBlendStateProperty(blendState);
+            // Task 803 finding: this parameter was previously entirely unused -- SpriteBatch
+            // draws silently inherited whatever DepthStencilState the game's own 3D rendering
+            // last configured (or each backend's own construction-time default), instead of
+            // FNA's real default of DepthStencilState.None when the caller passes null. Matches
+            // FNA's SpriteBatch.Begin(): a null depthStencilState always means None, the state is
+            // always (re-)applied here, never left over from a previous Begin() (mirrors the
+            // samplerState handling immediately below).
+            graphicsDevice_->setDepthStencilStateProperty(
+                depthStencilState ? *depthStencilState : DepthStencilState::None);
+        }
 
         customEffect_    = effect;
         transformMatrix_ = transformMatrix;

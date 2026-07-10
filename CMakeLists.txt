@@ -5164,6 +5164,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 803 (Phase 72 Bgfx gap closure): SpriteSortMode ordering affects on-screen draw order
+    # on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 420; that file reads back 3
+    # regions from one rendered frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406
+    # -- see the test's own file-header comment for full scope notes).
+    cna_bgfx_test(cna_test_bgfx_spritebatch_layerdepth
+                  examples/bgfx_spritebatch_layerdepth_test.cpp)
+    add_test(NAME Bgfx_SpriteBatch_LayerDepthOrder
+             COMMAND cna_test_bgfx_spritebatch_layerdepth)
+    set_tests_properties(Bgfx_SpriteBatch_LayerDepthOrder PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
