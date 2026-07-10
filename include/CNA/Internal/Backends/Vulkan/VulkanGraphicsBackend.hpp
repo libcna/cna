@@ -452,6 +452,13 @@ namespace CNA::Internal::Backends::Vulkan
 
     class VulkanOcclusionQueryBackend : public IOcclusionQueryBackend
     {
+        // Task 447/854: RecordCommandBuffer() drives pool_/resetThisFrame_/recordedThisFrame_
+        // directly (real vkCmdResetQueryPool/vkCmdBeginQuery/vkCmdEndQuery recording lives there,
+        // alongside every other draw-dispatch/render-pass concern), mirroring this file's
+        // existing one-directional friend idiom (VulkanGraphicsBackend already befriends this
+        // class the other way, for owner_ access).
+        friend class VulkanGraphicsBackend;
+
     public:
         explicit VulkanOcclusionQueryBackend(VulkanGraphicsBackend* owner);
         ~VulkanOcclusionQueryBackend() override;
@@ -466,6 +473,15 @@ namespace CNA::Internal::Backends::Vulkan
         VkQueryPool             pool_       = VK_NULL_HANDLE;
         bool                    ended_      = false;
         mutable int             pixelCount_ = 0;
+        // Task 447/854: per-frame recording bookkeeping, driven entirely by RecordCommandBuffer().
+        // recordedThisFrame_ is reset to false at the top of every RecordCommandBuffer() call (for
+        // every query actually tagged on a pending draw that frame) and flips true once this
+        // query's first contiguous run of draws has been wrapped in a real vkCmdBeginQuery/
+        // vkCmdEndQuery pair -- implementing the approved "allow multiple draws within one render
+        // pass, reject additional spans across a render-pass boundary (or a non-contiguous 2nd run
+        // within the same pass)" policy: only the first run this query appears in each frame is
+        // ever actually recorded on the GPU.
+        bool                    recordedThisFrame_ = false;
     };
 
     // -------------------------------------------------------------------------
@@ -1032,8 +1048,25 @@ namespace CNA::Internal::Backends::Vulkan
             // emits vkCmdInsertDebugUtilsLabelEXT instead of a draw call.
             bool                    isMarker          = false;
             std::string             markerLabel;
+            // Task 447/854: the OcclusionQuery active (via Begin()/End()) when this draw was
+            // submitted, nullptr if none. Set uniformly by PushPending3DDraw() so every draw
+            // call site gets query correlation for free. RecordCommandBuffer() wraps each
+            // contiguous run of draws sharing the same non-null pointer, within a single
+            // targetRT's render pass, in a real vkCmdBeginQuery/vkCmdEndQuery pair.
+            VulkanOcclusionQueryBackend* occlusionQuery = nullptr;
         };
         std::vector<Pending3DDraw>  pending3D_;
+        // Task 447/854: pushes d onto pending3D_ after tagging it with the currently-active
+        // OcclusionQuery (if any) -- the single choke point every DrawXPrimitives() call site
+        // routes through, so query correlation doesn't need repeating at each of the 6 push
+        // sites individually.
+        void PushPending3DDraw(Pending3DDraw&& d);
+        // Task 447/854: set by VulkanOcclusionQueryBackend::Begin(), cleared by End() (only if
+        // still pointing at itself, mirroring Bgfx's activeOcclusionQuery_ convention). Nested
+        // Begin() calls are not supported by XNA's own OcclusionQuery API (one query in flight
+        // at a time is the real, documented XNA usage pattern), so a single raw pointer (not a
+        // stack) is sufficient.
+        VulkanOcclusionQueryBackend* activeOcclusionQuery_ = nullptr;
         // pair: (an independent per-Begin/End-cycle snapshot, target RT) where RT=nullptr means
         // backbuffer. Owns each snapshot outright (Task 664 fix) so that a 2nd Begin()/End() on
         // the same SpriteBatch object within one frame cannot clobber the 1st cycle's data —

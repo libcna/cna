@@ -3945,6 +3945,19 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Tasks 447/854 (Phase 73 Vulkan gap closure): real per-draw-call OcclusionQuery
+        # correlation -- previously entirely-stubbed Begin()/End() (always returned PixelCount=0).
+        # Draws are now tagged with the active query (VulkanGraphicsBackend::PushPending3DDraw)
+        # and RecordCommandBuffer() wraps the tagged run in a real vkCmdBeginQuery/vkCmdEndQuery
+        # pair with correct per-frame vkCmdResetQueryPool sequencing.
+        cna_vulkan_test(cna_test_vulkan_occlusionquery_pixelcount
+                        examples/vulkan_occlusionquery_pixelcount_test.cpp)
+        add_test(NAME Vulkan_OcclusionQuery_PixelCount
+                 COMMAND cna_test_vulkan_occlusionquery_pixelcount)
+        set_tests_properties(Vulkan_OcclusionQuery_PixelCount PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
 
 endif()

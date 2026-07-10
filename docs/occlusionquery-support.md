@@ -3,8 +3,10 @@
 Covers `Microsoft::Xna::Framework::Graphics::OcclusionQuery` across all 4 backends. Written as the
 closing documentation task for Phase 50 (Tasks 441-450), which audited FNA's real API surface,
 verified CNA's own `Begin()`/`End()`/`IsComplete()`/`PixelCount()` behavior against it, added real
-pixel/query correctness tests, implemented a genuine fix on Bgfx, and investigated (without
-guessing) a real architecture blocker on Vulkan.
+pixel/query correctness tests, and implemented a genuine fix on Bgfx. Vulkan's own real
+architecture blocker (Task 447), investigated without guessing at the time, was later fully
+resolved once the project owner picked a direction for its 3 open design questions (Task 854,
+2026-07-10) — see its own section below.
 
 ## FNA's real API surface (Task 441's audit)
 
@@ -42,7 +44,7 @@ matching `End()`) via a 50-iteration stress test — no crash, no resource-track
 | Backend | Attaches to real GPU work? | Sequence validation | Pixel/query correctness | Status |
 |---|---|---|---|---|
 | **EasyGL** | ✅ Yes — thin `glBeginQuery`/`glEndQuery(GL_ANY_SAMPLES_PASSED)` wrapper | None (matches FNA) | ✅ Verified both directions (Tasks 445/446) | **Fully correct** |
-| **Vulkan** | ❌ No — `Begin()`/`End()` never inject `vkCmdBeginQuery`/`vkCmdEndQuery` | N/A (unreachable) | Always reports 0 (functionally inert) | **BLOCKED** (Task 447) |
+| **Vulkan** | ✅ Yes (Task 447, 2026-07-10) — real per-draw-call tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording | None (matches FNA) | ✅ Verified both directions plus multi-draw-span (Task 854) — genuinely discriminating in this sandbox (Mesa Lavapipe) | **Fully correct** |
 | **Bgfx** | ✅ Yes (Task 448) — real `bgfx::submit(id, program, occlusionQuery)` attachment | None (matches FNA) | ⚠️ Not verifiable in this sandbox (see below); dedicated-view gap open (Task 917) | **Fixed, with caveats** |
 | **SDL_Renderer** | N/A — construction itself throws | N/A | N/A | **Correctly unsupported** (2D-only backend, Task 727) |
 
@@ -59,27 +61,47 @@ occluder — rejected by `DepthStencilState::Default`'s `LessEqual` compare — 
 <= 0`). Both independently confirmed via sabotage-and-revert. This is the only backend where
 occlusion queries are both wired up AND pixel-verified correct.
 
-### Vulkan — BLOCKED, functionally inert
+### Vulkan — fixed, all 3 design questions resolved (Task 447/854, 2026-07-10)
 
-`VulkanOcclusionQueryBackend::Begin()`/`End()` never inject `vkCmdBeginQuery`/`vkCmdEndQuery`,
-because this backend defers ALL 3D and 2D draw calls into `pending3D_`/`activeBatches_` snapshots,
-recorded into real Vulkan commands only once per frame inside `RecordCommandBuffer` — well after
-`Begin()`/`End()` (called synchronously by game code around a draw call) already returned.
-`Pending3DDraw` has no query-association field at all. Occlusion queries on Vulkan currently always
-report 0 visible pixels regardless of real visibility — safe (no crash) but functionally inert.
+`VulkanOcclusionQueryBackend::Begin()`/`End()` previously never injected `vkCmdBeginQuery`/
+`vkCmdEndQuery`, because this backend defers ALL 3D and 2D draw calls into `pending3D_`/
+`activeBatches_` snapshots, recorded into real Vulkan commands only once per frame inside
+`RecordCommandBuffer` — well after `Begin()`/`End()` (called synchronously by game code around a
+draw call) already returned. `Pending3DDraw` had no query-association field at all, so occlusion
+queries on Vulkan always reported 0 visible pixels regardless of real visibility.
 
-Fixing this for real (Task 447, investigated but left BLOCKED — not guessed at) requires resolving
-3 genuinely non-obvious design questions:
+Fixing this required resolving 3 genuinely non-obvious design questions, all now implemented per
+the project owner's decision to do the full fix:
 
-1. How to tag deferred draw entries with "recorded inside query X's Begin/End span" so
-   `RecordCommandBuffer` can wrap the matching `vkCmdDraw*` calls correctly.
-2. Whether a query may legally span multiple draw calls (matching real FNA semantics, but Vulkan
-   requires `vkCmdBeginQuery`/`vkCmdEndQuery` to stay within a single render-pass instance) or must
-   be restricted to exactly one (simpler, but a real FNA-capability deviation).
-3. How to correctly re-`vkCmdResetQueryPool` a reused `OcclusionQuery` object's slot before each new
-   frame's Begin/End cycle (currently reset only once, at construction) — this task's own "avoid
-   stale reads" hint directly names this exact hazard for the idiomatic real-world pattern of
-   reusing one query object across many frames.
+1. **Tagging** — a new `VulkanOcclusionQueryBackend* occlusionQuery` field on `Pending3DDraw`, set
+   uniformly by a new `VulkanGraphicsBackend::PushPending3DDraw()` choke point (all 6
+   `pending3D_.push_back` call sites now route through it) from a new `activeOcclusionQuery_`
+   member, set by `Begin()` and cleared by `End()` (mirrors Bgfx's own convention).
+2. **Multi-draw-span policy** — a query MAY span multiple draw calls, as long as they all land in
+   the same render pass (i.e. target the same render target/backbuffer with no intervening
+   `SetRenderTarget` switch): `RecordCommandBuffer`'s `draw3DFor()` tracks contiguous runs of draws
+   sharing the same query tag and wraps each run in one real `vkCmdBeginQuery`/`vkCmdEndQuery`
+   pair. A query spanning a render-pass boundary (or a non-contiguous 2nd run within the same
+   render pass) is NOT re-opened — a `recordedThisFrame_` flag ensures only the first contiguous
+   run each frame is ever actually recorded, avoiding a Vulkan validation error (double
+   `vkCmdBeginQuery` without an intervening reset) rather than attempting to correctly sum results
+   across multiple render passes (a real FNA capability this implementation doesn't fully cover,
+   documented here rather than silently assumed).
+3. **Per-frame `vkCmdResetQueryPool` sequencing** — previously reset only once, at construction;
+   `RecordCommandBuffer()` now scans `pending3D_` for every distinct query tagged that frame and
+   issues one reset per query, before any render pass begins (Vulkan requires resets outside a
+   render pass instance) — so a query reused every frame (the idiomatic real-world usage pattern)
+   gets a fresh reset each time, not just the first.
+
+New `examples/vulkan_occlusionquery_pixelcount_test.cpp` (`Vulkan_OcclusionQuery_PixelCount`, 6/6
+pass): a fully-visible 64×64 quad reports `PixelCount()==4096` (the exact pixel count); a quad
+fully hidden behind a nearer opaque occluder reports `PixelCount()==0`; a 3rd scenario draws 2
+non-overlapping half-quads inside ONE `Begin()`/`End()` span and confirms `PixelCount()==4096`
+(summed across both draws), directly exercising decision 2's multi-draw-span policy. Unlike Bgfx's
+own identical-shaped test, this sandbox's software Vulkan renderer (Mesa Lavapipe) reports fully
+accurate, discriminating pixel counts — no sandbox-limitation caveat needed. Verified via `git
+stash` revert-and-rebuild (reverting reproduced exactly the predicted failure, the 2
+query-correlation checks failing with `IsComplete()` never becoming true).
 
 ### Bgfx — fixed, with two honestly-documented caveats
 
@@ -131,6 +153,6 @@ Since construction itself throws, `Begin()`/`End()` are unreachable — consiste
 | FNA API surface + Begin/End sequence behavior | ✅ Fully audited; CNA correctly matches FNA's own lack of validation on every backend that reaches user code (Tasks 441-444) |
 | `Dispose()`/active-query-destruction safety | ✅ Verified safe on EasyGL via 50-iteration stress test (Task 449) |
 | EasyGL pixel/query correctness | ✅ Both directions (visible → positive, occluded → zero) pixel-verified (Tasks 445-446) |
-| Vulkan | ❌ Functionally inert (always reports 0); real fix needs a genuine architecture decision, BLOCKED (Task 447) |
+| Vulkan | ✅ Real per-draw-call query correlation implemented (Task 447/854, 2026-07-10); pixel/query correctness verified both directions plus multi-draw-span, genuinely discriminating in this sandbox |
 | Bgfx | ✅ Wiring fixed per bgfx's documented API (Task 448); pixel-level correctness unverifiable in this sandbox; dedicated-view gap for true scene-depth correctness still open (Task 917) |
 | SDL_Renderer | ✅ Correctly throws at construction (2D-only backend, Task 727) |

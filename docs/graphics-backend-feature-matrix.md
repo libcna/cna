@@ -115,8 +115,8 @@ falls back," which is the idiomatic Vulkan pattern for optional features, not a 
 
 | Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer |
 |---|---|---|---|---|
-| Wired to real GPU work (`Begin`/`End`) | ✅ | ⛔ **BLOCKED**, functionally inert, always reports 0 (Task 447) | ✅ (Task 448) | N/A — throws at construction (Task 727) |
-| Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | N/A | ⚠️ can't verify in this sandbox's software GL2.1 driver; dedicated-view architecture gap open (Task 917) | N/A |
+| Wired to real GPU work (`Begin`/`End`) | ✅ | ✅ **FIXED (Task 447, 2026-07-10)** — real per-draw-call query correlation via `Pending3DDraw::occlusionQuery` tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording in `RecordCommandBuffer()` | ✅ (Task 448) | N/A — throws at construction (Task 727) |
+| Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | ✅ verified both directions, plus a multi-draw-span check (Task 854) — this sandbox's software Vulkan driver (Mesa Lavapipe) reports fully accurate, discriminating pixel counts (4096 visible / 0 occluded on a 64×64 quad) | ⚠️ can't verify in this sandbox's software GL2.1 driver; dedicated-view architecture gap open (Task 917) | N/A |
 
 ## Model (Phase 49, closed this session — see `docs/model-content-pipeline-support.md` for full detail)
 
@@ -130,7 +130,6 @@ falls back," which is the idiomatic Vulkan pattern for optional features, not a 
 
 | Task | Backend | One-line reason |
 |---|---|---|
-| 447 | Vulkan | Occlusion query — backend defers ALL draws to `RecordCommandBuffer`; no way to correlate a query's Begin/End span with a deferred draw without a real design decision (3 sub-questions, none guessed at) |
 | 686 | SDL_Renderer | `TextureAddressMode::Wrap` via `SpriteBatch` — no native support in the `Draw()` path used; 3 options (throw / rewrite to `SDL_RenderGeometry` / hybrid), none picked |
 | 687 | SDL_Renderer | Same underlying constraint as 686, for `Mirror` — resolving 686 resolves this too |
 | 725 | SDL_Renderer | `Texture3D`/`TextureCube` construction succeeds silently with a null backend; 94 existing tests rely on that silent-success behavior, so fixing needs a blast-radius-aware architecture decision |
@@ -201,16 +200,16 @@ already pixel-verified on EasyGL/SDL_Renderer, so a regression specifically on V
 but it is genuinely unverified there. Not opened as a new numbered task here (that's Task 738-scale
 triage work); flagging it in this matrix is this task's own real scope.
 
-**`OcclusionQuery` visible-vs-occluded pixel test on Vulkan (Task 854's own topic)**: not a new
-finding — this is exactly Task 447's already-tracked ⛔ BLOCKED status (Vulkan's deferred-draw
-architecture can't correlate a query's Begin/End span with a draw at all yet, so no pixel test is
-even possible until that's resolved).
+**`OcclusionQuery` visible-vs-occluded pixel test on Vulkan (Task 854's own topic)**: **FIXED,
+2026-07-10** — was Task 447's ⛔ BLOCKED status (Vulkan's deferred-draw architecture couldn't
+correlate a query's Begin/End span with a draw at all); now resolved via real per-draw-call query
+tagging and `vkCmdBeginQuery`/`vkCmdEndQuery` recording, see the `OcclusionQuery` table above.
 
 **Bottom line**: Vulkan's real, current, confirmed-open limitations are exactly 2 — `BlendState`
-(Task 868) and the isolated `RasterizerState.DepthBias` sub-case — plus the already-tracked
-`OcclusionQuery` BLOCKED status (Task 447) and `ReferenceStencil` gap (Task 872, shared across all
-3 3D backends). The 2D SpriteBatch/SpriteFont/Model-hierarchy test-coverage gap above is real but
-distinct in kind (untested, not un-implemented or known-broken).
+(Task 868) and the isolated `RasterizerState.DepthBias` sub-case — plus the `ReferenceStencil` gap
+(Task 872, shared across all 3 3D backends). The 2D SpriteBatch/SpriteFont/Model-hierarchy
+test-coverage gap above is real but distinct in kind (untested, not un-implemented or
+known-broken). `OcclusionQuery` (Task 447/854) is no longer on this list — fixed in full.
 
 ## Remaining genuine Bgfx limitations (Task 824, 2026-07-10)
 

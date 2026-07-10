@@ -5321,6 +5321,28 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkBeginCommandBuffer(cb, &bi) != VK_SUCCESS)
             throw std::runtime_error("vkBeginCommandBuffer failed");
 
+        // Task 447/854: reset every OcclusionQuery pool actually tagged on a pending draw this
+        // frame, before any render pass begins (vkCmdResetQueryPool must not be called inside a
+        // render pass instance). Replaces the old "reset once at construction only" bug -- a
+        // query reused across frames (the real, idiomatic XNA usage pattern: Begin()/End() called
+        // once per Draw()) now gets a fresh reset every time it's actually used, not just the
+        // first. recordedThisFrame_ is cleared here too, so draw3DFor's own contiguous-run
+        // tracking starts fresh each frame.
+        {
+            std::vector<VulkanOcclusionQueryBackend*> queriesThisFrame;
+            for (const auto& draw : pending3D_) {
+                if (draw.occlusionQuery &&
+                    std::find(queriesThisFrame.begin(), queriesThisFrame.end(), draw.occlusionQuery)
+                        == queriesThisFrame.end())
+                    queriesThisFrame.push_back(draw.occlusionQuery);
+            }
+            for (auto* q : queriesThisFrame) {
+                q->recordedThisFrame_ = false;
+                if (q->pool_ != VK_NULL_HANDLE)
+                    vkCmdResetQueryPool(cb, q->pool_, 0, 1);
+            }
+        }
+
         // Helper: draw all 2D batches for a specific RT (nullptr = backbuffer) into current render pass.
         // Sprite VB/IB ring buffers are shared across all passes in a frame — each snapshot is
         // memcpy'd/bound at its own running byte offset (vbOff/ibOff below), mirroring draw3DFor's
@@ -5427,6 +5449,10 @@ namespace CNA::Internal::Backends::Vulkan
             VkDeviceSize vbOff    = 0;
             VkDeviceSize ibOff    = 0;
             VkDeviceSize instVbOff = 0;
+            // Task 447/854: the OcclusionQuery currently wrapped in a real vkCmdBeginQuery for
+            // this render pass, if any -- tracks contiguous runs of draws sharing the same
+            // occlusionQuery tag so they land in one vkCmdBeginQuery/vkCmdEndQuery pair.
+            VulkanOcclusionQueryBackend* openQuery = nullptr;
             for (const auto& draw : pending3D_) {
                 if (draw.rt != targetRT) continue;
                 if (draw.isMarker) {
@@ -5444,6 +5470,27 @@ namespace CNA::Internal::Backends::Vulkan
                 if (vbOff + draw.vbData.size() > kFrame3DVBSize) continue;
                 if (!draw.ibData.empty() && ibOff + draw.ibData.size() > kFrame3DIBSize) continue;
                 if (draw.useInstanced && instVbOff + draw.instVbData.size() > kFrame3DInstVBSize) continue;
+
+                // Task 447/854: this draw is definitely about to be recorded -- open/close real
+                // vkCmdBeginQuery/vkCmdEndQuery pairs around contiguous runs of draws sharing the
+                // same occlusionQuery tag. A query already recorded once this frame (an earlier
+                // contiguous run, in this render pass or an earlier one) is deliberately NOT
+                // reopened -- Vulkan requires a reset between two vkCmdBeginQuery calls on the
+                // same query, and re-resetting mid-frame would corrupt the first run's own
+                // in-flight result; this implements the approved "reject additional spans beyond
+                // the first contiguous run" policy.
+                if (draw.occlusionQuery != openQuery) {
+                    if (openQuery && openQuery->pool_ != VK_NULL_HANDLE) {
+                        vkCmdEndQuery(cb, openQuery->pool_, 0);
+                        openQuery->recordedThisFrame_ = true;
+                    }
+                    openQuery = nullptr;
+                    if (draw.occlusionQuery && draw.occlusionQuery->pool_ != VK_NULL_HANDLE
+                        && !draw.occlusionQuery->recordedThisFrame_) {
+                        vkCmdBeginQuery(cb, draw.occlusionQuery->pool_, 0, 0);
+                        openQuery = draw.occlusionQuery;
+                    }
+                }
 
                 std::memcpy(static_cast<uint8_t*>(frame3DVBPtr_[currentFrame_]) + vbOff,
                             draw.vbData.data(), draw.vbData.size());
@@ -5662,6 +5709,12 @@ namespace CNA::Internal::Backends::Vulkan
                 if (draw.useInstanced)
                     instVbOff += static_cast<VkDeviceSize>(draw.instVbData.size());
                 vbOff += static_cast<VkDeviceSize>(draw.vbData.size());
+            }
+            // Task 447/854: close a query left open at the end of this render pass's own draw
+            // list (its span ran through the last tagged draw with no following untagged one).
+            if (openQuery && openQuery->pool_ != VK_NULL_HANDLE) {
+                vkCmdEndQuery(cb, openQuery->pool_, 0);
+                openQuery->recordedThisFrame_ = true;
             }
         };
 
@@ -6157,6 +6210,12 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::SetBlendEnabled(bool v)      { blendEnabled_      = v; }
     void VulkanGraphicsBackend::SetDepthWriteEnabled(bool v) { depthWriteEnabled_ = v; }
 
+    void VulkanGraphicsBackend::PushPending3DDraw(Pending3DDraw&& d)
+    {
+        d.occlusionQuery = activeOcclusionQuery_;
+        pending3D_.push_back(std::move(d));
+    }
+
     void VulkanGraphicsBackend::SetStringMarkerEXT(const char* marker)
     {
         if (!marker || !marker[0]) return;
@@ -6164,7 +6223,7 @@ namespace CNA::Internal::Backends::Vulkan
         m.isMarker   = true;
         m.markerLabel = marker;
         m.rt          = currentRT_;
-        pending3D_.push_back(std::move(m));
+        PushPending3DDraw(std::move(m));
     }
 
     void VulkanGraphicsBackend::DrawColoredPrimitives(
@@ -6204,7 +6263,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.slopeScaleDepthBias = slopeScaleDepthBias_;
         d.indexType  = VK_INDEX_TYPE_UINT16;  // non-indexed, not used
         d.rt         = currentRT_;
-        pending3D_.push_back(std::move(d));
+        PushPending3DDraw(std::move(d));
     }
 
     void VulkanGraphicsBackend::DrawIndexedColoredPrimitives(
@@ -6250,7 +6309,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.slopeScaleDepthBias = slopeScaleDepthBias_;
         d.indexType  = vulkanIB.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
         d.rt         = currentRT_;
-        pending3D_.push_back(std::move(d));
+        PushPending3DDraw(std::move(d));
     }
 
     // ---- Extended 3D draws (Tasks 53-55) ----
@@ -6416,7 +6475,7 @@ namespace CNA::Internal::Backends::Vulkan
                 d.fogTex3DUboData[6] = 0.f; d.fogTex3DUboData[7] = 0.f;
             }
         }
-        pending3D_.push_back(std::move(d));
+        PushPending3DDraw(std::move(d));
     }
 
     void VulkanGraphicsBackend::DrawIndexedPrimitivesEx(
@@ -6579,7 +6638,7 @@ namespace CNA::Internal::Backends::Vulkan
                 d.fogTex3DUboData[6] = 0.f; d.fogTex3DUboData[7] = 0.f;
             }
         }
-        pending3D_.push_back(std::move(d));
+        PushPending3DDraw(std::move(d));
     }
 
     void VulkanGraphicsBackend::DrawInstancedPrimitivesEx(
@@ -6648,7 +6707,7 @@ namespace CNA::Internal::Backends::Vulkan
         d.baseVertex   = static_cast<int32_t>(params.baseVertex);
         d.useInstanced = true;
         d.descSet      = defaultWhiteDescSet_;  // no per-draw texture for now
-        pending3D_.push_back(std::move(d));
+        PushPending3DDraw(std::move(d));
     }
 
     // ---- Graphics state ----
@@ -7286,19 +7345,26 @@ namespace CNA::Internal::Backends::Vulkan
     {
         if (!owner_ || pool_ == VK_NULL_HANDLE) return;
         ended_ = false;
-        // Occlusion queries in Vulkan must be recorded inside a render pass.
-        // CNA's Vulkan backend defers all draws to RecordCommandBuffer, so we
-        // cannot inject query begin/end here. The result is always 0 (not visible)
-        // until proper per-draw-call query injection is implemented.
+        // Task 447/854: occlusion queries in Vulkan must be recorded inside a render pass, and
+        // CNA's Vulkan backend defers all draws to RecordCommandBuffer -- so Begin()/End() don't
+        // inject any Vulkan commands directly. Instead, this marks the query "active": every
+        // Pending3DDraw pushed via PushPending3DDraw() between now and End() gets tagged with
+        // `this`, and RecordCommandBuffer() later wraps whichever contiguous run of tagged draws
+        // land in the same render pass in a real vkCmdBeginQuery/vkCmdEndQuery pair.
+        owner_->activeOcclusionQuery_ = this;
     }
 
     void VulkanOcclusionQueryBackend::End()
     {
         if (!owner_ || pool_ == VK_NULL_HANDLE) return;
         ended_ = true;
-        // See Begin(): draw-level query injection is not yet implemented.
-        // Report 0 visible pixels as a safe default.
-        pixelCount_ = 0;
+        // Guard rather than unconditionally clearing: XNA's own OcclusionQuery API doesn't
+        // support nested Begin() calls, so this should always already be `this` in practice.
+        if (owner_->activeOcclusionQuery_ == this)
+            owner_->activeOcclusionQuery_ = nullptr;
+        // pixelCount_ is no longer hardcoded to 0 here -- IsComplete() populates it once the
+        // real GPU query result (recorded by RecordCommandBuffer(), see Begin()'s comment) is
+        // ready, matching every other backend's own async completion timing.
     }
 
     bool VulkanOcclusionQueryBackend::IsComplete() const

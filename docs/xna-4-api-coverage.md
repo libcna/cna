@@ -103,7 +103,7 @@ that check matters).
 | `IndexBuffer` | ✅ | ✅ | ✅ | ✅ | `IndexElementSize`'s underlying numeric values now match FNA exactly, `0`/`1` not `16`/`32` (921, closed 2026-07-09 — see Coverage axes example above, now historical) |
 | `VertexDeclaration` | ✅ | ✅ | ✅ | ✅ | Construction/assignment confirmed never throws (729) |
 | `Model`/`ModelMesh`/`ModelBone` | ✅ | ✅ runtime API | ✅ | ✅ | 4-arg constructor now has an optional `rootBoneIndex` param, additive-only, default `0` matching the prior behavior (916, closed 2026-07-09); content-pipeline loader (`ModelTypeReader`) has real gaps vs. FNA's `.xnb` (no bone hierarchy/`ParentBone`/`BoundingSphere`/`Tag`, zero loader test coverage, 440) |
-| `OcclusionQuery` | ✅ | ⚠️ | ✅ | ⚠️ | EasyGL fully correct both directions (445/446); ⛔ Vulkan functionally inert, deferred-draw architecture can't correlate Begin/End spans (447); Bgfx fixed (448) but can't be pixel-verified in this sandbox's software GL driver, dedicated-view gap open (917) |
+| `OcclusionQuery` | ✅ | ✅ | ✅ | ⚠️ | EasyGL fully correct both directions (445/446); Vulkan fully correct both directions plus multi-draw-span, real per-draw-call correlation implemented (447/854, 2026-07-10); Bgfx fixed (448) but can't be pixel-verified in this sandbox's software GL driver, dedicated-view gap open (917) |
 | `Viewport` | ✅ | ✅ | ✅ | ✅ | The one class with a direct running-FNA cross-check beyond source-reading (`Project`/`Unproject`, Tasks 476/479) — all cases matched exactly |
 | `PresentationParameters` | ✅ | ✅ | ✅ | ✅ | No open gaps |
 | `GraphicsAdapter` | ✅ | ✅ | ✅ | ✅ | No open gaps |
@@ -119,7 +119,7 @@ adds nothing that source doesn't already contain in more detail.
 | Backend | Overall maturity | Fully correct | Partial / emulated | Architecturally blocked (⛔) | Known pre-existing test-failure baseline |
 |---|---|---|---|---|---|
 | **EasyGL** | Most mature — the primary backend; nearly everything below is ✅ | All 5 stock effects (core+lighting+specular+fog), `SpriteBatch`/`SpriteFont`, all 4 state classes, `RenderTarget2D`/`Cube` (MSAA/mip/depth-format), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. real mip-level upload, Task 924), `OcclusionQuery` (both directions verified), `VertexBuffer`/`IndexBuffer`/`VertexDeclaration`, real `TextureFilter::Anisotropic` (918) | `Texture3D`/`TextureCube` don't inherit `Texture` so can't be sampled in shaders (863, architectural, **NEEDS_HUMAN**) | Non-`Color` `SurfaceFormat` GPU forwarding (732 — conflicts with the already-shipped `Texture::ValidateFormat` contract, Task 176) | 3 — `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`, `easy-gl-resource-smoke-tests` (Task 449's regression, 4510/4513); reconfirmed 4535/4539 as of Task 924, 2026-07-09 |
-| **Vulkan** | Second-most mature — most rendering correct; `BlendState` closed 2026-07-09 (868), `ReferenceStencil` also confirmed already-fixed (872, corrected 2026-07-09), only one isolated `DepthBias` sub-case remains as a real state-class gap | All 5 stock effects (core+lighting+specular+fog on every Vulkan 3D pipeline, including `colored3d`/`textured3d`/`colored_textured3d`/`dual_texture3d`/`skinned3d`/`env_map3d` — Task 899 closed this fully on 2026-07-07, predating this table; **correction (2026-07-09, caught while writing Task 488):** this row previously and incorrectly claimed these pipelines "still lack fog," which was already stale when this table was first written), `RenderTarget2D`/`Cube` (MSAA/mip/per-instance `DepthStencilFormat` fidelity via Task 911's format-keyed pipeline cache), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. Task 865's real GPU readback, and real mip-level upload as of Task 925), `OcclusionQuery` (Task 448-equivalent — actually the one BLOCKED here, see below), `SamplerState`, `VertexBuffer`/`IndexBuffer`/`VertexDeclaration`, **`BlendState`** — real per-`Blend`/`BlendFunction` mapping across all 9 3D pipeline-creation sites (Task 868, closed 2026-07-09) | `DepthStencilState` compare-op + stencil ops now real (Task 870), `ReferenceStencil` also confirmed already-connected via `vkCmdSetStencilReference` (872, corrected 2026-07-09 — was undocumented since Task 870); one isolated `RasterizerState.DepthBias=-1e6` sub-case unresolved | `OcclusionQuery` is ⛔ **BLOCKED** — the deferred-draw-recording architecture can't correlate a query's Begin/End span with a specific deferred draw without a real design decision (447) | 4 — 1 `RasterizerState.DepthBias` sub-case, 3 `ContentManagerSkinnedModelTest.*` segfaults (Xvfb/llvmpipe environment issue, confirmed pre-existing via `git stash`, each passes in isolation) — Task 925's own regression, 4444/4448, 2026-07-09. **Historical note:** prior to Task 868's fix this baseline was 9 (5× `BlendState` failures included); `docs/graphics-backend-feature-matrix.md` may still cite the old, larger count until it's next touched. |
+| **Vulkan** | Second-most mature — most rendering correct; `BlendState` closed 2026-07-09 (868), `ReferenceStencil` also confirmed already-fixed (872, corrected 2026-07-09), only one isolated `DepthBias` sub-case remains as a real state-class gap | All 5 stock effects (core+lighting+specular+fog on every Vulkan 3D pipeline, including `colored3d`/`textured3d`/`colored_textured3d`/`dual_texture3d`/`skinned3d`/`env_map3d` — Task 899 closed this fully on 2026-07-07, predating this table; **correction (2026-07-09, caught while writing Task 488):** this row previously and incorrectly claimed these pipelines "still lack fog," which was already stale when this table was first written), `RenderTarget2D`/`Cube` (MSAA/mip/per-instance `DepthStencilFormat` fidelity via Task 911's format-keyed pipeline cache), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. Task 865's real GPU readback, and real mip-level upload as of Task 925), `OcclusionQuery` — real per-draw-call query correlation implemented, both directions plus multi-draw-span pixel-verified (Task 447/854, 2026-07-10), `SamplerState`, `VertexBuffer`/`IndexBuffer`/`VertexDeclaration`, **`BlendState`** — real per-`Blend`/`BlendFunction` mapping across all 9 3D pipeline-creation sites (Task 868, closed 2026-07-09) | `DepthStencilState` compare-op + stencil ops now real (Task 870), `ReferenceStencil` also confirmed already-connected via `vkCmdSetStencilReference` (872, corrected 2026-07-09 — was undocumented since Task 870); one isolated `RasterizerState.DepthBias=-1e6` sub-case unresolved | none remaining (`OcclusionQuery`'s own former BLOCKED status, 447, was resolved 2026-07-10 — see the ✅ column) | 4 — 1 `RasterizerState.DepthBias` sub-case, 3 `ContentManagerSkinnedModelTest.*` segfaults (Xvfb/llvmpipe environment issue, confirmed pre-existing via `git stash`, each passes in isolation) — Task 925's own regression, 4444/4448, 2026-07-09. **Historical note:** prior to Task 868's fix this baseline was 9 (5× `BlendState` failures included); `docs/graphics-backend-feature-matrix.md` may still cite the old, larger count until it's next touched. |
 | **Bgfx** | Third — full 2D+3D pixel-verified parity as of Phase 72, but occlusion-query correctness can't be confirmed in this sandbox | All 5 stock effects (core+lighting+specular+fog), `RenderTarget2D`/`Cube` (MSAA/mip/depth), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. Task 914's blit-based readback), all 4 state classes, `SpriteBatch` `SamplerState` (Task 750) | `OcclusionQuery` Begin/End wiring is real (Task 448) but correctness (visible vs. occluded pixel counts) can't be pixel-verified under this sandbox's software GL 2.1 driver — dedicated-view architecture gap open (917); `ShaderEffect` custom-source loading unsupported (`CreateEffectBackend` returns `nullptr`) | None | 1 baseline (`Bgfx_RenderTarget2D_MsaaResolve`, this sandbox's Xvfb has no DRI3 support; a documented environment limitation, not a code bug) — Task 448's regression, 4413/4414. **Correction (2026-07-09, Task 499):** this count undercounted a 2nd already-documented pre-existing failure, `Bgfx_RenderTarget2D_MipChain` (Tasks 455/877/906/912's own ~1-in-8 mip-generation-vs-readback timing flake) — never folded into this row's own baseline number. Task 496's integration-only rerun genuinely hit both. |
 | **SDL_Renderer** | Deliberately 2D-only by design — not a maturity gap, an architectural scope boundary; its own 2D path is comprehensively audited and pixel-verified (`docs/sdl-renderer-2d-completeness.md`, Phase 70, 15 real bugs found and fixed) | All `SpriteBatch`/`SpriteFont` draw paths, all `BlendState`/`SamplerState` behavior, `RenderTarget2D` basic round-trip, `GetBackBufferData` (Task 915) | `RenderTarget2D`'s `DepthStencilFormat` is emulated — echoes the requested format back with no real backing store; `ClearOptions::Stencil` is emulated too | `TextureAddressMode::Wrap`/`Mirror` via `SpriteBatch` (686/687 — no native support in the `Draw()` path used, 3 unpicked design options); `Texture3D`/`TextureCube` construction succeeds silently with a null backend, a 94-existing-test blast radius if changed (725) | 11 — all throwing/exercising `"SDL_Renderer does not support 3D"` (`EffectApplyTest`×2, `SkinnedModelEXTPartTest.*`×6, `ContentManagerSkinnedModelTest.*`×3), matching this backend's accepted 2D-only scope exactly. Corrected from an original 13 by Task 709's own fix; reconfirmed via Task 915/456. |
 
@@ -184,8 +184,9 @@ was written and not yet folded into it) — do not reuse cached numbers from an 
       one** backend (no class is entirely ❌/missing).
 - [ ] Every class is rated Tested ✅ on at least one backend (no class has zero automated coverage).
 - [ ] At least one backend (currently EasyGL) has zero ❌-rated classes in Task 483's table.
-- [ ] The BLOCKED-task count (Task 484's per-backend table; currently 5: 447, 686, 687, 725, 732)
-      is stable and each one has a written, current rationale — not silently stale.
+- [ ] The BLOCKED-task count (Task 484's per-backend table; currently 4: 686, 687, 725, 732 — 447
+      was resolved 2026-07-10) is stable and each one has a written, current rationale — not
+      silently stale.
 - [ ] `docs/migration-guide.md`'s "what doesn't work at all yet" list matches the current BLOCKED
       list exactly (no drift between the two documents).
 
@@ -716,8 +717,9 @@ stale again the same way), this section now points at the single, currently-main
 **See `docs/graphics-backend-feature-matrix.md`** (Task 451) for the authoritative "Stock Effects"
 table (all 5 stock effects × 4 backends, per-feature rows down to `DirectionalLight1`/`2`,
 `SpecularColor`/`Power`, `VertexColorEnabled`, `WeightsPerVertex`), the "2D SpriteBatch/SpriteFont"
-table, and the full list of currently-BLOCKED tasks (447 Vulkan OcclusionQuery, 686/687 SDL_Renderer
-`Wrap`/`Mirror`, 725 SDL_Renderer `Texture3D`/`TextureCube`, 732 EasyGL non-`Color` `SurfaceFormat`).
+table, and the full list of currently-BLOCKED tasks (686/687 SDL_Renderer `Wrap`/`Mirror`, 725
+SDL_Renderer `Texture3D`/`TextureCube`, 732 EasyGL non-`Color` `SurfaceFormat` — Task 447 Vulkan
+OcclusionQuery is no longer on this list, see the 2026-07-10 update below).
 
 **Update (2026-07-10, Task 823) — Phase 72 (Bgfx full 2D+3D pixel-verified parity) is now closed
 in full**: of the 38 real gaps found in a first-ever complete row-by-row triage of that phase's 85
@@ -737,10 +739,24 @@ the phase's 8 confirmed real gaps (`SpriteBatch` sort-mode/rotation/scale/crop/f
 `Model` hierarchy — Task 861's own finding — plus `Texture2D`/`Texture3D` partial-region/NPOT
 tests) and 2 UNCERTAIN rows (MRT mixed-format, `Viewport` math), every one is now ✅ — no bugs
 found on Vulkan itself in any of them (Task 774's shared-code `SurfaceFormat`-validation fix,
-found while closing Bgfx's identical row, already covered Vulkan too). Only Task 854
-(`OcclusionQuery` pixel/query test) remains open, `BLOCKED` on Task 447's own already-tracked
-architecture decision (Vulkan's deferred-draw model can't yet correlate a query's `Begin`/`End`
-span with a draw call). See `plan_graphics.md`'s own Phase 73 intro blockquote for detail.
+found while closing Bgfx's identical row, already covered Vulkan too). At the time of this update,
+only Task 854 (`OcclusionQuery` pixel/query test) remained open, `BLOCKED` on Task 447's own
+already-tracked architecture decision — see the update immediately below for its resolution later
+the same day.
+
+**Update (2026-07-10, Task 854) — Task 447/854 (Vulkan OcclusionQuery) is now fully CLOSED, and
+Phase 73 has moved to `plan_graphics_20260709.md` in full** (every one of its 37 rows now ✅). The
+project owner picked a direction for Task 447's 3 open design questions (tagging mechanism,
+multi-draw-span policy, per-frame query-pool reset sequencing) and all 3 are now implemented: a
+new `Pending3DDraw::occlusionQuery` field tags every deferred draw with the currently-active
+query, `RecordCommandBuffer()` wraps contiguous same-query draw runs in a real `vkCmdBeginQuery`/
+`vkCmdEndQuery` pair (one render pass at a time — a query spanning a render-target switch is not
+re-opened, matching the approved "reject additional spans across a render-pass boundary" policy),
+and every query tagged on a pending draw gets a fresh `vkCmdResetQueryPool` each frame. New
+`Vulkan_OcclusionQuery_PixelCount` test (6/6 pass) confirms genuinely accurate, discriminating
+pixel counts (4096 for a fully-visible 64×64 quad, 0 when occluded, 4096 again when split across 2
+draws in one query span) — see `docs/occlusionquery-support.md`'s own updated Vulkan section for
+full detail.
 
 **Headline summary as of 2026-07-09** (see the matrix doc for detail and task numbers):
 
@@ -872,11 +888,12 @@ maturity levels.
   `Anisotropic` fallback (918), `Model`'s missing `rootBoneIndex` (916), `IndexElementSize`'s
   numeric mismatch (921), and `SpriteBatch::Draw`'s missing 7th overload (922) are all now
   CLOSED — removed from this list. Remaining:
-  - 5 BLOCKED tasks needing a project-owner architecture decision: 447 (Vulkan OcclusionQuery),
-    686/687 (SDL_Renderer `Wrap`/`Mirror` via `SpriteBatch`), 725 (SDL_Renderer `Texture3D`/
-    `TextureCube`), 732 (EasyGL non-`Color` `SurfaceFormat` GPU forwarding). Plus 2 more found
-    since: 863 (`Texture3D` shader-sampling architecture) and 869 (`GraphicsDevice` state
-    value-vs-reference semantics) — both NEEDS_HUMAN, neither picked.
+  - 4 BLOCKED tasks needing a project-owner architecture decision: 686/687 (SDL_Renderer
+    `Wrap`/`Mirror` via `SpriteBatch`), 725 (SDL_Renderer `Texture3D`/`TextureCube`), 732 (EasyGL
+    non-`Color` `SurfaceFormat` GPU forwarding). Plus 2 more found since: 863 (`Texture3D`
+    shader-sampling architecture) and 869 (`GraphicsDevice` state value-vs-reference semantics) —
+    both NEEDS_HUMAN, neither picked. **447 (Vulkan OcclusionQuery) was resolved 2026-07-10** —
+    removed from this list, see `docs/occlusionquery-support.md`.
   - `GraphicsDevice.ReferenceStencil` has no backend connection on EasyGL/Bgfx (Vulkan confirmed
     already-fixed, corrected 2026-07-09, Task 872); `Clear` ignores `ClearOptions::Stencil` on all
     3 3D backends (Task 871). Both confirmed real, scoped (touches new backend virtual methods
@@ -909,17 +926,17 @@ See build run in task notes. Build must remain clean after each stub addition.
 
 **Updated 2026-07-09** — items 1–2 (Vulkan pixel tests, Bgfx 3D state) from the original version
 of this list were DONE by Phases 71–73; item 2 below (`IndexElementSize`) and Vulkan's `BlendState`
-half of item 3 are now ALSO done. Current real next steps:
+half of item 3 are now ALSO done. **Updated 2026-07-10**: item 3 (Phase 72) is now fully closed
+too, and item 1's BLOCKED-task count dropped from 7 to 6 (447 resolved). Current real next steps:
 
-1. Resolve the 7 currently-BLOCKED/NEEDS_HUMAN architecture decisions (447, 686, 687, 725, 732,
+1. Resolve the 6 currently-BLOCKED/NEEDS_HUMAN architecture decisions (686, 687, 725, 732,
    863, 869 — see `docs/graphics-backend-feature-matrix.md`'s own BLOCKED-task table) — each needs
    a project-owner call, not more investigation.
 2. Fix `ClearOptions::Stencil` (all 3 3D backends, Task 871) and `ReferenceStencil` (EasyGL/Bgfx
    only — Vulkan confirmed already-fixed 2026-07-09, Task 872) — confirmed real, scoped, not yet
    started.
-3. Close Phase 72 (Bgfx)'s 38 confirmed real pixel-test gaps — `DepthStencilState`/`SpriteFont`/
-   `Model`/`SpriteBatch` behavior/most `BlendState` presets have zero Bgfx-specific tests at all,
-   found via a full 2026-07-09 triage; this is the single largest known remaining gap.
+3. ~~Close Phase 72 (Bgfx)'s 38 confirmed real pixel-test gaps~~ — **DONE 2026-07-10**, see the
+   Phase 72 update above; Phase 73 (Vulkan) is also now fully closed, including Task 854.
 4. Close Phase 73 (Vulkan)'s 9 confirmed real gaps — `SpriteBatch`/`SpriteFont`/`Model` pixel
    tests plus `Texture2D`/`Texture3D` partial-region/NPOT tests.
 5. Add compile-compatibility stubs for `Gamer` / `SignedInGamer` / `GamerCollection` if target games need them.
