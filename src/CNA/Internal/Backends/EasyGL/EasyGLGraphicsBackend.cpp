@@ -3092,6 +3092,49 @@ void main()
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
     }
 
+    // Task 871: glClear(GL_STENCIL_BUFFER_BIT) is itself masked by the currently-active
+    // glStencilMask -- forcing it to all-1s here (mirroring ClearDepth's identical
+    // set_depth_mask(true) override) guarantees the requested clear value actually reaches every
+    // stencil bit regardless of whatever DepthStencilState::StencilWriteMask a previous draw left
+    // active; ApplyDepthStencilState() reissues the real write mask before the next draw anyway.
+    void EasyGLGraphicsBackend::ClearStencil(int stencil)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_clear_stencil(stencil);
+        device.set_stencil_mask(0xFFFFFFFFu);
+        device.clear(::easygl::ClearFlags::Stencil);
+    }
+
+    void EasyGLGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_clear_depth(depth);
+        device.set_clear_stencil(stencil);
+        device.set_depth_mask(true);
+        device.set_stencil_mask(0xFFFFFFFFu);
+        device.clear(::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
+    }
+
+    void EasyGLGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_clear_color(r, g, b, a);
+        device.set_clear_stencil(stencil);
+        device.set_stencil_mask(0xFFFFFFFFu);
+        device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Stencil);
+    }
+
+    void EasyGLGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_clear_color(r, g, b, a);
+        device.set_clear_depth(depth);
+        device.set_clear_stencil(stencil);
+        device.set_depth_mask(true);
+        device.set_stencil_mask(0xFFFFFFFFu);
+        device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
+    }
+
     void EasyGLGraphicsBackend::ClearDepth(float depth)
     {
         if (metagl::IsContextLost()) return;

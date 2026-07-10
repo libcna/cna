@@ -361,6 +361,9 @@ namespace CNA::Internal::Backends::Bgfx
         uint16_t currentRtWidth_ = 0;
         uint16_t currentRtHeight_ = 0;
         uint32_t clearRgba = 0x000000ff;
+        // Task 871: threaded into EnsureViewState()'s bgfx::setViewClear() call, replacing a
+        // previously-hardcoded stencil clear value of 0.
+        uint8_t clearStencilValue_ = 0;
         // Task 808: SpriteBatch::Begin()'s transformMatrix, set by BgfxSpriteBatchBackend::
         // SetTransformMatrix(). Combined with the sprite view's own ortho projection in
         // EnsureViewState() (`orthoWithTransform = ortho * spriteTransform_`, bx::mtxMul order --
@@ -569,6 +572,10 @@ namespace CNA::Internal::Backends::Bgfx
         // @note SetDepth* / SetBlend still throw (not wired to state flags yet).
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
+        void ClearStencil(int stencil) override;
+        void ClearDepthAndStencil(float depth, int stencil) override;
+        void ClearColorAndStencil(float r, float g, float b, float a, int stencil) override;
+        void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;

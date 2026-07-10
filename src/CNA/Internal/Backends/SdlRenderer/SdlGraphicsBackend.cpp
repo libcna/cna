@@ -782,6 +782,10 @@ namespace CNA::Internal::Backends::SdlRenderer
 
     void SdlGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
     void SdlGraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
+    void SdlGraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
+    void SdlGraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
+    void SdlGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
+    void SdlGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
     void SdlGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D("SetDepthTestEnabled"); }
     void SdlGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D("SetBlendEnabled"); }
     void SdlGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }

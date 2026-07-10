@@ -566,6 +566,34 @@ namespace CNA::Internal::Backends
         virtual void ClearDepth(float depth) = 0;
 
         /**
+         * @brief Clears the stencil buffer only, to a given reference value.
+         * @param stencil Stencil value to clear with.
+         */
+        virtual void ClearStencil(int stencil) = 0;
+
+        /**
+         * @brief Clears the depth and stencil buffers in a single call.
+         * @param depth   Depth value to clear with (0..1).
+         * @param stencil Stencil value to clear with.
+         */
+        virtual void ClearDepthAndStencil(float depth, int stencil) = 0;
+
+        /**
+         * @brief Clears the color and stencil buffers in a single call.
+         * @param r,g,b,a Clear color in range 0..1.
+         * @param stencil Stencil value to clear with.
+         */
+        virtual void ClearColorAndStencil(float r, float g, float b, float a, int stencil) = 0;
+
+        /**
+         * @brief Clears the color, depth, and stencil buffers in a single call.
+         * @param r,g,b,a Clear color in range 0..1.
+         * @param depth   Depth value to clear with (0..1).
+         * @param stencil Stencil value to clear with.
+         */
+        virtual void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) = 0;
+
+        /**
          * @brief Enables or disables depth testing.
          *
          * @note Status: PARTIAL. Only the EasyGL backend honors this; other

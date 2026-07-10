@@ -2848,6 +2848,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 871: GraphicsDevice::Clear() now actually clears the stencil buffer to the
+        # requested value on ClearOptions combinations that include ClearOptions::Stencil.
+        cna_easygl_test(cna_test_easygl_graphicsdevice_clear_stencil
+                        examples/easygl_graphicsdevice_clear_stencil_test.cpp)
+        add_test(NAME EasyGL_GraphicsDevice_ClearStencil
+                 COMMAND cna_test_easygl_graphicsdevice_clear_stencil)
+        set_tests_properties(EasyGL_GraphicsDevice_ClearStencil PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 323 (+ 324/325 coverage): RasterizerState.CullMode — None/CullClockwiseFace/
         # CullCounterClockwiseFace, contrast-checked with front- and back-winding quads
         cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode
@@ -3223,6 +3233,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_GraphicsDevice_ReferenceStencil
                  COMMAND cna_test_vulkan_graphicsdevice_reference_stencil)
         set_tests_properties(Vulkan_GraphicsDevice_ReferenceStencil PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 871: GraphicsDevice::Clear() stencil-clearing fix is in SHARED code
+        # (GraphicsDevice.cpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_graphicsdevice_clear_stencil
+                        examples/easygl_graphicsdevice_clear_stencil_test.cpp)
+        add_test(NAME Vulkan_GraphicsDevice_ClearStencil
+                 COMMAND cna_test_vulkan_graphicsdevice_clear_stencil)
+        set_tests_properties(Vulkan_GraphicsDevice_ClearStencil PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -5592,6 +5612,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_GraphicsDevice_ReferenceStencil
              COMMAND cna_test_bgfx_graphicsdevice_reference_stencil)
     set_tests_properties(Bgfx_GraphicsDevice_ReferenceStencil PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 871: GraphicsDevice::Clear() now actually clears the stencil buffer to the requested
+    # value on Bgfx too -- a Bgfx-specific adaptation of the EasyGL source (1 step per real frame,
+    # since Bgfx's own per-frame view clear cannot be interleaved mid-frame with draws either).
+    cna_bgfx_test(cna_test_bgfx_graphicsdevice_clear_stencil
+                  examples/bgfx_graphicsdevice_clear_stencil_test.cpp)
+    add_test(NAME Bgfx_GraphicsDevice_ClearStencil
+             COMMAND cna_test_bgfx_graphicsdevice_clear_stencil)
+    set_tests_properties(Bgfx_GraphicsDevice_ClearStencil PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

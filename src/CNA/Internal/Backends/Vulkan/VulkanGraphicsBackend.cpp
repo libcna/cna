@@ -1620,7 +1620,7 @@ namespace CNA::Internal::Backends::Vulkan
         depthAtt.samples = VK_SAMPLE_COUNT_1_BIT;
         depthAtt.loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -1706,7 +1706,7 @@ namespace CNA::Internal::Backends::Vulkan
         // starts in UNDEFINED and its previous content is never needed across RT passes.
         depthAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -1815,7 +1815,7 @@ namespace CNA::Internal::Backends::Vulkan
         depthAtt.samples        = sampleCount_;
         depthAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -1901,7 +1901,7 @@ namespace CNA::Internal::Backends::Vulkan
         depth.samples        = VK_SAMPLE_COUNT_1_BIT;
         depth.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depth.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depth.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depth.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depth.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         depth.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -2758,7 +2758,7 @@ namespace CNA::Internal::Backends::Vulkan
         depthAtt.samples        = sampleCount_;
         depthAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -5755,11 +5755,11 @@ namespace CNA::Internal::Backends::Vulkan
             if (rtMsaa) {
                 rtCv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
                 rtCv[1].color        = {};
-                rtCv[2].depthStencil = { 1.0f, 0 };
+                rtCv[2].depthStencil = { 1.0f, static_cast<uint32_t>(clearStencil_) };
             } else {
                 for (uint32_t ci = 0; ci < nColor; ++ci)
                     rtCv[ci].color = { { clearR_, clearG_, clearB_, clearA_ } };
-                rtCv[nColor].depthStencil = { 1.0f, 0 };
+                rtCv[nColor].depthStencil = { 1.0f, static_cast<uint32_t>(clearStencil_) };
             }
             VkRenderPassBeginInfo rtRp{};
             rtRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -5798,9 +5798,9 @@ namespace CNA::Internal::Backends::Vulkan
         cv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
         if (hasMsaa) {
             cv[1].color        = {};
-            cv[2].depthStencil = { 1.0f, 0 };
+            cv[2].depthStencil = { 1.0f, static_cast<uint32_t>(clearStencil_) };
         } else {
-            cv[1].depthStencil = { 1.0f, 0 };
+            cv[1].depthStencil = { 1.0f, static_cast<uint32_t>(clearStencil_) };
         }
         VkRenderPassBeginInfo rp{};
         rp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -6237,6 +6237,46 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     void VulkanGraphicsBackend::ClearDepth(float /*depth*/) { readbackStagingValid_ = false; /* Vulkan depth-only clear not yet implemented */ }
+
+    // Task 871: every render pass this backend records already unconditionally clears the
+    // color/depth attachments every frame (see RecordCommandBuffer()'s hardcoded loadOp=CLEAR),
+    // so -- mirroring that existing (if imperfect) design rather than introducing new
+    // per-request selectivity -- these new stencil-aware entry points just update clearStencil_
+    // (read by RecordCommandBuffer()'s VkClearValue construction) and mark the currently-bound RT
+    // dirty exactly like Clear()/ClearColorAndDepth() already do (Task 875).
+    void VulkanGraphicsBackend::ClearStencil(int stencil)
+    {
+        clearStencil_ = stencil;
+        readbackStagingValid_ = false;
+        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
+            clearedRTs_.push_back(currentRT_);
+    }
+
+    void VulkanGraphicsBackend::ClearDepthAndStencil(float /*depth*/, int stencil)
+    {
+        clearStencil_ = stencil;
+        readbackStagingValid_ = false;
+        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
+            clearedRTs_.push_back(currentRT_);
+    }
+
+    void VulkanGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
+        clearStencil_ = stencil;
+        readbackStagingValid_ = false;
+        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
+            clearedRTs_.push_back(currentRT_);
+    }
+
+    void VulkanGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float /*depth*/, int stencil)
+    {
+        clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
+        clearStencil_ = stencil;
+        readbackStagingValid_ = false;
+        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
+            clearedRTs_.push_back(currentRT_);
+    }
 
     void VulkanGraphicsBackend::SetDepthTestEnabled(bool v)  { depthTestEnabled_  = v; }
     void VulkanGraphicsBackend::SetBlendEnabled(bool v)      { blendEnabled_      = v; }

@@ -1295,7 +1295,10 @@ namespace CNA::Internal::Backends::Bgfx
         float orthoWithTransform[16];
         bx::mtxMul(orthoWithTransform, transformColMajor, ortho);
         bgfx::setViewTransform(spriteViewId, nullptr, orthoWithTransform);
-        bgfx::setViewClear(spriteViewId, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, clearRgba, 1.0f, 0);
+        // Task 871: BGFX_CLEAR_STENCIL and the real requested stencil value were previously
+        // never included here -- a requested stencil clear silently did nothing.
+        bgfx::setViewClear(spriteViewId, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL,
+                            clearRgba, 1.0f, clearStencilValue_);
     }
 
     void BgfxGraphicsBackend::Clear(float r, float g, float b, float a)
@@ -1883,6 +1886,35 @@ namespace CNA::Internal::Backends::Bgfx
     }
 
     void BgfxGraphicsBackend::ClearDepth(float /*depth*/) { /* Bgfx depth-only clear not yet implemented */ }
+
+    // Task 871: mirrors Clear()'s own shape (EnsureViewState() + touch actually applies the new
+    // bgfx::setViewClear() flags/value this frame) rather than ClearDepth()'s pre-existing no-op
+    // shape, since stencil clearing needs to genuinely take effect for this task's fix to matter.
+    void BgfxGraphicsBackend::ClearStencil(int stencil)
+    {
+        clearStencilValue_ = static_cast<uint8_t>(stencil);
+        EnsureViewState();
+        bgfx::touch(spriteViewId);
+    }
+
+    void BgfxGraphicsBackend::ClearDepthAndStencil(float /*depth*/, int stencil)
+    {
+        clearStencilValue_ = static_cast<uint8_t>(stencil);
+        EnsureViewState();
+        bgfx::touch(spriteViewId);
+    }
+
+    void BgfxGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        clearStencilValue_ = static_cast<uint8_t>(stencil);
+        Clear(r, g, b, a);
+    }
+
+    void BgfxGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float /*depth*/, int stencil)
+    {
+        clearStencilValue_ = static_cast<uint8_t>(stencil);
+        Clear(r, g, b, a);
+    }
 
     void BgfxGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3DState(); }
     void BgfxGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3DState(); }

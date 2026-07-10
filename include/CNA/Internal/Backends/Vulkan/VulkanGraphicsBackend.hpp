@@ -735,6 +735,10 @@ namespace CNA::Internal::Backends::Vulkan
 
         void ClearColorAndDepth(float, float, float, float, float) override;
         void ClearDepth(float) override;
+        void ClearStencil(int stencil) override;
+        void ClearDepthAndStencil(float depth, int stencil) override;
+        void ClearColorAndStencil(float r, float g, float b, float a, int stencil) override;
+        void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
         void SetDepthTestEnabled(bool)  override;
         void SetBlendEnabled(bool)      override;
         void SetDepthWriteEnabled(bool) override;
@@ -1095,6 +1099,9 @@ namespace CNA::Internal::Backends::Vulkan
         uint32_t currentFrame_            = 0;
         uint32_t lastPresentedImageIndex_ = 0;
         float    clearR_ = 0.f, clearG_ = 0.f, clearB_ = 0.f, clearA_ = 1.f;
+        // Task 871: threaded into every render pass's VkClearValue.depthStencil.stencil field,
+        // replacing a previously-hardcoded clear value of 0.
+        int      clearStencil_ = 0;
         bool     initialized_       = false;
         VulkanRTSource*            currentRT_ = nullptr;
         bool     depthTestEnabled_  = true;

@@ -253,8 +253,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth, int stencil)
     {
-        (void)stencil;
-
         if (backend_ == nullptr)
         {
             return;
@@ -273,12 +271,28 @@ namespace Microsoft::Xna::Framework::Graphics
         const float b = static_cast<float>(color.getBProperty()) / 255.0f;
         const float a = static_cast<float>(color.getAProperty()) / 255.0f;
 
-        const bool clearTarget = hasClearFlag(options, ClearOptions::Target);
-        const bool clearDepth = hasClearFlag(options, ClearOptions::DepthBuffer);
+        const bool clearTarget  = hasClearFlag(options, ClearOptions::Target);
+        const bool clearDepth   = hasClearFlag(options, ClearOptions::DepthBuffer);
+        // Task 871: ClearOptions::Stencil was previously entirely ignored here -- neither checked
+        // against `options` nor threaded through to any backend, so a requested stencil clear
+        // silently did nothing on every backend.
+        const bool clearStencil = hasClearFlag(options, ClearOptions::Stencil);
 
-        if (clearTarget && clearDepth)
+        if (clearTarget && clearDepth && clearStencil)
+        {
+            backend_->ClearColorDepthAndStencil(r, g, b, a, depth, stencil);
+        }
+        else if (clearTarget && clearDepth)
         {
             backend_->ClearColorAndDepth(r, g, b, a, depth);
+        }
+        else if (clearTarget && clearStencil)
+        {
+            backend_->ClearColorAndStencil(r, g, b, a, stencil);
+        }
+        else if (clearDepth && clearStencil)
+        {
+            backend_->ClearDepthAndStencil(depth, stencil);
         }
         else if (clearTarget)
         {
@@ -287,6 +301,10 @@ namespace Microsoft::Xna::Framework::Graphics
         else if (clearDepth)
         {
             backend_->ClearDepth(depth);
+        }
+        else if (clearStencil)
+        {
+            backend_->ClearStencil(stencil);
         }
     }
 
