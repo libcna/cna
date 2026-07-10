@@ -4598,6 +4598,29 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 757 (Phase 72 Bgfx gap closure): BlendFactor constant-color blending on Bgfx -- a
+    # Bgfx-specific adaptation of the EasyGL source (Task 309; that file uses
+    # SetDepthTestEnabled(false), which throws on Bgfx -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_blendstate_blendfactor
+                  examples/bgfx_blendstate_blendfactor_test.cpp)
+    add_test(NAME Bgfx_BlendState_BlendFactor
+             COMMAND cna_test_bgfx_blendstate_blendfactor)
+    set_tests_properties(Bgfx_BlendState_BlendFactor PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 777 (Phase 72 Bgfx gap closure): verify Viewport reset after backbuffer resize on Bgfx
+    # -- verbatim reuse of the shared, 100% backend-agnostic source (Task 349, already reused
+    # verbatim on Vulkan). Exercises only GraphicsDevice/GraphicsDeviceManager C++ state
+    # (UpdateViewportFromWindow()/Present()), no pixel readback, no backend-specific code at all.
+    cna_bgfx_test(cna_test_bgfx_viewport_reset_after_resize
+                  examples/viewport_reset_after_resize_test.cpp)
+    add_test(NAME Bgfx_ViewportResetAfterResize
+             COMMAND cna_test_bgfx_viewport_reset_after_resize)
+    set_tests_properties(Bgfx_ViewportResetAfterResize PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 249: Bgfx vertex layout mapping tests — all 12 VertexElementFormat values
     cna_bgfx_test(cna_test_bgfx_vertex_format
                   examples/bgfx_vertex_format_test.cpp)
