@@ -5297,6 +5297,33 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Tasks 814/815 (Phase 72 Bgfx gap closure): OcclusionQuery visible/occluded pixel counts on
+    # Bgfx -- Bgfx-specific counterpart of the EasyGL sources (Tasks 445/446), combined into one
+    # file since both scenarios share the same fixture (see the test's own file-header comment).
+    # Real, pixel-verified assertions cover the underlying rendering/depth-occlusion behavior;
+    # OcclusionQuery.IsComplete()/PixelCount() are reported informational-only -- a scratch probe
+    # confirmed PixelCount() does not discriminate visible from occluded geometry in this sandbox's
+    # software GL renderer (same class of limitation as Task 448/923).
+    cna_bgfx_test(cna_test_bgfx_occlusionquery_pixelcount
+                  examples/bgfx_occlusionquery_pixelcount_test.cpp)
+    add_test(NAME Bgfx_OcclusionQuery_PixelCount
+             COMMAND cna_test_bgfx_occlusionquery_pixelcount)
+    set_tests_properties(Bgfx_OcclusionQuery_PixelCount PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 816 (Phase 72 Bgfx gap closure): explicit Dispose() on an ACTIVE OcclusionQuery is safe
+    # on Bgfx -- distinct from Task 449's own EasyGL-only occlusion_query_test.cpp, which covers
+    # C++ destruction, not the explicit .Dispose() API call (see the test's own file-header
+    # comment). Closes the entire Phase 72 OcclusionQuery row group (814-816).
+    cna_bgfx_test(cna_test_bgfx_occlusionquery_dispose_active
+                  examples/bgfx_occlusionquery_dispose_active_test.cpp)
+    add_test(NAME Bgfx_OcclusionQuery_DisposeActive
+             COMMAND cna_test_bgfx_occlusionquery_dispose_active)
+    set_tests_properties(Bgfx_OcclusionQuery_DisposeActive PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

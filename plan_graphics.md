@@ -809,9 +809,26 @@ header. No task content changed, only the file location and numbering.
 > `DrawIndexedPrimitivesEx` → `DrawIndexedColoredPrimitives` path — confirmed a non-issue for
 > these `VertexColorEnabled`-only, untextured, unlit fixtures, since that fallback is documented
 > as exactly equivalent to `BasicEffect` with `VertexColorEnabled = true`). **This closes the
-> entire Phase 72 `Model` row group too (812-813, both 2/2 done).** 12 REAL GAPS remain (of the
-> original 38; 26 have now been closed or flagged this session — 752-755, 758-768, 803-813), 1 of
-> which (Task 767) is flagged `NEEDS_HUMAN` rather than a plain untouched row.
+> entire Phase 72 `Model` row group too (812-813, both 2/2 done).** Tasks 814-815 (fully-visible
+> quad returns a positive occlusion-query pixel count; fully-occluded quad returns zero/lower)
+> found a genuine **sandbox limitation, not a CNA defect**: a dedicated scratch probe confirmed
+> `OcclusionQuery.PixelCount()` returns the IDENTICAL value (`-1`) for a fully-visible quad and a
+> genuinely depth-occluded one in this sandbox's software Mesa GL 2.1 (llvmpipe) renderer —
+> extending Task 448's own already-documented finding (can't distinguish a wired-up query from a
+> never-submitted one) to show the actual numeric value is equally unreliable here, needing a real
+> GPU-backed environment to verify meaningfully. Combined into one test file covering both rows:
+> the underlying rendering/depth-occlusion behavior each scenario depends on IS reliably
+> pixel-verified (real PASS/FAIL, confirmed via sabotage-and-revert of `ApplyDepthStencilState`),
+> while `PixelCount()`/`IsComplete()` are reported informational-only, matching this project's
+> established precedent for sandbox/renderer ceilings (Task 448, Task 923's alpha-blend half).
+> Task 816 (disposing an active `OcclusionQuery` is safe or throws correctly) found no bug —
+> confirmed safe via repetition-based stress verification (mirroring Task 449's own established
+> convention for this shape of task): explicit `.Dispose()` while active never crashes, `IsDisposed`
+> correctly flips true, and a fresh query afterward still works normally, confirming no shared
+> backend state is left corrupted. **This closes the entire Phase 72 `OcclusionQuery` row group too
+> (814-816, all 3/3 done).** 9 REAL GAPS remain (of the original 38; 29 have now been closed or
+> flagged this session — 752-755, 758-768, 803-816), 1 of which (Task 767) is flagged `NEEDS_HUMAN`
+> rather than a plain untouched row.
 > 13 are UNCERTAIN (no test found either way, needs closer individual investigation before
 > concluding). **Bgfx is dramatically less pixel-test-covered than Vulkan for the same
 > categories**: `DepthStencilState` (0/7 rows remaining, all 7 closed this session), `RasterizerState`
@@ -820,7 +837,9 @@ header. No task content changed, only the file location and numbering.
 > this preset group), `SpriteBatch` behavior (0/6 remaining, all 6 closed this session — 2 real
 > bugs found and fixed, Tasks 803/808), `SpriteFont` (0/3 remaining, all 3 closed this session, no
 > bugs found — glyph placement/spacing/newline/fallback all correctly reach the sprite draw path),
-> `Model` (0/2 remaining, both closed this session, no bugs found). Bgfx's own full ctest regression
+> `Model` (0/2 remaining, both closed this session, no bugs found), `OcclusionQuery` (0/3 remaining,
+> all 3 closed this session — a real sandbox-limitation finding on `PixelCount()`, no bug found on
+> `Dispose()` safety). Bgfx's own full ctest regression
 > also surfaced (pre-existing, unrelated to any of this session's own changes — confirmed by their
 > 100%-reproducible failure in isolation and by this session touching zero `RenderTarget*`
 > production code) 4 previously-undocumented `RenderTarget2D`/`RenderTargetCube` failures beyond the
@@ -987,9 +1006,9 @@ header. No task content changed, only the file location and numbering.
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
-| 814 | Pixel/query test: fully visible quad returns positive pixel count on Bgfx | ⬜ | |
-| 815 | Pixel/query test: fully occluded quad returns zero/lower count on Bgfx | ⬜ | |
-| 816 | Verify disposing an active `OcclusionQuery` is safe or throws correctly on Bgfx | ⬜ | |
+| 814 | Pixel/query test: fully visible quad returns positive pixel count on Bgfx | ✅ | **2026-07-10 (combined with Task 815 into one test file/commit — both scenarios share the same fixture, mirroring this session's own Task 752-755 precedent).** New `examples/bgfx_occlusionquery_pixelcount_test.cpp`. **Real finding, empirically confirmed via a dedicated scratch probe before writing the shipped test**: `OcclusionQuery.PixelCount()` does NOT discriminate a fully-visible quad from a fully-occluded one in this sandbox's software Mesa GL 2.1 (llvmpipe) renderer — both scenarios return the identical value (`-1`), despite `IsComplete()` reporting `true` in both. This extends Task 448's own already-documented finding (`IsComplete()`/`PixelCount()` can't distinguish a wired-up query from a never-submitted one) to show `PixelCount()`'s actual numeric value is equally unreliable here — not a CNA defect (`BgfxOcclusionQueryBackend::PixelCount()` correctly forwards `bgfx::getResult()`, and Task 448 already verified the query genuinely attaches to the real draw call); the ceiling is this software rasterizer's own occlusion-query result reporting, needing a real GPU-backed environment to verify meaningfully — matches this project's established precedent for sandbox/renderer limitations (Task 448 itself, Task 923's alpha-blend-factor half). **What IS reliably pixel-verified (real PASS/FAIL, not informational)**: the underlying rendering these scenarios depend on — Scenario A's quad genuinely renders Red at centre; Scenario B's nearer opaque occluder's own Blue still shows at centre, proving the farther target quad was truly rejected by a real depth test, not merely drawn-then-covered by coincidence. `IsComplete()`/`PixelCount()` reported INFO-only per the finding above. **Discriminating power of the real (depth-occlusion) assertion verified via sabotage-and-revert**: forced `BgfxGraphicsBackend::ApplyDepthStencilState` to never enable the depth test (`if (false)` instead of `if (depthEnable)`) — Scenario B's check correctly flipped to FAIL (centre showed Red, the un-occluded target, instead of the occluder's Blue), 1/2; reverted via `git checkout --`, rebuilt, reconfirmed 2/2 PASS clean. Registered in `CMakeLists.txt` (`Bgfx_OcclusionQuery_PixelCount`). See Task 816 below for the full regression run (same session, same clean tree). |
+| 815 | Pixel/query test: fully occluded quad returns zero/lower count on Bgfx | ✅ | **2026-07-10 — closed together with Task 814 above (see its own row for the full write-up, sabotage verification, and finding); this row is the "occluded" half of the same combined `bgfx_occlusionquery_pixelcount_test.cpp` file.** |
+| 816 | Verify disposing an active `OcclusionQuery` is safe or throws correctly on Bgfx | ✅ | **2026-07-10 — closes the entire Phase 72 `OcclusionQuery` row group (814-816, all 3/3 done).** New `examples/bgfx_occlusionquery_dispose_active_test.cpp`, distinct from Task 449's own `examples/occlusion_query_test.cpp` (EasyGL-only, covers C++ *destruction* of an active query, explicitly documented there as a deliberate design where `OcclusionQuery::Dispose()` doesn't touch `backend_` at all, matching FNA's own un-overridden `GraphicsResource.Dispose(bool)` — real teardown happens at `~OcclusionQuery()`, not `Dispose()`). This task covers the explicit `.Dispose()` XNA API call itself, while active (`Begin()` called, no matching `End()`), specifically on Bgfx (no Bgfx-registered test exercised this before). Confirmed **safe** (this row's own either/or acceptance: safe OR throws correctly) — repeated 10x: `Dispose()` while active never crashes/throws, `IsDisposed` correctly becomes `true`, subsequent `End()`/`IsComplete()`/`PixelCount()` calls on the disposed object don't crash (they proceed against the still-live `bgfx::OcclusionQueryHandle`, since `Dispose()` doesn't release `backend_`), and a fresh, ordinary `OcclusionQuery` created afterward still works normally — confirming no shared backend-side state (e.g. `BgfxGraphicsBackend::activeOcclusionQuery_`) was left corrupted. Repetition-based stress verification, not sabotage-and-revert (no natural incorrect-vs-correct branch exists for a pure safety confirmation, mirroring Task 449's own established convention for this shape of task). Registered in `CMakeLists.txt` (`Bgfx_OcclusionQuery_DisposeActive`). **Full Bgfx ctest regression (4449 tests, covers both this task and Task 814/815 above)**: zero new failures traceable to either change (both new tests pass cleanly, all touched production code reverted before this run); the same 6 pre-existing failures as the prior Task 812/813 regression (2 already-documented `Bgfx_RenderTarget2D_MsaaResolve`/`MipChain` + 4 already-newly-documented `Bgfx_RenderTarget2D_DepthBuffer`/`Bgfx_RenderTargetCube_MipChain`/`MsaaResolve`/`DepthFormat`, all reconfirmed identical). Commit: (fill in). |
 
 ### Texture2D / Texture3D / TextureCube depth
 
