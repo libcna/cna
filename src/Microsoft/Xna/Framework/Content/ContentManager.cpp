@@ -14,10 +14,12 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
+#include "System/IO/FileStream.hpp"
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 #endif
@@ -157,6 +159,22 @@ namespace Microsoft::Xna::Framework::Content
             {
                 Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
                 return Graphics::Texture2D(path, gd);
+            }
+        };
+
+        class TextureCubeTypeReader : public ContentTypeReader<Graphics::TextureCube>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".dds"};
+            }
+
+            Graphics::TextureCube Read(const std::string& path, ContentManager& cm) override
+            {
+                Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
+                System::IO::FileStream stream(path);
+                return Graphics::TextureCube::DDSFromStreamEXT(gd, stream);
             }
         };
 
@@ -1001,6 +1019,7 @@ namespace Microsoft::Xna::Framework::Content
     void ContentManager::RegisterBuiltinLoaders()
     {
         RegisterTypeReader<Graphics::Texture2D>(std::make_unique<Texture2DTypeReader>());
+        RegisterTypeReader<Graphics::TextureCube>(std::make_unique<TextureCubeTypeReader>());
         RegisterTypeReader<Audio::SoundEffect>(std::make_unique<SoundEffectTypeReader>());
         RegisterTypeReader<std::shared_ptr<Graphics::Effect>>(std::make_unique<EffectTypeReader>());
         RegisterTypeReader<Graphics::SpriteFont>(std::make_unique<SpriteFontTypeReader>());
@@ -1114,6 +1133,39 @@ namespace Microsoft::Xna::Framework::Content
                 + assetName + "'.");
 
         ContentTypeReader<Audio::SoundEffect>& reader = **readerPtr;
+        const std::string resolvedPath = ResolveAssetPath(assetName, reader);
+
+        return reader.Read(resolvedPath, *this);
+    }
+
+    // Task 934: TextureCube is move-only (NOXNA, copy constructor deleted -- unlike Texture2D,
+    // which supports reference-counted backend sharing via its own weak-cache specialisation
+    // above), so it cannot be held in the generic strong (std::any-based) cache either. Mirrors
+    // SoundEffect's own identical not-cached specialisation immediately above: reader.Read()
+    // already does a fresh decode per call, which is exactly what a cache MISS did before this
+    // specialisation existed.
+    template<>
+    Graphics::TextureCube ContentManager::Load<Graphics::TextureCube>(const std::string& assetName)
+    {
+        if (disposed_)
+            throw std::runtime_error("ContentManager has been disposed.");
+
+        log::Debug(std::string("Loading asset: ") + assetName);
+
+        auto readerIt = typeReaders_.find(std::type_index(typeid(Graphics::TextureCube)));
+        if (readerIt == typeReaders_.end())
+            throw ContentLoadException(
+                std::string("ContentManager::Load<T>(): No reader registered for type, asset '")
+                + assetName + "'.");
+
+        auto* readerPtr = std::any_cast<
+            std::shared_ptr<ContentTypeReader<Graphics::TextureCube>>>(&readerIt->second);
+        if (!readerPtr || !*readerPtr)
+            throw ContentLoadException(
+                std::string("ContentManager::Load<T>(): Reader is null for asset '")
+                + assetName + "'.");
+
+        ContentTypeReader<Graphics::TextureCube>& reader = **readerPtr;
         const std::string resolvedPath = ResolveAssetPath(assetName, reader);
 
         return reader.Read(resolvedPath, *this);

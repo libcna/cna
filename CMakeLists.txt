@@ -1788,6 +1788,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 934: Content.Load<TextureCube>() via a real .dds cubemap file fixture --
+        # exercises the new TextureCubeTypeReader (ContentManager.cpp).
+        cna_easygl_test(cna_test_easygl_texturecube_content_load
+                        examples/easygl_texturecube_content_load_test.cpp)
+        add_test(NAME EasyGL_TextureCube_ContentLoad
+                 COMMAND cna_test_easygl_texturecube_content_load)
+        set_tests_properties(EasyGL_TextureCube_ContentLoad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 438: Pixel test -- Model with two meshes, each using its own distinct Effect.
         cna_easygl_test(cna_test_easygl_model_two_meshes_effects
                         examples/easygl_model_two_meshes_effects_test.cpp)
@@ -3970,6 +3980,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_ModelJsonReader_Texture
                  COMMAND cna_test_vulkan_model_json_reader_texture)
         set_tests_properties(Vulkan_ModelJsonReader_Texture PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 934: TextureCubeTypeReader / Content.Load<TextureCube>() fix is in SHARED code
+        # (ContentManager.cpp/.hpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_texturecube_content_load
+                        examples/easygl_texturecube_content_load_test.cpp)
+        add_test(NAME Vulkan_TextureCube_ContentLoad
+                 COMMAND cna_test_vulkan_texturecube_content_load)
+        set_tests_properties(Vulkan_TextureCube_ContentLoad PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
