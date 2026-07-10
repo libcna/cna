@@ -3,6 +3,7 @@
 #include "System/IServiceProvider.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
@@ -11,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -434,6 +436,147 @@ namespace Microsoft::Xna::Framework::Content
                 std::istreambuf_iterator<char>(file), {});
         }
 
+        struct BinReaderEXT
+        {
+            const std::vector<std::uint8_t>& Data;
+            std::size_t Pos = 0;
+
+            template <typename T>
+            T Read()
+            {
+                // Task 11.7: a truncated/corrupt .skeleton.bin/.clip.bin (or a header value like
+                // boneCount/trackCount/keyCount inconsistent with the file's actual byte length)
+                // previously caused a real out-of-bounds heap read (undefined behavior) here
+                // instead of a clean, catchable error - this is the most serious memory-safety
+                // finding in the whole Avatar content-loading path.
+                if (Pos + sizeof(T) > Data.size())
+                {
+                    throw ContentLoadException(
+                        "Truncated or corrupt binary content: attempted to read " + std::to_string(sizeof(T))
+                            + " bytes at offset " + std::to_string(Pos) + ", but only "
+                            + std::to_string(Data.size()) + " bytes are available");
+                }
+                T value{};
+                std::memcpy(&value, Data.data() + Pos, sizeof(T));
+                Pos += sizeof(T);
+                return value;
+            }
+
+            Matrix ReadMatrix()
+            {
+                float m[16];
+                for (float& f : m) { f = Read<float>(); }
+                return Matrix(m[0],  m[1],  m[2],  m[3],
+                              m[4],  m[5],  m[6],  m[7],
+                              m[8],  m[9],  m[10], m[11],
+                              m[12], m[13], m[14], m[15]);
+            }
+        };
+
+        // Task 14.1: string-literal-aware - a brace/bracket embedded inside a JSON string value
+        // (e.g. a part/clip name like "Weird{Name}", structurally possible from
+        // convert_avatar.py's fully automated pipeline even if not currently produced) previously
+        // miscounted depth, since this only ever tracked raw character occurrences with no
+        // awareness of string-literal boundaries. Skips over "..." contents (respecting
+        // backslash escapes, so \" doesn't end the string early) without counting brackets
+        // inside them.
+        std::size_t FindMatchingBracketEXT(const std::string& j, std::size_t openPos,
+                                            char openCh, char closeCh)
+        {
+            int depth = 1;
+            std::size_t pos = openPos + 1;
+            bool inString = false;
+            while (pos < j.size() && depth > 0)
+            {
+                const char c = j[pos];
+                if (inString)
+                {
+                    if (c == '\\') { ++pos; } // skip the escaped character entirely
+                    else if (c == '"') { inString = false; }
+                }
+                else if (c == '"') { inString = true; }
+                else if (c == openCh) { ++depth; }
+                else if (c == closeCh) { --depth; }
+                ++pos;
+            }
+            return pos;
+        }
+
+        // Parses a flat JSON array of small objects bounded to the array's own closing
+        // bracket (unlike the "meshes"/"glyphs" loops above, this schema has more than one
+        // array key per file, so bounding matters — an unbounded scan would bleed into a
+        // later array's objects).
+        std::vector<std::string> ParseFlatObjectArrayEXT(const std::string& json, const std::string& key)
+        {
+            std::vector<std::string> result;
+            const std::size_t k = json.find("\"" + key + "\"");
+            if (k == std::string::npos) { return result; }
+            const std::size_t a = json.find('[', k);
+            if (a == std::string::npos) { return result; }
+            const std::size_t arrEnd = FindMatchingBracketEXT(json, a, '[', ']');
+
+            std::size_t pos = a + 1;
+            while (true)
+            {
+                const std::size_t os = json.find('{', pos);
+                if (os == std::string::npos || os >= arrEnd) { break; }
+                const std::size_t oe = FindMatchingBracketEXT(json, os, '{', '}');
+                result.push_back(json.substr(os, oe - os));
+                pos = oe;
+            }
+            return result;
+        }
+
+        // Task 941: shared by SkinnedModelTypeReader (.skinnedmodel.json's "animations" section)
+        // and ModelTypeReader (.model.json's own new "animations" section, added for real-Model
+        // skeletal animation, Phase 77) -- both use the exact same .clip.bin binary format, so
+        // this is the single, already-bug-fixed (Task 11.11) implementation both readers share,
+        // rather than two copies that could drift out of sync.
+        Graphics::AnimationClipEXT ReadAnimationClipFileEXT(const std::string& clipFilePath)
+        {
+            const auto clipBytes = ReadBinaryFile(clipFilePath);
+            BinReaderEXT clipReader{clipBytes};
+
+            Graphics::AnimationClipEXT clip;
+            clip.Duration = System::TimeSpan::FromSeconds(clipReader.Read<double>());
+            const int trackCount = clipReader.Read<std::int32_t>();
+            clip.Tracks.reserve(static_cast<std::size_t>(trackCount));
+            for (int t = 0; t < trackCount; ++t)
+            {
+                Graphics::BoneTrackEXT track;
+                track.BoneIndex = clipReader.Read<std::int32_t>();
+                const int keyCount = clipReader.Read<std::int32_t>();
+                track.Keys.reserve(static_cast<std::size_t>(keyCount));
+                for (int k = 0; k < keyCount; ++k)
+                {
+                    Graphics::KeyframeEXT key;
+                    key.Time = System::TimeSpan::FromSeconds(clipReader.Read<double>());
+                    // C++ does not guarantee left-to-right evaluation order for a single
+                    // function call's arguments — reading each float into its own named
+                    // local first (separate statements, strictly sequential) before
+                    // constructing Vector3/Quaternion is required here, not stylistic — see
+                    // Task 11.11's own regression (a keyframe's rotation bytes were read back
+                    // scrambled under a right-to-left argument evaluation order).
+                    const float tx = clipReader.Read<float>();
+                    const float ty = clipReader.Read<float>();
+                    const float tz = clipReader.Read<float>();
+                    key.Translation = Vector3(tx, ty, tz);
+                    const float qx = clipReader.Read<float>();
+                    const float qy = clipReader.Read<float>();
+                    const float qz = clipReader.Read<float>();
+                    const float qw = clipReader.Read<float>();
+                    key.Rotation = Quaternion(qx, qy, qz, qw);
+                    const float sx = clipReader.Read<float>();
+                    const float sy = clipReader.Read<float>();
+                    const float sz = clipReader.Read<float>();
+                    key.Scale = Vector3(sx, sy, sz);
+                    track.Keys.push_back(key);
+                }
+                clip.Tracks.push_back(std::move(track));
+            }
+            return clip;
+        }
+
         // ---------------------------------------------------------------------------
         // .model.json descriptor reader
         // ---------------------------------------------------------------------------
@@ -463,6 +606,10 @@ namespace Microsoft::Xna::Framework::Content
                     std::vector<std::unique_ptr<Graphics::ModelMeshPart>> partOwners;
                     std::vector<std::shared_ptr<Graphics::Effect>>        effectOwners;
                     std::vector<std::unique_ptr<Graphics::Texture2D>>     textureOwners;
+                    // Task 941: owns the skeleton/animation-clip data attached to the returned
+                    // Model's own Tag property (see the "Skeletal animation" section below) --
+                    // null for a rigid, non-skinned .model.json with no "skeleton" field.
+                    std::unique_ptr<Graphics::SkinningData>               skinningData;
                 };
                 auto res = std::make_shared<ModelResources>();
 
@@ -498,6 +645,55 @@ namespace Microsoft::Xna::Framework::Content
                 // (see Model::Model), so the just-pushed root bone stays at a stable, known index
                 // regardless of how many per-mesh child bones get appended after it.
                 Graphics::ModelBone* rootBone = boneRawPtrs.front();
+
+                // Skeletal animation (Task 941, Phase 77) — an optional "skeleton" field names a
+                // .skeleton.bin file (byte-for-byte the same format SkinnedModelTypeReader's own
+                // "skeleton" field already reads, see Task 939's own design decision); when
+                // present, an optional "animations" field (same {name, clip} shape and .clip.bin
+                // format as SkinnedModelTypeReader's own "animations" field) supplies the
+                // clips AnimationPlayer will play back. The result is attached to the returned
+                // Model's own Tag property below, mirroring the real XNA Skinned Model Sample's
+                // own convention (real XNA's Model has no dedicated skinning-data property).
+                const std::string skeletonRel = ExtractJsonStringField(json, "skeleton");
+                if (!skeletonRel.empty())
+                {
+                    const auto skelBytes = ReadBinaryFile((fs::path(root) / skeletonRel).string());
+                    BinReaderEXT skelReader{skelBytes};
+                    const int boneCount = skelReader.Read<std::int32_t>();
+                    // Mirrors SkinnedModelTypeReader's own identical bone-count sanity check
+                    // (Task 11.8) — a corrupt/negative file value must not reach a std::vector
+                    // resize.
+                    constexpr int kMaxSaneBoneCount = 100000;
+                    if (boneCount < 0 || boneCount > kMaxSaneBoneCount)
+                    {
+                        throw ContentLoadException(
+                            "Model skeleton has an invalid bone count (" + std::to_string(boneCount)
+                                + "): " + path);
+                    }
+
+                    auto skinningData = std::make_unique<Graphics::SkinningData>();
+                    skinningData->BoneCount = boneCount;
+                    skinningData->SkeletonHierarchy.resize(static_cast<std::size_t>(boneCount));
+                    for (int i = 0; i < boneCount; ++i)
+                        skinningData->SkeletonHierarchy[static_cast<std::size_t>(i)] = skelReader.Read<std::int32_t>();
+                    skinningData->BindPose.resize(static_cast<std::size_t>(boneCount));
+                    for (int i = 0; i < boneCount; ++i)
+                        skinningData->BindPose[static_cast<std::size_t>(i)] = skelReader.ReadMatrix();
+                    skinningData->InverseBindPose.resize(static_cast<std::size_t>(boneCount));
+                    for (int i = 0; i < boneCount; ++i)
+                        skinningData->InverseBindPose[static_cast<std::size_t>(i)] = skelReader.ReadMatrix();
+
+                    for (const std::string& ag : ParseFlatObjectArrayEXT(json, "animations"))
+                    {
+                        const std::string name     = ExtractJsonStringField(ag, "name");
+                        const std::string clipFile = ExtractJsonStringField(ag, "clip");
+                        if (name.empty() || clipFile.empty()) { continue; }
+                        skinningData->AnimationClips[name] =
+                            ReadAnimationClipFileEXT((fs::path(root) / clipFile).string());
+                    }
+
+                    res->skinningData = std::move(skinningData);
+                }
 
                 // Meshes
                 const std::size_t mk = json.find("\"meshes\"");
@@ -617,6 +813,16 @@ namespace Microsoft::Xna::Framework::Content
                                     verts.emplace_back(readVec3(o), readVec3(o + 12), readVec2(o + 24));
                                 }
                                 vb->SetData(verts.data(), numVertices);
+                            } else if (stride == 52) {
+                                // Task 941 (Phase 77): GPU-skinned vertex (VertexPositionNormal
+                                // TextureSkinned) -- pos+normal+texcoord+blendweight+blendindices,
+                                // already exactly the compact GPU layout VertexBuffer's own
+                                // skinned SetData path expects (matches
+                                // SkinnedModelTypeReader's own identical stride-52 handling in
+                                // this same file). SetDataRaw() copies these bytes straight
+                                // through with no C++ struct reinterpretation at all, so this
+                                // branch has no analogue of Task 927's own vtable-inflation risk.
+                                vb->SetDataRaw(vertBytes.data(), numVertices, 52);
                             }
 
                             auto ib = std::make_unique<Graphics::IndexBuffer>(
@@ -659,21 +865,31 @@ namespace Microsoft::Xna::Framework::Content
                             std::shared_ptr<Graphics::Effect> fx;
                             if (effectStr.empty() || effectStr == "BasicEffect") {
                                 fx = std::make_shared<Graphics::BasicEffect>(device);
+                            } else if (effectStr == "SkinnedEffect") {
+                                // Task 941 (Phase 77): the real Skinned Model Sample's own
+                                // effect for GPU-skinned meshes -- AnimationPlayer's own
+                                // GetSkinTransforms() feeds SkinnedEffect::SetBoneTransforms()
+                                // directly (see Task 942), not through this reader.
+                                fx = std::make_shared<Graphics::SkinnedEffect>(device);
                             } else {
                                 fx = cm.Load<std::shared_ptr<Graphics::Effect>>(effectStr);
                             }
 
                             // Task 932: bind a per-mesh diffuse texture, if the descriptor names
                             // one -- mirrors SkinnedModelTypeReader's own already-working
-                            // per-part texture loading. Only meaningful for a BasicEffect (a
-                            // custom effect loaded via "effect" has no standard texture slot to
-                            // bind through here).
+                            // per-part texture loading. BasicEffect needs TextureEnabled
+                            // explicitly turned on; SkinnedEffect's real XNA shader is always
+                            // textured (no such toggle exists on it). A custom effect loaded
+                            // via "effect" has no standard texture slot to bind through here.
                             if (!textureFile.empty()) {
+                                auto tex = std::make_unique<Graphics::Texture2D>(
+                                    cm.Load<Graphics::Texture2D>(textureFile));
                                 if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
-                                    auto tex = std::make_unique<Graphics::Texture2D>(
-                                        cm.Load<Graphics::Texture2D>(textureFile));
                                     basicFx->setTextureProperty(tex.get());
                                     basicFx->setTextureEnabledProperty(true);
+                                    res->textureOwners.push_back(std::move(tex));
+                                } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
+                                    skinnedFx->setTextureProperty(tex.get());
                                     res->textureOwners.push_back(std::move(tex));
                                 }
                             }
@@ -694,6 +910,12 @@ namespace Microsoft::Xna::Framework::Content
                                       std::move(boneRawPtrs),
                                       std::move(meshRawPtrs));
                 model.setOwnedResources(res);
+                // Task 941 (Phase 77): attach the skeleton/animation-clip data (if any) to the
+                // real XNA Model.Tag property, mirroring the Skinned Model Sample's own
+                // convention -- game code retrieves it via
+                // static_cast<Graphics::SkinningData*>(model.getTagProperty()). Left null (Tag's
+                // own default) for a rigid, non-skinned .model.json with no "skeleton" field.
+                model.setTagProperty(res->skinningData.get());
                 return model;
             }
         };
@@ -704,97 +926,6 @@ namespace Microsoft::Xna::Framework::Content
         // Avatar extension (see AvatarRenderer::EnableRealRenderingEXT). Not part of the XNA
         // 4.0 content pipeline.
         // ---------------------------------------------------------------------------
-
-        struct BinReaderEXT
-        {
-            const std::vector<std::uint8_t>& Data;
-            std::size_t Pos = 0;
-
-            template <typename T>
-            T Read()
-            {
-                // Task 11.7: a truncated/corrupt .skeleton.bin/.clip.bin (or a header value like
-                // boneCount/trackCount/keyCount inconsistent with the file's actual byte length)
-                // previously caused a real out-of-bounds heap read (undefined behavior) here
-                // instead of a clean, catchable error - this is the most serious memory-safety
-                // finding in the whole Avatar content-loading path.
-                if (Pos + sizeof(T) > Data.size())
-                {
-                    throw ContentLoadException(
-                        "Truncated or corrupt binary content: attempted to read " + std::to_string(sizeof(T))
-                            + " bytes at offset " + std::to_string(Pos) + ", but only "
-                            + std::to_string(Data.size()) + " bytes are available");
-                }
-                T value{};
-                std::memcpy(&value, Data.data() + Pos, sizeof(T));
-                Pos += sizeof(T);
-                return value;
-            }
-
-            Matrix ReadMatrix()
-            {
-                float m[16];
-                for (float& f : m) { f = Read<float>(); }
-                return Matrix(m[0],  m[1],  m[2],  m[3],
-                              m[4],  m[5],  m[6],  m[7],
-                              m[8],  m[9],  m[10], m[11],
-                              m[12], m[13], m[14], m[15]);
-            }
-        };
-
-        // Task 14.1: string-literal-aware - a brace/bracket embedded inside a JSON string value
-        // (e.g. a part/clip name like "Weird{Name}", structurally possible from
-        // convert_avatar.py's fully automated pipeline even if not currently produced) previously
-        // miscounted depth, since this only ever tracked raw character occurrences with no
-        // awareness of string-literal boundaries. Skips over "..." contents (respecting
-        // backslash escapes, so \" doesn't end the string early) without counting brackets
-        // inside them.
-        std::size_t FindMatchingBracketEXT(const std::string& j, std::size_t openPos,
-                                            char openCh, char closeCh)
-        {
-            int depth = 1;
-            std::size_t pos = openPos + 1;
-            bool inString = false;
-            while (pos < j.size() && depth > 0)
-            {
-                const char c = j[pos];
-                if (inString)
-                {
-                    if (c == '\\') { ++pos; } // skip the escaped character entirely
-                    else if (c == '"') { inString = false; }
-                }
-                else if (c == '"') { inString = true; }
-                else if (c == openCh) { ++depth; }
-                else if (c == closeCh) { --depth; }
-                ++pos;
-            }
-            return pos;
-        }
-
-        // Parses a flat JSON array of small objects bounded to the array's own closing
-        // bracket (unlike the "meshes"/"glyphs" loops above, this schema has more than one
-        // array key per file, so bounding matters — an unbounded scan would bleed into a
-        // later array's objects).
-        std::vector<std::string> ParseFlatObjectArrayEXT(const std::string& json, const std::string& key)
-        {
-            std::vector<std::string> result;
-            const std::size_t k = json.find("\"" + key + "\"");
-            if (k == std::string::npos) { return result; }
-            const std::size_t a = json.find('[', k);
-            if (a == std::string::npos) { return result; }
-            const std::size_t arrEnd = FindMatchingBracketEXT(json, a, '[', ']');
-
-            std::size_t pos = a + 1;
-            while (true)
-            {
-                const std::size_t os = json.find('{', pos);
-                if (os == std::string::npos || os >= arrEnd) { break; }
-                const std::size_t oe = FindMatchingBracketEXT(json, os, '{', '}');
-                result.push_back(json.substr(os, oe - os));
-                pos = oe;
-            }
-            return result;
-        }
 
         class SkinnedModelTypeReader
             : public ContentTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>
@@ -946,53 +1077,9 @@ namespace Microsoft::Xna::Framework::Content
                     const std::string clipFile = ExtractJsonStringField(ag, "clip");
                     if (name.empty() || clipFile.empty()) { continue; }
 
-                    const auto clipBytes = ReadBinaryFile((manifestDir / clipFile).string());
-                    BinReaderEXT clipReader{clipBytes};
-
-                    Graphics::AnimationClipEXT clip;
-                    clip.Duration = System::TimeSpan::FromSeconds(clipReader.Read<double>());
-                    const int trackCount = clipReader.Read<std::int32_t>();
-                    clip.Tracks.reserve(static_cast<std::size_t>(trackCount));
-                    for (int t = 0; t < trackCount; ++t)
-                    {
-                        Graphics::BoneTrackEXT track;
-                        track.BoneIndex = clipReader.Read<std::int32_t>();
-                        const int keyCount = clipReader.Read<std::int32_t>();
-                        track.Keys.reserve(static_cast<std::size_t>(keyCount));
-                        for (int k = 0; k < keyCount; ++k)
-                        {
-                            Graphics::KeyframeEXT key;
-                            key.Time = System::TimeSpan::FromSeconds(clipReader.Read<double>());
-                            // C++ does not guarantee left-to-right evaluation order for a single
-                            // function call's arguments — reading each float into its own named
-                            // local first (separate statements, strictly sequential) before
-                            // constructing Vector3/Quaternion is required here, not stylistic:
-                            // Vector3(clipReader.Read<float>(), clipReader.Read<float>(), ...)
-                            // previously let the compiler evaluate those Read<float>() calls (each
-                            // with the side effect of advancing clipReader's position) in whatever
-                            // order it liked, silently scrambling which bytes landed in which
-                            // component. Confirmed via a real rendering bug (Task 11.11): a
-                            // Spine bone keyframe's rotation bytes for (x,y,z,w) = (0,0,0,1) (identity)
-                            // were read back as (1,0,0,0) — exactly the reversed order a right-to-left
-                            // evaluation would produce.
-                            const float tx = clipReader.Read<float>();
-                            const float ty = clipReader.Read<float>();
-                            const float tz = clipReader.Read<float>();
-                            key.Translation = Vector3(tx, ty, tz);
-                            const float qx = clipReader.Read<float>();
-                            const float qy = clipReader.Read<float>();
-                            const float qz = clipReader.Read<float>();
-                            const float qw = clipReader.Read<float>();
-                            key.Rotation = Quaternion(qx, qy, qz, qw);
-                            const float sx = clipReader.Read<float>();
-                            const float sy = clipReader.Read<float>();
-                            const float sz = clipReader.Read<float>();
-                            key.Scale = Vector3(sx, sy, sz);
-                            track.Keys.push_back(key);
-                        }
-                        clip.Tracks.push_back(std::move(track));
-                    }
-                    model->Clips[name] = std::move(clip);
+                    // Task 941: extracted into the shared ReadAnimationClipFileEXT() helper
+                    // (also used by ModelTypeReader's own new .model.json "animations" support).
+                    model->Clips[name] = ReadAnimationClipFileEXT((manifestDir / clipFile).string());
                 }
 
                 return model;

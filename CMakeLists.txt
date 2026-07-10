@@ -1809,6 +1809,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 941: ModelTypeReader::Read() parses .model.json's new "skeleton"/"animations"
+        # fields into a SkinningData attached to Model.Tag, and honors a mesh's "effect":
+        # "SkinnedEffect" + "texture" field. Pure structural test, no rendering.
+        cna_easygl_test(cna_test_easygl_model_json_reader_skeleton
+                        examples/easygl_model_json_reader_skeleton_test.cpp)
+        add_test(NAME EasyGL_ModelJsonReader_Skeleton
+                 COMMAND cna_test_easygl_model_json_reader_skeleton)
+        set_tests_properties(EasyGL_ModelJsonReader_Skeleton PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 438: Pixel test -- Model with two meshes, each using its own distinct Effect.
         cna_easygl_test(cna_test_easygl_model_two_meshes_effects
                         examples/easygl_model_two_meshes_effects_test.cpp)
@@ -4011,6 +4022,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_ModelJsonReader_BoneHierarchy
                  COMMAND cna_test_vulkan_model_json_reader_bone_hierarchy)
         set_tests_properties(Vulkan_ModelJsonReader_BoneHierarchy PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 941: ModelTypeReader::Read()'s "skeleton"/"animations"/SkinnedEffect support is in
+        # SHARED code (ContentManager.cpp) -- verbatim reuse of the EasyGL source (pure
+        # structural test).
+        cna_vulkan_test(cna_test_vulkan_model_json_reader_skeleton
+                        examples/easygl_model_json_reader_skeleton_test.cpp)
+        add_test(NAME Vulkan_ModelJsonReader_Skeleton
+                 COMMAND cna_test_vulkan_model_json_reader_skeleton)
+        set_tests_properties(Vulkan_ModelJsonReader_Skeleton PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
