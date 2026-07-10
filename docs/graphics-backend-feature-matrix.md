@@ -220,14 +220,23 @@ this session and exactly 1 remains open, explicitly flagged (not silently skippe
 confirmed limitations survive this closure — none of them a code bug in this project, each already
 root-caused rather than merely observed:
 
-- **Depth bias / slope-scale depth bias (Task 767, `NEEDS_HUMAN`)**: bgfx's high-level state API
-  has zero depth-bias/polygon-offset mechanism anywhere (confirmed via `bgfx/defines.h` — no
-  `BIAS`/`OFFSET` flag exists — and the vendored `renderer_gl.cpp` — no `glPolygonOffset` call in
-  the whole file). EasyGL has the identical gap; only Vulkan implements real depth bias
-  (`vkCmdSetDepthBias`, dynamic state). A genuine fix needs shader-level Z-offset emulation across
-  every 3D vertex shader (and, for slope-scale bias specifically, a fragment-stage `dFdx`/`dFdy`
-  screen-space-slope approximation) — a cross-cutting architecture change spanning shader code on
-  at least 2 backends, needing a project-owner decision before any code lands.
+- **Constant `DepthBias` (Task 767): FIXED, 2026-07-10.** Project-owner decision received: bgfx's
+  high-level state API has zero depth-bias/polygon-offset mechanism anywhere (confirmed via
+  `bgfx/defines.h` — no `BIAS`/`OFFSET` flag exists — and the vendored `renderer_gl.cpp` — no
+  `glPolygonOffset` call in the whole file), so constant `DepthBias` is now emulated via a per-draw
+  vertex-shader Z-offset (`BgfxGraphicsBackend::SetDepthBiasUniform`, a new `u_depthBias` uniform
+  added to every 3D vertex shader, scaled by `kDepthBiasScale` to roughly match the visual magnitude
+  a real GL/Vulkan polygon-offset implementation would produce). New `Bgfx_RasterizerState_DepthBias`
+  test confirms both the zero-bias baseline (stays RED) and a large negative bias (pulls a coplanar
+  redraw in front, turns GREEN); verified via `git stash` revert-and-rebuild.
+  **`SlopeScaleDepthBias` remains an intentionally undone gap** (project-owner decision, not
+  attempted): a true per-fragment screen-space-slope computation would force every 3D shader off the
+  early-Z path, even at `DepthBias=0`, unless duplicate shader variants were added — not worth the
+  cost for this one property. EasyGL, by contrast, needed no shader emulation at all: it already had
+  real `glPolygonOffset` support in the vendored `easy-gl` library, just never wired up — fixed with
+  a native call, covering both constant and slope-scale bias in one shot (see Task 767's own
+  `plan_graphics.md` entry). Only Vulkan implements real hardware depth bias (`vkCmdSetDepthBias`,
+  dynamic state, including real slope-scale).
 - **`RenderTarget2D`/`RenderTargetCube` `glReadPixels` crashes under this sandbox's software GL
   driver** (`Bgfx_RenderTarget2D_DepthBuffer`/`MsaaResolve`/`MipChain`,
   `Bgfx_RenderTargetCube_MipChain`/`MsaaResolve`/`DepthFormat` — 6 tests, all pre-existing, none

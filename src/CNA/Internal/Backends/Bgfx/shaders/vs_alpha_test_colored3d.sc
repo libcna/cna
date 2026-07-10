@@ -7,10 +7,13 @@ uniform mat4 u_wvp;
 uniform vec4 u_diffuseColor;
 uniform vec4 u_vertexColorEnabled3D;
 uniform vec4 u_fogParams;
+uniform vec4 u_depthBias;
 
 void main()
 {
     gl_Position  = mul(u_wvp, vec4(a_position, 1.0));
+    // Task 767: RasterizerState.DepthBias emulation (see vs_colored3d.sc for the full comment).
+    gl_Position.z += u_depthBias.x * gl_Position.w;
     v_texcoord0  = a_texcoord0;
     // Task 887: stride-24 (VertexPositionColorTexture) variant of vs_alpha_test3d, mirroring
     // vs_colored_textured3d.sc's VertexColorEnabled-gated multiply.

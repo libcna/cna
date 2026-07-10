@@ -379,6 +379,14 @@ namespace CNA::Internal::Backends::Bgfx
         // native polygon-fill-mode toggle (unlike D3D9/Vulkan) -- emulated by re-expanding
         // triangle indices into a line list at draw time, mirroring EasyGL's DrawWireframe.
         bool wireframe_ = false;
+        // Task 767: RasterizerState.DepthBias, set by ApplyRasterizerState. bgfx has no native
+        // polygon-offset mechanism (unlike D3D9/Vulkan/GL) -- emulated via a per-draw uniform
+        // added to clip-space Z in every 3D vertex shader (see u_depthBias in the .sc sources).
+        // SlopeScaleDepthBias is deliberately NOT emulated (project-owner decision, 2026-07-10):
+        // a true per-fragment slope computation would force every 3D shader off the early-Z path,
+        // even at DepthBias=0, unless duplicate shader variants were added -- documented as a
+        // remaining gap instead.
+        float depthBias_ = 0.0f;
         // Sampler flags per slot (slots 0–15)
         static constexpr int kMaxSamplerSlots = 16;
         uint32_t samplerFlags_[kMaxSamplerSlots] = {};
@@ -452,6 +460,8 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ProgramHandle envMap3DProgram_          = BGFX_INVALID_HANDLE;
         // Uniforms shared across 3D draw calls
         bgfx::UniformHandle wvpUniform_         = BGFX_INVALID_HANDLE;
+        /// Task 767: RasterizerState.DepthBias vertex-shader Z-offset emulation, x component only.
+        bgfx::UniformHandle depthBiasUnif_      = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle diffuseColor3DUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle ambientColor3DUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle light0Dir3DUnif_    = BGFX_INVALID_HANDLE;
@@ -609,6 +619,10 @@ namespace CNA::Internal::Backends::Bgfx
         // zero effect on any 3D draw. bgfx resets scissor state per submit() call (does not
         // persist from a prior draw), so this must be called before every 3D bgfx::submit().
         void ApplyScissorOverride();
+
+        /// Task 767: uploads depthBias_ (scaled by kDepthBiasScale) to u_depthBias. bgfx resets
+        /// uniform state per submit() call, so this must be called before every 3D bgfx::submit().
+        void SetDepthBiasUniform();
 
         // Task 448: submits a 3D draw call's already-configured bgfx state to currentViewId_,
         // routing through bgfx's occlusion-query submit() overload when activeOcclusionQuery_ is

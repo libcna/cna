@@ -8,10 +8,13 @@ uniform mat4 u_world;
 uniform mat3 u_normalMatrix;
 uniform vec4 u_eyePos;
 uniform vec4 u_fogParams;
+uniform vec4 u_depthBias;
 
 void main()
 {
     gl_Position   = mul(u_wvp, vec4(a_position, 1.0));
+    // Task 767: RasterizerState.DepthBias emulation (see vs_colored3d.sc for the full comment).
+    gl_Position.z += u_depthBias.x * gl_Position.w;
     vec3 worldPos = mul(u_world, vec4(a_position, 1.0)).xyz;
     // Task 398 fix: transform by the precomputed inverse-transpose of World's upper-left 3x3
     // (cofactor/det, computed on the CPU side), not World directly -- a direct World multiply

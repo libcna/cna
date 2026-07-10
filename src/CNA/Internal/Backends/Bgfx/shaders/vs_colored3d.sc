@@ -7,10 +7,15 @@ uniform mat4 u_wvp;
 uniform vec4 u_diffuseColor;
 uniform vec4 u_vertexColorEnabled3D;
 uniform vec4 u_fogParams;
+uniform vec4 u_depthBias;
 
 void main()
 {
     gl_Position = mul(u_wvp, vec4(a_position, 1.0));
+    // Task 767: RasterizerState.DepthBias emulation -- bgfx has no native polygon-offset
+    // mechanism, so a scaled constant offset is added to clip-space Z (scaled by w so the
+    // effect survives perspective divide as a roughly constant NDC-space offset).
+    gl_Position.z += u_depthBias.x * gl_Position.w;
     // BasicEffect no-texture path (Task 364): mirrors FNA's ComputeCommonVSOutput()
     // (vout.Diffuse = DiffuseColor) plus the optional `vout.Diffuse *= vin.Color`
     // vertex-color multiply gated by VertexColorEnabled.

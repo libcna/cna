@@ -5443,6 +5443,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 767 (Phase 72 Bgfx gap closure, project-owner decision 2026-07-10): RasterizerState.
+    # DepthBias on Bgfx -- bgfx has no native polygon-offset mechanism, emulated via a per-draw
+    # vertex-shader Z-offset (see BgfxGraphicsBackend::SetDepthBiasUniform, u_depthBias in every
+    # 3D vertex shader). SlopeScaleDepthBias deliberately NOT emulated (documented gap, checked
+    # informationally only -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_rasterizerstate_depthbias
+                  examples/bgfx_rasterizerstate_depthbias_test.cpp)
+    add_test(NAME Bgfx_RasterizerState_DepthBias
+             COMMAND cna_test_bgfx_rasterizerstate_depthbias)
+    set_tests_properties(Bgfx_RasterizerState_DepthBias PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 768 (Phase 72 Bgfx gap closure): ScissorTestEnable/ScissorRectangle interaction on Bgfx
     # -- a Bgfx-specific adaptation of the EasyGL source (Task 209; that file reads 2 columns per
     # frame across 3 draws, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see the

@@ -1095,6 +1095,7 @@ namespace CNA::Internal::Backends::Bgfx
                                                              "env_map3d");
 
                 wvpUniform_         = bgfx::createUniform("u_wvp",            bgfx::UniformType::Mat4);
+                depthBiasUnif_      = bgfx::createUniform("u_depthBias",      bgfx::UniformType::Vec4);
                 diffuseColor3DUnif_ = bgfx::createUniform("u_diffuseColor",   bgfx::UniformType::Vec4);
                 ambientColor3DUnif_ = bgfx::createUniform("u_ambientColor",   bgfx::UniformType::Vec4);
                 light0Dir3DUnif_    = bgfx::createUniform("u_light0Dir",      bgfx::UniformType::Vec4);
@@ -1190,6 +1191,7 @@ namespace CNA::Internal::Backends::Bgfx
         auto destroyP = [](bgfx::ProgramHandle& h) { if (bgfx::isValid(h)) { bgfx::destroy(h); h = BGFX_INVALID_HANDLE; } };
 
         destroyU(wvpUniform_);
+        destroyU(depthBiasUnif_);
         destroyU(diffuseColor3DUnif_);
         destroyU(ambientColor3DUnif_);
         destroyU(light0Dir3DUnif_);
@@ -1687,7 +1689,7 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
                                                     bool scissorTestEnable,
-                                                    float /*depthBias*/,
+                                                    float depthBias,
                                                     float /*slopeScaleDepthBias*/)
     {
         // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
@@ -1704,6 +1706,11 @@ namespace CNA::Internal::Backends::Bgfx
         scissorEnabled_ = scissorTestEnable;
         // FillMode: Solid=0, WireFrame=1 (Task 766; see ExpandWireframeIndices).
         wireframe_ = (fillMode == 1);
+        // Task 767: bgfx has no native polygon-offset mechanism, so DepthBias is emulated via a
+        // per-draw vertex-shader Z-offset (see u_depthBias in every 3D vertex shader source).
+        // SlopeScaleDepthBias is deliberately NOT emulated (project-owner decision, 2026-07-10)
+        // and remains a documented, separately-tracked gap -- see depthBias_'s own declaration.
+        depthBias_ = depthBias;
     }
 
     bool BgfxGraphicsBackend::ExpandWireframeIndices(const BgfxIndexBufferBackend* ib,
@@ -2015,6 +2022,19 @@ namespace CNA::Internal::Backends::Bgfx
 
     // --- 3D draw calls ---
 
+    // Task 767: scale factor for the DepthBias vertex-shader Z-offset emulation. Real GL/Vulkan
+    // polygon-offset hardware multiplies the raw DepthBias value by an implementation-defined
+    // "minimum resolvable difference" of the depth buffer format (commonly ~1/(2^24-1) for a
+    // 24-bit depth buffer) before adding it to window-space depth -- mirrored here so a given
+    // DepthBias value produces a roughly comparable visual shift on Bgfx as on EasyGL/Vulkan.
+    static constexpr float kDepthBiasScale = 1.0f / 16777215.0f;
+
+    void BgfxGraphicsBackend::SetDepthBiasUniform()
+    {
+        const float depthBias4[4] = { depthBias_ * kDepthBiasScale, 0.0f, 0.0f, 0.0f };
+        bgfx::setUniform(depthBiasUnif_, depthBias4);
+    }
+
     static uint64_t ToTopologyFlag(PrimitiveType p)
     {
         switch (p)
@@ -2041,6 +2061,7 @@ namespace CNA::Internal::Backends::Bgfx
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         bgfx::setUniform(wvpUniform_, wvp_col);
+        SetDepthBiasUniform();
         // This path carries no BasicEffect diffuse/VertexColorEnabled (no GpuDrawParams at
         // all); preserve the historical behavior of outputting the raw vertex colors
         // unmodified (diffuseColor=white, vertexColorEnabled=true — Task 364).
@@ -2087,6 +2108,7 @@ namespace CNA::Internal::Backends::Bgfx
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         bgfx::setUniform(wvpUniform_, wvp_col);
+        SetDepthBiasUniform();
         // See DrawColoredPrimitives above: preserve the historical raw-vertex-color output
         // for this no-GpuDrawParams legacy path (Task 364).
         const float whiteDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -2130,6 +2152,7 @@ namespace CNA::Internal::Backends::Bgfx
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         bgfx::setUniform(wvpUniform_, wvp_col);
+        SetDepthBiasUniform();
 
         // Task 888: fog uniforms are set unconditionally (not per-branch) since bgfx uniforms
         // are shared by name across every program -- any program declaring u_fogColor/
@@ -2477,6 +2500,7 @@ namespace CNA::Internal::Backends::Bgfx
         float vp_col[16];
         vp.ToColumnMajor(vp_col);
         bgfx::setUniform(vpInstanced3DUnif_, vp_col);
+        SetDepthBiasUniform();
 
         bgfx::setVertexBuffer(0, vb.handle);
         // Task 766: see DrawColoredPrimitives above.
