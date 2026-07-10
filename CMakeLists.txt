@@ -5248,6 +5248,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 810 (Phase 72 Bgfx gap closure): SpriteFont multi-glyph spacing + newline advance on
+    # Bgfx -- a Bgfx-specific adaptation combining the EasyGL sources (Tasks 425/426; those files
+    # read back several regions from one rendered frame, incompatible with Bgfx's
+    # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_spritefont_multiglyph_newline
+                  examples/bgfx_spritefont_multiglyph_newline_test.cpp)
+    add_test(NAME Bgfx_SpriteFont_MultiGlyphSpacingNewline
+             COMMAND cna_test_bgfx_spritefont_multiglyph_newline)
+    set_tests_properties(Bgfx_SpriteFont_MultiGlyphSpacingNewline PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
