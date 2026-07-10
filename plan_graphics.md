@@ -797,9 +797,11 @@ header. No task content changed, only the file location and numbering.
 > uniform this touches); also found and fixed a matrix-multiplication-order bug while implementing
 > this (bx's own vector convention is row-vector, `v' = v * M`, opposite of the first attempt's
 > argument order). **This closes the entire Phase 72 `SpriteBatch` row group (803-808, all 6/6
-> done).** 17 REAL GAPS remain (of the original 38; 21 have now been closed or flagged this
-> session — 752-755, 758-768, 803-808), 1 of which (Task 767) is flagged `NEEDS_HUMAN` rather than
-> a plain untouched row.
+> done).** Task 809 (`SpriteFont` single-glyph placement, first of the `SpriteFont` row group) also
+> found no bug, confirming glyph positioning correctly reaches Bgfx's now-fixed sprite draw path.
+> 16 REAL GAPS remain (of the original 38; 22 have now been closed or flagged this session —
+> 752-755, 758-768, 803-809), 1 of which (Task 767) is flagged `NEEDS_HUMAN` rather than a plain
+> untouched row.
 > 13 are UNCERTAIN (no test found either way, needs closer individual investigation before
 > concluding). **Bgfx is dramatically less pixel-test-covered than Vulkan for the same
 > categories**: `DepthStencilState` (0/7 rows remaining, all 7 closed this session), `RasterizerState`
@@ -950,7 +952,7 @@ header. No task content changed, only the file location and numbering.
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
-| 809 | Pixel test: single glyph at known position on Bgfx | ⬜ | |
+| 809 | Pixel test: single glyph at known position on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed.** New `Bgfx_SpriteFont_SingleGlyph` test — a Bgfx-specific adaptation of `examples/easygl_spritefont_single_glyph_test.cpp` (Task 424, already reused verbatim on Vulkan): that file reads back 5 spatially-separate regions from one rendered frame, incompatible with Bgfx's `GetBackBufferData` "first read per frame" quirk (Task 406); restructured into one separately-read `RunCheck()` pass per region, mirroring Tasks 759-808's established Bgfx pattern. All 5/5 pass on the first attempt: a hand-built single-glyph font (8x8 solid-white 'A', zero cropping/kerning) drawn via `SpriteBatch::DrawString` lands at exactly the expected screen rect, confirming `SpriteFont`'s glyph positioning correctly reaches Bgfx's now-fixed sprite draw path (Tasks 803/808). **Discriminating power verified via sabotage-and-revert**: temporarily added a +5px X offset to the shared `SpriteBatch::DrawString`'s final glyph destination-rect computation (`src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp`) — exactly the 2 X-affected checks (interior, right-edge) failed as predicted, the 3 X-unaffected checks (left-edge, top-edge, bottom-edge) correctly still passed, reverted and reconfirmed 5/5. Full Bgfx regression: `ctest` 4442/4443 passed, 1 pre-existing (`Bgfx_RenderTarget2D_MsaaResolve`/DRI3 limitation), zero new. |
 | 810 | Pixel test: multiple glyphs with spacing + newline on Bgfx | ⬜ | |
 | 811 | Pixel test: default character fallback on Bgfx | ⬜ | |
 
