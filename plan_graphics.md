@@ -248,11 +248,8 @@ All 100 original tasks addressed.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 161 | Verify `SpriteSortMode::Immediate`: sprite must be flushed inside `Draw()`, not deferred — add unit test that calls `Draw` inside `Begin/Immediate/End` and inspects that backend received draw before `End()` | ✅ | **Backlog-hygiene closure (2026-07-09) — no new work, this task's exact ask was already fulfilled and left unmarked.** Task 411 built the `RecordingSpriteBatchBackend` mock/injection infrastructure this ask requires (this row's own blocker, "requires mock/inspectable backend," is exactly what that task provides), and Task 412 explicitly fulfills this task's exact ask (`ImmediateFlushesInsideDrawBeforeEnd` + `ImmediateFlushesEachDrawSeparatelyInCallOrder`, verify-only, zero bugs found). See `plan_graphics_20260708.md` Tasks 411/412 for full detail. |
-| 162 | Verify `SpriteSortMode::Deferred`: sprites submitted in call order; test that order is preserved in backend | ✅ | **Backlog-hygiene closure (2026-07-09) — no new work.** Task 413 explicitly fulfills this task's exact ask (`DeferredPreservesSubmissionOrder`, verify-only, zero bugs found). See `plan_graphics_20260708.md` Task 413 for full detail. |
-| 163 | Verify `SpriteSortMode::Texture`: sprites sorted by texture pointer; test with 3 draws alternating 2 textures — backend must receive both textures grouped | ✅ | **Backlog-hygiene closure (2026-07-09) — no new work.** Task 414 explicitly fulfills this task's exact ask (`TextureGroupsDrawsByTextureAndPreservesGroupOrder`, verify-only, zero bugs found). See `plan_graphics_20260708.md` Task 414 for full detail. |
-| 164 | Verify `SpriteSortMode::FrontToBack`: sprites sorted by ascending `layerDepth`; test with 3 draws at depths 0.5, 0.1, 0.9 — assert delivery order | ✅ | **Backlog-hygiene closure (2026-07-09) — no new work.** Task 415 explicitly fulfills this task's exact ask, using this row's own example depths (`FrontToBackSortsByAscendingLayerDepth`, verify-only, zero bugs found). See `plan_graphics_20260708.md` Task 415 for full detail. |
-| 165 | Verify `SpriteSortMode::BackToFront`: sprites sorted by descending `layerDepth`; test with same 3 draws — assert reverse delivery order | ✅ | **Backlog-hygiene closure (2026-07-09) — no new work.** Task 416 explicitly fulfills this task's exact ask (`BackToFrontSortsByDescendingLayerDepth`, verify-only, zero bugs found), closing the per-`SpriteSortMode` test arc (Tasks 412-416). See `plan_graphics_20260708.md` Task 416 for full detail. |
+
+> **All tasks in this phase are complete — moved to `plan_graphics_20260709.md`.**
 
 ---
 
