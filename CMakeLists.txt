@@ -4457,6 +4457,50 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS GraphicsSmoke)
 
+    # Task 817 (Phase 72 Bgfx gap closure): Texture2D SetData/GetData partial-rectangle +
+    # startIndex/elementCount on Bgfx -- verbatim reuse of the shared EasyGL source (Tasks
+    # 169-170), same as several Vulkan registrations above. Texture2D::SetData/GetData operate
+    # entirely on a backend-agnostic CPU-side cpuPixels_ shadow buffer (Texture2D.cpp) -- confirmed
+    # via source that ITextureBackend doesn't even declare a GetData() method (only
+    # UpdatePixels/UpdatePixelsLevel, one-way CPU-to-GPU), so this test exercises zero
+    # Bgfx-specific code and needs no restructuring, unlike the GetBackBufferData-based tests above.
+    cna_bgfx_test(cna_test_bgfx_texture2d_partial_rect
+                  examples/easygl_texture2d_partial_rect_test.cpp)
+    add_test(NAME Bgfx_Texture2D_PartialRect_RoundTrip
+             COMMAND cna_test_bgfx_texture2d_partial_rect)
+    set_tests_properties(Bgfx_Texture2D_PartialRect_RoundTrip PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 819 (Phase 72 Bgfx gap closure): Texture3D partial-box GetData bounds/offset
+    # verification on Bgfx -- verbatim reuse of the shared EasyGL source (Task 274). Unlike
+    # Texture2D, Texture3D::GetData genuinely delegates to the per-backend
+    # ITexture3DBackend::GetData -- BgfxTexture3DBackend already has a real GPU readback
+    # implementation (Task 914: blit into a temporary BGFX_TEXTURE_BLIT_DST|READ_BACK texture,
+    # then bgfx::readTexture()), so this is a real per-backend verification, not a no-op reuse of
+    # shared CPU-only code like Task 817 above. No GetBackBufferData/rendered-frame involved at
+    # all (direct texture-to-CPU readback), so no Bgfx-specific restructuring is needed either.
+    cna_bgfx_test(cna_test_bgfx_texture3d_partial_box_readback
+                  examples/easygl_texture3d_partial_box_readback_test.cpp)
+    add_test(NAME Bgfx_Texture3D_PartialBox_Readback
+             COMMAND cna_test_bgfx_texture3d_partial_box_readback)
+    set_tests_properties(Bgfx_Texture3D_PartialBox_Readback PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 821 (Phase 72 Bgfx gap closure): NPOT texture upload + GPU sampling on Bgfx -- a
+    # Bgfx-specific adaptation of the EasyGL source (Task 268; that file uses
+    # SetDepthTestEnabled(false), which throws on Bgfx, and reads back 5 rows from one rendered
+    # frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406 -- see the test's own
+    # file-header comment). Closes the entire Phase 72 Texture2D/3D/Cube depth row group (817-821).
+    cna_bgfx_test(cna_test_bgfx_npot_texture
+                  examples/bgfx_npot_texture_test.cpp)
+    add_test(NAME Bgfx_NpotTexture
+             COMMAND cna_test_bgfx_npot_texture)
+    set_tests_properties(Bgfx_NpotTexture PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 179: RenderTargetUsage DiscardContents/PreserveContents smoke test
     cna_bgfx_test(cna_test_bgfx_render_target_usage
                   examples/bgfx_render_target_usage_test.cpp)

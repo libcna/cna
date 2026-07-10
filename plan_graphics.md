@@ -826,9 +826,21 @@ header. No task content changed, only the file location and numbering.
 > convention for this shape of task): explicit `.Dispose()` while active never crashes, `IsDisposed`
 > correctly flips true, and a fresh query afterward still works normally, confirming no shared
 > backend state is left corrupted. **This closes the entire Phase 72 `OcclusionQuery` row group too
-> (814-816, all 3/3 done).** 9 REAL GAPS remain (of the original 38; 29 have now been closed or
-> flagged this session — 752-755, 758-768, 803-816), 1 of which (Task 767) is flagged `NEEDS_HUMAN`
-> rather than a plain untouched row.
+> (814-816, all 3/3 done).** Tasks 817/819/821 (`Texture2D` partial-rectangle `SetData`/`GetData`;
+> `Texture3D` partial-box `GetData` bounds/offset; NPOT texture upload+sample) also found no bug —
+> **817 and 819 closed via verbatim reuse of the existing shared EasyGL sources (Tasks 169-170/274)
+> with zero Bgfx-specific restructuring needed**, after confirming via source that `Texture2D`'s
+> own `SetData`/`GetData` are entirely backend-agnostic (a CPU-side `cpuPixels_` shadow buffer,
+> `ITextureBackend` doesn't even declare a `GetData()` method) while `Texture3D`'s DO genuinely
+> exercise a real per-backend GPU round-trip (`BgfxTexture3DBackend::GetData`'s Task 914 blit-based
+> readback, confirmed correct end-to-end: asymmetric off-origin boxes, non-zero `startIndex`, and
+> far-corner-touching boxes all read back the exact right voxels). Task 821 needed the usual Bgfx
+> restructuring (`SetDepthTestEnabled` → `DepthStencilState`; per-row `RunCheck()` for the Task 406
+> quirk) — confirms Bgfx's NPOT (3×5) texture upload and GPU sampling already works correctly, no
+> row-alignment/pitch bug found. **This closes the entire Phase 72 `Texture2D`/`Texture3D`/
+> `TextureCube` depth row group too (817-821, all 5/5 done).** 6 REAL GAPS remain (of the original
+> 38; 32 have now been closed or flagged this session — 752-755, 758-768, 803-821), 1 of which
+> (Task 767) is flagged `NEEDS_HUMAN` rather than a plain untouched row.
 > 13 are UNCERTAIN (no test found either way, needs closer individual investigation before
 > concluding). **Bgfx is dramatically less pixel-test-covered than Vulkan for the same
 > categories**: `DepthStencilState` (0/7 rows remaining, all 7 closed this session), `RasterizerState`
@@ -839,7 +851,8 @@ header. No task content changed, only the file location and numbering.
 > bugs found — glyph placement/spacing/newline/fallback all correctly reach the sprite draw path),
 > `Model` (0/2 remaining, both closed this session, no bugs found), `OcclusionQuery` (0/3 remaining,
 > all 3 closed this session — a real sandbox-limitation finding on `PixelCount()`, no bug found on
-> `Dispose()` safety). Bgfx's own full ctest regression
+> `Dispose()` safety), `Texture2D`/`Texture3D`/`TextureCube` depth (0/3 open rows remaining, all 3
+> closed this session, no bugs found — 2 via verbatim shared-source reuse). Bgfx's own full ctest regression
 > also surfaced (pre-existing, unrelated to any of this session's own changes — confirmed by their
 > 100%-reproducible failure in isolation and by this session touching zero `RenderTarget*`
 > production code) 4 previously-undocumented `RenderTarget2D`/`RenderTargetCube` failures beyond the
@@ -1014,10 +1027,11 @@ header. No task content changed, only the file location and numbering.
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
-| 817 | Verify `Texture2D` `SetData`/`GetData` partial-rectangle + `startIndex`/`elementCount` on Bgfx | ⬜ | Mirrors Tasks 169–170; currently only EasyGL has this depth |
+| 817 | Verify `Texture2D` `SetData`/`GetData` partial-rectangle + `startIndex`/`elementCount` on Bgfx | ✅ | **2026-07-10 — no bug found, real coverage gap closed via a verbatim reuse, not a new Bgfx-specific file.** Registered `examples/easygl_texture2d_partial_rect_test.cpp` (Tasks 169-170) unmodified as `Bgfx_Texture2D_PartialRect_RoundTrip`. Confirmed via source first (before assuming reuse was safe) that `Texture2D::SetData`/`GetData` (`Texture2D.cpp`) operate entirely on a backend-agnostic CPU-side `cpuPixels_` shadow buffer — `ITextureBackend` doesn't even declare a `GetData()` method at all (only `UpdatePixels`/`UpdatePixelsLevel`, one-way CPU→GPU), so this test exercises zero Bgfx-specific code and needed no restructuring for the `GetBackBufferData`-per-frame quirk (Task 406) either, since it never touches the rendered framebuffer. All 24 checks (T169 16 pixels + T170A/B 8 checks) pass identically to EasyGL. |
 | 818 | Verify `Texture2D` mip-level `SetData`/`GetData` on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_TextureMipFilter_DualTextureEffect` (Task 926, this session) exercises mip `SetData` for `Texture2D`.  Mirrors Task 171 |
-| 819 | Verify `Texture3D` box/`GetData` bounds guards reach correct pixels on Bgfx | ⬜ | Task 271 fixed the C++ guards backend-agnostically; no Bgfx pixel test confirms the GPU side |
+| 819 | Verify `Texture3D` box/`GetData` bounds guards reach correct pixels on Bgfx | ✅ | **2026-07-10 — no bug found, real coverage gap closed via a verbatim reuse.** Registered `examples/easygl_texture3d_partial_box_readback_test.cpp` (Task 274) unmodified as `Bgfx_Texture3D_PartialBox_Readback`. Unlike Task 817's `Texture2D` (pure CPU shadow buffer), `Texture3D::GetData` (`Texture3D.cpp`) genuinely delegates to the per-backend `ITexture3DBackend::GetData` — `BgfxTexture3DBackend` already has a real GPU readback implementation (Task 914: blit into a temporary `BGFX_TEXTURE_BLIT_DST`\|`READ_BACK` texture, then `bgfx::readTexture()`), so this is a real, previously-unverified per-backend round-trip, not a no-op reuse of shared code. All 3 sub-tests pass: asymmetric off-origin box (12 checks), non-zero `startIndex` with untouched sentinels either side (6 checks), and a box touching the far corner (right==width/bottom==height/back==depth, 8 checks) — confirms Bgfx's blit-based box readback correctly honors exclusive bounds and per-voxel x/y/z addressing, not just a symmetric colour split. No `GetBackBufferData`/rendered-frame path involved at all, so no Bgfx-specific restructuring needed. |
 | 820 | Verify `TextureCube` per-face/per-mip `SetData`/`GetData` on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_TextureCube_PartialRect_RoundTrip`/`Bgfx_TextureCube_Mip_RoundTrip`.  Mirrors Task 172 |
+| 821 | Verify NPOT texture upload+sample on Bgfx | ✅ | **2026-07-10 — no bug found, real coverage gap closed; closes the entire Phase 72 `Texture2D`/`Texture3D`/`TextureCube` depth row group (817-821, all 5/5 done).** New `examples/bgfx_npot_texture_test.cpp`, a Bgfx-specific adaptation of `easygl_npot_texture_test.cpp` (Task 268, already reused verbatim on Vulkan) — needed the usual 2 substitutions (`SetDepthTestEnabled(false)` throws on Bgfx → `DepthStencilState`; 5 rows read from one rendered frame → per-row `RunCheck()` passes, Task 406 quirk). Uploads a 3×5 NPOT texture (3 deliberately not a multiple of 4, exercising row-alignment handling for a non-power-of-two width) with a distinct solid colour per row, drawn full-screen via `SpriteBatch` with `SamplerState::PointClamp`. All 5/5 rows sample their exact expected colour, confirming Bgfx's NPOT texture upload and GPU sampling path is already correct — no dedicated row-alignment/pitch bug found. |
 | 821 | Verify NPOT texture upload+sample on Bgfx | ⬜ | Mirrors Task 268; currently code-inspected only for this backend |
 
 ### Final Bgfx perfection gate
