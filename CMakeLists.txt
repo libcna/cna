@@ -1779,6 +1779,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 932: ModelTypeReader::Read() binding a per-mesh "texture" field to BasicEffect.
+        cna_easygl_test(cna_test_easygl_model_json_reader_texture
+                        examples/easygl_model_json_reader_texture_test.cpp)
+        add_test(NAME EasyGL_ModelJsonReader_Texture
+                 COMMAND cna_test_easygl_model_json_reader_texture)
+        set_tests_properties(EasyGL_ModelJsonReader_Texture PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 438: Pixel test -- Model with two meshes, each using its own distinct Effect.
         cna_easygl_test(cna_test_easygl_model_two_meshes_effects
                         examples/easygl_model_two_meshes_effects_test.cpp)
@@ -3951,6 +3960,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_ModelJsonReader_32BitIndices
                  COMMAND cna_test_vulkan_model_json_reader_32bit_indices)
         set_tests_properties(Vulkan_ModelJsonReader_32BitIndices PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 932: ModelTypeReader::Read()'s per-mesh texture-binding fix is in SHARED code
+        # (ContentManager.cpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_model_json_reader_texture
+                        examples/easygl_model_json_reader_texture_test.cpp)
+        add_test(NAME Vulkan_ModelJsonReader_Texture
+                 COMMAND cna_test_vulkan_model_json_reader_texture)
+        set_tests_properties(Vulkan_ModelJsonReader_Texture PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

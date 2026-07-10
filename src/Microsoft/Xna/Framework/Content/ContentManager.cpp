@@ -444,6 +444,7 @@ namespace Microsoft::Xna::Framework::Content
                     std::vector<std::unique_ptr<Graphics::ModelMesh>>     meshOwners;
                     std::vector<std::unique_ptr<Graphics::ModelMeshPart>> partOwners;
                     std::vector<std::shared_ptr<Graphics::Effect>>        effectOwners;
+                    std::vector<std::unique_ptr<Graphics::Texture2D>>     textureOwners;
                 };
                 auto res = std::make_shared<ModelResources>();
 
@@ -495,11 +496,12 @@ namespace Microsoft::Xna::Framework::Content
                             const std::string mg = json.substr(os, oe - os);
                             pos = oe;
 
-                            const std::string meshName  = ExtractJsonStringField(mg, "name");
-                            const std::string vertFile  = ExtractJsonStringField(mg, "vertices");
-                            const std::string idxFile   = ExtractJsonStringField(mg, "indices");
-                            const int         stride    = JsonInt(mg, "vertexStride", 16);
-                            const std::string effectStr = ExtractJsonStringField(mg, "effect");
+                            const std::string meshName   = ExtractJsonStringField(mg, "name");
+                            const std::string vertFile   = ExtractJsonStringField(mg, "vertices");
+                            const std::string idxFile    = ExtractJsonStringField(mg, "indices");
+                            const int         stride     = JsonInt(mg, "vertexStride", 16);
+                            const std::string effectStr  = ExtractJsonStringField(mg, "effect");
+                            const std::string textureFile = ExtractJsonStringField(mg, "texture");
 
                             if (vertFile.empty() || idxFile.empty())
                                 continue;
@@ -623,6 +625,22 @@ namespace Microsoft::Xna::Framework::Content
                             } else {
                                 fx = cm.Load<std::shared_ptr<Graphics::Effect>>(effectStr);
                             }
+
+                            // Task 932: bind a per-mesh diffuse texture, if the descriptor names
+                            // one -- mirrors SkinnedModelTypeReader's own already-working
+                            // per-part texture loading. Only meaningful for a BasicEffect (a
+                            // custom effect loaded via "effect" has no standard texture slot to
+                            // bind through here).
+                            if (!textureFile.empty()) {
+                                if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
+                                    auto tex = std::make_unique<Graphics::Texture2D>(
+                                        cm.Load<Graphics::Texture2D>(textureFile));
+                                    basicFx->setTextureProperty(tex.get());
+                                    basicFx->setTextureEnabledProperty(true);
+                                    res->textureOwners.push_back(std::move(tex));
+                                }
+                            }
+
                             partPtr->setEffectProperty(fx.get());
                             res->effectOwners.push_back(std::move(fx));
 
