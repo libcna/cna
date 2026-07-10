@@ -5188,6 +5188,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 805 (Phase 72 Bgfx gap closure): SpriteBatch::Draw scalar/Vector2 scale overloads on
+    # Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 418; that file reads back 5
+    # regions from one rendered frame, incompatible with Bgfx's GetBackBufferData quirk, Task 406
+    # -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_spritebatch_scale
+                  examples/bgfx_spritebatch_scale_test.cpp)
+    add_test(NAME Bgfx_SpriteBatch_Scale
+             COMMAND cna_test_bgfx_spritebatch_scale)
+    set_tests_properties(Bgfx_SpriteBatch_Scale PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
