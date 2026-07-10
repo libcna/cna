@@ -515,21 +515,77 @@ namespace Microsoft::Xna::Framework::Content
                                                     / static_cast<int>(sizeof(std::uint16_t));
                             const int primCount   = numIndices / 3;
 
+                            // Task 927: `stride` is always one of XNA's own "clean" (tightly
+                            // packed, no vtable) sizes -- 16/20/24/32 -- since every offline
+                            // conversion tool writes that exact layout. Every CNA vertex struct
+                            // below publicly inherits the polymorphic IVertexType (a vtable
+                            // pointer XNA's own C# interface never carried), inflating its real
+                            // sizeof() past that clean size -- comparing `stride` against
+                            // sizeof(...) directly, then reinterpret_cast-ing the tightly-packed
+                            // file bytes as an array of those inflated structs, silently read
+                            // every vertex field from the wrong byte offset (confirmed the true
+                            // cause of a long-tracked "near-plane-clipping"/invisible-model
+                            // symptom family in ../cna-samples). Read each vertex's fields
+                            // explicitly from the file's own known-clean offsets instead, and
+                            // construct real, normally-initialized C++ objects (the compiler
+                            // resolves member layout correctly), then upload through the existing
+                            // typed SetData overload, which already packs into the correct
+                            // compact GPU layout.
+                            auto readF = [&](std::size_t off) {
+                                float v;
+                                std::memcpy(&v, vertBytes.data() + off, sizeof(float));
+                                return v;
+                            };
+                            auto readVec3 = [&](std::size_t off) {
+                                return Vector3(readF(off), readF(off + 4), readF(off + 8));
+                            };
+                            auto readVec2 = [&](std::size_t off) {
+                                return Vector2(readF(off), readF(off + 4));
+                            };
+                            auto readColor = [&](std::size_t off) {
+                                return Color(vertBytes[off], vertBytes[off + 1],
+                                             vertBytes[off + 2], vertBytes[off + 3]);
+                            };
+
+                            // Note: VertexPositionColorTexture's own declared `= default` default
+                            // constructor is implicitly deleted (its `Color Color` member has no
+                            // zero-arg constructor) -- build each vector via reserve()+
+                            // emplace_back() rather than a sized constructor, so none of the 4
+                            // branches below ever needs default-construction.
                             auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
-                            if (stride == static_cast<int>(sizeof(Graphics::VertexPositionColor)))
-                                vb->SetData(reinterpret_cast<const Graphics::VertexPositionColor*>(
-                                    vertBytes.data()), numVertices);
-                            else if (stride == static_cast<int>(
-                                         sizeof(Graphics::VertexPositionNormalTexture)))
-                                vb->SetData(reinterpret_cast<const Graphics::VertexPositionNormalTexture*>(
-                                    vertBytes.data()), numVertices);
-                            else if (stride == static_cast<int>(
-                                         sizeof(Graphics::VertexPositionColorTexture)))
-                                vb->SetData(reinterpret_cast<const Graphics::VertexPositionColorTexture*>(
-                                    vertBytes.data()), numVertices);
-                            else if (stride == static_cast<int>(sizeof(Graphics::VertexPositionTexture)))
-                                vb->SetData(reinterpret_cast<const Graphics::VertexPositionTexture*>(
-                                    vertBytes.data()), numVertices);
+                            if (stride == 16) {
+                                std::vector<Graphics::VertexPositionColor> verts;
+                                verts.reserve(static_cast<std::size_t>(numVertices));
+                                for (int i = 0; i < numVertices; ++i) {
+                                    const std::size_t o = static_cast<std::size_t>(i) * 16;
+                                    verts.emplace_back(readVec3(o), readColor(o + 12));
+                                }
+                                vb->SetData(verts.data(), numVertices);
+                            } else if (stride == 20) {
+                                std::vector<Graphics::VertexPositionTexture> verts;
+                                verts.reserve(static_cast<std::size_t>(numVertices));
+                                for (int i = 0; i < numVertices; ++i) {
+                                    const std::size_t o = static_cast<std::size_t>(i) * 20;
+                                    verts.emplace_back(readVec3(o), readVec2(o + 12));
+                                }
+                                vb->SetData(verts.data(), numVertices);
+                            } else if (stride == 24) {
+                                std::vector<Graphics::VertexPositionColorTexture> verts;
+                                verts.reserve(static_cast<std::size_t>(numVertices));
+                                for (int i = 0; i < numVertices; ++i) {
+                                    const std::size_t o = static_cast<std::size_t>(i) * 24;
+                                    verts.emplace_back(readVec3(o), readColor(o + 12), readVec2(o + 16));
+                                }
+                                vb->SetData(verts.data(), numVertices);
+                            } else if (stride == 32) {
+                                std::vector<Graphics::VertexPositionNormalTexture> verts;
+                                verts.reserve(static_cast<std::size_t>(numVertices));
+                                for (int i = 0; i < numVertices; ++i) {
+                                    const std::size_t o = static_cast<std::size_t>(i) * 32;
+                                    verts.emplace_back(readVec3(o), readVec3(o + 12), readVec2(o + 24));
+                                }
+                                vb->SetData(verts.data(), numVertices);
+                            }
 
                             auto ib = std::make_unique<Graphics::IndexBuffer>(device, numIndices);
                             ib->SetData(reinterpret_cast<const std::uint16_t*>(

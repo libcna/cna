@@ -1757,6 +1757,18 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 927: Content.Load<Model>() via a real .model.json + binary vertex/index file
+        # fixture -- exercises ModelTypeReader::Read() itself (the vertex-stride/vtable-size
+        # corruption bug found while porting ../cna-samples), unlike Task 144's hand-built-in-C++
+        # model above.
+        cna_easygl_test(cna_test_easygl_model_json_reader
+                        examples/easygl_model_json_reader_test.cpp)
+        add_test(NAME EasyGL_ModelJsonReader_Quad
+                 COMMAND cna_test_easygl_model_json_reader)
+        set_tests_properties(EasyGL_ModelJsonReader_Quad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 438: Pixel test -- Model with two meshes, each using its own distinct Effect.
         cna_easygl_test(cna_test_easygl_model_two_meshes_effects
                         examples/easygl_model_two_meshes_effects_test.cpp)
@@ -3904,6 +3916,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 927: ModelTypeReader::Read()'s vertex-stride/vtable-size corruption fix is in
+        # SHARED code (ContentManager.cpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_model_json_reader
+                        examples/easygl_model_json_reader_test.cpp)
+        add_test(NAME Vulkan_ModelJsonReader_Quad
+                 COMMAND cna_test_vulkan_model_json_reader)
+        set_tests_properties(Vulkan_ModelJsonReader_Quad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 855 (Phase 73 Vulkan gap closure): Texture2D SetData/GetData partial-rectangle +
         # startIndex/elementCount + mip-level on Vulkan -- verbatim reuse of the shared EasyGL
         # sources (Tasks 169-171); both operate entirely on a backend-agnostic CPU-side shadow
@@ -5639,6 +5661,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_Model_TwoMeshesEffects
              COMMAND cna_test_bgfx_model_two_meshes_effects)
     set_tests_properties(Bgfx_Model_TwoMeshesEffects PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 927: ModelTypeReader::Read()'s vertex-stride/vtable-size corruption fix is in SHARED
+    # code (ContentManager.cpp) -- a Bgfx-specific adaptation of the EasyGL source, restructured
+    # into per-check RunCheck() passes for Bgfx's own GetBackBufferData "first read per frame"
+    # quirk (Task 406).
+    cna_bgfx_test(cna_test_bgfx_model_json_reader
+                  examples/bgfx_model_json_reader_test.cpp)
+    add_test(NAME Bgfx_ModelJsonReader_Quad
+             COMMAND cna_test_bgfx_model_json_reader)
+    set_tests_properties(Bgfx_ModelJsonReader_Quad PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
