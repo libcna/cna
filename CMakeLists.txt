@@ -2228,6 +2228,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 60
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        cna_easygl_test(cna_test_easygl_vertexbuffer_indexbuffer_getdata
+                        examples/easygl_vertexbuffer_indexbuffer_getdata_test.cpp)
+        add_test(NAME EasyGL_VertexBufferIndexBufferGetData
+                 COMMAND cna_test_easygl_vertexbuffer_indexbuffer_getdata)
+        set_tests_properties(EasyGL_VertexBufferIndexBufferGetData PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
         add_test(NAME EasyGL_EffectClone
@@ -3923,6 +3931,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_ModelJsonReader_Quad
                  COMMAND cna_test_vulkan_model_json_reader)
         set_tests_properties(Vulkan_ModelJsonReader_Quad PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 930: VertexBuffer/IndexBuffer::GetData() is a CPU-side shadow buffer in SHARED
+        # code (VertexBuffer.cpp/IndexBuffer.cpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_vertexbuffer_indexbuffer_getdata
+                        examples/easygl_vertexbuffer_indexbuffer_getdata_test.cpp)
+        add_test(NAME Vulkan_VertexBufferIndexBufferGetData
+                 COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata)
+        set_tests_properties(Vulkan_VertexBufferIndexBufferGetData PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
