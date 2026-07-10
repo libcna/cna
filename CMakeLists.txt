@@ -4563,6 +4563,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 773 (Phase 72 Bgfx gap closure): verify SetRenderTarget(nullptr) genuinely restores the
+    # real backbuffer with real pixel verification, superseding Task 179's own stale "pixel-level
+    # verification is not available" comment (predates Task 406's readback convention and Task
+    # 901's EnsureViewState() fix) -- see the test's own file-header comment.
+    cna_bgfx_test(cna_test_bgfx_setrendertarget_null_restore
+                  examples/bgfx_setrendertarget_null_restore_test.cpp)
+    add_test(NAME Bgfx_SetRenderTarget_NullRestore
+             COMMAND cna_test_bgfx_setrendertarget_null_restore)
+    set_tests_properties(Bgfx_SetRenderTarget_NullRestore PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 249: Bgfx vertex layout mapping tests — all 12 VertexElementFormat values
     cna_bgfx_test(cna_test_bgfx_vertex_format
                   examples/bgfx_vertex_format_test.cpp)

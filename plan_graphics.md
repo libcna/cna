@@ -861,9 +861,19 @@ header. No task content changed, only the file location and numbering.
 > preset mapping to `BGFX_STATE_BLEND_*`) also closes clean: read `XnaBlendToBgfxFactor` in full,
 > confirmed all 13 real XNA `Blend` enum values are already correctly mapped (fixed by Task 923 in
 > a prior session, already pixel-verified by Tasks 752-755/923 this session) — no bug, no new test
-> needed. 3 REAL GAPS remain (of the
-> original 38; 35 have now been closed or flagged this session — 741-751, 752-755, 758-768,
-> 803-821), 1 of which (Task 767) is flagged `NEEDS_HUMAN` rather than a plain untouched row.
+> needed. Task 773 (verify `SetRenderTarget(nullptr)` restores the backbuffer) also found no bug —
+> superseded Task 179's own stale "pixel-level verification is not available" claim with real
+> `GetBackBufferData` assertions (both a centre point and a corner outside the bound RT's own
+> smaller bounds correctly read the post-unbind draw). Found, along the way, a real environmental
+> trigger for the already-documented `RenderTarget2D` `glReadPixels` crash class (repeatedly
+> rebinding the same RT object across many frames while reading the backbuffer) — worked around,
+> documented, not chased further. A genuine discriminating-power investigation (2 sabotage
+> attempts plus direct debug instrumentation) found bgfx resets a view's frame-buffer binding to
+> the default swapchain every new frame regardless, so this specific reset code can't be
+> single-point-sabotaged across the multi-frame retry loop Task 406's own convention requires —
+> documented transparently rather than silently omitted. 2 REAL GAPS remain (of the
+> original 38; 36 have now been closed or flagged this session — 741-751, 752-755, 758-768,
+> 773, 803-821), 1 of which (Task 767) is flagged `NEEDS_HUMAN` rather than a plain untouched row.
 > 13 are UNCERTAIN (no test found either way, needs closer individual investigation before
 > concluding). **Bgfx is dramatically less pixel-test-covered than Vulkan for the same
 > categories**: `DepthStencilState` (0/7 rows remaining, all 7 closed this session), `RasterizerState`
@@ -953,7 +963,7 @@ header. No task content changed, only the file location and numbering.
 | 770 | Verify `RenderTargetCube` can be sampled as `TextureCube` after unbinding on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_RenderTargetCube_SampleAfterUnbind`.  `EnvironmentMapEffect` path |
 | 771 | Verify `RenderTargetUsage::DiscardContents` vs `PreserveContents` on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_RenderTargetUsage`.  |
 | 772 | Verify MSAA render target creation + resolve on Bgfx | ✅ | **Backlog-hygiene closure (2026-07-09) — SUPERSEDED, no new work, left unmarked (found via a full Phase 72/73 triage pass).** Covered by `Bgfx_RenderTarget2D_MsaaResolve`/`Bgfx_RenderTargetCube_MsaaResolve` (Tasks 879/903).  |
-| 773 | Verify `SetRenderTarget(nullptr)` restores the backbuffer on Bgfx | ⬜ | |
+| 773 | Verify `SetRenderTarget(nullptr)` restores the backbuffer on Bgfx | ✅ | **2026-07-10 — no bug found, real coverage gap closed, superseding a stale claim.** New `examples/bgfx_setrendertarget_null_restore_test.cpp`. Task 179's own original smoke test (`bgfx_render_target_usage_test.cpp`) carried a stale header comment ("Pixel-level verification is not available in the Bgfx backend") predating both Task 406's now-pervasive `GetBackBufferData` convention and Task 901's `EnsureViewState()` fix (which specifically corrected a bug where a bound `RenderTarget2D`'s smaller viewport/ortho-projection leaked into subsequent backbuffer draws) — this task supersedes that stale claim with real assertions. Binds a 16×16 RT, clears it Red, calls `SetRenderTarget(nullptr)`, clears the real 64×64 backbuffer Green, draws a full-viewport Blue quad via `SpriteBatch`, and reads back both the centre AND a corner outside the RT's own smaller bounds — both correctly read Blue, confirming the backbuffer is genuinely restored at its own full size, not clipped/misaligned to the RT's dimensions. **Found and fixed a real, adjacent test-methodology bug of my own along the way** (not a production bug): an early draft repeatedly rebound the SAME `RenderTarget2D` object across many separate rendered frames inside the retry loop, which triggered a crash — the same pre-existing `glReadPixels`/`GL_INVALID_OPERATION` class of failure as the already-documented `Bgfx_RenderTarget2D_DepthBuffer`/`MsaaResolve` baseline (Task 812/813's own finding) — fixed by binding the RT only once (a `rtBoundOnce_` guard), not once per retry attempt; this is a real, previously-undiscovered environmental trigger for that known limitation, documented here rather than chased further, matching established precedent. **Discriminating-power investigation, transparently documented rather than skipped**: attempted sabotage of both `SetRenderTarget2D(nullptr)`'s `spriteViewId`/`currentViewId_` reset and its `currentRtWidth_`/`currentRtHeight_` reset — neither broke the test even after direct debug instrumentation of `EnsureViewState()` confirmed the sabotaged state genuinely persisted. Root cause: bgfx resets a view's frame-buffer binding back to the default swapchain every new frame unless explicitly re-set that same frame, so a leftover stale view/FBO binding only ever manifests within the SAME frame as the bind — the multi-frame `RunCheck()` retry loop this project's own Task 406 convention requires cannot keep that stale state observable long enough to sabotage-and-refail. Documented transparently in the test's own file header rather than silently omitted, matching this project's established precedent for investigated-but-inherently-non-discriminating scenarios (Task 923's alpha-blend half). Full Bgfx ctest regression (4457 tests): zero new failures — the same 6 pre-existing `RenderTarget*` failures as every regression since Task 812/813. |
 | 774 | Verify MRT with mixed formats is rejected or handled per XNA constraints on Bgfx | ⬜ | |
 | 775 | Document Bgfx MRT attachment limits | ⬜ | |
 
