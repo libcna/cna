@@ -1439,6 +1439,27 @@ research; the actual edits were applied and verified directly). Real findings, n
 - **Phases 56-69 (WebGPU) remain hard-forbidden** — do not open, plan, or stub anything there
   regardless of what else is done; see `CLAUDE.md`.
 
+**Final update, same day (2026-07-10) — backlog-hygiene sweep, at the user's own explicit
+request**: 4 more phases that had every row already ✅ but hadn't yet been moved out of
+`plan_graphics.md` were archived to a new `plan_graphics_20260710.md` (pure file relocation, no
+task content changed, same convention as `plan_graphics_20260708.md`/`plan_graphics_20260709.md`):
+- **Phase 28** (`PresentationParameters`/`GraphicsDeviceManager` compatibility, 1 row).
+- **Phase 31** (user primitives/draw-call variants, 3 rows).
+- **Phase 54** (documentation and public compatibility status, 10 rows: Tasks 481-490).
+- **Phase 55** (final Graphics stabilization, 10 rows: Tasks 491-500 — the phase that closed with
+  Task 500's own qualified ~90% milestone declaration referenced at the top of this section).
+
+Phases with any genuinely open row were deliberately left in place: 33 (`Texture3D`/`TextureCube`,
+10 open), 49 (`Model`, 1 open), 51 (backend parity policy, 2 open), 53 (FNA comparison harness, 4
+open), 71 (EasyGL, 1 open — Task 732, `NEEDS_HUMAN`), 74 (MojoShader `.fx` bytecode, all 10 still
+open). Phase 29's 2 rows are both status `N/A` (not `✅`) — an ambiguous fit for the archival rule's
+literal wording, left in place conservatively rather than assumed equivalent to "done."
+
+**`plan_graphics.md` is now down to real, still-open work only**: Phases 33, 49, 51, 53, 71, 74
+(all with genuinely open rows), plus Phase 29 (N/A rows). Every other phase from 9 through 73 is
+now a one-line pointer into one of the 3 archive files. This is the leanest the active backlog file
+has been all session.
+
 ## What to do next
 
 Same established methodology as always: research → implement → write a discriminating test FIRST
