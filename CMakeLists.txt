@@ -2786,6 +2786,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 767: depth bias / slope-scale depth bias via real glPolygonOffset.
+        cna_easygl_test(cna_test_easygl_depth_bias
+                        examples/easygl_depth_bias_test.cpp)
+        add_test(NAME EasyGL_DepthBias
+                 COMMAND cna_test_easygl_depth_bias)
+        set_tests_properties(EasyGL_DepthBias PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 331: RenderTarget2D constructor/property audit against FNA.
         cna_easygl_test(cna_test_easygl_rendertarget2d_properties
                         examples/easygl_rendertarget2d_properties_test.cpp)

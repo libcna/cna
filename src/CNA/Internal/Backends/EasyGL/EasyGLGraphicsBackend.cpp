@@ -1896,8 +1896,8 @@ void main()
 
     void EasyGLGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
                                                       bool scissorTestEnable,
-                                                      float /*depthBias*/,
-                                                      float /*slopeScaleDepthBias*/)
+                                                      float depthBias,
+                                                      float slopeScaleDepthBias)
     {
         if (metagl::IsContextLost()) return;
         // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2
@@ -1916,6 +1916,13 @@ void main()
         // OpenGL ES has no glPolygonMode; FillMode::WireFrame (1) is emulated at draw
         // time by re-expanding triangles into GL_LINES (see DrawWireframe).
         wireframe_ = (fillMode == 1);
+        // Task 767: DepthBias/SlopeScaleDepthBias map directly onto real GL polygon offset
+        // (matches this project's own already-established Vulkan convention, see
+        // VulkanGraphicsBackend::ApplyRasterizerState's comment: "matching FNA's
+        // glPolygonOffset(slopeScaleDepthBias, depthBias)"). Always enabled -- factor=0/units=0
+        // is a genuine no-op in GL, so there is no need to conditionally disable it.
+        device.set_polygon_offset_fill_enabled(true);
+        device.set_polygon_offset(slopeScaleDepthBias, depthBias);
     }
 
     void EasyGLGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
