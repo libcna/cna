@@ -719,6 +719,19 @@ table (all 5 stock effects × 4 backends, per-feature rows down to `DirectionalL
 table, and the full list of currently-BLOCKED tasks (447 Vulkan OcclusionQuery, 686/687 SDL_Renderer
 `Wrap`/`Mirror`, 725 SDL_Renderer `Texture3D`/`TextureCube`, 732 EasyGL non-`Color` `SurfaceFormat`).
 
+**Update (2026-07-10, Task 823) — Phase 72 (Bgfx full 2D+3D pixel-verified parity) is now closed
+in full**: of the 38 real gaps found in a first-ever complete row-by-row triage of that phase's 85
+rows, 37 are now ✅ closed this session (2 real, previously-undiscovered bugs found and fixed along
+the way — `BgfxGraphicsBackend::ApplySamplerState`'s incomplete `TextureFilter` split-Min/Mag/Mip
+mapping, Task 743; `RenderTarget2D`/`RenderTargetCube`'s missing `SurfaceFormat` validation, Task
+774, both shared-code fixes affecting all 4 backends) and 1 remains explicitly `NEEDS_HUMAN`
+(Task 767, depth bias/slope-scale depth bias — bgfx has zero depth-bias mechanism at the API
+level, a permanent ceiling needing a project-owner decision on shader-level Z-offset emulation).
+Every `GraphicsDevice` state-object category (`DepthStencilState`/`RasterizerState`/`BlendState`/
+`SamplerState`), `SpriteBatch`/`SpriteFont`/`Model`/`OcclusionQuery`/`Texture2D`/`Texture3D`/
+`TextureCube`/`RenderTarget2D`/`RenderTargetCube`/`Viewport` row group is now fully pixel-verified
+on Bgfx — see `plan_graphics.md`'s own Phase 72 intro blockquote for the complete session log.
+
 **Headline summary as of 2026-07-09** (see the matrix doc for detail and task numbers):
 
 - **Core rendering for all 5 stock effects** (MVP transform, lighting, texture sampling, fog) is

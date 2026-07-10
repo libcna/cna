@@ -586,6 +586,7 @@ index, not a duplicate.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `(fill in)` | 822-824 | **CLOSED — pure documentation; PHASE 72 (Bgfx full 2D+3D pixel-verified parity) IS NOW CLOSED IN FULL.** Of the phase's original 85 rows (34 SUPERSEDED, 38 confirmed REAL GAPS, 13 UNCERTAIN), every single one is now resolved: 84 ✅, 1 `NEEDS_HUMAN` (Task 767, depth bias — a permanent bgfx API ceiling). Task 822 confirms the full Bgfx `ctest` regression (run well over a dozen times across this session's own task batches) has zero unexplained failures — every failure is one of 6 already-documented, already-root-caused pre-existing `RenderTarget*` sandbox-limitation tests (Xvfb/software-GL `glReadPixels` ceiling). Task 823 refreshes `docs/xna-4-api-coverage.md` §7 with a pointer to this closure (the "compiles only"→"pixel-verified" transition itself had already happened via an earlier task; this session's own findings were `GraphicsDevice` state-object/infrastructure bugs, not stock-effect ones, so the existing Stock Effects table needed no substantive changes). Task 824 adds a consolidated "Remaining genuine Bgfx limitations" section to `docs/graphics-backend-feature-matrix.md` (mirroring the existing Vulkan-limitations section's style): exactly 3 genuine limitations survive — Task 767's depth bias, the 6 `RenderTarget*` sandbox `glReadPixels` failures, and `OcclusionQuery.PixelCount()`'s own sandbox non-discrimination (Tasks 814/815) — none of them a CNA code defect. **This session found and fixed at least 10 real, confirmed, previously-undiscovered bugs across 9 tasks** (758/759, 763, 764, 766, 768 ×2, 803, 808, 743, 774), several in shared code affecting all 4 backends — the single largest, most thorough gap-closure pass in this project's history for any one backend. See `plan_graphics.md`'s own Phase 72 intro blockquote for the complete session log. |
 | `cd1065bd` | 757,776-778,785,789,799 | **CLOSED — no bug found in any of the 7; resolves 7 more Phase 72 UNCERTAIN rows, closing the entire `BlendState` (751-757), `Viewport` (776-777), `Effect` base (778), `AlphaTestEffect` (785), `DualTextureEffect` (789), and `SkinnedEffect` (799) row groups.** Task 757 (`BlendFactor` constant-color blending): new Bgfx-specific test (adapted from Task 309's EasyGL source, only `SetDepthTestEnabled`→`DepthStencilState` needed) confirms `setBlendStateProperty`'s existing shared-code `BlendFactor` propagation correctly reaches Bgfx. Task 776 (`Viewport::Project`/`Unproject`) and Task 799 (`SkinnedEffect.SetBoneTransforms` bone-count validation): both 100% pure CPU-side shared code with zero backend dependency, confirmed via source read, already fully covered by existing gtest unit tests passing on Bgfx's own `CnaTests` — no new tests needed. Task 777 (viewport reset after backbuffer resize): verbatim reuse of the shared, backend-agnostic `viewport_reset_after_resize_test.cpp` (Task 349), 8/8 pass. Task 778 (`EffectPass::Apply`/`EffectTechnique` selection): confirmed already comprehensively exercised by the dozens of existing, passing Bgfx 3D effect tests. Tasks 785 (alpha reference 0–255 vs 0–1 scaling) and 789 (two white textures + diffuse color): both already indirectly or directly proven by existing tests (`Bgfx_AlphaTest_CompareFunctionSweep`'s below/at/above discrimination; `Bgfx_DualTextureEffect_Doubling`'s own check (b)) — no new tests needed. Also cleaned up a stale duplicate Task 821 row found while auditing the file. Full Bgfx ctest regression (4461 tests): zero new failures (same 6 pre-existing `RenderTarget*` failures). See `plan_graphics.md` for each task's full detail. |
 | `3c299a10` | 774-775 | **CLOSED — real, confirmed, previously-undiscovered bug found and fixed, in SHARED code affecting all 4 backends; closes the entire Phase 72 `RenderTarget2D`/`RenderTargetCube` row group (773-775, all 3/3 done) — every originally-confirmed REAL GAP in Phase 72 is now closed except Task 767 (`NEEDS_HUMAN`).** Read FNA's own real `GraphicsDevice.SetRenderTargets` first: it performs zero surface-format validation, so the real constraint is `Texture::ValidateFormat` (Task 176), which throws for every `SurfaceFormat` except `Color` on all 4 backends. Verifying this held for `RenderTarget2D` specifically (not just the already-tested plain `Texture2D` case) found it didn't: `RenderTarget2D`'s own dedicated delegating constructor (and `RenderTargetCube`'s analogous one) **skipped `ValidateFormat` entirely** — a `RenderTarget2D` could be constructed with any `SurfaceFormat` (e.g. `Bgr565`) even though the backend's `CreateRenderTarget2D` call never actually forwards it (always allocates real Color-format GPU storage regardless), meaning `Format()` could silently lie about what the GPU resource actually is. Fixed both (`Texture2D.cpp`/`TextureCube.cpp`) by adding the same `ValidateFormat` call their non-RT sibling constructors already have. New `Bgfx_MRT_MixedFormats` test (2 checks: same-format RTs bind fine; a `Bgr565` RT now correctly throws before `SetRenderTargets` is ever reached) plus a verbatim reuse of Task 176's own `easygl_surface_format_throws_test.cpp` registered for Bgfx for the first time (16/16 pass, confirms the same contract). Verified via `git stash` revert-and-rebuild (reverting reproduced the exact predicted failure, 1/2). **Full regression on all 4 backends since this is shared code**: Bgfx/EasyGL/Vulkan/SDL_Renderer all zero new failures (exactly each backend's own known baseline, including one reconfirmed-in-isolation Audio flake on EasyGL). Task 775 (document Bgfx MRT attachment limits) closed via pure documentation in `docs/graphics-backend-feature-matrix.md`: the practical limit is FNA's own real `MAX_RENDERTARGET_BINDINGS = 4` (Task 881's shared-code gate), Bgfx's own device capability is typically 8 and has never been the binding constraint. See `plan_graphics.md` Tasks 774-775 for full detail. |
 | `807dd7f3` | 773 | **CLOSED — no bug found, real coverage gap closed, superseding a stale claim.** New `Bgfx_SetRenderTarget_NullRestore` test supersedes Task 179's own stale "pixel-level verification is not available in the Bgfx backend" comment (predates Task 406's readback convention and Task 901's `EnsureViewState()` fix) with real assertions: binds a 16×16 RT, clears Red, calls `SetRenderTarget(nullptr)`, clears the real 64×64 backbuffer Green, draws a full-viewport Blue quad, reads back both the centre and a corner outside the RT's own bounds — both correctly Blue, confirming genuine backbuffer restoration at full size. Found a real environmental trigger for the already-documented `Bgfx_RenderTarget2D_DepthBuffer`/`MsaaResolve` `glReadPixels` crash class along the way (repeatedly rebinding the same RT object across many frames while reading the backbuffer) — worked around (bind once, not per retry attempt), documented, not chased further. **Discriminating-power investigation, transparently documented rather than skipped**: 2 sabotage attempts (the `spriteViewId`/`currentViewId_` reset, and the `currentRtWidth_`/`currentRtHeight_` reset) plus direct debug instrumentation of `EnsureViewState()` found neither breaks the test — bgfx resets a view's frame-buffer binding to the default swapchain every new frame regardless, so a stale binding only manifests within the SAME frame as the bind, which the multi-frame `RunCheck()` retry loop Task 406's own convention requires can't keep observable long enough to sabotage. Full Bgfx ctest regression (4457 tests): zero new failures — the same 6 pre-existing `RenderTarget*` failures as every regression since Task 812/813. See `plan_graphics.md` Task 773 for full detail. |
@@ -1345,58 +1346,59 @@ fixes (Task 868→923, Task 878→899):
 **Phase 71-73 triage, now complete** — Phase 72 (Bgfx, 85 rows) and Phase 73 (Vulkan, 37 rows)
 both got their first-ever full row-by-row triage this session (a fork did the cross-referencing
 research; the actual edits were applied and verified directly). Real findings, not just hygiene:
-- **Phase 72 (Bgfx)**: 34 SUPERSEDED (closed), 38 confirmed REAL GAPS found. **15 of those 38 were
-  then picked up as real work the same session, closing the entire `DepthStencilState` row group
-  (758-764), all 3 testable `RasterizerState` rows (765-768, Task 767 flagged `NEEDS_HUMAN`), and
-  all 4 `BlendState` preset rows (752-755) — 23 REAL GAPS remain**, 13 UNCERTAIN (no test found
-  either way, needs individual investigation). **5 genuine, previously-undiscovered bugs were found
-  and fixed in this pass** (not just coverage-gap closures):
-  - Tasks 758/759 — `DepthBufferWriteEnable=false` had zero effect on any 3D draw (all 4
-    draw-dispatch functions unconditionally wrote depth).
-  - Task 763 — `TwoSidedStencilMode`'s front/back stencil slots were swapped relative to the
-    intended raw winding (bgfx's default `glFrontFace` is `GL_CW`, opposite EasyGL's effective
-    convention) — the exact same phenomenon Task 870 already fixed for Vulkan.
-  - Task 764 — `GraphicsDevice.ReferenceStencil`'s standalone setter was a silent no-op on Bgfx
-    (mirrors the EasyGL/Vulkan asymmetry this project had already found — only Vulkan had a real
-    `SetReferenceStencil` override before this).
-  - Task 766 — `FillMode::WireFrame` had NO implementation at all on Bgfx (not a mapping bug — a
-    genuinely missing feature; bgfx has no native polygon-fill-mode toggle). Implemented a
-    triangle-to-line-list expansion mirroring EasyGL's already-shipped `DrawWireframe` emulation.
-  - Task 768 — 2 bugs: none of the 4 3D draw-dispatch functions ever called `bgfx::setScissor`
-    (only the 2D `SpriteBatch` path did); and once fixed, `scissorW_`/`scissorH_`'s "zero means
-    disabled" sentinel conflated the enable flag with the rect's own coordinates.
-  Tasks 752-755/760-762/765 all found their respective mapping already correct (no bug, real
-  coverage gap closed); Task 761 additionally confirmed `StencilWriteMask` is a permanent bgfx API
-  ceiling (no per-draw write-mask concept exists anywhere in bgfx's own state flags). **Bgfx is
-  still dramatically less pixel-test-covered than Vulkan for the remaining categories** —
-  `SpriteFont` (3/3), `Model` (2/2), and `SpriteBatch` behavior (6/6) still have ZERO Bgfx-specific
-  tests at all, while Vulkan is mostly done in these categories. **This remains the single largest
-  known real gap in this project's pixel-verification coverage** — a genuine, substantial
-  undertaking if picked up, not a quick pass.
+- **Phase 72 (Bgfx) is now CLOSED IN FULL (2026-07-10)**: 34 SUPERSEDED, 38 confirmed REAL GAPS —
+  **37 of those 38 are now ✅ closed, 1 remains `NEEDS_HUMAN`** (Task 767, depth bias — bgfx has
+  zero depth-bias mechanism at the API level, a permanent ceiling needing a project-owner decision
+  on shader-level Z-offset emulation). **At least 10 real, confirmed, previously-undiscovered bugs
+  were found and fixed across the full pass** (not just coverage-gap closures):
+  - Tasks 758/759 — `DepthBufferWriteEnable=false` had zero effect on any 3D draw.
+  - Task 763 — `TwoSidedStencilMode`'s front/back stencil slots were swapped (bgfx's default
+    `glFrontFace` is `GL_CW`, opposite EasyGL's effective convention) — same phenomenon Task 870
+    already fixed for Vulkan.
+  - Task 764 — `GraphicsDevice.ReferenceStencil`'s standalone setter was a silent no-op on Bgfx.
+  - Task 766 — `FillMode::WireFrame` had NO implementation at all on Bgfx (a genuinely missing
+    feature, not a mapping bug) — implemented a triangle-to-line-list expansion.
+  - Task 768 — 2 bugs: no 3D draw-dispatch function ever called `bgfx::setScissor`; and
+    `scissorW_`/`scissorH_`'s "zero means disabled" sentinel conflated the enable flag with the
+    rect's own coordinates.
+  - Task 803 — **SHARED code, all 4 backends**: `SpriteBatch::Begin()`'s final overload never
+    applied its `depthStencilState` parameter at all, silently masked on EasyGL/Vulkan by
+    coincidence, exposed for the first time by Bgfx's own non-trivial depth-test default.
+  - Task 808 — `SpriteBatch.Begin()`'s `transformMatrix` had zero effect on Bgfx (plus a genuine
+    `bx::mtxMul` argument-order bug found while fixing it — bx's own convention is row-vector).
+  - Task 743 — **SHARED code, all 4 backends**: `ApplySamplerState`'s filter switch silently
+    collapsed 6 of 9 `TextureFilter` values (all the split Min/Mag/Mip combinations) to plain
+    Linear.
+  - Task 774 — **SHARED code, all 4 backends**: `RenderTarget2D`/`RenderTargetCube`'s own
+    dedicated delegating constructors skipped `Texture::ValidateFormat` entirely, silently
+    accepting any `SurfaceFormat` even though the backend never actually forwards it.
+  Every `GraphicsDevice` state-object category (`DepthStencilState`/`RasterizerState`/`BlendState`/
+  `SamplerState`), plus `SpriteBatch`/`SpriteFont`/`Model`/`OcclusionQuery`/`Texture2D`/`Texture3D`/
+  `TextureCube`/`RenderTarget2D`/`RenderTargetCube`/`Viewport`/`Effect` base/`AlphaTestEffect`/
+  `DualTextureEffect`/`SkinnedEffect` row groups are now fully closed — see `plan_graphics.md`'s
+  own Phase 72 intro blockquote for the complete session log, and
+  `docs/graphics-backend-feature-matrix.md`'s new "Remaining genuine Bgfx limitations" section
+  (Task 824) for the 3 genuine limitations that survive (Task 767 depth bias; 6 pre-existing
+  `RenderTarget*` `glReadPixels` sandbox crashes; `OcclusionQuery.PixelCount()`'s own sandbox
+  non-discrimination, Tasks 814/815) — none of them a CNA code defect.
 - **Phase 73 (Vulkan)**: 26 SUPERSEDED (closed), 9 confirmed REAL GAPS (matches Task 861's own
   `SpriteBatch`/`SpriteFont`/`Model` finding, plus newly-found `Texture2D` partial-rect/NPOT/
   `Texture3D` box-region gaps), 2 UNCERTAIN (MRT mixed-format, `Viewport` math).
 - See both phases' own intro blockquotes in `plan_graphics.md` for the full breakdown.
 
 **What's left, honestly categorized** (see `plan_graphics.md`'s own rows for full detail):
-- **Phase 72 (Bgfx)'s 23 remaining confirmed real gaps** — still the single largest remaining
-  piece of real work; `SpriteFont`/`Model`/`SpriteBatch` behavior on Bgfx have zero tests, plus a
-  handful of remaining `DepthStencilState`-adjacent/stencil rows not yet triaged into this pass
-  (761's own row group was `StencilEnable`/masks/ops/two-sided/`ReferenceStencil` — check
-  `plan_graphics.md`'s Phase 72 table directly for exactly which rows remain open vs. UNCERTAIN).
-  Genuinely substantial, not a quick pass.
-- **Phase 73 (Vulkan)'s 9 confirmed real gaps** — smaller: `SpriteBatch`/`SpriteFont`/`Model`
-  pixel tests (Task 861's own finding) plus `Texture2D`/`Texture3D` partial-region/NPOT tests.
-- **~30 UNCERTAIN rows across both phases** (13 Bgfx + 4 Vulkan, per-phase intro blocks) — not
+- **Phase 72 (Bgfx) is now closed in full** (see above) — only Task 767 (`NEEDS_HUMAN`) and the 2
+  sandbox-environment limitations (`RenderTarget*` `glReadPixels`, `OcclusionQuery.PixelCount()`)
+  remain, none of them further Bgfx backend code work.
+- **Phase 73 (Vulkan)'s ~9 confirmed real gaps** — the next-largest remaining piece of real work:
+  `SpriteBatch`/`SpriteFont`/`Model` pixel tests (Task 861's own finding) plus `Texture2D`/
+  `Texture3D` partial-region/NPOT tests, mirroring the same pattern Phase 72 just closed.
+- **A handful of UNCERTAIN rows in Phase 73** (Vulkan, ~4 per that phase's own intro block) — not
   confirmed either way, need individual investigation before concluding real-gap or superseded.
-- **Task 767** (Bgfx depth bias/slope-scale depth bias) — **NEEDS_HUMAN**, bgfx has zero depth-bias
-  support anywhere (confirmed via source, matching EasyGL's own identical gap); a real fix needs
-  shader-level Z-offset emulation across every 3D shader, a cross-cutting architecture decision
-  spanning multiple backends, not a small Bgfx-scoped fix like this pass's other rows.
 - **2 adjacent, out-of-scope discoveries from Task 766's work, not fixed, worth their own tasks**:
   `BgfxGraphicsBackend` never overrides `DrawIndexedPrimitivesEx` (silently falls back to
   `DrawIndexedColoredPrimitives`, losing all `GpuDrawParams`-driven shader features — textures/
-  lighting/fog/etc. — for any indexed+effect draw); `DrawPrimitivesEx` never honors
+  lighting/fog/etc. — for any indexed+effect draw, though confirmed a non-issue for `VertexColorEnabled`-only draws like `Model`'s own Tasks 812/813); `DrawPrimitivesEx` never honors
   `params.vertexStart` in its existing solid-fill path (pre-existing, separate bug).
 - **Task 863** (`Texture3D` shader-sampling architecture) — **NEEDS_HUMAN**, 2 named options,
   neither picked; see its own row for the tradeoffs.

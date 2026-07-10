@@ -212,6 +212,43 @@ even possible until that's resolved).
 3 3D backends). The 2D SpriteBatch/SpriteFont/Model-hierarchy test-coverage gap above is real but
 distinct in kind (untested, not un-implemented or known-broken).
 
+## Remaining genuine Bgfx limitations (Task 824, 2026-07-10)
+
+Phase 72 (Bgfx full 2D+3D pixel-verified parity, Tasks 740-824) is now closed in full: of the
+original 38 confirmed real gaps found in a first-ever complete row-by-row triage, 37 are ✅ closed
+this session and exactly 1 remains open, explicitly flagged (not silently skipped). Three genuine,
+confirmed limitations survive this closure — none of them a code bug in this project, each already
+root-caused rather than merely observed:
+
+- **Depth bias / slope-scale depth bias (Task 767, `NEEDS_HUMAN`)**: bgfx's high-level state API
+  has zero depth-bias/polygon-offset mechanism anywhere (confirmed via `bgfx/defines.h` — no
+  `BIAS`/`OFFSET` flag exists — and the vendored `renderer_gl.cpp` — no `glPolygonOffset` call in
+  the whole file). EasyGL has the identical gap; only Vulkan implements real depth bias
+  (`vkCmdSetDepthBias`, dynamic state). A genuine fix needs shader-level Z-offset emulation across
+  every 3D vertex shader (and, for slope-scale bias specifically, a fragment-stage `dFdx`/`dFdy`
+  screen-space-slope approximation) — a cross-cutting architecture change spanning shader code on
+  at least 2 backends, needing a project-owner decision before any code lands.
+- **`RenderTarget2D`/`RenderTargetCube` `glReadPixels` crashes under this sandbox's software GL
+  driver** (`Bgfx_RenderTarget2D_DepthBuffer`/`MsaaResolve`/`MipChain`,
+  `Bgfx_RenderTargetCube_MipChain`/`MsaaResolve`/`DepthFormat` — 6 tests, all pre-existing, none
+  introduced by this session's own work): all abort with the same class of
+  `GL_INVALID_OPERATION`/MSAA-resolve-vs-depth-attachment assertion, pointing at this project's
+  Xvfb/software-GL (Mesa llvmpipe, no DRI3) sandbox ceiling rather than a CNA defect — matches the
+  already-established precedent (Task 448/879/903's own identical-class findings). A real
+  GPU-backed environment would be needed to distinguish "still broken" from "sandbox-only."
+- **`OcclusionQuery.PixelCount()` doesn't discriminate visible from occluded geometry in this
+  sandbox** (Tasks 814/815): a dedicated scratch probe confirmed the exact same numeric value is
+  returned regardless of scene content, extending Task 448's own already-documented finding
+  (`IsComplete()`/`PixelCount()` can't distinguish a wired-up query from a never-submitted one) to
+  the actual pixel-count magnitude too — the underlying rendering/depth-occlusion behavior each
+  scenario depends on IS reliably pixel-verified instead (`Bgfx_OcclusionQuery_PixelCount`'s own 2
+  real, sabotage-verified checks). Same software-renderer ceiling as above, not a CNA defect.
+
+**Bottom line**: Bgfx's only remaining code-level gap is Task 767 (depth bias), already flagged for
+a project-owner decision; the other 2 items are sandbox/environment ceilings, already root-caused,
+that would need a real GPU-backed test environment to resolve or re-confirm — not further Bgfx
+backend code work.
+
 ## New tracked follow-up tasks opened this session
 
 - **Task 916** — `Model`'s constructor auto-defaults `Root` to `bones[0]`, no way to specify a
