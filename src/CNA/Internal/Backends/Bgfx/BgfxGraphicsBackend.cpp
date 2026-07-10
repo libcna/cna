@@ -2463,6 +2463,341 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
+    void BgfxGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb_in,
+                                                      const IIndexBufferBackend& ib_in,
+                                                      const Matrix& world, const Matrix& view,
+                                                      const Matrix& projection,
+                                                      PrimitiveType primitive, int primitiveCount,
+                                                      const GpuDrawParams& params)
+    {
+        // Task 948: indexed counterpart of DrawPrimitivesEx -- previously unimplemented, so
+        // every indexed Effect-bound draw (e.g. any Content.Load<Model>() mesh) silently fell
+        // back to the base IGraphicsBackend default (DrawIndexedColoredPrimitives), discarding
+        // GpuDrawParams entirely (diffuse color, texture, lighting, fog all lost). Mirrors
+        // DrawPrimitivesEx's own full GpuDrawParams dispatch exactly -- see that function for
+        // per-branch comments -- with an index buffer bound instead of a plain vertex draw.
+        auto& vb = static_cast<const BgfxVertexBufferBackend&>(vb_in);
+        auto& ib = static_cast<const BgfxIndexBufferBackend&>(ib_in);
+        if (!bgfx::isValid(vb.handle) || !bgfx::isValid(ib.handle)) return;
+
+        ApplyViewportOverride();
+
+        const Matrix wvp = world * view * projection;
+        float wvp_col[16];
+        wvp.ToColumnMajor(wvp_col);
+        bgfx::setUniform(wvpUniform_, wvp_col);
+        SetDepthBiasUniform();
+
+        // Task 888: fog uniforms are set unconditionally (not per-branch) since bgfx uniforms
+        // are shared by name across every program -- any program declaring u_fogColor/
+        // u_fogParams as inputs picks these up automatically; programs that don't simply ignore
+        // them, no error.
+        float fogColor4[4]  = { params.fogColor[0], params.fogColor[1], params.fogColor[2], 0.0f };
+        bgfx::setUniform(fogColorUnif_, fogColor4);
+        float fogParams4[4] = { params.fogEnabled ? 1.0f : 0.0f, params.fogStart, params.fogEnd, 0.0f };
+        bgfx::setUniform(fogParamsUnif_, fogParams4);
+
+        bgfx::setVertexBuffer(0, vb.handle);
+        // Task 766: see DrawColoredPrimitives above.
+        bgfx::TransientIndexBuffer wireTib;
+        const bool useWireframe = wireframe_
+            && ExpandWireframeIndices(&ib, primitive, primitiveCount, params.startIndex,
+                                      params.baseVertex, 0, wireTib);
+        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
+        else              bgfx::setIndexBuffer(ib.handle);
+        ApplyScissorOverride();
+        bgfx::setStencil(stencilFront_, stencilBack_);
+        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
+                       // here -- depthFlags_ (set by ApplyDepthStencilState from the real
+                       // DepthBufferWriteEnable) already carries it when writes are actually
+                       // requested; including it again here unconditionally made
+                       // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
+                                | blendFlags_ | depthFlags_ | cullFlags_)
+                               | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive));
+        bgfx::setState(state, blendFactorPacked_);
+
+        const bool alphaTestActive = (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
+        if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            if (bgfx::isValid(texColor3DSampler2_))
+            {
+                if (params.texture1)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
+                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
+                }
+                else
+                {
+                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
+                    // instead of leaving the previous draw's texture bound.
+                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
+                }
+            }
+            SubmitViewProgram(dualTexture3DProgram_);
+        }
+        else if (params.skinned && bgfx::isValid(skinned3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float amb[4]  = { params.ambientColor[0],  params.ambientColor[1],  params.ambientColor[2],  0.0f };
+            bgfx::setUniform(ambientColor3DUnif_, amb);
+            float dir[4]  = { params.light0Dir[0],     params.light0Dir[1],     params.light0Dir[2],     0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir);
+            float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff);
+            float litEn[4] = { params.lightingEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(lightingEn3DUnif_, litEn);
+            // Task 899: EmissiveColor was never forwarded to the skinned3d shader at all -- see
+            // fs_skinned3d.sc's comment for the full finding.
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
+                bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(skinned3DProgram_);
+        }
+        else if (params.envMapping && bgfx::isValid(envMap3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_,  params.diffuseColor);
+            bgfx::setUniform(world3DUnif_,          params.worldColMajor);
+            float normalMatrix[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrix);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrix);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            float dir[4]  = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir);
+            float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
+                               params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff);
+            float amount[4] = { params.envMapAmount, params.fresnelEnabled ? 1.0f : 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(envMapAmountUnif_, amount);
+            float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],
+                                   params.envMapSpecular[2], params.fresnelFactor };
+            bgfx::setUniform(envMapSpecularUnif_, specular);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            if (params.envMap && bgfx::isValid(envMapSampler_))
+            {
+                // Task 907 (closes Task 874): dynamic_cast to the common cube-samplable
+                // interface instead of an unsafe static_cast<const BgfxTextureCubeBackend&> --
+                // params.envMap may be a BgfxRenderTargetCubeBackend (a sampled RenderTargetCube),
+                // whose layout differs entirely from BgfxTextureCubeBackend's.
+                if (const auto* samplable = dynamic_cast<const IBgfxCubeSamplable*>(params.envMap))
+                    bgfx::setTexture(1, envMapSampler_, samplable->GetBgfxCubeTextureHandle());
+            }
+            SubmitViewProgram(envMap3DProgram_);
+        }
+        else if (alphaTestActive && params.vertexColorEnabled
+                 && bgfx::isValid(alphaTestColoredTextured3DProgram_))
+        {
+            // Task 887: stride-24 (VertexPositionColorTexture) variant — reads a_color0 and
+            // gates it by VertexColorEnabled, mirroring BasicEffect's coloredTextured3DProgram_.
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
+            bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(alphaTestColoredTextured3DProgram_);
+        }
+        else if (alphaTestActive && bgfx::isValid(alphaTest3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(alphaTest3DProgram_);
+        }
+        else if (params.lightingEnabled && bgfx::isValid(litTextured3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float amb[4] = { params.ambientColor[0], params.ambientColor[1],
+                             params.ambientColor[2], 0.0f };
+            bgfx::setUniform(ambientColor3DUnif_, amb);
+            float dir[4] = { params.light0Dir[0], params.light0Dir[1],
+                             params.light0Dir[2], 0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir);
+            float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
+                              params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff);
+            float litEn[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(lightingEn3DUnif_, litEn);
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1],
+                               params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1],
+                               params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            // Task 892 fix: correct inverse-transpose normal matrix, not the raw World/WVP.
+            float normalMatrixLit[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixLit);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrixLit);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            float spec0[4] = { params.light0Specular[0], params.light0Specular[1],
+                                params.light0Specular[2], 0.0f };
+            bgfx::setUniform(light0Spec3DUnif_, spec0);
+            float spec1[4] = { params.light1Specular[0], params.light1Specular[1],
+                                params.light1Specular[2], 0.0f };
+            bgfx::setUniform(light1Spec3DUnif_, spec1);
+            float spec2[4] = { params.light2Specular[0], params.light2Specular[1],
+                                params.light2Specular[2], 0.0f };
+            bgfx::setUniform(light2Spec3DUnif_, spec2);
+            float specColorPower[4] = { params.specularColor[0], params.specularColor[1],
+                                         params.specularColor[2], params.specularPower };
+            bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
+
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(litTextured3DProgram_);
+        }
+        else if (params.textureEnabled && params.vertexColorEnabled
+                 && bgfx::isValid(coloredTextured3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(coloredTextured3DProgram_);
+        }
+        else if (params.textureEnabled && bgfx::isValid(textured3DProgram_))
+        {
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            SubmitViewProgram(textured3DProgram_);
+        }
+        else
+        {
+            if (!bgfx::isValid(colored3DProgram_)) return;
+            // BasicEffect no-texture path (Task 364): honor DiffuseColor and gate the
+            // per-vertex color multiply on VertexColorEnabled, matching FNA's
+            // ComputeCommonVSOutput()/`vout.Diffuse *= vin.Color` semantics.
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vce[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vce);
+            SubmitViewProgram(colored3DProgram_);
+        }
+    }
+
     void BgfxGraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb_in,
                                                          const IIndexBufferBackend& ib_in,
                                                          const Matrix& /*world*/,

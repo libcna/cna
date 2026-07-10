@@ -143,13 +143,15 @@ contention false failures):
 
 - **EasyGL**: 3 — `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`,
   `easy-gl-resource-smoke-tests`. Reconfirmed as recently as Task 449's own regression (4510/4513).
-- **Bgfx**: **updated 2026-07-10** — 7, not the stale "1" this line previously said: 6
-  `RenderTarget2D`/`RenderTargetCube` `glReadPixels`/Xvfb-no-DRI3 sandbox crashes (`DepthBuffer`,
-  `MsaaResolve`, `MipChain` ×2 for `RenderTarget2D` and `RenderTargetCube`, plus
+- **Bgfx**: **updated 2026-07-10 (Task 948 fixed)** — back down to 6 (was briefly 7 while Task 948
+  was still open): 6 `RenderTarget2D`/`RenderTargetCube` `glReadPixels`/Xvfb-no-DRI3 sandbox crashes
+  (`DepthBuffer`, `MsaaResolve`, `MipChain` ×2 for `RenderTarget2D` and `RenderTargetCube`, plus
   `RenderTargetCube_DepthFormat` — see the "Remaining genuine Bgfx limitations" section above) —
-  environment limitations, not code bugs — plus 1 **real CNA bug**, `Bgfx_ModelJsonReader_Quad`
-  (Task 927/948: `DrawIndexedPrimitivesEx` never overridden on Bgfx, see above), not yet fixed.
-  Reconfirmed via this session's own full regression (4463 tests).
+  environment limitations, not code bugs. `Bgfx_ModelJsonReader_Quad` (Task 927/948:
+  `DrawIndexedPrimitivesEx` was never overridden on Bgfx) is now fixed and passes 2/2 — a real
+  `BgfxGraphicsBackend::DrawIndexedPrimitivesEx` override was added, mirroring `DrawPrimitivesEx`'s
+  own full `GpuDrawParams` dispatch. Reconfirmed via `ctest -R "^Bgfx_"` (98 cases, 92/98 passed —
+  exactly these 6) plus `CnaTests` (4361/4363, 2 pre-existing hardware skips, 0 failures, run twice).
 - **Vulkan**: last full run (Task 911) was 4369/4378 — **9** known pre-existing (5× `BlendState`/
   Task 868, 1 `RasterizerState.DepthBias` sub-case, 3 non-deterministic
   `ContentManagerSkinnedModelTest.*` segfaults under this sandbox's Vulkan/Xvfb/llvmpipe combination
@@ -255,17 +257,17 @@ root-caused rather than merely observed:
   scenario depends on IS reliably pixel-verified instead (`Bgfx_OcclusionQuery_PixelCount`'s own 2
   real, sabotage-verified checks). Same software-renderer ceiling as above, not a CNA defect.
 
-**New, 2026-07-10 (Task 927/948): `BgfxGraphicsBackend` never overrides `DrawIndexedPrimitivesEx`**
-— a **real CNA gap**, not an environment limitation, first flagged as an "adjacent, out-of-scope
-discovery" by Task 766 and now concretely reproduced by `Bgfx_ModelJsonReader_Quad` (added to this
-doc's own known-failure baseline, see the "Confirmed most recently..." Bgfx line above): any
-indexed, `Effect`-bound draw with a vertex format lacking a
+**FIXED, 2026-07-10 (Task 927/948): `BgfxGraphicsBackend` never overrode `DrawIndexedPrimitivesEx`**
+— was a **real CNA gap**, not an environment limitation, first flagged as an "adjacent, out-of-scope
+discovery" by Task 766 and concretely reproduced by `Bgfx_ModelJsonReader_Quad` (previously a
+documented 1/2 known failure). Any indexed, `Effect`-bound draw with a vertex format lacking a
 `Color` attribute (`VertexPositionNormalTexture`/`VertexPositionTexture` — i.e. any
-`Content.Load<Model>()`-loaded mesh) silently falls back to the base `IGraphicsBackend`'s default
-`DrawIndexedPrimitivesEx`, which discards `GpuDrawParams` entirely and renders via the `colored3D`
+`Content.Load<Model>()`-loaded mesh) silently fell back to the base `IGraphicsBackend`'s default
+`DrawIndexedPrimitivesEx`, which discarded `GpuDrawParams` entirely and rendered via the `colored3D`
 pipeline instead — reading an unbound `a_color0` attribute (GL default `(0,0,0,1)`), so the mesh
-renders solid black regardless of its real `DiffuseColor`/texture/lighting. Tracked as Task 948,
-not yet fixed.
+rendered solid black regardless of its real `DiffuseColor`/texture/lighting. Fixed by adding a real
+`BgfxGraphicsBackend::DrawIndexedPrimitivesEx` override mirroring `DrawPrimitivesEx`'s own full
+`GpuDrawParams` dispatch; `Bgfx_ModelJsonReader_Quad` now passes 2/2.
 
 **Bottom line**: Bgfx's only remaining code-level gap is Task 767 (depth bias), already flagged for
 a project-owner decision; the other 2 items are sandbox/environment ceilings, already root-caused,
