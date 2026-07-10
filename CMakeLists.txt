@@ -5212,6 +5212,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 807 (Phase 72 Bgfx gap closure): SpriteEffects::FlipHorizontally/FlipVertically on
+    # Bgfx (mirrors Task 167) -- a Bgfx-specific adaptation of the EasyGL source (that file reads
+    # back 8 points from 4 draws in one rendered frame, incompatible with Bgfx's
+    # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_sprite_effects
+                  examples/bgfx_sprite_effects_test.cpp)
+    add_test(NAME Bgfx_SpriteEffects_Flip
+             COMMAND cna_test_bgfx_sprite_effects)
+    set_tests_properties(Bgfx_SpriteEffects_Flip PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
