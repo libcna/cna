@@ -797,21 +797,23 @@ header. No task content changed, only the file location and numbering.
 > uniform this touches); also found and fixed a matrix-multiplication-order bug while implementing
 > this (bx's own vector convention is row-vector, `v' = v * M`, opposite of the first attempt's
 > argument order). **This closes the entire Phase 72 `SpriteBatch` row group (803-808, all 6/6
-> done).** Task 809 (`SpriteFont` single-glyph placement, first of the `SpriteFont` row group) and
-> Task 810 (multi-glyph spacing + newline advance) also found no bug, confirming glyph placement,
-> inter-glyph spacing, and newline advance all correctly reach Bgfx's now-fixed sprite draw path.
-> 15 REAL GAPS remain (of the original 38; 23 have now been closed or flagged this session —
-> 752-755, 758-768, 803-810), 1 of which (Task 767) is flagged `NEEDS_HUMAN` rather than a plain
-> untouched row.
+> done).** Tasks 809-811 (`SpriteFont` single-glyph placement, multi-glyph spacing + newline
+> advance, and default-character fallback) all found no bug, confirming glyph placement, spacing,
+> newline advance, and unresolvable-character fallback all correctly reach Bgfx's now-fixed sprite
+> draw path — **this closes the entire Phase 72 `SpriteFont` row group too (809-811, all 3/3
+> done).** 14 REAL GAPS remain (of the original 38; 24 have now been closed or flagged this
+> session — 752-755, 758-768, 803-811), 1 of which (Task 767) is flagged `NEEDS_HUMAN` rather than
+> a plain untouched row.
 > 13 are UNCERTAIN (no test found either way, needs closer individual investigation before
 > concluding). **Bgfx is dramatically less pixel-test-covered than Vulkan for the same
 > categories**: `DepthStencilState` (0/7 rows remaining, all 7 closed this session), `RasterizerState`
 > (1/4 remaining — only Task 767, NEEDS_HUMAN — 4 closed/flagged this session), `BlendState` presets
 > (0/5 remaining — 4 closed this session, the 5th being a custom/general-purpose row not part of
 > this preset group), `SpriteBatch` behavior (0/6 remaining, all 6 closed this session — 2 real
-> bugs found and fixed, Tasks 803/808). `SpriteFont`
-> (3/3) and `Model` (2/2) still have ZERO Bgfx-specific tests at
-> all, while Vulkan is mostly done in these same categories. This is
+> bugs found and fixed, Tasks 803/808), `SpriteFont` (0/3 remaining, all 3 closed this session, no
+> bugs found — glyph placement/spacing/newline/fallback all correctly reach the sprite draw path).
+> `Model` (2/2) still has ZERO Bgfx-specific tests at all, while Vulkan is mostly done in these same
+> categories. This is
 > the single largest real remaining gap in this project's pixel-verification
 > coverage — a genuine, substantial undertaking if picked up, not a quick pass.
 
@@ -955,7 +957,7 @@ header. No task content changed, only the file location and numbering.
 | --- | ---- | ------ | ----- |
 | 809 | Pixel test: single glyph at known position on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed.** New `Bgfx_SpriteFont_SingleGlyph` test — a Bgfx-specific adaptation of `examples/easygl_spritefont_single_glyph_test.cpp` (Task 424, already reused verbatim on Vulkan): that file reads back 5 spatially-separate regions from one rendered frame, incompatible with Bgfx's `GetBackBufferData` "first read per frame" quirk (Task 406); restructured into one separately-read `RunCheck()` pass per region, mirroring Tasks 759-808's established Bgfx pattern. All 5/5 pass on the first attempt: a hand-built single-glyph font (8x8 solid-white 'A', zero cropping/kerning) drawn via `SpriteBatch::DrawString` lands at exactly the expected screen rect, confirming `SpriteFont`'s glyph positioning correctly reaches Bgfx's now-fixed sprite draw path (Tasks 803/808). **Discriminating power verified via sabotage-and-revert**: temporarily added a +5px X offset to the shared `SpriteBatch::DrawString`'s final glyph destination-rect computation (`src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp`) — exactly the 2 X-affected checks (interior, right-edge) failed as predicted, the 3 X-unaffected checks (left-edge, top-edge, bottom-edge) correctly still passed, reverted and reconfirmed 5/5. Full Bgfx regression: `ctest` 4442/4443 passed, 1 pre-existing (`Bgfx_RenderTarget2D_MsaaResolve`/DRI3 limitation), zero new. |
 | 810 | Pixel test: multiple glyphs with spacing + newline on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed.** New `Bgfx_SpriteFont_MultiGlyphSpacingNewline` test — a Bgfx-specific adaptation combining `examples/easygl_spritefont_multiglyph_spacing_test.cpp` (Task 425) and `examples/easygl_spritefont_newline_test.cpp` (Task 426), both already reused verbatim on Vulkan, into ONE test exercising both concepts at once (matching this row's own combined scope): those files each read back several spatially-separate regions from one rendered frame, incompatible with Bgfx's `GetBackBufferData` "first read per frame" quirk (Task 406); restructured into one separately-read `RunCheck()` pass per region, mirroring Tasks 759-809's established Bgfx pattern. Two-glyph font ('A' White, 'B' Green, `spacing=4`, `lineSpacing=10` — deliberately different from the glyph's own 8px height so a "line-advances-by-glyph-height" bug would be caught), drawing `"AB\nAB"`: all 8/8 checks pass, confirming both the inter-glyph `spacing_` constant and the `lineSpacing_`-driven newline advance are correctly applied by the shared `SpriteBatch::DrawString`, reaching Bgfx's now-fixed sprite draw path (Tasks 803/808) correctly. **Discriminating power verified via sabotage-and-revert**: temporarily hardcoded the newline branch's line advance to the glyph's own height (8) instead of `spriteFont.lineSpacing_` (10) — exactly the inter-line-gap check failed as predicted (line 2 started 2px too early, covering the gap point), the other 7 checks (unaffected by line advance) correctly still passed, reverted and reconfirmed 8/8. Full Bgfx regression: `ctest` 4442/4444 passed, 2 pre-existing unrelated Audio test flakes (`AudioCategoryTest.StopOnParentCategoryStopsCueInChildCategory`, `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances`, both reconfirmed passing in isolation) plus the pre-existing `Bgfx_RenderTarget2D_MsaaResolve`/DRI3 limitation, zero new. |
-| 811 | Pixel test: default character fallback on Bgfx | ⬜ | |
+| 811 | Pixel test: default character fallback on Bgfx | ✅ | **CLOSED — no bug found, real coverage gap closed; closes the entire Phase 72 `SpriteFont` row group (809-811, all 3/3 done).** New `Bgfx_SpriteFont_DefaultCharacterFallback` test — a Bgfx-specific adaptation of `examples/easygl_spritefont_default_char_test.cpp` (Task 427, already reused verbatim on Vulkan): that file reads back 3 spatially-separate regions from one rendered frame, incompatible with Bgfx's `GetBackBufferData` "first read per frame" quirk (Task 406); restructured into one separately-read `RunCheck()` pass per region, mirroring Tasks 759-810's established Bgfx pattern (the no-throw check needed no such restructuring, since it isn't a pixel read). Drawing `"Z"` — a character that exists neither as a real glyph in the font's alphabet ('A') nor as the designated `defaultCharacter` ('?') itself — confirms `SpriteBatch::DrawString`'s unresolvable-character fallback correctly renders `?`'s glyph (Red) rather than throwing or silently rendering `A`'s glyph (White) or nothing. All 4/4 pass. **Discriminating power verified via sabotage-and-revert** (2 attempts, documenting both for transparency): the first sabotage (fallback resolves to `characterIndexMap_.begin()` instead of the real default character) coincidentally produced the SAME correct result, since this font's 2-character map happens to order `'?'` (0x3F) before `'A'` (0x41) — a genuine near-miss, not a flaw in the underlying fix; the second, more targeted sabotage (hardcoding the fallback to explicitly resolve `'A'` instead of `spriteFont.defaultCharacter_`) caught it correctly: the fallback-glyph-color check failed exactly as predicted (White instead of Red), the 2 background checks (unaffected by which character resolves) correctly still passed. Reverted and reconfirmed 4/4. Full Bgfx regression: `ctest` 4444/4445 passed, 1 pre-existing (`Bgfx_RenderTarget2D_MsaaResolve`/DRI3 limitation), zero new. |
 
 ### Model
 
