@@ -257,6 +257,15 @@ namespace CNA::Internal::Backends
         virtual void SetUniformVec4(const char* name, float x, float y, float z, float w) {}
         /// Sets a column-major 4×4 matrix uniform by name.
         virtual void SetUniformMat4(const char* name, const float* matrix) {}
+        /// Sets a float array uniform by name. `count` is the number of scalar elements.
+        virtual void SetUniformFloatArray(const char* name, const float* values, int count) {}
+        /// Sets a vec2 array uniform by name. `count` is the number of vec2 elements
+        /// (`values` holds `count * 2` floats).
+        virtual void SetUniformVec2Array(const char* name, const float* values, int count) {}
+        /// Binds a texture to the given sampler unit (0-based) for subsequent draw calls.
+        /// Unit 0 is normally driven by the caller (e.g. SpriteBatch); this is for additional
+        /// units a custom shader samples directly (e.g. a second blend-source texture).
+        virtual void BindTexture(int unit, ITextureBackend* texture) {}
     };
 
     class ISpriteBatchBackend

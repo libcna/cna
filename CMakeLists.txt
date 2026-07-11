@@ -1604,6 +1604,42 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 946: BloomExtract.fx HLSL->GLSL conversion proof + .shader.json ContentManager round-trip
+        cna_easygl_test(cna_test_easygl_bloom_extract
+                        examples/easygl_bloom_extract_test.cpp)
+        add_test(NAME EasyGL_Bloom_Extract
+                 COMMAND cna_test_easygl_bloom_extract)
+        set_tests_properties(EasyGL_Bloom_Extract PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 946: GaussianBlur.fx HLSL->GLSL conversion proof (array uniforms)
+        cna_easygl_test(cna_test_easygl_bloom_gaussianblur
+                        examples/easygl_bloom_gaussianblur_test.cpp)
+        add_test(NAME EasyGL_Bloom_GaussianBlur
+                 COMMAND cna_test_easygl_bloom_gaussianblur)
+        set_tests_properties(EasyGL_Bloom_GaussianBlur PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 946: BloomCombine.fx HLSL->GLSL conversion proof (2nd texture unit)
+        cna_easygl_test(cna_test_easygl_bloom_combine
+                        examples/easygl_bloom_combine_test.cpp)
+        add_test(NAME EasyGL_Bloom_Combine
+                 COMMAND cna_test_easygl_bloom_combine)
+        set_tests_properties(EasyGL_Bloom_Combine PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 946: full 4-pass BloomSample pipeline end-to-end proof (extract->blurH->blurV->combine)
+        cna_easygl_test(cna_test_easygl_bloom_pipeline
+                        examples/easygl_bloom_pipeline_test.cpp)
+        add_test(NAME EasyGL_Bloom_Pipeline
+                 COMMAND cna_test_easygl_bloom_pipeline)
+        set_tests_properties(EasyGL_Bloom_Pipeline PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)

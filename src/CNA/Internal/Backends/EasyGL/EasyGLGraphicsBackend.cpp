@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include <iostream>
+#include <span>
 
 #include "CNA/Platform.hpp"
 
@@ -322,6 +323,28 @@ namespace CNA::Internal::Backends::EasyGL
     {
         const int loc = program_.uniform_location(name);
         if (loc >= 0) program_.set_uniform_matrix4(loc, matrix);
+    }
+
+    void EasyGLEffectBackend::SetUniformFloatArray(const char* name, const float* values, int count)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count)), 1);
+    }
+
+    void EasyGLEffectBackend::SetUniformVec2Array(const char* name, const float* values, int count)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 2), 2);
+    }
+
+    void EasyGLEffectBackend::BindTexture(int unit, ITextureBackend* texture)
+    {
+        if (!texture) return;
+        const auto textureUnit = static_cast<::metagl::TextureUnit>(
+            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
+        ::metagl::glActiveTexture(textureUnit);
+        texture->BindGL();
+        ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
     }
 
     // --- EasyGLOcclusionQueryBackend ---
@@ -1047,7 +1070,19 @@ void main()
         prog->use();
 
         int logW = 0, logH = 0;
-        if (graphicsBackend_)
+        int rtW = 0, rtH = 0;
+        // Task 1078: a custom-effect draw into a bound RenderTarget2D must size its viewport
+        // and orthographic projection to that RT, not the window -- getPhysicalSize()/
+        // getLogicalSize() are always window-sized, which only happened to work in every prior
+        // test because those tests' RTs all coincidentally matched the window size.
+        if (graphicsBackend_ && graphicsBackend_->GetCurrentRenderTarget2DSize(rtW, rtH)
+            && rtW > 0 && rtH > 0)
+        {
+            device_.set_viewport(0, 0, rtW, rtH);
+            logW = rtW;
+            logH = rtH;
+        }
+        else if (graphicsBackend_)
         {
             int physW = 0, physH = 0;
             graphicsBackend_->getPhysicalSize(physW, physH);
@@ -1522,6 +1557,14 @@ void main()
     void EasyGLGraphicsBackend::getPhysicalSize(int& width, int& height) const
     {
         SDL_GetWindowSize(window, &width, &height);
+    }
+
+    bool EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize(int& width, int& height) const
+    {
+        if (!currentRt2D_) return false;
+        width  = currentRt2D_->GetWidth();
+        height = currentRt2D_->GetHeight();
+        return true;
     }
 
     bool EasyGLGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,

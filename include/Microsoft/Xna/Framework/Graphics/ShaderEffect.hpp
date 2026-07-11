@@ -11,6 +11,8 @@ namespace CNA::Internal::Backends { class IEffectBackend; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    class Texture2D;
+
     /**
      * @brief GLSL-source-based effect loaded from vertex and fragment shader strings.
      *
@@ -48,6 +50,25 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA void SetUniformFloat(const char* name, float value);
         /** @brief Sets a scalar int uniform by name. */
         NOXNA void SetUniformInt(const char* name, int value);
+        /** @brief Sets a float array uniform by name. `count` is the number of scalar elements. */
+        NOXNA void SetUniformFloatArray(const char* name, const float* values, int count);
+        /**
+         * @brief Sets a vec2 array uniform by name.
+         *
+         * @param count Number of vec2 elements (`values` holds `count * 2` floats).
+         */
+        NOXNA void SetUniformVec2Array(const char* name, const float* values, int count);
+        /**
+         * @brief Binds a texture to an additional sampler unit for this effect's shader.
+         *
+         * Unit 0 is normally driven by the caller (e.g. SpriteBatch's own texture parameter);
+         * use this for extra units a custom shader samples directly (e.g. a second
+         * blend-source texture, matching real XNA's `GraphicsDevice.Textures[unit] = tex`).
+         *
+         * @param unit    0-based sampler unit.
+         * @param texture Texture to bind.
+         */
+        NOXNA void SetTexture(int unit, Texture2D& texture);
 
         /**
          * @brief Gets the GLSL vertex shader source string.

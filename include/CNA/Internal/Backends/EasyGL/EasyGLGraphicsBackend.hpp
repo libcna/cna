@@ -181,6 +181,9 @@ namespace CNA::Internal::Backends::EasyGL
         void SetUniformVec3(const char* name, float x, float y, float z) override;
         void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
         void SetUniformMat4(const char* name, const float* matrix) override;
+        void SetUniformFloatArray(const char* name, const float* values, int count) override;
+        void SetUniformVec2Array(const char* name, const float* values, int count) override;
+        void BindTexture(int unit, ITextureBackend* texture) override;
 
         /// Returns the underlying compiled program, so a backend (e.g. SpriteBatch) can bind
         /// the SAME program this ShaderEffect's SetUniformXxx() calls actually write to.
@@ -490,6 +493,10 @@ namespace CNA::Internal::Backends::EasyGL
         void GetViewportSize(int& width, int& height) override;
         void getLogicalSize(int& width, int& height) const;
         void getPhysicalSize(int& width, int& height) const;
+        /// Returns the currently-bound single 2D render target's size, if one is bound (Task
+        /// 1078). Used by EasyGLSpriteBatchBackend so a custom-effect draw into a RenderTarget2D
+        /// smaller/larger than the window sizes its viewport/projection to the RT, not the window.
+        [[nodiscard]] bool GetCurrentRenderTarget2DSize(int& width, int& height) const;
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logX, float& logY) const override;
         bool TransformLogicalToWindow(float logX, float logY,
