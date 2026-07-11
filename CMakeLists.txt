@@ -2899,6 +2899,30 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # XNA culling-compatibility audit (docs/xna_culling_compatibility_audit.md): extends the
+        # identity-only CullMode test above with a real Matrix::CreateLookAt camera and
+        # perspective/orthographic projection -- verbatim reuse of the shared backend-agnostic
+        # source, registered on all 3 backends.
+        cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode_camera
+                        examples/rasterizerstate_cullmode_camera_test.cpp)
+        add_test(NAME EasyGL_RasterizerState_CullMode_Camera
+                 COMMAND cna_test_easygl_rasterizerstate_cullmode_camera)
+        set_tests_properties(EasyGL_RasterizerState_CullMode_Camera PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # XNA culling-compatibility audit: same real-camera reproducer, but through
+        # GraphicsDevice::DrawIndexedPrimitives with a real VertexBuffer/IndexBuffer/BasicEffect
+        # -- the exact code path Model/ModelMesh::Draw() uses -- instead of DrawUserPrimitives'
+        # separate DrawColoredPrimitives dispatch. Verbatim reuse of the shared source.
+        cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode_indexed_basiceffect
+                        examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp)
+        add_test(NAME EasyGL_RasterizerState_CullMode_IndexedBasicEffect
+                 COMMAND cna_test_easygl_rasterizerstate_cullmode_indexed_basiceffect)
+        set_tests_properties(EasyGL_RasterizerState_CullMode_IndexedBasicEffect PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 326: FillMode::Solid baseline on EasyGL (reuses Task 327's backend-agnostic Vulkan
         # source — its Solid sub-tests 1/3 previously only ran on Vulkan).
         cna_easygl_test(cna_test_easygl_fill_mode
@@ -3305,6 +3329,24 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_RasterizerState_CullMode
                  COMMAND cna_test_vulkan_rasterizerstate_cullmode)
         set_tests_properties(Vulkan_RasterizerState_CullMode PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # XNA culling-compatibility audit: real-camera CullMode reproducer, verbatim reuse of the
+        # shared backend-agnostic source.
+        cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode_camera
+                        examples/rasterizerstate_cullmode_camera_test.cpp)
+        add_test(NAME Vulkan_RasterizerState_CullMode_Camera
+                 COMMAND cna_test_vulkan_rasterizerstate_cullmode_camera)
+        set_tests_properties(Vulkan_RasterizerState_CullMode_Camera PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode_indexed_basiceffect
+                        examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp)
+        add_test(NAME Vulkan_RasterizerState_CullMode_IndexedBasicEffect
+                 COMMAND cna_test_vulkan_rasterizerstate_cullmode_indexed_basiceffect)
+        set_tests_properties(Vulkan_RasterizerState_CullMode_IndexedBasicEffect PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -5732,6 +5774,26 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_RasterizerState_CullMode
              COMMAND cna_test_bgfx_rasterizerstate_cullmode)
     set_tests_properties(Bgfx_RasterizerState_CullMode PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # XNA culling-compatibility audit: real-camera CullMode reproducer, verbatim reuse of the
+    # shared backend-agnostic source (first tried on Bgfx as-is; see the audit doc for whether
+    # Bgfx's own multiple-reads-per-frame GetBackBufferData limitation, Task 406, required a
+    # restructure here).
+    cna_bgfx_test(cna_test_bgfx_rasterizerstate_cullmode_camera
+                  examples/rasterizerstate_cullmode_camera_test.cpp)
+    add_test(NAME Bgfx_RasterizerState_CullMode_Camera
+             COMMAND cna_test_bgfx_rasterizerstate_cullmode_camera)
+    set_tests_properties(Bgfx_RasterizerState_CullMode_Camera PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_bgfx_test(cna_test_bgfx_rasterizerstate_cullmode_indexed_basiceffect
+                  examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp)
+    add_test(NAME Bgfx_RasterizerState_CullMode_IndexedBasicEffect
+             COMMAND cna_test_bgfx_rasterizerstate_cullmode_indexed_basiceffect)
+    set_tests_properties(Bgfx_RasterizerState_CullMode_IndexedBasicEffect PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
