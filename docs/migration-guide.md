@@ -101,10 +101,14 @@ briefly so old bookmarks/searches still find them, not because they're still ris
 
 Real, currently-open caveats worth knowing about instead:
 
-- **EasyGL: a `SpriteBatch.Begin()`/`End()` pair leaks its blend state into subsequent 3D draws**
-  (Task 956) — `Begin()` enables blending unconditionally and `End()` never restores whatever blend
-  state was active before. If you draw 2D UI/HUD via `SpriteBatch` and then issue 3D draws in the
-  same frame on EasyGL, explicitly reset `BlendState` yourself afterward.
+- ~~EasyGL: a `SpriteBatch.Begin()`/`End()` pair leaks its blend state into subsequent 3D draws~~ —
+  **fixed, Task 956** (2026-07-11). `SpriteBatch::Begin()` on EasyGL used to hardcode its own blend
+  factors regardless of what `BlendState` was requested, and leave that leftover state in effect
+  after `End()`. Now, whatever `BlendState` you pass to `SpriteBatch.Begin()` (or the default
+  `AlphaBlend`) genuinely persists on `GraphicsDevice.BlendState` afterward, matching real FNA — if
+  you draw 3D geometry after a `SpriteBatch` pass without resetting `BlendState` yourself, you get
+  real FNA's own well-known behavior (it inherits the SpriteBatch's blend mode), not leftover
+  garbage state.
 - **EasyGL: a full-backbuffer `SpriteBatch` draw before any 3D draw in the same frame breaks that
   frame's 3D rendering** (Task 933) — investigated, root cause not yet isolated.
 - **Vulkan `RasterizerState.DepthBias` has no effect** — one isolated, unresolved case.

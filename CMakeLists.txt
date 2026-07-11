@@ -3021,6 +3021,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 956: SpriteBatch's blend state must not leak a hardcoded value into a following 3D draw.
+        cna_easygl_test(cna_test_easygl_spritebatch_blendstate_leak
+                        examples/easygl_spritebatch_blendstate_leak_test.cpp)
+        add_test(NAME EasyGL_SpriteBatch_BlendStateLeak
+                 COMMAND cna_test_easygl_spritebatch_blendstate_leak)
+        set_tests_properties(EasyGL_SpriteBatch_BlendStateLeak PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
 
     # Vulkan integration tests

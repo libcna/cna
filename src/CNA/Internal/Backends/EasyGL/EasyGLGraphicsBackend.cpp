@@ -981,9 +981,19 @@ void main()
 
     void EasyGLSpriteBatchBackend::Begin()
     {
+        // Task 956 fix: this previously hardcoded set_blend_enabled(true) +
+        // SrcAlpha/OneMinusSrcAlpha unconditionally, clobbering whatever
+        // EasyGLGraphicsBackend::ApplyBlendState had just set via
+        // GraphicsDevice::setBlendStateProperty(blendState) -- called by SpriteBatch::Begin()
+        // immediately before backend_->Begin() runs (see SpriteBatch.cpp). This both silently
+        // ignored any non-AlphaBlend BlendState passed to SpriteBatch::Begin() (e.g. Opaque or
+        // NonPremultiplied always rendered as if AlphaBlend-with-straight-alpha-factors had been
+        // requested) and left the real GL blend state permanently stuck at that hardcoded value
+        // after End() -- any 3D draw issued afterward without the game explicitly reassigning
+        // BlendState inherited SpriteBatch's leftover raw GL state instead of whatever
+        // GraphicsDevice.BlendState still claimed was active. Matches the same bug shape SDL_Renderer
+        // already fixed (Task 695) -- see docs/sdl-renderer-2d-completeness.md.
         begun = true;
-        device_.set_blend_enabled(true);
-        device_.set_blend_func(::easygl::BlendFactor::SrcAlpha, ::easygl::BlendFactor::OneMinusSrcAlpha);
     }
 
     void EasyGLSpriteBatchBackend::SetTransformMatrix(const Matrix& m)

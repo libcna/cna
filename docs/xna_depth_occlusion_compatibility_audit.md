@@ -207,18 +207,21 @@ instead of (0,255,0); Check B: PASS, as expected) on EasyGL. Restored and reconf
 ## 8. Related, NOT fixed here -- a second, separate state-leak gap found while investigating
 
 While confirming `DrawHelpOverlay()`'s `SpriteBatch` couldn't be the cause of the reported bug
-(it early-returns and was never invoked in either the static-pose or animated repro), a **real,
-separate, still-open** bug was found: `EasyGLSpriteBatchBackend::Begin()` unconditionally enables
-blending (`set_blend_enabled(true)` + `SrcAlpha`/`OneMinusSrcAlpha`), but `End()`/`FlushBatch()`
-never restores the prior blend state. Any 3D draw issued after a `SpriteBatch.Begin()`/`End()`
-pair in the same or a later frame -- without that game explicitly resetting `BlendState` itself --
-inherits `SpriteBatch`'s own blend state instead of whatever was active before. Confirmed via
-direct source read (`EasyGLGraphicsBackend.cpp`), not observed in SimpleAnimation itself (its
-`DrawHelpOverlay()` never actually runs in the automated repro), but a real, XNA-incompatible gap
-in the same "state doesn't reset the way a game implicitly expects" family as this document's own
-fix. **Deliberately not fixed here** -- out of this task's own scope (a `SpriteBatch`-to-3D state
-transition issue, not a `GraphicsDevice`-construction-default issue) and not implicated in the
-reported bug. Tracked as a new follow-up (Task 956, not started).
+(it early-returns and was never invoked in either the static-pose or animated repro), a real,
+separate bug was found: `EasyGLSpriteBatchBackend::Begin()` unconditionally enabled blending
+(`set_blend_enabled(true)` + `SrcAlpha`/`OneMinusSrcAlpha`), but `End()`/`FlushBatch()` never
+restored the prior blend state. Any 3D draw issued after a `SpriteBatch.Begin()`/`End()` pair in
+the same or a later frame -- without that game explicitly resetting `BlendState` itself -- inherited
+`SpriteBatch`'s own hardcoded blend state instead of whatever `GraphicsDevice.BlendState` actually
+claimed was active. Confirmed via direct source read (`EasyGLGraphicsBackend.cpp`), not observed
+in SimpleAnimation itself (its `DrawHelpOverlay()` never actually runs in the automated repro), but
+a real, XNA-incompatible gap in the same "state doesn't reset the way a game implicitly expects"
+family as this document's own fix. **Deliberately not fixed here** -- out of this task's own scope
+(a `SpriteBatch`-to-3D state transition issue, not a `GraphicsDevice`-construction-default issue)
+and not implicated in the reported bug. Tracked as a new follow-up, **Task 956 — fixed 2026-07-11**
+by removing the hardcoded blend call entirely (`SpriteBatch::Begin()` already applies the real
+requested `BlendState` correctly before the backend's own `Begin()` runs); see `NEXT.md` §3 for
+the full write-up and the new `EasyGL_SpriteBatch_BlendStateLeak` regression test.
 
 ---
 
