@@ -1,5 +1,14 @@
 # SamplerState / Texture Sampling Support Matrix
 
+> **Status update, 2026-07-11:** two gaps this document treats as open below are now fixed. **Task
+> 867** (`Texture2D::SetData(level>0)` silent no-op on Vulkan/Bgfx, §6) was split into Tasks
+> 924 (EasyGL)/925 (Vulkan)/926 (Bgfx) and all three are closed (2026-07-09) — mip-level `SetData`
+> is now real GPU upload on all 3 hardware backends. **Task 918** (EasyGL `TextureFilter::Anisotropic`
+> falling back to trilinear, §7) is also fixed (2026-07-09) — EasyGL now issues a real
+> `GL_EXT_texture_filter_anisotropic` call. The ❌ markers for these in §6/§7 and the summary table
+> below are historical. See `docs/xna-4-api-coverage.md`'s per-class table or `NEXT.md` §5 for
+> current status.
+
 Phase 35 (`plan_graphics.md` Tasks 291–300) audited and pixel-verified `SamplerState` and texture
 sampling conformance against FNA across all three graphics backends (EasyGL, Vulkan, Bgfx). This
 document summarizes the findings.
@@ -126,6 +135,9 @@ too. Task 867's tracked scope covers both.
 
 ## Summary: what actually works today, per backend
 
+**Updated 2026-07-11** — Vulkan/Bgfx mip `SetData` and EasyGL anisotropic filtering rows reflect
+Tasks 924/925/926 and 918 (see the status banner at the top of this document).
+
 | Feature | EasyGL | Vulkan | Bgfx |
 |---|---|---|---|
 | `SamplerState` API/presets/`Name` | ✅ | ✅ | ✅ |
@@ -133,9 +145,10 @@ too. Task 867's tracked scope covers both.
 | Per-slot sampler actually applied on 3D stock-effect draws | ✅ (fixed) | ✅ (fixed) | ✅ (fixed) |
 | `TextureAddressMode::Clamp`/`Wrap`/`Mirror` | ✅ | ✅ | 🔍 not pixel-verified (no readback API) |
 | `TextureFilter::Point` vs `Linear` | ✅ | ✅ | 🔍 not pixel-verified |
-| Mip-aware filters (`LinearMipPoint` etc.) select the correct mip | ✅ (mipmapped textures only) | ❌ (Task 867: `SetData(level>0)` no-op) | ❌ (Task 867: same) |
-| `Point`/`Linear`/`Mip*` filters on a **non-mipmapped** texture | ⚠️ `Mip*`/`Anisotropic` render black (Task 867); `Point`/`Linear` correctly avoid this | ✅ no incompleteness issue | 🔍 unconfirmed |
-| `TextureFilter::Anisotropic` — level respected | ❌ no support at all | ✅ correct, capped to device limit | ⚠️ enabled but level ignored |
+| Mip-level `SetData(level>0)` uploads real GPU data | ✅ (fixed, Task 924) | ✅ (fixed, Task 925) | ✅ (fixed, Task 926) |
+| Mip-aware filters (`LinearMipPoint` etc.) select the correct mip | ✅ (mipmapped textures only) | ✅ (Task 925 fixed the underlying mip upload) | ✅ (Task 926) |
+| `Point`/`Linear`/`Mip*` filters on a **non-mipmapped** texture | ✅ (fixed, Task 924 — `GL_TEXTURE_MAX_LEVEL` now clamped to the real level count, so a single-level texture no longer reads as GL-incomplete under a mip-aware filter) | ✅ no incompleteness issue | 🔍 unconfirmed |
+| `TextureFilter::Anisotropic` — level respected | ✅ (fixed, Task 918 — real `GL_EXT_texture_filter_anisotropic`, clamped to driver cap) | ✅ correct, capped to device limit | ⚠️ enabled but level ignored |
 | Extreme/over-cap `MaxAnisotropy` doesn't crash | ✅ | ✅ | 🔍 not tested (no crash observed elsewhere) |
 
 Legend: ✅ verified working · ❌ confirmed broken/absent · ⚠️ partial/inconsistent ·
@@ -146,9 +159,12 @@ sampler-related coverage is smoke-test/no-regression only by design).
 
 - **Task 866** — `BlendState`/`DepthStencilState`/`RasterizerState` static presets don't set
   `Name` (same gap `SamplerState` had before Task 291).
-- **Task 867** — `Texture2D::SetData(level>0,...)` silent no-op on Vulkan/Bgfx, plus Vulkan's
-  `mipLevels`/`levelCount`/`minLod`/`maxLod` hardcoding, plus EasyGL's `GL_TEXTURE_MAX_LEVEL`
-  mipmap-incompleteness black-screen bug for `Mip*`/`Anisotropic` filters on non-mipmapped
-  textures. A multi-part, three-backend-touching fix — not attempted piecemeal.
-- EasyGL's anisotropic filtering gap would require adding real anisotropy support to the
-  `easy-gl` library itself — out of scope for a CNA-side fix.
+- ~~**Task 867**~~ — **fixed**, split into Tasks 924 (EasyGL)/925 (Vulkan)/926 (Bgfx), all closed
+  2026-07-09: `Texture2D::SetData(level>0,...)` now does a real GPU upload on all 3 hardware
+  backends, Vulkan's `mipLevels`/`levelCount`/`minLod`/`maxLod` are no longer hardcoded, and
+  EasyGL's `GL_TEXTURE_MAX_LEVEL` mipmap-incompleteness black-screen bug is fixed.
+- ~~EasyGL's anisotropic filtering gap~~ — **fixed, Task 918** (2026-07-09): real
+  `GL_EXT_texture_filter_anisotropic` support added, gated on the extension genuinely being
+  available and clamped to the live driver's `MaxTextureMaxAnisotropy` cap.
+- Bgfx's anisotropic `maxAnisotropy` level still being ignored (only on/off, §7) remains open —
+  not part of Task 918's EasyGL-scoped fix.

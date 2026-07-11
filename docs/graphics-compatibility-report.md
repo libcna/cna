@@ -1,5 +1,17 @@
 # Graphics compatibility report — computed from real test runs
 
+> **Status update, 2026-07-11: all 5 "confirmed bugs" below are now fixed.** This report's own
+> central gate (§3, §6) was "5 confirmed bugs + 5 BLOCKED tasks" as of 2026-07-09. As of this
+> update: `IndexElementSize` (Task 921), Vulkan `BlendState` (Task 868), EasyGL anisotropic
+> filtering (Task 918), `Model` root-bone default (Task 916), and `SpriteBatch::Draw`'s optional
+> source rectangle (Task 922) are **all closed** — 5/5. Of the original 5 BLOCKED tasks, Vulkan
+> `OcclusionQuery` (447) is also closed (2026-07-10); the other 4 (686/687, 725, 732) still need a
+> project-owner architecture decision. **Do not treat the percentages and bug counts in this report
+> as current** — they are a dated snapshot of Task 500's 2026-07-09 milestone declaration, kept
+> below for its methodology (how the numbers were computed), not as a live status. For current
+> status, see `NEXT.md` §5 (the actively maintained bug list) and
+> `docs/graphics-backend-feature-matrix.md`.
+
 **Written for Task 499 (`plan_graphics.md` Phase 55).** This project has historically described
 Graphics maturity with informal, hand-derived percentages (e.g. `docs/xna-4-api-coverage.md`'s
 older §8 table — "~98%", "~85%" — acknowledged in Task 490's own "Release checklist" section as

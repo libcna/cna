@@ -83,11 +83,11 @@ so it has never been the binding constraint in this project.
 
 | Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer |
 |---|---|---|---|---|
-| `BlendState` (all presets + custom factors/equations) | ✅ | ❌ **almost entirely fake** — hardcodes one blend equation regardless of request, confirmed 5× via pixel tests (Task 868, open) | ✅ | ✅ (2 real bugs fixed) |
+| `BlendState` (all presets + custom factors/equations) | ✅ | ✅ **FIXED (Task 868, 2026-07-09)** — real per-`Blend`/`BlendFunction` mapping across all 9 3D pipeline-creation sites; was "almost entirely fake" (hardcoded one blend equation regardless of request, confirmed 5× via pixel tests) before this fix | ✅ | ✅ (2 real bugs fixed) |
 | `DepthStencilState` (compare func + full stencil ops) | ✅ | ✅ (Task 870 — real per-pipeline compare-op + stencil) | not separately re-confirmed this pass | ✅ never throws (deliberate no-op, matches FNA's backend-agnostic-until-drawn model) |
 | `RasterizerState` | ✅ | not separately re-confirmed this pass | not separately re-confirmed this pass | ✅ never throws |
 | Per-slot `SamplerState` (16 slots) | ✅ | ✅ | ✅ | ✅ (1 real bug fixed) |
-| `GraphicsDevice.ReferenceStencil` | ❌ **no backend connection, all 3** (Task 872, open) | ❌ | ❌ | N/A |
+| `GraphicsDevice.ReferenceStencil` | ❌ **no backend connection** (Task 872, open) | ✅ **FIXED** — connected via `vkCmdSetStencilReference`, an undocumented side effect of Task 870 (corrected 2026-07-09) | ❌ **no backend connection** (Task 872, open) | N/A |
 | `Clear` honors `ClearOptions::Stencil` | ❌ **ignored, all 3** (Task 871, open) | ❌ | ❌ | ⚠️ emulated |
 
 ### Vulkan optional device-feature gating (Task 454)
@@ -124,7 +124,7 @@ falls back," which is the idiomatic Vulkan pattern for optional features, not a 
 |---|---|
 | Runtime API (`Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone`) | ✅ fully audited/FNA-faithful, several real bugs found and fixed (Tasks 431-439) |
 | Content-pipeline loading (`ModelTypeReader`) | ⚠️ real gaps — no bone hierarchy, no `ParentBone` wiring, no `BoundingSphere`/`Tag`, custom `.model.json` format is not `.xnb`-compatible (Task 440); zero test coverage of the loader itself |
-| `Model` constructor root-bone-index flexibility | ❌ open (Task 916) |
+| `Model` constructor root-bone-index flexibility | ✅ fixed (Task 916, 2026-07-09) |
 
 ## Every currently-BLOCKED task (⛔)
 
@@ -152,18 +152,18 @@ contention false failures):
   `BgfxGraphicsBackend::DrawIndexedPrimitivesEx` override was added, mirroring `DrawPrimitivesEx`'s
   own full `GpuDrawParams` dispatch. Reconfirmed via `ctest -R "^Bgfx_"` (98 cases, 92/98 passed —
   exactly these 6) plus `CnaTests` (4361/4363, 2 pre-existing hardware skips, 0 failures, run twice).
-- **Vulkan**: last full run (Task 911) was 4369/4378 — **9** known pre-existing (5× `BlendState`/
-  Task 868, 1 `RasterizerState.DepthBias` sub-case, 3 non-deterministic
-  `ContentManagerSkinnedModelTest.*` segfaults under this sandbox's Vulkan/Xvfb/llvmpipe combination
-  — confirmed via `git stash` to be pre-existing and unrelated to any session's changes, and to pass
-  cleanly in isolation). **Correction (2026-07-09, Task 861):** this row previously said "12" and
-  additionally claimed "several `DepthStencilState`-adjacent" failures — both wrong; `4378-4369=9`,
-  and `DepthStencilState`'s own compare-op/stencil-op tests all pass (Task 870 fixed this), leaving
-  only the 6 integration-suite failures (5 `BlendState` + 1 `DepthBias`) plus the 3 segfaults.
-  Independently reconfirmed via a fresh `ctest -R "^Vulkan_"` rerun (Task 495, 87/93 — exactly those
-  6, same names) plus the matching correction already made in `docs/xna-4-api-coverage.md` (Task
-  484/499). Not re-run as a full suite this session (no Vulkan-touching task since Task 911) —
-  treat as the best-known baseline, not a guarantee.
+- **Vulkan**: **updated 2026-07-11 — Task 868's `BlendState` fix landed (commit `459a0e37`)**,
+  removing the 5 `Vulkan_BlendState_*` failures from the baseline below. Last full run (Task 911,
+  pre-fix) was 4369/4378 — 9 known pre-existing (5× `BlendState`/Task 868, 1
+  `RasterizerState.DepthBias` sub-case, 3 non-deterministic `ContentManagerSkinnedModelTest.*`
+  segfaults under this sandbox's Vulkan/Xvfb/llvmpipe combination — confirmed via `git stash` to be
+  pre-existing and unrelated to any session's changes, and to pass cleanly in isolation). With the 5
+  `BlendState` cases now fixed, the current known baseline is the remaining 4 (1 `DepthBias` +
+  3 segfaults) — not independently re-run as a full suite since the fix landed; see `NEXT.md` for
+  the latest confirmed count before relying on this number. **Historical correction (2026-07-09,
+  Task 861):** this row previously said "12" and additionally claimed "several
+  `DepthStencilState`-adjacent" failures — both wrong; `4378-4369=9`, and `DepthStencilState`'s own
+  compare-op/stencil-op tests all pass (Task 870 fixed this).
 - **SDL_Renderer**: 13 known pre-existing, all throwing `"SDL_Renderer does not support 3D"` —
   matches this backend's accepted 2D-only architectural scope exactly (`EffectApplyTest`,
   `GraphicsDeviceValidationTest.SetRenderTargets_*`, `SkinnedModelEXTPartTest.*`,
@@ -186,7 +186,7 @@ presets, all 6 `DepthStencilState` aspects, `CullMode`, `Viewport`, render-targe
 (sample-after-unbind, MSAA, mip chains, depth-format fidelity, MRT-adjacent), and all 5 stock
 effects including fog and several per-effect sub-features (specular, Fresnel, eye position, bone
 blending) — this maps directly onto Tasks 825-849's own topics. **Confirmed genuine bugs found by
-this later work, not silently passing**: `BlendState` (Task 868, still open), one isolated
+this later work**: `BlendState` (Task 868, **fixed 2026-07-09**), one isolated
 `RasterizerState.DepthBias` sub-case (still open) — these are the real content behind Tasks 831-833
 and 839's own topics, not clean passes.
 
@@ -210,11 +210,13 @@ triage work); flagging it in this matrix is this task's own real scope.
 correlate a query's Begin/End span with a draw at all); now resolved via real per-draw-call query
 tagging and `vkCmdBeginQuery`/`vkCmdEndQuery` recording, see the `OcclusionQuery` table above.
 
-**Bottom line**: Vulkan's real, current, confirmed-open limitations are exactly 2 — `BlendState`
-(Task 868) and the isolated `RasterizerState.DepthBias` sub-case — plus the `ReferenceStencil` gap
-(Task 872, shared across all 3 3D backends). The 2D SpriteBatch/SpriteFont/Model-hierarchy
-test-coverage gap above is real but distinct in kind (untested, not un-implemented or
-known-broken). `OcclusionQuery` (Task 447/854) is no longer on this list — fixed in full.
+**Bottom line**: Vulkan's real, current, confirmed-open limitation is exactly 1 — the isolated
+`RasterizerState.DepthBias` sub-case. `BlendState` (Task 868) is fixed as of 2026-07-09, and
+`ReferenceStencil` is fixed on Vulkan specifically (an undocumented side effect of Task 870); the
+`ReferenceStencil` gap (Task 872) remains open only on EasyGL and Bgfx. The 2D
+SpriteBatch/SpriteFont/Model-hierarchy test-coverage gap above is real but distinct in kind
+(untested, not un-implemented or known-broken). `OcclusionQuery` (Task 447/854) is no longer on this
+list — fixed in full.
 
 ## Remaining genuine Bgfx limitations (Task 824, 2026-07-10)
 
@@ -276,8 +278,9 @@ backend code work.
 
 ## New tracked follow-up tasks opened this session
 
-- **Task 916** — `Model`'s constructor auto-defaults `Root` to `bones[0]`, no way to specify a
-  different root bone index (low-risk, purely-additive fix, not blocked).
+- ~~**Task 916**~~ — **fixed, 2026-07-09** (same day it was opened): `Model`'s constructor used to
+  auto-default `Root` to `bones[0]` with no way to specify a different root bone index; an optional
+  `rootBoneIndex` parameter now covers it (low-risk, purely-additive fix).
 - **Task 917** — Bgfx occlusion queries share a view/depth buffer with other same-frame geometry
   instead of using bgfx's own dedicated-measurement-view pattern; needed for true scene-depth
   query correctness (deferred, not blocked, can't be verified in this sandbox anyway).

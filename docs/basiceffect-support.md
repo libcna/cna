@@ -1,5 +1,15 @@
 # BasicEffect Exactness Support Matrix
 
+> **Status update, 2026-07-11:** Tasks 885 (`DirectionalLight1`/`2` + lit-path `EmissiveColor`) and
+> 886 (real specular highlights) — listed as open in §4 and the support matrix below — **are now
+> implemented**: `BasicEffect.cpp` forwards both additional lights (gated on their own `Enabled`
+> flags) and a real `SpecularColor`/`SpecularPower` term. Per `docs/graphics-backend-feature-matrix.md`,
+> "BasicEffect core (MVP, lighting, texture, vertex color)", "`DirectionalLight1`/`2` +
+> `EmissiveColor`", and "real specular highlights" are all ✅ on EasyGL/Vulkan/Bgfx with no open
+> gaps. This document predates that work (flagged in the feature matrix's own "See also" section)
+> and has not been refreshed row-by-row; treat §4 and the matrix below as historical, and
+> `docs/graphics-backend-feature-matrix.md`/`docs/xna-4-api-coverage.md` as current.
+
 Phase 42 (`plan_graphics.md` Tasks 361–370) audited and pixel-verified `BasicEffect` conformance
 against FNA across all three graphics backends (EasyGL, Vulkan, Bgfx). This document summarizes
 the findings and closes the phase.
@@ -116,21 +126,22 @@ thanks to Tasks 364–369's fixes already being in place.
 | One directional light, diffuse + ambient | ✅ Task 368 | ✅ Task 368 | ✅ fixed Task 368 (layout bug) |
 | `DirectionalLight0.Enabled` gating | ✅ fixed Task 368 | ✅ fixed Task 368 | ✅ fixed Task 368 |
 | `DiffuseColor+EmissiveColor`, no lighting | ✅ fixed Task 369 | ✅ fixed Task 369 | ✅ fixed Task 369 |
-| `EmissiveColor` while lit | ❌ Task 885 | ❌ Task 885 | ❌ Task 885 |
-| `DirectionalLight1`/`2` (multi-light) | ❌ Task 885 | ❌ Task 885 | ❌ Task 885 |
-| Real specular highlights | ❌ Task 886 | ❌ Task 886 | ❌ Task 886 |
+| `EmissiveColor` while lit | ✅ fixed Task 885 | ✅ fixed Task 885 | ✅ fixed Task 885 |
+| `DirectionalLight1`/`2` (multi-light) | ✅ fixed Task 885 | ✅ fixed Task 885 | ✅ fixed Task 885 |
+| Real specular highlights | ✅ fixed Task 886 | ✅ fixed Task 886 | ✅ fixed Task 886 |
 | Cross-backend pixel consistency | ✅ Task 370 | ✅ Task 370 | ✅ Task 370 |
 
-Legend: ✅ verified working · ❌ confirmed not implemented.
+Legend: ✅ verified working · ❌ confirmed not implemented (historical — see status banner at top).
 
 ## Open, tracked follow-up work
 
-Phase 42 opened 2 new tracked tasks:
+Phase 42 opened 2 new tracked tasks, both since closed:
 
-- **Task 885** — lit-path `EmissiveColor` + `DirectionalLight1`/`DirectionalLight2` forwarding.
-  Vulkan's half needs a shared push-constant budget change (see §4) — do the design pass before
-  touching code.
-- **Task 886** — real Blinn-Phong specular highlights, all 3 backends. A genuinely new feature.
-  Likely shares Task 885's Vulkan push-constant work — consider doing them together.
+- ~~**Task 885**~~ — **fixed.** Lit-path `EmissiveColor` + `DirectionalLight1`/`DirectionalLight2`
+  forwarding now implemented on all 3 backends.
+- ~~**Task 886**~~ — **fixed.** Real specular highlights (`SpecularColor`/`SpecularPower`) now
+  implemented on all 3 backends.
 
-This closes Phase 42 (`plan_graphics.md` Tasks 361–370) in full.
+This closes Phase 42 (`plan_graphics.md` Tasks 361–370) in full. Note `BasicEffect` is unrelated to
+`EnvironmentMapEffect`/`SkinnedEffect`, whose own `DirectionalLight1`/`2` forwarding gaps (Tasks
+890/891/893) remain genuinely open — see `NEXT.md` §5.

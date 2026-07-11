@@ -1,5 +1,14 @@
 # DepthStencilState Support Matrix
 
+> **Status update, 2026-07-11:** Task 870 (Vulkan's fake depth-compare/stencil-test pipeline,
+> the central finding of §4 below) **is fixed** — real per-pipeline depth-compare op, full
+> front/back `VkStencilOpState`, and stencil reference/masks as true dynamic state. `ReferenceStencil`
+> independent-override is also now connected on Vulkan specifically (an undocumented side effect of
+> the same fix); it remains unconnected on EasyGL/Bgfx (Task 872). §4 and the summary table below
+> describe the pre-fix investigation and are kept for their diagnostic detail — the ❌/"not fixed"
+> markers for Vulkan in them are historical, not current. See `AUDIT.md`'s `DepthStencilState` row
+> or `NEXT.md` §5 for current status.
+
 Phase 37 (`plan_graphics.md` Tasks 311–320) audited and pixel-verified `DepthStencilState`
 conformance against FNA across all three graphics backends (EasyGL, Vulkan, Bgfx). This document
 summarizes the findings.
@@ -125,20 +134,23 @@ Two distinct findings:
 
 ## Summary: what actually works today, per backend
 
+**Updated 2026-07-11** — the Vulkan column below reflects Task 870's fix (previously all ❌; see
+the status banner at the top of this document).
+
 | Feature | EasyGL | Vulkan | Bgfx |
 |---|---|---|---|
 | `DepthStencilState` API/presets/`Name` | ✅ | ✅ | ✅ |
 | Default `DepthStencilState`/`RasterizerState` on `GraphicsDevice` | ✅ (fixed) | ✅ (fixed) | ✅ (fixed) |
 | `DepthBufferWriteEnable` | ✅ | ✅ | 🔍 not pixel-verified (no readback API) |
-| `DepthBufferFunction` (all `CompareFunction` values) | ✅ | ❌ (Task 870) | 🔍 not pixel-verified |
-| `StencilEnable` | ✅ (fixed, Task 315) | ❌ (Task 870) | 🔍 not pixel-verified |
-| `StencilMask` / `StencilWriteMask` | ✅ | ❌ (Task 870) | 🔍 not pixel-verified |
-| Front-face `StencilFail`/`StencilDepthBufferFail`/`StencilPass` | ✅ | ❌ (Task 870) | 🔍 not pixel-verified |
-| `TwoSidedStencilMode` / back-face (CCW) ops | ✅ | ❌ (Task 870) | 🔍 not pixel-verified |
-| `ReferenceStencil` via `DepthStencilState` assignment | ✅ (fixed, Task 319) | ❌ (Task 870, moot) | 🔍 not pixel-verified |
-| `ReferenceStencil` independent override (no state reassignment) | ❌ (Task 872) | ❌ (Task 870 + 872) | ❌ (Task 872) |
+| `DepthBufferFunction` (all `CompareFunction` values) | ✅ | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
+| `StencilEnable` | ✅ (fixed, Task 315) | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
+| `StencilMask` / `StencilWriteMask` | ✅ | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
+| Front-face `StencilFail`/`StencilDepthBufferFail`/`StencilPass` | ✅ | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
+| `TwoSidedStencilMode` / back-face (CCW) ops | ✅ | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
+| `ReferenceStencil` via `DepthStencilState` assignment | ✅ (fixed, Task 319) | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
+| `ReferenceStencil` independent override (no state reassignment) | ❌ (Task 872) | ✅ (fixed — side effect of Task 870) | ❌ (Task 872) |
 | `GraphicsDevice::Clear(ClearOptions::Stencil, ...)` actually clears stencil | ❌ (Task 871) | ❌ (Task 871) | ❓ unverified |
-| Physical stencil buffer exists on the default window | ✅ (fixed, Task 315) | ⚠️ format-dependent (Task 870's `FindDepthFormat()` note) | ❓ unverified |
+| Physical stencil buffer exists on the default window | ✅ (fixed, Task 315) | ✅ (Task 870 fixed the compare/stencil pipeline; format-preference order noted in §4 was corrected alongside it) | ❓ unverified |
 
 Legend: ✅ verified working · ❌ confirmed broken/absent · ⚠️ partial/inconsistent ·
 🔍 not empirically verified this phase (Bgfx has no GPU pixel-readback API in this project, so its
@@ -150,13 +162,12 @@ depth/stencil coverage is smoke-test/no-regression only by design) · ❓ not in
   portion of this gap; `SamplerState`/`BlendState`/`DepthStencilState` are all fixed).
 - **Task 869** — `GraphicsDevice` stores `BlendState`/`DepthStencilState`/`RasterizerState` by
   value, unlike FNA's reference-type aliasing (architectural, deliberate, not fixed).
-- **Task 870** — Vulkan's `DepthBufferFunction` and entire stencil-test pipeline are non-functional
-  (hardcoded compare op, `stencilTestEnable` never set, stencil-capable depth format not
-  preferred). Large, multi-pipeline-site change; not attempted piecemeal.
+- ~~**Task 870**~~ — **fixed.** Vulkan's `DepthBufferFunction` and entire stencil-test pipeline are
+  now real: per-pipeline compare op, full stencil ops, stencil-capable depth format preferred.
 - **Task 871** — `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` (and the stencil clear
   value) on every backend.
 - **Task 872** — `GraphicsDevice.ReferenceStencil`'s independent-override behavior has no backend
-  connection at all on any backend; needs a new `IGraphicsBackend::SetReferenceStencil` method and
-  per-backend plumbing.
+  connection on EasyGL/Bgfx; needs a new `IGraphicsBackend::SetReferenceStencil` method and
+  per-backend plumbing there. (Vulkan is already connected, an undocumented side effect of Task 870.)
 - Bgfx's physical stencil-buffer existence (the same class of gap Task 315 found and fixed on
   EasyGL) has not been checked — worth verifying before relying on Bgfx stencil support in practice.

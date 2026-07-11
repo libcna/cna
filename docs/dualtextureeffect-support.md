@@ -83,9 +83,9 @@ per-stride shader that already had fog infra), `DualTextureEffect` uses its own 
 both sides: added `uFogEnabled`/`uFogColor`/`uFogStart`/`uFogEnd` uniforms plus the standard
 `vFogFactor`/`mix()` blend to the shader (mirroring `EnsureTextured3DProgram()`'s pattern exactly),
 then forwarded the 4 fog fields in `FillGpuDrawParams()` (mirroring `AlphaTestEffect`'s Task 378
-C++ pattern). **Confirmed, not fixed here** (already tracked as Task 888): Vulkan and Bgfx still
-have zero fog GPU implementation for any 3D effect — no Vulkan/Bgfx test added, matching Task
-377/378's precedent of not committing a test that would encode a known no-op as passing.
+C++ pattern). **At the time, not fixed here** (tracked as Task 888): Vulkan and Bgfx had zero fog
+GPU implementation for any 3D effect. **Since fixed by Task 899** (closed 2026-07-07) — real fog is
+now implemented across every 3D shader on both backends, including `DualTextureEffect`'s.
 
 ## 6. Cross-backend consistency (Task 389)
 
@@ -113,7 +113,7 @@ Task 377.
 | `Alpha` premultiplication | ✅ Task 385 | ✅ Task 385 (alpha-channel-only) | ✅ Task 385 |
 | First texture (`Texture`) null-fallback | ✅ Task 386 | ✅ Task 386 | ✅ Task 379/386 |
 | Second texture (`Texture2`) null-fallback | ✅ Task 387 | ✅ Task 387 | ✅ fixed Task 387 |
-| Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 388 | ❌ Task 888 | ❌ Task 888 |
+| Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 388 | ✅ fixed Task 899 (2026-07-07) | ✅ fixed Task 899 (2026-07-07) |
 | `VertexColorEnabled` | ❌ Task 889 | ❌ Task 889 | ❌ Task 889 |
 | Cross-backend pixel consistency | ✅ Task 389 | ✅ Task 389 | ✅ Task 389 |
 
@@ -124,9 +124,10 @@ Legend: ✅ verified working · ❌ confirmed not implemented.
 Phase 44 opened 1 new tracked task and confirmed 2 already-open ones apply here too:
 
 - **Task 887** (opened by Task 377, `AlphaTestEffect`) — Vulkan/Bgfx alpha-test vertex-color
-  unification. Architecturally related to Task 889 but a distinct effect/pipeline.
-- **Task 888** (opened by Task 378, `AlphaTestEffect`) — implement real fog on Vulkan and Bgfx,
-  project-wide, for every 3D effect including `DualTextureEffect`.
+  unification. Architecturally related to Task 889 but a distinct effect/pipeline. Still open.
+- ~~**Task 888**~~ (opened by Task 378, `AlphaTestEffect`) — **fixed by Task 899** (closed
+  2026-07-07): real fog now implemented on Vulkan and Bgfx, project-wide, for every 3D effect
+  including `DualTextureEffect`.
 - **Task 889** (opened by Task 389) — `DualTextureEffect.VertexColorEnabled` is a total no-op on
   all 3 backends. Needs a new vertex-color-carrying stride variant and `vin.Color` multiplication
   into the forwarded diffuse on every backend's dual-texture shader (mirroring FNA's

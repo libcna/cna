@@ -91,12 +91,14 @@ A 3-point Z-sweep pixel test (`easygl_alphatest_fog_test.cpp`) proved genuine in
 on/off switch — 3/3 PASS, near-exact match. Verified genuine discriminating power via `git stash`:
 2/3 assertions correctly failed pre-fix.
 
-**Much larger finding, confirmed not fixed:** grepping every `.glsl` (Vulkan) and `.sc` (Bgfx)
-shader file in both backends for "fog" found **zero matches anywhere** — fog is a total,
+**Much larger finding at the time, since fixed:** grepping every `.glsl` (Vulkan) and `.sc` (Bgfx)
+shader file in both backends for "fog" found **zero matches anywhere** — fog was a total,
 project-wide no-op on Vulkan and Bgfx for **every** 3D effect, including `BasicEffect`, despite
 `BasicEffect::FillGpuDrawParams()` already forwarding the fields correctly on the C++ side.
-Implementing real fog on Vulkan/Bgfx means adding fog uniforms/varyings and the blend formula to
-essentially every 3D shader in both backends. **Opened Task 888** to track it.
+**Opened Task 888** to track it; **fixed by Task 899 (closed 2026-07-07)** — fog uniforms/varyings
+and the blend formula were added across every 3D shader on both backends, including
+`AlphaTestEffect`'s. See `docs/graphics-backend-feature-matrix.md`'s "Fog, all applicable
+effects/pipelines" row for current status.
 
 ## 6. Null/disabled texture behavior (Task 379)
 
@@ -125,7 +127,7 @@ textures by design, unlike `AlphaTestEffect`, so the impact is much narrower.
 | `AlphaTest` switch, all 8 `CompareFunction` values | ✅ Task 373 | ✅ Task 374 | ✅ fixed Task 375 (depth-state stub) |
 | `ReferenceAlpha` 0–255 scaling, boundary + out-of-range | ✅ Task 376 | ✅ (shared C++) | ✅ (shared C++) |
 | `VertexColorEnabled` × `DiffuseColor` × alpha-test | ✅ Task 377 | ❌ Task 887 | ❌ Task 887 |
-| Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 378 | ❌ Task 888 | ❌ Task 888 |
+| Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 378 | ✅ fixed Task 899 (2026-07-07) | ✅ fixed Task 899 (2026-07-07) |
 | Null-texture fallback to opaque white | ✅ Task 379 | ✅ Task 379 | ✅ fixed Task 379 |
 
 Legend: ✅ verified working · ❌ confirmed not implemented.
@@ -138,8 +140,7 @@ Phase 43 opened 2 new tracked tasks:
   per-stride textured/colored-textured pipelines (mirroring EasyGL's architecture), so
   `VertexColorEnabled` actually affects the alpha-test comparison on those 2 backends. A 6-shader-
   file, 2-backend change.
-- **Task 888** — implement real fog on Vulkan and Bgfx, project-wide, for every 3D effect (not just
-  `AlphaTestEffect`). Requires adding fog uniforms/varyings and the blend formula to essentially
-  every 3D shader in both backends.
+- ~~**Task 888**~~ — **fixed by Task 899** (closed 2026-07-07): real fog is now implemented on
+  Vulkan and Bgfx, project-wide, for every 3D effect including `AlphaTestEffect`.
 
 This closes Phase 43 (`plan_graphics.md` Tasks 371–380) in full.
