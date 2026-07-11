@@ -1,37 +1,45 @@
 // SPDX-License-Identifier: MS-PL
-// Task 877: verify RenderTargetCube honors its exact requested DepthFormat on Bgfx.
+// Task 877 (original scope) / Task 952 (current, open finding): verify RenderTargetCube honors
+// its exact requested DepthFormat on Bgfx.
 //
-// Before this task, BgfxRenderTargetCubeBackend had NO depth/stencil attachment support at all --
-// every face's framebuffer was color-only regardless of what DepthFormat was requested, so depth
-// testing while rendering into a RenderTargetCube face silently never worked on this backend.
+// METHODOLOGY, updated 2026-07-11 (Task 952 investigation): this test originally read the face
+// back DIRECTLY while it was still bound, relying on GetBackBufferData reading "whatever
+// framebuffer is currently active". Task 951 (2026-07-11) made GetBackBufferData always read the
+// TRUE backbuffer regardless of what's bound, which is the CORRECT XNA-matching behavior but makes
+// that old read-while-bound methodology fundamentally unreliable going forward. This test now
+// unbinds first and samples the face back via EnvironmentMapEffect instead, matching every other
+// passing RenderTargetCube test's own established pattern. Getting a correct sample also required
+// fixing a second, separate methodology bug: with Identity View, EnvironmentMapEffect's
+// EyePosition (= inverse(View).Translation) exactly coincides with the sampled vertex, making the
+// reflection vector reflect(-E, N) degenerate/undefined -- fixed by placing the eye off-plane via
+// Matrix::CreateLookAt(Vector3(0,0,5), Vector3::Zero, Vector3::Up), confirmed correct by
+// temporarily filling the other 5 faces with a magenta sentinel (proved the un-fixed sampling
+// direction was silently reading a neighboring face, not PositiveZ).
 //
-// Method (mirrors rendertarget2d_depth_test.cpp's near/far-quad methodology): render a near GREEN
-// quad (z=0.2) then a far RED quad (z=0.8) at the same screen position into the PositiveZ face,
-// with DepthStencilState::Default (depth test+write, LessEqual) enabled, and read the face back
-// DIRECTLY while it is still bound (GetBackBufferData reads whatever framebuffer is currently
-// active), rather than unbinding and sampling it back out via EnvironmentMapEffect. Investigated
-// as a suspected separate bug (originally tracked as Task 912) and root-caused: sampling a
-// freshly-filled-then-unbound render target via SpriteBatch in the same un-advanced bgfx frame can
-// read back stale/black content on its first GetBackBufferData call -- the SAME already-documented
-// "Bgfx's GetBackBufferData() only reliably reflects the first read call per rendered frame" quirk
-// (NEXT.md §5), not a distinct bug. The established retry-until-non-black convention (see
-// rendertarget2d_depth_test.cpp, now Bgfx-registered too) fixes it completely; this test predates
-// that fix and keeps the simpler direct-while-bound read since it's sufficient for what Task 877
-// needs to prove.
-// Confirmed via debug instrumentation that the fix itself is structurally correct: DepthFormat::
-// None yields numAttachments=1 with an invalid depthTex handle (no attachment created at all),
-// while Depth24Stencil8 yields numAttachments=2 with a real depthTex handle attached. However,
-// this sandbox's software GL path (Mesa llvmpipe, "OpenGL 2.1" bgfx renderer) was observed to
-// perform an identical, seemingly-correct near-wins z-comparison in BOTH cases regardless of draw
-// order -- i.e. depth testing appears to behave the same whether or not a depth attachment
-// actually exists on the framebuffer. This is an environment/driver quirk this task's fix does not
-// control (Task 877 is about wiring the correct format/attachment, not this deeper depth-test-
-// without-an-attachment GL semantics question), so no pixel-level pass/fail is asserted here for
-// either DepthFormat value -- both are checked only for "constructs and renders a sensible,
-// non-garbage colour without crashing". The structural correctness of the fix (does the right
-// bgfx::TextureFormat get created and attached for each DepthFormat) is verified directly in
-// BgfxRenderTargetCubeBackend's constructor/BindAsRenderTargetFace by code review, mirroring the
-// EasyGL sibling test's fully pixel-verified equivalent (which has no such environment confound).
+// CURRENT FINDING (Task 952, still open): with both methodology bugs fixed, DepthFormat::None
+// correctly reads back the near (green) quad, proving the fixed methodology itself is sound. But
+// DepthFormat::Depth24Stencil8 reads back nothing -- not the far (red) quad either, just the
+// sampling loop's own background clear colour -- even with a SINGLE draw call and with
+// DepthStencilState::None (depth testing fully disabled). So this is NOT "depth doesn't gate
+// draws"; something about a depth attachment being present on a RenderTargetCube face's FBO
+// silently blocks ALL colour output into that face on Bgfx, structurally unlike RenderTarget2D
+// (whose equivalent depth test, rendertarget2d_depth_test.cpp, already passes correctly).
+//
+// INVESTIGATED AND RULED OUT (see plan_graphics.md Task 952 for the full write-up): stencil
+// presence, specific depth format (Depth16/Depth24/Depth24Stencil8 all reproduce identically),
+// sampler/mip-filter mismatch (identical GL_LINEAR params on the working and broken textures, via
+// apitrace GL-call-log inspection), and framebuffer incompleteness (glCheckFramebufferStatus
+// always reports GL_FRAMEBUFFER_COMPLETE, no GL error at all under MESA_DEBUG=1). Also
+// investigated and RETRACTED: an "orphaned render-target view gets silently re-cleared by bgfx on
+// a later unrelated frame" theory that initially looked promising from the apitrace call log --
+// disproven by two independent, controlled repro attempts (a plain unbound RenderTarget2D
+// surviving 5 unrelated frame flushes; the same RT WITH a Depth24Stencil8 attachment ALSO
+// surviving) that could not reproduce any corruption with or without a candidate fix, so no
+// engine-side fix was made from this. Root cause remains unresolved -- see NEXT.md §5/§8's Task
+// 952 entry for what's needed next (RenderDoc, unavailable in this sandbox's apt repos, or a raw
+// GL minimal reproduction bypassing bgfx entirely -- glretrace/eglretrace could not replay this
+// trace for direct pixel/visual inspection, failing with "no current context" almost immediately,
+// a known apitrace limitation with bgfx's dedicated render-thread architecture).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -40,6 +48,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -47,16 +56,20 @@
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -109,8 +122,13 @@ class BgfxRenderTargetCubeDepthFormatTest : public Game
             && closeTo(c.getBProperty(), expected.getBProperty(), 40);
     }
 
-    // Renders near-green-then-far-red into the RenderTargetCube's PositiveZ face (with real
-    // depth testing enabled) and reads it back directly while still bound.
+    std::unique_ptr<Texture2D> whiteTex_;
+
+    // DIAGNOSTIC v2: renders near-green-then-far-red into the RenderTargetCube's PositiveZ face
+    // (with real depth testing enabled), unbinds, then samples the face back via
+    // EnvironmentMapEffect with a non-degenerate eye position (established SampleAfterUnbind
+    // pattern), instead of reading while still bound (Task 951 makes that unreliable -- see
+    // plan_graphics.md Task 952's write-up).
     Color RenderAndReadFace(GraphicsDevice& dev, DepthFormat depthFormat)
     {
         RenderTargetCube rtc(dev, kCubeSize, false, SurfaceFormat::Color, depthFormat);
@@ -130,16 +148,61 @@ class BgfxRenderTargetCubeDepthFormatTest : public Game
         DrawFullQuad(dev, 0.2f, Color(0, 255, 0, 255));  // near, green — should win if depth-tested
         DrawFullQuad(dev, 0.8f, Color(255, 0, 0, 255));  // far, red — must be rejected if depth-tested
 
-        const Rectangle reg(kCubeSize / 2, kCubeSize / 2, 1, 1);
-        Color px(0, 0, 0, 0);
-        dev.GetBackBufferData(&reg, &px, 0, 1);
-
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color px(0, 0, 0, 0);
+        for (int i = 0; i < 20; ++i)
+        {
+            dev.Clear(Color(10, 10, 10, 255));
+
+            EnvironmentMapEffect envFx(dev);
+            envFx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            envFx.setEmissiveColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+            envFx.setEnvironmentMapAmountProperty(1.0f);
+            envFx.setEnvironmentMapSpecularProperty(Vector3(0.0f, 0.0f, 0.0f));
+            envFx.setTextureProperty(whiteTex_.get());
+            envFx.setEnvironmentMapProperty(&rtc);
+            envFx.setWorldProperty(Matrix::getIdentityProperty());
+            // Task 952 finding: Identity View makes EyePosition (= inverse(View).Translation)
+            // exactly coincide with the sampled vertex, making reflect(-E, N) degenerate/
+            // undefined -- place the eye off-plane, in front of the face's own normal, so the
+            // reflection direction is well-defined and actually points at PositiveZ.
+            envFx.setViewProperty(Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 5.0f),
+                                                         Vector3(0.0f, 0.0f, 0.0f),
+                                                         Vector3(0.0f, 1.0f, 0.0f)));
+            envFx.setProjectionProperty(Matrix::getIdentityProperty());
+            envFx.Apply();
+
+            const Vector3 n(0.0f, 0.0f, 1.0f);
+            const VertexPositionNormalTexture verts[6] = {
+                { Vector3(-1.0f,  1.0f, 0.0f), n, Vector2(0.0f, 1.0f) },
+                { Vector3(-1.0f, -1.0f, 0.0f), n, Vector2(0.0f, 0.0f) },
+                { Vector3( 1.0f, -1.0f, 0.0f), n, Vector2(1.0f, 0.0f) },
+                { Vector3(-1.0f,  1.0f, 0.0f), n, Vector2(0.0f, 1.0f) },
+                { Vector3( 1.0f, -1.0f, 0.0f), n, Vector2(1.0f, 0.0f) },
+                { Vector3( 1.0f,  1.0f, 0.0f), n, Vector2(1.0f, 1.0f) },
+            };
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+
+            const Rectangle reg(kCubeSize / 2, kCubeSize / 2, 1, 1);
+            dev.GetBackBufferData(&reg, &px, 0, 1);
+            // Break once we see anything other than the (10,10,10) background clear colour.
+            if (px.getRProperty() > 20 || px.getGProperty() > 20 || px.getBProperty() > 20)
+                break;
+        }
+
         return px;
     }
 
 protected:
-    void Initialize() override { Game::Initialize(); }
+    void Initialize() override
+    {
+        Game::Initialize();
+        auto& device = getGraphicsDeviceProperty();
+        const std::vector<uint8_t> white = { 255, 255, 255, 255 };
+        whiteTex_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, white));
+    }
 
     void Draw(const GameTime&) override
     {
