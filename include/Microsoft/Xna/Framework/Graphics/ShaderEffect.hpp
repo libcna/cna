@@ -95,14 +95,19 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] Effect* Clone() override;
 
+        /**
+         * @brief Returns the backend-specific compiled program for this effect (CNA extension).
+         *
+         * Lets a backend (e.g. SpriteBatch) bind the same compiled program this ShaderEffect
+         * uses, instead of maintaining a redundant separate copy.
+         */
+        NOXNA [[nodiscard]] CNA::Internal::Backends::IEffectBackend* GetEffectBackendPtr() const override;
+
     protected:
         /**
          * @brief Applies the GLSL shaders to the graphics device before drawing.
          */
         void OnApply() override;
-
-        /** @brief Returns the backend effect handle (CNA extension). */
-        NOXNA [[nodiscard]] CNA::Internal::Backends::IEffectBackend* GetEffectBackend() const;
 
     private:
         std::string vertSrc_;

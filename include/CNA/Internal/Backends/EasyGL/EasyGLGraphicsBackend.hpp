@@ -182,6 +182,10 @@ namespace CNA::Internal::Backends::EasyGL
         void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
         void SetUniformMat4(const char* name, const float* matrix) override;
 
+        /// Returns the underlying compiled program, so a backend (e.g. SpriteBatch) can bind
+        /// the SAME program this ShaderEffect's SetUniformXxx() calls actually write to.
+        [[nodiscard]] ::easygl::Program& GetProgram() { return program_; }
+
     private:
         ::easygl::Program program_;
         std::string compileError_;
@@ -228,8 +232,6 @@ namespace CNA::Internal::Backends::EasyGL
         const ITextureBackend* current_texture_ = nullptr;
         Matrix transform_ = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
-        ::easygl::Program customProgram_;
-        Effect* compiledFor_        = nullptr;
 
         // Raw TextureFilter/TextureAddressMode values set via SetSamplerFilter/SetSamplerAddressMode
         // (SpriteBatch::Begin), applied to texture unit 0 on the next FlushBatch(). Defaults match

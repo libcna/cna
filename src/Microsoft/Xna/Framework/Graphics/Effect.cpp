@@ -75,6 +75,11 @@ namespace Microsoft::Xna::Framework::Graphics
         return empty;
     }
 
+    CNA::Internal::Backends::IEffectBackend* Effect::GetEffectBackendPtr() const
+    {
+        return nullptr;
+    }
+
     const std::string& Effect::GetTypeName() const
     {
         static const std::string name = "Microsoft.Xna.Framework.Graphics.Effect";

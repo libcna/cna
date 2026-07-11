@@ -72,7 +72,7 @@ namespace Microsoft::Xna::Framework::Graphics
             CNA::Logger::Debug("ShaderEffect::OnApply() — no backend or compile failed.");
     }
 
-    CNA::Internal::Backends::IEffectBackend* ShaderEffect::GetEffectBackend() const
+    CNA::Internal::Backends::IEffectBackend* ShaderEffect::GetEffectBackendPtr() const
     {
         return effectBackend_.get();
     }

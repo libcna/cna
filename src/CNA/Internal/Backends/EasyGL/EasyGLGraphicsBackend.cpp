@@ -867,7 +867,6 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLSpriteBatchBackend::release_gl_handle_only()
     {
         program_.reset_handle_no_gl();
-        customProgram_.reset_handle_no_gl();
         vao_.reset_handle_no_gl();
         vbo_.reset_handle_no_gl();
         ibo_.reset_handle_no_gl();
@@ -879,7 +878,6 @@ namespace CNA::Internal::Backends::EasyGL
         pending_indices_.clear();
         current_texture_ = nullptr;
         transform_ = Matrix::getIdentityProperty();
-        compiledFor_ = nullptr;
         InitializeResources();
     }
 
@@ -1032,44 +1030,17 @@ void main()
         if (pending_vertices_.empty()) return;
 
         // Determine which GL program to use: built-in or custom Effect.
-        // Access vertex/fragment source via virtual Effect::GetVertexSource()/GetFragmentSource()
-        // to avoid a circular dependency on the concrete ShaderEffect type.
+        // Task 1077 fix: bind the SAME compiled program the Effect itself owns
+        // (Effect::GetEffectBackendPtr(), overridden by ShaderEffect) instead of recompiling a
+        // second, independent copy from GLSL source text -- the old recompiled-copy approach
+        // meant any ShaderEffect::SetUniformXxx() call (which writes to the effect's OWN
+        // program) had no way to ever reach the program actually bound for the real draw.
         ::easygl::Program* prog = &program_;
-        if (customEffect_ && !customEffect_->GetVertexSource().empty())
+        if (customEffect_)
         {
-            if (compiledFor_ != customEffect_)
-            {
-                const std::string& vertSrc = customEffect_->GetVertexSource();
-                const std::string& fragSrc = customEffect_->GetFragmentSource();
-
-                ::easygl::Shader vert(::easygl::ShaderType::Vertex);
-                vert.create();
-                vert.compile_from_source(vertSrc.c_str());
-                if (!vert.is_compiled())
-                    std::cerr << "SpriteBatch custom vertex shader failed:\n" << vert.info_log() << "\n";
-
-                ::easygl::Shader frag(::easygl::ShaderType::Fragment);
-                frag.create();
-                frag.compile_from_source(fragSrc.c_str());
-                if (!frag.is_compiled())
-                    std::cerr << "SpriteBatch custom fragment shader failed:\n" << frag.info_log() << "\n";
-
-                customProgram_.create();
-                customProgram_.attach(vert);
-                customProgram_.attach(frag);
-                customProgram_.link();
-                if (!customProgram_.is_linked())
-                    std::cerr << "SpriteBatch custom program link failed:\n" << customProgram_.info_log() << "\n";
-
-                compiledFor_ = customEffect_;
-            }
-            prog = &customProgram_;
-            customEffect_->Apply();
-        }
-        else if (customEffect_)
-        {
-            // Effect has no GLSL source; run OnApply() for parameter side-effects
-            // and register it as the active effect on the device.
+            auto* backend = dynamic_cast<EasyGLEffectBackend*>(customEffect_->GetEffectBackendPtr());
+            if (backend && backend->IsValid())
+                prog = &backend->GetProgram();
             customEffect_->Apply();
         }
 
