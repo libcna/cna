@@ -17,7 +17,7 @@ cmake --build build --target CNA CnaTests
 ctest --test-dir build --output-on-failure
 ```
 
-> **Looking for a specific doc?** `docs/` has 53 files — see [`docs/README.md`](docs/README.md)
+> **Looking for a specific doc?** `docs/` has 56 files — see [`docs/README.md`](docs/README.md)
 > for an index of what's current vs. historical.
 
 ### Project Status

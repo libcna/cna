@@ -1,11 +1,11 @@
 # docs/ index
 
-53 files, no prior map — this index exists so a reader (human or AI agent) can tell what's current
-without opening every file. It groups files by topic and flags which ones are known-current vs.
-historical/dated. Entries not explicitly flagged have not been individually re-verified in the
-2026-07-11 documentation pass that produced this index — treat their currency with normal caution
-(check the file's own "last updated"/date header before relying on it) rather than assuming either
-way.
+56 files in `docs/` (including this index), no prior map — this index exists so a reader (human or
+AI agent) can tell what's current without opening every file. It groups files by topic and flags
+which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
+individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
+their currency with normal caution (check the file's own "last updated"/date header before relying
+on it) rather than assuming either way.
 
 ## Start here
 
@@ -16,9 +16,9 @@ way.
   (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does backend X support feature Y."
 - **`xna-4-api-coverage.md`** — current per-class Graphics coverage table plus the overall
   per-namespace XNA 4.0 API-surface numbers (227/245 = 92.7%, computed 2026-07-11).
-- **`../migration-guide.md`**\* — practical guide for porting an existing XNA/FNA game to CNA;
-  the two gaps that block most real ports (`.xnb`, compiled `.fx` bytecode) are at the top.
-  (\*lives at `docs/migration-guide.md`.)
+- **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
+  game to CNA; the two gaps that block most real ports (`.xnb`, compiled `.fx` bytecode) are at
+  the top.
 
 ## Graphics — per-effect / per-feature support matrices
 

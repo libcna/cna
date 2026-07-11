@@ -69,12 +69,15 @@ self-consistency check.
 Task 479 (`tools/cna-reference/` + `scripts/compare-fna-reference.py`) is done: the CNA-side C++
 mirror of Tasks 472/473/476's own categories (enums, state presets, PackedVector, Viewport) plus a
 Python script that diffs the two JSON outputs key-for-key. Running it for real found exactly one
-genuine divergence — see `plan_graphics.md` Task 921 (`IndexElementSize`'s numeric values: FNA
-uses `SixteenBits=0`/`ThirtyTwoBits=1`, CNA uses `16`/`32`) — after several tooling bugs in the new
-comparison harness itself were found and fixed first (`ostringstream`'s default 6-significant-digit
-precision silently truncating large packed-value integers and sub-millimeter float differences; a
-few state-preset properties and 7 `SurfaceFormat` `*EXT` enum members omitted from the first draft
-of the C++ dump). See `tools/cna-reference/README.md` for how to run the comparison.
+genuine divergence — `IndexElementSize`'s numeric values: FNA uses `SixteenBits=0`/
+`ThirtyTwoBits=1`, CNA at the time used `16`/`32` — after several tooling bugs in the new comparison
+harness itself were found and fixed first (`ostringstream`'s default 6-significant-digit precision
+silently truncating large packed-value integers and sub-millimeter float differences; a few
+state-preset properties and 7 `SurfaceFormat` `*EXT` enum members omitted from the first draft of
+the C++ dump). **This divergence was tracked as Task 921 and fixed 2026-07-09** — CNA's
+`IndexElementSize` now uses `SixteenBits=0`/`ThirtyTwoBits=1` too, matching FNA exactly; re-running
+this comparison today would no longer show that mismatch. See `tools/cna-reference/README.md` for
+how to run the comparison.
 
 Task 480 (the rest of this phase) documents how to regenerate this reference data — not yet
 started.

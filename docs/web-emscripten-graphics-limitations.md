@@ -97,9 +97,14 @@ in this project**:
   Emscripten.
 - **Anisotropic filtering requires the `EXT_texture_filter_anisotropic` WebGL extension**, which is
   not guaranteed present on every browser/GPU combination (unlike desktop GL, where it is
-  near-universal). Combined with Task 918's already-tracked finding that `EasyGL` has **no real
-  anisotropic filtering implementation at all** on any platform today, this is currently moot — but
-  worth re-checking once Task 918 is actually implemented.
+  near-universal). **Task 918 (fixed, 2026-07-09)** added real `EasyGL` anisotropic filtering,
+  gated on `HasExtension("GL_EXT_texture_filter_anisotropic")` and clamped to the live driver's
+  reported cap — so on Emscripten specifically, whether anisotropic filtering actually does anything
+  now genuinely depends on whether the browser/GPU exposes the WebGL variant of that extension; this
+  has **not been empirically confirmed against a real browser** (matching this whole section's own
+  "design-time, unverified" scope) — if the extension is absent, `TextureFilter::Anisotropic`
+  correctly falls back to the plain trilinear filter set already in place, it just won't be a
+  currently-untracked bug if that happens on Web the way it briefly was on desktop EasyGL pre-918.
 - **Texture format support is narrower** than desktop GL's — WebGL 2 guarantees a smaller baseline
   set of internal formats and compressed-texture extensions vary significantly by browser/GPU. CNA's
   own `SurfaceFormat::Color`-only constraint (Task 176, already enforced identically on every
