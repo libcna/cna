@@ -2879,6 +2879,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 955: a freshly-constructed GraphicsDevice's own default state (no game code ever
+        # explicitly setting BlendState/DepthStencilState/RasterizerState, exactly like
+        # ../cna-samples SimpleAnimation's Tank.hpp) must produce correct opaque depth occlusion.
+        cna_easygl_test(cna_test_easygl_graphicsdevice_default_state_occlusion
+                        examples/graphicsdevice_default_state_occlusion_test.cpp)
+        add_test(NAME EasyGL_GraphicsDevice_DefaultStateOcclusion
+                 COMMAND cna_test_easygl_graphicsdevice_default_state_occlusion)
+        set_tests_properties(EasyGL_GraphicsDevice_DefaultStateOcclusion PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 889: DualTextureEffect.VertexColorEnabled -- verbatim reuse of the shared
         # backend-agnostic source, registered on all 3 backends.
         cna_easygl_test(cna_test_easygl_dualtextureeffect_vertexcolor
@@ -3309,6 +3320,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_GraphicsDevice_ClearDepth
                  COMMAND cna_test_vulkan_graphicsdevice_clear_depth)
         set_tests_properties(Vulkan_GraphicsDevice_ClearDepth PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 955: a freshly-constructed GraphicsDevice's own default state (no game code ever
+        # explicitly setting BlendState/DepthStencilState/RasterizerState, exactly like
+        # ../cna-samples SimpleAnimation's Tank.hpp) must produce correct opaque depth occlusion.
+        cna_vulkan_test(cna_test_vulkan_graphicsdevice_default_state_occlusion
+                        examples/graphicsdevice_default_state_occlusion_test.cpp)
+        add_test(NAME Vulkan_GraphicsDevice_DefaultStateOcclusion
+                 COMMAND cna_test_vulkan_graphicsdevice_default_state_occlusion)
+        set_tests_properties(Vulkan_GraphicsDevice_DefaultStateOcclusion PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -5752,6 +5774,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_GraphicsDevice_ClearDepth
              COMMAND cna_test_bgfx_graphicsdevice_clear_depth)
     set_tests_properties(Bgfx_GraphicsDevice_ClearDepth PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 955: a freshly-constructed GraphicsDevice's own default state (no game code ever
+    # explicitly setting BlendState/DepthStencilState/RasterizerState, exactly like
+    # ../cna-samples SimpleAnimation's Tank.hpp) must produce correct opaque depth occlusion.
+    cna_bgfx_test(cna_test_bgfx_graphicsdevice_default_state_occlusion
+                  examples/graphicsdevice_default_state_occlusion_test.cpp)
+    add_test(NAME Bgfx_GraphicsDevice_DefaultStateOcclusion
+             COMMAND cna_test_bgfx_graphicsdevice_default_state_occlusion)
+    set_tests_properties(Bgfx_GraphicsDevice_DefaultStateOcclusion PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
