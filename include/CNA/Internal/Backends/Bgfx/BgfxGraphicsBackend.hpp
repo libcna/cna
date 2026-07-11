@@ -20,6 +20,19 @@ namespace CNA::Internal::Backends::Bgfx
         /// valid allocations, so this must be outside that range -- bgfx caps view ids at 255).
         inline constexpr bgfx::ViewId kInvalidRtViewId = 0xFFFF;
 
+        // Task 951: the single highest bgfx view id (255) is permanently reserved as a dedicated
+        // "backbuffer flush" view -- never handed out by AllocateRtViewId(). bgfx processes every
+        // configured view in ascending id order each frame, so whichever view was configured last
+        // (highest id) is left as the bound GL framebuffer once that processing finishes; a real,
+        // concurrently-bound render target's view (ids [1,254]) would otherwise be that last view
+        // whenever one is active in the same frame, corrupting/crashing BgfxGraphicsBackend::
+        // ReadBackbuffer()'s bgfx::requestScreenShot()-based glReadPixels. Explicitly binding this
+        // reserved view to the backbuffer and bgfx::touch()-ing it right before that screenshot
+        // request guarantees the real backbuffer is what ends up GL-bound, without ever touching
+        // (and so without ever discarding the still-pending, unflushed draws queued against) any
+        // render target's own view.
+        inline constexpr bgfx::ViewId kBackbufferFlushViewId = 255;
+
         // Task 910: each concurrently-live render target (2D or cube) needs its own bgfx view id
         // -- bgfx::setViewFrameBuffer(viewId, fbo) is a per-view-per-*frame* setting, resolved
         // once at bgfx::frame(), not per bgfx::submit() call. Every render target previously

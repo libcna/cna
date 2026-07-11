@@ -302,6 +302,14 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
+        // Task 951: force the reserved highest-id view (Detail::kBackbufferFlushViewId) to be the
+        // last one bgfx processes this frame -- see that constant's own comment for why. Touching
+        // it (rather than resetting any real render target's own view) never discards a still-
+        // pending draw queued against a concurrently-active render target within this same
+        // un-advanced frame.
+        bgfx::setViewFrameBuffer(Detail::kBackbufferFlushViewId, BGFX_INVALID_HANDLE);
+        bgfx::touch(Detail::kBackbufferFlushViewId);
+
         // Request a screenshot of the default backbuffer (BGFX_INVALID_HANDLE = swapchain).
         // The callback fires after bgfx::frame() flushes the current command buffer.
         readbackCallback_.screenshotReady = false;
@@ -634,8 +642,9 @@ namespace CNA::Internal::Backends::Bgfx
         {
             // Mirrors bgfx's own internal BGFX_CONFIG_MAX_VIEWS default (src/config.h, not part
             // of the public bgfx.h API so not #include-able here) -- view id 0 is reserved for
-            // the backbuffer, leaving ids [1, kMaxBgfxViews) for render targets/MRT.
-            static constexpr bgfx::ViewId kMaxBgfxViews = 256;
+            // the backbuffer and kBackbufferFlushViewId (Task 951) is reserved at the top end,
+            // leaving ids [1, kMaxBgfxViews) for render targets/MRT.
+            static constexpr bgfx::ViewId kMaxBgfxViews = kBackbufferFlushViewId;
             auto& pool = RtViewIdFreeList();
             if (!pool.empty())
             {
@@ -841,7 +850,14 @@ namespace CNA::Internal::Backends::Bgfx
         int numAttachments = 1;
         if (bgfx::isValid(depthTex))
         {
-            atts[1].init(depthTex, bgfx::Access::Write);
+            // Task 951: bgfx::Attachment::init()'s _resolve parameter defaults to
+            // BGFX_RESOLVE_AUTO_GEN_MIPS (desired for atts[0]'s colour/cube-face attachment, see
+            // Task 907's own comment above) -- but bgfx hard-asserts if a DEPTH attachment is
+            // given that same default ("Depth textures do not support MSAA resolve"), since
+            // depthTex is never created with hasMips=true (see the constructor above) and mip
+            // auto-regeneration makes no sense for a depth buffer regardless. BGFX_RESOLVE_NONE
+            // is depthTex's own correct, do-nothing resolve mode.
+            atts[1].init(depthTex, bgfx::Access::Write, 0, 1, 0, BGFX_RESOLVE_NONE);
             numAttachments = 2;
         }
         fbo = bgfx::createFrameBuffer(numAttachments, atts);
