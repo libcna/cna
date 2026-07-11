@@ -28,7 +28,10 @@ void main()
     float blendFactor = (u_envMapAmount.y > 0.5)
         ? pow(max(1.0 - abs(viewAngle), 0.0), u_envMapSpecular.w) * u_envMapAmount.x
         : u_envMapAmount.x;
-    vec3 rgb = mix(baseColor, envSample.xyz, blendFactor) + u_envMapSpecular.xyz * envSample.w * combinedAlpha;
+    // Task 891: FNA's real PSEnvMap/PSEnvMapSpecular scale the whole `envmap` sample (both
+    // the base lerp target and the specular term, the latter already fixed by Task 395) by
+    // combinedAlpha before use -- the base lerp's envSample.xyz was still unscaled here.
+    vec3 rgb = mix(baseColor, envSample.xyz * combinedAlpha, blendFactor) + u_envMapSpecular.xyz * envSample.w * combinedAlpha;
     // Task 899: mix toward FogColor as v_fogFactor -> 0 (matches Task 888's established formula).
     rgb = mix(u_fogColor.xyz, rgb, v_fogFactor);
     gl_FragColor  = vec4(rgb, combinedAlpha);

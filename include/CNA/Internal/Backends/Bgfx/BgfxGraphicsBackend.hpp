@@ -20,6 +20,19 @@ namespace CNA::Internal::Backends::Bgfx
         /// valid allocations, so this must be outside that range -- bgfx caps view ids at 255).
         inline constexpr bgfx::ViewId kInvalidRtViewId = 0xFFFF;
 
+        // Task 951: the single highest bgfx view id (255) is permanently reserved as a dedicated
+        // "backbuffer flush" view -- never handed out by AllocateRtViewId(). bgfx processes every
+        // configured view in ascending id order each frame, so whichever view was configured last
+        // (highest id) is left as the bound GL framebuffer once that processing finishes; a real,
+        // concurrently-bound render target's view (ids [1,254]) would otherwise be that last view
+        // whenever one is active in the same frame, corrupting/crashing BgfxGraphicsBackend::
+        // ReadBackbuffer()'s bgfx::requestScreenShot()-based glReadPixels. Explicitly binding this
+        // reserved view to the backbuffer and bgfx::touch()-ing it right before that screenshot
+        // request guarantees the real backbuffer is what ends up GL-bound, without ever touching
+        // (and so without ever discarding the still-pending, unflushed draws queued against) any
+        // render target's own view.
+        inline constexpr bgfx::ViewId kBackbufferFlushViewId = 255;
+
         // Task 910: each concurrently-live render target (2D or cube) needs its own bgfx view id
         // -- bgfx::setViewFrameBuffer(viewId, fbo) is a per-view-per-*frame* setting, resolved
         // once at bgfx::frame(), not per bgfx::submit() call. Every render target previously
@@ -361,6 +374,12 @@ namespace CNA::Internal::Backends::Bgfx
         uint16_t currentRtWidth_ = 0;
         uint16_t currentRtHeight_ = 0;
         uint32_t clearRgba = 0x000000ff;
+        // Task 871: threaded into EnsureViewState()'s bgfx::setViewClear() call, replacing a
+        // previously-hardcoded stencil clear value of 0.
+        uint8_t clearStencilValue_ = 0;
+        // Task 950: threaded into EnsureViewState()'s bgfx::setViewClear() call, replacing a
+        // previously-hardcoded depth clear value of 1.0f.
+        float clearDepthValue_ = 1.0f;
         // Task 808: SpriteBatch::Begin()'s transformMatrix, set by BgfxSpriteBatchBackend::
         // SetTransformMatrix(). Combined with the sprite view's own ortho projection in
         // EnsureViewState() (`orthoWithTransform = ortho * spriteTransform_`, bx::mtxMul order --
@@ -455,6 +474,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ProgramHandle alphaTest3DProgram_       = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle alphaTestColoredTextured3DProgram_ = BGFX_INVALID_HANDLE; // Task 887
         bgfx::ProgramHandle dualTexture3DProgram_     = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle dualTextureColored3DProgram_ = BGFX_INVALID_HANDLE; // Task 889
         bgfx::ProgramHandle skinned3DProgram_         = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle instanced3DProgram_       = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle envMap3DProgram_          = BGFX_INVALID_HANDLE;
@@ -569,6 +589,10 @@ namespace CNA::Internal::Backends::Bgfx
         // @note SetDepth* / SetBlend still throw (not wired to state flags yet).
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
+        void ClearStencil(int stencil) override;
+        void ClearDepthAndStencil(float depth, int stencil) override;
+        void ClearColorAndStencil(float r, float g, float b, float a, int stencil) override;
+        void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;

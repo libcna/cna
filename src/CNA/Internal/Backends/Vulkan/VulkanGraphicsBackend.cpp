@@ -939,8 +939,11 @@ namespace CNA::Internal::Backends::Vulkan
                                                          VulkanGraphicsBackend* owner)
         : capacity_(vertex_capacity), owner_(owner)
     {
-        // Pre-allocate for worst-case stride (e.g. VertexPositionColor = 16 bytes)
-        VkDeviceSize size = static_cast<VkDeviceSize>(vertex_capacity) * 64;
+        // Pre-allocate for worst-case stride (e.g. VertexPositionColor = 16 bytes).
+        // A 0-vertex capacity (e.g. an empty model part) must still produce a valid,
+        // non-empty VkBuffer -- vkCreateBuffer/vkAllocateMemory with size 0 is invalid
+        // per the Vulkan spec.
+        VkDeviceSize size = std::max<VkDeviceSize>(1, static_cast<VkDeviceSize>(vertex_capacity) * 64);
         owner_->CreateBuffer(size,
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -988,7 +991,10 @@ namespace CNA::Internal::Backends::Vulkan
         : capacity_(index_capacity), thirtyTwoBit_(thirtyTwoBit), owner_(owner)
     {
         const std::size_t elemSize = thirtyTwoBit ? sizeof(uint32_t) : sizeof(uint16_t);
-        VkDeviceSize size = static_cast<VkDeviceSize>(index_capacity) * elemSize;
+        // A 0-index capacity (e.g. an empty model part) must still produce a valid,
+        // non-empty VkBuffer -- vkCreateBuffer/vkAllocateMemory with size 0 is invalid
+        // per the Vulkan spec.
+        VkDeviceSize size = std::max<VkDeviceSize>(1, static_cast<VkDeviceSize>(index_capacity) * elemSize);
         owner_->CreateBuffer(size,
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1620,7 +1626,7 @@ namespace CNA::Internal::Backends::Vulkan
         depthAtt.samples = VK_SAMPLE_COUNT_1_BIT;
         depthAtt.loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -1706,7 +1712,7 @@ namespace CNA::Internal::Backends::Vulkan
         // starts in UNDEFINED and its previous content is never needed across RT passes.
         depthAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -1815,7 +1821,7 @@ namespace CNA::Internal::Backends::Vulkan
         depthAtt.samples        = sampleCount_;
         depthAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -1901,7 +1907,7 @@ namespace CNA::Internal::Backends::Vulkan
         depth.samples        = VK_SAMPLE_COUNT_1_BIT;
         depth.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depth.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depth.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depth.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depth.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         depth.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -2758,7 +2764,7 @@ namespace CNA::Internal::Backends::Vulkan
         depthAtt.samples        = sampleCount_;
         depthAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -3760,16 +3766,17 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineDualTex3D(
-        VkPrimitiveTopology topo,
+        std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureDualTexResources();
 
-        // DualTexture always uses stride=20 (VertexPositionTexture); key encodes topology+state.
-        constexpr std::size_t kDualStride = 20;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kDualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        // DualTexture uses stride=20 (VertexPositionTexture) by default, or stride=24
+        // (VertexPositionColorTexture, Task 889) when VertexColorEnabled needs a color attribute.
+        const std::size_t dualStride = (stride == 24) ? 24 : 20;
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(dualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesDualTex3D_.find(key);
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
@@ -3777,18 +3784,34 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 899: dedicated vertex shader (was: reuse kTextured3dVertSpv) -- textured3d.vert.glsl
         // now declares its own fog UBO at binding=1 (Bundle A's shared layout), which conflicts
         // with dual_texture3d's 2-sampler descriptor set layout (fog UBO here is at binding=2).
-        VkShaderModule vert = CreateShaderModule(kDualTexture3dVertSpv,  kDualTexture3dVertSpv_size);
+        // Task 889: stride 24 (VertexPositionColorTexture) gets its own vertex shader that reads
+        // the color attribute and gates it by VertexColorEnabled, mirroring Task 887's
+        // alpha_test_colored3d.vert.glsl pattern; both variants share the unchanged fragment shader.
+        const bool colored = (dualStride == 24);
+        VkShaderModule vert = colored
+            ? CreateShaderModule(kDualTextureColored3dVertSpv, kDualTextureColored3dVertSpv_size)
+            : CreateShaderModule(kDualTexture3dVertSpv,        kDualTexture3dVertSpv_size);
         VkShaderModule frag = CreateShaderModule(kDualTexture3dFragSpv,  kDualTexture3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, kDualStride, VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[2]{};
-        attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };
-        attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT,    12 };
+        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(dualStride), VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[3]{};
+        uint32_t attrCount;
+        if (colored) {
+            // float3 pos + ubyte4 color + float2 uv (mirrors colored_textured3d's layout).
+            attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };
+            attrs[1] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12 };
+            attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    16 };
+            attrCount = 3;
+        } else {
+            attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };
+            attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT,    12 };
+            attrCount = 2;
+        }
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = 2; vis.pVertexAttributeDescriptions = attrs;
+        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
@@ -5533,7 +5556,7 @@ namespace CNA::Internal::Backends::Vulkan
                                                           draw.depthTest, draw.depthWrite,
                                                           draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useDualTexture) {
-                    pipe = GetOrCreatePipelineDualTex3D(draw.topology,
+                    pipe = GetOrCreatePipelineDualTex3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useEnvMap) {
@@ -5755,11 +5778,11 @@ namespace CNA::Internal::Backends::Vulkan
             if (rtMsaa) {
                 rtCv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
                 rtCv[1].color        = {};
-                rtCv[2].depthStencil = { 1.0f, 0 };
+                rtCv[2].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
             } else {
                 for (uint32_t ci = 0; ci < nColor; ++ci)
                     rtCv[ci].color = { { clearR_, clearG_, clearB_, clearA_ } };
-                rtCv[nColor].depthStencil = { 1.0f, 0 };
+                rtCv[nColor].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
             }
             VkRenderPassBeginInfo rtRp{};
             rtRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -5798,9 +5821,9 @@ namespace CNA::Internal::Backends::Vulkan
         cv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
         if (hasMsaa) {
             cv[1].color        = {};
-            cv[2].depthStencil = { 1.0f, 0 };
+            cv[2].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
         } else {
-            cv[1].depthStencil = { 1.0f, 0 };
+            cv[1].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
         }
         VkRenderPassBeginInfo rp{};
         rp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -6226,17 +6249,59 @@ namespace CNA::Internal::Backends::Vulkan
 
     // ---- 3D pipeline ----
 
-    void VulkanGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float /*depth*/)
+    void VulkanGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
+        clearDepth_ = depth;
         readbackStagingValid_ = false;  // new frame content invalidates the readback cache
         // Task 875: see Clear()'s identical fix.
         if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
             clearedRTs_.push_back(currentRT_);
-        // TODO: depth buffer support
     }
 
-    void VulkanGraphicsBackend::ClearDepth(float /*depth*/) { readbackStagingValid_ = false; /* Vulkan depth-only clear not yet implemented */ }
+    void VulkanGraphicsBackend::ClearDepth(float depth) { clearDepth_ = depth; readbackStagingValid_ = false; /* Vulkan depth-only clear not yet implemented */ }
+
+    // Task 871: every render pass this backend records already unconditionally clears the
+    // color/depth attachments every frame (see RecordCommandBuffer()'s hardcoded loadOp=CLEAR),
+    // so -- mirroring that existing (if imperfect) design rather than introducing new
+    // per-request selectivity -- these new stencil-aware entry points just update clearStencil_
+    // (read by RecordCommandBuffer()'s VkClearValue construction) and mark the currently-bound RT
+    // dirty exactly like Clear()/ClearColorAndDepth() already do (Task 875).
+    void VulkanGraphicsBackend::ClearStencil(int stencil)
+    {
+        clearStencil_ = stencil;
+        readbackStagingValid_ = false;
+        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
+            clearedRTs_.push_back(currentRT_);
+    }
+
+    void VulkanGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
+    {
+        clearDepth_ = depth;
+        clearStencil_ = stencil;
+        readbackStagingValid_ = false;
+        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
+            clearedRTs_.push_back(currentRT_);
+    }
+
+    void VulkanGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
+        clearStencil_ = stencil;
+        readbackStagingValid_ = false;
+        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
+            clearedRTs_.push_back(currentRT_);
+    }
+
+    void VulkanGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
+    {
+        clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
+        clearDepth_ = depth;
+        clearStencil_ = stencil;
+        readbackStagingValid_ = false;
+        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
+            clearedRTs_.push_back(currentRT_);
+    }
 
     void VulkanGraphicsBackend::SetDepthTestEnabled(bool v)  { depthTestEnabled_  = v; }
     void VulkanGraphicsBackend::SetBlendEnabled(bool v)      { blendEnabled_      = v; }

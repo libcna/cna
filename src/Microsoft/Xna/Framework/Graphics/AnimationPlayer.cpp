@@ -4,6 +4,12 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    const std::string& SkinningData::GetTypeName() const
+    {
+        static const std::string typeName = "Microsoft.Xna.Framework.Graphics.SkinningData";
+        return typeName;
+    }
+
     namespace
     {
         // Mirrors SkinnedModelEXT.cpp's own identical SampleTrack helper (same keyframe

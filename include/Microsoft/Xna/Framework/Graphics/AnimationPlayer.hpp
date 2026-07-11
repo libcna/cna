@@ -7,6 +7,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -41,10 +42,14 @@ namespace Microsoft::Xna::Framework::Graphics
      * descriptor supplies a `"skeleton"` field — game code retrieves it via
      * `static_cast<SkinningData*>(model.getTagProperty())`, matching the real sample's own
      * convention of stashing this on `Model.Tag` (real XNA's `Model` class has no dedicated
-     * skinning-data property of its own).
+     * skinning-data property of its own). Inherits `System::Object` so it can be pointed to
+     * by `Model.Tag`'s own `System::Object*` type.
      */
-    NOXNA struct SkinningData
+    NOXNA struct SkinningData : public System::Object
     {
+        /** @brief Returns the fully-qualified .NET-style type name of this object. */
+        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+
         /** @brief Number of bones in this model's skeleton. */
         int BoneCount = 0;
         /** @brief Parent bone index for each bone (-1 for a root bone), in topological order. */

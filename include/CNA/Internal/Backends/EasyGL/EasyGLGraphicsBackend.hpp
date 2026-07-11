@@ -424,6 +424,7 @@ namespace CNA::Internal::Backends::EasyGL
         Prog3D prog_col_textured_;   ///< stride=24: aPos + aColor + aUV
         Prog3D prog_lit_textured_;   ///< stride=32: aPos + aNormal + aUV
         Prog3D prog_dual_textured_;  ///< stride=20: aPos + aUV, two samplers (DualTextureEffect)
+        Prog3D prog_dual_textured_colored_;  ///< stride=24: aPos + aColor + aUV, two samplers (DualTextureEffect, Task 889)
         Prog3D prog_env_mapped_;     ///< stride=32: aPos + aNormal + aUV, cube map (EnvironmentMapEffect)
         Prog3D prog_skinned_;        ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect)
 
@@ -464,6 +465,7 @@ namespace CNA::Internal::Backends::EasyGL
         void EnsureColoredTextured3DProgram();
         void EnsureLit3DProgram();
         void EnsureDualTextured3DProgram();
+        void EnsureDualTexturedColored3DProgram();
         void EnsureEnvMapped3DProgram();
         void EnsureSkinnedProgram();
         void EnsureDefaultWhiteTexture();
@@ -544,6 +546,10 @@ namespace CNA::Internal::Backends::EasyGL
         // ---- 3D: IMPLEMENTED ----
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
+        void ClearStencil(int stencil) override;
+        void ClearDepthAndStencil(float depth, int stencil) override;
+        void ClearColorAndStencil(float r, float g, float b, float a, int stencil) override;
+        void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;

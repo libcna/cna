@@ -1649,6 +1649,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 891: EnvironmentMapEffect's base cube-map lerp target must be scaled by the
+        # combined texture x diffuse alpha -- verbatim reuse of the shared backend-agnostic
+        # source, registered on all 3 backends.
+        cna_easygl_test(cna_test_easygl_environmentmapeffect_alphascaledlerp
+                        examples/environmentmapeffect_alphascaledlerp_test.cpp)
+        add_test(NAME EasyGL_EnvironmentMapEffect_AlphaScaledLerp
+                 COMMAND cna_test_easygl_environmentmapeffect_alphascaledlerp)
+        set_tests_properties(EasyGL_EnvironmentMapEffect_AlphaScaledLerp PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 396: EnvironmentMapEffect Fresnel edge-weighting should suppress head-on reflections
         cna_easygl_test(cna_test_easygl_environmentmapeffect_fresnel
                         examples/easygl_environmentmapeffect_fresnel_test.cpp)
@@ -1806,6 +1817,28 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME EasyGL_ModelJsonReader_BoneHierarchy
                  COMMAND cna_test_easygl_model_json_reader_bone_hierarchy)
         set_tests_properties(EasyGL_ModelJsonReader_BoneHierarchy PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 941: ModelTypeReader::Read() parses .model.json's new "skeleton"/"animations"
+        # fields into a SkinningData attached to Model.Tag, and honors a mesh's "effect":
+        # "SkinnedEffect" + "texture" field. Pure structural test, no rendering.
+        cna_easygl_test(cna_test_easygl_model_json_reader_skeleton
+                        examples/easygl_model_json_reader_skeleton_test.cpp)
+        add_test(NAME EasyGL_ModelJsonReader_Skeleton
+                 COMMAND cna_test_easygl_model_json_reader_skeleton)
+        set_tests_properties(EasyGL_ModelJsonReader_Skeleton PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 942: Pixel test -- AnimationPlayer::GetSkinTransforms() fed into a real, Content.
+        # Load<Model>()-loaded mesh's SkinnedEffect::SetBoneTransforms() before Model.Draw()
+        # actually deforms the rendered mesh as the clip advances.
+        cna_easygl_test(cna_test_easygl_model_skinned_animation_playback
+                        examples/easygl_model_skinned_animation_playback_test.cpp)
+        add_test(NAME EasyGL_Model_SkinnedAnimationPlayback
+                 COMMAND cna_test_easygl_model_skinned_animation_playback)
+        set_tests_properties(EasyGL_Model_SkinnedAnimationPlayback PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -2826,6 +2859,36 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 871: GraphicsDevice::Clear() now actually clears the stencil buffer to the
+        # requested value on ClearOptions combinations that include ClearOptions::Stencil.
+        cna_easygl_test(cna_test_easygl_graphicsdevice_clear_stencil
+                        examples/easygl_graphicsdevice_clear_stencil_test.cpp)
+        add_test(NAME EasyGL_GraphicsDevice_ClearStencil
+                 COMMAND cna_test_easygl_graphicsdevice_clear_stencil)
+        set_tests_properties(EasyGL_GraphicsDevice_ClearStencil PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 950: GraphicsDevice::Clear()'s depth parameter -- EasyGL already forwarded it
+        # correctly (unlike Vulkan/Bgfx); registered here too as a regression guard.
+        cna_easygl_test(cna_test_easygl_graphicsdevice_clear_depth
+                        examples/graphicsdevice_clear_depth_test.cpp)
+        add_test(NAME EasyGL_GraphicsDevice_ClearDepth
+                 COMMAND cna_test_easygl_graphicsdevice_clear_depth)
+        set_tests_properties(EasyGL_GraphicsDevice_ClearDepth PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 889: DualTextureEffect.VertexColorEnabled -- verbatim reuse of the shared
+        # backend-agnostic source, registered on all 3 backends.
+        cna_easygl_test(cna_test_easygl_dualtextureeffect_vertexcolor
+                        examples/dualtextureeffect_vertexcolor_test.cpp)
+        add_test(NAME EasyGL_DualTextureEffect_VertexColor
+                 COMMAND cna_test_easygl_dualtextureeffect_vertexcolor)
+        set_tests_properties(EasyGL_DualTextureEffect_VertexColor PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 323 (+ 324/325 coverage): RasterizerState.CullMode — None/CullClockwiseFace/
         # CullCounterClockwiseFace, contrast-checked with front- and back-winding quads
         cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode
@@ -2833,6 +2896,30 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME EasyGL_RasterizerState_CullMode
                  COMMAND cna_test_easygl_rasterizerstate_cullmode)
         set_tests_properties(EasyGL_RasterizerState_CullMode PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # XNA culling-compatibility audit (docs/xna_culling_compatibility_audit.md): extends the
+        # identity-only CullMode test above with a real Matrix::CreateLookAt camera and
+        # perspective/orthographic projection -- verbatim reuse of the shared backend-agnostic
+        # source, registered on all 3 backends.
+        cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode_camera
+                        examples/rasterizerstate_cullmode_camera_test.cpp)
+        add_test(NAME EasyGL_RasterizerState_CullMode_Camera
+                 COMMAND cna_test_easygl_rasterizerstate_cullmode_camera)
+        set_tests_properties(EasyGL_RasterizerState_CullMode_Camera PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # XNA culling-compatibility audit: same real-camera reproducer, but through
+        # GraphicsDevice::DrawIndexedPrimitives with a real VertexBuffer/IndexBuffer/BasicEffect
+        # -- the exact code path Model/ModelMesh::Draw() uses -- instead of DrawUserPrimitives'
+        # separate DrawColoredPrimitives dispatch. Verbatim reuse of the shared source.
+        cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode_indexed_basiceffect
+                        examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp)
+        add_test(NAME EasyGL_RasterizerState_CullMode_IndexedBasicEffect
+                 COMMAND cna_test_easygl_rasterizerstate_cullmode_indexed_basiceffect)
+        set_tests_properties(EasyGL_RasterizerState_CullMode_IndexedBasicEffect PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -3204,6 +3291,37 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 871: GraphicsDevice::Clear() stencil-clearing fix is in SHARED code
+        # (GraphicsDevice.cpp) -- verbatim reuse of the EasyGL source.
+        cna_vulkan_test(cna_test_vulkan_graphicsdevice_clear_stencil
+                        examples/easygl_graphicsdevice_clear_stencil_test.cpp)
+        add_test(NAME Vulkan_GraphicsDevice_ClearStencil
+                 COMMAND cna_test_vulkan_graphicsdevice_clear_stencil)
+        set_tests_properties(Vulkan_GraphicsDevice_ClearStencil PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 950: VulkanGraphicsBackend::ClearColorAndDepth/ClearColorDepthAndStencil now
+        # actually thread their `depth` parameter into VkClearValue.depthStencil.depth instead of
+        # hardcoding 1.0f -- verbatim reuse of the shared backend-agnostic source.
+        cna_vulkan_test(cna_test_vulkan_graphicsdevice_clear_depth
+                        examples/graphicsdevice_clear_depth_test.cpp)
+        add_test(NAME Vulkan_GraphicsDevice_ClearDepth
+                 COMMAND cna_test_vulkan_graphicsdevice_clear_depth)
+        set_tests_properties(Vulkan_GraphicsDevice_ClearDepth PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 889: DualTextureEffect.VertexColorEnabled -- verbatim reuse of the shared
+        # backend-agnostic source, registered on all 3 backends.
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_vertexcolor
+                        examples/dualtextureeffect_vertexcolor_test.cpp)
+        add_test(NAME Vulkan_DualTextureEffect_VertexColor
+                 COMMAND cna_test_vulkan_dualtextureeffect_vertexcolor)
+        set_tests_properties(Vulkan_DualTextureEffect_VertexColor PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 323 (+ 324/325 coverage): RasterizerState.CullMode on Vulkan (reuses the
         # backend-agnostic EasyGL source).
         cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode
@@ -3211,6 +3329,24 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_RasterizerState_CullMode
                  COMMAND cna_test_vulkan_rasterizerstate_cullmode)
         set_tests_properties(Vulkan_RasterizerState_CullMode PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # XNA culling-compatibility audit: real-camera CullMode reproducer, verbatim reuse of the
+        # shared backend-agnostic source.
+        cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode_camera
+                        examples/rasterizerstate_cullmode_camera_test.cpp)
+        add_test(NAME Vulkan_RasterizerState_CullMode_Camera
+                 COMMAND cna_test_vulkan_rasterizerstate_cullmode_camera)
+        set_tests_properties(Vulkan_RasterizerState_CullMode_Camera PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode_indexed_basiceffect
+                        examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp)
+        add_test(NAME Vulkan_RasterizerState_CullMode_IndexedBasicEffect
+                 COMMAND cna_test_vulkan_rasterizerstate_cullmode_indexed_basiceffect)
+        set_tests_properties(Vulkan_RasterizerState_CullMode_IndexedBasicEffect PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -3247,6 +3383,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_EnvironmentMapEffect_Specular
                  COMMAND cna_test_vulkan_environmentmapeffect_specular)
         set_tests_properties(Vulkan_EnvironmentMapEffect_Specular PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 891: EnvironmentMapEffect's base cube-map lerp target must be scaled by the
+        # combined texture x diffuse alpha -- verbatim reuse of the shared backend-agnostic
+        # source, registered on all 3 backends.
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_alphascaledlerp
+                        examples/environmentmapeffect_alphascaledlerp_test.cpp)
+        add_test(NAME Vulkan_EnvironmentMapEffect_AlphaScaledLerp
+                 COMMAND cna_test_vulkan_environmentmapeffect_alphascaledlerp)
+        set_tests_properties(Vulkan_EnvironmentMapEffect_AlphaScaledLerp PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -4011,6 +4158,28 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_ModelJsonReader_BoneHierarchy
                  COMMAND cna_test_vulkan_model_json_reader_bone_hierarchy)
         set_tests_properties(Vulkan_ModelJsonReader_BoneHierarchy PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 941: ModelTypeReader::Read()'s "skeleton"/"animations"/SkinnedEffect support is in
+        # SHARED code (ContentManager.cpp) -- verbatim reuse of the EasyGL source (pure
+        # structural test).
+        cna_vulkan_test(cna_test_vulkan_model_json_reader_skeleton
+                        examples/easygl_model_json_reader_skeleton_test.cpp)
+        add_test(NAME Vulkan_ModelJsonReader_Skeleton
+                 COMMAND cna_test_vulkan_model_json_reader_skeleton)
+        set_tests_properties(Vulkan_ModelJsonReader_Skeleton PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 942: AnimationPlayer -> SkinnedEffect -> Model.Draw() wiring is in SHARED code
+        # (ContentManager.cpp/AnimationPlayer.cpp/SkinnedEffect) -- verbatim reuse of the EasyGL
+        # source (pixel test).
+        cna_vulkan_test(cna_test_vulkan_model_skinned_animation_playback
+                        examples/easygl_model_skinned_animation_playback_test.cpp)
+        add_test(NAME Vulkan_Model_SkinnedAnimationPlayback
+                 COMMAND cna_test_vulkan_model_skinned_animation_playback)
+        set_tests_properties(Vulkan_Model_SkinnedAnimationPlayback PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -4986,6 +5155,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 891: EnvironmentMapEffect's base cube-map lerp target must be scaled by the combined
+    # texture x diffuse alpha -- verbatim reuse of the shared backend-agnostic source, registered
+    # on all 3 backends.
+    cna_bgfx_test(cna_test_bgfx_environmentmapeffect_alphascaledlerp
+                  examples/environmentmapeffect_alphascaledlerp_test.cpp)
+    add_test(NAME Bgfx_EnvironmentMapEffect_AlphaScaledLerp
+             COMMAND cna_test_bgfx_environmentmapeffect_alphascaledlerp)
+    set_tests_properties(Bgfx_EnvironmentMapEffect_AlphaScaledLerp PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 396: EnvironmentMapEffect Fresnel edge-weighting should suppress head-on reflections
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_fresnel
                   examples/bgfx_environmentmapeffect_fresnel_test.cpp)
@@ -5551,6 +5731,40 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 871: GraphicsDevice::Clear() now actually clears the stencil buffer to the requested
+    # value on Bgfx too -- a Bgfx-specific adaptation of the EasyGL source (1 step per real frame,
+    # since Bgfx's own per-frame view clear cannot be interleaved mid-frame with draws either).
+    cna_bgfx_test(cna_test_bgfx_graphicsdevice_clear_stencil
+                  examples/bgfx_graphicsdevice_clear_stencil_test.cpp)
+    add_test(NAME Bgfx_GraphicsDevice_ClearStencil
+             COMMAND cna_test_bgfx_graphicsdevice_clear_stencil)
+    set_tests_properties(Bgfx_GraphicsDevice_ClearStencil PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 950: BgfxGraphicsBackend::ClearColorAndDepth/ClearColorDepthAndStencil now actually
+    # thread their `depth` parameter into bgfx::setViewClear() instead of hardcoding 1.0f --
+    # verbatim reuse of the shared backend-agnostic source (no retry loop needed, same as the
+    # Task 871 Bgfx stencil test: each check's Clear()+Draw()+GetBackBufferData() is its own real
+    # frame).
+    cna_bgfx_test(cna_test_bgfx_graphicsdevice_clear_depth
+                  examples/graphicsdevice_clear_depth_test.cpp)
+    add_test(NAME Bgfx_GraphicsDevice_ClearDepth
+             COMMAND cna_test_bgfx_graphicsdevice_clear_depth)
+    set_tests_properties(Bgfx_GraphicsDevice_ClearDepth PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 889: DualTextureEffect.VertexColorEnabled -- verbatim reuse of the shared
+    # backend-agnostic source, registered on all 3 backends.
+    cna_bgfx_test(cna_test_bgfx_dualtextureeffect_vertexcolor
+                  examples/dualtextureeffect_vertexcolor_test.cpp)
+    add_test(NAME Bgfx_DualTextureEffect_VertexColor
+             COMMAND cna_test_bgfx_dualtextureeffect_vertexcolor)
+    set_tests_properties(Bgfx_DualTextureEffect_VertexColor PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 765 (Phase 72 Bgfx gap closure): CullMode (None/CullClockwiseFace/
     # CullCounterClockwiseFace) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task
     # 323/324/325; that file reads back 2 columns in one frame, incompatible with Bgfx's
@@ -5560,6 +5774,26 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_RasterizerState_CullMode
              COMMAND cna_test_bgfx_rasterizerstate_cullmode)
     set_tests_properties(Bgfx_RasterizerState_CullMode PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # XNA culling-compatibility audit: real-camera CullMode reproducer, verbatim reuse of the
+    # shared backend-agnostic source (first tried on Bgfx as-is; see the audit doc for whether
+    # Bgfx's own multiple-reads-per-frame GetBackBufferData limitation, Task 406, required a
+    # restructure here).
+    cna_bgfx_test(cna_test_bgfx_rasterizerstate_cullmode_camera
+                  examples/rasterizerstate_cullmode_camera_test.cpp)
+    add_test(NAME Bgfx_RasterizerState_CullMode_Camera
+             COMMAND cna_test_bgfx_rasterizerstate_cullmode_camera)
+    set_tests_properties(Bgfx_RasterizerState_CullMode_Camera PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_bgfx_test(cna_test_bgfx_rasterizerstate_cullmode_indexed_basiceffect
+                  examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp)
+    add_test(NAME Bgfx_RasterizerState_CullMode_IndexedBasicEffect
+             COMMAND cna_test_bgfx_rasterizerstate_cullmode_indexed_basiceffect)
+    set_tests_properties(Bgfx_RasterizerState_CullMode_IndexedBasicEffect PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

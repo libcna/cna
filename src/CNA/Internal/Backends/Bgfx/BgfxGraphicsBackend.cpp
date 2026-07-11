@@ -302,6 +302,14 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
+        // Task 951: force the reserved highest-id view (Detail::kBackbufferFlushViewId) to be the
+        // last one bgfx processes this frame -- see that constant's own comment for why. Touching
+        // it (rather than resetting any real render target's own view) never discards a still-
+        // pending draw queued against a concurrently-active render target within this same
+        // un-advanced frame.
+        bgfx::setViewFrameBuffer(Detail::kBackbufferFlushViewId, BGFX_INVALID_HANDLE);
+        bgfx::touch(Detail::kBackbufferFlushViewId);
+
         // Request a screenshot of the default backbuffer (BGFX_INVALID_HANDLE = swapchain).
         // The callback fires after bgfx::frame() flushes the current command buffer.
         readbackCallback_.screenshotReady = false;
@@ -634,8 +642,9 @@ namespace CNA::Internal::Backends::Bgfx
         {
             // Mirrors bgfx's own internal BGFX_CONFIG_MAX_VIEWS default (src/config.h, not part
             // of the public bgfx.h API so not #include-able here) -- view id 0 is reserved for
-            // the backbuffer, leaving ids [1, kMaxBgfxViews) for render targets/MRT.
-            static constexpr bgfx::ViewId kMaxBgfxViews = 256;
+            // the backbuffer and kBackbufferFlushViewId (Task 951) is reserved at the top end,
+            // leaving ids [1, kMaxBgfxViews) for render targets/MRT.
+            static constexpr bgfx::ViewId kMaxBgfxViews = kBackbufferFlushViewId;
             auto& pool = RtViewIdFreeList();
             if (!pool.empty())
             {
@@ -841,7 +850,14 @@ namespace CNA::Internal::Backends::Bgfx
         int numAttachments = 1;
         if (bgfx::isValid(depthTex))
         {
-            atts[1].init(depthTex, bgfx::Access::Write);
+            // Task 951: bgfx::Attachment::init()'s _resolve parameter defaults to
+            // BGFX_RESOLVE_AUTO_GEN_MIPS (desired for atts[0]'s colour/cube-face attachment, see
+            // Task 907's own comment above) -- but bgfx hard-asserts if a DEPTH attachment is
+            // given that same default ("Depth textures do not support MSAA resolve"), since
+            // depthTex is never created with hasMips=true (see the constructor above) and mip
+            // auto-regeneration makes no sense for a depth buffer regardless. BGFX_RESOLVE_NONE
+            // is depthTex's own correct, do-nothing resolve mode.
+            atts[1].init(depthTex, bgfx::Access::Write, 0, 1, 0, BGFX_RESOLVE_NONE);
             numAttachments = 2;
         }
         fbo = bgfx::createFrameBuffer(numAttachments, atts);
@@ -1081,6 +1097,10 @@ namespace CNA::Internal::Backends::Bgfx
                                                              "vs_dual_texture3d",
                                                              "fs_dual_texture3d",
                                                              "dual_texture3d");
+                dualTextureColored3DProgram_ = tryCreateProgram(kDualTexture3dShaders,
+                                                             "vs_dual_texture_colored3d",
+                                                             "fs_dual_texture3d",
+                                                             "dual_texture_colored3d");
                 skinned3DProgram_         = tryCreateProgram(kSkinned3dShaders,
                                                              "vs_skinned3d",
                                                              "fs_skinned3d",
@@ -1228,6 +1248,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyP(alphaTest3DProgram_);
         destroyP(alphaTestColoredTextured3DProgram_);
         destroyP(dualTexture3DProgram_);
+        destroyP(dualTextureColored3DProgram_);
         destroyP(skinned3DProgram_);
         destroyP(instanced3DProgram_);
         destroyP(envMap3DProgram_);
@@ -1295,7 +1316,11 @@ namespace CNA::Internal::Backends::Bgfx
         float orthoWithTransform[16];
         bx::mtxMul(orthoWithTransform, transformColMajor, ortho);
         bgfx::setViewTransform(spriteViewId, nullptr, orthoWithTransform);
-        bgfx::setViewClear(spriteViewId, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, clearRgba, 1.0f, 0);
+        // Task 871: BGFX_CLEAR_STENCIL and the real requested stencil value were previously
+        // never included here -- a requested stencil clear silently did nothing.
+        // Task 950: clearDepthValue_ replaces a previously-hardcoded 1.0f.
+        bgfx::setViewClear(spriteViewId, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL,
+                            clearRgba, clearDepthValue_, clearStencilValue_);
     }
 
     void BgfxGraphicsBackend::Clear(float r, float g, float b, float a)
@@ -1877,12 +1902,44 @@ namespace CNA::Internal::Backends::Bgfx
             "are not yet wired into bgfx state flags.");
     }
 
-    void BgfxGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float /*depth*/)
+    void BgfxGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
+        clearDepthValue_ = depth;
         Clear(r, g, b, a);
     }
 
-    void BgfxGraphicsBackend::ClearDepth(float /*depth*/) { /* Bgfx depth-only clear not yet implemented */ }
+    void BgfxGraphicsBackend::ClearDepth(float depth) { clearDepthValue_ = depth; /* Bgfx depth-only clear not yet implemented */ }
+
+    // Task 871: mirrors Clear()'s own shape (EnsureViewState() + touch actually applies the new
+    // bgfx::setViewClear() flags/value this frame) rather than ClearDepth()'s pre-existing no-op
+    // shape, since stencil clearing needs to genuinely take effect for this task's fix to matter.
+    void BgfxGraphicsBackend::ClearStencil(int stencil)
+    {
+        clearStencilValue_ = static_cast<uint8_t>(stencil);
+        EnsureViewState();
+        bgfx::touch(spriteViewId);
+    }
+
+    void BgfxGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
+    {
+        clearDepthValue_ = depth;
+        clearStencilValue_ = static_cast<uint8_t>(stencil);
+        EnsureViewState();
+        bgfx::touch(spriteViewId);
+    }
+
+    void BgfxGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        clearStencilValue_ = static_cast<uint8_t>(stencil);
+        Clear(r, g, b, a);
+    }
+
+    void BgfxGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
+    {
+        clearDepthValue_ = depth;
+        clearStencilValue_ = static_cast<uint8_t>(stencil);
+        Clear(r, g, b, a);
+    }
 
     void BgfxGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3DState(); }
     void BgfxGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3DState(); }
@@ -2183,7 +2240,44 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setState(state, blendFactorPacked_);
 
         const bool alphaTestActive = (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
-        if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
+        if (params.dualTexture && params.vertexColorEnabled && bgfx::isValid(dualTextureColored3DProgram_))
+        {
+            // Task 889: stride-24 (VertexPositionColorTexture) variant — reads a_color0 and
+            // gates it by VertexColorEnabled, mirroring Task 887's alphaTestColoredTextured3DProgram_.
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            if (bgfx::isValid(texColor3DSampler2_))
+            {
+                if (params.texture1)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
+                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
+                }
+                else
+                {
+                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
+                    // instead of leaving the previous draw's texture bound.
+                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
+                }
+            }
+            SubmitViewProgram(dualTextureColored3DProgram_);
+        }
+        else if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             if (bgfx::isValid(texColor3DSampler_))
@@ -2518,7 +2612,44 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setState(state, blendFactorPacked_);
 
         const bool alphaTestActive = (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
-        if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
+        if (params.dualTexture && params.vertexColorEnabled && bgfx::isValid(dualTextureColored3DProgram_))
+        {
+            // Task 889: stride-24 (VertexPositionColorTexture) variant — reads a_color0 and
+            // gates it by VertexColorEnabled, mirroring Task 887's alphaTestColoredTextured3DProgram_.
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            if (bgfx::isValid(texColor3DSampler2_))
+            {
+                if (params.texture1)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
+                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
+                }
+                else
+                {
+                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
+                    // instead of leaving the previous draw's texture bound.
+                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
+                }
+            }
+            SubmitViewProgram(dualTextureColored3DProgram_);
+        }
+        else if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             if (bgfx::isValid(texColor3DSampler_))

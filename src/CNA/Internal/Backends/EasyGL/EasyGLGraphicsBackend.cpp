@@ -1388,6 +1388,7 @@ void main()
         prog_col_textured_.reset_no_gl();
         prog_lit_textured_.reset_no_gl();
         prog_dual_textured_.reset_no_gl();
+        prog_dual_textured_colored_.reset_no_gl();
         prog_env_mapped_.reset_no_gl();
         prog_skinned_.reset_no_gl();
         default_white_texture_.reset_handle_no_gl();
@@ -2686,6 +2687,70 @@ void main()
         CNA_RENDER_LOG("dual+textured3D ready loc_wvp=" << prog_dual_textured_.loc_wvp);
     }
 
+    void EasyGLGraphicsBackend::EnsureDualTexturedColored3DProgram()
+    {
+        if (prog_dual_textured_colored_.ready) return;
+
+        // Task 889: stride-24 (VertexPositionColorTexture) variant of the dual-texture shader
+        // above -- reads the vertex color and gates it by VertexColorEnabled, mirroring
+        // EnsureColoredTextured3DProgram()'s already-correct BasicEffect formula.
+        static const char* vsrc =
+"#version 300 es\n"
+"precision highp float;\n"
+"layout(location=0) in vec3 aPos;\n"
+"layout(location=1) in vec4 aColor;\n"
+"layout(location=2) in vec2 aUV;\n"
+"uniform mat4 uWVP;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
+"out vec4 vColor;\n"
+"out vec2 vUV;\n"
+"out float vFogFactor;\n"
+"void main(){\n"
+"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vColor=aColor;\n"
+"    vUV=aUV;\n"
+"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+"}\n";
+        static const char* fsrc =
+"#version 300 es\n"
+"precision mediump float;\n"
+"in vec4 vColor;\n"
+"in vec2 vUV;\n"
+"in float vFogFactor;\n"
+"uniform sampler2D uTexture;\n"
+"uniform sampler2D uTexture2;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
+"uniform float uVertexColorEnabled;\n"
+"out vec4 FragColor;\n"
+"void main(){\n"
+"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
+"    vec4 base=texture(uTexture,vUV);\n"
+"    base.rgb*=2.0;\n"
+"    FragColor=base*texture(uTexture2,vUV)*vc*uDiffuseColor;\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"}\n";
+
+        CompileAndLink(prog_dual_textured_colored_.prog, vsrc, fsrc, "dual+textured+colored");
+        prog_dual_textured_colored_.loc_wvp         = prog_dual_textured_colored_.prog.uniform_location("uWVP");
+        prog_dual_textured_colored_.loc_texture     = prog_dual_textured_colored_.prog.uniform_location("uTexture");
+        prog_dual_textured_colored_.loc_texture2    = prog_dual_textured_colored_.prog.uniform_location("uTexture2");
+        prog_dual_textured_colored_.loc_diffuse     = prog_dual_textured_colored_.prog.uniform_location("uDiffuseColor");
+        prog_dual_textured_colored_.loc_alphatest   = prog_dual_textured_colored_.prog.uniform_location("uAlphaTest");
+        prog_dual_textured_colored_.loc_fog_enabled = prog_dual_textured_colored_.prog.uniform_location("uFogEnabled");
+        prog_dual_textured_colored_.loc_fog_color   = prog_dual_textured_colored_.prog.uniform_location("uFogColor");
+        prog_dual_textured_colored_.loc_fog_start   = prog_dual_textured_colored_.prog.uniform_location("uFogStart");
+        prog_dual_textured_colored_.loc_fog_end     = prog_dual_textured_colored_.prog.uniform_location("uFogEnd");
+        prog_dual_textured_colored_.loc_vertexcolor = prog_dual_textured_colored_.prog.uniform_location("uVertexColorEnabled");
+        prog_dual_textured_colored_.ready           = true;
+        CNA_RENDER_LOG("dual+textured+colored3D ready loc_wvp=" << prog_dual_textured_colored_.loc_wvp);
+    }
+
     void EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()
     {
         if (prog_env_mapped_.ready) return;
@@ -2749,7 +2814,7 @@ void main()
 "    float blendFactor=(uFresnelEnabled>0.5)\n"
 "        ? pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount\n"
 "        : uEnvMapAmount;\n"
-"    vec3 rgb=mix(baseColor,envSample.rgb,blendFactor)+uEnvMapSpecular*envSample.a*combinedAlpha;\n"
+"    vec3 rgb=mix(baseColor,envSample.rgb*combinedAlpha,blendFactor)+uEnvMapSpecular*envSample.a*combinedAlpha;\n"
 "    FragColor=vec4(rgb,combinedAlpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
@@ -2879,6 +2944,13 @@ void main()
         }
         if (params.dualTexture)
         {
+            // Task 889: stride 24 (VertexPositionColorTexture) gets its own vertex-color-aware
+            // program; stride 20 (VertexPositionTexture) keeps the original color-less shader.
+            if (stride == 24)
+            {
+                EnsureDualTexturedColored3DProgram();
+                return prog_dual_textured_colored_;
+            }
             EnsureDualTextured3DProgram();
             return prog_dual_textured_;
         }
@@ -3090,6 +3162,49 @@ void main()
         device.set_clear_depth(depth);
         device.set_depth_mask(true);
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
+    }
+
+    // Task 871: glClear(GL_STENCIL_BUFFER_BIT) is itself masked by the currently-active
+    // glStencilMask -- forcing it to all-1s here (mirroring ClearDepth's identical
+    // set_depth_mask(true) override) guarantees the requested clear value actually reaches every
+    // stencil bit regardless of whatever DepthStencilState::StencilWriteMask a previous draw left
+    // active; ApplyDepthStencilState() reissues the real write mask before the next draw anyway.
+    void EasyGLGraphicsBackend::ClearStencil(int stencil)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_clear_stencil(stencil);
+        device.set_stencil_mask(0xFFFFFFFFu);
+        device.clear(::easygl::ClearFlags::Stencil);
+    }
+
+    void EasyGLGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_clear_depth(depth);
+        device.set_clear_stencil(stencil);
+        device.set_depth_mask(true);
+        device.set_stencil_mask(0xFFFFFFFFu);
+        device.clear(::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
+    }
+
+    void EasyGLGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_clear_color(r, g, b, a);
+        device.set_clear_stencil(stencil);
+        device.set_stencil_mask(0xFFFFFFFFu);
+        device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Stencil);
+    }
+
+    void EasyGLGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
+    {
+        if (metagl::IsContextLost()) return;
+        device.set_clear_color(r, g, b, a);
+        device.set_clear_depth(depth);
+        device.set_clear_stencil(stencil);
+        device.set_depth_mask(true);
+        device.set_stencil_mask(0xFFFFFFFFu);
+        device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
     }
 
     void EasyGLGraphicsBackend::ClearDepth(float depth)
