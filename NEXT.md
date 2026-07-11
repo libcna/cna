@@ -18,13 +18,22 @@ API-surface changes.
 - **Current phase:** Phase 55 already declared a qualified **~90% XNA/FNA compatibility milestone**
   for `Microsoft::Xna::Framework::Graphics` (see `docs/graphics-compatibility-report.md`). Work
   since then has been backlog-hygiene plus new gaps found while porting real samples from the
-  sibling `../cna-samples` repo (Phases 75–78). **Phase 77 (skeletal animation playback) closed
+  sibling `../cna-samples` repo (Phases 75–79). **Phase 77 (skeletal animation playback) closed
   2026-07-10** (Tasks 939–942). **Phase 78** (HLSL→GLSL shader conversion for hand-porting sample
   effects) is open but the project owner confirmed most of it (Tasks 943/944/946/947) is
   `../cna-samples` content-porting work, not `cna_graphics` engine scope — only Task 945 (a tooling
   decision) is arguably in-scope, and even that needs Task 946's own first attempt (in the sibling
   repo) to inform it. **Not started as of this handoff** — do not begin it without checking with
-  the project owner first.
+  the project owner first. **Tasks 954/955 closed 2026-07-11** (a real cross-repo investigation of
+  a `SimpleAnimation` rendering bug, reported by the project owner: `RasterizerState.CullMode`
+  itself was proven correct — the actual bugs were a systematic tank-mesh winding reversal in
+  `../cna-samples`' own converted asset data, Task 954, and a `GraphicsDevice`-construction-time
+  gap where `BlendState`/`DepthStencilState` defaults never reached the backend, Task 955 — see
+  `docs/xna_culling_compatibility_audit.md`/`docs/xna_depth_occlusion_compatibility_audit.md`).
+  **Phase 79 opened 2026-07-11** (Tasks 957–1076, not started): a full one-task-per-sample re-audit
+  of all 153 `../cna-samples`-catalogued samples (including the 67 previously-ignored ones),
+  prompted directly by Tasks 954/955 showing a sample marked "Done" can still hide a real,
+  unfound CNA bug — see §8 item 5 and `plan_graphics.md`'s own Phase 79 intro for the full scope.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER`). EasyGL is primary and most heavily tested.
@@ -68,19 +77,46 @@ All 4 configured build directories build clean for their own `CNA`/`CnaTests`/ex
 target fails ("Error copying directory … `examples/demo_xact/Content`") because that directory
 doesn't exist in this checkout. Cosmetic, not a CNA bug — do not chase it (see §9).
 
-### Test status (verified 2026-07-11)
+### Test status (verified 2026-07-11, after Tasks 954/955)
 
 | Backend | `CnaTests` (gtest) | `ctest` (integration/pixel) |
 |---|---|---|
-| EasyGL | 4371/4373 pass (2 hardware-dependent skips: Accelerometer/Gyroscope) | 188/190 pass — 2 pre-existing failures (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`) |
-| Vulkan | 4371/4373 pass (2 hardware skips) — Task 953 fixed the 3 `ContentManagerSkinnedModelTest` segfaults, no exclusions needed anymore | 125/126 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
-| Bgfx | 4375/4377 pass (2 hardware skips) | **102/104 pass** — 2 remaining failures, neither a crash (see §5): `Bgfx_RenderTarget2D_MsaaResolve` (known environment limitation) and `Bgfx_RenderTargetCube_DepthFormat` (Task 952, **DEFERRED** — a `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output on Bgfx) |
+| EasyGL | 4371/4373 pass (2 hardware-dependent skips: Accelerometer/Gyroscope) | 189/191 pass — 2 pre-existing failures (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`) |
+| Vulkan | 4371/4373 pass (2 hardware skips) — Task 953 fixed the 3 `ContentManagerSkinnedModelTest` segfaults, no exclusions needed anymore | 126/127 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
+| Bgfx | 4375/4377 pass (2 hardware skips) | **103/105 pass** — 2 remaining failures, neither a crash (see §5): `Bgfx_RenderTarget2D_MsaaResolve` (known environment limitation) and `Bgfx_RenderTargetCube_DepthFormat` (Task 952, **DEFERRED** — a `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output on Bgfx) |
+
+`ctest` counts include the 6 new Task 954 CullMode reproducer tests and the 3 new Task 955
+`GraphicsDevice_DefaultStateOcclusion` tests (1 per backend), all passing.
 
 All pre-existing failures above were independently reconfirmed via `git stash` (present on the
 unmodified baseline too — not introduced by any change in this session).
 
 ### Recently implemented
 
+- **Task 955** (closed 2026-07-11): `GraphicsDevice`'s constructor now syncs `BlendState`/
+  `DepthStencilState` to the backend, not just `RasterizerState` (Task 896 had ported only that
+  3rd line from FNA's own constructor). Root cause of a real SimpleAnimation part-occlusion bug
+  reported by the project owner after Task 954's fix: on EasyGL, depth testing was OpenGL's raw
+  default (disabled) for any game — like `Tank.hpp`, correctly mirroring real XNA's own `Tank.cs`
+  — that never explicitly sets `DepthStencilState` itself. Fix mirrors real FNA's
+  `GraphicsDevice.cs` constructor line-for-line; zero `cna-samples` changes needed (diagnostic
+  isolation proved this before the fix was written). Bonus: fixed Bgfx's own wrong blend default
+  (`BGFX_STATE_BLEND_ALPHA`) as a side effect. New shared 3-backend test
+  `graphicsdevice_default_state_occlusion_test.cpp` — deliberately the one test in this project
+  that never explicitly sets state, to actually exercise `GraphicsDevice`'s real defaults. See
+  `docs/xna_depth_occlusion_compatibility_audit.md`. Found+documented (not fixed) a second,
+  separate `SpriteBatch` blend-state-leak bug, Task 956.
+- **Task 954** (closed 2026-07-11): cross-repo XNA culling-compatibility audit. `RasterizerState.
+  CullMode` proven correct — confirmed twice, once via 2 new NDC-area-prediction reproducer tests
+  (36/36 PASS across all 3 backends) and once independently against real XNA 4.0 (not just FNA
+  source reading) via a C# `CullModeTest` project the project owner ran on a real Windows 7 VM.
+  The actual SimpleAnimation symptom (a dark, disc-shaped turret underside) was root-caused —
+  after an initial too-narrow conclusion was corrected on project-owner pushback — to a systematic
+  winding reversal across all 12 of `tank.fbx`'s converted mesh parts in `../cna-samples`' own
+  asset data, fixed by reversing triangle winding in all 12 `tank_*_idx.bin` files. No `cna`
+  framework change was needed. See `docs/xna_culling_compatibility_audit.md`.
+- **Phase 79 opened** (2026-07-11, not started): full one-task-per-sample re-audit of all 153
+  `../cna-samples`-catalogued samples (Tasks 957–1076), prompted by the above 2 tasks — see §8.
 - **Task 950** (closed 2026-07-11): `GraphicsDevice::Clear()`'s `depth` parameter now actually
   takes effect on Vulkan and Bgfx (previously every clear silently hardcoded depth=1.0). Mirrors
   Task 871's `clearStencil_` pattern exactly — new `clearDepth_`/`clearDepthValue_` members threaded
