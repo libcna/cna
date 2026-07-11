@@ -2803,6 +2803,10 @@ void main()
 "uniform vec3 uEmissiveColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
+"uniform vec3 uLight1Dir;\n"
+"uniform vec3 uLight1Diffuse;\n"
+"uniform vec3 uLight2Dir;\n"
+"uniform vec3 uLight2Diffuse;\n"
 "uniform float uEnvMapAmount;\n"
 "uniform vec3 uEnvMapSpecular;\n"
 "uniform float uFresnelEnabled;\n"
@@ -2813,8 +2817,11 @@ void main()
 "void main(){\n"
 "    vec3 N=normalize(vWorldNormal);\n"
 "    vec3 E=normalize(vEyeDir);\n"
-"    float NdotL=max(dot(N,-uLight0Dir),0.0);\n"
-"    vec3 litRGB=(uEmissiveColor+uLight0Diffuse*NdotL)*uDiffuseColor.rgb;\n"
+"    float NdotL0=max(dot(N,-uLight0Dir),0.0);\n"
+"    float NdotL1=max(dot(N,-uLight1Dir),0.0);\n"
+"    float NdotL2=max(dot(N,-uLight2Dir),0.0);\n"
+"    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+"    vec3 litRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
 "    vec3 reflDir=reflect(-E,N);\n"
 "    vec4 envSample=texture(uEnvMap,reflDir);\n"
@@ -2843,6 +2850,10 @@ void main()
         p.loc_emissive      = p.prog.uniform_location("uEmissiveColor");
         p.loc_l0dir         = p.prog.uniform_location("uLight0Dir");
         p.loc_l0diff        = p.prog.uniform_location("uLight0Diffuse");
+        p.loc_l1dir         = p.prog.uniform_location("uLight1Dir");
+        p.loc_l1diff        = p.prog.uniform_location("uLight1Diffuse");
+        p.loc_l2dir         = p.prog.uniform_location("uLight2Dir");
+        p.loc_l2diff        = p.prog.uniform_location("uLight2Diffuse");
         p.loc_envmap_amount   = p.prog.uniform_location("uEnvMapAmount");
         p.loc_envmap_spec     = p.prog.uniform_location("uEnvMapSpecular");
         p.loc_fresnel_enabled = p.prog.uniform_location("uFresnelEnabled");
@@ -3087,6 +3098,21 @@ void main()
         if (p.loc_l0diff >= 0 && p.loc_ambient < 0)
             p.prog.set_uniform(p.loc_l0diff,
                 params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2]);
+        // Task 890: EnvironmentMapEffect's own DirectionalLight1/2 forwarding (same generic
+        // Prog3D fields the lit-textured/BasicEffect path above uses, gated the same way via
+        // loc_ambient's absence to identify this is the env-map program).
+        if (p.loc_l1dir >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l1dir,
+                params.light1Dir[0], params.light1Dir[1], params.light1Dir[2]);
+        if (p.loc_l1diff >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l1diff,
+                params.light1Diffuse[0], params.light1Diffuse[1], params.light1Diffuse[2]);
+        if (p.loc_l2dir >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l2dir,
+                params.light2Dir[0], params.light2Dir[1], params.light2Dir[2]);
+        if (p.loc_l2diff >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l2diff,
+                params.light2Diffuse[0], params.light2Diffuse[1], params.light2Diffuse[2]);
 
         if (p.loc_eyepos >= 0)
             p.prog.set_uniform(p.loc_eyepos,

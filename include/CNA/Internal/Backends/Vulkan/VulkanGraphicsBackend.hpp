@@ -1016,10 +1016,10 @@ namespace CNA::Internal::Backends::Vulkan
             float                   dualTexFogUboData[8] = {}; // vec4 fogColorEnabled + vec4 fogStartEnd (Task 899)
             bool                    useEnvMap         = false; // true = EnvMap3D pipeline
             float                   envMapPC[32]      = {};    // push consts: [0..15]=mvp, [16..31]=world
-            // 8×vec4 = 128 bytes for env map UBO (6 original + fogColorEnabled/fogStartEnd,
-            // Task 899's own noted cheap-leftover: env_map3d's EnvMapParams UBO already has
-            // ~160 spare bytes past the original 96 used).
-            float                   envMapUboData[32] = {};
+            // 12×vec4 = 192 bytes for env map UBO (8 original [0..31], see Task 899's own
+            // comment on the original 6 + fog pair, + 4 more for Task 890's
+            // light1Dir_pad/light1Diff_pad/light2Dir_pad/light2Diff_pad at [32..47]).
+            float                   envMapUboData[48] = {};
             VkDescriptorSet         envMapDescSet     = VK_NULL_HANDLE;
             bool                    useSkinned        = false; // true = Skinned3D pipeline
             std::vector<float>      boneMatrices;              // up to 72 mat4s = 1152 floats

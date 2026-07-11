@@ -1696,6 +1696,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 890: EnvironmentMapEffect DirectionalLight1/DirectionalLight2 forwarding
+        cna_easygl_test(cna_test_easygl_environmentmapeffect_multilight
+                        examples/easygl_environmentmapeffect_multilight_test.cpp)
+        add_test(NAME EasyGL_EnvironmentMapEffect_MultiLight
+                 COMMAND cna_test_easygl_environmentmapeffect_multilight)
+        set_tests_properties(EasyGL_EnvironmentMapEffect_MultiLight PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 900: SkinnedEffect fog fix verification
         cna_easygl_test(cna_test_easygl_skinnedeffect_fog
                         examples/easygl_skinnedeffect_fog_test.cpp)
@@ -3396,6 +3405,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_EnvironmentMapEffect_AmountZero
                  COMMAND cna_test_vulkan_environmentmapeffect_amount_zero)
         set_tests_properties(Vulkan_EnvironmentMapEffect_AmountZero PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 890: EnvironmentMapEffect DirectionalLight1/DirectionalLight2 forwarding
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_multilight
+                        examples/vulkan_environmentmapeffect_multilight_test.cpp)
+        add_test(NAME Vulkan_EnvironmentMapEffect_MultiLight
+                 COMMAND cna_test_vulkan_environmentmapeffect_multilight)
+        set_tests_properties(Vulkan_EnvironmentMapEffect_MultiLight PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -5165,6 +5183,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_EnvironmentMapEffect_AmountZero
              COMMAND cna_test_bgfx_environmentmapeffect_amount_zero)
     set_tests_properties(Bgfx_EnvironmentMapEffect_AmountZero PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 890: EnvironmentMapEffect DirectionalLight1/DirectionalLight2 forwarding
+    cna_bgfx_test(cna_test_bgfx_environmentmapeffect_multilight
+                  examples/bgfx_environmentmapeffect_multilight_test.cpp)
+    add_test(NAME Bgfx_EnvironmentMapEffect_MultiLight
+             COMMAND cna_test_bgfx_environmentmapeffect_multilight)
+    set_tests_properties(Bgfx_EnvironmentMapEffect_MultiLight PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

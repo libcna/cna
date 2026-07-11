@@ -2362,6 +2362,17 @@ namespace CNA::Internal::Backends::Bgfx
             float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
                                params.light0Diffuse[2], 0.0f };
             bgfx::setUniform(light0Diff3DUnif_, diff);
+            // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1], params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1], params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
             float amount[4] = { params.envMapAmount, params.fresnelEnabled ? 1.0f : 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(envMapAmountUnif_, amount);
             float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],
@@ -2734,6 +2745,17 @@ namespace CNA::Internal::Backends::Bgfx
             float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
                                params.light0Diffuse[2], 0.0f };
             bgfx::setUniform(light0Diff3DUnif_, diff);
+            // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1], params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1], params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
             float amount[4] = { params.envMapAmount, params.fresnelEnabled ? 1.0f : 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(envMapAmountUnif_, amount);
             float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],

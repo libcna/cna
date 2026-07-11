@@ -412,10 +412,28 @@ namespace Microsoft::Xna::Framework::Graphics
         p.emissiveColor[1] = (emissiveColor_.Y + ambientLightColor_.Y * diffuseColor_.Y) * alpha_;
         p.emissiveColor[2] = (emissiveColor_.Z + ambientLightColor_.Z * diffuseColor_.Z) * alpha_;
 
-        const Vector3 ld  = DirectionalLight0.getDiffuseColorProperty();
+        // Task 890 fix: FNA's real EnvironmentMapEffect.fx (via the shared Lighting.fxh
+        // ComputeLights()) sums all 3 directional lights' diffuse contribution, not just
+        // DirectionalLight0 -- matches FNA's DirectionalLight.Enabled setter zeroing the
+        // GPU-facing diffuse when disabled (the same gating BasicEffect::FillGpuDrawParams
+        // already applies).
+        const bool    light0On = DirectionalLight0.getEnabledProperty();
+        const Vector3 ld  = light0On ? DirectionalLight0.getDiffuseColorProperty() : Vector3::Zero;
         const Vector3 dir = DirectionalLight0.getDirectionProperty();
         p.light0Dir[0]    = dir.X; p.light0Dir[1]    = dir.Y; p.light0Dir[2]    = dir.Z;
         p.light0Diffuse[0]= ld.X;  p.light0Diffuse[1]= ld.Y;  p.light0Diffuse[2]= ld.Z;
+
+        const bool    light1On = DirectionalLight1.getEnabledProperty();
+        const Vector3 ld1  = light1On ? DirectionalLight1.getDiffuseColorProperty() : Vector3::Zero;
+        const Vector3 dir1 = DirectionalLight1.getDirectionProperty();
+        p.light1Dir[0]     = dir1.X; p.light1Dir[1]     = dir1.Y; p.light1Dir[2]     = dir1.Z;
+        p.light1Diffuse[0] = ld1.X;  p.light1Diffuse[1] = ld1.Y;  p.light1Diffuse[2] = ld1.Z;
+
+        const bool    light2On = DirectionalLight2.getEnabledProperty();
+        const Vector3 ld2  = light2On ? DirectionalLight2.getDiffuseColorProperty() : Vector3::Zero;
+        const Vector3 dir2 = DirectionalLight2.getDirectionProperty();
+        p.light2Dir[0]     = dir2.X; p.light2Dir[1]     = dir2.Y; p.light2Dir[2]     = dir2.Z;
+        p.light2Diffuse[0] = ld2.X;  p.light2Diffuse[1] = ld2.Y;  p.light2Diffuse[2] = ld2.Z;
 
         // Eye world position from the inverse view matrix
         const Matrix viewInverse = Matrix::Invert(view_);

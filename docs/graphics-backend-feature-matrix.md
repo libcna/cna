@@ -31,8 +31,8 @@ fixed · ⛔ BLOCKED, needs a project-owner architecture decision.
 | DualTextureEffect core + fog | ✅ | ✅ | ✅ |
 | DualTextureEffect `VertexColorEnabled` | ❌ (Task 889) | ❌ | ❌ |
 | EnvironmentMapEffect core/Fresnel/reflection | ✅ | ✅ | ✅ |
-| EnvironmentMapEffect `DirectionalLight1`/`2` | ❌ (Task 890) | ❌ | ❌ |
-| EnvironmentMapEffect base-lerp alpha scaling | ❌ (Task 891) | ❌ | ❌ |
+| EnvironmentMapEffect `DirectionalLight1`/`2` | ✅ fixed (Task 890, 2026-07-11) | ✅ fixed (Task 890) | ✅ fixed (Task 890) |
+| EnvironmentMapEffect base-lerp alpha scaling | ✅ fixed (Task 891) | ✅ fixed (Task 891) | ✅ fixed (Task 891) |
 | SkinnedEffect core (72-bone GPU skinning) | ✅ | ✅ | ✅ |
 | SkinnedEffect `DirectionalLight1`/`2` | ❌ (Task 893) | ❌ | ❌ |
 | SkinnedEffect `SpecularColor`/`SpecularPower` | ❌ (Task 894) | ❌ | ❌ |
