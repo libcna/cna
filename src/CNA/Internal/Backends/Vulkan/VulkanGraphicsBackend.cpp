@@ -939,8 +939,11 @@ namespace CNA::Internal::Backends::Vulkan
                                                          VulkanGraphicsBackend* owner)
         : capacity_(vertex_capacity), owner_(owner)
     {
-        // Pre-allocate for worst-case stride (e.g. VertexPositionColor = 16 bytes)
-        VkDeviceSize size = static_cast<VkDeviceSize>(vertex_capacity) * 64;
+        // Pre-allocate for worst-case stride (e.g. VertexPositionColor = 16 bytes).
+        // A 0-vertex capacity (e.g. an empty model part) must still produce a valid,
+        // non-empty VkBuffer -- vkCreateBuffer/vkAllocateMemory with size 0 is invalid
+        // per the Vulkan spec.
+        VkDeviceSize size = std::max<VkDeviceSize>(1, static_cast<VkDeviceSize>(vertex_capacity) * 64);
         owner_->CreateBuffer(size,
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -988,7 +991,10 @@ namespace CNA::Internal::Backends::Vulkan
         : capacity_(index_capacity), thirtyTwoBit_(thirtyTwoBit), owner_(owner)
     {
         const std::size_t elemSize = thirtyTwoBit ? sizeof(uint32_t) : sizeof(uint16_t);
-        VkDeviceSize size = static_cast<VkDeviceSize>(index_capacity) * elemSize;
+        // A 0-index capacity (e.g. an empty model part) must still produce a valid,
+        // non-empty VkBuffer -- vkCreateBuffer/vkAllocateMemory with size 0 is invalid
+        // per the Vulkan spec.
+        VkDeviceSize size = std::max<VkDeviceSize>(1, static_cast<VkDeviceSize>(index_capacity) * elemSize);
         owner_->CreateBuffer(size,
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,

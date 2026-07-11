@@ -73,7 +73,7 @@ doesn't exist in this checkout. Cosmetic, not a CNA bug — do not chase it (see
 | Backend | `CnaTests` (gtest) | `ctest` (integration/pixel) |
 |---|---|---|
 | EasyGL | 4371/4373 pass (2 hardware-dependent skips: Accelerometer/Gyroscope) | 184/186 pass — 2 pre-existing failures (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`) |
-| Vulkan | 4368/4370 pass, excluding 3 known-crashing tests (see §5) | 121/122 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
+| Vulkan | 4371/4373 pass (2 hardware skips) — Task 953 fixed the 3 `ContentManagerSkinnedModelTest` segfaults, no exclusions needed anymore | 121/122 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
 | Bgfx | 4375/4377 pass (2 hardware skips) | **98/100 pass** — 2 remaining failures, neither a crash (see §5): `Bgfx_RenderTarget2D_MsaaResolve` (known environment limitation) and `Bgfx_RenderTargetCube_DepthFormat` (Task 952, still-unresolved — a `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output on Bgfx) |
 
 All pre-existing failures above were independently reconfirmed via `git stash` (present on the
@@ -159,6 +159,7 @@ shape) is in `plan_graphics.md` — this section is intentionally a short index.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `PENDING` | 953 | Fixed Vulkan segfaulting on a 0-length index/vertex buffer (3 `ContentManagerSkinnedModelTest` crashes). `VulkanIndexBufferBackend`/`VulkanVertexBufferBackend` constructors now clamp their computed `VkDeviceSize` to a minimum of 1 byte before `vkCreateBuffer`/`vkAllocateMemory` (previously size 0 for an empty model part, invalid per spec). `ContentManagerSkinnedModelTest.*` now 9/9 pass; full Vulkan `CnaTests` 4371/4373 clean. |
 | `d562a813` | 952 | Explicitly marked Task 952 as **DEFERRED** per project owner instruction — no further investigation this session. Docs-only: `plan_graphics.md`, `NEXT.md` §5/§8/§9 updated to flag "do not resume without explicit direction." |
 | `5a094666` | 952 | Continued the Task 952 investigation with a real RenderDoc 1.45 install (project owner provided a manual download after the apitrace round hit its wall). `qrenderdoc --python` hangs indefinitely in this sandbox (no WM, no offscreen Qt platform); `renderdoccmd convert -c zip.xml` works headless and gave enough structured GL-call detail to rule out FBO-handle validity, view-id targeting, and texture-handle identity as the bug, with hard evidence. Root cause still not found. No code changes (all diagnostics reverted); `programs.md` updated with real RenderDoc findings. |
 | `d0146c67` | 952 | Continued the Task 952 investigation with `apitrace`. Fixed the depth-format test's own readback methodology (unbind-then-`EnvironmentMapEffect`-sample) and a degenerate-eye-position sampling bug, isolating the real remaining symptom to `Depth24Stencil8` specifically. Investigated and retracted a candidate "orphaned view gets silently re-cleared" fix after it failed 2 controlled repro attempts. Root cause still not found — needs RenderDoc or a raw-GL repro. |
@@ -195,7 +196,7 @@ remaining Bgfx `ctest` failures are both non-crashing, already-diagnosed, and tr
 | Confirmed bug, environment limitation | `Bgfx_RenderTarget2D_MsaaResolve`: this sandbox's bgfx OpenGL path negotiates only a legacy GL 2.1 context (llvmpipe), under which MSAA-flagged framebuffer textures don't sub-pixel resolve — pre-existing, already diagnosed at Task 878/879. The `CNA_BGFX_RENDERER=VULKAN` workaround recorded there no longer routes around it in this sandbox (bgfx silently falls back to `active renderer: OpenGL 2.1` even when Vulkan is requested, confirmed while investigating Task 951) — worth its own future look, not chased here. | — |
 | Confirmed bug | `EasyGL_MRT_TwoAttachments`: a basic 2-target same-size/format MRT setup doesn't render correctly — attachment 1 stays black. Pre-existing, off-limits for opportunistic fixing per project convention (see §9). | 145 |
 | Confirmed bug | `Vulkan_DepthBias` fails; pre-existing, not investigated further. | — |
-| Confirmed bug, environment-only | 3 `ContentManagerSkinnedModelTest.*` tests reliably segfault on Vulkan (confirmed deterministic in isolation, not flaky) — root cause: these specific test fixtures write a zero-length `.idx.bin`, and Vulkan's index-buffer creation path calls `vkCreateBuffer`/`vkAllocateMemory` with size 0, which is invalid per the Vulkan spec (validation layer confirms). Needs a size-0 guard in the Vulkan index/vertex buffer creation path, or the affected tests need non-empty fixtures. | — |
+| Test-order-dependent flakiness, environment-only | `DrawUserIndexedPrimitivesArgumentGuardTest.VD_16bit_ZeroCount_Throws` (and other unrelated tests) occasionally fail only as part of a full `CnaTests` run on Vulkan/llvmpipe, never in isolation — documented resource-contention flakiness under rapid SDL-window creation on a software rasterizer (Task 883's own write-up has the same signature with different tests). Not tied to any specific diff. | — |
 | Confirmed bug, not fixed | `GraphicsDevice.ReferenceStencil`'s independent-override semantics have zero backend connection on EasyGL/Bgfx (Vulkan already fixed, an undocumented side effect of Task 870). | 872 |
 | Confirmed bug, not fixed | `DualTextureEffect.VertexColorEnabled` is a total no-op on all 3 hardware backends. | 889 |
 | Confirmed bug, not fixed | `EnvironmentMapEffect`/`SkinnedEffect` `DirectionalLight1`/`DirectionalLight2` are unforwarded; `EnvironmentMapEffect`'s cube-map lerp isn't alpha-scaled; `SkinnedEffect` has zero specular implementation and `WeightsPerVertex` is a GPU no-op. | 890/891/893/894/895 |
@@ -296,17 +297,13 @@ directly without the env vars above already set).
 
 ## 8. Next smallest tasks
 
-1. **Add a zero-length index/vertex buffer guard on Vulkan** (fixes the 3 `ContentManagerSkinnedModelTest`
-   segfaults noted in §5). Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
-   (index/vertex buffer creation). Verify:
-   `SDL_VIDEODRIVER=x11 DISPLAY=:99 ./cmake-build-vulkan/CnaTests --gtest_filter="ContentManagerSkinnedModelTest.PartNameWithUnbalancedEmbeddedBraceParsesCorrectly"` no longer segfaults.
-2. **Fix Task 889** (`DualTextureEffect.VertexColorEnabled` no-op on all 3 backends). Scoped, has an
+1. **Fix Task 889** (`DualTextureEffect.VertexColorEnabled` no-op on all 3 backends). Scoped, has an
    existing audit-task writeup. Files: each backend's `DualTextureEffect` shader/dispatch code.
    Verify: a new per-backend pixel test comparing vertex-color-enabled vs. disabled output.
-3. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling) — or defer until
+2. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling) — or defer until
    Task 946's first real attempt exists in `../cna-samples`. Requires project-owner input; do not
    pick an approach unilaterally.
-4. Task 952 (`RenderTargetCube` depth-gating bug on Bgfx) is **DEFERRED**, not a next task — see §9.
+3. Task 952 (`RenderTargetCube` depth-gating bug on Bgfx) is **DEFERRED**, not a next task — see §9.
 
 ---
 
