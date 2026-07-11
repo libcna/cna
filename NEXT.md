@@ -159,6 +159,7 @@ shape) is in `plan_graphics.md` — this section is intentionally a short index.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `PENDING` | 952 | Explicitly marked Task 952 as **DEFERRED** per project owner instruction — no further investigation this session. Docs-only: `plan_graphics.md`, `NEXT.md` §5/§8/§9 updated to flag "do not resume without explicit direction." |
 | `5a094666` | 952 | Continued the Task 952 investigation with a real RenderDoc 1.45 install (project owner provided a manual download after the apitrace round hit its wall). `qrenderdoc --python` hangs indefinitely in this sandbox (no WM, no offscreen Qt platform); `renderdoccmd convert -c zip.xml` works headless and gave enough structured GL-call detail to rule out FBO-handle validity, view-id targeting, and texture-handle identity as the bug, with hard evidence. Root cause still not found. No code changes (all diagnostics reverted); `programs.md` updated with real RenderDoc findings. |
 | `d0146c67` | 952 | Continued the Task 952 investigation with `apitrace`. Fixed the depth-format test's own readback methodology (unbind-then-`EnvironmentMapEffect`-sample) and a degenerate-eye-position sampling bug, isolating the real remaining symptom to `Depth24Stencil8` specifically. Investigated and retracted a candidate "orphaned view gets silently re-cleared" fix after it failed 2 controlled repro attempts. Root cause still not found — needs RenderDoc or a raw-GL repro. |
 | `22bbaa7f` | 950 | `GraphicsDevice::Clear()`'s `depth` parameter now actually takes effect on Vulkan/Bgfx (was hardcoded to 1.0). New `clearDepth_`/`clearDepthValue_` members mirror Task 871's `clearStencil_` pattern exactly. New shared 3-backend test `graphicsdevice_clear_depth_test.cpp`. |
@@ -190,7 +191,7 @@ remaining Bgfx `ctest` failures are both non-crashing, already-diagnosed, and tr
 
 | Status | Description | Task |
 |---|---|---|
-| Confirmed bug, investigated 3 times (apitrace + RenderDoc), not fixed | A `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output at all on Bgfx (not even the "wrong" quad — just background) — reproduces with a single draw call and with `DepthStencilState::None` (depth testing fully disabled), regardless of depth format or stencil presence. Not a depth-*test* bug. `RenderTarget2D`'s structurally-similar depth attachment works fine, and it's specific to `RenderTargetCube`, not depth attachments generally. RenderDoc-based analysis (`renderdoccmd convert -c zip.xml`, headless) confirmed with hard evidence that the FBO handle is valid, the correct view id is used for both quad draws, the GL draws do execute against the cube's real FBO, and the cube's real texture is correctly bound for sampling on every retry attempt — yet the content is never visible when sampled. See `plan_graphics.md`'s Task 952 entry for the full investigation trail (2 rounds, both without a fix). Needs either a working window manager to unblock `qrenderdoc`'s GUI pixel-history tools in this sandbox, or a from-scratch raw-GL repro bypassing bgfx entirely. | 952 |
+| **DEFERRED (2026-07-11)** — investigated 3 times (apitrace + RenderDoc), not fixed, explicitly paused by the project owner | A `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output at all on Bgfx (not even the "wrong" quad — just background) — reproduces with a single draw call and with `DepthStencilState::None` (depth testing fully disabled), regardless of depth format or stencil presence. Not a depth-*test* bug. `RenderTarget2D`'s structurally-similar depth attachment works fine, and it's specific to `RenderTargetCube`, not depth attachments generally. RenderDoc-based analysis (`renderdoccmd convert -c zip.xml`, headless) confirmed with hard evidence that the FBO handle is valid, the correct view id is used for both quad draws, the GL draws do execute against the cube's real FBO, and the cube's real texture is correctly bound for sampling on every retry attempt — yet the content is never visible when sampled. See `plan_graphics.md`'s Task 952 entry for the full investigation trail (2 rounds, both without a fix). Needs either a working window manager to unblock `qrenderdoc`'s GUI pixel-history tools in this sandbox, or a from-scratch raw-GL repro bypassing bgfx entirely. **Do not resume without explicit instruction** — see §9. | 952 |
 | Confirmed bug, environment limitation | `Bgfx_RenderTarget2D_MsaaResolve`: this sandbox's bgfx OpenGL path negotiates only a legacy GL 2.1 context (llvmpipe), under which MSAA-flagged framebuffer textures don't sub-pixel resolve — pre-existing, already diagnosed at Task 878/879. The `CNA_BGFX_RENDERER=VULKAN` workaround recorded there no longer routes around it in this sandbox (bgfx silently falls back to `active renderer: OpenGL 2.1` even when Vulkan is requested, confirmed while investigating Task 951) — worth its own future look, not chased here. | — |
 | Confirmed bug | `EasyGL_MRT_TwoAttachments`: a basic 2-target same-size/format MRT setup doesn't render correctly — attachment 1 stays black. Pre-existing, off-limits for opportunistic fixing per project convention (see §9). | 145 |
 | Confirmed bug | `Vulkan_DepthBias` fails; pre-existing, not investigated further. | — |
@@ -305,21 +306,7 @@ directly without the env vars above already set).
 3. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling) — or defer until
    Task 946's first real attempt exists in `../cna-samples`. Requires project-owner input; do not
    pick an approach unilaterally.
-4. **Continue Task 952** (`Depth24Stencil8`-attached `RenderTargetCube` face produces no colour
-   output on Bgfx). Bigger than a "smallest task" — investigated 3 times now across 2 sessions
-   (`plan_graphics.md` has the full trail: apitrace round, then RenderDoc round), root cause still
-   not found despite ruling out FBO-handle validity, view-id targeting, and texture-handle identity
-   with hard evidence. RenderDoc 1.45 is available at `~/Downloads/renderdoc_1.45` (project owner's
-   manual download — see `programs.md` §7) but its GUI (`qrenderdoc --python`, the only way to get
-   pixel-history/texture-viewer tools) hangs indefinitely in this sandbox (no window manager
-   installed). Needs either that fixed (install a minimal WM alongside `Xvfb`), or a from-scratch
-   minimal raw-GL (no bgfx) reproduction of "cube-face colour attachment + companion 2D
-   depth/stencil attachment, FBO recreated fresh on every bind" to isolate driver-vs-bgfx-vs-CNA.
-   `renderdoccmd convert -c zip.xml` (headless, no GUI needed) is useful for call-log-level analysis
-   but can't read back arbitrary texture pixel data on its own. Files:
-   `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`
-   (`BgfxRenderTargetCubeBackend`/`BindAsRenderTargetFace`). Verify:
-   `SDL_VIDEODRIVER=x11 DISPLAY=:99 ./cmake-build-bgfx/cna_test_bgfx_rendertargetcube_depthformat`.
+4. Task 952 (`RenderTargetCube` depth-gating bug on Bgfx) is **DEFERRED**, not a next task — see §9.
 
 ---
 
@@ -332,6 +319,12 @@ directly without the env vars above already set).
 - **Do not attempt Task 863 or Task 869** (the two architecture-decision items in §5) without the
   project owner picking a direction first — both touch wide surface area
   (`EffectParameter`/`TextureCollection` for 863; every `GraphicsDevice` state setter for 869).
+- **Do not resume Task 952** (`Depth24Stencil8`-attached `RenderTargetCube` face produces no colour
+  output on Bgfx) without explicit direction — explicitly marked **DEFERRED** by the project owner
+  on 2026-07-11 after 2 full investigation rounds (apitrace, then RenderDoc 1.45) found no root
+  cause. See §5 and `plan_graphics.md`'s Task 952 entry for the full trail and what's still needed
+  (a working window manager to unblock `qrenderdoc`'s GUI pixel-history tools, or a from-scratch
+  raw-GL repro) before picking this back up.
 - **Do not chase `cna_demo_xact`'s build failure** — it's a missing example asset directory, not a
   CNA bug; fixing it is out of scope for engine work.
 - **Do not attempt `EasyGL_MRT_TwoAttachments`** opportunistically — pre-existing, previously
