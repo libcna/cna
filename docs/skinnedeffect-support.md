@@ -148,7 +148,7 @@ draw call.
 | Single-bone translation | ✅ Task 407 | ✅ Task 407 | ✅ Task 407 |
 | Two-bone weighted blend | ✅ Task 408 | ✅ Task 408 | ✅ Task 408 |
 | Multi-quad/multi-bone composition in one draw call | ✅ Task 409 | ✅ Task 409 | ✅ Task 409 |
-| `DirectionalLight1`/`DirectionalLight2` | ❌ Task 893 | ❌ Task 893 | ❌ Task 893 |
+| `DirectionalLight1`/`DirectionalLight2` | ✅ fixed Task 893 (2026-07-11) | ✅ fixed Task 893 | ✅ fixed Task 893 |
 | `SpecularColor`/`SpecularPower` GPU implementation | ❌ Task 894 | ❌ Task 894 | ❌ Task 894 |
 | `WeightsPerVertex` GPU enforcement | ❌ Task 895 | ❌ Task 895 | ❌ Task 895 |
 
@@ -158,9 +158,9 @@ Legend: ✅ verified working · ❌ confirmed not implemented.
 
 Phase 46 opened 3 new tracked tasks (all from Task 401's opener audit):
 
-- **Task 893** — forward `DirectionalLight1`/`DirectionalLight2` on `SkinnedEffect` (all 3
-  backends), same shape and likely shared fix plumbing as `BasicEffect`'s Task 885 and
-  `EnvironmentMapEffect`'s Task 890.
+- ~~**Task 893**~~ — **fixed, 2026-07-11**: `DirectionalLight1`/`DirectionalLight2` now forward on
+  `SkinnedEffect` on all 3 backends, mirroring `BasicEffect`'s (Task 885/886) and
+  `EnvironmentMapEffect`'s (Task 890) own fixes. See `NEXT.md` §3 for the full write-up.
 - **Task 894** — implement real GPU specular highlights for `SkinnedEffect`'s `SpecularColor`/
   `SpecularPower` (a new feature, zero existing infrastructure), the same shape as `BasicEffect`'s
   already-tracked Task 886.

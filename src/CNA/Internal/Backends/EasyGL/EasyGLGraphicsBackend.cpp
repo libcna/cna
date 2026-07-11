@@ -2909,13 +2909,20 @@ void main()
 "uniform vec3 uEmissiveColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
+"uniform vec3 uLight1Dir;\n"
+"uniform vec3 uLight1Diffuse;\n"
+"uniform vec3 uLight2Dir;\n"
+"uniform vec3 uLight2Diffuse;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
-"    float NdotL=max(dot(N,-uLight0Dir),0.0);\n"
-"    vec3 litRGB=(uEmissiveColor+uLight0Diffuse*NdotL)*uDiffuseColor.rgb;\n"
+"    float NdotL0=max(dot(N,-uLight0Dir),0.0);\n"
+"    float NdotL1=max(dot(N,-uLight1Dir),0.0);\n"
+"    float NdotL2=max(dot(N,-uLight2Dir),0.0);\n"
+"    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+"    vec3 litRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
 "    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
@@ -2932,6 +2939,10 @@ void main()
         p.loc_emissive  = p.prog.uniform_location("uEmissiveColor");
         p.loc_l0dir     = p.prog.uniform_location("uLight0Dir");
         p.loc_l0diff    = p.prog.uniform_location("uLight0Diffuse");
+        p.loc_l1dir     = p.prog.uniform_location("uLight1Dir");
+        p.loc_l1diff    = p.prog.uniform_location("uLight1Diffuse");
+        p.loc_l2dir     = p.prog.uniform_location("uLight2Dir");
+        p.loc_l2diff    = p.prog.uniform_location("uLight2Diffuse");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");

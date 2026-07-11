@@ -1024,7 +1024,9 @@ namespace CNA::Internal::Backends::Vulkan
             bool                    useSkinned        = false; // true = Skinned3D pipeline
             std::vector<float>      boneMatrices;              // up to 72 mat4s = 1152 floats
             VkDescriptorSet         skinnedDescSet    = VK_NULL_HANDLE;
-            float                   skinnedFogUboData[8] = {}; // vec4 fogColorEnabled + vec4 fogStartEnd (Task 899)
+            // vec4 fogColorEnabled + vec4 fogStartEnd (Task 899), plus 4 more vec4 at [8..23] for
+            // Task 893's DirectionalLight1/2 dir+diffuse (kSkinnedFogUBOStride=256 has headroom).
+            float                   skinnedFogUboData[24] = {};
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
             // Layout (floats): [0..19]=light1/2 dir+diffuse+emissive (5 vec4, Task 897),
             // [20..35]=world mat4, [36..39]=eyePos, [40..51]=light0/1/2 specular (3 vec4),

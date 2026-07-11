@@ -1714,6 +1714,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
+        cna_easygl_test(cna_test_easygl_skinnedeffect_multilight
+                        examples/easygl_skinnedeffect_multilight_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_MultiLight
+                 COMMAND cna_test_easygl_skinnedeffect_multilight)
+        set_tests_properties(EasyGL_SkinnedEffect_MultiLight PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 406: SkinnedEffect identity bone palette should produce zero deformation
         cna_easygl_test(cna_test_easygl_skinnedeffect_identity_bones
                         examples/easygl_skinnedeffect_identity_bones_test.cpp)
@@ -3960,6 +3969,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_multilight
+                        examples/vulkan_skinnedeffect_multilight_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_MultiLight
+                 COMMAND cna_test_vulkan_skinnedeffect_multilight)
+        set_tests_properties(Vulkan_SkinnedEffect_MultiLight PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 899's own noted cheap leftover: env_map3d fog packed into EnvMapParams' spare bytes
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_fog
                         examples/vulkan_environmentmapeffect_fog_test.cpp)
@@ -5565,6 +5583,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_SkinnedEffect_Fog
              COMMAND cna_test_bgfx_skinnedeffect_fog)
     set_tests_properties(Bgfx_SkinnedEffect_Fog PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_multilight
+                  examples/bgfx_skinnedeffect_multilight_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_MultiLight
+             COMMAND cna_test_bgfx_skinnedeffect_multilight)
+    set_tests_properties(Bgfx_SkinnedEffect_MultiLight PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
