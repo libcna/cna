@@ -1102,6 +1102,9 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 871: threaded into every render pass's VkClearValue.depthStencil.stencil field,
         // replacing a previously-hardcoded clear value of 0.
         int      clearStencil_ = 0;
+        // Task 950: threaded into every render pass's VkClearValue.depthStencil.depth field,
+        // replacing a previously-hardcoded clear value of 1.0f (mirrors clearStencil_ exactly).
+        float    clearDepth_ = 1.0f;
         bool     initialized_       = false;
         VulkanRTSource*            currentRT_ = nullptr;
         bool     depthTestEnabled_  = true;

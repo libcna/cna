@@ -377,6 +377,9 @@ namespace CNA::Internal::Backends::Bgfx
         // Task 871: threaded into EnsureViewState()'s bgfx::setViewClear() call, replacing a
         // previously-hardcoded stencil clear value of 0.
         uint8_t clearStencilValue_ = 0;
+        // Task 950: threaded into EnsureViewState()'s bgfx::setViewClear() call, replacing a
+        // previously-hardcoded depth clear value of 1.0f.
+        float clearDepthValue_ = 1.0f;
         // Task 808: SpriteBatch::Begin()'s transformMatrix, set by BgfxSpriteBatchBackend::
         // SetTransformMatrix(). Combined with the sprite view's own ortho projection in
         // EnsureViewState() (`orthoWithTransform = ortho * spriteTransform_`, bx::mtxMul order --

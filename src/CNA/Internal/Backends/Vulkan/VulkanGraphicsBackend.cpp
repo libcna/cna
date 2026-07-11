@@ -5755,11 +5755,11 @@ namespace CNA::Internal::Backends::Vulkan
             if (rtMsaa) {
                 rtCv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
                 rtCv[1].color        = {};
-                rtCv[2].depthStencil = { 1.0f, static_cast<uint32_t>(clearStencil_) };
+                rtCv[2].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
             } else {
                 for (uint32_t ci = 0; ci < nColor; ++ci)
                     rtCv[ci].color = { { clearR_, clearG_, clearB_, clearA_ } };
-                rtCv[nColor].depthStencil = { 1.0f, static_cast<uint32_t>(clearStencil_) };
+                rtCv[nColor].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
             }
             VkRenderPassBeginInfo rtRp{};
             rtRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -5798,9 +5798,9 @@ namespace CNA::Internal::Backends::Vulkan
         cv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
         if (hasMsaa) {
             cv[1].color        = {};
-            cv[2].depthStencil = { 1.0f, static_cast<uint32_t>(clearStencil_) };
+            cv[2].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
         } else {
-            cv[1].depthStencil = { 1.0f, static_cast<uint32_t>(clearStencil_) };
+            cv[1].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
         }
         VkRenderPassBeginInfo rp{};
         rp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -6226,17 +6226,17 @@ namespace CNA::Internal::Backends::Vulkan
 
     // ---- 3D pipeline ----
 
-    void VulkanGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float /*depth*/)
+    void VulkanGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
+        clearDepth_ = depth;
         readbackStagingValid_ = false;  // new frame content invalidates the readback cache
         // Task 875: see Clear()'s identical fix.
         if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
             clearedRTs_.push_back(currentRT_);
-        // TODO: depth buffer support
     }
 
-    void VulkanGraphicsBackend::ClearDepth(float /*depth*/) { readbackStagingValid_ = false; /* Vulkan depth-only clear not yet implemented */ }
+    void VulkanGraphicsBackend::ClearDepth(float depth) { clearDepth_ = depth; readbackStagingValid_ = false; /* Vulkan depth-only clear not yet implemented */ }
 
     // Task 871: every render pass this backend records already unconditionally clears the
     // color/depth attachments every frame (see RecordCommandBuffer()'s hardcoded loadOp=CLEAR),
@@ -6252,8 +6252,9 @@ namespace CNA::Internal::Backends::Vulkan
             clearedRTs_.push_back(currentRT_);
     }
 
-    void VulkanGraphicsBackend::ClearDepthAndStencil(float /*depth*/, int stencil)
+    void VulkanGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
     {
+        clearDepth_ = depth;
         clearStencil_ = stencil;
         readbackStagingValid_ = false;
         if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
@@ -6269,9 +6270,10 @@ namespace CNA::Internal::Backends::Vulkan
             clearedRTs_.push_back(currentRT_);
     }
 
-    void VulkanGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float /*depth*/, int stencil)
+    void VulkanGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
     {
         clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
+        clearDepth_ = depth;
         clearStencil_ = stencil;
         readbackStagingValid_ = false;
         if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())

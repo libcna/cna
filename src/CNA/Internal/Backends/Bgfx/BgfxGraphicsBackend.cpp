@@ -1313,8 +1313,9 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setViewTransform(spriteViewId, nullptr, orthoWithTransform);
         // Task 871: BGFX_CLEAR_STENCIL and the real requested stencil value were previously
         // never included here -- a requested stencil clear silently did nothing.
+        // Task 950: clearDepthValue_ replaces a previously-hardcoded 1.0f.
         bgfx::setViewClear(spriteViewId, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL,
-                            clearRgba, 1.0f, clearStencilValue_);
+                            clearRgba, clearDepthValue_, clearStencilValue_);
     }
 
     void BgfxGraphicsBackend::Clear(float r, float g, float b, float a)
@@ -1896,12 +1897,13 @@ namespace CNA::Internal::Backends::Bgfx
             "are not yet wired into bgfx state flags.");
     }
 
-    void BgfxGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float /*depth*/)
+    void BgfxGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
+        clearDepthValue_ = depth;
         Clear(r, g, b, a);
     }
 
-    void BgfxGraphicsBackend::ClearDepth(float /*depth*/) { /* Bgfx depth-only clear not yet implemented */ }
+    void BgfxGraphicsBackend::ClearDepth(float depth) { clearDepthValue_ = depth; /* Bgfx depth-only clear not yet implemented */ }
 
     // Task 871: mirrors Clear()'s own shape (EnsureViewState() + touch actually applies the new
     // bgfx::setViewClear() flags/value this frame) rather than ClearDepth()'s pre-existing no-op
@@ -1913,8 +1915,9 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::touch(spriteViewId);
     }
 
-    void BgfxGraphicsBackend::ClearDepthAndStencil(float /*depth*/, int stencil)
+    void BgfxGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
     {
+        clearDepthValue_ = depth;
         clearStencilValue_ = static_cast<uint8_t>(stencil);
         EnsureViewState();
         bgfx::touch(spriteViewId);
@@ -1926,8 +1929,9 @@ namespace CNA::Internal::Backends::Bgfx
         Clear(r, g, b, a);
     }
 
-    void BgfxGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float /*depth*/, int stencil)
+    void BgfxGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
     {
+        clearDepthValue_ = depth;
         clearStencilValue_ = static_cast<uint8_t>(stencil);
         Clear(r, g, b, a);
     }

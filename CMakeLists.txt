@@ -2858,6 +2858,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 950: GraphicsDevice::Clear()'s depth parameter -- EasyGL already forwarded it
+        # correctly (unlike Vulkan/Bgfx); registered here too as a regression guard.
+        cna_easygl_test(cna_test_easygl_graphicsdevice_clear_depth
+                        examples/graphicsdevice_clear_depth_test.cpp)
+        add_test(NAME EasyGL_GraphicsDevice_ClearDepth
+                 COMMAND cna_test_easygl_graphicsdevice_clear_depth)
+        set_tests_properties(EasyGL_GraphicsDevice_ClearDepth PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 323 (+ 324/325 coverage): RasterizerState.CullMode — None/CullClockwiseFace/
         # CullCounterClockwiseFace, contrast-checked with front- and back-winding quads
         cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode
@@ -3243,6 +3253,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_GraphicsDevice_ClearStencil
                  COMMAND cna_test_vulkan_graphicsdevice_clear_stencil)
         set_tests_properties(Vulkan_GraphicsDevice_ClearStencil PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 950: VulkanGraphicsBackend::ClearColorAndDepth/ClearColorDepthAndStencil now
+        # actually thread their `depth` parameter into VkClearValue.depthStencil.depth instead of
+        # hardcoding 1.0f -- verbatim reuse of the shared backend-agnostic source.
+        cna_vulkan_test(cna_test_vulkan_graphicsdevice_clear_depth
+                        examples/graphicsdevice_clear_depth_test.cpp)
+        add_test(NAME Vulkan_GraphicsDevice_ClearDepth
+                 COMMAND cna_test_vulkan_graphicsdevice_clear_depth)
+        set_tests_properties(Vulkan_GraphicsDevice_ClearDepth PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -5623,6 +5644,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_GraphicsDevice_ClearStencil
              COMMAND cna_test_bgfx_graphicsdevice_clear_stencil)
     set_tests_properties(Bgfx_GraphicsDevice_ClearStencil PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 950: BgfxGraphicsBackend::ClearColorAndDepth/ClearColorDepthAndStencil now actually
+    # thread their `depth` parameter into bgfx::setViewClear() instead of hardcoding 1.0f --
+    # verbatim reuse of the shared backend-agnostic source (no retry loop needed, same as the
+    # Task 871 Bgfx stencil test: each check's Clear()+Draw()+GetBackBufferData() is its own real
+    # frame).
+    cna_bgfx_test(cna_test_bgfx_graphicsdevice_clear_depth
+                  examples/graphicsdevice_clear_depth_test.cpp)
+    add_test(NAME Bgfx_GraphicsDevice_ClearDepth
+             COMMAND cna_test_bgfx_graphicsdevice_clear_depth)
+    set_tests_properties(Bgfx_GraphicsDevice_ClearDepth PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
