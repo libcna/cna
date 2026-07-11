@@ -35,7 +35,7 @@ fixed · ⛔ BLOCKED, needs a project-owner architecture decision.
 | EnvironmentMapEffect base-lerp alpha scaling | ✅ fixed (Task 891) | ✅ fixed (Task 891) | ✅ fixed (Task 891) |
 | SkinnedEffect core (72-bone GPU skinning) | ✅ | ✅ | ✅ |
 | SkinnedEffect `DirectionalLight1`/`2` | ✅ fixed (Task 893, 2026-07-11) | ✅ fixed (Task 893) | ✅ fixed (Task 893) |
-| SkinnedEffect `SpecularColor`/`SpecularPower` | ❌ (Task 894) | ❌ | ❌ |
+| SkinnedEffect `SpecularColor`/`SpecularPower` | ✅ fixed (Task 894, 2026-07-11) | ✅ fixed (Task 894) | ✅ fixed (Task 894) |
 | SkinnedEffect `WeightsPerVertex` GPU enforcement | ❌ (Task 895) | ❌ | ❌ |
 | Fog, all applicable effects/pipelines | ✅ | ✅ | ✅ |
 | ShaderEffect (custom shader source) | ✅ (GLSL) | ✅ (SPIR-V) | ❌ `CreateEffectBackend` returns `nullptr` |

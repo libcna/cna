@@ -1,9 +1,10 @@
 $input a_position, a_normal, a_texcoord0, a_weight, a_indices
-$output v_texcoord0, v_normal, v_color0, v_fogFactor
+$output v_texcoord0, v_normal, v_color0, v_fogFactor, v_worldPos
 
 #include <bgfx_shader.sh>
 
 uniform mat4 u_wvp;
+uniform mat4 u_world;
 uniform vec4 u_diffuseColor;
 uniform mat4 u_bones[72];
 uniform vec4 u_fogParams;
@@ -15,7 +16,8 @@ void main()
                  + u_bones[int(a_indices.y)] * a_weight.y
                  + u_bones[int(a_indices.z)] * a_weight.z
                  + u_bones[int(a_indices.w)] * a_weight.w;
-    gl_Position  = mul(u_wvp, mul(skinMat, vec4(a_position, 1.0)));
+    vec4 skinnedPos = mul(skinMat, vec4(a_position, 1.0));
+    gl_Position  = mul(u_wvp, skinnedPos);
     // Task 767: RasterizerState.DepthBias emulation (see vs_colored3d.sc for the full comment).
     gl_Position.z += u_depthBias.x * gl_Position.w;
     v_normal     = normalize(skinMat[0].xyz * a_normal.x
@@ -23,6 +25,7 @@ void main()
                            + skinMat[2].xyz * a_normal.z);
     v_texcoord0  = a_texcoord0;
     v_color0     = u_diffuseColor;
+    v_worldPos   = mul(u_world, skinnedPos).xyz;
     // Task 899: fog factor from raw PRE-SKIN object-space Z (matches EasyGL's Task 900 formula
     // exactly, which also uses aPos.z rather than the skinned position).
     // u_fogParams = (fogEnabled, fogStart, fogEnd, unused). 1.0 = no fog, 0.0 = full.

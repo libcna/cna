@@ -119,9 +119,11 @@ Real, currently-open caveats worth knowing about instead:
   `DirectionalLight1`/`2` now forward correctly on all 3 backends.
 - ~~`SkinnedEffect` only forwards `DirectionalLight0`~~ — **fixed, Task 893** (2026-07-11):
   `DirectionalLight1`/`2` now forward correctly on all 3 backends.
-- **`SkinnedEffect` has no specular term** and `WeightsPerVertex` is a GPU no-op (always blends all
-  4 weight slots regardless of the property, unlike FNA's real per-vertex-count `Skin()` shader
-  variants) (Tasks 894/895).
+- ~~`SkinnedEffect` has no specular term~~ — **fixed, Task 894** (2026-07-11): real half-vector
+  Blinn-Phong specular (`SpecularColor`/`SpecularPower`) now implemented on all 3 backends.
+- **`SkinnedEffect`'s `WeightsPerVertex` is a GPU no-op** (always blends all 4 weight slots
+  regardless of the property, unlike FNA's real per-vertex-count `Skin()` shader variants) (Task
+  895).
 - See `docs/xna-4-api-coverage.md`'s full "Known deviations from XNA/FNA" list (Task 485) for a
   handful of smaller, permanent, intentional deviations (e.g. `GetHashCode()` returns
   `std::size_t` not `int`; a couple of `Texture2D` methods have looser null/argument validation
@@ -261,7 +263,7 @@ unlike `SpriteBatch::Draw` (Task 922), this area checked out clean.
 | `AlphaTestEffect` | ✅ | ✅ / ✅ / ✅ | `VertexColorEnabled` missing on Vulkan/Bgfx (Task 887). |
 | `DualTextureEffect` | ✅ | ✅ / ✅ / ✅ | `VertexColorEnabled` missing on all 3 3D backends (Task 889). |
 | `EnvironmentMapEffect` | ✅ | ✅ / ✅ / ✅ | No open gaps — `DirectionalLight1`/`2` (Task 890, fixed 2026-07-11, was missing on all 3 backends not just Vulkan/Bgfx) and base-lerp alpha scaling (Task 891) are both fixed. |
-| `SkinnedEffect` | ✅ | ✅ / ✅ / ✅ | `DirectionalLight1`/`2` fixed (Task 893, 2026-07-11, was missing on all 3 backends not just Vulkan/Bgfx). `SpecularColor`/`Power` and `WeightsPerVertex` GPU enforcement still missing on all 3 backends (Tasks 894/895). |
+| `SkinnedEffect` | ✅ | ✅ / ✅ / ✅ | `DirectionalLight1`/`2` (Task 893) and `SpecularColor`/`Power` (Task 894) both fixed 2026-07-11, both were missing on all 3 backends not just Vulkan/Bgfx. `WeightsPerVertex` GPU enforcement still missing on all 3 backends (Task 895). |
 | Fog (all 5 effects) | — | ✅ / ✅ / ✅ | Fully implemented on every 3D backend for every effect, including Vulkan's `env_map3d`/`skinned3d` (Task 899, closed 2026-07-07) — a stale "Vulkan still lacks fog" claim in this same file's own per-backend table (Task 484) was found and corrected while writing this checklist. |
 | `ShaderEffect` (NOXNA custom shader) | ✅ (constructor exists on all 3) | ✅ / ✅ / ❌ | Bgfx's `CreateEffectBackend` returns `nullptr` for it — the one whole-feature 3D gap left. |
 

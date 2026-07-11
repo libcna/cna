@@ -149,7 +149,7 @@ draw call.
 | Two-bone weighted blend | ✅ Task 408 | ✅ Task 408 | ✅ Task 408 |
 | Multi-quad/multi-bone composition in one draw call | ✅ Task 409 | ✅ Task 409 | ✅ Task 409 |
 | `DirectionalLight1`/`DirectionalLight2` | ✅ fixed Task 893 (2026-07-11) | ✅ fixed Task 893 | ✅ fixed Task 893 |
-| `SpecularColor`/`SpecularPower` GPU implementation | ❌ Task 894 | ❌ Task 894 | ❌ Task 894 |
+| `SpecularColor`/`SpecularPower` GPU implementation | ✅ fixed Task 894 (2026-07-11) | ✅ fixed Task 894 | ✅ fixed Task 894 |
 | `WeightsPerVertex` GPU enforcement | ❌ Task 895 | ❌ Task 895 | ❌ Task 895 |
 
 Legend: ✅ verified working · ❌ confirmed not implemented.
@@ -161,9 +161,10 @@ Phase 46 opened 3 new tracked tasks (all from Task 401's opener audit):
 - ~~**Task 893**~~ — **fixed, 2026-07-11**: `DirectionalLight1`/`DirectionalLight2` now forward on
   `SkinnedEffect` on all 3 backends, mirroring `BasicEffect`'s (Task 885/886) and
   `EnvironmentMapEffect`'s (Task 890) own fixes. See `NEXT.md` §3 for the full write-up.
-- **Task 894** — implement real GPU specular highlights for `SkinnedEffect`'s `SpecularColor`/
-  `SpecularPower` (a new feature, zero existing infrastructure), the same shape as `BasicEffect`'s
-  already-tracked Task 886.
+- ~~**Task 894**~~ — **fixed, 2026-07-11**: real GPU specular highlights (half-vector Blinn-Phong,
+  matching `BasicEffect`'s Task 886 formula exactly) now implemented for `SkinnedEffect`'s
+  `SpecularColor`/`SpecularPower` on all 3 backends, including new World-matrix/EyePosition
+  plumbing each backend's skinned shader previously had zero infrastructure for. See `NEXT.md` §3.
 - **Task 895** — make `WeightsPerVertex` a real GPU-enforced constraint on all 3 backends, matching
   FNA's real `Skin(vin, boneCount)` behavior of only summing the first `boneCount` weight/index
   pairs, instead of the current unconditional 4-weight sum.

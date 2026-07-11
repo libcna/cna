@@ -352,6 +352,22 @@ namespace Microsoft::Xna::Framework::Graphics
         p.light2Dir[0] = dir2.X; p.light2Dir[1] = dir2.Y; p.light2Dir[2] = dir2.Z;
         p.light2Diffuse[0] = ld2.X; p.light2Diffuse[1] = ld2.Y; p.light2Diffuse[2] = ld2.Z;
 
+        // Task 894 fix: FNA's real SkinnedEffect.fx has genuine per-light specular support
+        // (unlike EnvironmentMapEffect, which hardcodes it to zero) -- Lighting.fxh's
+        // ComputeLights() sums each enabled light's own SpecularColor via the Blinn-Phong
+        // half-vector term, then the material's SpecularColor multiplies that summed result once.
+        const Vector3 ls0 = light0On ? DirectionalLight0.getSpecularColorProperty() : Vector3::Zero;
+        const Vector3 ls1 = light1On ? DirectionalLight1.getSpecularColorProperty() : Vector3::Zero;
+        const Vector3 ls2 = light2On ? DirectionalLight2.getSpecularColorProperty() : Vector3::Zero;
+        p.light0Specular[0] = ls0.X; p.light0Specular[1] = ls0.Y; p.light0Specular[2] = ls0.Z;
+        p.light1Specular[0] = ls1.X; p.light1Specular[1] = ls1.Y; p.light1Specular[2] = ls1.Z;
+        p.light2Specular[0] = ls2.X; p.light2Specular[1] = ls2.Y; p.light2Specular[2] = ls2.Z;
+        const Vector3 specularColor = getSpecularColorProperty();
+        p.specularColor[0] = specularColor.X;
+        p.specularColor[1] = specularColor.Y;
+        p.specularColor[2] = specularColor.Z;
+        p.specularPower     = getSpecularPowerProperty();
+
         const Matrix viewInverse  = Matrix::Invert(view_);
         const Vector3 eyePos      = viewInverse.getTranslationProperty();
         p.eyePositionWorld[0] = eyePos.X;

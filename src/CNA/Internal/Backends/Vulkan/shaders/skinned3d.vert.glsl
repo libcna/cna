@@ -9,6 +9,7 @@ layout(location = 4) in uvec4 aBoneIndices;
 layout(location = 0) out vec3 vNormal;
 layout(location = 1) out vec2 vUV;
 layout(location = 2) out float vFogFactor;
+layout(location = 3) out vec3 vWorldPos;
 
 layout(push_constant) uniform PC {
     mat4  mvp;
@@ -35,6 +36,14 @@ layout(set = 0, binding = 2) uniform FogParams {
     vec4 light1Diff_pad;
     vec4 light2Dir_pad;
     vec4 light2Diff_pad;
+    // Task 894: World matrix + EyePosition + specular (World doesn't fit in the already-128-byte
+    // push constant, so it lives here instead).
+    mat4 world;
+    vec4 eyePos_pad;
+    vec4 specularColor_power;
+    vec4 light0Spec_pad;
+    vec4 light1Spec_pad;
+    vec4 light2Spec_pad;
 } fog;
 
 void main() {
@@ -42,9 +51,11 @@ void main() {
                  + bb.bones[aBoneIndices.y] * aBoneWeights.y
                  + bb.bones[aBoneIndices.z] * aBoneWeights.z
                  + bb.bones[aBoneIndices.w] * aBoneWeights.w;
-    gl_Position = pc.mvp * skinMat * vec4(aPos, 1.0);
+    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
+    gl_Position = pc.mvp * skinnedPos;
     vNormal     = normalize(mat3(skinMat) * aNormal);
     vUV         = aUV;
+    vWorldPos   = (fog.world * skinnedPos).xyz;
     // Task 899: fog factor from the PRE-SKIN raw object-space Z (matches EasyGL/Bgfx's
     // established SkinnedEffect fog formula exactly -- Task 900/899 bonus scope).
     vFogFactor = (fog.fogColorEnabled.w > 0.5)

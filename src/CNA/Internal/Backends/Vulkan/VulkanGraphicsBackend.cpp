@@ -4895,7 +4895,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorBufferInfo fogBufInfo{};
         fogBufInfo.buffer = skinnedFogUBO_[frameIdx];
         fogBufInfo.offset = 0;
-        fogBufInfo.range  = 96; // fogColorEnabled+fogStartEnd + light1Dir/Diff + light2Dir/Diff
+        // fogColorEnabled+fogStartEnd + light1/2 Dir/Diff (Task 893) + World/eyePos/specular (Task 894)
+        fogBufInfo.range  = 240;
 
         VkWriteDescriptorSet writes[3]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -5671,9 +5672,9 @@ namespace CNA::Internal::Backends::Vulkan
                         if (skinnedFogUBOPtr_[currentFrame_]) {
                             const uint32_t fogSlot = skinnedFogUBOSlot++;
                             fogOff = fogSlot * kSkinnedFogUBOStride;
-                            if (fogOff + 96 <= kSkinnedFogUBOStride * kSkinnedFogUBOMaxDraws) {
+                            if (fogOff + 240 <= kSkinnedFogUBOStride * kSkinnedFogUBOMaxDraws) {
                                 std::memcpy(static_cast<uint8_t*>(skinnedFogUBOPtr_[currentFrame_]) + fogOff,
-                                            draw.skinnedFogUboData, 96);
+                                            draw.skinnedFogUboData, 240);
                             }
                         }
                         const uint32_t dynOffsets[2] = { boneOff, fogOff };
@@ -6493,6 +6494,20 @@ namespace CNA::Internal::Backends::Vulkan
             d.skinnedFogUboData[18] = params.light2Dir[2]; d.skinnedFogUboData[19] = 0.f;
             d.skinnedFogUboData[20] = params.light2Diffuse[0]; d.skinnedFogUboData[21] = params.light2Diffuse[1];
             d.skinnedFogUboData[22] = params.light2Diffuse[2]; d.skinnedFogUboData[23] = 0.f;
+            // Task 894: World matrix (for world-space position -> eye vector), EyePosition,
+            // per-light SpecularColor, and material SpecularColor/SpecularPower.
+            for (int wi = 0; wi < 16; ++wi) d.skinnedFogUboData[24 + wi] = params.worldColMajor[wi];
+            d.skinnedFogUboData[40] = params.eyePositionWorld[0];
+            d.skinnedFogUboData[41] = params.eyePositionWorld[1];
+            d.skinnedFogUboData[42] = params.eyePositionWorld[2]; d.skinnedFogUboData[43] = 0.f;
+            d.skinnedFogUboData[44] = params.specularColor[0]; d.skinnedFogUboData[45] = params.specularColor[1];
+            d.skinnedFogUboData[46] = params.specularColor[2]; d.skinnedFogUboData[47] = params.specularPower;
+            d.skinnedFogUboData[48] = params.light0Specular[0]; d.skinnedFogUboData[49] = params.light0Specular[1];
+            d.skinnedFogUboData[50] = params.light0Specular[2]; d.skinnedFogUboData[51] = 0.f;
+            d.skinnedFogUboData[52] = params.light1Specular[0]; d.skinnedFogUboData[53] = params.light1Specular[1];
+            d.skinnedFogUboData[54] = params.light1Specular[2]; d.skinnedFogUboData[55] = 0.f;
+            d.skinnedFogUboData[56] = params.light2Specular[0]; d.skinnedFogUboData[57] = params.light2Specular[1];
+            d.skinnedFogUboData[58] = params.light2Specular[2]; d.skinnedFogUboData[59] = 0.f;
         } else if (needsEnvMap) {
             EnsureEnvMapResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -6677,6 +6692,20 @@ namespace CNA::Internal::Backends::Vulkan
             d.skinnedFogUboData[18] = params.light2Dir[2]; d.skinnedFogUboData[19] = 0.f;
             d.skinnedFogUboData[20] = params.light2Diffuse[0]; d.skinnedFogUboData[21] = params.light2Diffuse[1];
             d.skinnedFogUboData[22] = params.light2Diffuse[2]; d.skinnedFogUboData[23] = 0.f;
+            // Task 894: World matrix (for world-space position -> eye vector), EyePosition,
+            // per-light SpecularColor, and material SpecularColor/SpecularPower.
+            for (int wi = 0; wi < 16; ++wi) d.skinnedFogUboData[24 + wi] = params.worldColMajor[wi];
+            d.skinnedFogUboData[40] = params.eyePositionWorld[0];
+            d.skinnedFogUboData[41] = params.eyePositionWorld[1];
+            d.skinnedFogUboData[42] = params.eyePositionWorld[2]; d.skinnedFogUboData[43] = 0.f;
+            d.skinnedFogUboData[44] = params.specularColor[0]; d.skinnedFogUboData[45] = params.specularColor[1];
+            d.skinnedFogUboData[46] = params.specularColor[2]; d.skinnedFogUboData[47] = params.specularPower;
+            d.skinnedFogUboData[48] = params.light0Specular[0]; d.skinnedFogUboData[49] = params.light0Specular[1];
+            d.skinnedFogUboData[50] = params.light0Specular[2]; d.skinnedFogUboData[51] = 0.f;
+            d.skinnedFogUboData[52] = params.light1Specular[0]; d.skinnedFogUboData[53] = params.light1Specular[1];
+            d.skinnedFogUboData[54] = params.light1Specular[2]; d.skinnedFogUboData[55] = 0.f;
+            d.skinnedFogUboData[56] = params.light2Specular[0]; d.skinnedFogUboData[57] = params.light2Specular[1];
+            d.skinnedFogUboData[58] = params.light2Specular[2]; d.skinnedFogUboData[59] = 0.f;
         } else if (needsEnvMap) {
             EnsureEnvMapResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);

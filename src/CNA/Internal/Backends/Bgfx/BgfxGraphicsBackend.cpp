@@ -2337,6 +2337,24 @@ namespace CNA::Internal::Backends::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            // Task 894: World (for world-space position -> eye vector), EyePosition, and
+            // per-light + material specular.
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            float spec0[4] = { params.light0Specular[0], params.light0Specular[1],
+                                params.light0Specular[2], 0.0f };
+            bgfx::setUniform(light0Spec3DUnif_, spec0);
+            float spec1[4] = { params.light1Specular[0], params.light1Specular[1],
+                                params.light1Specular[2], 0.0f };
+            bgfx::setUniform(light1Spec3DUnif_, spec1);
+            float spec2[4] = { params.light2Specular[0], params.light2Specular[1],
+                                params.light2Specular[2], 0.0f };
+            bgfx::setUniform(light2Spec3DUnif_, spec2);
+            float specColorPower[4] = { params.specularColor[0], params.specularColor[1],
+                                         params.specularColor[2], params.specularPower };
+            bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
             if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
                 bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
             if (bgfx::isValid(texColor3DSampler_))
@@ -2731,6 +2749,24 @@ namespace CNA::Internal::Backends::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            // Task 894: World (for world-space position -> eye vector), EyePosition, and
+            // per-light + material specular.
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            float spec0[4] = { params.light0Specular[0], params.light0Specular[1],
+                                params.light0Specular[2], 0.0f };
+            bgfx::setUniform(light0Spec3DUnif_, spec0);
+            float spec1[4] = { params.light1Specular[0], params.light1Specular[1],
+                                params.light1Specular[2], 0.0f };
+            bgfx::setUniform(light1Spec3DUnif_, spec1);
+            float spec2[4] = { params.light2Specular[0], params.light2Specular[1],
+                                params.light2Specular[2], 0.0f };
+            bgfx::setUniform(light2Spec3DUnif_, spec2);
+            float specColorPower[4] = { params.specularColor[0], params.specularColor[1],
+                                         params.specularColor[2], params.specularPower };
+            bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
             if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
                 bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
             if (bgfx::isValid(texColor3DSampler_))

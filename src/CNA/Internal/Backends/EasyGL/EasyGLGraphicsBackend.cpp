@@ -2880,6 +2880,7 @@ void main()
 "layout(location=3) in vec4 aBoneWeights;\n"
 "layout(location=4) in uvec4 aBoneIndices;\n"
 "uniform mat4 uWVP;\n"
+"uniform mat4 uWorld;\n"
 "uniform mat4 uBones[72];\n"
 "uniform float uFogEnabled;\n"
 "uniform float uFogStart;\n"
@@ -2887,14 +2888,17 @@ void main()
 "out vec3 vNormal;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
+"out vec3 vWorldPos;\n"
 "void main(){\n"
 "    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x\n"
 "               +uBones[aBoneIndices.y]*aBoneWeights.y\n"
 "               +uBones[aBoneIndices.z]*aBoneWeights.z\n"
 "               +uBones[aBoneIndices.w]*aBoneWeights.w;\n"
-"    gl_Position=uWVP*skinMat*vec4(aPos,1.0);\n"
+"    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
+"    gl_Position=uWVP*skinnedPos;\n"
 "    vNormal=normalize(mat3(skinMat)*aNormal);\n"
 "    vUV=aUV;\n"
+"    vWorldPos=(uWorld*skinnedPos).xyz;\n"
 "    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
 "}\n";
 
@@ -2904,6 +2908,7 @@ void main()
 "in vec3 vNormal;\n"
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
+"in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uEmissiveColor;\n"
@@ -2913,18 +2918,30 @@ void main()
 "uniform vec3 uLight1Diffuse;\n"
 "uniform vec3 uLight2Dir;\n"
 "uniform vec3 uLight2Diffuse;\n"
+"uniform vec3 uLight0Specular;\n"
+"uniform vec3 uLight1Specular;\n"
+"uniform vec3 uLight2Specular;\n"
+"uniform vec3 uSpecularColor;\n"
+"uniform float uSpecularPower;\n"
+"uniform vec3 uEyePosition;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
-"    float NdotL0=max(dot(N,-uLight0Dir),0.0);\n"
-"    float NdotL1=max(dot(N,-uLight1Dir),0.0);\n"
-"    float NdotL2=max(dot(N,-uLight2Dir),0.0);\n"
+"    vec3 E=normalize(uEyePosition-vWorldPos);\n"
+"    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
+"    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
+"    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
 "    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
 "    vec3 litRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
+"    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
+"    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
+"    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
+"    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
 "    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a);\n"
+"    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -2933,6 +2950,7 @@ void main()
         CompileAndLink(prog_skinned_.prog, vsrc, fsrc, "skinned");
         auto& p = prog_skinned_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
+        p.loc_world     = p.prog.uniform_location("uWorld");
         p.loc_bones     = p.prog.uniform_location("uBones[0]");
         p.loc_texture   = p.prog.uniform_location("uTexture");
         p.loc_diffuse   = p.prog.uniform_location("uDiffuseColor");
@@ -2943,6 +2961,12 @@ void main()
         p.loc_l1diff    = p.prog.uniform_location("uLight1Diffuse");
         p.loc_l2dir     = p.prog.uniform_location("uLight2Dir");
         p.loc_l2diff    = p.prog.uniform_location("uLight2Diffuse");
+        p.loc_l0spec    = p.prog.uniform_location("uLight0Specular");
+        p.loc_l1spec    = p.prog.uniform_location("uLight1Specular");
+        p.loc_l2spec    = p.prog.uniform_location("uLight2Specular");
+        p.loc_specularcolor = p.prog.uniform_location("uSpecularColor");
+        p.loc_specularpower = p.prog.uniform_location("uSpecularPower");
+        p.loc_eyepos    = p.prog.uniform_location("uEyePosition");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -3124,6 +3148,23 @@ void main()
         if (p.loc_l2diff >= 0 && p.loc_ambient < 0)
             p.prog.set_uniform(p.loc_l2diff,
                 params.light2Diffuse[0], params.light2Diffuse[1], params.light2Diffuse[2]);
+        // Task 894: SkinnedEffect's own specular forwarding (same generic Prog3D fields the
+        // lit-textured/BasicEffect path above uses; harmless no-op for env-map, which never
+        // declares these uniforms so loc_l0spec etc. stay -1 there).
+        if (p.loc_l0spec >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l0spec,
+                params.light0Specular[0], params.light0Specular[1], params.light0Specular[2]);
+        if (p.loc_l1spec >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l1spec,
+                params.light1Specular[0], params.light1Specular[1], params.light1Specular[2]);
+        if (p.loc_l2spec >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l2spec,
+                params.light2Specular[0], params.light2Specular[1], params.light2Specular[2]);
+        if (p.loc_specularcolor >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_specularcolor,
+                params.specularColor[0], params.specularColor[1], params.specularColor[2]);
+        if (p.loc_specularpower >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_specularpower, params.specularPower);
 
         if (p.loc_eyepos >= 0)
             p.prog.set_uniform(p.loc_eyepos,
