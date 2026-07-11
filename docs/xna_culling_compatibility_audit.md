@@ -1,8 +1,13 @@
 # XNA 4.0 Culling Compatibility Audit
 
-**Status: framework proven compatible; SimpleAnimation-specific symptom root-caused to a
-localized winding-orientation defect in a subset of `turret_geo`'s own converted mesh data, not
-yet corrected (evidence gathered, exact fix not yet applied — see §7).**
+**Status: RESOLVED. CNA's `RasterizerState.CullMode` framework is confirmed correct — verified
+directly against real XNA 4.0 (not just FNA source reading) via a dedicated C# reproducer run on
+a real Windows 7/XNA 4.0 VM (§6). The SimpleAnimation symptom was a systematic winding reversal
+across the ENTIRE converted `tank.fbx` mesh data (all 12 mesh parts, not just `turret_geo`'s own
+disc region as first suspected — §5 walks through why that first, narrower conclusion was wrong).
+Fixed by reversing triangle winding in all 12 `tank_*_idx.bin` files under
+`cna-samples/samples/SimpleAnimation/Content/`. Verified visually against the authoritative XNA
+screenshot across multiple rotation angles — see §7.**
 
 Date started: 2026-07-11. Investigates a visual discrepancy first noticed while porting the
 SimpleAnimation sample (`cna-samples/samples/SimpleAnimation`) to CNA: a dark, disc-shaped
@@ -22,10 +27,9 @@ not be conflated:**
    rendered flat white/cream because `tank.model.json` predated `cna` Task 932's per-mesh
    `"texture"` field. Fixed by extending `cna-samples/tools/fbx_ascii2model.py` with a generic
    FBX `Material`/`Texture`/`Connect` graph parser and hand-adding the 12 resolved texture names
-   to the existing `tank.model.json` (no vertex/index data touched — regenerating the file
-   wholesale was tested in a scratch directory and found to corrupt this specific asset, see
-   `DEFERRED.md`'s own addendum). Full write-up: `cna-samples/samples/SimpleAnimation/missing.md`'s
-   "Flat, untextured shading — FIXED" section.
+   to the existing `tank.model.json` (no vertex/index data touched at the time — that came later,
+   §7). Full write-up: `cna-samples/samples/SimpleAnimation/missing.md`'s "Flat, untextured
+   shading — FIXED" section.
 2. **The turret underside/culling problem** (this document). Investigated independently, after
    the texture fix, using a real running build with the texture fix applied.
 
@@ -53,21 +57,22 @@ not be conflated:**
 
 This evidence was treated as a starting point, not as proof of where the defect lives (per the
 task's own explicit instruction). Every item was independently re-verified or superseded below.
+**Item 9's own framing ("switching CullMode fixes the turret") turned out to be the single most
+important clue — it just needed to be tested at the scale of the whole tank, not just one mesh
+(§5.5), before its real implication was clear.**
 
 ---
 
 ## 3. Live confirmation — CNA vs. real XNA 4.0
 
-All 3 screenshots referenced below are preserved at
-`docs/xna_culling_compatibility_audit_images/` (not generated/build output — committed
-investigation reference material, per this document's own record-keeping requirement).
+All screenshots referenced below are preserved at `docs/xna_culling_compatibility_audit_images/`
+(not generated/build output — committed investigation reference material).
 
-**CNA (current HEAD, EasyGL backend, texture fix applied, no CullMode override), live screenshot:**
+**CNA (pre-fix, EasyGL backend, texture fix applied, no CullMode override), live screenshot:**
 `cna_default_bug_present.png`.
 
 A dark, flat, disc-shaped surface is clearly visible poking out from behind/under the turret
-dome — matches evidence items 4-9 exactly. Confirmed still present in the current codebase, not a
-stale/historical report.
+dome — matches evidence items 4-9 exactly.
 
 **Authoritative original XNA 4.0 reference (provided 2026-07-11 by the project owner: the real
 C# `SimpleAnimation` sample, built and run on Windows 7 inside a VirtualBox VM):**
@@ -80,8 +85,8 @@ wheels/steering/turret/cannon/hatch), so no pixel-level comparison of unrelated 
 angle, cannon angle, hatch state) is meaningful — only face-visibility/effective-CullMode
 behavior was compared, per the task's own explicit instruction.
 
-**This is now direct, live, authoritative evidence of an observable XNA-vs-CNA rendering
-mismatch** — not a comparison against Blender, DirectXTK, or any other non-XNA reference.
+**This was direct, live, authoritative evidence of an observable XNA-vs-CNA rendering mismatch**
+— not a comparison against Blender, DirectXTK, or any other non-XNA reference.
 
 ---
 
@@ -98,8 +103,7 @@ Extends the pre-existing, already-passing
 perspective/orthographic projection, matching SimpleAnimation's own exact camera
 (`eye=(1000,500,0)`, `target=(0,150,0)`, `up=(0,1,0)`, `FOV=PiOver4`, `near=10`, `far=10000`).
 
-**Method** (deliberately avoids ever hand-predicting an expected screen position, which is exactly
-the kind of arithmetic this investigation must not silently rely on):
+**Method** (deliberately avoids ever hand-predicting an expected screen position):
 1. Render each of 2 test triangles **alone** under `CullMode.None` (guaranteed visible if on
    screen at all) and scan the **entire** framebuffer for its own unique color to find a real
    sample pixel — never a hardcoded coordinate.
@@ -112,169 +116,225 @@ the kind of arithmetic this investigation must not silently rely on):
    `CullCounterClockwiseFace` / the default `RasterizerState`, sample each triangle's own pixel,
    and check the observed visibility against the step-2 prediction.
 
-Five scenarios, all using this same self-consistency check:
-- **(a)** Identity World/View/Projection (sanity anchor — must reproduce the pre-existing
-  identity test's own result).
-- **(b)** Orthographic projection + real `CreateLookAt` view, identity World.
-- **(c)** Perspective + real `CreateLookAt` view (SimpleAnimation's exact camera), identity World.
-- **(d)** Same camera, **positive-determinant** World transform (a real `CreateRotationY`
-  rotation, determinant = 1) — the exact class of transform SimpleAnimation's own animated bones
-  compose (confirmed, see §4.3).
-- **(e)** Same camera, **negative-determinant** World transform (`CreateScale(-1,1,1)`) —
-  documented separately per the audit's own requirement: a real winding flip is *expected* here,
-  not a bug; the test checks the render against this scenario's own (also-flipped) prediction, not
-  scenario (c)/(d)'s.
+Five scenarios: (a) identity anchor, (b) orthographic + `CreateLookAt`, (c) perspective +
+`CreateLookAt` (SimpleAnimation's exact camera), (d) same camera + positive-determinant World
+(`CreateRotationY`), (e) same camera + negative-determinant World (`CreateScale(-1,1,1)`,
+documented separately — a real flip is *expected* here).
 
 **Result: 30/30 checks PASS on EasyGL, Vulkan, and Bgfx — identical outcome on all 3 backends.**
-Discriminating power was not separately re-verified here since this test is purely additive
-regression coverage over an already-passing baseline, not a bug fix.
 
 ### 4.2 `examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp`
 
 Same methodology, but drives `GraphicsDevice::DrawIndexedPrimitives` with a **real**
-`VertexBuffer`/`IndexBuffer`/`BasicEffect` (`VertexPositionNormalTexture`, stride 32, matching
-every real `ModelMeshPart`) — the exact code path `ModelMesh::Draw()` uses — instead of
-`DrawUserPrimitives`'s separate, simpler `DrawColoredPrimitives` dispatch that every pre-existing
-CullMode test (including §4.1) happens to use. Also exercises `BasicEffect.EnableDefaultLighting()`
-(SimpleAnimation's own `Tank::Draw()` calls this every frame for every mesh part), to check
-whether lighting activation itself — a different shader-selection path on every backend —
-has any bearing on `CullMode`.
+`VertexBuffer`/`IndexBuffer`/`BasicEffect` (`VertexPositionNormalTexture`, stride 32) plus
+`EnableDefaultLighting()` — the exact code path `ModelMesh::Draw()` uses, not the simpler
+`DrawUserPrimitives`/`DrawColoredPrimitives` path every pre-existing CullMode test happened to
+use.
 
 **Result: 6/6 checks PASS on EasyGL, Vulkan, and Bgfx.**
 
-**Methodology fix needed for Bgfx**: an early draft used ONE shared `VertexBuffer`/`IndexBuffer`
-with the 2 triangles at index offsets 0 and 3 (`GraphicsDevice.DrawIndexedPrimitives(...,
-startIndex: 3, ...)` for the second). On Bgfx specifically, both triangles rendered at the exact
-same screen location. Root-caused (§6) to a real, separate, previously-unknown Bgfx bug
-(`BgfxGraphicsBackend::DrawIndexedPrimitivesEx` silently discarding `GpuDrawParams::startIndex`)
-— **not a CullMode bug**. Worked around in the test (not the bug itself — see §6 for why the
-attempted fix was reverted) by using two separate, dedicated `VertexBuffer`/`IndexBuffer` pairs
-instead, matching how every real `ModelMeshPart` actually works (`tank.model.json` gives every
-mesh its own separate `"vertices"`/`"indices"` `.bin` pair, never a shared buffer with per-part
-offsets) — confirmed this is the *representative* case, not an artificial simplification.
+An early draft used one shared `VertexBuffer`/`IndexBuffer` at two `startIndex` offsets, which
+surfaced a real, separate Bgfx bug (§6 old numbering removed — see the standalone note in §9) —
+worked around in the test using two dedicated buffers, matching how every real `ModelMeshPart`
+actually works.
 
-### 4.3 Conclusion of Phase 1
+### 4.3 Conclusion of Phase 1 (still correct, but incomplete on its own — see §5)
 
-**CNA's `CullMode`/`RasterizerState` implementation is self-consistent and matches the rule
-established by the pre-existing identity test, across identity, orthographic, and perspective
-projection; a real `Matrix.CreateLookAt` view; positive- and negative-determinant World
-transforms; both the simple `DrawUserPrimitives` dispatch and the real indexed/`BasicEffect`
-dispatch `Model`/`ModelMesh::Draw()` actually uses; with and without lighting; on all 3 runnable
-backends (EasyGL, Vulkan, Bgfx).**
-
-No framework-level `CullMode`-to-native-state mapping defect was found anywhere this
-investigation could exercise it. This directly rules out the most obvious hypothesis (an enum
-mapped backward, or a Y-flip/viewport correction applied inconsistently with the cull-state
-mapping on one specific backend) as the cause of the SimpleAnimation symptom.
+**CNA's `CullMode`/`RasterizerState` implementation is self-consistent** across identity,
+orthographic, and perspective projection; a real `Matrix.CreateLookAt` view; positive- and
+negative-determinant World transforms; the simple and the real indexed/`BasicEffect` dispatch; and
+all 3 backends. This ruled out an *internal* framework inconsistency (an enum mapped backward on
+just one backend, or a Y-flip applied inconsistently with the cull-state mapping on one specific
+backend). **It could not, on its own, rule out CNA's entire convention being self-consistently
+different from real XNA's — see §5.5 and §6 for why, and how that was resolved.**
 
 ---
 
-## 5. Phase 3/5 — tracing the real turret_geo transform, and re-examining the asset itself
+## 5. Phase 3/5 — tracing the real turret_geo transform, and the (first, too narrow) asset-level
+conclusion
 
 ### 5.1 Why the original evidence's own normal-vs-winding check (item 12) is a weaker signal than
 it first appears
 
 A per-triangle check of "does this triangle's geometric winding (from its 3 vertex positions)
-agree with its own stored vertex normal" was re-run for `turret_geo` specifically (not `tank_geo`,
-which item 12 checked): **0 disagreements across all 1674 triangles.** This is a genuinely useful
-data point, but on its own it is **not proof the mesh is correctly wound** — it only proves
-*internal* consistency between each triangle's winding and its own normal. If normals were
-derived from (rather than independently authored against) the same winding data during FBX
-export/conversion, a mesh with its **entire** winding convention reversed relative to true intent
-would pass this exact check with 0 disagreements too. Per the task's own explicit instruction
-("Do not use lighting normals as evidence for culling correctness"), this check is recorded here
-for completeness but was **not** relied on for the final conclusion.
+agree with its own stored vertex normal" was re-run for `turret_geo` specifically: **0
+disagreements across all 1674 triangles.** This is a genuinely useful data point, but on its own
+it is **not proof the mesh is correctly wound** — it only proves *internal* consistency between
+each triangle's winding and its own normal. If normals were derived from (rather than
+independently authored against) the same winding data during FBX export/conversion, a mesh with
+its **entire** winding convention reversed relative to true intent would pass this exact check
+with 0 disagreements too. Per the task's own explicit instruction ("do not use lighting normals
+as evidence for culling correctness"), this check was not relied on for the final conclusion.
 
-### 5.2 Edge-adjacency orientation consistency (a real, non-circular check)
+### 5.2 Edge-adjacency orientation consistency (a real, non-circular check) — run on all 12 meshes
 
 A proper closed/manifold mesh has every internal edge shared by exactly 2 triangles, each
-traversing that shared edge in the **opposite** direction from the other (a standard, well-known
-polygon-orientation invariant, independent of stored normals entirely). Checked directly against
-`turret_geo`'s real shipped `tank_turret_geo_verts.bin`/`tank_turret_geo_idx.bin`:
+traversing that shared edge in the **opposite** direction from the other — a standard polygon-
+orientation invariant, independent of stored normals entirely. Checked directly against every one
+of the 12 real shipped `tank_*_verts.bin`/`tank_*_idx.bin` pairs (`canon_geo`, `hatch_geo`, both
+`{l,r}_{back,front}_wheel_geo`, both `{l,r}_{engine,steer}_geo`, `tank_geo`, `turret_geo`):
 
-**Result: 0 orientation-inconsistent triangles out of 1674** (positions matched with a small
-tolerance to account for legitimately duplicated seam/UV-boundary vertices). `turret_geo` is a
-genuinely coherent, consistently-oriented manifold mesh — no random per-triangle indexing errors.
+**Result: 0 orientation-inconsistent triangles in every single one of the 12 meshes** (positions
+matched with a small tolerance to account for legitimately duplicated seam/UV-boundary vertices).
+Every mesh is individually a genuinely coherent, consistently-oriented manifold — no random
+per-triangle indexing errors anywhere in the asset.
+
+**This is exactly why the investigation's first conclusion (below) was wrong in scope but not in
+kind**: a mesh can be perfectly self-consistent (this check) while its *entire* winding
+convention is reversed relative to true intent — the check cannot distinguish those two cases,
+and neither could the NDC-signed-area analysis in §5.4, which is *also* entirely internal to
+CNA's own matrix pipeline.
 
 ### 5.3 The real runtime World transform for turret_geo
 
 Instrumented `cna-samples/samples/SimpleAnimation/src/Tank.hpp`'s `Draw()` (temporarily, reverted
-before this investigation's own commits — see §8) to print the actual `BasicEffect.World` matrix
-used for `turret_geo` during a real running frame:
+before any commit) to print the actual `BasicEffect.World` matrix used for `turret_geo` during a
+real running frame: **`World.Determinant() = 1.000000`** — a plain rotation (the small
+`TurretRotation`-driven `Matrix.CreateRotationY`) times a pure translation (the rest-pose offset
+from `cna-samples`' own `ApplyRestTransforms()`). Positive-determinant, confirmed — rules out a
+transform-composition bug (wrong parent chain, an accidental reflection introduced by
+`ModelBone`/`Model` composition) as the cause. This matches Phase 1's own scenario (d).
 
-```
-World.Determinant() = 1.000000
-World = [ 1.000  0.000 -0.009  0.0 /
-          0.000  1.000  0.000  0.0 /
-          0.009  0.000  1.000  0.0 /
-         -0.059 231.754 -35.595  1.0 ]
-```
+### 5.4 The first (too narrow) conclusion: NDC-signed-area prediction for turret_geo alone
 
-**Positive determinant, confirmed** — a plain rotation (the small `TurretRotation`-driven
-`Matrix.CreateRotationY`, composed through `ModelBone.Transform`/`CopyAbsoluteBoneTransformsTo`)
-times a pure translation (matches `cna-samples`' own `ApplyRestTransforms()` rest-pose value,
-`(0, 231.754, -35.595)`, which — per that function's own header comment — is itself a plain
-translation read directly from `tank.fbx`'s own `Lcl Translation`, since every rotation/
-`PreRotation` in this asset is zero). This exactly matches Phase 1's own scenario (d)
-(positive-determinant World via `CreateRotationY`), which passed 30/30 across all 3 backends.
+Using the same NDC-signed-area methodology from §4.1, applied directly to `turret_geo`'s own real
+vertex/index data under the real transform (§5.3): a specific, obviously-underside triangle
+(`tri#0`, average Y ≈ 0.00, face normal ≈ straight down) predicted to **survive** the default
+`CullCounterClockwiseFace` — front-facing from the real camera given its actual stored winding.
+Broadened to a ~100-triangle "underside region" candidate set (78 of 100 predicted to survive) and
+to the full 1674-triangle mesh (52.1%/47.9% survive/cull split — the expected roughly-even split
+for *any* correctly-wound closed/convex-ish mesh, and — this was the reasoning error — also
+exactly what a *uniformly reversed* mesh would show, since reversing every triangle's winding
+does not change which ~half face toward vs. away from the camera, only which of those halves is
+labeled "front").
 
-**This rules out a transform-composition bug (wrong parent chain, an accidental reflection
-introduced by `ModelBone`/`Model` composition, etc.) as the cause.**
+**This is where the investigation's first write-up stopped and drew too narrow a conclusion**:
+"the underside/disc sub-region of `turret_geo` has a real, internally consistent but
+XNA-incompatible winding, isolated to that sub-region" — treating the 52/48% full-mesh split as
+evidence the *rest* of the mesh was fine. It was not fine; it just wasn't *visually obvious* that
+it was wrong, because a convex-ish exterior shell's outward silhouette barely changes when its
+winding is uniformly reversed (only concave/interior-facing detail exposes it) — exactly why the
+turret's own dome looked correct in every screenshot while its one exposed interior surface (the
+underside disc) did not.
 
-### 5.4 The decisive check: NDC-signed-area prediction for the REAL underside triangles, under the
-REAL exact transform
+### 5.5 The test that actually settled scope: a whole-tank CullMode flip, and all 12 meshes checked
 
-Using the exact same (already-validated-correct, §4) NDC-signed-area methodology, but now applied
-directly to `turret_geo`'s own real, shipped vertex/index data — not synthetic test geometry —
-under the exact real `World` (§5.3) / `View` / `Projection` matrices:
+Two things, done in direct response to the project owner pointing out (correctly) that a live
+screenshot of the "fixed" turret still showed clearly wrong-looking wheels — solid drums in real
+XNA, visibly hollow/inside-out in CNA:
 
-A specific, obviously-underside triangle (`tri#0`, vertex indices `(0,1,2)`, average Y ≈ 0.00,
-geometric face normal ≈ `(0, -1, 0)` — i.e. essentially exactly straight down) was computed to
-have **NDC signed area = −0.001211**, which by the already-established, already-validated rule
-(§4.1 step 2) **predicts it survives the default `CullCounterClockwiseFace` state** — i.e.
-mathematically front-facing from the real camera's real viewpoint, given its actual stored
-winding.
+1. **Edge-adjacency was re-run on all 12 meshes, not just `turret_geo`** (§5.2 above) — confirmed
+   every mesh is *individually* self-consistent, which (per §5.2's own caveat) is fully compatible
+   with *every* mesh sharing the same reversed-relative-to-XNA convention.
+2. **A global, whole-model `RasterizerState.CullMode = CullClockwiseFace` override** (not a
+   per-mesh one) was set for one diagnostic run, covering every one of the 12 meshes at once —
+   *not* the final fix, purely a diagnostic. Result: the turret's disc disappeared **and** all 4
+   wheels changed from a hollow/inside-out appearance to solid drums with correctly-visible tread
+   spikes, matching the XNA reference at multiple rotation angles.
 
-Broadening this to every low-Y (< 30), steeply-downward-normal (`faceNormal.Y < -0.99`) triangle
-in the mesh (20 such triangles, spanning vertex indices 0-683, **not** a single contiguous index
-range) found **78 of the 100 broader "underside-region" candidate triangles** (Y<30,
-`faceNormal.Y < -0.3`, a looser filter also catching some angled side-wall triangles near the
-same feature) predicted to survive the default cull state.
+This is the direct evidence that resolved scope: **the winding reversal is asset-wide (all 12
+meshes), not isolated to `turret_geo`'s own disc.** (Diagnostic screenshots: this override was
+reverted immediately after — not a proposed fix, since a per-app `CullMode` override would be
+exactly the "SimpleAnimation-specific workaround" the task's own instructions prohibit.)
 
-A full-mesh breakdown (all 1674 triangles) found **52.1% predicted to survive, 47.9% predicted to
-be culled** — the expected roughly-even split for a normally, correctly-wound closed/convex-ish
-mesh viewed from any single direction (most of the mesh is **not** part of the anomaly; this
-statistic on its own does not distinguish a globally-reversed mesh from a correctly-wound one, and
-is recorded here only for completeness).
+### 5.6 `fbx_ascii2model.py`'s own triangulation logic — checked directly, not just inferred
 
-**Conclusion: CNA's rendering of the underside triangles is mathematically self-consistent and
-correct, given the mesh's own actual stored winding data and the real transform. This is not a
-CNA rendering/culling bug** — the same already-proven-correct pipeline (§4) simply computes that
-this specific triangle, as currently wound, is front-facing from this camera. **The winding data
-itself, as currently shipped in `tank_turret_geo_idx.bin`, does not match what real XNA's content
-pipeline evidently produced from the same source FBX** (§3's live screenshot comparison) — i.e.
-this is a **model-conversion-level defect**, isolated to (at least) the disc/underside region of
-`turret_geo`, not a `cna` framework defect.
-
-### 5.5 `fbx_ascii2model.py`'s own triangulation logic — checked directly, not just inferred
-
-Per the task's own instruction not to assume a conversion-tool bug without direct evidence: the
-tool's `triangulate()` function was read line-by-line against the FBX ASCII format's own
+The tool's `triangulate()` function was read line-by-line against the FBX ASCII format's own
 `PolygonVertexIndex` convention (a negative value encodes both `(-n)-1` as the real index **and**
 marks the end of a polygon). Confirmed **correct**: fan-triangulation from `polygon[0]`
-(`[polygon[0], polygon[k], polygon[k+1]]` for each `k`) faithfully preserves whatever vertex order
-the FBX's own `PolygonVertexIndex` array encodes — it does not introduce any reversal itself. If
-the underside region's winding really is wrong relative to true XNA intent, the most likely
-remaining explanation is either (a) a genuine peculiarity of this specific region's own authored
-winding in the source FBX that real XNA's actual content-pipeline FBX importer resolves
-differently than this hand-written ASCII parser does (e.g. a coordinate-system/axis-handedness
-declaration this tool doesn't apply, if the source FBX has one), or (b) some other
-`fbx_ascii2model.py` step downstream of `triangulate()` not yet traced to this level of detail.
-**Not fully resolved — see §7 for what remains open.**
+faithfully preserves whatever vertex order the FBX's own `PolygonVertexIndex` array encodes — it
+does not introduce a reversal itself. The reversal most likely originates either in a
+coordinate-system/axis-handedness convention difference between this hand-written ASCII parser
+and real XNA's actual content-pipeline FBX importer (not yet pinned down to an exact line), or
+elsewhere in the tool not yet traced to this level of detail. **Not required for the fix applied
+in §7** (a direct, verified data correction), but worth resolving in `fbx_ascii2model.py` itself
+so future FBX conversions via this tool don't reproduce the same defect — tracked as a follow-up,
+not done here.
 
 ---
 
-## 6. A real, separate bug found incidentally (not the root cause of §3-5, documented for its own
+## 6. The decisive test — resolving "CNA bug" vs. "asset bug" with real XNA 4.0, not FNA reading
+
+Phase 1 (§4) proved CNA's `CullMode` convention is *self-consistent*. It could not prove that
+convention matches *real* XNA — that conclusion was drawn from reading FNA's own native backend
+source (`FNA3D_Driver_OpenGL.c`/`FNA3D_Driver_D3D11.c`), which is authoritative for this project's
+own conventions (per `CLAUDE.md`) but is still an independent reimplementation, and the specific
+derivation involves an easy-to-invert detail (NDC space is Y-up; screen/pixel space is Y-down;
+mixing the two silently flips which "clockwise" is meant). The project owner correctly pushed
+back on this: a whole-tank fix could equally be explained by CNA's own default `CullMode` being
+backward relative to real XNA, not by the asset.
+
+**This is exactly why `tools/xna-reference/CullModeTest/` (§9) existed — to settle it with real
+XNA, not more reasoning about FNA source.** The project owner built and ran it on the same
+Windows 7/XNA 4.0 VM used for §3's screenshot. Result
+(`docs/xna_culling_compatibility_audit_images/` — see the project's own screenshot from that run):
+
+| Quadrant | CullMode | Real XNA 4.0 result |
+|---|---|---|
+| top-left | `None` | both RED and GREEN triangles visible |
+| top-right | `CullClockwiseFace` | GREEN only |
+| bottom-left | `CullCounterClockwiseFace` (documented default) | RED only |
+| bottom-right | unset (whatever the real default actually is) | RED only — matches bottom-left |
+
+RED is the test's own "negative NDC signed area" triangle (same construction, same labeling
+convention as the CNA reproducer, §4.1). **Real XNA's default state keeps RED, culls GREEN —
+exactly what CNA's own default state does.** This is a direct, independent, non-FNA-derived
+confirmation: **CNA's `CullMode` framework genuinely matches real XNA 4.0.** The "maybe CNA itself
+is backward" hypothesis is now ruled out by real hardware/software evidence, not just re-reading
+source a second time.
+
+With that resolved, the only remaining explanation for the whole-tank symptom (§5.5) is the one
+this document's §7 now applies: the asset data itself.
+
+---
+
+## 7. The fix
+
+**Root cause (confirmed, not just inferred): all 12 of SimpleAnimation's `tank_*_idx.bin` mesh
+index buffers have their triangle winding reversed relative to what real XNA's content pipeline
+would have produced from the same source `tank.fbx`.** Scope: `cna-samples`
+(`samples/SimpleAnimation/Content/`) only — a data/conversion defect, not a `cna` framework
+defect (§6 rules that out directly).
+
+**Fix applied**: for every one of the 12 `tank_*_idx.bin` files, every triangle's 2nd and 3rd
+index were swapped (`(i0,i1,i2) -> (i0,i2,i1)`), reversing its winding without changing which
+vertices it references or the mesh's actual shape. Originals backed up first (not committed,
+scratch-only) before any file was modified. No `cna` change, no `Tank.hpp`/
+`SimpleAnimationGame.hpp` change, no runtime `CullMode` override anywhere — the fix makes the
+*data* correct so the app renders correctly under XNA's real, unmodified default `RasterizerState`.
+
+**Verification**: rebuilt, ran, and screenshotted at 3 different rotation angles (the sample
+auto-rotates and independently animates wheels/steering/turret/cannon/hatch, so exact pixel
+matching against a single differently-timed XNA screenshot isn't meaningful — face-visibility was
+compared, per the task's own instruction). At every angle checked:
+- The turret's underside disc is gone — closed, correctly-seated dome, matching the XNA reference.
+- All 4 wheels show solid drums with correctly-visible tread spikes — no more hollow/inside-out
+  appearance.
+- No new holes, gaps, or missing surfaces introduced anywhere else on the hull, engine covers,
+  exhaust pipes, cannon, or hatch.
+- Animation (wheel rotation, steering, turret rotation, cannon elevation, hatch) unaffected, as
+  expected — winding reversal changes only which side of a triangle is considered front-facing,
+  never vertex positions or the bone/animation data.
+
+**Files changed** (all in `cna-samples`, `samples/SimpleAnimation/Content/`): `tank_canon_geo_idx.bin`,
+`tank_hatch_geo_idx.bin`, `tank_l_back_wheel_geo_idx.bin`, `tank_l_engine_geo_idx.bin`,
+`tank_l_front_wheel_geo_idx.bin`, `tank_l_steer_geo_idx.bin`, `tank_r_back_wheel_geo_idx.bin`,
+`tank_r_engine_geo_idx.bin`, `tank_r_front_wheel_geo_idx.bin`, `tank_r_steer_geo_idx.bin`,
+`tank_tank_geo_idx.bin`, `tank_turret_geo_idx.bin`. Same file sizes before/after (only index
+*values* within each triangle were swapped, not resized).
+
+**Deliberately not touched**: `CameraShake`, `CustomModelClass`, and `ReachGraphicsDemo` each
+have their **own, independent** copies of the same `tank_*_idx.bin` files (confirmed not
+shared/symlinked with SimpleAnimation's) — these almost certainly have the identical defect
+(same conversion tool, same source FBX) but were out of this task's own scope. `SplitScreen` and
+`TankOnHeightmap` (the other 2 samples that were going to share this rig, per
+`missing.md`'s own note) don't have `Content/` mesh files yet — not affected, but whoever ports
+them next should be aware `fbx_ascii2model.py`'s own winding handling (§5.6) is still unresolved
+at the tool level, so a *fresh* conversion for those samples could reproduce the same defect.
+
+---
+
+## 8. A real, separate bug found incidentally (not the root cause above, documented for its own
 sake)
 
 While building §4.2's test, an early draft used one shared `VertexBuffer`/`IndexBuffer` read at
@@ -288,122 +348,16 @@ unconditionally — `GpuDrawParams::startIndex`/`baseVertex` are read and forwar
 `ExpandWireframeIndices()` (the *wireframe* path only) but are **never applied** to the real,
 non-wireframe vertex/index buffer binding at all.
 
-This has not yet caused a visible bug in any existing CNA sample or test because every current
-`Model`/`ModelMeshPart` owns its own dedicated, complete `VertexBuffer`/`IndexBuffer` pair
-starting at index/vertex 0 (confirmed directly: `tank.model.json` gives every mesh its own
-separate `"vertices"`/`"indices"` `.bin` file, never a shared buffer with per-part offsets) — so
-`startIndex`/`baseVertex` are always 0 in every real draw today. It would affect: any future
-multi-part-mesh format sharing one buffer with per-part offsets, and any direct
-`GraphicsDevice.DrawIndexedPrimitives(..., startIndex: N, ...)` / `baseVertex: N` call with a
-nonzero offset on Bgfx specifically.
+Not visible in any current CNA sample/test because every current `Model`/`ModelMeshPart` owns its
+own dedicated, complete `VertexBuffer`/`IndexBuffer` pair starting at index/vertex 0.
 
-**A fix was attempted** (using `bgfx::setIndexBuffer(handle, firstIndex, numIndices)` /
-`bgfx::setVertexBuffer(stream, handle, startVertex, numVertices)`, the correct offset-aware
-overloads for `DynamicIndexBufferHandle`/dynamic vertex buffers) but **produced a worse
-regression** on retest (the offset draw stopped rendering anything at all, rather than rendering
-in the wrong place) — root cause of *that* not identified within this session's time budget,
-possibly a `DynamicIndexBufferHandle`-specific quirk in how `bgfx::update()`-populated dynamic
-buffers interact with the offset overload. **The fix was reverted, not committed** (see §8) —
-shipping an unverified change was judged worse than leaving the original, narrower, already-
-understood bug in place. **Tracked as a new, separate, NOT-yet-fixed task** (needs its own
-dedicated investigation) — not part of this audit's own root cause and explicitly out of scope
-for the culling investigation itself.
-
----
-
-## 7. Current status / what remains open
-
-**Framework-level conclusion (high confidence):** CNA's `RasterizerState.CullMode` — `None`,
-`CullClockwiseFace`, `CullCounterClockwiseFace`, and the default state — behaves identically and
-correctly across every camera/projection/transform/draw-path/backend combination this
-investigation could construct. No public CNA API change is justified by any evidence gathered.
-**No CNA framework change has been made or is being proposed.**
-
-**Asset-level conclusion (strong evidence, not yet independently confirmed against a rebuilt
-real-XNA-content-pipeline reference of the same FBX):** the underside/disc region of
-`turret_geo` — a real, internally self-consistent (§5.2) sub-region of the mesh, not the whole
-mesh — has a winding convention that, per CNA's own already-proven-correct culling pipeline,
-predicts front-facing/visible when the authoritative XNA screenshot (§3) shows it should not be.
-This is consistent with (not yet independently proven beyond doubt to be) a genuine, localized
-model-conversion defect specific to this region.
-
-**Why no data fix has been applied yet:**
-1. The exact affected triangle set is only approximately characterized (§5.4: a 20-triangle
-   "steeply downward" core, a looser ~100-triangle candidate region including some angled
-   neighbors that may or may not need to be included) — a global reversal of all 1674 triangles
-   would be **wrong** (it would break the correctly-wound majority of the mesh) and was
-   deliberately not attempted.
-2. `cna-samples`' own established convention (`DEFERRED.md`'s own addendum, written before this
-   investigation) already found regenerating `tank.model.json` wholesale via
-   `fbx_ascii2model.py` corrupts this specific asset for unrelated reasons (a scale-baking bug for
-   `tank_geo`'s own `Lcl Scaling`) — so any fix must either hand-patch the specific affected
-   index range in the already-shipped `.bin` file, or fix `fbx_ascii2model.py`'s own handling of
-   whatever FBX-level winding subtlety is responsible (not yet identified, §5.5) and then safely
-   regenerate *only* the affected sub-region.
-3. A first attempt at a targeted binary edit was blocked by this session's own safety tooling,
-   correctly, since the evidence available at that moment did not yet distinguish "reverse the
-   whole mesh" (wrong) from "reverse only the disc" (the actual, better-evidenced hypothesis) —
-   see §8's own commit-history note.
-
-**Recommended next steps for whoever picks this up:**
-- Run `cna-samples/tools/xna-reference/CullModeTest` (new, this session — §9) on the same Windows
-  7/XNA 4.0 VM used for §3's screenshot, to get a pixel-exact, side-by-side CullMode comparison
-  independent of the SimpleAnimation model entirely — closes the loop on whether the *framework*
-  conclusion in this document (already strong, from CNA-side testing alone) is fully confirmed
-  from the XNA side too.
-- If a real XNA content-pipeline build of `tank.fbx` (or an FBX SDK-based inspector) becomes
-  available, compare the *real* XNA-processed `turret_geo` index buffer against the currently
-  shipped one directly — the most direct possible confirmation of the model-conversion-defect
-  hypothesis.
-- If confirmed, apply a **targeted** fix (reverse only the confirmed-affected index range, not a
-  blanket global reversal) either directly to `tank_turret_geo_idx.bin` or via a
-  `fbx_ascii2model.py` correction, with its own before/after screenshot verification against the
-  §3 XNA reference.
-
----
-
-## 8. Files changed
-
-### `cna_graphics` (this repository)
-
-- **New**: `examples/rasterizerstate_cullmode_camera_test.cpp` (§4.1), registered on EasyGL/
-  Vulkan/Bgfx.
-- **New**: `examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp` (§4.2), registered on
-  EasyGL/Vulkan/Bgfx.
-- **New**: this document.
-- `CMakeLists.txt`: the 2 new tests' registration (6 `add_test`/`cna_*_test` blocks total).
-- **No production `CNA`/`Microsoft::Xna` source changes** — the framework was found correct.
-
-Diagnostic-only changes made and **reverted, not committed**, during the investigation (kept here
-for the record, matching this project's own established convention of documenting dead ends so a
-future session doesn't re-derive them):
-- A temporary `BgfxGraphicsBackend::DrawIndexedPrimitivesEx` `startIndex`/`baseVertex` fix (§6) —
-  reverted after it introduced a worse regression on retest.
-- A temporary Bgfx-only regression test for that fix — deleted along with the reverted fix.
-
-### `cna-samples`
-
-- **New**: `tools/xna-reference/CullModeTest/` (§9) — a minimal XNA 4.0 C# project for the
-  Windows VM, not yet run there.
-- **Unchanged**: `samples/SimpleAnimation/src/Tank.hpp` — 2 separate diagnostic experiments were
-  made and **fully reverted** before this document's own commit (both confirmed via `git diff`
-  showing zero net changes to this file):
-  1. Forcing an explicit `RasterizerState.CullCounterClockwise` set before every mesh draw
-     (ruled out "the default state never gets applied to the real running game" as a hypothesis
-     — the bug persisted identically either way).
-  2. Printing `turret_geo`'s real runtime `World` matrix + forcing `CullClockwiseFace`
-     specifically for `turret_geo`'s own draw call (§5.3, and re-confirmed evidence item 9 is
-     still true on the current codebase — screenshot taken, dark disc genuinely gone; preserved as
-     `docs/xna_culling_compatibility_audit_images/cna_cullclockwise_forced_turret_diagnostic.png`,
-     a **diagnostic** capture only, not a proposed fix — see §7 for why this exact mechanism
-     [a per-mesh `CullMode` override] is explicitly NOT the recommended final fix).
-  3. A blocked, never-applied attempt to reverse `tank_turret_geo_idx.bin`'s entire winding
-     globally (correctly blocked by this session's own safety tooling — see §7 for why a blanket
-     reversal would have been the wrong fix regardless).
-- **No SimpleAnimation-specific `CullMode` workaround was added or committed** — `Tank.hpp` is
-  byte-identical to its state before this investigation began (confirmed via `git diff`), aside
-  from the pre-existing, separate, already-good texture fix (§1) which this investigation did not
-  touch.
+**A fix was attempted** (the correct offset-aware `bgfx::setIndexBuffer(handle, firstIndex,
+numIndices)` / `bgfx::setVertexBuffer(stream, handle, startVertex, numVertices)` overloads for
+`DynamicIndexBufferHandle`/dynamic vertex buffers) but **produced a worse regression** on retest
+(the offset draw stopped rendering anything at all) — root cause of *that* not identified within
+this session's time budget. **The fix was reverted, not committed.** **Tracked as a new, separate,
+NOT-yet-fixed task** — not part of this audit's own root cause and explicitly out of scope for
+the culling investigation itself.
 
 ---
 
@@ -413,19 +367,73 @@ future session doesn't re-derive them):
 (no content pipeline, no textures, no models) implementing the exact same 2-triangle-opposite-
 winding methodology as §4.1's CNA test, using SimpleAnimation's own exact camera. Renders all 4
 `CullMode` combinations simultaneously in 4 screen quadrants for a single-screenshot comparison.
-See that directory's own `README.md` for build/run instructions. **Not yet run** — prepared for
-the project owner to run on the same Windows 7/XNA 4.0 VM used for §3's reference screenshot.
+**Run by the project owner on a real Windows 7/XNA 4.0 VM (§6)** — the result was the decisive
+evidence that closed this investigation.
 
 ---
 
-## 10. Summary for future readers
+## 10. Files changed (final)
 
-- Do **not** re-attempt "swap `CullClockwiseFace`/`CullCounterClockwiseFace` in the backend enum
-  mapping" — this was the original, most obvious hypothesis, and it is **disproven** (§4).
-- Do **not** re-attempt a blanket reversal of all of `turret_geo`'s indices — the mesh is not
-  uniformly mis-wound (§5.4's full-mesh breakdown), only a sub-region is.
+### `cna_graphics`
+
+- **New**: `examples/rasterizerstate_cullmode_camera_test.cpp` (§4.1), registered on EasyGL/
+  Vulkan/Bgfx.
+- **New**: `examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp` (§4.2), registered on
+  EasyGL/Vulkan/Bgfx.
+- **New**: this document + `docs/xna_culling_compatibility_audit_images/` (3 reference
+  screenshots, plus the XNA `CullModeTest` result).
+- `CMakeLists.txt`: the 2 new tests' registration (6 `add_test`/`cna_*_test` blocks total).
+- **No production `CNA`/`Microsoft::Xna` source changes** — the framework was found correct
+  (confirmed twice over: internally self-consistent, §4; and independently matching real XNA,
+  §6).
+
+Diagnostic-only changes made and **reverted, not committed**:
+- A temporary `BgfxGraphicsBackend::DrawIndexedPrimitivesEx` `startIndex`/`baseVertex` fix (§8) —
+  reverted after it introduced a worse regression on retest.
+- A temporary Bgfx-only regression test for that fix — deleted along with the reverted fix.
+
+### `cna-samples`
+
+- **New**: `tools/xna-reference/CullModeTest/` (§9).
+- **Fixed**: all 12 `samples/SimpleAnimation/Content/tank_*_idx.bin` files (§7) — triangle
+  winding reversed to match real XNA's content-pipeline convention.
+- **Unchanged**: `samples/SimpleAnimation/src/Tank.hpp` and `SimpleAnimationGame.hpp` — several
+  diagnostic experiments were made in each during the investigation and **fully reverted** before
+  any commit (confirmed via `git diff` showing zero net changes to either file each time):
+  1. `Tank.hpp`: forcing an explicit `RasterizerState.CullCounterClockwise` set before every mesh
+     draw (ruled out "the default state never gets applied to the real running game").
+  2. `Tank.hpp`: printing `turret_geo`'s real runtime `World` matrix + forcing
+     `CullClockwiseFace` specifically for `turret_geo`'s own draw call (§5.3, and re-confirmed
+     evidence item 9 was still true on the pre-fix codebase).
+  3. `SimpleAnimationGame.hpp`: a global (whole-model, not per-mesh) `CullClockwiseFace` override
+     (§5.5) — the diagnostic that actually revealed the true scope of the defect.
+  4. A blocked, then explicitly re-authorized (after §6's independent XNA confirmation) direct
+     edit of `tank_turret_geo_idx.bin` alone — superseded by the full, all-12-meshes fix in §7
+     once scope was correctly understood.
+- **No SimpleAnimation-specific `CullMode` workaround was added or committed anywhere** — the fix
+  is entirely at the data level; the app's own code renders correctly under XNA's real, unmodified
+  default `RasterizerState`.
+
+---
+
+## 11. Summary for future readers
+
+- CNA's `CullMode` framework is correct — confirmed twice, once against itself (§4) and once
+  against real XNA 4.0 running on real hardware (§6). Do not re-investigate the framework itself
+  without new evidence.
+- The original SimpleAnimation symptom was **not** isolated to `turret_geo` — it was every one of
+  the 12 mesh parts in `tank.fbx`'s conversion. If re-deriving this, don't stop at "one mesh's
+  disc region is wrong" just because the rest of that one mesh's own statistics look normal
+  (§5.4's own cautionary tale) — check whether a *whole-model* CullMode flip fixes everything
+  before concluding the defect is localized.
 - Do **not** use stored vertex normals as evidence of correct winding on their own (§5.1) — use
-  edge-adjacency orientation (§5.2, a real, independent, non-circular check) or direct NDC-area
-  computation against a known-correct external reference (§5.4) instead.
-- The Bgfx `startIndex`/`baseVertex` bug (§6) is real but **unrelated** to this investigation's
+  edge-adjacency orientation (§5.2) or a direct comparison against a real external reference
+  (§5.5/§6) instead.
+- `CameraShake`, `CustomModelClass`, `ReachGraphicsDemo` almost certainly have the same defect in
+  their own independent `tank_*_idx.bin` copies — not fixed here, flagged for whoever next
+  touches those samples' own turret/wheel rendering.
+- `fbx_ascii2model.py`'s own root cause for *why* it produces reversed winding is still not
+  pinned down to an exact line (§5.6) — the shipped data fix does not depend on finding it, but a
+  future FBX conversion through this same tool could reproduce the defect until that's fixed too.
+- The Bgfx `startIndex`/`baseVertex` bug (§8) is real but **unrelated** to this investigation's
   own root cause — don't conflate the two if revisiting either.
