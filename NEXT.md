@@ -68,19 +68,34 @@ All 4 configured build directories build clean for their own `CNA`/`CnaTests`/ex
 target fails ("Error copying directory … `examples/demo_xact/Content`") because that directory
 doesn't exist in this checkout. Cosmetic, not a CNA bug — do not chase it (see §9).
 
-### Test status (verified 2026-07-10)
+### Test status (verified 2026-07-11)
 
 | Backend | `CnaTests` (gtest) | `ctest` (integration/pixel) |
 |---|---|---|
 | EasyGL | 4371/4373 pass (2 hardware-dependent skips: Accelerometer/Gyroscope) | 183/185 pass — 2 pre-existing failures (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`) |
 | Vulkan | 4368/4370 pass, excluding 3 known-crashing tests (see §5) | 120/121 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
-| Bgfx | 4375/4377 pass (2 hardware skips) | 93/99 pass — 6 pre-existing crash-class failures (see §4) |
+| Bgfx | 4375/4377 pass (2 hardware skips) | **97/99 pass** — 2 remaining failures, neither a crash (see §5): `Bgfx_RenderTarget2D_MsaaResolve` (known environment limitation) and `Bgfx_RenderTargetCube_DepthFormat` (new Task 952, depth doesn't gate cube-face draws) |
 
 All pre-existing failures above were independently reconfirmed via `git stash` (present on the
 unmodified baseline too — not introduced by any change in this session).
 
 ### Recently implemented
 
+- **Task 951** (closed 2026-07-11): root-caused and fixed 5 of the 6 pre-existing Bgfx
+  `RenderTarget2D`/`RenderTargetCube` `ctest` crashes (93/99 → 97/99). Root cause: bgfx processes
+  views in ascending id order each frame, and every CNA render-target view has id > 0 (reserved
+  view 0 = backbuffer) — so any RT with same-frame pending work is always the *last* view bgfx
+  processes, leaving its fbo GL-bound when `ReadBackbuffer()`'s `bgfx::requestScreenShot()`-driven
+  `glReadPixels()` fires, crashing outright for depth/MSAA/mip-attached RTs under this sandbox's
+  legacy-GL-2.1 bgfx OpenGL context. Fixed via a dedicated, permanently-reserved highest-id "flush"
+  view (255) touched right before every screenshot request — guaranteed to always be processed
+  last, without ever touching (and so never discarding) any real RT's own still-pending draws. A
+  first attempt (releasing the outgoing RT's own view on every `SetRenderTarget2D`/
+  `SetRenderTargetCubeFace` switch) was tried and reverted — it silently discarded same-frame
+  pending draws, regressing `Bgfx_ConcurrentRenderTargets` and corrupting 3 tests' own RT content
+  to black. A 6th, unrelated crash (`Bgfx_RenderTargetCube_DepthFormat`, a bgfx hard-assert on an
+  invalid depth-attachment resolve flag) was also fixed; it now surfaces a separate, real,
+  pre-existing bug (RenderTargetCube depth doesn't gate face draws on Bgfx) opened as **Task 952**.
 - **Phase 77 — skeletal animation playback** (Tasks 939–942, closed 2026-07-10): `.model.json` can
   now carry an optional `"skeleton"`/`"animations"` schema; `Content.Load<Model>()` attaches a real
   `SkinningData` to the loaded `Model`'s `Tag`; a new `AnimationPlayer` class samples keyframe clips
@@ -119,6 +134,7 @@ shape) is in `plan_graphics.md` — this section is intentionally a short index.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `981f1b0c` | 951 | Fixed 5 of 6 pre-existing Bgfx `RenderTarget2D`/`RenderTargetCube` `ctest` crashes via a dedicated highest-view-id "backbuffer flush" view touched before every screenshot request; fixed a 6th, unrelated crash (invalid depth-attachment resolve flag) that then surfaced Task 952 (RenderTargetCube depth doesn't gate face draws on Bgfx). |
 | `eba5d0bb`/`9762cdac` | 871 | `GraphicsDevice::Clear()` now clears the stencil buffer on all 4 backends. Vulkan needed `stencilLoadOp` fixed on 5 separate render-pass-creation sites (was hardcoded `DONT_CARE`); Bgfx needed a real stencil value threaded into its `bgfx::setViewClear()` call. Opened Task 950 (depth value still hardcoded on Vulkan/Bgfx). |
 | `225fc60b` | 942 | Proved `AnimationPlayer::GetSkinTransforms()` → `SkinnedEffect::SetBoneTransforms()` → `Model.Draw()` renders correctly end-to-end via a new pixel test; no engine code was actually missing. Closes Phase 77. |
 | `e495dbc0` | 941 | `ModelTypeReader::Read()` parses `.model.json`'s new `"skeleton"`/`"animations"` fields into a `SkinningData` on `Model.Tag`, plus a stride-52 GPU-skinned vertex branch and `"effect": "SkinnedEffect"` support. |
@@ -134,25 +150,11 @@ shape) is in `plan_graphics.md` — this section is intentionally a short index.
 ## 4. Current blocker / main problem
 
 **No hard blocker exists** — all 4 backends build clean and the vast majority of tests pass. The
-most significant *unresolved, unexplained* issue in the current test suite is a set of 6 Bgfx
-crash-class failures that have not yet been root-caused:
-
-- **Symptom:** process crash (`Subprocess aborted` / `SIGTRAP`), not a wrong-pixel-value failure.
-- **Failing command:**
-  `ctest --test-dir cmake-build-bgfx -R "Bgfx_RenderTarget2D_DepthBuffer|Bgfx_RenderTarget2D_MsaaResolve|Bgfx_RenderTarget2D_MipChain|Bgfx_RenderTargetCube_MipChain|Bgfx_RenderTargetCube_MsaaResolve|Bgfx_RenderTargetCube_DepthFormat"`
-- **Affected tests:** `Bgfx_RenderTarget2D_DepthBuffer`, `Bgfx_RenderTarget2D_MsaaResolve`,
-  `Bgfx_RenderTarget2D_MipChain`, `Bgfx_RenderTargetCube_MipChain`,
-  `Bgfx_RenderTargetCube_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`.
-- **Affected files:** likely `examples/rendertarget2d_depth_test.cpp`,
-  `examples/bgfx_rendertarget2d_msaa_resolve_test.cpp` (or similarly named), and
-  `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`'s `RenderTarget2D`/`RenderTargetCube`
-  creation/MSAA-resolve/mip-chain paths — not yet located precisely.
-- **Suspected cause:** unknown. Not yet investigated this session beyond confirming it is not a
-  new regression.
-- **What has been tried:** confirmed via `git stash` (full revert of this session's changes,
-  rebuild, rerun) that all 6 tests fail **identically** on the unmodified pre-session baseline —
-  this is a pre-existing bug, not caused by Task 871/941/942's changes. No further root-causing has
-  been attempted yet.
+Bgfx crash cluster that previously occupied this section (6 crashing `RenderTarget2D`/
+`RenderTargetCube` tests) was root-caused and fixed by Task 951 (2026-07-11) — see §3. The 2
+remaining Bgfx `ctest` failures are both non-crashing, already-diagnosed, and tracked in §5
+(`Bgfx_RenderTarget2D_MsaaResolve` — known environment limitation; `Bgfx_RenderTargetCube_DepthFormat`
+— new Task 952). Nothing else in the current test suite is unexplained.
 
 ---
 
@@ -160,7 +162,8 @@ crash-class failures that have not yet been root-caused:
 
 | Status | Description | Task |
 |---|---|---|
-| Confirmed bug, needs verification | 6 Bgfx `RenderTarget2D`/`RenderTargetCube` tests crash (`Subprocess aborted`/`SIGTRAP`) around depth buffers, MSAA resolve, and mip chains. Root cause not yet investigated (see §4). | — |
+| Confirmed bug, not fixed | `RenderTargetCube`'s depth buffer does not gate face draws on Bgfx — `Bgfx_RenderTargetCube_DepthFormat` reads back black instead of the nearer quad's colour after Task 951's crash fix let it run to completion. `RenderTarget2D`'s equivalent depth test already passes, so this is specific to the cube-face path (`BgfxRenderTargetCubeBackend`/`SetRenderTargetCubeFace`). Not investigated further. | 952 |
+| Confirmed bug, environment limitation | `Bgfx_RenderTarget2D_MsaaResolve`: this sandbox's bgfx OpenGL path negotiates only a legacy GL 2.1 context (llvmpipe), under which MSAA-flagged framebuffer textures don't sub-pixel resolve — pre-existing, already diagnosed at Task 878/879. The `CNA_BGFX_RENDERER=VULKAN` workaround recorded there no longer routes around it in this sandbox (bgfx silently falls back to `active renderer: OpenGL 2.1` even when Vulkan is requested, confirmed while investigating Task 951) — worth its own future look, not chased here. | — |
 | Confirmed bug | `EasyGL_MRT_TwoAttachments`: a basic 2-target same-size/format MRT setup doesn't render correctly — attachment 1 stays black. Pre-existing, off-limits for opportunistic fixing per project convention (see §9). | 145 |
 | Confirmed bug | `Vulkan_DepthBias` fails; pre-existing, not investigated further. | — |
 | Confirmed bug, environment-only | 3 `ContentManagerSkinnedModelTest.*` tests reliably segfault on Vulkan (confirmed deterministic in isolation, not flaky) — root cause: these specific test fixtures write a zero-length `.idx.bin`, and Vulkan's index-buffer creation path calls `vkCreateBuffer`/`vkAllocateMemory` with size 0, which is invalid per the Vulkan spec (validation layer confirms). Needs a size-0 guard in the Vulkan index/vertex buffer creation path, or the affected tests need non-empty fixtures. | — |
@@ -249,8 +252,8 @@ ctest --test-dir cmake-build-debug -R "^EasyGL_" --timeout 60
 ctest --test-dir cmake-build-vulkan -R "^Vulkan_" --timeout 60
 ctest --test-dir cmake-build-bgfx  -R "^Bgfx_"   --timeout 60
 
-# Reproduce the current known Bgfx crash cluster (§4)
-ctest --test-dir cmake-build-bgfx -R "Bgfx_RenderTarget2D_DepthBuffer|Bgfx_RenderTarget2D_MsaaResolve|Bgfx_RenderTarget2D_MipChain|Bgfx_RenderTargetCube_MipChain|Bgfx_RenderTargetCube_MsaaResolve|Bgfx_RenderTargetCube_DepthFormat"
+# Reproduce the remaining known Bgfx RenderTargetCube depth-gating bug (§5, Task 952)
+SDL_VIDEODRIVER=x11 DISPLAY=:99 ./cmake-build-bgfx/cna_test_bgfx_rendertargetcube_depthformat
 
 # Run one example/integration test directly
 SDL_VIDEODRIVER=x11 DISPLAY=:99 ./cmake-build-bgfx/cna_test_bgfx_rendertarget2d_depth
@@ -265,12 +268,10 @@ directly without the env vars above already set).
 
 ## 8. Next smallest tasks
 
-1. **Root-cause the 6 Bgfx `RenderTarget2D`/`RenderTargetCube` crashes** (§4). Goal: identify
-   whether depth-buffer creation, MSAA resolve, or mip-chain allocation is the actual trigger (they
-   may share one root cause, or be 2–3 separate bugs). Files:
-   `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` (`BgfxRenderTargetBackend`/
-   `BgfxRenderTargetCubeBackend` construction and MSAA-resolve/mip-generation paths). Verify:
-   `ctest --test-dir cmake-build-bgfx -R "Bgfx_RenderTarget(2D|Cube)_(DepthBuffer|MsaaResolve|MipChain|DepthFormat)"`.
+1. **Fix Task 952** (`RenderTargetCube` depth buffer doesn't gate face draws on Bgfx). Files:
+   `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` (`BgfxRenderTargetCubeBackend`/
+   `SetRenderTargetCubeFace`). Verify:
+   `SDL_VIDEODRIVER=x11 DISPLAY=:99 ./cmake-build-bgfx/cna_test_bgfx_rendertargetcube_depthformat`.
 2. **Fix Task 950** (Vulkan/Bgfx `Clear()`'s `depth` parameter hardcoded to 1.0). Small — mirrors
    Task 871's own `clearStencil_`/`clearStencilValue_` pattern exactly, just for depth. Files:
    `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.{hpp,cpp}`,
