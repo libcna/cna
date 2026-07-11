@@ -316,6 +316,13 @@ directly without the env vars above already set).
    found while investigating Task 955, not yet reproduced live or fixed). Needs a minimal
    reproducer first, then a fix in `EasyGLSpriteBatchBackend::End()`; check Vulkan/Bgfx for the
    same gap before scoping to EasyGL only.
+5. **New standing work queue: Phase 79** (Tasks 957–1076) — a full re-audit of all 153 `../cna-samples`
+   catalogued samples (including the 67 previously-ignored ones), one task per sample, prompted
+   directly by Tasks 954/955 showing a "Done" sample can still hide a real CNA bug. Most rows need
+   only a light re-verification pass; the real, already-known open CNA gaps are DEFERRED.md items
+   #10/#18/#22/#27/#28/#29 and the Phase 78 shader-conversion umbrella (#11). Start with Task 1006
+   (`SimpleAnimation`'s own flagged future re-review list) or any `⬜` row — do not touch the `⛔`
+   rows (structural/permanent, no CNA action possible).
 
 ---
 

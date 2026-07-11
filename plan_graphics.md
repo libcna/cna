@@ -867,3 +867,223 @@ Pipeline tooling available in this project.
 | 945 | Decide and document the HLSL→GLSL conversion approach: manual line-by-line port vs. a `SPIRV-Cross`+`dxc`-assisted pipeline | ⬜ | A real, non-obvious design decision — manual porting needs no new tooling but doesn't scale past a handful of shaders; a `dxc` (HLSL→SPIR-V) + `SPIRV-Cross` (SPIR-V→GLSL) pipeline could semi-automate the bulk of the 14 blocked samples but adds 2 new vendored tool dependencies. Recommend deciding based on Task 946's own first attempt (BloomSample's 3 shaders are simple full-screen post-process effects — a good first data point for how well manual porting scales before committing to tooling). |
 | 946 | Prove the chosen workflow end-to-end on BloomSample's 3 shaders (`GaussianBlur`/`BloomCombine`/`BloomExtract`) | ⬜ | First real conversion — these are the simplest custom shaders in the blocked-sample list (full-screen post-process effects over an already-working `RenderTarget2D`, no per-vertex skinning/lighting complexity). Confirms the `.shader.json` + GLSL descriptor round-trip for a non-trivial, previously-untried shader shape before committing to the same approach for the remaining 13 samples. |
 | 947 | Apply the proven workflow to the remaining 13 shader-blocked samples, one at a time, as each is picked up | ⬜ | `DistortionSample`, `NonPhotoRealistic`, `NormalMapping`, `PerPixelLighting`, `VertexLighting`, `ShadowMapping`, `BillboardSample`, `InstancedModel`, `ShatterEffect`, `Particles3D`, `XmlParticles`, `ShipGame`, `NetRumble` — ongoing, per-sample content work in `../cna-samples`, not a single PR. Re-check each sample's own `missing.md`/`DEFERRED.md` cross-reference before starting in case a different gap (e.g. skeletal animation, Phase 77) also blocks it. |
+
+---
+
+## Phase 79 — Full `../cna-samples` re-audit: one task per catalogued sample (2026-07-11)
+
+> **Scope and purpose.** Per explicit project-owner request (2026-07-11, after Tasks 954/955
+> closed 2 real CNA bugs found while re-checking `SimpleAnimation`): every one of the **153**
+> sample directories `../cna-samples/PLAN.md`/`ignored.md` catalogues (from the official XNA Game
+> Studio 4.0 archive) gets its own row here, re-framed as *"what, if anything, does CNA itself
+> still need so this sample can be ported or finished — and does its currently-recorded status
+> still hold up?"* This phase exists because Tasks 954/955 showed a sample marked "✅ Done" in
+> `../cna-samples/PLAN.md` can still hide a real, unfound CNA-level rendering bug — "done" so far
+> has generally meant "builds and runs," not "pixel-verified against real XNA." **Only samples
+> with a hard, structural, non-CNA reason (a WinForms tool, an XNA 2.0/3.0 archive, an Xbox LIVE
+> service, phone-only hardware, art-only data, a redundant duplicate) are marked `⛔` (permanently
+> out of scope, no CNA action conceivable, no revisit needed unless the reason itself stops
+> applying — see each row). Every other sample is `⬜` — actionable, either as a port, a CNA-gap
+> fix, or (for already-"Done" samples) a re-verification pass — until it's individually confirmed
+> correct against a real XNA/FNA reference, the way Tasks 954/955 did for `SimpleAnimation`.
+>
+> **Source of truth for per-sample status**: `../cna-samples/PLAN.md` (own "Complete Sample Task
+> List", updated 2026-07-10) and `../cna-samples/ignored.md`. **Source of truth for known CNA
+> gaps**: `../cna-samples/DEFERRED.md`'s own Summary Table (30 items, most already ✅ resolved —
+> the still-open ones referenced below are items **#10** (GamePad button shortcut, cosmetic,
+> workaround exists), **#18** (content-pipeline processor extensibility), **#22** (EasyGL
+> `BlendState.ColorWriteChannels` ignored), **#27** (`NetworkSession.SessionProperties` no mutable/
+> replicated accessor), **#28**/**#29** (EasyGL SpriteBatch-before-3D / `DualTextureEffect`
+> vertex-layout gaps, both already worked around in their one affected sample), and the **Phase
+> 78** shader-conversion umbrella (item #11, 14 samples). **Actual sample-porting work itself
+> (writing/fixing `.cpp`/`.hpp`/`Content/` files under `../cna-samples/samples/<Name>/`) belongs
+> in that sibling repo, not here** (same convention as Task 938) — a row below only tracks the
+> **CNA-side** gap/re-verification; where a sample needs no CNA change at all, its row says so
+> explicitly and the only remaining work is the port itself (tracked in `../cna-samples/PLAN.md`,
+> not duplicated here).
+>
+> **`SimpleAnimation` (#050) is deliberately still `⬜`, not `✅`**, despite Tasks 954/955 both
+> closing real bugs this session — flagged for a **future** re-review: (a) pixel-perfect comparison
+> against a real XNA screenshot once convenient (today's verification was "closely matches,"
+> visual/qualitative, not a pixel-diff against a like-for-like animation frame); (b) `CameraShake`
+> (#030), `CustomModelClass` (#052), and `ReachGraphicsDemo` (#005) each have their own independent
+> copy of a `tank`-family FBX/mesh and were flagged, not checked, for the same winding defect
+> Task 954 found and fixed only in `SimpleAnimation`'s own copy; (c) `TankOnHeightmap` (#074) and
+> `SplitScreen` (#076) share the exact same `tank.fbx`/`Tank.cs` source asset and per-mesh-bone gap
+> and should get the identical winding + depth-occlusion scrutiny once their own Task 938 asset-regen
+> follow-up is picked up; (d) the still-open `fbx_ascii2model.py` winding root-cause (Task 954 §5.6)
+> and the two still-open, unrelated bugs found along the way (Bgfx `DrawIndexedPrimitivesEx`
+> `startIndex` bug, Task 954 §8; EasyGL `SpriteBatch` blend-state leak, Task 956) are all
+> candidates to fold into whichever future session re-opens this row.
+
+### Phase 1 — Foundation (#001–012)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 957  | PrimitivesSample (001) | ⬜ | Re-verify against current CNA; `../cna-samples/PLAN.md` marks Done, no known CNA gap. |
+| 958  | Primitives3D (002) | ⬜ | Re-verify; ships via the `VertexPositionNormalTexture`-with-dummy-UV workaround (DEFERRED #5) — no CNA change wanted (Task 935 closed, not implemented, by explicit project-owner decision). |
+| 959  | TexturesAndColors (003) | ⬜ | Re-verify against current CNA; no known CNA gap. |
+| 960  | StockEffects (004) | ⛔ | Ships only an effect-source + CLI compiler, no runnable `Game` — structural, not a CNA gap. No revisit trigger. |
+| 961  | ReachGraphicsDemo (005) | ⬜ | 5/6 demo scenes done; `SkinnedDemo` blocked on DEFERRED #13 (skeletal animation, partially done — re-check once Phase 77 fully lands). Also flagged (see phase intro) to check its own `saucer.fbx`/`model.fbx` for the same winding defect Task 954 found in `SimpleAnimation`'s `tank.fbx` (DEFERRED #30 already suspects this). |
+| 962  | SpriteEffects (006) | ⬜ | Re-verify; no known CNA gap. |
+| 963  | SpriteSheet (007) | ⬜ | Re-verify; no known CNA gap. |
+| 964  | ShapeRendering (008) | ⬜ | Re-verify; no known CNA gap. |
+| 965  | InputReporter (009) | ⬜ | Re-verify; no known CNA gap. |
+| 966  | InputSequence (010) | ⬜ | Re-verify; no known CNA gap. |
+| 967  | SafeArea (011) | ⬜ | Re-verify; no known CNA gap. |
+| 968  | GeneratedGeometry (012) | ⬜ | Re-verify; no known CNA gap. |
+
+### Phase 2 — 2D Games & Gameplay (#013–030)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 969  | Platformer (013) | ⬜ | Re-verify; no known CNA gap. |
+| 970  | Spacewar (014) | ⬜ | `RenderTarget2D` itself now resolved (DEFERRED #12) — re-check whether Model + custom shaders (#11, Phase 78) + XACT audio are still the only remaining blockers before re-confirming Placeholder status. |
+| 971  | TicTacToe (015) | ⬜ | Re-verify; no known CNA gap. |
+| 972  | Bounce (016) | ⬜ | Re-verify; no known CNA gap. |
+| 973  | CollisionSample (017) | ⬜ | Re-verify; no known CNA gap. |
+| 974  | PerPixelCollision (018) | ⬜ | Re-verify; no known CNA gap. |
+| 975  | RectangleCollision (019) | ⬜ | Re-verify; no known CNA gap. |
+| 976  | TransformedCollision (020) | ⬜ | Re-verify; no known CNA gap. |
+| 977  | PathDrawing (021) | ⬜ | Re-verify; no known CNA gap. |
+| 978  | Pathfinding (022) | ⬜ | Re-verify; no known CNA gap. |
+| 979  | WaypointSample (023) | ⬜ | Re-verify; no known CNA gap. |
+| 980  | FlockingSample (024) | ⬜ | Re-verify; no known CNA gap. |
+| 981  | ChaseAndEvade (025) | ⬜ | Re-verify; no known CNA gap. |
+| 982  | AimingSample (026) | ⬜ | Re-verify; no known CNA gap. |
+| 983  | FuzzyLogic (027) | ⬜ | Re-verify; no known CNA gap. |
+| 984  | ColorReplacement (028) | ⬜ | Blocked on custom `ReplaceColor.fx` shader (DEFERRED #11, Phase 78) — model conversion itself already unblocked (#6). |
+| 985  | ParticleSample (029) | ⬜ | Re-verify; no known CNA gap. |
+| 986  | CameraShake (030) | ⬜ | Re-verify; **also check this sample's own independent `tank`-family mesh copy for the same winding defect Task 954 fixed in `SimpleAnimation`** (see phase intro, point b). |
+
+### Phase 3 — 3D Graphics & Shaders (#031–049)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 987  | BloomSample (031) | ⬜ | Blocked on 3 custom shaders (DEFERRED #11, Phase 78 Task 946 — the planned first conversion target). `RenderTarget2D` itself already resolved (#12). |
+| 988  | DistortionSample (032) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 989  | NonPhotoRealistic (033) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 990  | NormalMapping (034) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 991  | PerPixelLighting (035) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 992  | VertexLighting (036) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 993  | RimLighting (037) | ⬜ | Re-verify; ported via a `Content.Load<TextureCube>`/`Content.Load<Model>` bypass — re-check whether items #14/#26 being since fully resolved lets this drop the bypass. |
+| 994  | ShadowMapping (038) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 995  | BillboardSample (039) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 996  | InstancedModel (040) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 997  | LensFlare (041) | ⬜ | Re-verify; cosmetic gap open (DEFERRED #22, EasyGL ignores `BlendState.ColorWriteChannels`, not started) — confirm still non-blocking. |
+| 998  | ShatterEffect (042) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 999  | Particles3D (043) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 1000 | Particles2DPipeline (044) | ⬜ | Re-verify; no known CNA gap. |
+| 1001 | XmlParticles (045) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 1002 | Graphics3D (046) | ⬜ | Re-verify; shipped with a component-lifecycle workaround (DEFERRED #23, now confirmed correct XNA/FNA behavior, not a CNA bug — workaround should stay). |
+| 1003 | PickingSample (047) | ⬜ | Re-verify; same #23 workaround note as Graphics3D. |
+| 1004 | TrianglePicking (048) | ⬜ | Re-verify; uses the `fbx_ascii2model.py --picking` sidecar (DEFERRED #25 workaround) since `VertexBuffer`/`IndexBuffer::GetData()` didn't exist at the time — that gap is now resolved (Task 930); re-check whether the sidecar can be retired in favor of the real `GetData()` API. |
+| 1005 | HeightmapCollision (049) | ⬜ | Re-verify; no known CNA gap (hand-built runtime terrain mesh). |
+
+### Phase 4 — Models & Animation (#050–058)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 1006 | **SimpleAnimation (050)** | ⬜ | **Deliberately not marked Done — see this phase's own intro for the full future-re-review list** (points a–d): pixel-perfect XNA comparison still pending; `CameraShake`/`CustomModelClass`/`ReachGraphicsDemo`'s own independent tank-mesh copies not yet checked for Task 954's winding defect; `TankOnHeightmap`/`SplitScreen` share the same asset family; `fbx_ascii2model.py`'s winding root cause (Task 954 §5.6), the Bgfx `startIndex` bug (Task 954 §8), and the `SpriteBatch` blend-leak bug (Task 956) are all still open. Update `../cna-samples/PLAN.md`'s own stale "🚧 Placeholder" line for #050 to ✅ Done (it already has real, working source — this status line was not kept in sync with Tasks 954/955). |
+| 1007 | CustomModelAnimation (051) | ⬜ | Blocked on skeletal animation (DEFERRED #13 — partially done, loader/`Model::Draw` wiring landed Phase 77, but this sample's own port not yet attempted against it). |
+| 1008 | CustomModelClass (052) | ⬜ | Re-verify; **check for the same tank/model-family winding defect per this phase's intro** if it shares an asset with `SimpleAnimation`'s family (confirm asset identity first — `../cna-samples/PLAN.md` doesn't currently say). |
+| 1009 | CustomModelEffect (053) | ⬜ | Blocked on content-pipeline processor extensibility (DEFERRED #18, not started). |
+| 1010 | SkinningSample (054) | ⬜ | Blocked on skeletal animation (DEFERRED #13, partially done — re-check against current Phase 77 state). |
+| 1011 | SkinnedModelExtensions (055) | ⬜ | Blocked on skeletal animation (DEFERRED #13, same as above). |
+| 1012 | CPUSkinning (056) | ⬜ | Blocked on skeletal animation (DEFERRED #13, same as above). |
+| 1013 | InverseKinematics (057) | ⬜ | Re-verify; no known CNA gap. |
+| 1014 | ChaseCamera (058) | ⬜ | Re-verify; no known CNA gap. |
+
+### Phase 5 — Audio (#059–060)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 1015 | Audio3D (059) | ⬜ | Re-verify; no known CNA gap. |
+| 1016 | SoundAndMusic (060) | ⬜ | Re-verify; no known CNA gap. |
+
+### Phase 6 — Full Games & Starter Kits (#061–074)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 1017 | MarbleMaze (061) | ⬜ | Re-verify; no known CNA gap (confirmed a 2nd `assimp`-export winding-inversion quirk — asset-tooling, not CNA). |
+| 1018 | NetRumble (062) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947); networking itself already unblocked. |
+| 1019 | HoneycombRush (063) | ⬜ | Re-verify; no known CNA gap. |
+| 1020 | HoneycombRushTrainingKit (064) | ⛔ | Redundant multi-exercise variant of already-ported `HoneycombRush` (063) — structural, no CNA gap. No revisit trigger. |
+| 1021 | NinjAcademy (065) | ⬜ | Re-verify; no known CNA gap. |
+| 1022 | ShipGame (066) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 1023 | CatapultWars (067) | ⬜ | Re-verify; no known CNA gap. |
+| 1024 | CatapultWarsTrainingKit (068) | ⛔ | Redundant multi-exercise variant of already-ported `CatapultWars` (067) — structural, no CNA gap. No revisit trigger. |
+| 1025 | CardsStarterKit (069) | ⬜ | Re-verify; no known CNA gap. |
+| 1026 | RolePlayingGame (070) | ⬜ | Re-verify; shipped with some combat/screens simplified — confirm that simplification isn't masking a real CNA gap. |
+| 1027 | Yacht (071) | ⬜ | Re-verify; no known CNA gap. |
+| 1028 | GameStateManagement (072) | ⬜ | Re-verify; no known CNA gap. |
+| 1029 | SoccerPitch (073) | ⬜ | Re-verify; no known CNA gap. |
+| 1030 | TankOnHeightmap (074) | ⬜ | Same `tank.fbx`/`Tank.cs` per-mesh `ModelBone` gap as SplitScreen (076) — Task 938's own asset-regen follow-up still open. **Shares `SimpleAnimation`'s asset family — apply the same winding + depth-occlusion scrutiny (Tasks 954/955) once ported.** |
+
+### Phase 7 — Advanced, UI, Misc (#075–083, #102)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 1031 | NGSMSample (075) | ⛔ | Even with Xbox LIVE lobby networking (#17, done), the sample's own "Single Player" path is an intentionally empty stub per the original's own documentation — structural, no CNA gap could ever unblock real gameplay here. No revisit trigger. |
+| 1032 | SplitScreen (076) | ⬜ | Needs per-mesh `ModelBone` support (DEFERRED #6 addendum) — landed (Tasks 936/937); Task 938's own asset-regen follow-up for this sample specifically still open. Shares `tank.fbx` family with `SimpleAnimation`/`TankOnHeightmap` — same future scrutiny applies. |
+| 1033 | DynamicMenu (077) | ⬜ | Re-verify; no known CNA gap. |
+| 1034 | LocalizationSample (078) | ⬜ | Re-verify; no known CNA gap. |
+| 1035 | GesturesSample (079) | ⬜ | Re-verify; no known CNA gap. |
+| 1036 | TouchThumbsticks (080) | ⬜ | Re-verify; no known CNA gap. |
+| 1037 | PerformanceMeasuring (081) | ⬜ | Re-verify; no known CNA gap. |
+| 1038 | UISample (082) | ⬜ | Re-verify; no known CNA gap. |
+| 1039 | SnowShovel (083) | ⬜ | Re-verify; no known CNA gap. |
+| 1040 | Orientation (102) | ⬜ | Re-verify; miscategorized as phone-hardware originally, has zero accelerometer/sensor dependency — no known CNA gap. |
+
+### Deferred appendix — Phone Hardware / Avatar / WinForms / Xbox LIVE Networking (#084–111)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 1041 | AccelerometerSample (084) | ⬜ | Re-verify; ported via the original's own emulator keyboard-tilt fallback code (user go/no-go approved) — no CNA gap. |
+| 1042 | AvatarAnimationBlending (085) | ⛔ | Xbox LIVE Avatar body/animation content system, permanently retired — CNA's opt-in substitute-body `AvatarRenderer::EnableRealRenderingEXT` path exists but was judged not faithful enough (user go/no-go, 2026-07-10). Revisit trigger: only if the substitute rendering quality is ever substantially improved and the project owner chooses to revisit that go/no-go. |
+| 1043 | AvatarMultipleAnimations (086) | ⛔ | Same Xbox LIVE Avatar dependency and same permanent-skip decision as 085. |
+| 1044 | AvatarShadows (087) | ⛔ | Same Xbox LIVE Avatar dependency and same permanent-skip decision as 085. |
+| 1045 | BingMaps (088) | ⛔ | External Bing Maps web API/service — not a CNA framework capability. No revisit trigger. |
+| 1046 | BingMapsPathFinding (089) | ⛔ | Same external Bing Maps dependency as 088. |
+| 1047 | BitmapFontMaker (090) | ⛔ | WinForms design-time tool, not a runnable `Game` — structural. No revisit trigger. |
+| 1048 | ClientServerSample (091) | ⬜ | Re-verify; shipped with 3 networking workarounds (DEFERRED #19–21, all now independently ✅ resolved at the CNA level too) — confirm the sample's own workarounds can be simplified/removed now that the underlying gaps are fixed. |
+| 1049 | ContentManifestExtensions (092) | ⛔ | Content-pipeline extension only, no executable — structural. No revisit trigger. |
+| 1050 | CurveEditor (093) | ⛔ | WinForms animation-curve editing tool, not a `Game` — structural. No revisit trigger. |
+| 1051 | CustomAvatarAnimation (094) | ⛔ | Same Xbox LIVE Avatar dependency and same permanent-skip decision as 085. |
+| 1052 | GeolocationSample (095) | ⛔ | Real phone GPS hardware; SDL has no portable geolocation API (unlike the accelerometer, covered generically by `SDL_Sensor`) — structural. Revisit trigger: only if SDL or a portable geolocation shim ever becomes available. |
+| 1053 | InvitesSample (096) | ⛔ | Xbox LIVE friends/invite/presence system tied to a real Xbox LIVE account, not LAN `NetworkSession` discovery — structural, unlike `ClientServerSample`/`NetworkPrediction`/`PeerToPeer`. No revisit trigger. |
+| 1054 | MemoryMadnessLab (097) | ⛔ | WP7 teaching-lab exercise + accompanying document, not a standalone sample — structural. No revisit trigger. |
+| 1055 | MicrophoneEcho (098) | ⬜ | Re-verify; no known CNA gap (DEFERRED #16 resolved). |
+| 1056 | ModelImporterSample (099) | ⛔ | Content-pipeline extension only, no executable — structural. No revisit trigger. |
+| 1057 | NetworkPrediction (100) | ⬜ | Re-verify; confirmed zero networking workarounds needed — flagged that `NetworkSession.SessionProperties` has no mutable/replicated accessor (DEFERRED #27, not started, worked around via an explicit options packet) — re-check whether #27 is worth fixing at the CNA level now. |
+| 1058 | ObjectPlacementOnAvatar (101) | ⛔ | Same Xbox LIVE Avatar dependency and same permanent-skip decision as 085. |
+| 1059 | PeerToPeer (103) | ⬜ | Re-verify; confirmed zero networking workarounds needed, doesn't use `SessionProperties` (item #27 not applicable here) — no known CNA gap. |
+| 1060 | PerformanceUtility (104) | ⛔ | Utility library only, no standalone executable — structural. No revisit trigger. |
+| 1061 | PushNotifications (105) | ⛔ | Windows Phone push notification service, no desktop analog — structural. No revisit trigger. |
+| 1062 | SavingEmbeddedImages (106) | ⛔ | Windows Phone media library API, no desktop analog — structural. No revisit trigger. |
+| 1063 | TiltPerspective (107) | ⬜ | Re-verify; ported via a genuinely invented keyboard-tilt scheme (user go/no-go approved, no original fallback existed) — no CNA gap. |
+| 1064 | WinFormsContent (108) | ⛔ | WinForms host window, not a `Game` — structural. No revisit trigger. |
+| 1065 | WinFormsGraphics (109) | ⛔ | WinForms host window, not a `Game` — structural. No revisit trigger. |
+| 1066 | WP7MusicManagement (110) | ⛔ | Windows Phone 7 media-library management API, no desktop analog (contrast with the already-ported `SoundAndMusic`/`Audio3D`, which use the portable `SoundEffect`/`Song` APIs) — structural. No revisit trigger. |
+| 1067 | XnaGraphicsProfileChecker (111) | ⛔ | WinForms diagnostic tool, not a `Game` — structural. No revisit trigger. |
+
+### Everything else (#112–153) — 42 samples with no individual `PLAN.md` number, grouped by identical reason
+
+> These never got an individual numbered `PLAN.md` entry (see `../cna-samples/ignored.md`) because
+> each one's exclusion reason is shared identically by every other sample in its group — grouping
+> them keeps this phase's table from padding out with 42 rows that would each say the exact same
+> thing. Every reason below is structural (XNA version, file format, licensing/authorship, or
+> platform), not a CNA capability gap — **none of these 42 can ever become CNA tasks**, matching
+> `ignored.md`'s own framing exactly.
+
+| #    | Group | Samples | Status | Reason |
+| ---- | ----- | ------- | ------ | ------ |
+| 1068 | XNA 2.0/3.0/3.1 archives | BasicEffectShader, Catapult, MaterialsAndLights, Minjie, MultipassLighting, Pickture, RobotGame, SpriteBatchShader, VectorRumble, SpaceShooter, TiledSprites, RedistributableTTFs (12) | ⛔ | Pre-4.0 XNA API versions (or font files only) — this repo ports the XNA Game Studio 4.0 collection exclusively. No revisit trigger. |
+| 1069 | Avatar asset/rig packs | AvatarAnimPack ×4 (BIN/FBX/Maya/Mod Tool), AvatarRig ×3 (3ds Max 2010/Maya 2009/SoftImage Mod Tool 7.5) (7) | ⛔ | Art/animation/DCC-rigging data only, no C# game code at all. No revisit trigger. |
+| 1070 | Phone/Mango duplicates | GSMSample (Mango/Mango VB/Phone), ModelViewerDemo (Mango), PaddleBattle (Mango/Mango VB), RolePlayingGame (Phone) (7) | ⛔ | Each duplicates an already-ported desktop sample (or is phone-only with no desktop equivalent). No revisit trigger. |
+| 1071 | VB language duplicate | CardsStarterKit (VB) (1) | ⛔ | Visual Basic duplicate of already-ported `CardsStarterKit` (069, C#). No revisit trigger. |
+| 1072 | Silverlight/WP7-native code | CustomIndeterminateProgressBar, NonLinear WP SL Navigation, PushRecipe WP7, SilverlightMicrophone, TombstoningSample, LevelStarterKit (6) | ⛔ | Silverlight controls/apps or WP7 app-lifecycle demos, not XNA `Game`s at all. No revisit trigger. |
+| 1073 | Image/resource-only directories | ButtonImages, ControllerImages, LobbyChatImages (3) | ⛔ | Image assets only, consumed by other already-catalogued samples — no code. No revisit trigger. |
+| 1074 | Third-party/community kits | Riemers Tutorials, XNA-4-Racing-Game-Kit, Movipa (3) | ⛔ | Not official Microsoft samples — outside this repo's stated scope (the official XNA Game Studio 4.0 collection). No revisit trigger. |
+| 1075 | Unversioned/incomplete starter kit | UnitConverterStarterKit (1) | ⛔ | Directory contains only a license file and an empty stub subfolder — no real sample content to port. No revisit trigger. |
+| 1076 | Misc/non-code | XNA XNB Format (docs), SoundLab (standalone tool) (2) | ⛔ | Documentation-only or a standalone authoring tool, not an XNA game sample. No revisit trigger. |
