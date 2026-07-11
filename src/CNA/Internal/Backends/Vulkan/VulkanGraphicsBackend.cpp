@@ -6499,7 +6499,8 @@ namespace CNA::Internal::Backends::Vulkan
             for (int wi = 0; wi < 16; ++wi) d.skinnedFogUboData[24 + wi] = params.worldColMajor[wi];
             d.skinnedFogUboData[40] = params.eyePositionWorld[0];
             d.skinnedFogUboData[41] = params.eyePositionWorld[1];
-            d.skinnedFogUboData[42] = params.eyePositionWorld[2]; d.skinnedFogUboData[43] = 0.f;
+            d.skinnedFogUboData[42] = params.eyePositionWorld[2];
+            d.skinnedFogUboData[43] = static_cast<float>(params.weightsPerVertex); // Task 895
             d.skinnedFogUboData[44] = params.specularColor[0]; d.skinnedFogUboData[45] = params.specularColor[1];
             d.skinnedFogUboData[46] = params.specularColor[2]; d.skinnedFogUboData[47] = params.specularPower;
             d.skinnedFogUboData[48] = params.light0Specular[0]; d.skinnedFogUboData[49] = params.light0Specular[1];
@@ -6697,7 +6698,8 @@ namespace CNA::Internal::Backends::Vulkan
             for (int wi = 0; wi < 16; ++wi) d.skinnedFogUboData[24 + wi] = params.worldColMajor[wi];
             d.skinnedFogUboData[40] = params.eyePositionWorld[0];
             d.skinnedFogUboData[41] = params.eyePositionWorld[1];
-            d.skinnedFogUboData[42] = params.eyePositionWorld[2]; d.skinnedFogUboData[43] = 0.f;
+            d.skinnedFogUboData[42] = params.eyePositionWorld[2];
+            d.skinnedFogUboData[43] = static_cast<float>(params.weightsPerVertex); // Task 895
             d.skinnedFogUboData[44] = params.specularColor[0]; d.skinnedFogUboData[45] = params.specularColor[1];
             d.skinnedFogUboData[46] = params.specularColor[2]; d.skinnedFogUboData[47] = params.specularPower;
             d.skinnedFogUboData[48] = params.light0Specular[0]; d.skinnedFogUboData[49] = params.light0Specular[1];

@@ -39,7 +39,7 @@ layout(set = 0, binding = 2) uniform FogParams {
     // Task 894: World matrix + EyePosition + specular (World doesn't fit in the already-128-byte
     // push constant, so it lives here instead).
     mat4 world;
-    vec4 eyePos_pad;
+    vec4 eyePos_pad; // w = WeightsPerVertex (Task 895, packed into otherwise-unused padding)
     vec4 specularColor_power;
     vec4 light0Spec_pad;
     vec4 light1Spec_pad;
@@ -47,10 +47,13 @@ layout(set = 0, binding = 2) uniform FogParams {
 } fog;
 
 void main() {
-    mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x
-                 + bb.bones[aBoneIndices.y] * aBoneWeights.y
-                 + bb.bones[aBoneIndices.z] * aBoneWeights.z
-                 + bb.bones[aBoneIndices.w] * aBoneWeights.w;
+    // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
+    // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
+    float weightsPerVertex = fog.eyePos_pad.w;
+    mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x;
+    if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y;
+    if (weightsPerVertex >= 4.0) skinMat += bb.bones[aBoneIndices.z] * aBoneWeights.z
+                                          + bb.bones[aBoneIndices.w] * aBoneWeights.w;
     vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
     vNormal     = normalize(mat3(skinMat) * aNormal);

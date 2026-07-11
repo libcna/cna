@@ -382,6 +382,11 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int i = 0; i < p.boneCount; ++i)
             bones[i].ToColumnMajor(p.boneTransforms + i * 16);
 
+        // Task 895 fix: FNA's real Skin(vin, boneCount) shader only sums the first
+        // WeightsPerVertex weight/index pairs -- CNA's shaders used to always sum all 4
+        // unconditionally regardless of this property.
+        p.weightsPerVertex = weightsPerVertex_;
+
         p.fogEnabled = fogEnabled_;
         const Vector3 fogColor = getFogColorProperty();
         p.fogColor[0] = fogColor.X;

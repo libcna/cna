@@ -410,6 +410,7 @@ namespace CNA::Internal::Backends::EasyGL
             int loc_emissive      = -1;  ///< vec3 emissive+ambient (env map / skinned)
             int loc_eyepos        = -1;  ///< vec3 camera world pos
             int loc_bones         = -1;  ///< mat4[72] bone palette (SkinnedEffect)
+            int loc_weightsPerVertex = -1;  ///< int 1/2/4 (SkinnedEffect only, Task 895)
             int loc_alphatest     = -1;  ///< vec4 (refVal, tolerance, passW, failW)
             int loc_fog_enabled   = -1;  ///< float 0=off 1=on
             int loc_fog_color     = -1;  ///< vec3 RGB fog colour

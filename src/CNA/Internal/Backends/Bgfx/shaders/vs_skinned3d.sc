@@ -9,13 +9,17 @@ uniform vec4 u_diffuseColor;
 uniform mat4 u_bones[72];
 uniform vec4 u_fogParams;
 uniform vec4 u_depthBias;
+uniform vec4 u_weightsPerVertex;
 
 void main()
 {
-    mat4 skinMat = u_bones[int(a_indices.x)] * a_weight.x
-                 + u_bones[int(a_indices.y)] * a_weight.y
-                 + u_bones[int(a_indices.z)] * a_weight.z
-                 + u_bones[int(a_indices.w)] * a_weight.w;
+    // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
+    // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
+    float weightsPerVertex = u_weightsPerVertex.x;
+    mat4 skinMat = u_bones[int(a_indices.x)] * a_weight.x;
+    if (weightsPerVertex >= 2.0) skinMat += u_bones[int(a_indices.y)] * a_weight.y;
+    if (weightsPerVertex >= 4.0) skinMat += u_bones[int(a_indices.z)] * a_weight.z
+                                          + u_bones[int(a_indices.w)] * a_weight.w;
     vec4 skinnedPos = mul(skinMat, vec4(a_position, 1.0));
     gl_Position  = mul(u_wvp, skinnedPos);
     // Task 767: RasterizerState.DepthBias emulation (see vs_colored3d.sc for the full comment).

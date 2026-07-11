@@ -150,7 +150,7 @@ draw call.
 | Multi-quad/multi-bone composition in one draw call | ✅ Task 409 | ✅ Task 409 | ✅ Task 409 |
 | `DirectionalLight1`/`DirectionalLight2` | ✅ fixed Task 893 (2026-07-11) | ✅ fixed Task 893 | ✅ fixed Task 893 |
 | `SpecularColor`/`SpecularPower` GPU implementation | ✅ fixed Task 894 (2026-07-11) | ✅ fixed Task 894 | ✅ fixed Task 894 |
-| `WeightsPerVertex` GPU enforcement | ❌ Task 895 | ❌ Task 895 | ❌ Task 895 |
+| `WeightsPerVertex` GPU enforcement | ✅ fixed Task 895 (2026-07-11) | ✅ fixed Task 895 | ✅ fixed Task 895 |
 
 Legend: ✅ verified working · ❌ confirmed not implemented.
 
@@ -165,8 +165,9 @@ Phase 46 opened 3 new tracked tasks (all from Task 401's opener audit):
   matching `BasicEffect`'s Task 886 formula exactly) now implemented for `SkinnedEffect`'s
   `SpecularColor`/`SpecularPower` on all 3 backends, including new World-matrix/EyePosition
   plumbing each backend's skinned shader previously had zero infrastructure for. See `NEXT.md` §3.
-- **Task 895** — make `WeightsPerVertex` a real GPU-enforced constraint on all 3 backends, matching
-  FNA's real `Skin(vin, boneCount)` behavior of only summing the first `boneCount` weight/index
-  pairs, instead of the current unconditional 4-weight sum.
+- ~~**Task 895**~~ — **fixed, 2026-07-11**: `WeightsPerVertex` is now a real GPU-enforced constraint
+  on all 3 backends — each backend's skinning vertex shader gates bone-weight accumulation with
+  `>=2`/`>=4` conditionals, matching FNA's real `Skin(vin, boneCount)` behavior of only summing the
+  first `boneCount` weight/index pairs. See `NEXT.md` §3.
 
 This closes Phase 46 (`plan_graphics.md` Tasks 401–410) in full.

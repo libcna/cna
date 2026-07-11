@@ -1732,6 +1732,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
+        cna_easygl_test(cna_test_easygl_skinnedeffect_weightspervertex
+                        examples/easygl_skinnedeffect_weightspervertex_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_WeightsPerVertex
+                 COMMAND cna_test_easygl_skinnedeffect_weightspervertex)
+        set_tests_properties(EasyGL_SkinnedEffect_WeightsPerVertex PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 406: SkinnedEffect identity bone palette should produce zero deformation
         cna_easygl_test(cna_test_easygl_skinnedeffect_identity_bones
                         examples/easygl_skinnedeffect_identity_bones_test.cpp)
@@ -3996,6 +4005,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_weightspervertex
+                        examples/vulkan_skinnedeffect_weightspervertex_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_WeightsPerVertex
+                 COMMAND cna_test_vulkan_skinnedeffect_weightspervertex)
+        set_tests_properties(Vulkan_SkinnedEffect_WeightsPerVertex PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 899's own noted cheap leftover: env_map3d fog packed into EnvMapParams' spare bytes
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_fog
                         examples/vulkan_environmentmapeffect_fog_test.cpp)
@@ -5619,6 +5637,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_SkinnedEffect_Specular
              COMMAND cna_test_bgfx_skinnedeffect_specular)
     set_tests_properties(Bgfx_SkinnedEffect_Specular PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_weightspervertex
+                  examples/bgfx_skinnedeffect_weightspervertex_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_WeightsPerVertex
+             COMMAND cna_test_bgfx_skinnedeffect_weightspervertex)
+    set_tests_properties(Bgfx_SkinnedEffect_WeightsPerVertex PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

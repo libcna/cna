@@ -2882,6 +2882,7 @@ void main()
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat4 uBones[72];\n"
+"uniform int uWeightsPerVertex;\n"
 "uniform float uFogEnabled;\n"
 "uniform float uFogStart;\n"
 "uniform float uFogEnd;\n"
@@ -2890,10 +2891,11 @@ void main()
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "void main(){\n"
-"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x\n"
-"               +uBones[aBoneIndices.y]*aBoneWeights.y\n"
-"               +uBones[aBoneIndices.z]*aBoneWeights.z\n"
-"               +uBones[aBoneIndices.w]*aBoneWeights.w;\n"
+// Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
+// weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
+"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
+"    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
+"    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    gl_Position=uWVP*skinnedPos;\n"
 "    vNormal=normalize(mat3(skinMat)*aNormal);\n"
@@ -2952,6 +2954,7 @@ void main()
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
         p.loc_bones     = p.prog.uniform_location("uBones[0]");
+        p.loc_weightsPerVertex = p.prog.uniform_location("uWeightsPerVertex");
         p.loc_texture   = p.prog.uniform_location("uTexture");
         p.loc_diffuse   = p.prog.uniform_location("uDiffuseColor");
         p.loc_emissive  = p.prog.uniform_location("uEmissiveColor");
@@ -3173,6 +3176,9 @@ void main()
         // Bone palette (SkinnedEffect)
         if (p.loc_bones >= 0 && params.boneCount > 0)
             ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{p.loc_bones}, params.boneCount, 0, params.boneTransforms);
+        // Task 895: WeightsPerVertex (1, 2, or 4) -- only the first N weight/index pairs contribute.
+        if (p.loc_weightsPerVertex >= 0)
+            p.prog.set_uniform(p.loc_weightsPerVertex, params.weightsPerVertex);
 
         if (p.loc_envmap_amount >= 0)
             p.prog.set_uniform(p.loc_envmap_amount, params.envMapAmount);

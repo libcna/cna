@@ -360,6 +360,10 @@ namespace CNA::Internal::Backends
         float boneTransforms[72 * 16] = {};
         /// SkinnedEffect: number of valid entries in boneTransforms (0 = none).
         int boneCount = 0;
+        /// SkinnedEffect: number of bone weight/index pairs to evaluate per vertex (1, 2, or 4,
+        /// matching FNA's real Skin(vin, boneCount) shader behavior of only summing the first
+        /// N weight/index pairs -- Task 895).
+        int weightsPerVertex = 4;
         /// BasicEffect fog: when true the fog uniforms below are used.
         bool  fogEnabled      = false;
         /// BasicEffect fog: RGB blend colour.

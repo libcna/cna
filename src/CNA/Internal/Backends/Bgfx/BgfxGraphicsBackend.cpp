@@ -1136,6 +1136,7 @@ namespace CNA::Internal::Backends::Bgfx
                 alphaTestUnif_      = bgfx::createUniform("u_alphaTest",      bgfx::UniformType::Vec4);
                 texColor3DSampler2_ = bgfx::createUniform("s_texColor2",      bgfx::UniformType::Sampler);
                 bonesUnif_          = bgfx::createUniform("u_bones",          bgfx::UniformType::Mat4, 72);
+                weightsPerVertex3DUnif_ = bgfx::createUniform("u_weightsPerVertex", bgfx::UniformType::Vec4);
                 vpInstanced3DUnif_  = bgfx::createUniform("u_vp",            bgfx::UniformType::Mat4);
 
                 world3DUnif_         = bgfx::createUniform("u_world",          bgfx::UniformType::Mat4);
@@ -1232,6 +1233,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyU(alphaTestUnif_);
         destroyU(texColor3DSampler2_);
         destroyU(bonesUnif_);
+        destroyU(weightsPerVertex3DUnif_);
         destroyU(vpInstanced3DUnif_);
         destroyU(world3DUnif_);
         destroyU(normalMatrix3DUnif_);
@@ -2357,6 +2359,10 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
             if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
                 bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
+            // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex
+            // (1, 2, or 4) weight/index pairs.
+            float weightsPerVertex[4] = { static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex);
             if (bgfx::isValid(texColor3DSampler_))
             {
                 if (params.texture0)
@@ -2769,6 +2775,10 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
             if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
                 bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
+            // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex
+            // (1, 2, or 4) weight/index pairs.
+            float weightsPerVertex[4] = { static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex);
             if (bgfx::isValid(texColor3DSampler_))
             {
                 if (params.texture0)

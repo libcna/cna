@@ -512,6 +512,8 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::UniformHandle alphaTestUnif_      = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle texColor3DSampler2_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle bonesUnif_          = BGFX_INVALID_HANDLE;
+        /// SkinnedEffect.WeightsPerVertex (x = 1, 2, or 4), Task 895.
+        bgfx::UniformHandle weightsPerVertex3DUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle vpInstanced3DUnif_  = BGFX_INVALID_HANDLE;
         // EnvironmentMapEffect-specific uniforms
         bgfx::UniformHandle world3DUnif_        = BGFX_INVALID_HANDLE;

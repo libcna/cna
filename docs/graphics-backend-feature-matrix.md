@@ -36,7 +36,7 @@ fixed · ⛔ BLOCKED, needs a project-owner architecture decision.
 | SkinnedEffect core (72-bone GPU skinning) | ✅ | ✅ | ✅ |
 | SkinnedEffect `DirectionalLight1`/`2` | ✅ fixed (Task 893, 2026-07-11) | ✅ fixed (Task 893) | ✅ fixed (Task 893) |
 | SkinnedEffect `SpecularColor`/`SpecularPower` | ✅ fixed (Task 894, 2026-07-11) | ✅ fixed (Task 894) | ✅ fixed (Task 894) |
-| SkinnedEffect `WeightsPerVertex` GPU enforcement | ❌ (Task 895) | ❌ | ❌ |
+| SkinnedEffect `WeightsPerVertex` GPU enforcement | ✅ fixed (Task 895, 2026-07-11) | ✅ fixed (Task 895) | ✅ fixed (Task 895) |
 | Fog, all applicable effects/pipelines | ✅ | ✅ | ✅ |
 | ShaderEffect (custom shader source) | ✅ (GLSL) | ✅ (SPIR-V) | ❌ `CreateEffectBackend` returns `nullptr` |
 
