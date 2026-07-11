@@ -143,26 +143,22 @@ contention false failures):
 
 - **EasyGL**: 3 — `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`,
   `easy-gl-resource-smoke-tests`. Reconfirmed as recently as Task 449's own regression (4510/4513).
-- **Bgfx**: **updated 2026-07-10 (Task 948 fixed)** — back down to 6 (was briefly 7 while Task 948
-  was still open): 6 `RenderTarget2D`/`RenderTargetCube` `glReadPixels`/Xvfb-no-DRI3 sandbox crashes
-  (`DepthBuffer`, `MsaaResolve`, `MipChain` ×2 for `RenderTarget2D` and `RenderTargetCube`, plus
-  `RenderTargetCube_DepthFormat` — see the "Remaining genuine Bgfx limitations" section above) —
-  environment limitations, not code bugs. `Bgfx_ModelJsonReader_Quad` (Task 927/948:
-  `DrawIndexedPrimitivesEx` was never overridden on Bgfx) is now fixed and passes 2/2 — a real
-  `BgfxGraphicsBackend::DrawIndexedPrimitivesEx` override was added, mirroring `DrawPrimitivesEx`'s
-  own full `GpuDrawParams` dispatch. Reconfirmed via `ctest -R "^Bgfx_"` (98 cases, 92/98 passed —
-  exactly these 6) plus `CnaTests` (4361/4363, 2 pre-existing hardware skips, 0 failures, run twice).
-- **Vulkan**: **updated 2026-07-11 — Task 868's `BlendState` fix landed (commit `459a0e37`)**,
-  removing the 5 `Vulkan_BlendState_*` failures from the baseline below. Last full run (Task 911,
-  pre-fix) was 4369/4378 — 9 known pre-existing (5× `BlendState`/Task 868, 1
-  `RasterizerState.DepthBias` sub-case, 3 non-deterministic `ContentManagerSkinnedModelTest.*`
-  segfaults under this sandbox's Vulkan/Xvfb/llvmpipe combination — confirmed via `git stash` to be
-  pre-existing and unrelated to any session's changes, and to pass cleanly in isolation). With the 5
-  `BlendState` cases now fixed, the current known baseline is the remaining 4 (1 `DepthBias` +
-  3 segfaults) — not independently re-run as a full suite since the fix landed; see `NEXT.md` for
-  the latest confirmed count before relying on this number. **Historical correction (2026-07-09,
-  Task 861):** this row previously said "12" and additionally claimed "several
-  `DepthStencilState`-adjacent" failures — both wrong; `4378-4369=9`, and `DepthStencilState`'s own
+- **Bgfx**: **current baseline per `NEXT.md` (verified 2026-07-11): `CnaTests` 4375/4377 (2
+  hardware skips), `ctest` 103/105 — 2 remaining failures**: `Bgfx_RenderTarget2D_MsaaResolve`
+  (this sandbox's Xvfb has no DRI3 support — an environment limitation, not a code bug) and
+  `Bgfx_RenderTargetCube_DepthFormat` (Task 952, **DEFERRED** — a `Depth24Stencil8`-attached
+  `RenderTargetCube` face produces no colour output; investigated 3 times, root cause not yet
+  found). Task 951 (closed 2026-07-11) fixed 5 of the 6 pre-existing `RenderTarget2D`/
+  `RenderTargetCube` `glReadPixels`/Xvfb crashes that used to be counted here (`DepthBuffer`,
+  `MipChain` ×2, plus others) via a dedicated highest-id "flush" view — see `NEXT.md` §3/§5 for the
+  full root-cause writeup. `Bgfx_ModelJsonReader_Quad` (Task 927/948) is also fixed and passes 2/2.
+- **Vulkan**: **current baseline per `NEXT.md` (verified 2026-07-11): `CnaTests` 4371/4373 (2
+  hardware skips), `ctest` 126/127 — 1 remaining failure, `Vulkan_DepthBias`.** Both the 5×
+  `BlendState` failures (Task 868, fixed 2026-07-09, commit `459a0e37`) and the 3
+  `ContentManagerSkinnedModelTest.*` segfaults (Task 953, fixed 2026-07-11) that used to make up
+  this baseline are gone — no exclusions needed anymore. **Historical correction (2026-07-09,
+  Task 861):** this row previously said "12" pre-existing failures and additionally claimed
+  "several `DepthStencilState`-adjacent" ones — both wrong; `DepthStencilState`'s own
   compare-op/stencil-op tests all pass (Task 870 fixed this).
 - **SDL_Renderer**: 13 known pre-existing, all throwing `"SDL_Renderer does not support 3D"` —
   matches this backend's accepted 2D-only architectural scope exactly (`EffectApplyTest`,
@@ -243,14 +239,18 @@ root-caused rather than merely observed:
   a native call, covering both constant and slope-scale bias in one shot (see Task 767's own
   `plan_graphics.md` entry). Only Vulkan implements real hardware depth bias (`vkCmdSetDepthBias`,
   dynamic state, including real slope-scale).
-- **`RenderTarget2D`/`RenderTargetCube` `glReadPixels` crashes under this sandbox's software GL
-  driver** (`Bgfx_RenderTarget2D_DepthBuffer`/`MsaaResolve`/`MipChain`,
-  `Bgfx_RenderTargetCube_MipChain`/`MsaaResolve`/`DepthFormat` — 6 tests, all pre-existing, none
-  introduced by this session's own work): all abort with the same class of
-  `GL_INVALID_OPERATION`/MSAA-resolve-vs-depth-attachment assertion, pointing at this project's
-  Xvfb/software-GL (Mesa llvmpipe, no DRI3) sandbox ceiling rather than a CNA defect — matches the
-  already-established precedent (Task 448/879/903's own identical-class findings). A real
-  GPU-backed environment would be needed to distinguish "still broken" from "sandbox-only."
+- ~~**`RenderTarget2D`/`RenderTargetCube` `glReadPixels` crashes under this sandbox's software GL
+  driver**~~ (`Bgfx_RenderTarget2D_DepthBuffer`/`MsaaResolve`/`MipChain`,
+  `Bgfx_RenderTargetCube_MipChain`/`MsaaResolve`/`DepthFormat` — 6 tests, all pre-existing at the
+  time this section was written) — **5 of these 6 fixed by Task 951 (closed 2026-07-11)**, root
+  cause: bgfx processes views in ascending id order each frame, so any render-target view was
+  always last-processed and still GL-bound when `glReadPixels()` fired; fixed via a dedicated,
+  always-last-processed "flush" view touched right before every screenshot request. Only
+  `Bgfx_RenderTargetCube_DepthFormat` remains open (Task 952, **DEFERRED** — a genuinely different,
+  still-unsolved root cause: a `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour
+  output at all, not a crash). `Bgfx_RenderTarget2D_MsaaResolve` also remains, but as a real
+  environment ceiling (no DRI3 in this sandbox), not part of Task 951's crash class. See `NEXT.md`
+  §5 for the current, authoritative 2-failure baseline.
 - **`OcclusionQuery.PixelCount()` doesn't discriminate visible from occluded geometry in this
   sandbox** (Tasks 814/815): a dedicated scratch probe confirmed the exact same numeric value is
   returned regardless of scene content, extending Task 448's own already-documented finding

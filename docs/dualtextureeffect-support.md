@@ -51,13 +51,15 @@ crashes on Bgfx (Task 375's known throw-stub).
 `FillGpuDrawParams()`'s `Vector4(diffuseColor*alpha, alpha)` formula matches FNA exactly. Task 385
 added the missing verification layers: 3 new GPU-independent unit tests directly checking
 `FillGpuDrawParams()`'s output, plus real `BlendState.AlphaBlend` pixel tests on EasyGL/Bgfx
-proving the premultiplied RGB blends correctly against a real background. **Vulkan's `BlendState`
-support is already known-fake** (Task 868/870 — every Vulkan pipeline hardcodes
+proving the premultiplied RGB blends correctly against a real background. **At the time, Vulkan's
+`BlendState` support was known-fake** (Task 868 — every Vulkan pipeline hardcoded
 `colorBlendFactor=SRC_ALPHA/ONE_MINUS_SRC_ALPHA` regardless of the requested `BlendState`), which
-would make the same full RGB-premultiplication test spuriously fail on Vulkan for a reason
+would have made the same full RGB-premultiplication test spuriously fail on Vulkan for a reason
 unrelated to `DualTextureEffect` — worked around with a narrower alpha-channel-only pixel test
-there (the alpha-channel blend factors happen to already be hardcoded correctly, matching
-`BlendState.Opaque`).
+there instead. **Task 868 is now fixed (2026-07-09)** — Vulkan applies the real requested blend
+state like every other backend — but the Vulkan test itself is still the narrower alpha-channel-only
+variant written at the time; it has not been revisited to add the fuller RGB check now that the
+workaround's reason no longer applies.
 
 ## 4. Texture null-fallback behavior (Tasks 386–387)
 

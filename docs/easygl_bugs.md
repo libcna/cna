@@ -1,5 +1,15 @@
 # EasyGL Backend — Known Bugs and Limitations
 
+> **Status update, 2026-07-11:** this document is dated Task 227 (2026-06-27, see footer) and has
+> not been re-audited against thousands of lines of EasyGL changes since (Tasks 228-955). At least
+> 2 rows below are now confirmed stale — the `TextureFilter::Anisotropic` row (fixed, Task 918,
+> 2026-07-09) and the `CreateRenderTargetCube` `hasDepth`-always-true row (the function was
+> reworked to take a real `depthFormat` parameter, no longer a `hasDepth` bool at all, at some point
+> after Task 227) — both corrected in place below with a verified-current note. The remaining rows
+> were spot-checked, not exhaustively re-verified against current source; treat any row not marked
+> "still confirmed 2026-07-11" with appropriate caution and check the cited file:line yourself
+> before relying on it.
+
 This document lists confirmed bugs, incorrect mappings, and incomplete features
 in `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` and related files.
 
@@ -33,8 +43,8 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 |---|---|---|
 | `EasyGLGraphicsBackend.cpp:1211–1213` | **bug** | `Clear()` and `ClearColorAndDepth()` unconditionally call `SDL_GetWindowSize()` and set the GL viewport to the full physical window before clearing. When a render-target FBO is bound, this expands the viewport beyond the RT dimensions. The clear viewport should be the RT size when a RT is active. |
 | `EasyGLGraphicsBackend.cpp:1591–1593` | **bug** | `SetScissorRect()` flips the Y coordinate using `getPhysicalSize()` (physical window height). Correct for the default framebuffer, but wrong when a render-target FBO is bound — `currentRtHeight_` should be used for the flip in that case. |
-| `EasyGLGraphicsBackend.cpp:1604–1675` | **bug** | `TextureFilter::Anisotropic` is selected but the anisotropy degree (`maxAnisotropy`) is never passed to `glTexParameterf(GL_TEXTURE_MAX_ANISOTROPY_EXT)`. Anisotropic filtering is enabled with the driver default level (usually 1×). |
-| `EasyGLGraphicsBackend.cpp:1305` | **bug** | `CreateRenderTargetCube(int size)` always passes `hasDepth=true`, ignoring the caller's intent. XNA `RenderTargetCube` has a `DepthFormat` parameter; cube render targets that do not need a depth buffer still get one allocated. |
+| ~~`EasyGLGraphicsBackend.cpp:1604–1675`~~ | **fixed, Task 918 (2026-07-09)** | Was: `TextureFilter::Anisotropic` selected but `maxAnisotropy` never passed to the GPU, filtering stuck at driver-default (~1×). Now real: gated on `GL_EXT_texture_filter_anisotropic` being available, reads the live driver cap via `glGetFloatv(MaxTextureMaxAnisotropy)`, clamps the requested value to it, and calls `set_parameter(SamplerParameter::MaxAnisotropy, ...)` (verified in current source, 2026-07-11). |
+| ~~`EasyGLGraphicsBackend.cpp:1305`~~ | **stale, no longer applicable** | Was: `CreateRenderTargetCube(int size)` always passed `hasDepth=true`, a hardcoded boolean ignoring the caller's intent. The function has since been reworked to `CreateRenderTargetCube(int size, int depthFormat, bool mipMap, int multiSampleCount)` — a real `depthFormat` parameter, not a `hasDepth` bool, forwarded through to `EasyGLRenderTargetCubeBackend` (verified in current source, 2026-07-11). If a depth-format-fidelity gap remains here it would need fresh verification under a new finding, not this one. |
 | fog shaders | **diverges** | Fog is computed on `aPos.z` after the WVP transform (clip-space Z), not on view-space depth. XNA fog is linear in view-space distance. Results diverge at oblique viewing angles. |
 | `EasyGLGraphicsBackend.cpp:2498–2555` | **diverges** | `DrawColoredPrimitives` and `DrawIndexedColoredPrimitives` always use `prog_colored_` with a hardcoded WVP. They ignore `GpuDrawParams` (alpha-test, fog, diffuse color). Any `BasicEffect` state set before calling these paths is silently lost. |
 | `EasyGLGraphicsBackend.cpp:1740–1745` | **diverges** | Unknown vertex strides fall back to a position-only layout. Strides not in {16, 20, 24, 32, 52} silently render only position data. Custom vertex types with unlisted strides produce wrong geometry without error. |
@@ -45,8 +55,8 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 
 | File:line | Status | Description |
 |---|---|---|
-| `EasyGLGraphicsBackend.cpp:1299` | **missing** | `preserveContents` parameter in `CreateRenderTarget2D` is ignored. XNA `RenderTargetUsage::PreserveContents` should skip the automatic `DiscardContents` clear. Currently all RTs behave as `DiscardContents`. |
-| `EasyGLGraphicsBackend.cpp:341, 392` | **missing** | `glGenerateMipmap` is never called after texture upload. Samplers using `LinearMipmapLinear` on a texture with only level 0 get undefined results. User-supplied mipmap levels via `UpdatePixelsLevel` are also not triggering mipmap regeneration. |
+| `EasyGLGraphicsBackend.cpp:1299` | **missing — still confirmed 2026-07-11** | `preserveContents` parameter in `CreateRenderTarget2D` is ignored (the parameter is explicitly unused, `bool /*preserveContents*/`, in current source). XNA `RenderTargetUsage::PreserveContents` should skip the automatic `DiscardContents` clear. Currently all RTs behave as `DiscardContents`. |
+| `EasyGLGraphicsBackend.cpp:341, 392` | **missing — still confirmed 2026-07-11** | `EasyGLTextureBackend::UpdatePixelsLevel` (regular `Texture2D`/`SetData` uploads) never calls `generate_mipmap()`/`glGenerateMipmap`. Samplers using `LinearMipmapLinear` on a texture with only level 0 get undefined results. Note: render targets (`EasyGLRenderTargetBackend::UnbindAsRenderTarget`) do call `generate_mipmap()` on unbind — that is a separate, unrelated code path added since this row was written; it does not cover ordinary `Texture2D` uploads. |
 | `EasyGLGraphicsBackend.cpp:67, 107` | **missing** | `CreateTexture3D` and `CreateTextureCube` ignore `surfaceFormat` and always allocate `RGBA8`. Non-RGBA surface formats (`Alpha8`, `HalfVector4`, etc.) are not supported for 3D/cube textures. |
 | `EasyGLGraphicsBackend.cpp:67, 107` | **missing** | `mipMap=true` is accepted by `CreateTexture3D`/`CreateTextureCube` but no mip storage is allocated and `glGenerateMipmap` is never called. |
 | (hpp:103–122, cpp:67–82) | **missing** | `EasyGLTexture3DBackend` and `EasyGLTextureCubeBackend` are not registered with the `ResourceRegistry`. GL context loss orphans their handles — no recovery path exists for 3D and cube textures. |
@@ -83,4 +93,6 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 
 ---
 
-*Last updated: Task 227 (2026-06-27). Audit covers EasyGLGraphicsBackend.cpp as of commit `a491501`.*
+*Last updated: Task 227 (2026-06-27). Audit covers EasyGLGraphicsBackend.cpp as of commit `a491501`.
+Partially spot-checked against current source 2026-07-11 (see status banner at top) — not a full
+re-audit.*
