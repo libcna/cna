@@ -169,11 +169,17 @@ namespace Microsoft::Xna::Framework::Graphics
         createBackend();
         UpdateViewportFromWindow();
 
-        // Task 896: rasterizerState_ above was only ever set as a C++-level field, never
-        // pushed to the backend's actual GPU state — every backend started from its own
-        // hardcoded internal default (EasyGL/Vulkan: effectively CullNone; Bgfx: CullCCW,
-        // the only one that happened to already match FNA's real default) until a game
-        // explicitly set RasterizerState itself. Sync all 3 backends to the real default now.
+        // Task 896/955: blendState_/depthStencilState_/rasterizerState_ above were only ever
+        // set as C++-level fields, never pushed to the backend's actual GPU state — every
+        // backend started from its own hardcoded internal default (e.g. EasyGL's depth test is
+        // plain OpenGL, which defaults to disabled, until something explicitly enables it) until
+        // a game explicitly set one of these 3 state properties itself. Real FNA's own
+        // GraphicsDevice constructor does exactly this same 3-line sync unconditionally
+        // (GraphicsDevice.cs: "BlendState = BlendState.Opaque; DepthStencilState =
+        // DepthStencilState.Default; RasterizerState = RasterizerState.CullCounterClockwise;") —
+        // Task 896 ported only the 3rd line; this now ports the other 2 as well, matching FNA.
+        setBlendStateProperty(blendState_);
+        setDepthStencilStateProperty(depthStencilState_);
         setRasterizerStateProperty(rasterizerState_);
     }
 
