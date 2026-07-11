@@ -87,22 +87,27 @@ unmodified baseline too — not introduced by any change in this session).
   into the same 4 `VkClearValue.depthStencil` sites / the one `bgfx::setViewClear()` call Task 871
   already touched. New shared `examples/graphicsdevice_clear_depth_test.cpp`, registered on all 3
   hardware backends (EasyGL passes unmodified, confirming it was never affected).
-- **Task 952 investigation continued with `apitrace`** (2026-07-11, still open — see
-  `plan_graphics.md` Task 952 for the full trail). `apitrace` is now installed (see
-  `programs.md`). Kept 2 real fixes from this round: the test's readback methodology (now
-  unbind-then-`EnvironmentMapEffect`-sample with a non-degenerate `Matrix::CreateLookAt` eye
-  position — the old read-while-bound approach relied on a quirk Task 951 correctly removed) and
-  confirmed `DepthFormat::None` reads back correctly with it (green), isolating the remaining
-  symptom to `Depth24Stencil8` specifically: no colour output reaches the sampled texture at all
-  (not even the losing quad), with no GL error anywhere in the sequence. **A promising-looking
-  "orphaned render-target view gets silently re-cleared by a later unrelated frame" theory was
-  investigated, a candidate fix implemented, and then RETRACTED** after two independent controlled
-  repro attempts (a plain `RenderTarget2D`, and the same with a `Depth24Stencil8` attachment added)
-  both failed to reproduce any corruption with or without the fix — reverted, not committed.
-  `glretrace`/`eglretrace` cannot replay this trace for direct pixel inspection (fails with "no
-  current context" almost immediately — a known apitrace limitation with bgfx's dedicated render
-  thread). Needs RenderDoc (not in this sandbox's apt repos — bgfx already attempts to load it, see
-  `programs.md` §7) or a from-scratch raw-GL repro to make further progress — see §5/§8.
+- **Task 952 investigation continued twice more** (2026-07-11, still open — see
+  `plan_graphics.md` Task 952 for the full trail; `apitrace` and RenderDoc 1.45 are both now
+  available, see `programs.md`). **Round 1 (`apitrace`)**: kept 2 real fixes — the test's readback
+  methodology (unbind-then-`EnvironmentMapEffect`-sample with a non-degenerate
+  `Matrix::CreateLookAt` eye position — the old read-while-bound approach relied on a quirk Task
+  951 correctly removed) and confirmed `DepthFormat::None` reads back correctly with it (green),
+  isolating the remaining symptom to `Depth24Stencil8` specifically. A promising-looking "orphaned
+  render-target view gets silently re-cleared" theory was investigated, a candidate fix
+  implemented, then **retracted** after 2 controlled repro attempts showed no observable effect —
+  reverted, not committed. **Round 2 (RenderDoc, project owner provided a manual download)**:
+  `qrenderdoc --python` (the only way to get RenderDoc's Python scripting API in this Linux
+  release) hangs indefinitely under this sandbox's `Xvfb` (no window manager installed, no
+  `offscreen`/`minimal` Qt platform compiled in) — not solved. But `renderdoccmd convert -c
+  zip.xml` works fully headless and gave a structured, precisely-ordered GL call log good enough
+  to rule out several more hypotheses with hard evidence: `bgfx::createFrameBuffer()`'s handle for
+  the color+depth cube-face combo is valid; the correct view id is used for both quad draws; the
+  actual GL draws do execute against the cube's real FBO; the cube's real texture is correctly
+  bound for sampling on every one of ~20 retry attempts. Despite all of that being correct, the
+  sample never picks up any drawn content. Root cause still not found — needs either a working WM
+  to unblock `qrenderdoc`'s pixel-history/texture-viewer tools, or a from-scratch raw-GL repro —
+  see §5/§8.
 - **Task 951** (closed 2026-07-11): root-caused and fixed 5 of the 6 pre-existing Bgfx
   `RenderTarget2D`/`RenderTargetCube` `ctest` crashes (93/99 → 97/99). Root cause: bgfx processes
   views in ascending id order each frame, and every CNA render-target view has id > 0 (reserved
@@ -154,6 +159,7 @@ shape) is in `plan_graphics.md` — this section is intentionally a short index.
 
 | Commit | Task | Summary |
 |---|---|---|
+| _(pending commit)_ | 952 | Continued the Task 952 investigation with a real RenderDoc 1.45 install (project owner provided a manual download after the apitrace round hit its wall). `qrenderdoc --python` hangs indefinitely in this sandbox (no WM, no offscreen Qt platform); `renderdoccmd convert -c zip.xml` works headless and gave enough structured GL-call detail to rule out FBO-handle validity, view-id targeting, and texture-handle identity as the bug, with hard evidence. Root cause still not found. No code changes (all diagnostics reverted); `programs.md` updated with real RenderDoc findings. |
 | `d0146c67` | 952 | Continued the Task 952 investigation with `apitrace`. Fixed the depth-format test's own readback methodology (unbind-then-`EnvironmentMapEffect`-sample) and a degenerate-eye-position sampling bug, isolating the real remaining symptom to `Depth24Stencil8` specifically. Investigated and retracted a candidate "orphaned view gets silently re-cleared" fix after it failed 2 controlled repro attempts. Root cause still not found — needs RenderDoc or a raw-GL repro. |
 | `22bbaa7f` | 950 | `GraphicsDevice::Clear()`'s `depth` parameter now actually takes effect on Vulkan/Bgfx (was hardcoded to 1.0). New `clearDepth_`/`clearDepthValue_` members mirror Task 871's `clearStencil_` pattern exactly. New shared 3-backend test `graphicsdevice_clear_depth_test.cpp`. |
 | `981f1b0c` | 951 | Fixed 5 of 6 pre-existing Bgfx `RenderTarget2D`/`RenderTargetCube` `ctest` crashes via a dedicated highest-view-id "backbuffer flush" view touched before every screenshot request; fixed a 6th, unrelated crash (invalid depth-attachment resolve flag) that then surfaced Task 952 (RenderTargetCube depth doesn't gate face draws on Bgfx). |
@@ -184,7 +190,7 @@ remaining Bgfx `ctest` failures are both non-crashing, already-diagnosed, and tr
 
 | Status | Description | Task |
 |---|---|---|
-| Confirmed bug, investigated twice, not fixed | A `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output at all on Bgfx (not even the "wrong" quad — just background) — reproduces with a single draw call and with `DepthStencilState::None` (depth testing fully disabled), regardless of depth format (`Depth16`/`Depth24`/`Depth24Stencil8`) or stencil presence. Not a depth-*test* bug (originally suspected). `RenderTarget2D`'s structurally-similar depth attachment works fine, as does a plain `RenderTarget2D` + `Depth24Stencil8` combination under the same "several unrelated frames pass before it's read" conditions (2026-07-11 controlled repro) — so it's specific to `RenderTargetCube`, not depth attachments generally. No GL error anywhere (`MESA_DEBUG=1`), `glCheckFramebufferStatus` always `GL_FRAMEBUFFER_COMPLETE`. See `plan_graphics.md`'s Task 952 entry for the full `apitrace`-based investigation trail, including a retracted candidate fix. Needs RenderDoc (not available in this sandbox's apt repos) or a from-scratch raw-GL repro bypassing bgfx — `glretrace`/`eglretrace` cannot replay this trace for direct pixel inspection (bgfx's dedicated render thread breaks apitrace's replay model). | 952 |
+| Confirmed bug, investigated 3 times (apitrace + RenderDoc), not fixed | A `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output at all on Bgfx (not even the "wrong" quad — just background) — reproduces with a single draw call and with `DepthStencilState::None` (depth testing fully disabled), regardless of depth format or stencil presence. Not a depth-*test* bug. `RenderTarget2D`'s structurally-similar depth attachment works fine, and it's specific to `RenderTargetCube`, not depth attachments generally. RenderDoc-based analysis (`renderdoccmd convert -c zip.xml`, headless) confirmed with hard evidence that the FBO handle is valid, the correct view id is used for both quad draws, the GL draws do execute against the cube's real FBO, and the cube's real texture is correctly bound for sampling on every retry attempt — yet the content is never visible when sampled. See `plan_graphics.md`'s Task 952 entry for the full investigation trail (2 rounds, both without a fix). Needs either a working window manager to unblock `qrenderdoc`'s GUI pixel-history tools in this sandbox, or a from-scratch raw-GL repro bypassing bgfx entirely. | 952 |
 | Confirmed bug, environment limitation | `Bgfx_RenderTarget2D_MsaaResolve`: this sandbox's bgfx OpenGL path negotiates only a legacy GL 2.1 context (llvmpipe), under which MSAA-flagged framebuffer textures don't sub-pixel resolve — pre-existing, already diagnosed at Task 878/879. The `CNA_BGFX_RENDERER=VULKAN` workaround recorded there no longer routes around it in this sandbox (bgfx silently falls back to `active renderer: OpenGL 2.1` even when Vulkan is requested, confirmed while investigating Task 951) — worth its own future look, not chased here. | — |
 | Confirmed bug | `EasyGL_MRT_TwoAttachments`: a basic 2-target same-size/format MRT setup doesn't render correctly — attachment 1 stays black. Pre-existing, off-limits for opportunistic fixing per project convention (see §9). | 145 |
 | Confirmed bug | `Vulkan_DepthBias` fails; pre-existing, not investigated further. | — |
@@ -300,15 +306,18 @@ directly without the env vars above already set).
    Task 946's first real attempt exists in `../cna-samples`. Requires project-owner input; do not
    pick an approach unilaterally.
 4. **Continue Task 952** (`Depth24Stencil8`-attached `RenderTargetCube` face produces no colour
-   output on Bgfx). Bigger than a "smallest task" — investigated twice now (`plan_graphics.md` has
-   the full trail, including a retracted candidate fix), root cause still not found. Needs RenderDoc
-   (manually-downloaded `.deb`/AppImage from renderdoc.org — not in this sandbox's apt repos, see
-   `programs.md` §7; bgfx already attempts to auto-load it) for lossless frame/texture capture, or a
-   from-scratch minimal raw-GL (no bgfx) reproduction of "cube-face colour attachment + companion
-   2D depth/stencil attachment, FBO recreated fresh on every bind" to isolate driver-vs-bgfx-vs-CNA.
-   `apitrace` (installed) cannot get further alone — `glretrace`/`eglretrace` fail to replay this
-   trace for direct pixel inspection ("no current context", bgfx's dedicated render thread breaks
-   apitrace's replay model). Files: `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`
+   output on Bgfx). Bigger than a "smallest task" — investigated 3 times now across 2 sessions
+   (`plan_graphics.md` has the full trail: apitrace round, then RenderDoc round), root cause still
+   not found despite ruling out FBO-handle validity, view-id targeting, and texture-handle identity
+   with hard evidence. RenderDoc 1.45 is available at `~/Downloads/renderdoc_1.45` (project owner's
+   manual download — see `programs.md` §7) but its GUI (`qrenderdoc --python`, the only way to get
+   pixel-history/texture-viewer tools) hangs indefinitely in this sandbox (no window manager
+   installed). Needs either that fixed (install a minimal WM alongside `Xvfb`), or a from-scratch
+   minimal raw-GL (no bgfx) reproduction of "cube-face colour attachment + companion 2D
+   depth/stencil attachment, FBO recreated fresh on every bind" to isolate driver-vs-bgfx-vs-CNA.
+   `renderdoccmd convert -c zip.xml` (headless, no GUI needed) is useful for call-log-level analysis
+   but can't read back arbitrary texture pixel data on its own. Files:
+   `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`
    (`BgfxRenderTargetCubeBackend`/`BindAsRenderTargetFace`). Verify:
    `SDL_VIDEODRIVER=x11 DISPLAY=:99 ./cmake-build-bgfx/cna_test_bgfx_rendertargetcube_depthformat`.
 

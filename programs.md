@@ -155,12 +155,41 @@ sudo apt-get install -y apitrace apitrace-tracers
   (confirmed via `MESA_DEBUG=1 LIBGL_DEBUG=verbose`, which also needs no extra package — both are
   Mesa runtime env vars, not separate tools). Works fully headless — no GUI needed
   (`apitrace-gui`/`qapitrace` is the optional Qt frontend, not required for `apitrace dump`).
-- **RenderDoc** would also help here (`bgfx` already attempts `dlopen("librenderdoc.so")` at
-  startup — confirmed via a harmless `BX WARN dlopen failed` log line whenever it's absent — so
-  installing it would let bgfx auto-integrate for frame capture with zero extra configuration). It
-  is **not available in the default Debian 13 apt repos** (`apt-cache search renderdoc` returns
-  nothing) — would need a manually-downloaded `.deb`/AppImage from
-  [renderdoc.org](https://renderdoc.org) if ever pursued.
+- **RenderDoc** is **not available in the default Debian 13 apt repos** (`apt-cache search renderdoc`
+  returns nothing) — download the Linux tarball directly from
+  [renderdoc.org](https://renderdoc.org) (e.g. to `~/Downloads/renderdoc_<version>`, no install step
+  needed — `bin/`, `lib/`, `include/` are all self-contained). **Real findings from actually using it
+  in this sandbox (2026-07-11, Task 952)**, so a future session doesn't have to re-discover them:
+    - `bgfx` only calls its own RenderDoc auto-load when `bgfx::Init::debug` or `::profile` is `true`
+      (CNA sets neither) — the harmless `BX WARN dlopen failed` log line you'll see by default is
+      this, **not** evidence RenderDoc itself is missing/broken.
+    - Getting a capture requires `LD_PRELOAD=<path>/lib/librenderdoc.so <binary>`, not a plain
+      runtime `dlopen()` from within your own code — RenderDoc's hooking only intercepts a
+      subsequent `dlopen("libGL.so.1")` if it's preloaded first (same requirement as `apitrace`'s
+      own interposer).
+    - A capture only actually gets recorded on a frame submitted via
+      `bgfx::frame(BGFX_FRAME_DEBUG_CAPTURE)` (a real public bgfx flag) — or by calling RenderDoc's
+      own `RENDERDOC_API_1_6_0::StartFrameCapture`/`EndFrameCapture` directly (works from any code in
+      the process once the library is loaded, not just from bgfx's internal integration).
+    - **`qrenderdoc --python <script>.py`** (this Linux tarball's *only* way to get the
+      `import renderdoc` Python scripting API — it ships no standalone importable module, only
+      `qrenderdoc`'s own embedded interpreter) **hangs indefinitely under this sandbox's `Xvfb`**,
+      even with `QT_DEBUG_PLUGINS=1`; `qrenderdoc --version` (no GUI) returns instantly, and a plain
+      `xterm` on the same `DISPLAY` works fine, so it's specific to Qt/XCB init with no window
+      manager installed (§6 already notes none is present) — `--platform offscreen`/`minimal` are
+      **not** compiled into this particular RenderDoc release (`Available platform plugins are: xcb`
+      only). Not solved as of this writing — would need either a minimal WM installed alongside
+      `Xvfb`, or a RenderDoc build with the `offscreen` Qt platform plugin.
+    - **`renderdoccmd convert -c zip.xml -f cap.rdc -o out.xml` works perfectly headless** (no GUI,
+      no hang) and is a genuinely useful substitute for a lot of what the GUI would show: a fully
+      structured, `grep`/Python-parseable XML dump of every recorded GL call, in bgfx's *actual
+      view-processing order* (not just call-issue order like `apitrace dump`), including every
+      argument. `renderdoccmd thumb -o out.png <capture>.rdc` extracts a quick sanity-check
+      thumbnail. Both were sufficient to rule out several hypotheses (FBO handle validity, view-id
+      targeting, texture-handle identity) with hard evidence — see `plan_graphics.md`'s Task 952
+      entry for what was actually found this way. What's still blocked without the GUI: pixel
+      history / arbitrary internal-texture readback (only exposed via the Python API or the GUI's
+      own texture viewer), which is what's needed to finish Task 952.
 
 ## 8. Optional: Windows cross-compilation (MinGW-w64)
 
