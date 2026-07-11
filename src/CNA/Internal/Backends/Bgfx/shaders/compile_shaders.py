@@ -53,6 +53,9 @@ SHADER_PAIRS = [
     ("kDualTexture3dShaders", [
         ("vs_dual_texture3d",     "vertex",   "vs_dual_texture3d.sc"),
         ("fs_dual_texture3d",     "fragment", "fs_dual_texture3d.sc"),
+        # Stride-24 (VertexPositionColorTexture) variant with VertexColorEnabled support
+        # (Task 889); shares fs_dual_texture3d's fragment shader.
+        ("vs_dual_texture_colored3d", "vertex", "vs_dual_texture_colored3d.sc"),
     ]),
     ("kSkinned3dShaders", [
         ("vs_skinned3d",          "vertex",   "vs_skinned3d.sc"),

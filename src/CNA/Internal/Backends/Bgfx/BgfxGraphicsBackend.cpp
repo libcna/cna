@@ -1097,6 +1097,10 @@ namespace CNA::Internal::Backends::Bgfx
                                                              "vs_dual_texture3d",
                                                              "fs_dual_texture3d",
                                                              "dual_texture3d");
+                dualTextureColored3DProgram_ = tryCreateProgram(kDualTexture3dShaders,
+                                                             "vs_dual_texture_colored3d",
+                                                             "fs_dual_texture3d",
+                                                             "dual_texture_colored3d");
                 skinned3DProgram_         = tryCreateProgram(kSkinned3dShaders,
                                                              "vs_skinned3d",
                                                              "fs_skinned3d",
@@ -1244,6 +1248,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyP(alphaTest3DProgram_);
         destroyP(alphaTestColoredTextured3DProgram_);
         destroyP(dualTexture3DProgram_);
+        destroyP(dualTextureColored3DProgram_);
         destroyP(skinned3DProgram_);
         destroyP(instanced3DProgram_);
         destroyP(envMap3DProgram_);
@@ -2235,7 +2240,44 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setState(state, blendFactorPacked_);
 
         const bool alphaTestActive = (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
-        if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
+        if (params.dualTexture && params.vertexColorEnabled && bgfx::isValid(dualTextureColored3DProgram_))
+        {
+            // Task 889: stride-24 (VertexPositionColorTexture) variant — reads a_color0 and
+            // gates it by VertexColorEnabled, mirroring Task 887's alphaTestColoredTextured3DProgram_.
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            if (bgfx::isValid(texColor3DSampler2_))
+            {
+                if (params.texture1)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
+                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
+                }
+                else
+                {
+                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
+                    // instead of leaving the previous draw's texture bound.
+                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
+                }
+            }
+            SubmitViewProgram(dualTextureColored3DProgram_);
+        }
+        else if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             if (bgfx::isValid(texColor3DSampler_))
@@ -2570,7 +2612,44 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setState(state, blendFactorPacked_);
 
         const bool alphaTestActive = (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
-        if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
+        if (params.dualTexture && params.vertexColorEnabled && bgfx::isValid(dualTextureColored3DProgram_))
+        {
+            // Task 889: stride-24 (VertexPositionColorTexture) variant — reads a_color0 and
+            // gates it by VertexColorEnabled, mirroring Task 887's alphaTestColoredTextured3DProgram_.
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
+            if (bgfx::isValid(texColor3DSampler_))
+            {
+                if (params.texture0)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+                }
+                else
+                {
+                    // Task 379: fall back to opaque white instead of leaving the previous
+                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
+                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+                }
+            }
+            if (bgfx::isValid(texColor3DSampler2_))
+            {
+                if (params.texture1)
+                {
+                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
+                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
+                }
+                else
+                {
+                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
+                    // instead of leaving the previous draw's texture bound.
+                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
+                }
+            }
+            SubmitViewProgram(dualTextureColored3DProgram_);
+        }
+        else if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             if (bgfx::isValid(texColor3DSampler_))

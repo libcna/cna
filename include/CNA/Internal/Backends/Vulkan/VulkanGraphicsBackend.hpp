@@ -1215,7 +1215,7 @@ namespace CNA::Internal::Backends::Vulkan
         void       EnsureDualTexResources();
         VkDescriptorSet GetOrCreateDualTexDescSet(uint32_t frameIdx, VkImageView view0, VkImageView view1,
                                                     VkSampler sampler0, VkSampler sampler1);
-        VkPipeline GetOrCreatePipelineDualTex3D(VkPrimitiveTopology,
+        VkPipeline GetOrCreatePipelineDualTex3D(std::size_t stride, VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,

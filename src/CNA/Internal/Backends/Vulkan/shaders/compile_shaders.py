@@ -162,6 +162,9 @@ def main():
         # descriptor set layout); FS samples two texture units
         ("dual_texture3d.vert.glsl",     VERTEX_SHADER,   "kDualTexture3dVertSpv"),
         ("dual_texture3d.frag.glsl",     FRAGMENT_SHADER, "kDualTexture3dFragSpv"),
+        # DualTextureEffect stride-24 (VertexPositionColorTexture) variant with VertexColorEnabled
+        # support (Task 889); shares dual_texture3d's FS.
+        ("dual_texture_colored3d.vert.glsl", VERTEX_SHADER, "kDualTextureColored3dVertSpv"),
         # EnvironmentMapEffect pipeline — stride 32, world matrix in PC, UBO for FS params
         ("env_map3d.vert.glsl",          VERTEX_SHADER,   "kEnvMap3dVertSpv"),
         ("env_map3d.frag.glsl",          FRAGMENT_SHADER, "kEnvMap3dFragSpv"),

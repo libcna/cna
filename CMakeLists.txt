@@ -2868,6 +2868,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 889: DualTextureEffect.VertexColorEnabled -- verbatim reuse of the shared
+        # backend-agnostic source, registered on all 3 backends.
+        cna_easygl_test(cna_test_easygl_dualtextureeffect_vertexcolor
+                        examples/dualtextureeffect_vertexcolor_test.cpp)
+        add_test(NAME EasyGL_DualTextureEffect_VertexColor
+                 COMMAND cna_test_easygl_dualtextureeffect_vertexcolor)
+        set_tests_properties(EasyGL_DualTextureEffect_VertexColor PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 323 (+ 324/325 coverage): RasterizerState.CullMode — None/CullClockwiseFace/
         # CullCounterClockwiseFace, contrast-checked with front- and back-winding quads
         cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode
@@ -3264,6 +3274,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_GraphicsDevice_ClearDepth
                  COMMAND cna_test_vulkan_graphicsdevice_clear_depth)
         set_tests_properties(Vulkan_GraphicsDevice_ClearDepth PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 889: DualTextureEffect.VertexColorEnabled -- verbatim reuse of the shared
+        # backend-agnostic source, registered on all 3 backends.
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_vertexcolor
+                        examples/dualtextureeffect_vertexcolor_test.cpp)
+        add_test(NAME Vulkan_DualTextureEffect_VertexColor
+                 COMMAND cna_test_vulkan_dualtextureeffect_vertexcolor)
+        set_tests_properties(Vulkan_DualTextureEffect_VertexColor PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -5657,6 +5677,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_GraphicsDevice_ClearDepth
              COMMAND cna_test_bgfx_graphicsdevice_clear_depth)
     set_tests_properties(Bgfx_GraphicsDevice_ClearDepth PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 889: DualTextureEffect.VertexColorEnabled -- verbatim reuse of the shared
+    # backend-agnostic source, registered on all 3 backends.
+    cna_bgfx_test(cna_test_bgfx_dualtextureeffect_vertexcolor
+                  examples/dualtextureeffect_vertexcolor_test.cpp)
+    add_test(NAME Bgfx_DualTextureEffect_VertexColor
+             COMMAND cna_test_bgfx_dualtextureeffect_vertexcolor)
+    set_tests_properties(Bgfx_DualTextureEffect_VertexColor PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

@@ -1388,6 +1388,7 @@ void main()
         prog_col_textured_.reset_no_gl();
         prog_lit_textured_.reset_no_gl();
         prog_dual_textured_.reset_no_gl();
+        prog_dual_textured_colored_.reset_no_gl();
         prog_env_mapped_.reset_no_gl();
         prog_skinned_.reset_no_gl();
         default_white_texture_.reset_handle_no_gl();
@@ -2686,6 +2687,70 @@ void main()
         CNA_RENDER_LOG("dual+textured3D ready loc_wvp=" << prog_dual_textured_.loc_wvp);
     }
 
+    void EasyGLGraphicsBackend::EnsureDualTexturedColored3DProgram()
+    {
+        if (prog_dual_textured_colored_.ready) return;
+
+        // Task 889: stride-24 (VertexPositionColorTexture) variant of the dual-texture shader
+        // above -- reads the vertex color and gates it by VertexColorEnabled, mirroring
+        // EnsureColoredTextured3DProgram()'s already-correct BasicEffect formula.
+        static const char* vsrc =
+"#version 300 es\n"
+"precision highp float;\n"
+"layout(location=0) in vec3 aPos;\n"
+"layout(location=1) in vec4 aColor;\n"
+"layout(location=2) in vec2 aUV;\n"
+"uniform mat4 uWVP;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
+"out vec4 vColor;\n"
+"out vec2 vUV;\n"
+"out float vFogFactor;\n"
+"void main(){\n"
+"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vColor=aColor;\n"
+"    vUV=aUV;\n"
+"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+"}\n";
+        static const char* fsrc =
+"#version 300 es\n"
+"precision mediump float;\n"
+"in vec4 vColor;\n"
+"in vec2 vUV;\n"
+"in float vFogFactor;\n"
+"uniform sampler2D uTexture;\n"
+"uniform sampler2D uTexture2;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
+"uniform float uVertexColorEnabled;\n"
+"out vec4 FragColor;\n"
+"void main(){\n"
+"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
+"    vec4 base=texture(uTexture,vUV);\n"
+"    base.rgb*=2.0;\n"
+"    FragColor=base*texture(uTexture2,vUV)*vc*uDiffuseColor;\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"}\n";
+
+        CompileAndLink(prog_dual_textured_colored_.prog, vsrc, fsrc, "dual+textured+colored");
+        prog_dual_textured_colored_.loc_wvp         = prog_dual_textured_colored_.prog.uniform_location("uWVP");
+        prog_dual_textured_colored_.loc_texture     = prog_dual_textured_colored_.prog.uniform_location("uTexture");
+        prog_dual_textured_colored_.loc_texture2    = prog_dual_textured_colored_.prog.uniform_location("uTexture2");
+        prog_dual_textured_colored_.loc_diffuse     = prog_dual_textured_colored_.prog.uniform_location("uDiffuseColor");
+        prog_dual_textured_colored_.loc_alphatest   = prog_dual_textured_colored_.prog.uniform_location("uAlphaTest");
+        prog_dual_textured_colored_.loc_fog_enabled = prog_dual_textured_colored_.prog.uniform_location("uFogEnabled");
+        prog_dual_textured_colored_.loc_fog_color   = prog_dual_textured_colored_.prog.uniform_location("uFogColor");
+        prog_dual_textured_colored_.loc_fog_start   = prog_dual_textured_colored_.prog.uniform_location("uFogStart");
+        prog_dual_textured_colored_.loc_fog_end     = prog_dual_textured_colored_.prog.uniform_location("uFogEnd");
+        prog_dual_textured_colored_.loc_vertexcolor = prog_dual_textured_colored_.prog.uniform_location("uVertexColorEnabled");
+        prog_dual_textured_colored_.ready           = true;
+        CNA_RENDER_LOG("dual+textured+colored3D ready loc_wvp=" << prog_dual_textured_colored_.loc_wvp);
+    }
+
     void EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()
     {
         if (prog_env_mapped_.ready) return;
@@ -2879,6 +2944,13 @@ void main()
         }
         if (params.dualTexture)
         {
+            // Task 889: stride 24 (VertexPositionColorTexture) gets its own vertex-color-aware
+            // program; stride 20 (VertexPositionTexture) keeps the original color-less shader.
+            if (stride == 24)
+            {
+                EnsureDualTexturedColored3DProgram();
+                return prog_dual_textured_colored_;
+            }
             EnsureDualTextured3DProgram();
             return prog_dual_textured_;
         }

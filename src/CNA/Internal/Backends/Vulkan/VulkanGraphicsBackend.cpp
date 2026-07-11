@@ -3766,16 +3766,17 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineDualTex3D(
-        VkPrimitiveTopology topo,
+        std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsureDualTexResources();
 
-        // DualTexture always uses stride=20 (VertexPositionTexture); key encodes topology+state.
-        constexpr std::size_t kDualStride = 20;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kDualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        // DualTexture uses stride=20 (VertexPositionTexture) by default, or stride=24
+        // (VertexPositionColorTexture, Task 889) when VertexColorEnabled needs a color attribute.
+        const std::size_t dualStride = (stride == 24) ? 24 : 20;
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(dualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
         auto it = pipelinesDualTex3D_.find(key);
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
@@ -3783,18 +3784,34 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 899: dedicated vertex shader (was: reuse kTextured3dVertSpv) -- textured3d.vert.glsl
         // now declares its own fog UBO at binding=1 (Bundle A's shared layout), which conflicts
         // with dual_texture3d's 2-sampler descriptor set layout (fog UBO here is at binding=2).
-        VkShaderModule vert = CreateShaderModule(kDualTexture3dVertSpv,  kDualTexture3dVertSpv_size);
+        // Task 889: stride 24 (VertexPositionColorTexture) gets its own vertex shader that reads
+        // the color attribute and gates it by VertexColorEnabled, mirroring Task 887's
+        // alpha_test_colored3d.vert.glsl pattern; both variants share the unchanged fragment shader.
+        const bool colored = (dualStride == 24);
+        VkShaderModule vert = colored
+            ? CreateShaderModule(kDualTextureColored3dVertSpv, kDualTextureColored3dVertSpv_size)
+            : CreateShaderModule(kDualTexture3dVertSpv,        kDualTexture3dVertSpv_size);
         VkShaderModule frag = CreateShaderModule(kDualTexture3dFragSpv,  kDualTexture3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, kDualStride, VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[2]{};
-        attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };
-        attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT,    12 };
+        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(dualStride), VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[3]{};
+        uint32_t attrCount;
+        if (colored) {
+            // float3 pos + ubyte4 color + float2 uv (mirrors colored_textured3d's layout).
+            attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };
+            attrs[1] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12 };
+            attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    16 };
+            attrCount = 3;
+        } else {
+            attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };
+            attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT,    12 };
+            attrCount = 2;
+        }
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = 2; vis.pVertexAttributeDescriptions = attrs;
+        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
@@ -5539,7 +5556,7 @@ namespace CNA::Internal::Backends::Vulkan
                                                           draw.depthTest, draw.depthWrite,
                                                           draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useDualTexture) {
-                    pipe = GetOrCreatePipelineDualTex3D(draw.topology,
+                    pipe = GetOrCreatePipelineDualTex3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useEnvMap) {

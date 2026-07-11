@@ -424,6 +424,7 @@ namespace CNA::Internal::Backends::EasyGL
         Prog3D prog_col_textured_;   ///< stride=24: aPos + aColor + aUV
         Prog3D prog_lit_textured_;   ///< stride=32: aPos + aNormal + aUV
         Prog3D prog_dual_textured_;  ///< stride=20: aPos + aUV, two samplers (DualTextureEffect)
+        Prog3D prog_dual_textured_colored_;  ///< stride=24: aPos + aColor + aUV, two samplers (DualTextureEffect, Task 889)
         Prog3D prog_env_mapped_;     ///< stride=32: aPos + aNormal + aUV, cube map (EnvironmentMapEffect)
         Prog3D prog_skinned_;        ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect)
 
@@ -464,6 +465,7 @@ namespace CNA::Internal::Backends::EasyGL
         void EnsureColoredTextured3DProgram();
         void EnsureLit3DProgram();
         void EnsureDualTextured3DProgram();
+        void EnsureDualTexturedColored3DProgram();
         void EnsureEnvMapped3DProgram();
         void EnsureSkinnedProgram();
         void EnsureDefaultWhiteTexture();
