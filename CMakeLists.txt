@@ -1649,6 +1649,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 891: EnvironmentMapEffect's base cube-map lerp target must be scaled by the
+        # combined texture x diffuse alpha -- verbatim reuse of the shared backend-agnostic
+        # source, registered on all 3 backends.
+        cna_easygl_test(cna_test_easygl_environmentmapeffect_alphascaledlerp
+                        examples/environmentmapeffect_alphascaledlerp_test.cpp)
+        add_test(NAME EasyGL_EnvironmentMapEffect_AlphaScaledLerp
+                 COMMAND cna_test_easygl_environmentmapeffect_alphascaledlerp)
+        set_tests_properties(EasyGL_EnvironmentMapEffect_AlphaScaledLerp PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 396: EnvironmentMapEffect Fresnel edge-weighting should suppress head-on reflections
         cna_easygl_test(cna_test_easygl_environmentmapeffect_fresnel
                         examples/easygl_environmentmapeffect_fresnel_test.cpp)
@@ -3330,6 +3341,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_EnvironmentMapEffect_Specular
                  COMMAND cna_test_vulkan_environmentmapeffect_specular)
         set_tests_properties(Vulkan_EnvironmentMapEffect_Specular PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 891: EnvironmentMapEffect's base cube-map lerp target must be scaled by the
+        # combined texture x diffuse alpha -- verbatim reuse of the shared backend-agnostic
+        # source, registered on all 3 backends.
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_alphascaledlerp
+                        examples/environmentmapeffect_alphascaledlerp_test.cpp)
+        add_test(NAME Vulkan_EnvironmentMapEffect_AlphaScaledLerp
+                 COMMAND cna_test_vulkan_environmentmapeffect_alphascaledlerp)
+        set_tests_properties(Vulkan_EnvironmentMapEffect_AlphaScaledLerp PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -5088,6 +5110,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_EnvironmentMapEffect_Specular
              COMMAND cna_test_bgfx_environmentmapeffect_specular)
     set_tests_properties(Bgfx_EnvironmentMapEffect_Specular PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 891: EnvironmentMapEffect's base cube-map lerp target must be scaled by the combined
+    # texture x diffuse alpha -- verbatim reuse of the shared backend-agnostic source, registered
+    # on all 3 backends.
+    cna_bgfx_test(cna_test_bgfx_environmentmapeffect_alphascaledlerp
+                  examples/environmentmapeffect_alphascaledlerp_test.cpp)
+    add_test(NAME Bgfx_EnvironmentMapEffect_AlphaScaledLerp
+             COMMAND cna_test_bgfx_environmentmapeffect_alphascaledlerp)
+    set_tests_properties(Bgfx_EnvironmentMapEffect_AlphaScaledLerp PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

@@ -36,7 +36,10 @@ void main() {
     float blendFactor = (ep.light0Diff_fresnelEn.w > 0.5)
         ? pow(max(1.0 - abs(viewAngle), 0.0), ep.envMapSpec_fresnelF.w) * ep.emissive_em.w
         : ep.emissive_em.w;
-    vec3 rgb = mix(baseColor, envSample.rgb, blendFactor) + ep.envMapSpec_fresnelF.xyz * envSample.a * combinedAlpha;
+    // Task 891: FNA's real PSEnvMap/PSEnvMapSpecular scale the whole `envmap` sample (both
+    // the base lerp target and the specular term, the latter already fixed by Task 395) by
+    // combinedAlpha before use -- the base lerp's envSample.rgb was still unscaled here.
+    vec3 rgb = mix(baseColor, envSample.rgb * combinedAlpha, blendFactor) + ep.envMapSpec_fresnelF.xyz * envSample.a * combinedAlpha;
     // Mix toward FogColor as vFogFactor -> 0 (matches the established Task 888 formula).
     rgb = mix(ep.fogColorEnabled.xyz, rgb, vFogFactor);
     outColor = vec4(rgb, combinedAlpha);

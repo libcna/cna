@@ -72,9 +72,9 @@ doesn't exist in this checkout. Cosmetic, not a CNA bug — do not chase it (see
 
 | Backend | `CnaTests` (gtest) | `ctest` (integration/pixel) |
 |---|---|---|
-| EasyGL | 4371/4373 pass (2 hardware-dependent skips: Accelerometer/Gyroscope) | 185/187 pass — 2 pre-existing failures (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`) |
-| Vulkan | 4371/4373 pass (2 hardware skips) — Task 953 fixed the 3 `ContentManagerSkinnedModelTest` segfaults, no exclusions needed anymore | 122/123 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
-| Bgfx | 4375/4377 pass (2 hardware skips) | **99/101 pass** — 2 remaining failures, neither a crash (see §5): `Bgfx_RenderTarget2D_MsaaResolve` (known environment limitation) and `Bgfx_RenderTargetCube_DepthFormat` (Task 952, **DEFERRED** — a `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output on Bgfx) |
+| EasyGL | 4371/4373 pass (2 hardware-dependent skips: Accelerometer/Gyroscope) | 186/188 pass — 2 pre-existing failures (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`) |
+| Vulkan | 4371/4373 pass (2 hardware skips) — Task 953 fixed the 3 `ContentManagerSkinnedModelTest` segfaults, no exclusions needed anymore | 123/124 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
+| Bgfx | 4375/4377 pass (2 hardware skips) | **100/102 pass** — 2 remaining failures, neither a crash (see §5): `Bgfx_RenderTarget2D_MsaaResolve` (known environment limitation) and `Bgfx_RenderTargetCube_DepthFormat` (Task 952, **DEFERRED** — a `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output on Bgfx) |
 
 All pre-existing failures above were independently reconfirmed via `git stash` (present on the
 unmodified baseline too — not introduced by any change in this session).
@@ -160,6 +160,7 @@ shape) is in `plan_graphics.md` — this section is intentionally a short index.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `PENDING` | 891 | Fixed `EnvironmentMapEffect`'s cube-map lerp target not being scaled by combined texture×diffuse alpha (only the already-correct specular term was). One-line `mix()` fix on all 3 backends (`envSample.rgb * combinedAlpha` instead of unscaled `envSample.rgb`). New shared 3-backend test `environmentmapeffect_alphascaledlerp_test.cpp`. |
 | `a79469f2` | 889 | Fixed `DualTextureEffect.VertexColorEnabled` being a total no-op on all 3 backends. New stride-24-only sibling vertex shader/program on each backend (Vulkan `dual_texture_colored3d.vert.glsl`, Bgfx `vs_dual_texture_colored3d.sc`, EasyGL `EnsureDualTexturedColored3DProgram()`), mirroring Task 887's exact `AlphaTestEffect` pattern; stride-20 path unchanged. New shared 3-backend test `dualtextureeffect_vertexcolor_test.cpp`. |
 | `07ca2ad7` | 953 | Fixed Vulkan segfaulting on a 0-length index/vertex buffer (3 `ContentManagerSkinnedModelTest` crashes). `VulkanIndexBufferBackend`/`VulkanVertexBufferBackend` constructors now clamp their computed `VkDeviceSize` to a minimum of 1 byte before `vkCreateBuffer`/`vkAllocateMemory` (previously size 0 for an empty model part, invalid per spec). `ContentManagerSkinnedModelTest.*` now 9/9 pass; full Vulkan `CnaTests` 4371/4373 clean. |
 | `d562a813` | 952 | Explicitly marked Task 952 as **DEFERRED** per project owner instruction — no further investigation this session. Docs-only: `plan_graphics.md`, `NEXT.md` §5/§8/§9 updated to flag "do not resume without explicit direction." |
@@ -301,8 +302,10 @@ directly without the env vars above already set).
 1. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling) — or defer until
    Task 946's first real attempt exists in `../cna-samples`. Requires project-owner input; do not
    pick an approach unilaterally.
-2. **Fix Task 890–895** (`EnvironmentMapEffect`/`SkinnedEffect` `VertexColorEnabled`/multi-light/
-   specular gaps — same family as the now-closed Task 889, see §2 "Does NOT work yet").
+2. **Fix Task 890/893/894/895** (`EnvironmentMapEffect`/`SkinnedEffect` `VertexColorEnabled`/
+   multi-light/specular gaps — same family as the now-closed Tasks 889/891, see §2 "Does NOT
+   work yet"). Task 891 (this same family's `EnvironmentMapEffect` alpha-scaled-lerp gap) is now
+   also closed.
 3. Task 952 (`RenderTargetCube` depth-gating bug on Bgfx) is **DEFERRED**, not a next task — see §9.
 
 ---
