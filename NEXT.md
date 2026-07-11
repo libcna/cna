@@ -72,15 +72,30 @@ doesn't exist in this checkout. Cosmetic, not a CNA bug — do not chase it (see
 
 | Backend | `CnaTests` (gtest) | `ctest` (integration/pixel) |
 |---|---|---|
-| EasyGL | 4371/4373 pass (2 hardware-dependent skips: Accelerometer/Gyroscope) | 183/185 pass — 2 pre-existing failures (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`) |
-| Vulkan | 4368/4370 pass, excluding 3 known-crashing tests (see §5) | 120/121 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
-| Bgfx | 4375/4377 pass (2 hardware skips) | **97/99 pass** — 2 remaining failures, neither a crash (see §5): `Bgfx_RenderTarget2D_MsaaResolve` (known environment limitation) and `Bgfx_RenderTargetCube_DepthFormat` (new Task 952, depth doesn't gate cube-face draws) |
+| EasyGL | 4371/4373 pass (2 hardware-dependent skips: Accelerometer/Gyroscope) | 184/186 pass — 2 pre-existing failures (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`) |
+| Vulkan | 4368/4370 pass, excluding 3 known-crashing tests (see §5) | 121/122 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
+| Bgfx | 4375/4377 pass (2 hardware skips) | **98/100 pass** — 2 remaining failures, neither a crash (see §5): `Bgfx_RenderTarget2D_MsaaResolve` (known environment limitation) and `Bgfx_RenderTargetCube_DepthFormat` (Task 952, depth attachment presence silently blocks all color output on a cube face) |
 
 All pre-existing failures above were independently reconfirmed via `git stash` (present on the
 unmodified baseline too — not introduced by any change in this session).
 
 ### Recently implemented
 
+- **Task 950** (closed 2026-07-11): `GraphicsDevice::Clear()`'s `depth` parameter now actually
+  takes effect on Vulkan and Bgfx (previously every clear silently hardcoded depth=1.0). Mirrors
+  Task 871's `clearStencil_` pattern exactly — new `clearDepth_`/`clearDepthValue_` members threaded
+  into the same 4 `VkClearValue.depthStencil` sites / the one `bgfx::setViewClear()` call Task 871
+  already touched. New shared `examples/graphicsdevice_clear_depth_test.cpp`, registered on all 3
+  hardware backends (EasyGL passes unmodified, confirming it was never affected).
+- **Task 952 investigation narrowed** (2026-07-11, still open): built diagnostics on top of the
+  crash-fixed `Bgfx_RenderTargetCube_DepthFormat` test (all reverted afterward, shipped test
+  unchanged from Task 951). Ruled out a stale-test-methodology false alarm and a wrong-cube-face
+  sampling bug (both confirmed fine). The real, narrower symptom: **merely attaching a depth
+  texture to a `RenderTargetCube` face's FBO on Bgfx silently blocks ALL color output into that
+  face** — reproduces even with a single draw call and with `DepthStencilState::None` (depth
+  testing fully disabled), regardless of depth format/stencil presence. `RenderTarget2D`'s
+  structurally-similar depth attachment works fine; `glCheckFramebufferStatus` never flags the FBO
+  incomplete. Root cause still not found — see §5/§8.
 - **Task 951** (closed 2026-07-11): root-caused and fixed 5 of the 6 pre-existing Bgfx
   `RenderTarget2D`/`RenderTargetCube` `ctest` crashes (93/99 → 97/99). Root cause: bgfx processes
   views in ascending id order each frame, and every CNA render-target view has id > 0 (reserved
@@ -118,8 +133,6 @@ pixel-verification examples under `examples/`.
   path — Task 863, needs an architecture decision (see §5).
 - `GraphicsDevice.ReferenceStencil`'s independent-override semantics — EasyGL/Bgfx only; Vulkan
   already fixed (Task 872, remaining EasyGL/Bgfx scope not started).
-- Vulkan/Bgfx's `GraphicsDevice::Clear()` silently hardcodes the `depth` clear value to 1.0
-  regardless of what's requested (Task 950, opened 2026-07-10, not fixed).
 - Android cross-compile (blocked on sibling `sharp-runtime` NDK build regressions, Task 920,
   cross-repo — needs project-owner approval to touch that repo).
 - `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` `VertexColorEnabled`/multi-light/
@@ -134,6 +147,7 @@ shape) is in `plan_graphics.md` — this section is intentionally a short index.
 
 | Commit | Task | Summary |
 |---|---|---|
+| `22bbaa7f` | 950 | `GraphicsDevice::Clear()`'s `depth` parameter now actually takes effect on Vulkan/Bgfx (was hardcoded to 1.0). New `clearDepth_`/`clearDepthValue_` members mirror Task 871's `clearStencil_` pattern exactly. New shared 3-backend test `graphicsdevice_clear_depth_test.cpp`. |
 | `981f1b0c` | 951 | Fixed 5 of 6 pre-existing Bgfx `RenderTarget2D`/`RenderTargetCube` `ctest` crashes via a dedicated highest-view-id "backbuffer flush" view touched before every screenshot request; fixed a 6th, unrelated crash (invalid depth-attachment resolve flag) that then surfaced Task 952 (RenderTargetCube depth doesn't gate face draws on Bgfx). |
 | `eba5d0bb`/`9762cdac` | 871 | `GraphicsDevice::Clear()` now clears the stencil buffer on all 4 backends. Vulkan needed `stencilLoadOp` fixed on 5 separate render-pass-creation sites (was hardcoded `DONT_CARE`); Bgfx needed a real stencil value threaded into its `bgfx::setViewClear()` call. Opened Task 950 (depth value still hardcoded on Vulkan/Bgfx). |
 | `225fc60b` | 942 | Proved `AnimationPlayer::GetSkinTransforms()` → `SkinnedEffect::SetBoneTransforms()` → `Model.Draw()` renders correctly end-to-end via a new pixel test; no engine code was actually missing. Closes Phase 77. |
@@ -162,12 +176,11 @@ remaining Bgfx `ctest` failures are both non-crashing, already-diagnosed, and tr
 
 | Status | Description | Task |
 |---|---|---|
-| Confirmed bug, not fixed | `RenderTargetCube`'s depth buffer does not gate face draws on Bgfx — `Bgfx_RenderTargetCube_DepthFormat` reads back black instead of the nearer quad's colour after Task 951's crash fix let it run to completion. `RenderTarget2D`'s equivalent depth test already passes, so this is specific to the cube-face path (`BgfxRenderTargetCubeBackend`/`SetRenderTargetCubeFace`). Not investigated further. | 952 |
+| Confirmed bug, root-cause narrowed, not fixed | Merely attaching a depth texture to a `RenderTargetCube` face's FBO on Bgfx silently blocks ALL colour output into that face — reproduces with a single draw call and with `DepthStencilState::None` (depth testing fully disabled), regardless of depth format (`Depth16`/`Depth24`/`Depth24Stencil8`) or stencil presence. Not a depth-*test* bug (originally suspected) — `RenderTarget2D`'s structurally-similar depth attachment works fine; `glCheckFramebufferStatus` never flags the FBO incomplete. See NEXT.md's own 2026-07-11 investigation log (§2) for the full elimination trail. Needs either bgfx's own capability/format-support query for this depth format under this sandbox's legacy-GL-2.1 (llvmpipe) renderer, or raw-GL-level bisection this investigation didn't have tooling for. | 952 |
 | Confirmed bug, environment limitation | `Bgfx_RenderTarget2D_MsaaResolve`: this sandbox's bgfx OpenGL path negotiates only a legacy GL 2.1 context (llvmpipe), under which MSAA-flagged framebuffer textures don't sub-pixel resolve — pre-existing, already diagnosed at Task 878/879. The `CNA_BGFX_RENDERER=VULKAN` workaround recorded there no longer routes around it in this sandbox (bgfx silently falls back to `active renderer: OpenGL 2.1` even when Vulkan is requested, confirmed while investigating Task 951) — worth its own future look, not chased here. | — |
 | Confirmed bug | `EasyGL_MRT_TwoAttachments`: a basic 2-target same-size/format MRT setup doesn't render correctly — attachment 1 stays black. Pre-existing, off-limits for opportunistic fixing per project convention (see §9). | 145 |
 | Confirmed bug | `Vulkan_DepthBias` fails; pre-existing, not investigated further. | — |
 | Confirmed bug, environment-only | 3 `ContentManagerSkinnedModelTest.*` tests reliably segfault on Vulkan (confirmed deterministic in isolation, not flaky) — root cause: these specific test fixtures write a zero-length `.idx.bin`, and Vulkan's index-buffer creation path calls `vkCreateBuffer`/`vkAllocateMemory` with size 0, which is invalid per the Vulkan spec (validation layer confirms). Needs a size-0 guard in the Vulkan index/vertex buffer creation path, or the affected tests need non-empty fixtures. | — |
-| Confirmed bug, not fixed | `GraphicsDevice::Clear()`'s `depth` parameter is silently hardcoded to 1.0 on Vulkan and Bgfx regardless of what's requested (found while fixing Task 871). Usually invisible since `Viewport.MaxDepth` defaults to 1.0 anyway. | 950 |
 | Confirmed bug, not fixed | `GraphicsDevice.ReferenceStencil`'s independent-override semantics have zero backend connection on EasyGL/Bgfx (Vulkan already fixed, an undocumented side effect of Task 870). | 872 |
 | Confirmed bug, not fixed | `DualTextureEffect.VertexColorEnabled` is a total no-op on all 3 hardware backends. | 889 |
 | Confirmed bug, not fixed | `EnvironmentMapEffect`/`SkinnedEffect` `DirectionalLight1`/`DirectionalLight2` are unforwarded; `EnvironmentMapEffect`'s cube-map lerp isn't alpha-scaled; `SkinnedEffect` has zero specular implementation and `WeightsPerVertex` is a GPU no-op. | 890/891/893/894/895 |
@@ -268,26 +281,23 @@ directly without the env vars above already set).
 
 ## 8. Next smallest tasks
 
-1. **Fix Task 952** (`RenderTargetCube` depth buffer doesn't gate face draws on Bgfx). Files:
-   `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` (`BgfxRenderTargetCubeBackend`/
-   `SetRenderTargetCubeFace`). Verify:
-   `SDL_VIDEODRIVER=x11 DISPLAY=:99 ./cmake-build-bgfx/cna_test_bgfx_rendertargetcube_depthformat`.
-2. **Fix Task 950** (Vulkan/Bgfx `Clear()`'s `depth` parameter hardcoded to 1.0). Small — mirrors
-   Task 871's own `clearStencil_`/`clearStencilValue_` pattern exactly, just for depth. Files:
-   `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.{hpp,cpp}`,
-   `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.{hpp,cpp}`. Verify: a new pixel test clearing
-   to a non-default depth (e.g. 0.5) then a depth-compare draw confirming it round-trips; run
-   `ctest --test-dir cmake-build-vulkan -R Vulkan_` and `ctest --test-dir cmake-build-bgfx -R Bgfx_`.
-3. **Add a zero-length index/vertex buffer guard on Vulkan** (fixes the 3 `ContentManagerSkinnedModelTest`
+1. **Add a zero-length index/vertex buffer guard on Vulkan** (fixes the 3 `ContentManagerSkinnedModelTest`
    segfaults noted in §5). Files: `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`
    (index/vertex buffer creation). Verify:
    `SDL_VIDEODRIVER=x11 DISPLAY=:99 ./cmake-build-vulkan/CnaTests --gtest_filter="ContentManagerSkinnedModelTest.PartNameWithUnbalancedEmbeddedBraceParsesCorrectly"` no longer segfaults.
-4. **Fix Task 889** (`DualTextureEffect.VertexColorEnabled` no-op on all 3 backends). Scoped, has an
+2. **Fix Task 889** (`DualTextureEffect.VertexColorEnabled` no-op on all 3 backends). Scoped, has an
    existing audit-task writeup. Files: each backend's `DualTextureEffect` shader/dispatch code.
    Verify: a new per-backend pixel test comparing vertex-color-enabled vs. disabled output.
-5. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling) — or defer until
+3. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling) — or defer until
    Task 946's first real attempt exists in `../cna-samples`. Requires project-owner input; do not
    pick an approach unilaterally.
+4. **Continue Task 952** (`RenderTargetCube` + depth attachment silently blocks all colour output
+   on Bgfx). Bigger than a "smallest task" — root cause already narrowed once (see §2) but not
+   found; needs either a bgfx capability/format-support query added for this depth format under
+   this sandbox's legacy-GL-2.1 (llvmpipe) renderer, or raw-GL-level bisection (no tooling for that
+   was available in this investigation). Files: `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`
+   (`BgfxRenderTargetCubeBackend`/`BindAsRenderTargetFace`). Verify:
+   `SDL_VIDEODRIVER=x11 DISPLAY=:99 ./cmake-build-bgfx/cna_test_bgfx_rendertargetcube_depthformat`.
 
 ---
 
