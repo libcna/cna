@@ -1,37 +1,20 @@
 # NEXT.md — CNA Project Handoff
 
-> ✅ **WebGPU has a verified 2D baseline, real GPU readback, and its first working 3D draw path
-> (2026-07-12).** `WEBGPU-124`–`WEBGPU-131` (2D baseline) and `WEBGPU-88`–`91` (automated CTest
-> coverage + reusable readback) are all ✅. Writing `WEBGPU-91`/`92`'s pixel-asserted readback test
-> found and fixed a real, previously-unknown bug (`WEBGPU-132`): the `SpriteBatch` pipeline's blend
-> factors didn't match its own shader's non-premultiplied output, so any tint/texture alpha
-> strictly between 0 and 255 was silently ignored for colour — invisible to `WEBGPU-126`'s manual
-> screenshot review, caught only by a pixel assertion. `WEBGPU-92` is now 🟨 partial: only sampler
-> address-mode pixel assertions remain open. **New this session**: `DrawColoredPrimitives()`/
-> `DrawIndexedColoredPrimitives()` (`VertexPositionColor`, stride-16, unlit/untextured 3D draw with
-> real depth testing) now work end-to-end — a 128-float UBO matching Vulkan's `FillExtPushConst()`
-> layout byte-for-byte, a new `colored3d.wgsl` shader, a depth-aware pipeline cache, new
-> `WebGPU_Colored3D` CTest (4/4, git-stash-verified, including a genuine depth-order proof, not
-> "last draw wins"). Since `DrawPrimitivesEx()`'s own default falls back to `DrawColoredPrimitives()`,
-> simple `BasicEffect`/`Model.Draw()` calls now render (colour-only, no lighting/texture yet)
-> instead of throwing. Along the way, found+fixed a separate real gap: `ApplyDepthStencilState()`
-> was entirely unimplemented, so `GraphicsDevice.DepthStencilState` (the real XNA API surface,
-> not just the older `SetDepthTestEnabled()` convenience method) had zero effect on this backend.
-> **Also this session**: `DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()` now do real `GpuDrawParams`
-> dispatch for the stride-16 case — a `BasicEffect`'s actual `DiffuseColor`/`VertexColorEnabled`
-> reach `colored3d.wgsl` via `FillExtUniforms()` (mirrors Vulkan's `FillExtPushConst()`), instead of
-> the `DrawColoredPrimitives` fallback's hardcoded white/true; new `WebGPU_DrawPrimitivesEx` CTest
-> (3/3, git-stash-verified). Other strides/effects (texture, lighting, alpha test, dual texture,
-> env map, skinned) still fall back to `DrawColoredPrimitives()`, same as before.
-> This autonomous long session (started 2026-07-12) paused once before Phase 57 to avoid
-> half-building unverified 3D infrastructure — see §9 — then continued after the project owner
-> reviewed, pushed both repos (`cna_graphics` `feature/graphics` and `../mobile-eggbert` `develop`),
-> and asked to keep going autonomously (a second nudge was needed after an unwarranted pause — see
-> §9). **Recommended next step**: `WEBGPU-20` (`textured3d.wgsl`, stride 20) — the next WGSL shader
-> and its pipeline/dispatch, unblocking textured `BasicEffect` draws the same way this session
-> unblocked colour-only ones.
-> Still treat browser/Emscripten support as unstarted, and effects/render-targets/MRT as not yet
-> implemented until their own tasks close.
+> ✅ **WebGPU 2D baseline + readback are complete; 3D is now underway (2026-07-12).**
+> `WEBGPU-124`–`131` (2D) and `WEBGPU-88`–`92` (readback + pixel tests, `WEBGPU-92` 🟨 only sampler
+> address-mode left) are done — see §3 for the two real bugs found+fixed along the way
+> (`WEBGPU-132` SpriteBatch alpha blend, `ApplyDepthStencilState` unimplemented). **3D**: stride-16
+> (`colored3d.wgsl`, unlit/untextured, real depth test) and stride-20 (`textured3d.wgsl`, real
+> texture sampling) both work end-to-end through `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` with
+> real `GpuDrawParams` (`DiffuseColor` genuinely multiplies, not just passed through). Three new
+> CTests (`WebGPU_Colored3D`, `WebGPU_DrawPrimitivesEx`, `WebGPU_Textured3D`), all git-stash-verified
+> discriminating — see §3 for detail on each. Strides 24/32 (`colored_textured3d`/`lit_textured3d`,
+> real lighting) and other effects (alpha test/dual texture/env map/skinned) still fall back to the
+> colour-only path. **Recommended next step**: `WEBGPU-21` (`colored_textured3d.wgsl`, stride 24) or
+> `WEBGPU-22` (`lit_textured3d.wgsl`, stride 32, first real lighting).
+> This is an ongoing autonomous session (started 2026-07-12) with standing "continue autonomously"
+> authorization — see §9 for a self-correction record (an unwarranted mid-session pause) worth
+> reading before resuming. Still treat browser/Emscripten, render-targets and MRT as unstarted.
 
 ## 1. Project summary
 
@@ -230,6 +213,7 @@ shape) is in `plan_graphics.md` — this section is intentionally a short index.
 
 | Commit | Task | Summary |
 |---|---|---|
+| *(pending)* | 15/17/20/33/66 | WebGPU **`textured3d.wgsl` (stride 20, `VertexPositionTexture`)** — the second real 3D shader/pipeline, reusing `colored3d.wgsl`'s UBO/group-0 bind group (`coloredBindGroupLayout_`) and adding a new group-1 bind group (`texturedBindGroupLayout_`: sampler+texture, mirrors the SpriteBatch layout shape) via `CreateTexturedResources()`/`GetOrCreatePipelineTextured3D()` (cached the same way as `WEBGPU-32`). `DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()` now dispatch stride-20 draws with a non-null `params.texture0` to a new `QueueTexturedDraw()`/`RenderTexturedDraws()` pair (parallel to the stride-16 colored path, not merged into it, since the vertex layout/bind-group shape genuinely differ). New `WebGPU_Textured3D` CTest (3/3): a solid-colour 1×1 texture samples correctly through a real `BasicEffect.Texture`/`TextureEnabled` binding; `DiffuseColor` genuinely multiplies the sampled colour (green texture × red diffuse = black, not green or red alone — proves both the texture path and the UBO path feed the same shader correctly); the indexed-draw counterpart also works. Verified genuinely discriminating via `git stash` (aborts with `DrawColoredPrimitives`'s stride-16-only exception without this change, since stride-20 has no color attribute to fall back to). Re-verified `WebGPU_Native2D_Smoke`, `WebGPU_Clear_Readback`, `WebGPU_Colored3D`, `WebGPU_DrawPrimitivesEx`, the `--webgpu-2d-validation` scene all still pass. |
 | `c4f7191e` | 66 | WebGPU `DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()` **real `GpuDrawParams` dispatch** for the stride-16 case. New `FillExtUniforms()` mirrors `VulkanGraphicsBackend::FillExtPushConst()` field-for-field (real `DiffuseColor`/`AmbientColor`/`Light0Dir`/`Light0Diffuse`/`VertexColorEnabled`/`LightingEnabled`/`TextureEnabled`, not `DrawColoredPrimitives()`'s hardcoded white/true). `QueueColoredDraw()` gained an optional `const GpuDrawParams*` parameter and now respects `params.vertexStart` (offsets into the vertex shadow-copy). Dispatch: stride-16 draws with no alpha-test/dual-texture/env-map/skinned flags reuse the exact same `colored3d.wgsl`/`GetOrCreatePipelineColored3D()` infrastructure the previous task built; everything else (other strides, other effects) falls back to `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`, replicating `IGraphicsBackend`'s own prior default behaviour exactly. New `WebGPU_DrawPrimitivesEx` CTest (3/3): a white-vertex-coloured quad with `BasicEffect.VertexColorEnabled=false` and `DiffuseColor=red`/`blue` (non-indexed and indexed) now renders the real diffuse colour instead of the raw white vertex colour the old fallback always showed regardless of the effect's settings; a `VertexColorEnabled=true` case confirms no regression. Verified genuinely discriminating via `git stash` (1/3 pass without this change — only the no-regression check). Re-verified `WebGPU_Native2D_Smoke`, `WebGPU_Clear_Readback`, `WebGPU_Colored3D`, the `--webgpu-2d-validation` scene all still pass. |
 | `6842f632` | 11/13/14/19/32/39/64/65/67/69 | WebGPU's **first real 3D draw path** — `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` (`VertexPositionColor`, stride-16, unlit/untextured, real depth testing). 128-float uniform layout (`FillColoredUniforms()`) matches `VulkanGraphicsBackend::FillExtPushConst()` byte-for-byte (`WEBGPU-11`); `coloredBindGroupLayout_`/per-draw `WGPUBindGroup` (`WEBGPU-13`/`14`); new `colored3d.wgsl` shader, no NDC Y-flip needed unlike Vulkan (`WEBGPU-19`); `GetOrCreatePipelineColored3D()` cached by `(topology, depthFunc, depthTest, depthWrite)` (`WEBGPU-32`). `WebGPUVertexBufferBackend`/`WebGPUIndexBufferBackend` gained a CPU shadow-copy (`ShadowData()`) since the caller's temporary buffer is destroyed before this backend's deferred per-frame render actually runs (`GraphicsDevice::DrawUserPrimitives()` creates a function-local `unique_ptr`). New `WebGPU_Colored3D` CTest (4/4: non-indexed draw, indexed draw, and — the real proof — two depth-order checks where a near quad wins regardless of whether it's drawn first or second, ruling out "last draw wins" painter's-algorithm behaviour), git-stash-verified discriminating. **Found and fixed a separate real bug along the way**: `WebGPUGraphicsBackend::ApplyDepthStencilState()` was entirely unimplemented (silently inherited the interface's no-op default), so `GraphicsDevice.DepthStencilState` — the real XNA API surface almost every game/effect uses, not just the older `SetDepthTestEnabled()`/`SetDepthWriteEnabled()` convenience methods — had zero effect on this backend; the depth-order test failed until this was fixed. Now implements the depth portion (`ToWGPUCompareFunction()` mirrors Vulkan's XNA `CompareFunction`-ordinal mapping); stencil ops remain open (`WEBGPU-83`). Since `IGraphicsBackend::DrawPrimitivesEx()`'s own default falls back to `DrawColoredPrimitives()`, simple `BasicEffect`/`Model.Draw()` calls now render (colour-only) instead of throwing. Re-verified `WebGPU_Native2D_Smoke`, the `--webgpu-2d-validation` scene, and `../mobile-eggbert`'s menu (screenshot-reviewed) all still render correctly. |
 | `d7d39849` | 132 | WebGPU `SpriteBatch` partial-alpha blending **FIXED** — found via `WEBGPU-91`/`92`'s new pixel-asserted readback test (a 50%-alpha sprite over black), not caught by `WEBGPU-126`'s manual screenshot review. Root cause: the sprite pipeline's blend factors (`WGPUBlendFactor_One`/`OneMinusSrcAlpha`, a *premultiplied*-alpha equation) didn't match the sprite WGSL fragment shader's actual *straight*/non-premultiplied output (`textureSample(...) * input.color` — same shader shape as Vulkan's `sprite2d.frag.glsl`), so any alpha strictly between 0 and 255 was silently ignored for colour; a 50%-alpha sprite rendered at full brightness (only alpha=0/alpha=255 ever looked correct, both blend-equation-independent edge cases). **Fixed** by matching Vulkan's own correct pairing: `srcFactor = SrcAlpha` for colour (was `One`), `alpha.dstFactor = Zero` (was `OneMinusSrcAlpha`, matching Vulkan's `ONE`/`ZERO` alpha-channel factors) — no shader change needed. New Check G in `WebGPU_Clear_Readback`, verified genuinely discriminating via `git stash` (reads back full brightness (255) with the bug reverted, ~188 with the fix restored — the exact value is legitimately format-dependent, linear vs. sRGB-encoded blend space, so the check asserts a wide tolerance band, not one exact number). Re-verified `WebGPU_Native2D_Smoke` and the `--webgpu-2d-validation` scene (screenshot-reviewed) still render correctly. |

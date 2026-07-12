@@ -372,10 +372,55 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUPipelineLayout coloredPipelineLayout_ = nullptr;
         std::unordered_map<int, WGPURenderPipeline> coloredPipelines_;  ///< keyed by topology*4+depthTest*2+depthWrite
         std::vector<ColoredDrawCommand> coloredDrawCommands_;
+
+        // WEBGPU-20/33: textured3d (stride 20, VertexPositionTexture). Shares the same UBO layout/
+        // bind group (group 0, coloredBindGroupLayout_) as colored3d; adds a second bind group
+        // (group 1: sampler + texture, mirrors the SpriteBatch bind group layout exactly) for the
+        // texture itself. No fog (same deliberate deferral as colored3d.wgsl -- not tracked as its
+        // own WEBGPU-N task).
+        struct TexturedDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::array<float, 32> uniforms{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            // Not shadow-copied like vertex/index data: a bound Texture2D's WebGPUTextureBackend
+            // is owned by long-lived game/content state (unlike DrawUserPrimitives' transient
+            // vertex buffers), so it is guaranteed to still be alive when this command actually
+            // renders later in the same frame.
+            const WebGPUTextureBackend* texture = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+        };
+        void CreateTexturedResources();
+        void DestroyTexturedResources();
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineTextured3D(WGPUPrimitiveTopology topology,
+                                                                        bool depthTest, bool depthWrite,
+                                                                        int depthFunc);
+        void QueueTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                               const Matrix& world, const Matrix& view, const Matrix& projection,
+                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderTexturedDraws(WGPURenderPassEncoder pass);
+
+        WGPUShaderModule texturedShader_ = nullptr;
+        WGPUBindGroupLayout texturedBindGroupLayout_ = nullptr;   ///< group 1: sampler + texture
+        WGPUPipelineLayout texturedPipelineLayout_ = nullptr;     ///< group 0 (UBO) + group 1 (texture)
+        std::unordered_map<int, WGPURenderPipeline> texturedPipelines_;
+        std::vector<TexturedDrawCommand> texturedDrawCommands_;
+
         // Per-draw vertex/uniform/index buffers and bind groups are transient (created fresh
-        // every RenderColoredDraws() call) but must not be released until after the frame's
-        // command buffer is actually submitted -- releasing while the encoder still references
-        // them (before wgpuQueueSubmit) would race the recorded-but-not-yet-executed commands.
+        // every RenderColoredDraws()/RenderTexturedDraws() call) but must not be released until
+        // after the frame's command buffer is actually submitted -- releasing while the encoder
+        // still references them (before wgpuQueueSubmit) would race the recorded-but-not-yet-
+        // executed commands.
         std::vector<WGPUBuffer> pendingBufferReleases_;
         std::vector<WGPUBindGroup> pendingBindGroupReleases_;
     };
