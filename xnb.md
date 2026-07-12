@@ -17,6 +17,17 @@ that assembly-qualified generic reader names need a real parser (commas nest ins
 and that `ContentManager` integration should happen early (a new Phase B2) rather than only in the
 very last task. See `plan_xnb.md`'s own top-of-file note for the full list of fixes.
 
+**Changelog (follow-up review):** `plan_xnb.md` was revised a second time to add explicit
+`XnbReadLimits` from the start, a global-factory-vs-per-file-reader-instance split, an early
+known-unsupported placeholder for the general `EffectReader`, faithful `Decimal`/`DateTime`/
+`TimeSpan` handling, a physical (not just noted) move of `Texture3DReader`/`TextureCubeReader`
+into a Phase D3 after LZX, corrected stock-effect reader wording, a concurrency/no-global-state
+check, a continuously-enforced per-reader Definition of Done instead of a retroactive-only audit,
+a trimmed single-task Phase 0, and two new later phases: **Phase H** (Lua-scripted custom
+`ContentTypeReader` support, for game/sample-specific data readers only, strictly after the native
+reader framework is solid) and **Phase I** (an official XNA 4.0 sample `.xnb` compatibility
+inventory). See `plan_xnb.md`'s own top-of-file note for the full list.
+
 Grounded in FNA's real, current source (`/rv/data/library/github.com/FNA-XNA/FNA/src/Content/`),
 read directly rather than summarized from memory, plus a second-opinion breakdown from an
 independent review (effort estimates, phase shape, reader-registry sketch) that has been folded
