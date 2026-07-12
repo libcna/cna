@@ -10,6 +10,13 @@ code changes are part of this document itself.
 audit of what CNA is currently missing (no binary stream/reader layer, no `Curve` classes, etc.).
 Read this file first for the *why*; read `plan_xnb.md` for the *what, in order*.
 
+**Changelog:** `plan_xnb.md` was revised after an independent review that flagged several XNB
+protocol inaccuracies and one implementation-strategy gap in its first draft — most importantly
+that the root object is dispatched via a 1-based type-reader index (not "the first reader"),
+that assembly-qualified generic reader names need a real parser (commas nest inside `[[...]]`),
+and that `ContentManager` integration should happen early (a new Phase B2) rather than only in the
+very last task. See `plan_xnb.md`'s own top-of-file note for the full list of fixes.
+
 Grounded in FNA's real, current source (`/rv/data/library/github.com/FNA-XNA/FNA/src/Content/`),
 read directly rather than summarized from memory, plus a second-opinion breakdown from an
 independent review (effort estimates, phase shape, reader-registry sketch) that has been folded
