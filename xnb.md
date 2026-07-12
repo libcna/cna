@@ -37,6 +37,17 @@ early payload-agnostic reader-name inventory scanner into a new **Phase B3** tha
 Phase G, and add a Lua error-context task. See `plan_xnb.md`'s own top-of-file note for the full
 list.
 
+**Changelog (final review):** `plan_xnb.md` was revised a fourth time (rated 9.7/10 architecture,
+9.7/10 test strategy at that point) to fix one real protocol-sequencing bug: Phase B3's scanner
+cannot actually cover LZX-compressed `.xnb` files before Phase D's decompressor exists, since a
+compressed file's type-reader table lives inside the LZX payload with no addressable offset to
+"just" the table. Split into **XNB-61a** (uncompressed files, right after Phase B) and **XNB-61b**
+(LZX-compressed files, after Phase D). Also split the `⛔` legend symbol into `⏸` (deferred/
+optional, not milestone-blocking) vs. `⛔` (blocked by an external dependency) and re-marked
+`XNB-30C` (optional MonoGame compression variants) as `⏸` accordingly. This is expected to be the
+last plan-document revision before implementation begins — see `plan_xnb.md`'s own top-of-file
+note for the full list.
+
 Grounded in FNA's real, current source (`/rv/data/library/github.com/FNA-XNA/FNA/src/Content/`),
 read directly rather than summarized from memory, plus a second-opinion breakdown from an
 independent review (effort estimates, phase shape, reader-registry sketch) that has been folded

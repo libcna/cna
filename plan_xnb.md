@@ -45,14 +45,24 @@
 > error-context task (XNB-58A); and add an explicit **execution-order mandate** (below) telling an
 > autonomous agent to work strictly phase-by-phase, finish the current phase's milestone before
 > starting the next, and never open Phase H/I while any mandatory Phase A-G task is incomplete.
+>
+> **Revised a fourth time after the final review** (rated architecture 9.7/10, test strategy 9.7/10)
+> to fix one real bug: Phase B3's scanner cannot cover LZX-compressed files before Phase D's
+> decompressor exists, since a compressed file's type-reader table is inside the LZX payload, not
+> separately addressable — split into XNB-61a (uncompressed, right after Phase B) and XNB-61b
+> (LZX-compressed, after Phase D). Also clarified that a decompressor must process the stream
+> sequentially rather than jump to an offset, split the `⛔` legend symbol into `⏸` (deferred/optional,
+> not milestone-blocking) vs. `⛔` (blocked by an external dependency) and re-marked XNB-30C `⏸`
+> accordingly, since the execution-order mandate's "do not skip a task" rule only ever applied to
+> mandatory (`⬜`) tasks.
 
 ## Execution-order mandate for autonomous work
 
 > Read this before starting any task in this file.
 
 - Implement strictly in phase order. Do not begin Phase H or Phase I while any mandatory task in
-  Phase A-G remains incomplete (Phase B3's XNB-61a scanner is the one deliberate exception - see
-  its own row).
+  Phase A-G remains incomplete (Phase B3's XNB-61a/XNB-61b scanners are the one deliberate
+  exception - see their own rows; note XNB-61b still cannot start before Phase D exists).
 - Do not use Lua (Phase H) as a shortcut for a missing native standard reader - standard readers
   stay native C++ permanently (see Phase H's own intro).
 - Work sequentially from the first incomplete task in the current phase. Prioritize finishing the
@@ -89,12 +99,20 @@ entirely the second one.
 
 ## Legend
 
+> Per the third follow-up review point 3: `⬜` alone was ambiguous between "mandatory, not started"
+> and "optional/deferred, not started" — the execution-order mandate above only makes sense if a
+> task's mandatory-vs-deferred status is explicit, so the legend below splits `⛔` into two distinct
+> symbols. Any task marked `⏸` is **not** required to reach the milestone whose phase it lives in;
+> the execution-order mandate's "finish the current phase's milestone" rule does not wait on `⏸`
+> rows.
+
 | Symbol | Meaning |
 |--------|---------|
-| ⬜ | Not started |
+| ⬜ | Mandatory, not started |
 | 🔄 | In progress |
 | ✅ | Done |
-| ⛔ | Blocked / deferred |
+| ⏸ | Deferred / optional, not milestone-blocking |
+| ⛔ | Blocked by an external dependency (not yet actionable) |
 
 ## Phase 0 — CNA gap audit (confirms what's missing before any XNB-specific code)
 
@@ -181,12 +199,22 @@ entirely the second one.
 > type-reader-name table (XNB-11/XNB-12/XNB-13) — never the actual object payload — has no
 > dependency on any production reader existing yet. Running it early can show, for example, that a
 > reader planned for Phase F is used by only one sample while a reader not yet in this plan at all
-> is used by twenty. This phase must not block Phase C-G work; it only needs Phase B's header/table
-> parsing to exist.
+> is used by twenty.
+>
+> **Correction from the final review:** this phase originally tried to cover compressed `.xnb`
+> files too ("decompress just enough of the header/type-reader-table region if compressed"), but
+> that is not actually possible before Phase D exists — a compressed `.xnb`'s type-reader table
+> lives *inside* the LZX payload, and block-based LZX has no addressable random-access offset to
+> "just" the table; the decompressor must process the stream sequentially from its start. XNB-61a
+> below is therefore scoped to **uncompressed** files only, right after Phase B. The compressed
+> case becomes XNB-61b, sequenced after Phase D once a real decompressor exists. Neither task
+> deserializes the object payload — both only need to decode/decompress far enough to finish
+> reading the type-reader table, then stop.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-61a | Reader-name-only scanner: open each available `.xnb`, decompress just enough of the header/type-reader-table region if compressed, list every type-reader name referenced, and aggregate counts across all available files — no object-graph deserialization required | ⬜ | Depends only on Phase B (XNB-11/12/13), not on any Phase C+ reader; the full runtime-compatibility matrix and smoke-test selection stay in Phase I (XNB-61-64) and still wait until Phase G is solid |
+| XNB-61a | Reader-name-only scanner, **uncompressed `.xnb` files only**: open each available uncompressed `.xnb`, read the header and type-reader table, list every type-reader name referenced, and aggregate counts across all available files — no object-graph deserialization required | ⬜ | Depends only on Phase B (XNB-11/12/13), not on any Phase C+ reader or on Phase D; the full runtime-compatibility matrix and smoke-test selection stay in Phase I (XNB-61-64) and still wait until Phase G is solid |
+| XNB-61b | Extend the XNB-61a scanner to **LZX-compressed** XNA `.xnb` files, using CNA's own decompressor (Phase D) — decompress the payload sequentially from the start until the type-reader table has been fully read (for a first implementation, decompressing the entire payload is acceptable; do not prematurely optimize this into a partial-decompression short-circuit); do not continue into the root object. Verify that a compressed fixture and its uncompressed equivalent produce the same reader-name inventory | ⬜ | Sequenced after Phase D (needs a real LZX decoder to exist) — this is the one part of Phase B3 that is *not* available right after Phase B; do not attempt it earlier |
 
 ---
 
@@ -217,7 +245,7 @@ entirely the second one.
 | XNB-30 | Malformed/truncated/adversarial-input hardening for the decompressor: bounds checks, integer-overflow guards on decompressed-size fields, decompression-bomb output-size limits, no OOB reads on corrupt input | ⬜ | Explicitly flagged in `xnb.md` as often bigger than the happy path — first real "quality" hardening item |
 | XNB-30A | Fuzz tests + differential tests against a reference LZX implementation for the decompressor | ⬜ | |
 | XNB-30B | Re-run every Phase B/C fixture through its compressed form and confirm identical results | ⬜ | Goal line from `xnb.md` Phase D |
-| XNB-30C | Phase D2 (deferred, not MVP-blocking) — investigate/implement MonoGame-supported alternative compression variants under the `XnbCompression` enum from XNB-27 | ⬜ | Explicitly optional for the first working loader; the enum from XNB-27 just needs to not preclude it later |
+| XNB-30C | Phase D2 — investigate/implement MonoGame-supported alternative compression variants under the `XnbCompression` enum from XNB-27 | ⏸ | Deferred until broad MonoGame compatibility work (Phase G/XNB-44); explicitly optional for the first working loader and not required by any milestone M1-M5 — the enum from XNB-27 just needs to not preclude it later |
 
 ---
 
@@ -329,13 +357,13 @@ entirely the second one.
 > New phase — replaces guesswork about "broad real-world compatibility" with actual numbers, by
 > scanning real official sample content instead of only the hand-picked fixture corpus from
 > XNB-17A/XNB-44. Per the third revision, the payload-agnostic reader-*name* scan itself already
-> happened much earlier as XNB-61a (Phase B3) — this phase reuses that inventory and adds the parts
-> that genuinely do need Phase G's finished reader set: the compatibility classification and the
-> smoke-test selection below.
+> happened much earlier as XNB-61a/XNB-61b (Phase B3) — this phase reuses that inventory and adds
+> the parts that genuinely do need Phase G's finished reader set: the compatibility classification
+> and the smoke-test selection below.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-61 | Re-run/refresh the XNB-61a (Phase B3) reader-name inventory against the final Phase G reader set if it has gone stale, rather than re-implementing the scan from scratch | ⬜ | Formerly the first scan itself; the scan now lives in Phase B3 (XNB-61a) so it doesn't wait for Phase G |
+| XNB-61 | Re-run/refresh the XNB-61a/XNB-61b (Phase B3) reader-name inventory against the final Phase G reader set if it has gone stale, rather than re-implementing the scan from scratch | ⬜ | Formerly the first scan itself; the scan now lives in Phase B3 (XNB-61a for uncompressed, XNB-61b for LZX) so it doesn't wait for Phase G |
 | XNB-62 | Produce a compatibility matrix classifying each reader name found: standard reader (Phase A–F) / custom reader (Phase H candidate) / `ReflectiveReader` (XNB-42A limitation) / general `EffectReader` (XNB-32A limitation) | ⬜ | |
 | XNB-63 | Select a representative smoke-test set covering: plain 2D texture, `SpriteFont`, audio, a stock-effect model, one custom-reader sample, one custom-`.fx` sample | ⬜ | Small enough to run routinely, broad enough to catch regressions across phases |
 | XNB-64 | Track "`.xnb` loads successfully" compatibility separately from "full sample runs correctly at runtime" compatibility — the two are different claims and must not be conflated in `docs/xnb-content-pipeline-support.md` (XNB-45) | ⬜ | A `.xnb` can deserialize successfully while the sample still fails at runtime for unrelated reasons (input, gamerservices, etc.) — keep the claims separate and honest |
@@ -355,8 +383,11 @@ entirely the second one.
   XNB-40) closes as part of building the real `.xnb` `ModelReader`.
 - Phase H (Lua custom readers) and Phase I (official-sample inventory) are both explicitly
   sequenced *after* Phase A–G — neither should start before the native reader framework and its
-  hardening pass are solid. Phase B3 (XNB-61a) is the one deliberate exception: a payload-agnostic
-  reader-*name* scanner that only depends on Phase B and may run at any point once Phase B exists.
+  hardening pass are solid. Phase B3 is the one deliberate exception: XNB-61a (uncompressed files)
+  is a payload-agnostic reader-*name* scanner that only depends on Phase B and may run at any point
+  once Phase B exists; XNB-61b (LZX-compressed files) is the same scanner extended once Phase D's
+  decompressor exists — it cannot run any earlier than that, regardless of the Phase B3/Phase I
+  split.
 - See the "Execution-order mandate" and "Milestones" sections near the top of this file — they are
   the primary agent-facing guardrails for a long autonomous run and should be re-read whenever this
   plan is revised.
