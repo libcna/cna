@@ -3,7 +3,12 @@
 > WebGPU is an authorized, experimental workstream. Its first goal, a **verified native 2D backend
 > on Linux desktop**, was reached 2026-07-12 (`WEBGPU-124`–`WEBGPU-131`, all ✅ — see Phase 56.1).
 > This does not mean feature parity with Vulkan, Android support, or browser WebGPU: those remain
-> future work (Phase 57 onward), now open per `WEBGPU-131`'s own acceptance criteria.
+> future work (Phase 57 onward), now open per `WEBGPU-131`'s own acceptance criteria — and, as of
+> 2026-07-12, genuinely started: `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (a
+> `VertexPositionColor`, stride-16, unlit/untextured 3D draw with real depth testing) work
+> end-to-end, verified by the `WebGPU_Colored3D` CTest. Full BasicEffect/texture/lighting dispatch
+> (`WEBGPU-66`) and the other 8 WGSL shader variants remain open — see the Active execution order
+> below.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -35,11 +40,19 @@
 1. ~~`WEBGPU-126`~~ – ~~`WEBGPU-131`~~ — 2D baseline established 2026-07-12, all ✅ (Phase 56.1).
 2. ~~`WEBGPU-88`~~ – ~~`WEBGPU-91`~~ — automated CTest coverage and reusable GPU readback, all ✅
    2026-07-12 (`WebGPU_Clear_Readback`).
-3. `WEBGPU-92` — 🟨 partial (colour/alpha=0/source-rectangle pixel-asserted; partial-alpha blend
-   formula and sampler address-mode still need pixel assertions). `WEBGPU-99` — buffer disposal/
+3. `WEBGPU-92` — 🟨 partial (sampler address-mode pixel assertions still open — everything else is
+   now covered, including partial-alpha blend since `WEBGPU-132`). `WEBGPU-99` — buffer disposal/
    `SetDataOptions`/vertex-format tests, not yet started.
-4. Only then the 3D backlog (Phases 57–66), starting with Phase 57's UBO system — Phase 58's WGSL
-   shaders and Phase 59's pipelines both depend on it.
+4. 3D backlog (Phases 57–66) is now underway: the first real vertical slice — `WEBGPU-11`/`13`/`14`
+   (UBO + bind group), `WEBGPU-19` (`colored3d.wgsl`), `WEBGPU-32` (pipeline, with genuine
+   depth-test verification), `WEBGPU-64`/`65`/`67`/`69` (`DrawColoredPrimitives`/
+   `DrawIndexedColoredPrimitives`, real draw dispatch) — landed 2026-07-12, `WebGPU_Colored3D`
+   CTest, 4/4 checks, git-stash-verified. Also found+fixed a real, separate gap along the way:
+   `WebGPUGraphicsBackend::ApplyDepthStencilState()` was entirely unimplemented (`GraphicsDevice.
+   DepthStencilState` had zero effect on this backend), now handles the depth portion (`WEBGPU-39`
+   partial). Next: `WEBGPU-20`–`27` (the other 8 WGSL shaders) and `WEBGPU-33`+ (their pipelines),
+   or `WEBGPU-66` (real `DrawPrimitivesEx`/`GpuDrawParams` dispatch — lighting/texture/fog, not
+   just the colour-only fallback).
 
 For every task: use a clean build directory, pass `CNA_WEBGPU_ROOT` and
 `CNA_WEBGPU_AUTO_DOWNLOAD=OFF`, record the exact command and result in the task note, and do not
@@ -63,8 +76,8 @@ mark it ✅ from source inspection alone.
 | WEBGPU-5 | Instance, adapter, device and queue initialization | ✅ | Runtime-verified 2026-07-12 (`WEBGPU-125`); callback/timeout behaviour hardened and verified by `WEBGPU-127`'s `AllowProcessEvents` polling fix. |
 | WEBGPU-6 | Surface configuration, resize and backbuffer acquisition | ✅ | Runtime-verified: `WEBGPU-125` (baseline present/clear), `WEBGPU-127` (resize 800×600↔960×540, minimize/restore, zero-size handling). |
 | WEBGPU-7 | Command encoding and queue submission per frame | ✅ | Runtime-verified by every `WEBGPU-125`–`130` run (120–180+ frames each, no WebGPU validation errors). |
-| WEBGPU-8 | Main render pass with colour/depth/stencil attachments | 🟨 | Colour attachment runtime-verified (`WEBGPU-125`/`126`/`130`). Depth/stencil attachment creation code exists (`RecreateDepthTexture`) but has no verified 3D draw exercising it yet — real coverage starts with Phase 57 onward. |
-| WEBGPU-9 | Colour/depth/stencil clear state | 🟨 | Colour clear runtime-verified. Depth/stencil clear code exists but is unexercised until a 3D draw needs it (Phase 57 onward). |
+| WEBGPU-8 | Main render pass with colour/depth/stencil attachments | 🟨 | Colour and depth attachments are both now runtime-verified (`WEBGPU-125`/`126`/`130` for colour; `WebGPU_Colored3D`'s depth-order checks for depth, 2026-07-12 — see `WEBGPU-32`). Stencil attachment remains unexercised by any real draw. |
+| WEBGPU-9 | Colour/depth/stencil clear state | 🟨 | Colour and depth clear are both now runtime-verified (`WebGPU_Colored3D`'s `ClearOptions::Target\|DepthBuffer` calls, 2026-07-12). Stencil clear remains unexercised by any real draw. |
 | WEBGPU-10 | Present and recoverable acquisition handling | ✅ | The v29 status API is handled, and both normal present and surface-loss/outdated recovery are runtime-verified (`WEBGPU-127`, `WEBGPU-130`). |
 
 ---
@@ -140,13 +153,13 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-11 | Design `GpuUniforms` struct (128 bytes = 32 floats) matching Vulkan push constant layout; upload via `wgpuQueueWriteBuffer` | ⬜ | Central UBO for MVP + effect params |
-| WEBGPU-12 | Create `WGPUBuffer` (uniform, size=128) per frame (or ring buffer of 3); map on CPU side via `wgpuBufferGetMappedRange` | ⬜ | |
-| WEBGPU-13 | `WGPUBindGroupLayout` for slot 0 binding 0 (uniform buffer) — shared across all 3D pipelines | ⬜ | |
-| WEBGPU-14 | `WGPUBindGroup` creation and per-draw update for MVP matrix | ⬜ | |
-| WEBGPU-15 | `WGPUBindGroupLayout` for slot 1 binding 0 (texture sampler) — for textured pipelines | ⬜ | |
+| WEBGPU-11 | Design `GpuUniforms` struct (128 bytes = 32 floats) matching Vulkan push constant layout; upload via `wgpuQueueWriteBuffer` | ✅ | Verified 2026-07-12: implemented as the anonymous-namespace `FillColoredUniforms()` helper, byte-for-byte matching `VulkanGraphicsBackend::FillExtPushConst()`'s 32-float layout (`[0..15]` MVP, `[16..19]` diffuseColor, `[20..23]` ambient+lightingEnabled, `[24..27]` light0Dir+textureEnabled, `[28..31]` light0Diffuse+vertexColorEnabled), uploaded via `wgpuQueueWriteBuffer`. Runtime-verified by `WebGPU_Colored3D`. |
+| WEBGPU-12 | Create `WGPUBuffer` (uniform, size=128) per frame (or ring buffer of 3); map on CPU side via `wgpuBufferGetMappedRange` | 🟨 | A correct, simpler variant is implemented and verified: one fresh 128-byte `WGPUBuffer` (`WGPUBufferUsage_Uniform\|CopyDst`) per *draw call* (not per frame, not a ring buffer), written via `wgpuQueueWriteBuffer` and released once the frame's command buffer is submitted (`WebGPUGraphicsBackend::RenderColoredDraws()`/`pendingBufferReleases_`). Correct and GPU-validated with zero errors across all `WebGPU_Colored3D` checks, but not the per-frame/ring-buffer design this row describes — revisit if per-draw buffer churn becomes a real perf concern once more 3D draws land. |
+| WEBGPU-13 | `WGPUBindGroupLayout` for slot 0 binding 0 (uniform buffer) — shared across all 3D pipelines | ✅ | Verified 2026-07-12: `coloredBindGroupLayout_`, one `WGPUBufferBindingType_Uniform` entry at binding 0, visible to both vertex and fragment stages. Currently colored3D-pipeline-specific, not yet literally shared with a second 3D pipeline family (none exist yet) — same layout shape is intended to be reused once Phase 58's other WGSL shaders land. |
+| WEBGPU-14 | `WGPUBindGroup` creation and per-draw update for MVP matrix | ✅ | Verified 2026-07-12: a fresh `WGPUBindGroup` is created and bound per draw in `RenderColoredDraws()`, pointing at that draw's own uniform buffer. |
+| WEBGPU-15 | `WGPUBindGroupLayout` for slot 1 binding 0 (texture sampler) — for textured pipelines | ⬜ | Not needed yet — `colored3d.wgsl` (`WEBGPU-19`) has no texture. Schedule with `WEBGPU-20` (`textured3d.wgsl`). |
 | WEBGPU-16 | `WGPUSampler` creation mapping `SamplerState` (filter, address mode) → WGPU descriptor | 🟨 | SpriteBatch sampler cache maps linear/point and wrap/clamp/mirror; full per-slot 3D SamplerState mapping remains open. |
-| WEBGPU-17 | `WGPUPipelineLayout` combining UBO bind group layout + texture bind group layout | ⬜ | |
+| WEBGPU-17 | `WGPUPipelineLayout` combining UBO bind group layout + texture bind group layout | 🟨 | `coloredPipelineLayout_` combines the UBO bind group layout alone (verified, `WEBGPU-13`/`14`) — no texture bind group yet since `colored3d.wgsl` doesn't sample a texture; revisit once `WEBGPU-15`/`WEBGPU-20` land. |
 
 ---
 
@@ -155,7 +168,7 @@ mark it ✅ from source inspection alone.
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
 | WEBGPU-18 | Write `sprite2d.wgsl` — 2D sprite vertex + fragment shader (pos + UV + RGBA tint); embed as C++ string literal | ✅ | Embedded WGSL compiles and is runtime-verified: `WEBGPU-126`'s validation scene and `WEBGPU-130`'s independent `../mobile-eggbert` application both render correctly through it with no WebGPU validation errors. |
-| WEBGPU-19 | Write `colored3d.wgsl` — 3D vertex shader (float3 pos + ubyte4 color), flat fragment; UBO for MVP | ⬜ | stride=16 |
+| WEBGPU-19 | Write `colored3d.wgsl` — 3D vertex shader (float3 pos + ubyte4 color), flat fragment; UBO for MVP | ✅ | Verified 2026-07-12: embedded WGSL in `CreateColoredResources()`, compiles and is runtime-verified by `WebGPU_Colored3D` (4/4 checks, including a genuine depth-test proof — see `WEBGPU-32`/`WEBGPU-64`/`65`). No fog (unlike Vulkan's `colored3d.vert.glsl`, which layers a separate fog UBO on top) — not tracked as its own WEBGPU-N task, deliberately deferred. |
 | WEBGPU-20 | Write `textured3d.wgsl` — 3D vertex (float3 pos + float2 UV); texture2D sampler in fragment | ⬜ | stride=20 |
 | WEBGPU-21 | Write `colored_textured3d.wgsl` — float3 + ubyte4 color + float2 UV; multiply tex×color in fragment | ⬜ | stride=24 |
 | WEBGPU-22 | Write `lit_textured3d.wgsl` — float3 pos + float3 normal + float2 UV; Blinn-Phong lighting in fragment | ⬜ | stride=32 |
@@ -175,14 +188,14 @@ mark it ✅ from source inspection alone.
 | WEBGPU-29 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | 🟨 | The concrete SpriteBatch descriptor is runtime-verified (`WEBGPU-126`/`130`); a reusable all-pipeline builder for the 3D families in Phase 59 onward remains open. |
 | WEBGPU-30 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ⬜ | Mirror Vulkan MakeKey / GetOrCreate* |
 | WEBGPU-31 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | ✅ | Opaque and premultiplied-alpha variants are runtime-verified: `WEBGPU-126`'s validation scene and `WEBGPU-130`'s independent `../mobile-eggbert` application both render correctly through this pipeline. |
-| WEBGPU-32 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ⬜ | |
+| WEBGPU-32 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ✅ | Verified 2026-07-12: cached by `(topology, depthFunc, depthTest, depthWrite)`, `Float32x3` position + `Unorm8x4` color at stride 16. `WebGPU_Colored3D`'s two depth-order checks (far-then-near and near-then-far both correctly resolve to the near quad, not "last draw wins") prove genuine `WGPUCompareFunction` depth comparison, not just "a pipeline was created." |
 | WEBGPU-33 | `GetOrCreatePipelineExt3D()` — stride 20/24/32 dispatch matching Vulkan | ⬜ | |
 | WEBGPU-34 | `GetOrCreatePipelineAlphaTest3D()` — alpha discard variant | ⬜ | |
 | WEBGPU-35 | `GetOrCreatePipelineDualTex3D()` — two-texture variant | ⬜ | |
 | WEBGPU-36 | `GetOrCreatePipelineEnvMap3D()` — cube map variant | ⬜ | |
 | WEBGPU-37 | `GetOrCreatePipelineSkinned3D()` — bone palette variant | ⬜ | |
 | WEBGPU-38 | `GetOrCreatePipelineInstanced3D()` — per-instance binding variant | ⬜ | |
-| WEBGPU-39 | Depth-stencil: `WGPUDepthStencilState` mapping `DepthFormat` + `CompareFunction` + `StencilOperation` | ⬜ | |
+| WEBGPU-39 | Depth-stencil: `WGPUDepthStencilState` mapping `DepthFormat` + `CompareFunction` + `StencilOperation` | 🟨 | `CompareFunction`→`WGPUCompareFunction` (`ToWGPUCompareFunction()`, mirrors Vulkan's `ToVkCompareOp()` ordinal mapping) and `DepthBufferEnable`/`DepthBufferWriteEnable` are implemented and runtime-verified via `WebGPUGraphicsBackend::ApplyDepthStencilState()` (found missing entirely — see `WEBGPU-83`'s row — while verifying `WEBGPU-32`'s depth-order pixel test). `StencilOperation`/stencil state is still not wired into any pipeline (`WEBGPU-83` remains open for that half). |
 | WEBGPU-40 | Blend state: `WGPUBlendState` mapping `BlendFunction` + `BlendFactor` (Opaque, AlphaBlend, Additive, NonPremultiplied) | 🟨 | Opaque and premultiplied-alpha SpriteBatch pipelines exist; complete XNA BlendState mapping remains open. |
 | WEBGPU-41 | Rasterizer: `WGPUPrimitiveState` mapping `CullMode`, `FillMode` (WireFrame via `topology=LineStrip` fallback or unsupported) | ⬜ | |
 
@@ -234,13 +247,13 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-64 | `DrawPrimitives()`: bind colored3d pipeline + UBO + vertex buffer + `wgpuRenderPassEncoderDraw` | ⬜ | |
-| WEBGPU-65 | `DrawIndexedPrimitives()`: bind index buffer + `wgpuRenderPassEncoderDrawIndexed` | ⬜ | |
-| WEBGPU-66 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | ⬜ | Mirror Vulkan dispatch logic |
-| WEBGPU-67 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ⬜ | |
+| WEBGPU-64 | `DrawPrimitives()`: bind colored3d pipeline + UBO + vertex buffer + `wgpuRenderPassEncoderDraw` | ✅ | No literal `DrawPrimitives()` method exists on `IGraphicsBackend` (checked 2026-07-12) — this row's described capability *is* `DrawColoredPrimitives()`, implemented and verified (`WEBGPU-91`'s vertical slice, see `WEBGPU-32`). `WebGPU_Colored3D`'s Check A (`DrawUserPrimitives`, non-indexed) exercises exactly this path. |
+| WEBGPU-65 | `DrawIndexedPrimitives()`: bind index buffer + `wgpuRenderPassEncoderDrawIndexed` | ✅ | Same clarification as `WEBGPU-64` — this is `DrawIndexedColoredPrimitives()`. `WebGPU_Colored3D`'s Check B (`DrawUserIndexedPrimitives`, 4 verts + 6 indices) verifies it specifically, not just the non-indexed path. |
+| WEBGPU-66 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | ⬜ | Still not overridden — `IGraphicsBackend::DrawPrimitivesEx()`'s own default implementation falls back to `DrawColoredPrimitives()`, so simple (unlit, untextured, `VertexColorEnabled`-only) `BasicEffect`/`Model.Draw()` calls now render via that fallback instead of throwing, but real lighting/texture/fog dispatch is still open. |
+| WEBGPU-67 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ✅ | `RenderColoredDraws()` creates a transient `WGPUBuffer` (`Vertex\|CopyDst`) per draw, `wgpuQueueWriteBuffer`s the CPU shadow-copy into it, draws, and releases it after the frame's command buffer is submitted (not `mappedAtCreation` — uses the same queue-write pattern as every other buffer upload in this backend, an equally valid approach). |
 | WEBGPU-68 | `DrawInstancedPrimitivesEx()`: second vertex buffer binding (per-instance mat4 world transforms) | ⬜ | |
-| WEBGPU-69 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | 🟨 | All PrimitiveType values map to WebGPU topologies, but 3D draw dispatch using them remains open. |
-| WEBGPU-70 | `vertexStart` / `startIndex` / `baseVertex` support in draw calls | ⬜ | Match Task 110 |
+| WEBGPU-69 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | ✅ | All 5 `PrimitiveType` values map via the existing `ToTopology()` (unchanged); now genuinely exercised by real 3D draw dispatch (`WEBGPU-64`/`65`), not just present in source. `WebGPU_Colored3D` only exercises `TriangleList` directly, but the pipeline cache is keyed by topology so the other 4 follow the same, now-proven code path. |
+| WEBGPU-70 | `vertexStart` / `startIndex` / `baseVertex` support in draw calls | ⬜ | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` always draw from vertex/index 0 (`wgpuRenderPassEncoderDraw(pass, vertexCount, 1, 0, 0)` / `DrawIndexed(..., 0, 0, 0)`) — matches every real call site today (`GraphicsDevice.cpp`'s two `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` callers always build a dedicated, zero-based temporary buffer per call), but a genuine sub-range draw would silently ignore a non-zero start/base. Real gap, not yet needed by any current caller. |
 
 ---
 

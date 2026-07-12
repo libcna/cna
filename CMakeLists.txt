@@ -6340,6 +6340,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         LABELS "WebGPU"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase 57/63 vertical slice: DrawColoredPrimitives/DrawIndexedColoredPrimitives.
+    cna_webgpu_test(cna_test_webgpu_colored3d examples/webgpu_colored3d_test.cpp)
+    add_test(NAME WebGPU_Colored3D COMMAND cna_test_webgpu_colored3d)
+    set_tests_properties(WebGPU_Colored3D PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

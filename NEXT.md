@@ -1,25 +1,29 @@
 # NEXT.md — CNA Project Handoff
 
-> ✅ **WebGPU's native 2D baseline is complete, has real GPU readback, and a real translucency bug
-> is fixed (2026-07-12).** `WEBGPU-124`–`WEBGPU-131` (2D baseline) and `WEBGPU-88`–`91` (automated
-> CTest coverage + reusable readback) are all ✅. `WebGPUGraphicsBackend::ReadBackbuffer()` no
-> longer throws — it renders any pending `Clear()`/`SpriteBatch` work on demand (a `Present()`
-> refactor, `EnsureFrameRendered()`) and maps a row-aligned staging buffer, matching Vulkan/Bgfx's
-> own on-demand-submit readback semantics. Writing its pixel-asserted test (`WEBGPU-92`) then found
-> and fixed a real, previously-unknown bug (`WEBGPU-132`): the sprite pipeline's blend factors
-> didn't match its own shader's non-premultiplied output, so any tint/texture alpha strictly
-> between 0 and 255 was silently ignored for colour — invisible to `WEBGPU-126`'s manual screenshot
-> review, caught only by a pixel assertion. `WEBGPU-92` is now 🟨 partial: colour/alpha=0/
-> source-rectangle/partial-alpha-blend are pixel-asserted; sampler address-mode still is not.
-> **Recommended next step**: `plan_webgpu.md`'s Phase 57 section now has a concrete, investigated
-> (not yet implemented) entry point — `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`,
-> reusing Vulkan's exact `FillExtPushConst()` 128-byte UBO layout, no NDC Y-flip needed (unlike
-> Vulkan), plus a real vertex-buffer-lifetime hazard to design around (read that section first).
-> This autonomous long session (started 2026-07-12) paused before Phase 57 rather than half-build
-> unverified 3D infrastructure — see §9 — then continued into it after the project owner reviewed,
-> pushed both repos (`cna_graphics` `feature/graphics` and `../mobile-eggbert` `develop`, commit
-> `dcdb648`), and asked to keep going autonomously.
-> Still treat browser/Emscripten support as unstarted, and 3D/effects/render-targets/MRT as not yet
+> ✅ **WebGPU has a verified 2D baseline, real GPU readback, and its first working 3D draw path
+> (2026-07-12).** `WEBGPU-124`–`WEBGPU-131` (2D baseline) and `WEBGPU-88`–`91` (automated CTest
+> coverage + reusable readback) are all ✅. Writing `WEBGPU-91`/`92`'s pixel-asserted readback test
+> found and fixed a real, previously-unknown bug (`WEBGPU-132`): the `SpriteBatch` pipeline's blend
+> factors didn't match its own shader's non-premultiplied output, so any tint/texture alpha
+> strictly between 0 and 255 was silently ignored for colour — invisible to `WEBGPU-126`'s manual
+> screenshot review, caught only by a pixel assertion. `WEBGPU-92` is now 🟨 partial: only sampler
+> address-mode pixel assertions remain open. **New this session**: `DrawColoredPrimitives()`/
+> `DrawIndexedColoredPrimitives()` (`VertexPositionColor`, stride-16, unlit/untextured 3D draw with
+> real depth testing) now work end-to-end — a 128-float UBO matching Vulkan's `FillExtPushConst()`
+> layout byte-for-byte, a new `colored3d.wgsl` shader, a depth-aware pipeline cache, new
+> `WebGPU_Colored3D` CTest (4/4, git-stash-verified, including a genuine depth-order proof, not
+> "last draw wins"). Since `DrawPrimitivesEx()`'s own default falls back to `DrawColoredPrimitives()`,
+> simple `BasicEffect`/`Model.Draw()` calls now render (colour-only, no lighting/texture yet)
+> instead of throwing. Along the way, found+fixed a separate real gap: `ApplyDepthStencilState()`
+> was entirely unimplemented, so `GraphicsDevice.DepthStencilState` (the real XNA API surface,
+> not just the older `SetDepthTestEnabled()` convenience method) had zero effect on this backend.
+> This autonomous long session (started 2026-07-12) paused once before Phase 57 to avoid
+> half-building unverified 3D infrastructure — see §9 — then continued after the project owner
+> reviewed, pushed both repos (`cna_graphics` `feature/graphics` and `../mobile-eggbert` `develop`),
+> and asked to keep going autonomously. **Recommended next step**: `WEBGPU-20`–`27` (the other 8
+> WGSL shader variants) and their pipelines, or `WEBGPU-66` (real `DrawPrimitivesEx`/
+> `GpuDrawParams` dispatch — lighting/texture/fog, not just the colour-only fallback).
+> Still treat browser/Emscripten support as unstarted, and effects/render-targets/MRT as not yet
 > implemented until their own tasks close.
 
 ## 1. Project summary
@@ -219,6 +223,7 @@ shape) is in `plan_graphics.md` — this section is intentionally a short index.
 
 | Commit | Task | Summary |
 |---|---|---|
+| *(pending)* | 11/13/14/19/32/39/64/65/67/69 | WebGPU's **first real 3D draw path** — `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` (`VertexPositionColor`, stride-16, unlit/untextured, real depth testing). 128-float uniform layout (`FillColoredUniforms()`) matches `VulkanGraphicsBackend::FillExtPushConst()` byte-for-byte (`WEBGPU-11`); `coloredBindGroupLayout_`/per-draw `WGPUBindGroup` (`WEBGPU-13`/`14`); new `colored3d.wgsl` shader, no NDC Y-flip needed unlike Vulkan (`WEBGPU-19`); `GetOrCreatePipelineColored3D()` cached by `(topology, depthFunc, depthTest, depthWrite)` (`WEBGPU-32`). `WebGPUVertexBufferBackend`/`WebGPUIndexBufferBackend` gained a CPU shadow-copy (`ShadowData()`) since the caller's temporary buffer is destroyed before this backend's deferred per-frame render actually runs (`GraphicsDevice::DrawUserPrimitives()` creates a function-local `unique_ptr`). New `WebGPU_Colored3D` CTest (4/4: non-indexed draw, indexed draw, and — the real proof — two depth-order checks where a near quad wins regardless of whether it's drawn first or second, ruling out "last draw wins" painter's-algorithm behaviour), git-stash-verified discriminating. **Found and fixed a separate real bug along the way**: `WebGPUGraphicsBackend::ApplyDepthStencilState()` was entirely unimplemented (silently inherited the interface's no-op default), so `GraphicsDevice.DepthStencilState` — the real XNA API surface almost every game/effect uses, not just the older `SetDepthTestEnabled()`/`SetDepthWriteEnabled()` convenience methods — had zero effect on this backend; the depth-order test failed until this was fixed. Now implements the depth portion (`ToWGPUCompareFunction()` mirrors Vulkan's XNA `CompareFunction`-ordinal mapping); stencil ops remain open (`WEBGPU-83`). Since `IGraphicsBackend::DrawPrimitivesEx()`'s own default falls back to `DrawColoredPrimitives()`, simple `BasicEffect`/`Model.Draw()` calls now render (colour-only) instead of throwing. Re-verified `WebGPU_Native2D_Smoke`, the `--webgpu-2d-validation` scene, and `../mobile-eggbert`'s menu (screenshot-reviewed) all still render correctly. |
 | `d7d39849` | 132 | WebGPU `SpriteBatch` partial-alpha blending **FIXED** — found via `WEBGPU-91`/`92`'s new pixel-asserted readback test (a 50%-alpha sprite over black), not caught by `WEBGPU-126`'s manual screenshot review. Root cause: the sprite pipeline's blend factors (`WGPUBlendFactor_One`/`OneMinusSrcAlpha`, a *premultiplied*-alpha equation) didn't match the sprite WGSL fragment shader's actual *straight*/non-premultiplied output (`textureSample(...) * input.color` — same shader shape as Vulkan's `sprite2d.frag.glsl`), so any alpha strictly between 0 and 255 was silently ignored for colour; a 50%-alpha sprite rendered at full brightness (only alpha=0/alpha=255 ever looked correct, both blend-equation-independent edge cases). **Fixed** by matching Vulkan's own correct pairing: `srcFactor = SrcAlpha` for colour (was `One`), `alpha.dstFactor = Zero` (was `OneMinusSrcAlpha`, matching Vulkan's `ONE`/`ZERO` alpha-channel factors) — no shader change needed. New Check G in `WebGPU_Clear_Readback`, verified genuinely discriminating via `git stash` (reads back full brightness (255) with the bug reverted, ~188 with the fix restored — the exact value is legitimately format-dependent, linear vs. sRGB-encoded blend space, so the check asserts a wide tolerance band, not one exact number). Re-verified `WebGPU_Native2D_Smoke` and the `--webgpu-2d-validation` scene (screenshot-reviewed) still render correctly. |
 | `a33b822c` | 88-91 | WebGPU `ReadBackbuffer()`/`GetBackBufferData()` **IMPLEMENTED** — previously threw `"not implemented in this backend"` (the base-class default). Added `WebGPUGraphicsBackend::CaptureReadback()` (records `wgpuCommandEncoderCopyTextureToBuffer` into a 256-byte-row-aligned `MapRead`\|`CopyDst` buffer inside the frame's own command encoder) and `ReadBackbuffer()` itself (`wgpuBufferMapAsync` + the existing `WaitForCompletion` polling helper from `WEBGPU-127`, BGRA↔RGBA swizzle matching Vulkan's `ReadBackbuffer`). Required refactoring `Present()` into a shared `EnsureFrameRendered()` (acquire a swapchain texture only if none is held; render only if `framePending_`) so `GetBackBufferData()` can force an on-demand render of whatever's been queued so far in the *current* `Draw()` call — without this, WebGPU's swapchain-backed target could only ever show the *previous* frame's content, unlike Vulkan/Bgfx's own on-demand-submit readback (confirmed by inspecting `bgfx_graphicsdevice_clear_stencil_test.cpp`, which reads back a same-`Draw()`-call `Clear()`+draw with no intervening `Present()`). New `WebGPU_Clear_Readback` CTest (`examples/webgpu_clear_readback_test.cpp`, 6 checks: two sequential `Clear()`s observed without a stale cache, a tinted `SpriteBatch` quad visible inside/outside its destination rectangle, `alpha=0` leaving the destination unmodified, `sourceRectangle` cropping a 2×1 texture to only its right texel) — verified genuinely discriminating via `git stash` (reverting the backend changes makes the test abort with the base class's exception instead of passing). Re-verified `WebGPU_Native2D_Smoke` and the `--webgpu-2d-validation` scene (screenshot-reviewed) still pass unchanged after the `Present()` refactor. Closes `WEBGPU-88`/`89`/`90` (already-existing coverage, promoted from ⬜/undocumented to ✅), `WEBGPU-91` and `WEBGPU-55`; `WEBGPU-92` is now 🟨 partial (blend-formula and sampler-address-mode pixel assertions still open). |
 | `94fecf32` | 130/131 | WebGPU's native 2D baseline **CLOSED**. `WEBGPU-130`: `../mobile-eggbert`'s `CMakeLists.txt` now targets `../cna_graphics` (not the stale `../cna` clone), adds WebGPU as an explicit opt-in desktop backend (default stays `SDL_RENDERER`, matching that repo's own last real committed default), and fixes a previously-disabled/buggy `worlds/` directory copy step (mobile-eggbert commit `dcdb648`, pushed to origin/develop 2026-07-12 at the project owner's explicit request). On a real desktop session (`DISPLAY=:0`; `wgpu-native` needs a real GPU context, the sandbox's Xvfb `:99` was not used for this), `WindowsPhoneSpeedyBlupi` built clean against WEBGPU, reached its main menu automatically with pixel-correct `SpriteBatch` rendering, and a simulated Play-button click correctly drove its mission-start sequence (animated progress-bar cutscene + cross-fade), all with zero WebGPU validation errors. That sequence's fade back to the menu was confirmed via an identical `EASYGL` comparison build to be pre-existing, backend-independent `Game1` state-machine behavior in `../mobile-eggbert` itself — not a WebGPU regression, and out of scope to fix here. `WEBGPU-131` records this as the closed native 2D baseline in `plan_webgpu.md`/`docs/webgpu-backend.md`, and reconciles several stale 🟨 status notes in Phase 56/59/61/62 that had said "has not run against a device" despite `WEBGPU-125`–`127` already having verified those exact code paths. |
@@ -396,16 +401,18 @@ directly without the env vars above already set).
 
 ## 9. Do not do yet
 
-- **Do not overstate WebGPU parity**: its initial native 2D baseline is active, but the open tasks
-  in `plan_webgpu.md` still cover 3D, effects, render targets, readback, conformance and WASM.
-- **Why Phase 57 (WebGPU 3D UBO system) was investigated but not implemented this session
-  (2026-07-12)**: a real vertical slice (`DrawColoredPrimitives`) touches a new UBO layout, a new
-  WGSL shader, a new pipeline cache, a real vertex-buffer-lifetime hazard, and a new pixel test all
-  at once — genuinely new, unverified-until-built architecture, not a small bounded fix. Rather
-  than half-build and under-test that under session-length pressure, the concrete entry point and
-  every non-obvious finding (exact UBO byte layout to reuse, no Y-flip needed, the lifetime hazard)
-  were written up in `plan_webgpu.md`'s Phase 57 section instead, so the next session can implement
-  it directly rather than re-deriving the same research. Do not skip reading that section first.
+- **Do not overstate WebGPU parity**: `DrawColoredPrimitives`'s vertical slice (2026-07-12) proves
+  one unlit/untextured, stride-16 3D draw path with real depth testing — not lighting, texture
+  sampling, fog, stencil, render targets, MRT, or any of the other 8 WGSL shader variants. The open
+  tasks in `plan_webgpu.md` still cover all of that, plus conformance and WASM.
+- **How Phase 57's first slice got implemented (2026-07-12)**: initially paused before starting it
+  (a real vertical slice touches a new UBO layout, a new WGSL shader, a new pipeline cache, a real
+  vertex-buffer-lifetime hazard and a new pixel test all at once) and instead wrote up the exact
+  entry point and every non-obvious finding in `plan_webgpu.md`'s Phase 57 section. After the
+  project owner reviewed, pushed both repos and asked to continue autonomously, that write-up was
+  implemented directly from those notes (`WebGPU_Colored3D`, 4/4, git-stash-verified) — proving the
+  "investigate and write up first" approach paid off: no research had to be redone. Apply the same
+  pattern to the next 3D slice (`WEBGPU-20`+) if a similar pause is warranted.
 - **Do not start Phase 78's sample-porting tasks (943/944/946/947) in `../cna-samples`** without
   explicit direction — the project owner confirmed most of Phase 78 is out of `cna_graphics` scope
   and chose to stop before entering it (2026-07-10).

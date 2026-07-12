@@ -149,6 +149,23 @@ namespace CNA::Internal::Backends::WebGPU
             return (bytesPerRow + kAlignment - 1) / kAlignment * kAlignment;
         }
 
+        // XNA CompareFunction ordinals -> WGPUCompareFunction (mirrors Vulkan's own ToVkCompareOp):
+        // Always=0, Never=1, Less=2, LessEqual=3, Equal=4, GreaterEqual=5, Greater=6, NotEqual=7.
+        [[nodiscard]] WGPUCompareFunction ToWGPUCompareFunction(int xnaCompare)
+        {
+            switch (xnaCompare)
+            {
+                case 1: return WGPUCompareFunction_Never;
+                case 2: return WGPUCompareFunction_Less;
+                case 3: return WGPUCompareFunction_LessEqual;
+                case 4: return WGPUCompareFunction_Equal;
+                case 5: return WGPUCompareFunction_GreaterEqual;
+                case 6: return WGPUCompareFunction_Greater;
+                case 7: return WGPUCompareFunction_NotEqual;
+                default: return WGPUCompareFunction_Always;
+            }
+        }
+
         [[nodiscard]] WGPUAddressMode ToAddressMode(int mode)
         {
             switch (mode)
@@ -165,6 +182,21 @@ namespace CNA::Internal::Backends::WebGPU
             const int u = std::clamp(addressU, 0, 2);
             const int v = std::clamp(addressV, 0, 2);
             return filterIndex * 9 + u * 3 + v;
+        }
+
+        // Mirrors VulkanGraphicsBackend::DrawColoredPrimitives()'s own use of
+        // FillExtPushConst()'s byte layout: this path carries no BasicEffect diffuse/
+        // VertexColorEnabled (no GpuDrawParams at all), so it preserves the historical XNA
+        // behaviour of outputting the raw vertex colours unmodified (diffuseColor=white,
+        // vertexColorEnabled=true), everything else left zeroed.
+        void FillColoredUniforms(std::array<float, 32>& out, const Matrix& world, const Matrix& view,
+                                 const Matrix& projection)
+        {
+            const Matrix wvp = world * view * projection;
+            wvp.ToColumnMajor(out.data());
+            out[16] = 1.0f; out[17] = 1.0f; out[18] = 1.0f; out[19] = 1.0f;
+            for (int i = 20; i < 31; ++i) out[i] = 0.0f;
+            out[31] = 1.0f;
         }
 
         [[nodiscard]] bool IsSurfaceRecoverable(WGPUSurfaceGetCurrentTextureStatus status)
@@ -320,6 +352,9 @@ namespace CNA::Internal::Backends::WebGPU
                              static_cast<std::size_t>(vertexCount) * strideInBytes);
         vertexCount_ = vertexCount;
         stride_ = strideInBytes;
+
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        shadowData_.assign(bytes, bytes + static_cast<std::size_t>(vertexCount) * strideInBytes);
     }
 
     WebGPUIndexBufferBackend::WebGPUIndexBufferBackend(WebGPUGraphicsBackend& owner,
@@ -362,6 +397,9 @@ namespace CNA::Internal::Backends::WebGPU
         }
         wgpuQueueWriteBuffer(owner_->Queue(), buffer_, 0, data, static_cast<std::size_t>(indexCount) * stride);
         indexCount_ = indexCount;
+
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        shadowData_.assign(bytes, bytes + static_cast<std::size_t>(indexCount) * stride);
     }
 
     WebGPUSpriteBatchBackend::WebGPUSpriteBatchBackend(WebGPUGraphicsBackend& owner) : owner_(&owner) {}
@@ -472,6 +510,9 @@ namespace CNA::Internal::Backends::WebGPU
     {
         IGraphicsBackend::UnregisterForWindow(window_);
         DestroySpriteResources();
+        DestroyColoredResources();
+        for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
+        for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
         for (WGPUSampler& sampler : samplerCache_)
         {
             if (sampler != nullptr)
@@ -678,6 +719,8 @@ namespace CNA::Internal::Backends::WebGPU
         RecreateDepthTexture();
         if (formatChanged || spritePipelineBlend_ == nullptr)
             CreateSpriteResources();
+        if (formatChanged || coloredShader_ == nullptr)
+            CreateColoredResources();
     }
 
     void WebGPUGraphicsBackend::RecreateDepthTexture()
@@ -852,6 +895,152 @@ struct VertexOutput {
         if (spriteShader_ == nullptr || spriteBindGroupLayout_ == nullptr || spritePipelineLayout_ == nullptr ||
             spritePipelineBlend_ == nullptr || spritePipelineOpaque_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create SpriteBatch GPU resources");
+    }
+
+    void WebGPUGraphicsBackend::DestroyColoredResources()
+    {
+        for (auto& [key, pipe] : coloredPipelines_)
+        {
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        }
+        coloredPipelines_.clear();
+        if (coloredPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(coloredPipelineLayout_);
+        if (coloredBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(coloredBindGroupLayout_);
+        if (coloredShader_ != nullptr) wgpuShaderModuleRelease(coloredShader_);
+        coloredPipelineLayout_ = nullptr;
+        coloredBindGroupLayout_ = nullptr;
+        coloredShader_ = nullptr;
+    }
+
+    void WebGPUGraphicsBackend::CreateColoredResources()
+    {
+        DestroyColoredResources();
+        if (surfaceFormat_ == WGPUTextureFormat_Undefined)
+            return;
+
+        // Uniform layout matches VulkanGraphicsBackend::FillExtPushConst()'s 128-byte/32-float
+        // push-constant layout byte-for-byte (see plan_webgpu.md's Phase 57 entry-point note):
+        // [0..15] MVP, [16..19] diffuseColor, [20..23] ambient+lightingEnabled,
+        // [24..27] light0Dir+textureEnabled, [28..31] light0Diffuse+vertexColorEnabled. Only the
+        // fields this minimal DrawColoredPrimitives slice actually reads are named; the rest keep
+        // the same byte offsets so a future DrawPrimitivesEx (BasicEffect) shader can reuse this
+        // exact uniform block unchanged.
+        static constexpr char shaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) color: vec4f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) color: vec4f,
+};
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = u.mvp * vec4f(input.position, 1.0);
+    let vertexColorEnabled = u.light0DiffuseVertexColor.w;
+    output.color = select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5);
+    return output;
+}
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    return input.color;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL wgsl{};
+        wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl.code = StringView(shaderSource);
+        WGPUShaderModuleDescriptor shaderDescriptor{};
+        shaderDescriptor.label = StringView("CNA WebGPU Colored3D WGSL");
+        shaderDescriptor.nextInChain = &wgsl.chain;
+        coloredShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+
+        WGPUBindGroupLayoutEntry uniformEntry{};
+        uniformEntry.binding = 0;
+        uniformEntry.visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        uniformEntry.buffer.type = WGPUBufferBindingType_Uniform;
+        uniformEntry.buffer.minBindingSize = 128;
+        WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
+        bindLayoutDescriptor.label = StringView("CNA WebGPU Colored3D BindGroupLayout");
+        bindLayoutDescriptor.entryCount = 1;
+        bindLayoutDescriptor.entries = &uniformEntry;
+        coloredBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &bindLayoutDescriptor);
+
+        WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
+        pipelineLayoutDescriptor.label = StringView("CNA WebGPU Colored3D PipelineLayout");
+        pipelineLayoutDescriptor.bindGroupLayoutCount = 1;
+        pipelineLayoutDescriptor.bindGroupLayouts = &coloredBindGroupLayout_;
+        coloredPipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
+
+        if (coloredShader_ == nullptr || coloredBindGroupLayout_ == nullptr || coloredPipelineLayout_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create Colored3D GPU resources");
+    }
+
+    WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
+                                                                            bool depthTest, bool depthWrite,
+                                                                            int depthFunc)
+    {
+        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        if (auto it = coloredPipelines_.find(key); it != coloredPipelines_.end())
+            return it->second;
+
+        struct ColoredVertex { float x, y, z; std::uint8_t r, g, b, a; };
+        std::array<WGPUVertexAttribute, 2> attributes{};
+        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].offset = offsetof(ColoredVertex, x);
+        attributes[0].shaderLocation = 0;
+        attributes[1].format = WGPUVertexFormat_Unorm8x4;
+        attributes[1].offset = offsetof(ColoredVertex, r);
+        attributes[1].shaderLocation = 1;
+        WGPUVertexBufferLayout vertexBufferLayout{};
+        vertexBufferLayout.arrayStride = sizeof(ColoredVertex);
+        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+        vertexBufferLayout.attributeCount = attributes.size();
+        vertexBufferLayout.attributes = attributes.data();
+
+        WGPUColorTargetState target{};
+        target.format = surfaceFormat_;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = coloredShader_;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU Colored3D Pipeline");
+        pipeline.layout = coloredPipelineLayout_;
+        pipeline.vertex.module = coloredShader_;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 1;
+        pipeline.vertex.buffers = &vertexBufferLayout;
+        pipeline.primitive.topology = topology;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+
+        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        pipeline.depthStencil = &depthStencil;
+
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create Colored3D pipeline");
+        coloredPipelines_[key] = created;
+        return created;
     }
 
     WGPUSampler WebGPUGraphicsBackend::GetOrCreateSampler(int textureFilter, int addressU, int addressV)
@@ -1034,6 +1223,14 @@ struct VertexOutput {
         }
     }
 
+    void WebGPUGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                                        bool, int, int, int, int, int, int, int, bool, int, int, int, int)
+    {
+        depthTestEnabled_ = depthEnable;
+        depthWriteEnabled_ = depthWriteEnable;
+        depthCompareFunction_ = depthFunc;
+    }
+
     void WebGPUGraphicsBackend::Clear(float r, float g, float b, float a)
     {
         clearColor_ = WGPUColor{r, g, b, a};
@@ -1116,6 +1313,9 @@ struct VertexOutput {
         passDescriptor.colorAttachments = &colorAttachment;
         passDescriptor.depthStencilAttachment = depthView_ != nullptr ? &depthAttachment : nullptr;
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+        // 3D draws first, 2D SpriteBatch/UI on top -- matches typical XNA game draw order
+        // (World.Draw() then a HUD SpriteBatch pass), both collapsed into this one deferred pass.
+        RenderColoredDraws(pass);
         RenderSprites(pass);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
@@ -1129,6 +1329,14 @@ struct VertexOutput {
         wgpuQueueSubmit(queue_, 1, &commandBuffer);
         wgpuCommandBufferRelease(commandBuffer);
         wgpuTextureViewRelease(backBuffer);
+
+        // Transient per-draw colored3D resources are only safe to release once the command
+        // buffer referencing them has actually been submitted -- see pendingBufferReleases_'s
+        // own doc comment in the header.
+        for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
+        for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
+        pendingBindGroupReleases_.clear();
+        pendingBufferReleases_.clear();
 
         spriteCommands_.clear();
         clearColorPending_ = false;
@@ -1372,19 +1580,118 @@ struct VertexOutput {
                                  "SpriteBatch and buffer upload are implemented; see plan_webgpu.md Phase 58+ for 3D parity.");
     }
 
-    void WebGPUGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
-                                                        const Matrix&, const Matrix&, const Matrix&,
-                                                        PrimitiveType, int)
+    void WebGPUGraphicsBackend::QueueColoredDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                  PrimitiveType primitive, int primitiveCount)
     {
-        ThrowUnsupported3DDraw("DrawColoredPrimitives");
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
+        if (webgpuVb.Stride() != 16)
+            throw std::invalid_argument("CNA WebGPU: DrawColoredPrimitives requires a stride-16 "
+                                        "(VertexPositionColor) vertex buffer");
+
+        ColoredDrawCommand command;
+        command.vertexData = webgpuVb.ShadowData();
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        FillColoredUniforms(command.uniforms, world, view, projection);
+
+        if (ib != nullptr)
+        {
+            const auto& webgpuIb = static_cast<const WebGPUIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = webgpuIb.IsThirtyTwoBit();
+            command.indexData = webgpuIb.ShadowData();
+            command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount());
+        }
+        else
+        {
+            command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        coloredDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
     }
 
-    void WebGPUGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
-                                                               const IIndexBufferBackend&,
-                                                               const Matrix&, const Matrix&, const Matrix&,
-                                                               PrimitiveType, int)
+    void WebGPUGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
+                                                        const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                        PrimitiveType primitive, int primitiveCount)
     {
-        ThrowUnsupported3DDraw("DrawIndexedColoredPrimitives");
+        QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount);
+    }
+
+    void WebGPUGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
+                                                               const IIndexBufferBackend& ib,
+                                                               const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                               PrimitiveType primitive, int primitiveCount)
+    {
+        QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount);
+    }
+
+    void WebGPUGraphicsBackend::RenderColoredDraws(WGPURenderPassEncoder pass)
+    {
+        for (const ColoredDrawCommand& command : coloredDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty())
+                continue;
+
+            WGPUBufferDescriptor vbDescriptor{};
+            vbDescriptor.label = StringView("CNA WebGPU Colored3D VertexBuffer");
+            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+            vbDescriptor.size = Align4(command.vertexData.size());
+            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+            WGPUBufferDescriptor uboDescriptor{};
+            uboDescriptor.label = StringView("CNA WebGPU Colored3D UBO");
+            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            uboDescriptor.size = sizeof(command.uniforms);
+            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+            WGPUBindGroupEntry bindEntry{};
+            bindEntry.binding = 0;
+            bindEntry.buffer = uniformBuffer;
+            bindEntry.size = sizeof(command.uniforms);
+            WGPUBindGroupDescriptor bindDescriptor{};
+            bindDescriptor.label = StringView("CNA WebGPU Colored3D BindGroup");
+            bindDescriptor.layout = coloredBindGroupLayout_;
+            bindDescriptor.entryCount = 1;
+            bindDescriptor.entries = &bindEntry;
+            WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
+
+            WGPURenderPipeline pipe = GetOrCreatePipelineColored3D(command.topology, command.depthTest,
+                                                                   command.depthWrite, command.depthFunc);
+            wgpuRenderPassEncoderSetPipeline(pass, pipe);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+            if (command.indexed && !command.indexData.empty())
+            {
+                WGPUBufferDescriptor ibDescriptor{};
+                ibDescriptor.label = StringView("CNA WebGPU Colored3D IndexBuffer");
+                ibDescriptor.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
+                ibDescriptor.size = Align4(command.indexData.size());
+                WGPUBuffer indexBuffer = wgpuDeviceCreateBuffer(device_, &ibDescriptor);
+                wgpuQueueWriteBuffer(queue_, indexBuffer, 0, command.indexData.data(), command.indexData.size());
+                wgpuRenderPassEncoderSetIndexBuffer(pass, indexBuffer,
+                    command.index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16,
+                    0, command.indexData.size());
+                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                pendingBufferReleases_.push_back(indexBuffer);
+            }
+            else
+            {
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            }
+
+            pendingBindGroupReleases_.push_back(bindGroup);
+            pendingBufferReleases_.push_back(uniformBuffer);
+            pendingBufferReleases_.push_back(vertexBuffer);
+        }
+        coloredDrawCommands_.clear();
     }
 }
 

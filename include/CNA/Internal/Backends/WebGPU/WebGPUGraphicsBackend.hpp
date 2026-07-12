@@ -15,6 +15,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace CNA::Internal::Backends::WebGPU
@@ -60,6 +61,13 @@ namespace CNA::Internal::Backends::WebGPU
 
         [[nodiscard]] WGPUBuffer Buffer() const { return buffer_; }
         [[nodiscard]] std::size_t Stride() const { return stride_; }
+        // CPU-side copy of the most recent SetData() upload. WGPUBuffer objects are not
+        // host-readable without an async GPU->CPU copy, but DrawColoredPrimitives() (Phase 57
+        // vertical slice) needs the raw bytes *synchronously* at call time -- the caller's
+        // IVertexBufferBackend is typically a function-local temporary (see
+        // GraphicsDevice::DrawUserPrimitives()) destroyed before this backend's deferred
+        // per-frame render actually runs, so the bytes must be copied out now, not referenced.
+        [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
 
     private:
         WebGPUGraphicsBackend* owner_ = nullptr;
@@ -68,6 +76,7 @@ namespace CNA::Internal::Backends::WebGPU
         int vertexCapacity_ = 0;
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
+        std::vector<std::uint8_t> shadowData_;
     };
 
     class WebGPUIndexBufferBackend final : public IIndexBufferBackend
@@ -84,6 +93,8 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
         [[nodiscard]] WGPUBuffer Buffer() const { return buffer_; }
+        // See WebGPUVertexBufferBackend::ShadowData() for why this exists.
+        [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
 
     private:
         void Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit);
@@ -94,6 +105,7 @@ namespace CNA::Internal::Backends::WebGPU
         int indexCapacity_ = 0;
         int indexCount_ = 0;
         bool thirtyTwoBit_ = false;
+        std::vector<std::uint8_t> shadowData_;
     };
 
     class WebGPUSpriteBatchBackend final : public ISpriteBatchBackend
@@ -182,6 +194,19 @@ namespace CNA::Internal::Backends::WebGPU
         void SetDepthTestEnabled(bool enabled) override { depthTestEnabled_ = enabled; }
         void SetBlendEnabled(bool enabled) override { blendEnabled_ = enabled; }
         void SetDepthWriteEnabled(bool enabled) override { depthWriteEnabled_ = enabled; }
+        // Depth portion only for this Phase 57/63 vertical slice -- stencil parameters are stored
+        // but not yet wired into any pipeline (WEBGPU-83, still open). Without this override,
+        // GraphicsDevice.DepthStencilState (the real XNA API surface almost every game/effect
+        // uses, as opposed to the older SetDepthTestEnabled()/SetDepthWriteEnabled() convenience
+        // methods above) had zero effect on this backend -- found and fixed while verifying
+        // DrawColoredPrimitives' own depth-test pixel test.
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertexCapacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int indexCapacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int indexCapacity) override;
@@ -225,8 +250,17 @@ namespace CNA::Internal::Backends::WebGPU
         void ConfigureSurface(bool force = false);
         void CreateSpriteResources();
         void DestroySpriteResources();
+        void CreateColoredResources();
+        void DestroyColoredResources();
         void RecreateDepthTexture();
         void RenderSprites(WGPURenderPassEncoder pass);
+        void RenderColoredDraws(WGPURenderPassEncoder pass);
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
+                                                                       bool depthTest, bool depthWrite,
+                                                                       int depthFunc);
+        void QueueColoredDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount);
         void CaptureReadback(WGPUCommandEncoder encoder, WGPUTexture surfaceTexture);
         // Acquires a swapchain texture if none is currently held, and renders any pending
         // Clear()/sprite work into it. Called on demand by both Present() and ReadBackbuffer()
@@ -279,6 +313,7 @@ namespace CNA::Internal::Backends::WebGPU
         bool depthTestEnabled_ = false;
         bool depthWriteEnabled_ = false;
         bool blendEnabled_ = true;
+        int depthCompareFunction_ = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual (DepthStencilState.Default)
 
         WGPUBuffer readbackBuffer_ = nullptr;
         std::uint64_t readbackBufferCapacity_ = 0;
@@ -290,5 +325,38 @@ namespace CNA::Internal::Backends::WebGPU
         bool hasAcquiredTexture_ = false;
         WGPUTexture acquiredTexture_ = nullptr;
         bool framePending_ = true;
+
+        // Phase 57/63 vertical slice: DrawColoredPrimitives()/DrawIndexedColoredPrimitives() only
+        // (VertexPositionColor, stride 16 -- see plan_webgpu.md's Phase 57 entry-point note). The
+        // 128-float uniform layout matches VulkanGraphicsBackend::FillExtPushConst() byte-for-byte
+        // so the same shader/uniform shape can be reused once DrawPrimitivesEx (full BasicEffect
+        // dispatch) lands -- IGraphicsBackend::DrawPrimitivesEx's own default implementation
+        // already falls back to DrawColoredPrimitives, so this also unblocks simple (unlit,
+        // untextured) Model/BasicEffect draws going through that fallback.
+        struct ColoredDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::array<float, 32> uniforms{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
+        };
+        WGPUShaderModule coloredShader_ = nullptr;
+        WGPUBindGroupLayout coloredBindGroupLayout_ = nullptr;
+        WGPUPipelineLayout coloredPipelineLayout_ = nullptr;
+        std::unordered_map<int, WGPURenderPipeline> coloredPipelines_;  ///< keyed by topology*4+depthTest*2+depthWrite
+        std::vector<ColoredDrawCommand> coloredDrawCommands_;
+        // Per-draw vertex/uniform/index buffers and bind groups are transient (created fresh
+        // every RenderColoredDraws() call) but must not be released until after the frame's
+        // command buffer is actually submitted -- releasing while the encoder still references
+        // them (before wgpuQueueSubmit) would race the recorded-but-not-yet-executed commands.
+        std::vector<WGPUBuffer> pendingBufferReleases_;
+        std::vector<WGPUBindGroup> pendingBindGroupReleases_;
     };
 }

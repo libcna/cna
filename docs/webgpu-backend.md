@@ -149,8 +149,41 @@ validation scene above, independently confirming the SpriteBatch pipeline, Textu
 resize/present paths against a second, unrelated codebase.
 
 `WEBGPU-131` closes the native 2D baseline on this evidence: `WEBGPU-124`–`WEBGPU-130` are all
-verified. 3D, effects, render targets, GPU readback and MRT remain open (Phase 57 onward in
-`plan_webgpu.md`).
+verified. 3D effects, render targets and MRT remain open (Phase 57 onward in `plan_webgpu.md`).
+
+## GPU readback and a real translucency fix (2026-07-12)
+
+`WebGPUGraphicsBackend::ReadBackbuffer()`/`GraphicsDevice.GetBackBufferData()` are implemented
+(`WEBGPU-91`/`55`): a row-aligned staging buffer, `wgpuCommandEncoderCopyTextureToBuffer` inside
+the frame's own command encoder, `wgpuBufferMapAsync` polling. Because a naive implementation could
+only ever observe the *previous* frame's content on a swapchain-backed target, `Present()` was
+refactored into a shared `EnsureFrameRendered()` so `GetBackBufferData()` can force an on-demand
+render of whatever's queued so far in the current `Draw()` call — matching Vulkan/Bgfx's own
+on-demand-submit readback semantics. New `WebGPU_Clear_Readback` CTest.
+
+Writing that test's alpha case then found and fixed a real, previously-unknown bug (`WEBGPU-132`):
+the `SpriteBatch` pipeline's blend factors didn't match its own shader's non-premultiplied output,
+so any tint/texture alpha strictly between 0 and 255 was silently ignored for colour — a
+translucent sprite rendered fully opaque. Invisible to `WEBGPU-126`'s manual screenshot review;
+caught only by a pixel assertion. Fixed by matching Vulkan's own blend-factor pairing.
+
+## First 3D draw path (2026-07-12)
+
+`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` (a `VertexPositionColor`, stride-16,
+unlit/untextured 3D draw — the path `GraphicsDevice.DrawUserPrimitives()`/
+`DrawUserIndexedPrimitives()` already route to directly) are implemented: a 128-float uniform
+buffer matching `VulkanGraphicsBackend::FillExtPushConst()`'s layout byte-for-byte, a `colored3d.wgsl`
+shader, and a depth-aware pipeline cache. New `WebGPU_Colored3D` CTest proves genuine depth-buffer
+comparison (not "last draw wins"): a near and a far full-screen quad resolve to the near one
+regardless of draw order. Since `IGraphicsBackend::DrawPrimitivesEx()`'s own default implementation
+falls back to `DrawColoredPrimitives()`, simple (unlit, untextured) `BasicEffect`/`Model.Draw()`
+calls now render via that fallback instead of throwing, though real lighting/texture/fog dispatch
+(`WEBGPU-66`) is still open. Writing this test's own depth-order check also found and fixed a
+separate, real gap: `WebGPUGraphicsBackend::ApplyDepthStencilState()` was entirely unimplemented
+(silently inherited the interface's no-op default), so `GraphicsDevice.DepthStencilState` — the
+real XNA API surface almost every game/effect uses — had zero effect on this backend; only the
+older `SetDepthTestEnabled()`/`SetDepthWriteEnabled()` convenience methods worked. Now implements
+the depth portion (stencil ops remain open, `WEBGPU-83`).
 
 ## Implemented baseline
 
@@ -176,16 +209,20 @@ The initial backend is deliberately useful rather than an empty scaffold. It cur
 This is **not yet equivalent to CNA's Vulkan, EasyGL or Bgfx 3D backends**. The following remain
 open in `plan_webgpu.md`:
 
-- 3D primitive and indexed draw pipelines, stock effects, lighting, skinning and instancing;
+- stock effects (`BasicEffect`'s real lighting/texture dispatch, `SkinnedEffect`, etc.), the other
+  8 WGSL shader variants beyond `colored3d.wgsl`/`sprite2d.wgsl`, and instancing;
 - render targets, cube/3D textures, compressed formats, MSAA and multiple render targets;
-- GPU readback (`GetBackBufferData`, texture `GetData`) and pixel-test integration;
-- full BlendState, DepthStencilState, RasterizerState, viewport and scissor mapping;
+- `Texture2D.GetData()` (arbitrary-texture readback — distinct from the now-implemented backbuffer
+  readback, `WEBGPU-51`);
+- full BlendState, RasterizerState (cull mode/wireframe), viewport, scissor and stencil-operation
+  mapping (`DepthStencilState`'s *depth* portion is implemented, see below);
 - custom SpriteBatch effects and custom WGSL effects;
 - browser/Emscripten WebGPU; this first implementation is the native wgpu-native backend.
 
-Calls to the two legacy colored-3D entry points fail explicitly with a descriptive exception rather
-than silently producing incorrect output. Interface methods not overridden by this initial backend
-retain the common backend's existing unsupported/default behavior.
+`GetBackBufferData()` and a first real 3D draw path (`DrawColoredPrimitives`/
+`DrawIndexedColoredPrimitives`, with genuine depth testing) are implemented — see below. Interface
+methods still not overridden by this backend retain the common backend's existing unsupported/
+default behavior (mostly silent no-ops, by `IGraphicsBackend`'s own design for state setters).
 
 ## Architecture notes
 
