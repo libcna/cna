@@ -3,8 +3,10 @@
 > ✅ **WebGPU was activated by the project owner on 2026-07-12.** Its native clear/present smoke
 > gate (`WEBGPU-125`), SpriteBatch 2D validation (`WEBGPU-126`) and lifecycle hardening
 > (`WEBGPU-127`), reproducible native runtime deployment (`WEBGPU-128`) and the automated smoke
-> harness (`WEBGPU-129`) are now verified. Continue with `../mobile-eggbert` desktop integration
-> (`WEBGPU-130`); treat 3D/effects/render targets/readback/browser support as
+> harness (`WEBGPU-129`) are now verified. `WEBGPU-130` is **partially complete**: its clean
+> `mobile-eggbert` WebGPU build and sibling-runtime deployment are verified, but its unbounded
+> desktop menu/gameplay run remains pending. Do not start `WEBGPU-131` until that one manual run
+> is confirmed; treat 3D/effects/render targets/readback/browser support as
 > unfinished.
 
 ## 1. Project summary
