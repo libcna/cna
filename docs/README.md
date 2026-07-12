@@ -1,6 +1,6 @@
 # docs/ index
 
-56 files in `docs/` (including this index), no prior map — this index exists so a reader (human or
+57 files in `docs/` (including this index), no prior map — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -14,6 +14,8 @@ on it) rather than assuming either way.
   "is X still broken" over any dated snapshot below.
 - **`graphics-backend-feature-matrix.md`** — current per-backend Graphics feature status
   (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does backend X support feature Y."
+- **[`webgpu-backend.md`](webgpu-backend.md)** — current status, build instructions and explicit
+  limitations for the experimental fifth backend; detailed remaining work is in `../plan_webgpu.md`.
 - **`xna-4-api-coverage.md`** — current per-class Graphics coverage table plus the overall
   per-namespace XNA 4.0 API-surface numbers (227/245 = 92.7%, computed 2026-07-11).
 - **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA

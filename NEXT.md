@@ -1,8 +1,9 @@
 # NEXT.md — CNA Project Handoff
 
-> ⛔ **WebGPU is forbidden for now** — do not work on any WebGPU task (`plan_webgpu.md`,
-> Phases 56–69 / `WEBGPU-1`–`WEBGPU-123`) until the project owner explicitly lifts this
-> restriction. See `CLAUDE.md` ("WebGPU Is Forbidden For Now").
+> ✅ **WebGPU was activated by the project owner on 2026-07-12.** Its native clear/present smoke
+> gate (`WEBGPU-125`) is now verified: `cna_demo_2d --smoke 120` exits cleanly after 120 frames.
+> Continue with `WEBGPU-126`; treat 3D/effects/render targets/readback/browser support as
+> unfinished.
 
 ## 1. Project summary
 
@@ -375,7 +376,8 @@ directly without the env vars above already set).
 
 ## 9. Do not do yet
 
-- **Do not touch WebGPU** (`plan_webgpu.md`, Phases 56–69) — hard-forbidden by the project owner.
+- **Do not overstate WebGPU parity**: its initial native 2D baseline is active, but the open tasks
+  in `plan_webgpu.md` still cover 3D, effects, render targets, readback, conformance and WASM.
 - **Do not start Phase 78's sample-porting tasks (943/944/946/947) in `../cna-samples`** without
   explicit direction — the project owner confirmed most of Phase 78 is out of `cna_graphics` scope
   and chose to stop before entering it (2026-07-10).

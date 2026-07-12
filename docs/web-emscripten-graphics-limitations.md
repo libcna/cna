@@ -6,11 +6,10 @@ Task 459 status write-up for that path, scoped to the **graphics backend specifi
 input, and device support under Emscripten are already covered elsewhere (`NEXTdevices.md`,
 `noxna_devices.md`) and are out of scope here.
 
-**This document explicitly does NOT cover WebGPU.** A dedicated Emscripten target using a native
-`wgpu-native`/WebGPU backend is tracked separately as Phase 69 (`plan_webgpu.md`, Tasks WEBGPU-1
-through WEBGPU-123) and remains **hard out of scope project-wide** until the project owner
-explicitly lifts that restriction (see `CLAUDE.md`). Everything in this document concerns the
-already-existing `EasyGL`-over-WebGL2 path, which is unrelated to that prohibition.
+**This document covers only the existing EasyGL-over-WebGL2 browser path.** The project owner
+activated the native `wgpu-native` backend on 2026-07-12, but browser/Emscripten WebGPU remains a
+separate unimplemented workstream tracked in `plan_webgpu.md`. Nothing below should be read as a
+status report for the native WebGPU backend.
 
 ## Status headline: real build scaffolding, zero verified execution
 
@@ -132,7 +131,7 @@ device/adapter-model concern rather than a rendering-backend one.
 | Graphics integration/pixel tests (`examples/*_test.cpp`) | Explicitly excluded on Emscripten — zero coverage |
 | WebGL context-loss handling (`EasyGLGraphicsBackend.cpp`) | Real, non-trivial code; never run against a real browser |
 | GLES3/WebGL2 capability gaps vs. desktop GL | Anticipated only, not verified; current `SurfaceFormat`/anisotropy constraints happen to sidestep most of them today |
-| WebGPU (Phase 69) | Explicitly out of scope — separate, unstarted, hard-forbidden project-wide |
+| WebGPU | Native `wgpu-native` backend is now active and experimental; browser/Emscripten WebGPU remains unimplemented and is tracked separately in `plan_webgpu.md` |
 
 **Recommendation for whoever eventually does the first real Emscripten build**: start by getting
 `cna_house3d_demo` (the one target with a WebGL version pin already) running in an actual browser

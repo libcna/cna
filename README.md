@@ -17,7 +17,7 @@ cmake --build build --target CNA CnaTests
 ctest --test-dir build --output-on-failure
 ```
 
-> **Looking for a specific doc?** `docs/` has 56 files — see [`docs/README.md`](docs/README.md)
+> **Looking for a specific doc?** `docs/` has 57 files — see [`docs/README.md`](docs/README.md)
 > for an index of what's current vs. historical.
 
 ### Project Status
@@ -29,8 +29,9 @@ ctest --test-dir build --output-on-failure
 - **`EASYGL` backend:** Most mature backend overall — implemented OpenGL-based path through `easy-gl`, full 2D+3D pixel-verified coverage.
 - **`VULKAN` backend:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state, `BlendState`, `OcclusionQuery`) — second-most mature backend; the one remaining named gap is an isolated `RasterizerState.DepthBias` sub-case. See `docs/xna-4-api-coverage.md`'s per-backend table for current detail.
 - **`BGFX` backend:** Broad 2D+3D functionality, largely pixel-verified parity with EasyGL/Vulkan as of this project's Phase 72 — but not unqualified full parity: known real limitations remain, including a `Depth24Stencil8`-attached `RenderTargetCube` face producing no colour output (Task 952, deferred, root cause not yet found), `DrawIndexedPrimitivesEx` silently discarding `startIndex`/`baseVertex` on a sub-range indexed draw (Task 954), and occlusion-query pixel-count correctness that can't be verified under this project's own sandbox's software GL driver. See `NEXT.md` §5 for the current, complete list.
+- **`WEBGPU` backend:** Experimental fifth backend using native `wgpu-native`. The current baseline covers device/surface setup, clear/present, RGBA8 `Texture2D`, vertex/index uploads and WGSL SpriteBatch rendering. It is not yet a 3D-parity replacement for EasyGL/Vulkan/Bgfx; see [`docs/webgpu-backend.md`](docs/webgpu-backend.md) and `plan_webgpu.md`.
 - **Verification methodology:** differential testing against a real, running `FNA.dll` reference implementation (`tools/fna-reference/`), disputed behavior settled against genuine XNA 4.0 on a Windows 7 VM, and a compile-time `NOXNA` purity check (a dedicated CMake build option that turns every non-XNA-tagged declaration into a `[[deprecated]]` warning under `-Werror`) — see `CHECKLIST.md`'s "NOXNA markers" section and `CMakeLists.txt`.
-- **CI is Linux-only and partial** (see `.github/workflows/`): it currently runs only the `Input` and `Devices`/`Sensors` gtest suites — not the full ~4,370-test unit suite and not the ~490-test GPU pixel-test suite across the 4 graphics backends. Everything Graphics-related in this README is verified by running the suites locally and by hand, not by an automated Graphics CI gate; there is currently no Windows, macOS, or Android CI at all (Windows/Android are verified manually, per §7/§9 below).
+- **CI is Linux-only and partial** (see `.github/workflows/`): it currently runs only the `Input` and `Devices`/`Sensors` gtest suites — not the full ~4,370-test unit suite and not the ~490-test GPU pixel-test suite across the 4 established graphics backends; the experimental WebGPU backend does not yet have pixel-test coverage. Everything Graphics-related in this README is verified by running the suites locally and by hand, not by an automated Graphics CI gate; there is currently no Windows, macOS, or Android CI at all (Windows/Android are verified manually, per §7/§9 below).
 
 ## 2. 🎯 Goals
 

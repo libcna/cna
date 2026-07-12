@@ -6,6 +6,26 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Reuse compiler output across build directories when ccache is available.
+# This is intentionally configured before sharp-runtime is added so the cache
+# also covers that comparatively large dependency. Disable with
+# -DCNA_USE_CCACHE=OFF when diagnosing compiler-launcher issues.
+option(CNA_USE_CCACHE "Use ccache for CNA and sharp-runtime builds when available" ON)
+if(CNA_USE_CCACHE)
+    find_program(CNA_CCACHE_PROGRAM ccache)
+    if(CNA_CCACHE_PROGRAM)
+        if(NOT CMAKE_C_COMPILER_LAUNCHER)
+            set(CMAKE_C_COMPILER_LAUNCHER "${CNA_CCACHE_PROGRAM}" CACHE STRING "C compiler launcher")
+        endif()
+        if(NOT CMAKE_CXX_COMPILER_LAUNCHER)
+            set(CMAKE_CXX_COMPILER_LAUNCHER "${CNA_CCACHE_PROGRAM}" CACHE STRING "C++ compiler launcher")
+        endif()
+        message(STATUS "CNA: compiler cache available (${CNA_CCACHE_PROGRAM}); existing compiler launchers are preserved")
+    else()
+        message(STATUS "CNA: ccache not found; using the build directory's normal incremental object cache")
+    endif()
+endif()
+
 # Emscripten disables C++ exception throw/catch support by default (an uncaught throw aborts
 # the whole runtime instead of unwinding) - this codebase relies on exceptions pervasively
 # (System::Exception hierarchy, EXPECT_THROW tests, etc.), so it must be enabled globally,
@@ -71,16 +91,17 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, or VULKAN)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, or WEBGPU)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
 option(CNA_BACKEND_BGFX "Enable bgfx graphics backend" OFF)
 option(CNA_BACKEND_VULKAN "Enable Vulkan graphics backend" OFF)
+option(CNA_BACKEND_WEBGPU "Enable WebGPU graphics backend (wgpu-native)" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -97,6 +118,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_VULKAN)
         list(APPEND _cna_enabled_backends "VULKAN")
+    endif()
+    if(CNA_BACKEND_WEBGPU)
+        list(APPEND _cna_enabled_backends "WEBGPU")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -172,6 +196,13 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "VULKAN")
     set(BACKEND_TARGET "cna_backend_graphics_vulkan")
     add_compile_definitions(CNA_BACKEND_VULKAN)
     find_package(Vulkan REQUIRED)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
+    message(STATUS "CNA: Using WEBGPU graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/WebGPU")
+    set(BACKEND_TARGET "cna_backend_graphics_webgpu")
+    add_compile_definitions(CNA_BACKEND_WEBGPU)
+    include(cmake/ThirdPartyWebGPU.cmake)
+    cna_configure_webgpu()
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -197,7 +228,7 @@ endif()
 
 # Common backend interfaces
 add_library(cna_backend_graphics_common INTERFACE)
-target_include_directories(cna_backend_graphics_common INTERFACE 
+target_include_directories(cna_backend_graphics_common INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
@@ -218,6 +249,14 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
     target_include_directories(${BACKEND_TARGET} PRIVATE ${CNA_BGFX_SHADER_INCLUDE_DIR})
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "VULKAN")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 Vulkan::Vulkan)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 WebGPU::WebGPU)
+    if(CNA_WEBGPU_RUNTIME_LIBRARY)
+        add_custom_command(TARGET ${BACKEND_TARGET} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:${BACKEND_TARGET}>"
+            VERBATIM)
+    endif()
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS

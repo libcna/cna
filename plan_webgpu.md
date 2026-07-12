@@ -15,12 +15,14 @@
 > `plan_graphics.md` backlog — no task content changed in either move, only the numbering and
 > file location.
 >
-> **Verified starting point (2026-07-12):** CMake configuration succeeds on Linux x86_64 with an
-> explicit `CNA_WEBGPU_ROOT`, but `WebGPUGraphicsBackend.cpp` does not compile against the pinned
-> `wgpu-native v29.0.1.1` headers: it references non-existent
-> `WGPUSurfaceGetCurrentTextureStatus_OutOfMemory` and `...DeviceLost` values. No WebGPU binary,
-> runtime frame, shader compilation, or automated test has passed yet. All existing “implemented”
-> code is therefore unverified.
+> **Verified starting point (2026-07-12, `WEBGPU-124`):** a clean Linux x86_64 CMake configuration
+> with an explicit `CNA_WEBGPU_ROOT` compiles `WebGPUGraphicsBackend.cpp` against the pinned
+> `wgpu-native v29.0.1.1` headers, produces `libcna_backend_graphics_webgpu.a`, and copies the
+> native runtime. The obsolete surface-acquisition status names were replaced with v29-compatible
+> handling. `cna_demo_2d --smoke 120` has subsequently initialized, cleared, presented 120
+> frames and exited cleanly on a host desktop session without a WebGPU validation error, device
+> loss or loader failure; feature-by-feature 2D correctness and automated tests remain
+> unverified.
 >
 > **Platform scope until expanded by a completed task:** Linux desktop (X11 and Wayland), x86_64,
 > using an explicit extracted `wgpu-native` package. Windows and macOS are code paths only, not
@@ -29,15 +31,13 @@
 
 ## Active execution order — do this one task at a time
 
-1. `WEBGPU-124` — make the pinned native backend compile without compatibility defines.
-2. `WEBGPU-125` — link and run a minimal clear/present loop on a real Linux desktop GPU.
-3. `WEBGPU-126` — verify the complete existing SpriteBatch 2D slice visually and under validation.
-4. `WEBGPU-127` — harden lifecycle and recovery paths discovered by the first run.
-5. `WEBGPU-128` — make the verified Linux package/runtime deployment reproducible.
-6. `WEBGPU-129` — add a maintained automated native 2D smoke-test harness.
-7. `WEBGPU-130` — make `../mobile-eggbert` a repeatable desktop integration test.
-8. `WEBGPU-131` — record the 2D baseline and open the next tranche.
-9. Only then schedule readback/pixel tests (`WEBGPU-51`, `WEBGPU-55`, `WEBGPU-88`–`WEBGPU-92`)
+1. `WEBGPU-126` — verify the complete existing SpriteBatch 2D slice visually and under validation.
+2. `WEBGPU-127` — harden lifecycle and recovery paths discovered by the first run.
+3. `WEBGPU-128` — make the verified Linux package/runtime deployment reproducible.
+4. `WEBGPU-129` — add a maintained automated native 2D smoke-test harness.
+5. `WEBGPU-130` — make `../mobile-eggbert` a repeatable desktop integration test.
+6. `WEBGPU-131` — record the 2D baseline and open the next tranche.
+7. Only then schedule readback/pixel tests (`WEBGPU-51`, `WEBGPU-55`, `WEBGPU-88`–`WEBGPU-92`)
    and the 3D backlog (Phases 57–66).
 
 For every task: use a clean build directory, pass `CNA_WEBGPU_ROOT` and
@@ -55,16 +55,16 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-1 | Add `CNA_GRAPHICS_BACKEND=WEBGPU` CMake option; locate headers + libs; define `CNA_BACKEND_WEBGPU` | 🟨 | Selector and imported target exist; Linux configure with `CNA_WEBGPU_ROOT` works, but compilation, final executable linkage/runtime loading, package integrity and non-Linux paths are unverified. `vendor/wgpu-native` is not a portable vendored dependency. |
+| WEBGPU-1 | Add `CNA_GRAPHICS_BACKEND=WEBGPU` CMake option; locate headers + libs; define `CNA_BACKEND_WEBGPU` | 🟨 | Linux configure and backend archive creation with `CNA_WEBGPU_ROOT` are verified. Final executable linkage/runtime loading, package integrity and non-Linux paths are unverified. `vendor/wgpu-native` is not a portable vendored dependency. |
 | WEBGPU-2 | Create `include/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp` — class skeleton, all IGraphicsBackend sub-interfaces declared | 🟨 | Core backend, Texture2D, vertex/index buffers and SpriteBatch classes exist; remaining render-target/cube/3D/effect/query classes are still open. |
-| WEBGPU-3 | Create `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` — initial functional baseline and explicit unsupported 3D paths | 🟨 | Functional code exists, but it currently fails the pinned-header compilation gate. |
+| WEBGPU-3 | Create `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` — initial functional baseline and explicit unsupported 3D paths | 🟨 | Compiles against the pinned header after `WEBGPU-124`; functional runtime behaviour is still unverified. |
 | WEBGPU-4 | SDL3 surface creation | 🟨 | Win32, Metal, X11 and Wayland branches exist. Only Linux is in current scope; Android branch is not a supported build route. |
 | WEBGPU-5 | Instance, adapter, device and queue initialization | 🟨 | Code exists; runtime callback behaviour, error handling and timeout behaviour require `WEBGPU-125`. |
-| WEBGPU-6 | Surface configuration, resize and backbuffer acquisition | 🟨 | Code exists; uncompiled/unrun. |
-| WEBGPU-7 | Command encoding and queue submission per frame | 🟨 | Code exists; uncompiled/unrun. |
-| WEBGPU-8 | Main render pass with colour/depth/stencil attachments | 🟨 | Code exists; uncompiled/unrun. |
+| WEBGPU-6 | Surface configuration, resize and backbuffer acquisition | 🟨 | Code compiles; runtime validation is `WEBGPU-125`/`WEBGPU-127`. |
+| WEBGPU-7 | Command encoding and queue submission per frame | 🟨 | Code compiles; runtime validation is `WEBGPU-125`. |
+| WEBGPU-8 | Main render pass with colour/depth/stencil attachments | 🟨 | Code compiles; runtime validation is `WEBGPU-125`. |
 | WEBGPU-9 | Colour/depth/stencil clear state | 🟨 | Code exists; must be exercised by the first runtime frame. |
-| WEBGPU-10 | Present and recoverable acquisition handling | 🟨 | Code exists; the status handling is the current compilation blocker. |
+| WEBGPU-10 | Present and recoverable acquisition handling | 🟨 | The v29 status API is now handled and the code compiles; recovery needs runtime validation. |
 
 ---
 
@@ -72,8 +72,8 @@ mark it ✅ from source inspection alone.
 
 | # | Task | Status | Acceptance criteria |
 | --- | --- | --- | --- |
-| WEBGPU-124 | Align the backend with the pinned `wgpu-native v29.0.1.1` C API, beginning with surface-acquisition status handling. | ⬜ **NEXT** | A fresh Linux x86_64 CMake build with explicit `CNA_WEBGPU_ROOT` compiles and links `cna_backend_graphics_webgpu` with no compatibility `-D` aliases or source-specific compiler workaround. |
-| WEBGPU-125 | Build and run a minimal native window that initializes the backend, clears, presents at least 60 frames, then exits cleanly. | ⬜ | Run on a real Linux X11 or Wayland desktop; no hang in adapter/device request, no uncaptured WebGPU error, no device-loss report and no dynamic-loader failure. |
+| WEBGPU-124 | Align the backend with the pinned `wgpu-native v29.0.1.1` C API, beginning with surface-acquisition status handling. | ✅ | Verified 2026-07-12: fresh offline CMake configure, generated CMake compile of `WebGPUGraphicsBackend.cpp`, static backend archive and copied `libwgpu_native.so`; no compatibility aliases/workarounds. |
+| WEBGPU-125 | Build and run a minimal native window that initializes the backend, clears, presents at least 60 frames, then exits cleanly. | ✅ | Verified 2026-07-12: clean offline build with `-DCNA_WEBGPU_ROOT=$PWD/vendor/wgpu-native -DCNA_WEBGPU_AUTO_DOWNLOAD=OFF`, then `timeout 60s ./cna_demo_2d --smoke 120` on a host desktop session. The run completed 120 frames in 2.10 s with exit code 0 and no uncaptured WebGPU error, device-loss report or loader failure. The earlier X11-close `XInput BadWindow` remains a lifecycle observation for `WEBGPU-127`, not a failure of this smoke gate. |
 | WEBGPU-126 | Validate the existing 2D slice: texture upload, source rectangles, tint/alpha, rotation, flip, linear/point sampling, wrap/clamp/mirror, logical presentation and resize. | ⬜ | A reproducible manual checklist passes on the runtime from `WEBGPU-125`; compare screenshots with a known-good established backend where practical. |
 | WEBGPU-127 | Harden lifecycle and failure paths discovered in the first run: request timeout/polling strategy, surface loss/outdated recovery, zero-size windows and destruction order. | ⬜ | Targeted regression checks cover every repaired branch and the application exits without leaks/errors under validation layers where available. |
 | WEBGPU-128 | Make package discovery and runtime deployment reproducible for the verified Linux target. | ⬜ | Document one offline package layout and command; validate final executable runtime discovery. Defer auto-download checksum work and all unvalidated platform packages rather than claiming support. |
@@ -119,7 +119,7 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-29 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | 🟨 | A concrete SpriteBatch descriptor exists but is uncompiled/unrun; reusable all-pipeline builder remains open. |
+| WEBGPU-29 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | 🟨 | A concrete SpriteBatch descriptor compiles but has not run; reusable all-pipeline builder remains open. |
 | WEBGPU-30 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ⬜ | Mirror Vulkan MakeKey / GetOrCreate* |
 | WEBGPU-31 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | 🟨 | Code for opaque and premultiplied-alpha variants exists; correctness belongs to `WEBGPU-126`. |
 | WEBGPU-32 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ⬜ | |
@@ -139,7 +139,7 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-42 | `WebGPUVertexBufferBackend`: create `WGPUBuffer` (vertex, size=capacity×stride) with `COPY_DST` usage | 🟨 | Lazily sized VERTEX\|COPY_DST code and capacity validation exist; normal WebGPU compilation has not succeeded. |
+| WEBGPU-42 | `WebGPUVertexBufferBackend`: create `WGPUBuffer` (vertex, size=capacity×stride) with `COPY_DST` usage | 🟨 | Lazily sized VERTEX\|COPY_DST code and capacity validation compile; runtime validation remains open. |
 | WEBGPU-43 | `SetData()`: upload via `wgpuQueueWriteBuffer(queue, buffer, 0, data, byteSize)` | 🟨 | Upload code exists; no runtime validation yet. |
 | WEBGPU-44 | `SetDataWithOptions()`: `Discard` = reallocate buffer; `NoOverwrite` = `wgpuQueueWriteBuffer` at offset | ⬜ | |
 | WEBGPU-45 | `WebGPUIndexBufferBackend`: 16-bit and 32-bit index buffers via `WGPUIndexFormat` | 🟨 | Both backend classes exist; draw dispatch and runtime validation remain open. |

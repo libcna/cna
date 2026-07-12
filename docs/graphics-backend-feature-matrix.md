@@ -1,7 +1,10 @@
-# Graphics backend feature matrix — SDL_Renderer, EasyGL, Vulkan, Bgfx
+# Established graphics backend feature matrix — SDL_Renderer, EasyGL, Vulkan, Bgfx
 
-Master, up-to-date cross-backend feature matrix, written for Task 451 (Phase 51). **Supersedes
-`docs/coverage.md`**, which is dated 2026-06-21 and predates almost this entire session's work
+Master, up-to-date cross-backend feature matrix for CNA's four established backends, written for
+Task 451 (Phase 51). The experimental WebGPU backend is intentionally tracked separately in
+[`webgpu-backend.md`](webgpu-backend.md) and `../plan_webgpu.md` until its feature surface is broad
+enough for meaningful parity columns. **Supersedes `docs/coverage.md`**, which is dated 2026-06-21
+and predates almost this entire session's work
 (dozens of real bugs fixed across all 4 backends, an entire SDL_Renderer 2D-only audit phase,
 Model/OcclusionQuery correctness phases) and never covered SDL_Renderer at all. `docs/coverage.md`
 is kept for its still-accurate non-Graphics namespace estimates (Audio/Media/Content/Net/
