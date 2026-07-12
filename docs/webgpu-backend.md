@@ -120,6 +120,38 @@ causes the normal surface configuration path to rebuild them. The 180-frame vali
 above exercised resize, minimize, restore and normal teardown with exit status 0 and no WebGPU
 error.
 
+## Independent application integration and native 2D baseline
+
+`WEBGPU-130` integrated `../mobile-eggbert` (`WindowsPhoneSpeedyBlupi`, an independently-developed
+XNA-style game, not a CNA example) as a second, real-world consumer of this backend, verified on
+Linux desktop 2026-07-12:
+
+```bash
+cd ../mobile-eggbert
+cmake -B cmake-build-debug \
+  -DCNA_GRAPHICS_BACKEND=WEBGPU \
+  -DCNA_WEBGPU_ROOT=/absolute/path/to/cna_graphics/vendor/wgpu-native \
+  -DCNA_WEBGPU_AUTO_DOWNLOAD=OFF
+cmake --build cmake-build-debug --target WindowsPhoneSpeedyBlupi -j
+cd cmake-build-debug
+DISPLAY=:0 ./WindowsPhoneSpeedyBlupi
+```
+
+The build links `cna_backend_graphics_webgpu` and copies `libwgpu_native.so` beside the executable
+with `$ORIGIN` first in `RUNPATH`, the same deployment shape `WEBGPU-128` verified for `cna_demo_2d`.
+On a real desktop session it reached its main menu automatically (~5 seconds after launch) with
+pixel-correct `SpriteBatch` rendering (title text, an animated character, a player-select panel, a
+Setup icon and a Play button), and a simulated click on the Play button correctly triggered its
+mission-start sequence — an animated cutscene with a filling progress bar and a cross-fade
+transition, rendered correctly frame-by-frame with no WebGPU validation errors. This exercises real
+multi-sprite, multi-frame animation and alpha-blended fade compositing beyond the synthetic
+validation scene above, independently confirming the SpriteBatch pipeline, Texture2D upload and
+resize/present paths against a second, unrelated codebase.
+
+`WEBGPU-131` closes the native 2D baseline on this evidence: `WEBGPU-124`–`WEBGPU-130` are all
+verified. 3D, effects, render targets, GPU readback and MRT remain open (Phase 57 onward in
+`plan_webgpu.md`).
+
 ## Implemented baseline
 
 The initial backend is deliberately useful rather than an empty scaffold. It currently provides:

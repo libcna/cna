@@ -1,9 +1,9 @@
 # WebGPU Backend Implementation Plan
 
-> WebGPU is an authorized, experimental workstream. Its first goal is a **verified native 2D
-> backend on Linux desktop**, not feature parity with Vulkan, Android support, or browser WebGPU.
-> Do not begin another 3D/effect/render-target feature until the active 2D validation gate below
-> is green.
+> WebGPU is an authorized, experimental workstream. Its first goal, a **verified native 2D backend
+> on Linux desktop**, was reached 2026-07-12 (`WEBGPU-124`–`WEBGPU-131`, all ✅ — see Phase 56.1).
+> This does not mean feature parity with Vulkan, Android support, or browser WebGPU: those remain
+> future work (Phase 57 onward), now open per `WEBGPU-131`'s own acceptance criteria.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -15,14 +15,15 @@
 > `plan_graphics.md` backlog — no task content changed in either move, only the numbering and
 > file location.
 >
-> **Verified starting point (2026-07-12, `WEBGPU-124`):** a clean Linux x86_64 CMake configuration
-> with an explicit `CNA_WEBGPU_ROOT` compiles `WebGPUGraphicsBackend.cpp` against the pinned
-> `wgpu-native v29.0.1.1` headers, produces `libcna_backend_graphics_webgpu.a`, and copies the
-> native runtime. The obsolete surface-acquisition status names were replaced with v29-compatible
-> handling. `cna_demo_2d --smoke 120` has subsequently initialized, cleared, presented 120
-> frames and exited cleanly on a host desktop session without a WebGPU validation error, device
-> loss or loader failure; feature-by-feature 2D correctness and automated tests remain
-> unverified.
+> **Verified native 2D baseline (2026-07-12, `WEBGPU-124`–`WEBGPU-131`):** a clean Linux x86_64
+> CMake configuration with an explicit `CNA_WEBGPU_ROOT` compiles `WebGPUGraphicsBackend.cpp`
+> against the pinned `wgpu-native v29.0.1.1` headers, produces `libcna_backend_graphics_webgpu.a`,
+> and copies the native runtime. `cna_demo_2d --smoke 120`/`--webgpu-2d-validation` and a second,
+> independent application (`../mobile-eggbert`) both initialize, clear, upload/sample textures,
+> draw animated multi-sprite `SpriteBatch` scenes with tint/alpha/rotation/flip/sampler variants,
+> resize, and present cleanly on a host desktop session with no WebGPU validation error, device
+> loss or loader failure. Automated (non-manual-screenshot) tests and GPU readback remain open —
+> see `WEBGPU-88`–`99` below.
 >
 > **Platform scope until expanded by a completed task:** Linux desktop (X11 and Wayland), x86_64,
 > using an explicit extracted `wgpu-native` package. Windows and macOS are code paths only, not
@@ -31,14 +32,12 @@
 
 ## Active execution order — do this one task at a time
 
-1. `WEBGPU-126` — verify the complete existing SpriteBatch 2D slice visually and under validation.
-2. `WEBGPU-127` — harden lifecycle and recovery paths discovered by the first run.
-3. `WEBGPU-128` — make the verified Linux package/runtime deployment reproducible.
-4. `WEBGPU-129` — add a maintained automated native 2D smoke-test harness.
-5. `WEBGPU-130` — make `../mobile-eggbert` a repeatable desktop integration test.
-6. `WEBGPU-131` — record the 2D baseline and open the next tranche.
-7. Only then schedule readback/pixel tests (`WEBGPU-51`, `WEBGPU-55`, `WEBGPU-88`–`WEBGPU-92`)
-   and the 3D backlog (Phases 57–66).
+1. ~~`WEBGPU-126`~~ – ~~`WEBGPU-131`~~ — 2D baseline established 2026-07-12, all ✅ (Phase 56.1).
+2. `WEBGPU-91` — implement reusable GPU readback (prerequisite for pixel-asserted tests).
+3. `WEBGPU-88`–`90`, `92`, `99` — automated CTest coverage and the first deterministic pixel-asserted
+   2D correctness gate.
+4. Only then the 3D backlog (Phases 57–66), starting with Phase 57's UBO system — Phase 58's WGSL
+   shaders and Phase 59's pipelines both depend on it.
 
 For every task: use a clean build directory, pass `CNA_WEBGPU_ROOT` and
 `CNA_WEBGPU_AUTO_DOWNLOAD=OFF`, record the exact command and result in the task note, and do not
@@ -55,16 +54,16 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-1 | Add `CNA_GRAPHICS_BACKEND=WEBGPU` CMake option; locate headers + libs; define `CNA_BACKEND_WEBGPU` | 🟨 | Linux configure and backend archive creation with `CNA_WEBGPU_ROOT` are verified. Final executable linkage/runtime loading, package integrity and non-Linux paths are unverified. `vendor/wgpu-native` is not a portable vendored dependency. |
-| WEBGPU-2 | Create `include/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp` — class skeleton, all IGraphicsBackend sub-interfaces declared | 🟨 | Core backend, Texture2D, vertex/index buffers and SpriteBatch classes exist; remaining render-target/cube/3D/effect/query classes are still open. |
-| WEBGPU-3 | Create `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` — initial functional baseline and explicit unsupported 3D paths | 🟨 | Compiles against the pinned header after `WEBGPU-124`; functional runtime behaviour is still unverified. |
-| WEBGPU-4 | SDL3 surface creation | 🟨 | Win32, Metal, X11 and Wayland branches exist. Only Linux is in current scope; Android branch is not a supported build route. |
-| WEBGPU-5 | Instance, adapter, device and queue initialization | 🟨 | Code exists; runtime callback behaviour, error handling and timeout behaviour require `WEBGPU-125`. |
-| WEBGPU-6 | Surface configuration, resize and backbuffer acquisition | 🟨 | Code compiles; runtime validation is `WEBGPU-125`/`WEBGPU-127`. |
-| WEBGPU-7 | Command encoding and queue submission per frame | 🟨 | Code compiles; runtime validation is `WEBGPU-125`. |
-| WEBGPU-8 | Main render pass with colour/depth/stencil attachments | 🟨 | Code compiles; runtime validation is `WEBGPU-125`. |
-| WEBGPU-9 | Colour/depth/stencil clear state | 🟨 | Code exists; must be exercised by the first runtime frame. |
-| WEBGPU-10 | Present and recoverable acquisition handling | 🟨 | The v29 status API is now handled and the code compiles; recovery needs runtime validation. |
+| WEBGPU-1 | Add `CNA_GRAPHICS_BACKEND=WEBGPU` CMake option; locate headers + libs; define `CNA_BACKEND_WEBGPU` | 🟨 | Linux configure, backend archive creation and final executable linkage/runtime loading are all verified (`WEBGPU-124`/`WEBGPU-128`, and cross-repo via `WEBGPU-130`). Package integrity/checksums and non-Linux paths remain unverified. `vendor/wgpu-native` is not a portable vendored dependency. |
+| WEBGPU-2 | Create `include/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp` — class skeleton, all IGraphicsBackend sub-interfaces declared | 🟨 | Core backend, Texture2D, vertex/index buffers and SpriteBatch classes exist and are runtime-verified (`WEBGPU-124`–`WEBGPU-130`); remaining render-target/cube/3D/effect/query classes are still open (Phase 57 onward). |
+| WEBGPU-3 | Create `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` — initial functional baseline and explicit unsupported 3D paths | ✅ | Compiles against the pinned header (`WEBGPU-124`) and its 2D functional runtime baseline is verified end-to-end (`WEBGPU-125`–`WEBGPU-130`); explicit unsupported-3D throw paths (`ThrowUnsupported3DDraw`) remain until Phase 57 onward lands. |
+| WEBGPU-4 | SDL3 surface creation | ✅ | X11/Wayland branches runtime-verified on Linux desktop (`WEBGPU-125`, `WEBGPU-127`'s resize/minimize/restore coverage, `WEBGPU-130`'s independent second application). Win32/Metal are code paths only, not validation claims; Android is not a supported build route. |
+| WEBGPU-5 | Instance, adapter, device and queue initialization | ✅ | Runtime-verified 2026-07-12 (`WEBGPU-125`); callback/timeout behaviour hardened and verified by `WEBGPU-127`'s `AllowProcessEvents` polling fix. |
+| WEBGPU-6 | Surface configuration, resize and backbuffer acquisition | ✅ | Runtime-verified: `WEBGPU-125` (baseline present/clear), `WEBGPU-127` (resize 800×600↔960×540, minimize/restore, zero-size handling). |
+| WEBGPU-7 | Command encoding and queue submission per frame | ✅ | Runtime-verified by every `WEBGPU-125`–`130` run (120–180+ frames each, no WebGPU validation errors). |
+| WEBGPU-8 | Main render pass with colour/depth/stencil attachments | 🟨 | Colour attachment runtime-verified (`WEBGPU-125`/`126`/`130`). Depth/stencil attachment creation code exists (`RecreateDepthTexture`) but has no verified 3D draw exercising it yet — real coverage starts with Phase 57 onward. |
+| WEBGPU-9 | Colour/depth/stencil clear state | 🟨 | Colour clear runtime-verified. Depth/stencil clear code exists but is unexercised until a 3D draw needs it (Phase 57 onward). |
+| WEBGPU-10 | Present and recoverable acquisition handling | ✅ | The v29 status API is handled, and both normal present and surface-loss/outdated recovery are runtime-verified (`WEBGPU-127`, `WEBGPU-130`). |
 
 ---
 
@@ -78,8 +77,8 @@ mark it ✅ from source inspection alone.
 | WEBGPU-127 | Harden lifecycle and failure paths discovered in the first run: request timeout/polling strategy, surface loss/outdated recovery, zero-size windows and destruction order. | ✅ | Verified 2026-07-12: replaced unbounded spontaneous adapter/device callbacks with `AllowProcessEvents` polling and a 10 s timeout (the v29 package's `wgpuInstanceWaitAny` panics as unimplemented); minimized/nulled surfaces now unconfigure and release their depth attachment before restore/reconfigure. `cna_demo_2d --webgpu-2d-validation --smoke 180` exercised resize 800×600→960×540, minimization, restoration to 800×600, regular surface reconfiguration and teardown with exit 0 and no WebGPU error. |
 | WEBGPU-128 | Make package discovery and runtime deployment reproducible for the verified Linux target. | ✅ | Verified 2026-07-12 with a clean `/tmp/cna-webgpu-128` configure using `CNA_WEBGPU_ROOT=$PWD/vendor/wgpu-native` and `CNA_WEBGPU_AUTO_DOWNLOAD=OFF`. The final `cna_demo_2d` copies `libwgpu_native.so` beside itself, records `NEEDED libwgpu_native.so` plus `$ORIGIN` first in RUNPATH, and `ldd` resolved the copied sibling runtime before a successful 120-frame run. Auto-download integrity/checksum policy and unvalidated platform packages remain deferred. |
 | WEBGPU-129 | Add a backend-specific native smoke-test target and CTest registration that can run only when a display/GPU is available. | ✅ | Verified 2026-07-12: fresh WebGPU configure with `CNA_BUILD_TESTS=ON` registers `WebGPU_Native2D_Smoke`, a CTest wrapper around `cna_demo_2d --smoke 120`. It passed on the host desktop in 2.30 s; with `DISPLAY` and `WAYLAND_DISPLAY` removed it reported SKIPPED with a clear reason. |
-| WEBGPU-130 | Integrate `../mobile-eggbert` as the first real desktop 2D application smoke test. | 🟨 | Its CMake now targets `../cna_graphics`, accepts explicit `WEBGPU` without overriding it, recognizes `cna_backend_graphics_webgpu` in the GNU linker group, and copies `libwgpu_native.so` beside `WindowsPhoneSpeedyBlupi` with `$ORIGIN` first in RUNPATH. A clean desktop WebGPU build succeeded; `ldd` resolved the sibling runtime. Still required before ✅: run the game to menu and gameplay on a desktop session (the game has no bounded smoke-mode argument). No Android change is implied. |
-| WEBGPU-131 | Establish the native 2D test baseline before 3D work. | ⬜ | `WEBGPU-124`–`WEBGPU-130` are complete; manual test evidence and known limitations are written in `docs/webgpu-backend.md`. |
+| WEBGPU-130 | Integrate `../mobile-eggbert` as the first real desktop 2D application smoke test. | ✅ | Verified 2026-07-12 (commit `dcdb648` in `../mobile-eggbert`, local — not pushed, see `NEXT.md`): its CMake targets `../cna_graphics`, keeps `SDL_RENDERER` as the desktop default (matching the repo's own last real committed default, `de40814`) with `WEBGPU` selectable only via explicit `-DCNA_GRAPHICS_BACKEND=WEBGPU`, recognizes `cna_backend_graphics_webgpu` in the GNU linker group, and copies `libwgpu_native.so` beside `WindowsPhoneSpeedyBlupi` with `$ORIGIN` first in RUNPATH. Also fixed an incidental, previously-disabled `worlds/` directory POST_BUILD copy step (referenced an undefined CMake variable) found while verifying this task — a genuinely fresh build directory would not have loaded any level otherwise. On a real desktop session (`DISPLAY=:0`, not the sandbox's Xvfb `:99` — `wgpu-native` needs a real GPU context): a clean WebGPU build ran, reached its main menu automatically ~5s after launch with pixel-correct `SpriteBatch` rendering (title, animated character, player-select panel, Setup gear, Play button), and an `xdotool`-driven click on the Play button correctly triggered the `InitPlay`→`StartMission(1)` sequence — an animated "constructing Blupi" cutscene with a filling progress bar and a cross-fade transition, all rendering correctly frame-by-frame with no WebGPU validation errors. That sequence fades back to the main menu afterward; an identical byte-for-byte-comparable run against a freshly built `EASYGL` binary reproduced the exact same fade-back behavior, confirming it is a pre-existing, backend-independent `Game1`/`InputPad` state-machine behavior in `../mobile-eggbert` itself (its `SetPhase`/fade-transition logic, `Game1.cpp` — see the comment block at the top of that file), not a WebGPU rendering regression. Out of scope to fix here (touches sibling-repo gameplay logic, not a `cna_graphics` graphics-backend concern) — flagged for whoever next works on `../mobile-eggbert`. No Android change was made. |
+| WEBGPU-131 | Establish the native 2D test baseline before 3D work. | ✅ | `WEBGPU-124`–`WEBGPU-130` are all now ✅. Manual test evidence and known limitations are recorded in `docs/webgpu-backend.md` (revised 2026-07-12 alongside this task — see its "Verified native 2D baseline" and "Important limitations" sections). The native 2D SpriteBatch path (texture upload, source rects, tint/alpha/rotation/flips, Linear/Point + Clamp/Wrap/Mirror sampling, logical presentation/resize, lifecycle recovery) is verified on Linux desktop against both the synthetic `cna_demo_2d --webgpu-2d-validation` scene and a real, independently-built game (`../mobile-eggbert`). 3D/effects/render-targets/readback/MRT/browser remain unimplemented — Phase 57 onward, tracked below. |
 
 ---
 
@@ -101,7 +100,7 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-18 | Write `sprite2d.wgsl` — 2D sprite vertex + fragment shader (pos + UV + RGBA tint); embed as C++ string literal | 🟨 | Embedded WGSL exists, but neither backend compilation nor runtime shader validation has passed. `WEBGPU-126` owns its acceptance. |
+| WEBGPU-18 | Write `sprite2d.wgsl` — 2D sprite vertex + fragment shader (pos + UV + RGBA tint); embed as C++ string literal | ✅ | Embedded WGSL compiles and is runtime-verified: `WEBGPU-126`'s validation scene and `WEBGPU-130`'s independent `../mobile-eggbert` application both render correctly through it with no WebGPU validation errors. |
 | WEBGPU-19 | Write `colored3d.wgsl` — 3D vertex shader (float3 pos + ubyte4 color), flat fragment; UBO for MVP | ⬜ | stride=16 |
 | WEBGPU-20 | Write `textured3d.wgsl` — 3D vertex (float3 pos + float2 UV); texture2D sampler in fragment | ⬜ | stride=20 |
 | WEBGPU-21 | Write `colored_textured3d.wgsl` — float3 + ubyte4 color + float2 UV; multiply tex×color in fragment | ⬜ | stride=24 |
@@ -119,9 +118,9 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-29 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | 🟨 | A concrete SpriteBatch descriptor compiles but has not run; reusable all-pipeline builder remains open. |
+| WEBGPU-29 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | 🟨 | The concrete SpriteBatch descriptor is runtime-verified (`WEBGPU-126`/`130`); a reusable all-pipeline builder for the 3D families in Phase 59 onward remains open. |
 | WEBGPU-30 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ⬜ | Mirror Vulkan MakeKey / GetOrCreate* |
-| WEBGPU-31 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | 🟨 | Code for opaque and premultiplied-alpha variants exists; correctness belongs to `WEBGPU-126`. |
+| WEBGPU-31 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | ✅ | Opaque and premultiplied-alpha variants are runtime-verified: `WEBGPU-126`'s validation scene and `WEBGPU-130`'s independent `../mobile-eggbert` application both render correctly through this pipeline. |
 | WEBGPU-32 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ⬜ | |
 | WEBGPU-33 | `GetOrCreatePipelineExt3D()` — stride 20/24/32 dispatch matching Vulkan | ⬜ | |
 | WEBGPU-34 | `GetOrCreatePipelineAlphaTest3D()` — alpha discard variant | ⬜ | |
@@ -153,8 +152,8 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-49 | `WebGPUTextureBackend`: `WGPUTexture` (2D, RGBA8Unorm, COPY_DST + TEXTURE_BINDING) + `WGPUTextureView` | 🟨 | RGBA8Unorm Texture2D + view code exists; runtime validation is part of `WEBGPU-126`. |
-| WEBGPU-50 | `SetData()`: `wgpuQueueWriteTexture()` with `WGPUImageCopyTexture` + `WGPUTextureDataLayout` | 🟨 | Level-upload code exists; it has not run against a device. |
+| WEBGPU-49 | `WebGPUTextureBackend`: `WGPUTexture` (2D, RGBA8Unorm, COPY_DST + TEXTURE_BINDING) + `WGPUTextureView` | ✅ | RGBA8Unorm Texture2D + view are runtime-verified: `WEBGPU-126` (`player.png`) and `WEBGPU-130` (`../mobile-eggbert`'s own UI/background textures) both sample correctly with no WebGPU validation errors. |
+| WEBGPU-50 | `SetData()`: `wgpuQueueWriteTexture()` with `WGPUImageCopyTexture` + `WGPUTextureDataLayout` | ✅ | Level-upload is runtime-verified by the same two texture uploads above. |
 | WEBGPU-51 | `Texture2D::GetData()`: staged MAP_READ copy with aligned rows and asynchronous map/poll completion | ⬜ | Detailed acceptance and shared implementation are scheduled as `WEBGPU-91`, after the 2D runtime gate. |
 | WEBGPU-52 | Mip levels: generate via `wgpuCommandEncoderCopyTextureToTexture` per level or leave as mip=1 (document) | 🟨 | Requested mip count is allocated and explicit level uploads work; automatic mip generation is not implemented. |
 | WEBGPU-53 | `WebGPURenderTargetBackend`: `WGPUTexture` (RENDER_ATTACHMENT + TEXTURE_BINDING) + depth texture | ⬜ | |
@@ -170,9 +169,9 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-59 | `WebGPUSpriteBatchBackend`: dynamic vertex buffer ring (3 frames) for sprite quads | 🟨 | Growable dynamic SpriteBatch vertex buffer exists; three-frame ring/fencing optimization remains open. |
-| WEBGPU-60 | Upload sprite quads via `wgpuQueueWriteBuffer` per batch | 🟨 | Queued sprites are flattened and upload code exists; it has not run against a device. |
-| WEBGPU-61 | Per-batch draw: set pipeline, bind groups (UBO + texture), vertex buffer, draw | 🟨 | Pipeline/bind-group/draw code exists; it has not run against a device. |
+| WEBGPU-59 | `WebGPUSpriteBatchBackend`: dynamic vertex buffer ring (3 frames) for sprite quads | 🟨 | The growable dynamic SpriteBatch vertex buffer is runtime-verified (`WEBGPU-126`/`130`, including a real game's animated multi-sprite scenes); the three-frame ring/fencing optimization itself remains open (current single-buffer growth strategy works correctly, just unoptimized). |
+| WEBGPU-60 | Upload sprite quads via `wgpuQueueWriteBuffer` per batch | ✅ | Runtime-verified by every `WEBGPU-126`/`130` frame (flattened sprite upload → draw, no validation errors). |
+| WEBGPU-61 | Per-batch draw: set pipeline, bind groups (UBO + texture), vertex buffer, draw | ✅ | Runtime-verified the same way — `WEBGPU-130`'s `../mobile-eggbert` run alone issues many real per-frame SpriteBatch draws (title, UI panels, animated character, progress bar, fade overlay) with no WebGPU validation errors. |
 | WEBGPU-63 | Verify SpriteBatch sort modes: Immediate, Deferred, Texture, FrontToBack, BackToFront. | ⬜ | Queue ordering is primarily shared `SpriteBatch` behaviour; validate the WebGPU submission path in `WEBGPU-126` rather than reimplementing it. |
 
 ---
@@ -256,7 +255,7 @@ mark it ✅ from source inspection alone.
 | WEBGPU-107 | `DebugSimulateContextLoss()`: destroy and recreate device (wgpu-native supports `wgpuDeviceDestroy`) | ⬜ | |
 | WEBGPU-108 | `PresentationInterval` → vsync: `wgpuSurfaceConfigure.presentMode` (Fifo=VSync, Immediate=no VSync, Mailbox=adaptive) | 🟨 | Selection code exists but has no runtime validation. |
 | WEBGPU-109 | `IsFullScreen` via `SDL_SetWindowFullscreen` — same as other backends | ⬜ | |
-| WEBGPU-110 | `BackBufferWidth/Height` changes: reconfigure swap chain via `wgpuSurfaceConfigure` | 🟨 | Reconfiguration code exists but has no runtime validation. |
+| WEBGPU-110 | `BackBufferWidth/Height` changes: reconfigure swap chain via `wgpuSurfaceConfigure` | ✅ | Runtime-verified by `WEBGPU-127`'s resize sequence (800×600→960×540→800×600) and `WEBGPU-130`'s independent second application, both with clean reconfiguration and no WebGPU validation error. |
 | WEBGPU-111 | DXT1/DXT3/DXT5 compressed texture upload: `WGPUTextureFormat_BC1RGBAUnorm` etc. | ⬜ | Requires `wgpuAdapterHasFeature(BC_texture_compression)` |
 | WEBGPU-112 | Texture3D: `WGPUTextureDimension_3D` + layered upload | ⬜ | |
 | WEBGPU-113 | TextureCube: `WGPUTexture` arrayLayerCount=6 + `WGPUTextureViewDimension_Cube` | ⬜ | |
