@@ -73,6 +73,16 @@ the native window resizes from 800×600 to 960×540 and back, exercising logical
 surface reconfiguration. The command completes without WebGPU errors; a manual desktop screenshot
 review on 2026-07-12 confirmed the expected crop, tint/alpha, rotation, flips and sampler results.
 
+## Lifecycle recovery
+
+`WEBGPU-127` replaced the original unbounded adapter/device callback waits with
+`wgpuInstanceProcessEvents` polling and a 10-second timeout. This avoids the pinned v29 package's
+unimplemented `wgpuInstanceWaitAny` path, which aborts rather than waiting. A minimized or
+zero-size window now unconfigures the surface and releases the depth attachment; restoring it
+causes the normal surface configuration path to rebuild them. The 180-frame validation command
+above exercised resize, minimize, restore and normal teardown with exit status 0 and no WebGPU
+error.
+
 ## Implemented baseline
 
 The initial backend is deliberately useful rather than an empty scaffold. It currently provides:

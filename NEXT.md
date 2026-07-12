@@ -1,8 +1,9 @@
 # NEXT.md — CNA Project Handoff
 
 > ✅ **WebGPU was activated by the project owner on 2026-07-12.** Its native clear/present smoke
-> gate (`WEBGPU-125`) and SpriteBatch 2D validation (`WEBGPU-126`) are now verified. Continue
-> with lifecycle and recovery hardening (`WEBGPU-127`); treat 3D/effects/render targets/readback/browser support as
+> gate (`WEBGPU-125`), SpriteBatch 2D validation (`WEBGPU-126`) and lifecycle hardening
+> (`WEBGPU-127`) are now verified. Continue with reproducible package/runtime deployment
+> (`WEBGPU-128`); treat 3D/effects/render targets/readback/browser support as
 > unfinished.
 
 ## 1. Project summary

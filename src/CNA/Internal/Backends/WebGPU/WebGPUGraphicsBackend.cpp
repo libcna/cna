@@ -14,17 +14,17 @@
 #endif
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cmath>
-#include <condition_variable>
 #include <cstring>
 #include <iostream>
 #include <iterator>
 #include <limits>
-#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace CNA::Internal::Backends::WebGPU
@@ -32,6 +32,7 @@ namespace CNA::Internal::Backends::WebGPU
     namespace
     {
         constexpr std::uint64_t kMinimumBufferSize = 4;
+        constexpr std::uint64_t kRequestTimeoutNanoseconds = 10'000'000'000ULL;
 
         [[nodiscard]] WGPUStringView StringView(const char* text)
         {
@@ -74,8 +75,6 @@ namespace CNA::Internal::Backends::WebGPU
 
         struct AdapterRequestState
         {
-            std::mutex mutex;
-            std::condition_variable ready;
             WGPUAdapter adapter = nullptr;
             std::string error;
             bool completed = false;
@@ -88,21 +87,15 @@ namespace CNA::Internal::Backends::WebGPU
                               void*)
         {
             auto& state = *static_cast<AdapterRequestState*>(userdata1);
-            {
-                std::lock_guard lock(state.mutex);
-                if (status == WGPURequestAdapterStatus_Success)
-                    state.adapter = adapter;
-                else
-                    state.error = ToString(message);
-                state.completed = true;
-            }
-            state.ready.notify_one();
+            if (status == WGPURequestAdapterStatus_Success)
+                state.adapter = adapter;
+            else
+                state.error = ToString(message);
+            state.completed = true;
         }
 
         struct DeviceRequestState
         {
-            std::mutex mutex;
-            std::condition_variable ready;
             WGPUDevice device = nullptr;
             std::string error;
             bool completed = false;
@@ -115,15 +108,11 @@ namespace CNA::Internal::Backends::WebGPU
                              void*)
         {
             auto& state = *static_cast<DeviceRequestState*>(userdata1);
-            {
-                std::lock_guard lock(state.mutex);
-                if (status == WGPURequestDeviceStatus_Success)
-                    state.device = device;
-                else
-                    state.error = ToString(message);
-                state.completed = true;
-            }
-            state.ready.notify_one();
+            if (status == WGPURequestDeviceStatus_Success)
+                state.device = device;
+            else
+                state.error = ToString(message);
+            state.completed = true;
         }
 
         void OnUncapturedError(WGPUDevice const*, WGPUErrorType type, WGPUStringView message, void*, void*)
@@ -161,6 +150,23 @@ namespace CNA::Internal::Backends::WebGPU
             return status == WGPUSurfaceGetCurrentTextureStatus_Timeout ||
                    status == WGPUSurfaceGetCurrentTextureStatus_Outdated ||
                    status == WGPUSurfaceGetCurrentTextureStatus_Lost;
+        }
+
+        void WaitForCompletion(WGPUInstance instance, const bool& completed, const char* operation)
+        {
+            const auto deadline = std::chrono::steady_clock::now() +
+                                  std::chrono::nanoseconds(kRequestTimeoutNanoseconds);
+            while (!completed && std::chrono::steady_clock::now() < deadline)
+            {
+                wgpuInstanceProcessEvents(instance);
+                if (!completed)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            if (!completed)
+            {
+                throw std::runtime_error(
+                    std::string("CNA WebGPU: timed out waiting for ") + operation);
+            }
         }
     }
 
@@ -540,14 +546,11 @@ namespace CNA::Internal::Backends::WebGPU
         WGPURequestAdapterOptions adapterOptions{};
         adapterOptions.compatibleSurface = surface_;
         WGPURequestAdapterCallbackInfo adapterCallback{};
-        adapterCallback.mode = WGPUCallbackMode_AllowSpontaneous;
+        adapterCallback.mode = WGPUCallbackMode_AllowProcessEvents;
         adapterCallback.callback = OnAdapterRequest;
         adapterCallback.userdata1 = &adapterState;
         wgpuInstanceRequestAdapter(instance_, &adapterOptions, adapterCallback);
-        {
-            std::unique_lock lock(adapterState.mutex);
-            adapterState.ready.wait(lock, [&adapterState] { return adapterState.completed; });
-        }
+        WaitForCompletion(instance_, adapterState.completed, "adapter request");
         if (adapterState.adapter == nullptr)
             throw std::runtime_error("CNA WebGPU: adapter request failed: " + adapterState.error);
         adapter_ = adapterState.adapter;
@@ -559,14 +562,11 @@ namespace CNA::Internal::Backends::WebGPU
         descriptor.uncapturedErrorCallbackInfo.callback = OnUncapturedError;
         descriptor.deviceLostCallbackInfo.callback = OnDeviceLost;
         WGPURequestDeviceCallbackInfo callback{};
-        callback.mode = WGPUCallbackMode_AllowSpontaneous;
+        callback.mode = WGPUCallbackMode_AllowProcessEvents;
         callback.callback = OnDeviceRequest;
         callback.userdata1 = &deviceState;
         wgpuAdapterRequestDevice(adapter_, &descriptor, callback);
-        {
-            std::unique_lock lock(deviceState.mutex);
-            deviceState.ready.wait(lock, [&deviceState] { return deviceState.completed; });
-        }
+        WaitForCompletion(instance_, deviceState.completed, "device request");
         if (deviceState.device == nullptr)
             throw std::runtime_error("CNA WebGPU: device request failed: " + deviceState.error);
         device_ = deviceState.device;
@@ -580,11 +580,15 @@ namespace CNA::Internal::Backends::WebGPU
         int width = 0;
         int height = 0;
         SDL_GetWindowSizeInPixels(window_, &width, &height);
-        if (width <= 0 || height <= 0)
+        const bool minimized = (SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED) != 0;
+        if (minimized || width <= 0 || height <= 0)
         {
+            if (surfaceConfigured_ && surface_ != nullptr)
+                wgpuSurfaceUnconfigure(surface_);
             surfaceConfigured_ = false;
             physicalWidth_ = width;
             physicalHeight_ = height;
+            RecreateDepthTexture();
             return;
         }
         if (!force && surfaceConfigured_ && width == physicalWidth_ && height == physicalHeight_)

@@ -220,8 +220,13 @@ void Game1::Update(Microsoft::Xna::Framework::GameTime& gameTime)
         SDL_Window* const window = getWindowProperty().GetNativeSdlWindowEXT();
         if (window != nullptr && validationFrame_ == 20)
             SDL_SetWindowSize(window, 960, 540);
+        if (window != nullptr && validationFrame_ == 45)
+            SDL_MinimizeWindow(window);
         if (window != nullptr && validationFrame_ == 70)
+        {
+            SDL_RestoreWindow(window);
             SDL_SetWindowSize(window, 800, 600);
+        }
         return;
     }
 
