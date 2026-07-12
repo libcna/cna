@@ -57,6 +57,22 @@ uncaptured WebGPU error, device-loss report or dynamic-loader failure was emitte
 the native initialization, frame submission, present and normal teardown path only; it is not a
 pixel-correctness result for SpriteBatch or Texture2D.
 
+## SpriteBatch validation scene
+
+`cna_demo_2d` provides the deterministic coverage scene used to verify `WEBGPU-126`:
+
+```bash
+cd /tmp/cna-webgpu-125
+./cna_demo_2d --webgpu-2d-validation --smoke 120
+```
+
+It uploads `player.png` and displays source rectangles, tint/alpha blending, rotation, horizontal
+and vertical flips, linear and point filtering, and clamp/wrap/mirror address modes. The last
+three use UVs outside the texture's `[0, 1]` range so their visual results differ. During the run,
+the native window resizes from 800×600 to 960×540 and back, exercising logical presentation and
+surface reconfiguration. The command completes without WebGPU errors; a manual desktop screenshot
+review on 2026-07-12 confirmed the expected crop, tint/alpha, rotation, flips and sampler results.
+
 ## Implemented baseline
 
 The initial backend is deliberately useful rather than an empty scaffold. It currently provides:

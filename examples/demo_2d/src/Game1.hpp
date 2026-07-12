@@ -24,6 +24,9 @@ public:
     /** @brief Enables smoke-test mode: exit cleanly after @p n Draw frames. */
     void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
 
+    /** @brief Enables the deterministic SpriteBatch coverage scene used by the native WebGPU 2D validation. */
+    void SetWebGpu2DValidation(bool enabled) { webGpu2DValidation_ = enabled; }
+
     GetTypeNameHPP()
 
 private:
@@ -60,6 +63,7 @@ private:
     void UpdateFlyers(float deltaTime);
     void KeepFlyerInsideBounds(FlyerInstance& flyer);
     float GetDynamicSpeedFactor(const FlyerInstance& flyer) const;
+    void DrawWebGpu2DValidationScene();
 
 private:
     Microsoft::Xna::Framework::Graphics::Texture2D playerTexture;
@@ -83,6 +87,8 @@ private:
 
     // When >= 0, exit cleanly after this many more Draw frames (smoke-test mode).
     int smokeFramesLeft_ = -1;
+    bool webGpu2DValidation_ = false;
+    int validationFrame_ = 0;
 
 protected:
     Microsoft::Xna::Framework::Graphics::SpriteBatch* spriteBatch = nullptr;

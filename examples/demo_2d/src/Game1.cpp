@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <iostream>
 
+#include <SDL3/SDL.h>
+
 #include "System/TimeSpan.hpp"
 
 Game1::Game1()
@@ -69,16 +71,23 @@ void Game1::LoadContent()
 
     playerTexture = getContentProperty().Load<Texture2D>("images/player.png");
 
-    try {
-        flySound = getContentProperty().Load<SoundEffect>("sounds/test.wav");
-    } catch (...) {
-        // Audio might fail in some environments, ignore for graphics demo
+    if (!webGpu2DValidation_)
+    {
+        try {
+            flySound = getContentProperty().Load<SoundEffect>("sounds/test.wav");
+        } catch (...) {
+            // Audio might fail in some environments, ignore for graphics demo
+        }
+
+        flySoundInstance = std::make_unique<SoundEffectInstance>(flySound.CreateInstance());
+
+        for (int i = 0; i < minFlyers; ++i) {
+            SpawnFlyer();
+        }
     }
-
-    flySoundInstance = std::make_unique<SoundEffectInstance>(flySound.CreateInstance());
-
-    for (int i = 0; i < minFlyers; ++i) {
-        SpawnFlyer();
+    else
+    {
+        getWindowProperty().setTitleProperty("CNA 2D Demo - WebGPU 2D validation");
     }
 }
 
@@ -205,6 +214,17 @@ void Game1::Update(Microsoft::Xna::Framework::GameTime& gameTime)
         if (--smokeFramesLeft_ == 0) { Exit(); return; }
     }
 
+    if (webGpu2DValidation_)
+    {
+        ++validationFrame_;
+        SDL_Window* const window = getWindowProperty().GetNativeSdlWindowEXT();
+        if (window != nullptr && validationFrame_ == 20)
+            SDL_SetWindowSize(window, 960, 540);
+        if (window != nullptr && validationFrame_ == 70)
+            SDL_SetWindowSize(window, 800, 600);
+        return;
+    }
+
     static bool played = false;
     if (!played && flySoundInstance) {
         flySoundInstance->Play();
@@ -220,11 +240,60 @@ void Game1::Update(Microsoft::Xna::Framework::GameTime& gameTime)
     UpdateFlyers(deltaTime);
 }
 
+void Game1::DrawWebGpu2DValidationScene()
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    const Rectangle bounds = playerTexture.getBoundsProperty();
+    const Rectangle upperLeft{0, 0, bounds.Width / 2, bounds.Height / 2};
+    // Deliberately extends beyond the right edge: the clamp, wrap and mirror batches below make
+    // the sampler address modes visibly distinct while exercising UVs outside [0, 1].
+    const Rectangle repeated{0, 0, bounds.Width * 2, bounds.Height};
+
+    spriteBatch->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend,
+                       const_cast<SamplerState*>(&SamplerState::LinearClamp), nullptr, nullptr);
+    spriteBatch->Draw(playerTexture, Rectangle{40, 45, 180, 140}, upperLeft, Color::White);
+    spriteBatch->Draw(playerTexture, Rectangle{300, 110, 180, 140}, upperLeft,
+                      Color{255, 90, 60, 150}, 0.55f,
+                      Vector2{static_cast<float>(upperLeft.Width) / 2.0f, static_cast<float>(upperLeft.Height) / 2.0f},
+                      SpriteEffects::None, 0.0f);
+    spriteBatch->Draw(playerTexture, Rectangle{530, 45, 180, 140}, upperLeft, Color{80, 210, 255, 255},
+                      0.0f, Vector2::Zero, SpriteEffects::FlipHorizontally, 0.0f);
+    spriteBatch->Draw(playerTexture, Rectangle{530, 215, 180, 140}, upperLeft, Color{160, 255, 100, 255},
+                      0.0f, Vector2::Zero, SpriteEffects::FlipVertically, 0.0f);
+    spriteBatch->Draw(playerTexture, Rectangle{40, 390, 210, 130}, repeated, Color::White);
+    spriteBatch->End();
+
+    spriteBatch->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend,
+                       const_cast<SamplerState*>(&SamplerState::PointClamp), nullptr, nullptr);
+    spriteBatch->Draw(playerTexture, Rectangle{280, 390, 210, 130}, repeated, Color::White);
+    spriteBatch->End();
+
+    spriteBatch->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend,
+                       const_cast<SamplerState*>(&SamplerState::LinearWrap), nullptr, nullptr);
+    spriteBatch->Draw(playerTexture, Rectangle{520, 390, 210, 130}, repeated, Color::White);
+    spriteBatch->End();
+
+    SamplerState linearMirror;
+    linearMirror.setAddressUProperty(TextureAddressMode::Mirror);
+    linearMirror.setAddressVProperty(TextureAddressMode::Mirror);
+    spriteBatch->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &linearMirror, nullptr, nullptr);
+    spriteBatch->Draw(playerTexture, Rectangle{280, 535, 210, 55}, repeated, Color::White);
+    spriteBatch->End();
+}
+
 void Game1::Draw(const Microsoft::Xna::Framework::GameTime& gameTime)
 {
     (void)gameTime;
 
     getGraphicsDeviceProperty().Clear(backgroundR, backgroundG, backgroundB, 1.0f);
+
+    if (webGpu2DValidation_)
+    {
+        DrawWebGpu2DValidationScene();
+        return;
+    }
 
     spriteBatch->Begin();
 
