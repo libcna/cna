@@ -9,6 +9,7 @@ cmake-build-easygl/*
 .sdl-prebuilt-*/
 cmake-build-bgfx/*
 cmake-build-sdl/*
+cmake-build-webgpu/*
 vendor/wgpu-native/
 cmake-build-input-easygl/*
 cmake-build-input-vulkan/*

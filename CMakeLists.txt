@@ -6307,6 +6307,39 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     else()
         message(WARNING "CNA WebGPU: native smoke test requires CNA_BUILD_EXAMPLES=ON")
     endif()
+
+    # WEBGPU-91/92: pixel-asserted readback coverage -- registered the same way as
+    # WebGPU_Native2D_Smoke (SKIP_REGULAR_EXPRESSION for a headless/no-display environment),
+    # since ReadBackbuffer() needs a real GPU-backed surface exactly like the smoke test does.
+    macro(cna_webgpu_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+        if(CNA_WEBGPU_RUNTIME_LIBRARY)
+            add_custom_command(TARGET ${target} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:${target}>"
+                    COMMENT "Copying wgpu-native runtime next to ${target}")
+            if(UNIX AND NOT APPLE)
+                set_property(TARGET ${target} APPEND PROPERTY BUILD_RPATH "$ORIGIN")
+            endif()
+        endif()
+    endmacro()
+
+    cna_webgpu_test(cna_test_webgpu_clear_readback examples/webgpu_clear_readback_test.cpp)
+    add_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback)
+    set_tests_properties(WebGPU_Clear_Readback PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

@@ -159,6 +159,7 @@ namespace CNA::Internal::Backends::WebGPU
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
@@ -226,6 +227,13 @@ namespace CNA::Internal::Backends::WebGPU
         void DestroySpriteResources();
         void RecreateDepthTexture();
         void RenderSprites(WGPURenderPassEncoder pass);
+        void CaptureReadback(WGPUCommandEncoder encoder, WGPUTexture surfaceTexture);
+        // Acquires a swapchain texture if none is currently held, and renders any pending
+        // Clear()/sprite work into it. Called on demand by both Present() and ReadBackbuffer()
+        // so that GetBackBufferData() can observe work queued earlier in the same logical frame,
+        // matching the Vulkan/Bgfx backends' own on-demand-submit readback semantics. Returns
+        // false if the surface isn't presentable right now (minimized, lost, etc).
+        bool EnsureFrameRendered();
         [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
         [[nodiscard]] WGPUSampler GetOrCreateSampler(int textureFilter, int addressU, int addressV);
         [[nodiscard]] WGPUPrimitiveTopology ToTopology(PrimitiveType primitive) const;
@@ -271,5 +279,16 @@ namespace CNA::Internal::Backends::WebGPU
         bool depthTestEnabled_ = false;
         bool depthWriteEnabled_ = false;
         bool blendEnabled_ = true;
+
+        WGPUBuffer readbackBuffer_ = nullptr;
+        std::uint64_t readbackBufferCapacity_ = 0;
+        std::uint32_t readbackBytesPerRow_ = 0;
+        int readbackWidth_ = 0;
+        int readbackHeight_ = 0;
+        bool readbackValid_ = false;
+
+        bool hasAcquiredTexture_ = false;
+        WGPUTexture acquiredTexture_ = nullptr;
+        bool framePending_ = true;
     };
 }

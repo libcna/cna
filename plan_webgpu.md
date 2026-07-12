@@ -33,9 +33,11 @@
 ## Active execution order — do this one task at a time
 
 1. ~~`WEBGPU-126`~~ – ~~`WEBGPU-131`~~ — 2D baseline established 2026-07-12, all ✅ (Phase 56.1).
-2. `WEBGPU-91` — implement reusable GPU readback (prerequisite for pixel-asserted tests).
-3. `WEBGPU-88`–`90`, `92`, `99` — automated CTest coverage and the first deterministic pixel-asserted
-   2D correctness gate.
+2. ~~`WEBGPU-88`~~ – ~~`WEBGPU-91`~~ — automated CTest coverage and reusable GPU readback, all ✅
+   2026-07-12 (`WebGPU_Clear_Readback`).
+3. `WEBGPU-92` — 🟨 partial (colour/alpha=0/source-rectangle pixel-asserted; partial-alpha blend
+   formula and sampler address-mode still need pixel assertions). `WEBGPU-99` — buffer disposal/
+   `SetDataOptions`/vertex-format tests, not yet started.
 4. Only then the 3D backlog (Phases 57–66), starting with Phase 57's UBO system — Phase 58's WGSL
    shaders and Phase 59's pipelines both depend on it.
 
@@ -154,11 +156,11 @@ mark it ✅ from source inspection alone.
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
 | WEBGPU-49 | `WebGPUTextureBackend`: `WGPUTexture` (2D, RGBA8Unorm, COPY_DST + TEXTURE_BINDING) + `WGPUTextureView` | ✅ | RGBA8Unorm Texture2D + view are runtime-verified: `WEBGPU-126` (`player.png`) and `WEBGPU-130` (`../mobile-eggbert`'s own UI/background textures) both sample correctly with no WebGPU validation errors. |
 | WEBGPU-50 | `SetData()`: `wgpuQueueWriteTexture()` with `WGPUImageCopyTexture` + `WGPUTextureDataLayout` | ✅ | Level-upload is runtime-verified by the same two texture uploads above. |
-| WEBGPU-51 | `Texture2D::GetData()`: staged MAP_READ copy with aligned rows and asynchronous map/poll completion | ⬜ | Detailed acceptance and shared implementation are scheduled as `WEBGPU-91`, after the 2D runtime gate. |
+| WEBGPU-51 | `Texture2D::GetData()`: staged MAP_READ copy with aligned rows and asynchronous map/poll completion | ⬜ | `WEBGPU-91` (2026-07-12) implemented this exact staged-copy/row-alignment/async-map pattern for the *backbuffer* (`WEBGPU-55`); `Texture2D::GetData()` itself (reading an arbitrary `Texture2D`, not the swapchain) is a distinct, still-unimplemented method — reuse the same pattern, do not re-derive it. |
 | WEBGPU-52 | Mip levels: generate via `wgpuCommandEncoderCopyTextureToTexture` per level or leave as mip=1 (document) | 🟨 | Requested mip count is allocated and explicit level uploads work; automatic mip generation is not implemented. |
 | WEBGPU-53 | `WebGPURenderTargetBackend`: `WGPUTexture` (RENDER_ATTACHMENT + TEXTURE_BINDING) + depth texture | ⬜ | |
 | WEBGPU-54 | `SetRenderTarget(rt)` / `SetRenderTarget(nullptr)`: switch render pass target between RT and swapchain view | ⬜ | |
-| WEBGPU-55 | `GetBackBufferData()`: readback via MAP_READ buffer + `wgpuCommandEncoderCopyTextureToBuffer` | ⬜ | Use the shared `WEBGPU-91` readback path; do not build a duplicate implementation. |
+| WEBGPU-55 | `GetBackBufferData()`: readback via MAP_READ buffer + `wgpuCommandEncoderCopyTextureToBuffer` | ✅ | This *is* `WEBGPU-91`'s implementation (`WebGPUGraphicsBackend::ReadBackbuffer()`/`CaptureReadback()`) — verified 2026-07-12 via `WebGPU_Clear_Readback`, see `WEBGPU-91`'s own row for the full detail. |
 | WEBGPU-56 | `WebGPUTextureCubeBackend`: `WGPUTexture` (dimension=2D, arrayLayerCount=6, CUBE_COMPATIBLE) | ⬜ | |
 | WEBGPU-57 | `WebGPUTexture3DBackend`: `WGPUTexture` (dimension=3D) | ⬜ | |
 | WEBGPU-58 | MSAA: `WGPUTexture` with `sampleCount=4`; resolve in render pass via `resolveTarget` | ⬜ | |
@@ -232,11 +234,11 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-88 | Establish CMake/CTest registration for native WebGPU tests. | ⬜ | Runs only after `WEBGPU-129`; clear skip reason when no display/GPU is available. |
-| WEBGPU-89 | No-readback smoke: initialize, clear to a known colour, present 60 frames, release. | ⬜ | Automated equivalent of `WEBGPU-125`; catches initialization, lifecycle and loader regressions. |
-| WEBGPU-90 | No-readback SpriteBatch scene: RGBA texture, source rectangle, tint, rotation and sampler variants. | ⬜ | Automated device-error-free run plus captured/manual comparison while readback is unavailable. |
-| WEBGPU-91 | Implement reusable GPU readback with correct row alignment, asynchronous map/poll completion and timeout/error propagation. | ⬜ | Prerequisite for pixel assertions; consolidates the old `WEBGPU-51`/`WEBGPU-55` readback intent. |
-| WEBGPU-92 | Pixel-asserted 2D tests: clear and white 1×1 sprite, then alpha/source-rectangle/sampler cases. | ⬜ | Requires `WEBGPU-91`; this is the first deterministic 2D correctness gate. |
+| WEBGPU-88 | Establish CMake/CTest registration for native WebGPU tests. | ✅ | Delivered by `WEBGPU-129` (`WebGPU_Native2D_Smoke`) and extended 2026-07-12 by `WEBGPU-91`'s `WebGPU_Clear_Readback` — both registered via the same `CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU"` block, real display/GPU required (no synthetic skip path needed beyond the existing `WebGPUNativeSmokeTest.cmake` one). |
+| WEBGPU-89 | No-readback smoke: initialize, clear to a known colour, present 60 frames, release. | ✅ | This is exactly `WEBGPU_Native2D_Smoke` (`cna_demo_2d --smoke 120`), verified 2026-07-12 as part of the `ctest -R "^WebGPU_"` run (2.19s, pass) — restating this row's own acceptance criterion, not new work. |
+| WEBGPU-90 | No-readback SpriteBatch scene: RGBA texture, source rectangle, tint, rotation and sampler variants. | ✅ | This is `cna_demo_2d --webgpu-2d-validation`, verified by `WEBGPU-126` and reconfirmed 2026-07-12 (screenshot review after the `WEBGPU-91` `Present()`/`EnsureFrameRendered()` refactor, still renders identically — crops/tint/rotation/flips/sampler variants all correct, no WebGPU error). |
+| WEBGPU-91 | Implement reusable GPU readback with correct row alignment, asynchronous map/poll completion and timeout/error propagation. | ✅ | Verified 2026-07-12: `WebGPUGraphicsBackend::ReadBackbuffer()` implemented via `wgpuCommandEncoderCopyTextureToBuffer` into a 256-byte-row-aligned `MapRead`\|`CopyDst` buffer, `wgpuBufferMapAsync` + the existing `WaitForCompletion` polling helper (`WEBGPU-127`'s pattern), BGRA↔RGBA swizzle matching Vulkan's own `ReadBackbuffer`. Required refactoring `Present()` into a shared `EnsureFrameRendered()` (acquire-if-needed + render-if-`framePending_`) so `GetBackBufferData()` can force an on-demand render of whatever `Clear()`/`SpriteBatch` work is queued so far in the *current* `Draw()` call, matching the Vulkan/Bgfx backends' own on-demand-submit readback semantics (confirmed necessary: `bgfx_graphicsdevice_clear_stencil_test.cpp` reads back the same-frame result of a `Clear()`+draw with no intervening `Present()`). New `WebGPU_Clear_Readback` CTest (`examples/webgpu_clear_readback_test.cpp`), verified genuinely discriminating via `git stash` (reverting the backend changes makes the test abort with the base class's `"ReadBackbuffer: not implemented"` exception instead of passing). Re-verified `WebGPU_Native2D_Smoke` and the `--webgpu-2d-validation` scene (screenshot-reviewed) still pass unchanged after the `Present()` refactor. |
+| WEBGPU-92 | Pixel-asserted 2D tests: clear and white 1×1 sprite, then alpha/source-rectangle/sampler cases. | 🟨 | `WebGPU_Clear_Readback` (`WEBGPU-91`) pixel-asserts: solid-colour `Clear()` (twice, proving no stale cache), a colour-tinted `SpriteBatch` quad inside/outside its destination rectangle, `alpha=0` leaving the destination unmodified, and `sourceRectangle` cropping (2×1 red\|blue texture, right-texel-only crop samples blue). **Still missing** for full closure: partial-alpha blend-formula assertion (not just the alpha=0/alpha=255 edges already covered) and sampler address-mode (wrap/clamp/mirror) pixel assertions — those remain visually-verified only (`WEBGPU-126`), not pixel-asserted. |
 | WEBGPU-93 | 3D coloured-quad pixel test (stride 16). | ⬜ | Schedule only after `WEBGPU-19`, `WEBGPU-32`, `WEBGPU-64` and `WEBGPU-77`–`WEBGPU-83`. |
 | WEBGPU-94 | 3D textured-quad pixel test (stride 20). | ⬜ | Schedule only after the matching pipeline and draw dispatch exist. |
 | WEBGPU-95 | 3D coloured+textured pixel test (stride 24). | ⬜ | Schedule only after the matching pipeline and draw dispatch exist. |

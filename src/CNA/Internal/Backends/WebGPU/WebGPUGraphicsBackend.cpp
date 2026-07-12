@@ -127,6 +127,28 @@ namespace CNA::Internal::Backends::WebGPU
                       << ToString(message) << '\n';
         }
 
+        struct BufferMapState
+        {
+            WGPUMapAsyncStatus status = WGPUMapAsyncStatus_Error;
+            std::string error;
+            bool completed = false;
+        };
+
+        void OnBufferMap(WGPUMapAsyncStatus status, WGPUStringView message, void* userdata1, void*)
+        {
+            auto& state = *static_cast<BufferMapState*>(userdata1);
+            state.status = status;
+            if (status != WGPUMapAsyncStatus_Success)
+                state.error = ToString(message);
+            state.completed = true;
+        }
+
+        [[nodiscard]] std::uint32_t AlignBytesPerRow(std::uint32_t bytesPerRow)
+        {
+            constexpr std::uint32_t kAlignment = 256;
+            return (bytesPerRow + kAlignment - 1) / kAlignment * kAlignment;
+        }
+
         [[nodiscard]] WGPUAddressMode ToAddressMode(int mode)
         {
             switch (mode)
@@ -458,6 +480,8 @@ namespace CNA::Internal::Backends::WebGPU
         }
         if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
         if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
+        if (readbackBuffer_ != nullptr) wgpuBufferRelease(readbackBuffer_);
+        if (hasAcquiredTexture_ && acquiredTexture_ != nullptr) wgpuTextureRelease(acquiredTexture_);
         if (surfaceConfigured_ && surface_ != nullptr) wgpuSurfaceUnconfigure(surface_);
         if (queue_ != nullptr) wgpuQueueRelease(queue_);
         if (device_ != nullptr) wgpuDeviceRelease(device_);
@@ -640,7 +664,7 @@ namespace CNA::Internal::Backends::WebGPU
         surfaceConfig_ = {};
         surfaceConfig_.device = device_;
         surfaceConfig_.format = surfaceFormat_;
-        surfaceConfig_.usage = WGPUTextureUsage_RenderAttachment;
+        surfaceConfig_.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc;
         surfaceConfig_.width = static_cast<std::uint32_t>(width);
         surfaceConfig_.height = static_cast<std::uint32_t>(height);
         surfaceConfig_.presentMode = presentMode;
@@ -954,6 +978,7 @@ struct VertexOutput {
             std::copy(std::begin(rgba), std::end(rgba), vertex.color);
         }
         spriteCommands_.push_back(command);
+        framePending_ = true;
     }
 
     void WebGPUGraphicsBackend::RenderSprites(WGPURenderPassEncoder pass)
@@ -1005,6 +1030,7 @@ struct VertexOutput {
     {
         clearColor_ = WGPUColor{r, g, b, a};
         clearColorPending_ = true;
+        framePending_ = true;
     }
 
     void WebGPUGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
@@ -1012,40 +1038,50 @@ struct VertexOutput {
         Clear(r, g, b, a);
         ClearDepth(depth);
     }
-    void WebGPUGraphicsBackend::ClearDepth(float depth) { clearDepth_ = depth; clearDepthPending_ = true; }
-    void WebGPUGraphicsBackend::ClearStencil(int stencil) { clearStencil_ = static_cast<std::uint32_t>(stencil); clearStencilPending_ = true; }
+    void WebGPUGraphicsBackend::ClearDepth(float depth) { clearDepth_ = depth; clearDepthPending_ = true; framePending_ = true; }
+    void WebGPUGraphicsBackend::ClearStencil(int stencil) { clearStencil_ = static_cast<std::uint32_t>(stencil); clearStencilPending_ = true; framePending_ = true; }
     void WebGPUGraphicsBackend::ClearDepthAndStencil(float depth, int stencil) { ClearDepth(depth); ClearStencil(stencil); }
     void WebGPUGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil) { Clear(r, g, b, a); ClearStencil(stencil); }
     void WebGPUGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
     { Clear(r, g, b, a); ClearDepth(depth); ClearStencil(stencil); }
 
-    void WebGPUGraphicsBackend::Present()
+    bool WebGPUGraphicsBackend::EnsureFrameRendered()
     {
-        ConfigureSurface(false);
-        if (!surfaceConfigured_)
+        if (!hasAcquiredTexture_)
         {
-            spriteCommands_.clear();
-            return;
+            ConfigureSurface(false);
+            if (!surfaceConfigured_)
+            {
+                spriteCommands_.clear();
+                return false;
+            }
+
+            WGPUSurfaceTexture surfaceTexture{};
+            wgpuSurfaceGetCurrentTexture(surface_, &surfaceTexture);
+            if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
+                surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
+            {
+                if (surfaceTexture.texture != nullptr)
+                    wgpuTextureRelease(surfaceTexture.texture);
+                if (IsSurfaceRecoverable(surfaceTexture.status))
+                    ConfigureSurface(true);
+                else
+                    throw std::runtime_error(
+                        "CNA WebGPU: unrecoverable surface acquisition failure (status " +
+                        std::to_string(static_cast<int>(surfaceTexture.status)) + ")");
+                spriteCommands_.clear();
+                return false;
+            }
+
+            acquiredTexture_ = surfaceTexture.texture;
+            hasAcquiredTexture_ = true;
+            framePending_ = true;
         }
 
-        WGPUSurfaceTexture surfaceTexture{};
-        wgpuSurfaceGetCurrentTexture(surface_, &surfaceTexture);
-        if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
-            surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
-        {
-            if (surfaceTexture.texture != nullptr)
-                wgpuTextureRelease(surfaceTexture.texture);
-            if (IsSurfaceRecoverable(surfaceTexture.status))
-                ConfigureSurface(true);
-            else
-                throw std::runtime_error(
-                    "CNA WebGPU: unrecoverable surface acquisition failure (status " +
-                    std::to_string(static_cast<int>(surfaceTexture.status)) + ")");
-            spriteCommands_.clear();
-            return;
-        }
+        if (!framePending_)
+            return true;
 
-        WGPUTextureView backBuffer = wgpuTextureCreateView(surfaceTexture.texture, nullptr);
+        WGPUTextureView backBuffer = wgpuTextureCreateView(acquiredTexture_, nullptr);
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU Frame Encoder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
@@ -1076,20 +1112,141 @@ struct VertexOutput {
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
+        CaptureReadback(encoder, acquiredTexture_);
+
         WGPUCommandBufferDescriptor commandBufferDescriptor{};
         commandBufferDescriptor.label = StringView("CNA WebGPU Frame Commands");
         WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
         wgpuCommandEncoderRelease(encoder);
         wgpuQueueSubmit(queue_, 1, &commandBuffer);
         wgpuCommandBufferRelease(commandBuffer);
-        wgpuSurfacePresent(surface_);
         wgpuTextureViewRelease(backBuffer);
-        wgpuTextureRelease(surfaceTexture.texture);
 
         spriteCommands_.clear();
         clearColorPending_ = false;
         clearDepthPending_ = false;
         clearStencilPending_ = false;
+        framePending_ = false;
+        return true;
+    }
+
+    void WebGPUGraphicsBackend::Present()
+    {
+        if (!EnsureFrameRendered())
+            return;
+        wgpuSurfacePresent(surface_);
+        wgpuTextureRelease(acquiredTexture_);
+        acquiredTexture_ = nullptr;
+        hasAcquiredTexture_ = false;
+    }
+
+    void WebGPUGraphicsBackend::CaptureReadback(WGPUCommandEncoder encoder, WGPUTexture surfaceTexture)
+    {
+        if (physicalWidth_ <= 0 || physicalHeight_ <= 0)
+        {
+            readbackValid_ = false;
+            return;
+        }
+
+        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(physicalWidth_) * 4);
+        const std::uint64_t requiredCapacity =
+            static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(physicalHeight_);
+        if (readbackBuffer_ == nullptr || readbackBufferCapacity_ < requiredCapacity)
+        {
+            if (readbackBuffer_ != nullptr)
+                wgpuBufferRelease(readbackBuffer_);
+            WGPUBufferDescriptor descriptor{};
+            descriptor.label = StringView("CNA WebGPU Readback Buffer");
+            descriptor.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+            descriptor.size = requiredCapacity;
+            readbackBuffer_ = wgpuDeviceCreateBuffer(device_, &descriptor);
+            readbackBufferCapacity_ = requiredCapacity;
+        }
+        if (readbackBuffer_ == nullptr)
+        {
+            readbackValid_ = false;
+            return;
+        }
+
+        WGPUTexelCopyTextureInfo source{};
+        source.texture = surfaceTexture;
+        source.mipLevel = 0;
+        source.origin = WGPUOrigin3D{0, 0, 0};
+        source.aspect = WGPUTextureAspect_All;
+
+        WGPUTexelCopyBufferInfo destination{};
+        destination.buffer = readbackBuffer_;
+        destination.layout.offset = 0;
+        destination.layout.bytesPerRow = bytesPerRow;
+        destination.layout.rowsPerImage = static_cast<std::uint32_t>(physicalHeight_);
+
+        const WGPUExtent3D copySize{static_cast<std::uint32_t>(physicalWidth_),
+                                     static_cast<std::uint32_t>(physicalHeight_), 1};
+        wgpuCommandEncoderCopyTextureToBuffer(encoder, &source, &destination, &copySize);
+
+        readbackBytesPerRow_ = bytesPerRow;
+        readbackWidth_ = physicalWidth_;
+        readbackHeight_ = physicalHeight_;
+        readbackValid_ = true;
+    }
+
+    void WebGPUGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
+    {
+        if (w <= 0 || h <= 0)
+            return;
+
+        // Render whatever Clear()/sprite work has been queued so far this logical frame before
+        // reading it back, so a Clear()+GetBackBufferData() pair observes its own frame's result
+        // without needing a real Present() in between (matches Vulkan/Bgfx's on-demand submit).
+        EnsureFrameRendered();
+
+        if (!readbackValid_ || readbackBuffer_ == nullptr)
+        {
+            std::memset(pixels, 0, static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+            return;
+        }
+
+        const std::uint64_t mapSize = readbackBufferCapacity_;
+        BufferMapState mapState;
+        WGPUBufferMapCallbackInfo callbackInfo{};
+        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.callback = OnBufferMap;
+        callbackInfo.userdata1 = &mapState;
+        wgpuBufferMapAsync(readbackBuffer_, WGPUMapMode_Read, 0, mapSize, callbackInfo);
+        WaitForCompletion(instance_, mapState.completed, "readback buffer map");
+        if (mapState.status != WGPUMapAsyncStatus_Success)
+            throw std::runtime_error("CNA WebGPU: readback buffer map failed: " + mapState.error);
+
+        const auto* mapped = static_cast<const std::uint8_t*>(
+            wgpuBufferGetConstMappedRange(readbackBuffer_, 0, mapSize));
+        const bool isBgra = (surfaceFormat_ == WGPUTextureFormat_BGRA8Unorm ||
+                             surfaceFormat_ == WGPUTextureFormat_BGRA8UnormSrgb);
+        if (mapped == nullptr)
+        {
+            std::memset(pixels, 0, static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+        }
+        else
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const int sy = y + row;
+                for (int col = 0; col < w; ++col)
+                {
+                    const int sx = x + col;
+                    std::uint8_t* d = pixels + (static_cast<std::size_t>(row) * w + col) * 4;
+                    if (sx < 0 || sx >= readbackWidth_ || sy < 0 || sy >= readbackHeight_)
+                    {
+                        d[0] = d[1] = d[2] = d[3] = 0;
+                        continue;
+                    }
+                    const std::uint8_t* s =
+                        mapped + static_cast<std::size_t>(sy) * readbackBytesPerRow_ + static_cast<std::size_t>(sx) * 4;
+                    if (isBgra) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3]; }
+                    else        { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]; }
+                }
+            }
+        }
+        wgpuBufferUnmap(readbackBuffer_);
     }
 
     void WebGPUGraphicsBackend::GetViewportSize(int& width, int& height)
