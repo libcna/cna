@@ -52,6 +52,19 @@ SONAME, copies the runtime beside `cna_demo_2d`, and gives the executable a `$OR
 This enables the executable to use its sibling `libwgpu_native.so` rather than requiring the
 original package location at runtime.
 
+## Automated native smoke test
+
+With `CNA_BUILD_TESTS=ON`, the WebGPU configuration registers `WebGPU_Native2D_Smoke` with CTest:
+
+```bash
+ctest --test-dir /tmp/cna-webgpu-128 -R '^WebGPU_Native2D_Smoke$' --output-on-failure
+```
+
+The test runs `cna_demo_2d --smoke 120` when the host exposes Wayland or X11. It passed in 2.30
+seconds on the verified desktop. When neither `WAYLAND_DISPLAY` nor `DISPLAY` is available, the
+wrapper reports a clear skipped result rather than treating the lack of a desktop GPU/display as a
+backend failure.
+
 CNA enables compiler caching automatically when `ccache` is installed. The setting is applied
 before the sibling `sharp-runtime` project is added, so both CNA and `sharp-runtime` objects are
 reused across compatible build directories. Disable it with `-DCNA_USE_CCACHE=OFF`; existing custom

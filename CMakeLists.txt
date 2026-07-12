@@ -6292,6 +6292,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
 endif()
 
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+   AND CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
+    enable_testing()
+    if(TARGET cna_demo_2d)
+        add_test(NAME WebGPU_Native2D_Smoke
+                 COMMAND ${CMAKE_COMMAND}
+                    -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d>
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake)
+        set_tests_properties(WebGPU_Native2D_Smoke PROPERTIES
+            TIMEOUT 70
+            LABELS "GraphicsSmoke;WebGPU"
+            SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA WebGPU native smoke")
+    else()
+        message(WARNING "CNA WebGPU: native smoke test requires CNA_BUILD_EXAMPLES=ON")
+    endif()
+endif()
+
 # --- Task 6.1: real two-process ENet loopback test harness ---
 # A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
 # independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. See NEXT.md /
