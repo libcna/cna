@@ -28,6 +28,15 @@ a trimmed single-task Phase 0, and two new later phases: **Phase H** (Lua-script
 reader framework is solid) and **Phase I** (an official XNA 4.0 sample `.xnb` compatibility
 inventory). See `plan_xnb.md`'s own top-of-file note for the full list.
 
+**Changelog (second follow-up review):** `plan_xnb.md` was revised a third time (rated 9.5/10
+architecture, 9/10 protocol accuracy at that point) to: loosen the shared-resource fixup wording so
+it guarantees the observable result rather than one specific callback strategy, prefer a stable
+CNA-owned `RuntimeTypeId` over a bare `std::type_index`, add five explicit phase milestones plus an
+"execution-order mandate" telling an autonomous agent to work strictly phase-by-phase, split out an
+early payload-agnostic reader-name inventory scanner into a new **Phase B3** that doesn't block on
+Phase G, and add a Lua error-context task. See `plan_xnb.md`'s own top-of-file note for the full
+list.
+
 Grounded in FNA's real, current source (`/rv/data/library/github.com/FNA-XNA/FNA/src/Content/`),
 read directly rather than summarized from memory, plus a second-opinion breakdown from an
 independent review (effort estimates, phase shape, reader-registry sketch) that has been folded

@@ -33,6 +33,45 @@
 > `ContentTypeReader`s, deliberately *after* the native C++ reader framework is solid) and **Phase
 > I** (an official XNA 4.0 sample `.xnb` compatibility inventory, to replace guesswork with real
 > numbers).
+>
+> **Revised a third time after a second follow-up review** (rated architecture 9.5/10, protocol
+> accuracy 9/10, testability 9.5/10 at this point) to: loosen the shared-resource fixup wording
+> (XNB-15) so it guarantees an observable *result* instead of mandating one specific callback
+> strategy; prefer a stable CNA-owned `RuntimeTypeId` over a bare `std::type_index` (XNB-16A) so
+> Lua custom types, plugins, and no-RTTI builds stay representable; add five explicit phase
+> **milestones** (below) as agent-facing stop lines; split the sample scanner into an early,
+> payload-agnostic **Phase B3** task (XNB-61a) that only inventories reader *names* and does not
+> block on Phase G, versus the full runtime-compatibility work staying in Phase I; add a Lua
+> error-context task (XNB-58A); and add an explicit **execution-order mandate** (below) telling an
+> autonomous agent to work strictly phase-by-phase, finish the current phase's milestone before
+> starting the next, and never open Phase H/I while any mandatory Phase A-G task is incomplete.
+
+## Execution-order mandate for autonomous work
+
+> Read this before starting any task in this file.
+
+- Implement strictly in phase order. Do not begin Phase H or Phase I while any mandatory task in
+  Phase A-G remains incomplete (Phase B3's XNB-61a scanner is the one deliberate exception - see
+  its own row).
+- Do not use Lua (Phase H) as a shortcut for a missing native standard reader - standard readers
+  stay native C++ permanently (see Phase H's own intro).
+- Work sequentially from the first incomplete task in the current phase. Prioritize finishing the
+  current phase and reaching its milestone (below) over starting later, easier-looking tasks.
+- Do not skip a blocked/hard task silently by jumping ahead to a later phase to avoid it.
+- After each milestone below is reached: run the full test suite, update the support-matrix/status
+  rows in this file, re-check that the architecture decisions from Phase A/B still hold, commit a
+  consistent state, and only then continue. Do not accumulate dozens of half-implemented tasks
+  before stopping to verify.
+
+## Milestones
+
+| Milestone | Reached after | Definition of "done" |
+|---|---|---|
+| M1 - binary protocol | XNB-17F | An uncompressed, externally-produced test `.xnb` loads end-to-end through `ContentManager` using only the Phase B test-only reader. No graphics, audio, or Lua involved. |
+| M2 - real texture | XNB-26 | A real uncompressed XNA 4.0 `Texture2D` `.xnb` loads and uploads through the backend-neutral `GraphicsDevice` path. |
+| M3 - common XNA 2D content | end of Phase E | Compressed `Texture2D`, `SpriteFont`, and at least one supported `SoundEffect` variant from the XNB-33 matrix all load correctly. |
+| M4 - standard model | XNB-41 | A real multi-mesh, multi-bone XNA `Model` `.xnb` loads with shared resources resolved and native CNA stock effects attached. |
+| M5 - release-quality native loader | XNB-47 | Native `.xnb` support is documented (XNB-45), hardened (XNB-43), and fully usable without Lua. |
 
 ## Scope
 
@@ -107,9 +146,10 @@ entirely the second one.
 | XNB-14 | `ContentTypeReader` base class + `ContentTypeReaderRegistry` (register/create by normalized name) — registry starts empty, no readers registered yet | ⬜ | Matches the sketch in `xnb.md` |
 | XNB-14A | Separate global reader **factories** (registered once, process-wide) from per-`.xnb`-file reader **instances**: parsing a given file's type-reader table creates one initialized reader instance per table entry, scoped to that `ContentReader`'s lifetime; no reader instance is shared across files | ⬜ | Per follow-up review point 4 — prevents a stateful reader accidentally leaking state between unrelated files and keeps the registry thread-safe-by-construction (factories are stateless, instances are not shared) |
 | XNB-14B | Register a `KnownUnsupportedContentTypeReader` placeholder mechanism in the registry, and pre-register the general `Microsoft.Xna.Framework.Content.EffectReader` name under it with `UnsupportedReason::CompiledPlatformShaderBytecode` | ⬜ | Per follow-up review point 9 — if a fixture references the general `EffectReader` before Phase E exists, the error should already read "recognized but unsupported" instead of a generic "unknown content reader"; XNB-32A (Phase E) implements the detailed failure message and any later compiled-FX path, this task only reserves the name early |
-| XNB-15 | Shared-resource fixup mechanism: parse shared-resource count; read root object; then read each shared resource *in order*; then resolve all deferred fixup callbacks; fail if a required shared resource index is invalid or resolves to the wrong runtime type | ⬜ | Must NOT return a final value at read-time for forward references — register a `PendingSharedResource{resourceIndex, fixup, expectedType}` callback applied only after all shared resources are read. Test: index 0 = null, out-of-range index, multiple fixups on one resource, wrong runtime type |
+| XNB-15 | Shared-resource fixup mechanism: parse shared-resource count; read root object; then read each shared resource *in serialized order*, resolving each pending fixup no earlier than when its referenced resource becomes available; guarantee that **all** pending fixups are resolved before the root asset is returned; fail if a required shared resource index is invalid or resolves to the wrong runtime type | ⬜ | Per second follow-up review point 1 — the requirement is the observable *result* (forward references work, no fixup ever runs before its resource is loaded, fixup order is deterministic, a fixup's exception propagates correctly), not one specific implementation strategy; do not lock the architecture into "read all shared resources, only then resolve fixups" if a per-resource-as-available strategy is simpler to get right. Register a `PendingSharedResource{resourceIndex, fixup, expectedType}` callback for forward references. Test: index 0 = null, out-of-range index, multiple fixups on one resource, wrong runtime type |
 | XNB-16 | Root-object dispatch via the **1-based type-reader-index protocol**: read a 7-bit-encoded index; `0` means null; otherwise `index - 1` selects the type-reader table entry. Do **not** assume the root uses the table's first entry | ⬜ | Critical correctness fix — this is also how every nested object reference is dispatched, not just the root |
-| XNB-16A | Runtime type-safety for dispatched objects: reader results carry both an instance and a `RuntimeTypeId`/`std::type_index` (e.g. `ContentObject{RuntimeTypeId type; std::shared_ptr<void> instance; template<class T> std::shared_ptr<T> as() const;}`), not a bare untyped `shared_ptr<void>`; `as<T>()` must check `RuntimeTypeId` and throw/return null on mismatch, never a blind `static_pointer_cast` | ⬜ | Registry entries must record reader name, reader type, produced-object type, and reader version — avoids unsafe blind casts later. `shared_ptr<void>` alone is an acceptable *internal* transport type but must never be the public-facing shape callers interact with |
+| XNB-16A | Runtime type-safety for dispatched objects: reader results carry both an instance and a stable, CNA-owned `RuntimeTypeId` (e.g. `ContentObject{RuntimeTypeId type; std::shared_ptr<void> instance; template<class T> std::shared_ptr<T> as() const;}`), not a bare untyped `shared_ptr<void>`; `as<T>()` must check `RuntimeTypeId` and throw/return null on mismatch, never a blind `static_pointer_cast` | ⬜ | Registry entries must record reader name, reader type, produced-object type, and reader version — avoids unsafe blind casts later. `shared_ptr<void>` alone is an acceptable *internal* transport type but must never be the public-facing shape callers interact with |
+| XNB-16C | Prefer a stable, CNA-owned `RuntimeTypeId{std::uint64_t value}` (derived from a canonical name such as `Microsoft.Xna.Framework.Graphics.Texture2D` or `MyGame.LevelData`) over a bare `std::type_index` as the long-term identity in `RuntimeTypeInfo{RuntimeTypeId id; std::string canonicalName; std::type_index cppType;}`; `std::type_index` may remain a convenience *inside* a single C++ process but must not be the only identity `.xnb` results carry | ⬜ | Per second follow-up review point 2 — `std::type_index` doesn't survive across plugins, Lua custom types registered only by name (Phase H), no-RTTI builds, or stable diagnostics; keep it as an optional secondary C++-side check, not the primary identity |
 | XNB-16B | Reader-version handling: each created reader instance receives the serialized version from the type-reader table (`reader->initialize(version)`); reader declares `supportsVersion(version)`; unsupported version is a hard error ("Strict" mode) unless the reader explicitly whitelists multiple versions ("Compatibility" mode) | ⬜ | XNB-12 currently only *parses* the version int and never uses it — this closes that gap |
 | XNB-17 | Hand-build (or source) at least one real *uncompressed* `.xnb` test fixture, produced by real external tooling (never generated by CNA itself), and prove the full container round-trips before any real readers exist | ⬜ | Goal line from `xnb.md` Phase B |
 | XNB-17A | Create `tests/assets/xnb/` fixture corpus skeleton now (`xna40/windows/{uncompressed,lzx}/`, `monogame/desktopgl/`, `fna/`, `malformed/`), each fixture with a JSON manifest (`producer`, `platform`, `compressed`, `rootReader`, `expectedType`, expected field values) | ⬜ | Moved up from the former Phase G corpus task — must exist from Phase B onward so tests don't validate against CNA's own possibly-wrong interpretation |
@@ -131,6 +171,22 @@ entirely the second one.
 | XNB-17E | `Unload()` behavior for `.xnb`-sourced assets | ⬜ | |
 | XNB-17F | End-to-end milestone: `auto value = content.Load<TestValue>("fixture");` using only the Phase B test-only reader | ⬜ | First real proof the pipeline fits CNA's existing `ContentManager` API, not just a standalone parser |
 | XNB-17G | Confirm `ContentReader`, per-file reader instances (XNB-14A), shared-resource fixups (XNB-15), and decompression state (Phase D) contain no global mutable state, so different `.xnb` files can be loaded concurrently without cross-talk | ⬜ | Per follow-up review point 10 — cheap to guarantee now, expensive to retrofit once an async loader exists; does not require actually building an async loader yet |
+
+---
+
+## Phase B3 — Early reader-name inventory scanner (payload-agnostic, does not block on Phase G)
+
+> New phase, per second follow-up review point 5: the full official-sample compatibility work
+> (Phase I) can stay last, but a **payload-agnostic** scanner that only reads the header and the
+> type-reader-name table (XNB-11/XNB-12/XNB-13) — never the actual object payload — has no
+> dependency on any production reader existing yet. Running it early can show, for example, that a
+> reader planned for Phase F is used by only one sample while a reader not yet in this plan at all
+> is used by twenty. This phase must not block Phase C-G work; it only needs Phase B's header/table
+> parsing to exist.
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| XNB-61a | Reader-name-only scanner: open each available `.xnb`, decompress just enough of the header/type-reader-table region if compressed, list every type-reader name referenced, and aggregate counts across all available files — no object-graph deserialization required | ⬜ | Depends only on Phase B (XNB-11/12/13), not on any Phase C+ reader; the full runtime-compatibility matrix and smoke-test selection stay in Phase I (XNB-61-64) and still wait until Phase G is solid |
 
 ---
 
@@ -262,6 +318,7 @@ entirely the second one.
 | XNB-56 | Add safe shared-resource references for Lua readers: prefer a deferred `read_shared_resource_ref("Texture2D")` handle resolved automatically by C++ after all shared resources are read, over holding a raw Lua closure/callback across the whole read | ⬜ | Holding arbitrary Lua closures alive across `ReadSharedResource` risks lifetime/GC-safety bugs; a resolved-handle model is safer from the C++ side |
 | XNB-57 | Add external-reference support for Lua readers, delegating to the native `ContentReader::ReadExternalReference<T>()` from XNB-35 | ⬜ | Do not reimplement path resolution/cycle detection in Lua |
 | XNB-58 | Add memory and instruction-count limits to the reader sandbox (custom Lua allocator with a byte budget; instruction-count hook with a hard cap) | ⬜ | Prevents a malicious or buggy custom reader script from hanging or exhausting memory during content load |
+| XNB-58A | Lua reader error-context translation: every error surfaced from a Lua reader must preserve the script path, the normalized reader name, the `.xnb` asset path, the Lua stack trace, the current binary offset, and the current object-nesting path (e.g. `Root.Tag.AnimationClips[3]`) | ⬜ | Per second follow-up review point 3 — without this, debugging a faulty Lua reader degrades to guessing; a bare Lua error message alone is not acceptable diagnostics |
 | XNB-59 | Port one real custom reader from an official XNA sample to Lua as the first end-to-end proof (`SkinningDataReader` recommended — exercises dictionary/list/matrix/nested-object/custom-runtime-type all at once) | ⬜ | Must be verified against a real externally-produced fixture, per the Phase C+ Definition of Done, not a hand-crafted one |
 | XNB-60 | Document the AI-assisted C# `ContentTypeReader` → Lua porting workflow (what a human must still review/verify; explicitly not a guaranteed-correct automatic translation) | ⬜ | Sets expectations correctly — mirrors XNB-45's documentation style |
 
@@ -271,11 +328,14 @@ entirely the second one.
 
 > New phase — replaces guesswork about "broad real-world compatibility" with actual numbers, by
 > scanning real official sample content instead of only the hand-picked fixture corpus from
-> XNB-17A/XNB-44.
+> XNB-17A/XNB-44. Per the third revision, the payload-agnostic reader-*name* scan itself already
+> happened much earlier as XNB-61a (Phase B3) — this phase reuses that inventory and adds the parts
+> that genuinely do need Phase G's finished reader set: the compatibility classification and the
+> smoke-test selection below.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-61 | Scan all available official XNA 4.0 Windows sample `.xnb` files and export the complete reader-name inventory actually used across them | ⬜ | Gives real data instead of estimating which readers matter most |
+| XNB-61 | Re-run/refresh the XNB-61a (Phase B3) reader-name inventory against the final Phase G reader set if it has gone stale, rather than re-implementing the scan from scratch | ⬜ | Formerly the first scan itself; the scan now lives in Phase B3 (XNB-61a) so it doesn't wait for Phase G |
 | XNB-62 | Produce a compatibility matrix classifying each reader name found: standard reader (Phase A–F) / custom reader (Phase H candidate) / `ReflectiveReader` (XNB-42A limitation) / general `EffectReader` (XNB-32A limitation) | ⬜ | |
 | XNB-63 | Select a representative smoke-test set covering: plain 2D texture, `SpriteFont`, audio, a stock-effect model, one custom-reader sample, one custom-`.fx` sample | ⬜ | Small enough to run routinely, broad enough to catch regressions across phases |
 | XNB-64 | Track "`.xnb` loads successfully" compatibility separately from "full sample runs correctly at runtime" compatibility — the two are different claims and must not be conflated in `docs/xnb-content-pipeline-support.md` (XNB-45) | ⬜ | A `.xnb` can deserialize successfully while the sample still fails at runtime for unrelated reasons (input, gamerservices, etc.) — keep the claims separate and honest |
@@ -295,4 +355,8 @@ entirely the second one.
   XNB-40) closes as part of building the real `.xnb` `ModelReader`.
 - Phase H (Lua custom readers) and Phase I (official-sample inventory) are both explicitly
   sequenced *after* Phase A–G — neither should start before the native reader framework and its
-  hardening pass are solid.
+  hardening pass are solid. Phase B3 (XNB-61a) is the one deliberate exception: a payload-agnostic
+  reader-*name* scanner that only depends on Phase B and may run at any point once Phase B exists.
+- See the "Execution-order mandate" and "Milestones" sections near the top of this file — they are
+  the primary agent-facing guardrails for a long autonomous run and should be re-read whenever this
+  plan is revised.
