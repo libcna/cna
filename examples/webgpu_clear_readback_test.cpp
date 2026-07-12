@@ -25,15 +25,34 @@
 //   swapchain format blends in linear or sRGB-encoded space (both are legitimate, backend/
 //   platform-dependent choices), so this asserts direction and magnitude, not an exact value.
 //
+// Checks H/I/J (WEBGPU-92's remaining scope) -- sampler address-mode (Wrap/Clamp/Mirror) pixel
+//   assertions. A sourceRectangle wider than the texture (4 texels requested against a 2x1
+//   red|blue texture) makes the sprite's own UV genuinely exceed 1.0 without any extra plumbing
+//   (SpriteBatch never clamps UV to the source rectangle itself); TextureFilter=Point makes the
+//   sampled colour a crisp single-texel lookup with no bilinear blur at the wrap/mirror seam, so
+//   each check reads back an exact, deterministic colour instead of an ambiguous blended one.
+// Check H -- AddressMode=Wrap at u~1.14: wraps back to the fractional part (0.14, inside the red
+//   texel's [0, 0.5) range) -- samples red.
+// Check I -- AddressMode=Clamp at the same u~1.14 (>=1.0): clamps to the last texel (blue) --
+//   proves Wrap and Clamp are genuinely different, not both defaulting to the same behaviour.
+// Check J -- AddressMode=Mirror at u~1.77: the [1,2] range is a flipped repeat of [0,1], so
+//   u=1.77 mirrors to u'=0.23 (red) -- Wrap or Clamp at this same u would both sample blue
+//   (u mod 1 = 0.77, or clamped to the last texel), so this uniquely discriminates Mirror.
+//
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -65,7 +84,7 @@ namespace
 
 class WebGpuClearReadbackTest : public Game
 {
-    static constexpr int kChecks = 7;
+    static constexpr int kChecks = 10;
 
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     SpriteBatch* spriteBatch_ = nullptr;
@@ -154,6 +173,56 @@ protected:
             std::printf("    (50%%-alpha green over black -> R=%d G=%d B=%d)\n",
                         c.getRProperty(), c.getGProperty(), c.getBProperty());
             check(ok, "50%-alpha sprite blends partway between black and full colour");
+        }
+
+        // Checks H/I/J: sampler address-mode (Wrap/Clamp/Mirror). sourceRectangle is 4 texels wide
+        // against a 2x1 texture, so u genuinely ranges over [0, 2) -- SpriteBatch never clamps UV
+        // to the source rectangle, it just divides by the texture's real width.
+        const Rectangle wideSource(0, 0, 4, 1);
+        const Rectangle fullDestination(0, 0, kSize, kSize);
+
+        // Check H: AddressMode=Wrap, sampled at x=36 (u ~= 1.14 -> wraps to 0.14, the red texel).
+        {
+            dev.Clear(Color::Black);
+            SamplerState wrap;
+            wrap.setFilterProperty(TextureFilter::Point);
+            wrap.setAddressUProperty(TextureAddressMode::Wrap);
+            wrap.setAddressVProperty(TextureAddressMode::Wrap);
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &wrap, nullptr, nullptr);
+            spriteBatch_->Draw(redBlueTex_, fullDestination, wideSource, Color::White);
+            spriteBatch_->End();
+            check(colorNear(readPixel(dev, 36, kSize / 2), Color::Red),
+                  "AddressMode=Wrap at u~1.14 wraps back to the red texel");
+        }
+
+        // Check I: AddressMode=Clamp, same sample point (u ~= 1.14, past 1.0) -- clamps to the
+        // last texel (blue), proving Wrap and Clamp are genuinely different sampler states.
+        {
+            dev.Clear(Color::Black);
+            SamplerState clamp;
+            clamp.setFilterProperty(TextureFilter::Point);
+            clamp.setAddressUProperty(TextureAddressMode::Clamp);
+            clamp.setAddressVProperty(TextureAddressMode::Clamp);
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &clamp, nullptr, nullptr);
+            spriteBatch_->Draw(redBlueTex_, fullDestination, wideSource, Color::White);
+            spriteBatch_->End();
+            check(colorNear(readPixel(dev, 36, kSize / 2), Color::Blue),
+                  "AddressMode=Clamp at the same u~1.14 clamps to the last (blue) texel instead");
+        }
+
+        // Check J: AddressMode=Mirror at u~1.77 -- the [1,2] range mirrors [0,1], so this samples
+        // red; Wrap or Clamp at the same u would both sample blue, uniquely discriminating Mirror.
+        {
+            dev.Clear(Color::Black);
+            SamplerState mirror;
+            mirror.setFilterProperty(TextureFilter::Point);
+            mirror.setAddressUProperty(TextureAddressMode::Mirror);
+            mirror.setAddressVProperty(TextureAddressMode::Mirror);
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &mirror, nullptr, nullptr);
+            spriteBatch_->Draw(redBlueTex_, fullDestination, wideSource, Color::White);
+            spriteBatch_->End();
+            check(colorNear(readPixel(dev, 56, kSize / 2), Color::Red),
+                  "AddressMode=Mirror at u~1.77 mirrors back to the red texel (Wrap/Clamp would be blue)");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kChecks);
