@@ -1070,12 +1070,19 @@ struct VertexOutput {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
         }
         texturedPipelines_.clear();
+        for (auto& [key, pipe] : coloredTexturedPipelines_)
+        {
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        }
+        coloredTexturedPipelines_.clear();
         if (texturedPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(texturedPipelineLayout_);
         if (texturedBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(texturedBindGroupLayout_);
         if (texturedShader_ != nullptr) wgpuShaderModuleRelease(texturedShader_);
+        if (coloredTexturedShader_ != nullptr) wgpuShaderModuleRelease(coloredTexturedShader_);
         texturedPipelineLayout_ = nullptr;
         texturedBindGroupLayout_ = nullptr;
         texturedShader_ = nullptr;
+        coloredTexturedShader_ = nullptr;
     }
 
     void WebGPUGraphicsBackend::CreateTexturedResources()
@@ -1152,6 +1159,57 @@ struct VertexOutput {
 
         if (texturedShader_ == nullptr || texturedBindGroupLayout_ == nullptr || texturedPipelineLayout_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create Textured3D GPU resources");
+
+        // WEBGPU-21: colored_textured3d (stride 24, VertexPositionColorTexture) -- same UBO
+        // (group 0) and texture (group 1) bind groups as textured3d.wgsl above, just a different
+        // vertex layout (adds a per-vertex colour) and shader that mixes it with DiffuseColor
+        // before sampling, matching colored3d.wgsl's own vertexColorEnabled mixing formula.
+        static constexpr char coloredTexturedShaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) color: vec4f,
+    @location(2) uv: vec2f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) tint: vec4f,
+};
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = u.mvp * vec4f(input.position, 1.0);
+    output.uv = input.uv;
+    let vertexColorEnabled = u.light0DiffuseVertexColor.w;
+    output.tint = select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5);
+    return output;
+}
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let textureEnabled = u.light0DirTexture.w;
+    let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
+    return sampled * input.tint;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL coloredTexturedWgsl{};
+        coloredTexturedWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        coloredTexturedWgsl.code = StringView(coloredTexturedShaderSource);
+        WGPUShaderModuleDescriptor coloredTexturedShaderDescriptor{};
+        coloredTexturedShaderDescriptor.label = StringView("CNA WebGPU ColoredTextured3D WGSL");
+        coloredTexturedShaderDescriptor.nextInChain = &coloredTexturedWgsl.chain;
+        coloredTexturedShader_ = wgpuDeviceCreateShaderModule(device_, &coloredTexturedShaderDescriptor);
+        if (coloredTexturedShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create ColoredTextured3D shader");
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineTextured3D(WGPUPrimitiveTopology topology,
@@ -1210,6 +1268,68 @@ struct VertexOutput {
         if (created == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create Textured3D pipeline");
         texturedPipelines_[key] = created;
+        return created;
+    }
+
+    WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
+                                                                                    bool depthTest, bool depthWrite,
+                                                                                    int depthFunc)
+    {
+        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
+            return it->second;
+
+        struct ColoredTexturedVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
+        std::array<WGPUVertexAttribute, 3> attributes{};
+        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].offset = offsetof(ColoredTexturedVertex, x);
+        attributes[0].shaderLocation = 0;
+        attributes[1].format = WGPUVertexFormat_Unorm8x4;
+        attributes[1].offset = offsetof(ColoredTexturedVertex, r);
+        attributes[1].shaderLocation = 1;
+        attributes[2].format = WGPUVertexFormat_Float32x2;
+        attributes[2].offset = offsetof(ColoredTexturedVertex, u);
+        attributes[2].shaderLocation = 2;
+        WGPUVertexBufferLayout vertexBufferLayout{};
+        vertexBufferLayout.arrayStride = sizeof(ColoredTexturedVertex);
+        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+        vertexBufferLayout.attributeCount = attributes.size();
+        vertexBufferLayout.attributes = attributes.data();
+
+        WGPUColorTargetState target{};
+        target.format = surfaceFormat_;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = coloredTexturedShader_;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU ColoredTextured3D Pipeline");
+        pipeline.layout = texturedPipelineLayout_;
+        pipeline.vertex.module = coloredTexturedShader_;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 1;
+        pipeline.vertex.buffers = &vertexBufferLayout;
+        pipeline.primitive.topology = topology;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+
+        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        pipeline.depthStencil = &depthStencil;
+
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create ColoredTextured3D pipeline");
+        coloredTexturedPipelines_[key] = created;
         return created;
     }
 
@@ -1828,16 +1948,17 @@ struct VertexOutput {
             QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        if (!needsUnsupportedEffect && webgpuVb.Stride() == 20 && params.texture0 != nullptr)
+        if (!needsUnsupportedEffect && (webgpuVb.Stride() == 20 || webgpuVb.Stride() == 24) &&
+            params.texture0 != nullptr)
         {
             QueueTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // No colored_textured3d/lit_textured3d/alpha-test/dual-texture/env-map/skinned shader
-        // exists yet (Phase 58 remaining WGSL variants) -- fall back exactly like
-        // IGraphicsBackend's own default implementation did before this override existed. This
-        // will itself throw for anything other than a stride-16 buffer (DrawColoredPrimitives'
-        // own requirement), matching the pre-existing "unsupported, fail loudly" behaviour.
+        // No lit_textured3d/alpha-test/dual-texture/env-map/skinned shader exists yet (Phase 58
+        // remaining WGSL variants) -- fall back exactly like IGraphicsBackend's own default
+        // implementation did before this override existed. This will itself throw for anything
+        // other than a stride-16 buffer (DrawColoredPrimitives' own requirement), matching the
+        // pre-existing "unsupported, fail loudly" behaviour.
         DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
     }
 
@@ -1854,7 +1975,8 @@ struct VertexOutput {
             QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        if (!needsUnsupportedEffect && webgpuVb.Stride() == 20 && params.texture0 != nullptr)
+        if (!needsUnsupportedEffect && (webgpuVb.Stride() == 20 || webgpuVb.Stride() == 24) &&
+            params.texture0 != nullptr)
         {
             QueueTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -1971,8 +2093,11 @@ struct VertexOutput {
             texBindDescriptor.entries = texEntries.data();
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
-            WGPURenderPipeline pipe = GetOrCreatePipelineTextured3D(command.topology, command.depthTest,
-                                                                    command.depthWrite, command.depthFunc);
+            WGPURenderPipeline pipe = command.hasVertexColor
+                ? GetOrCreatePipelineColoredTextured3D(command.topology, command.depthTest,
+                                                       command.depthWrite, command.depthFunc)
+                : GetOrCreatePipelineTextured3D(command.topology, command.depthTest,
+                                                command.depthWrite, command.depthFunc);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -2011,15 +2136,18 @@ struct VertexOutput {
                                                   const GpuDrawParams& params)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
-        if (webgpuVb.Stride() != 20)
+        const std::size_t stride = webgpuVb.Stride();
+        if (stride != 20 && stride != 24)
             throw std::invalid_argument("CNA WebGPU: QueueTexturedDraw requires a stride-20 "
-                                        "(VertexPositionTexture) vertex buffer");
+                                        "(VertexPositionTexture) or stride-24 "
+                                        "(VertexPositionColorTexture) vertex buffer");
         if (params.texture0 == nullptr)
             throw std::invalid_argument("CNA WebGPU: QueueTexturedDraw requires a bound texture0");
 
         TexturedDrawCommand command;
+        command.hasVertexColor = (stride == 24);
         const auto& shadow = webgpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * 20u;
+        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * stride;
         if (byteOffset <= shadow.size())
             command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);

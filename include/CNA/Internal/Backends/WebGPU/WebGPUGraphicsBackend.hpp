@@ -399,21 +399,32 @@ namespace CNA::Internal::Backends::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            // WEBGPU-21: stride 24 (VertexPositionColorTexture) instead of stride 20
+            // (VertexPositionTexture) -- selects coloredTexturedShader_/
+            // GetOrCreatePipelineColoredTextured3D() instead of texturedShader_/
+            // GetOrCreatePipelineTextured3D() in RenderTexturedDraws(), same bind groups
+            // (texturedPipelineLayout_) either way, just a different vertex buffer layout/shader.
+            bool hasVertexColor = false;
         };
         void CreateTexturedResources();
         void DestroyTexturedResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineTextured3D(WGPUPrimitiveTopology topology,
                                                                         bool depthTest, bool depthWrite,
                                                                         int depthFunc);
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
+                                                                               bool depthTest, bool depthWrite,
+                                                                               int depthFunc);
         void QueueTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                const Matrix& world, const Matrix& view, const Matrix& projection,
                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
         void RenderTexturedDraws(WGPURenderPassEncoder pass);
 
         WGPUShaderModule texturedShader_ = nullptr;
+        WGPUShaderModule coloredTexturedShader_ = nullptr;
         WGPUBindGroupLayout texturedBindGroupLayout_ = nullptr;   ///< group 1: sampler + texture
-        WGPUPipelineLayout texturedPipelineLayout_ = nullptr;     ///< group 0 (UBO) + group 1 (texture)
+        WGPUPipelineLayout texturedPipelineLayout_ = nullptr;     ///< group 0 (UBO) + group 1 (texture); shared by textured3d and colored_textured3d
         std::unordered_map<int, WGPURenderPipeline> texturedPipelines_;
+        std::unordered_map<int, WGPURenderPipeline> coloredTexturedPipelines_;
         std::vector<TexturedDrawCommand> texturedDrawCommands_;
 
         // Per-draw vertex/uniform/index buffers and bind groups are transient (created fresh
