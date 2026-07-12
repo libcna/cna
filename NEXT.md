@@ -10,9 +10,13 @@
 > didn't match its own shader's non-premultiplied output, so any tint/texture alpha strictly
 > between 0 and 255 was silently ignored for colour — invisible to `WEBGPU-126`'s manual screenshot
 > review, caught only by a pixel assertion. `WEBGPU-92` is now 🟨 partial: colour/alpha=0/
-> source-rectangle/partial-alpha-blend are pixel-asserted; sampler address-mode still is not. This
-> is an autonomous long session (started 2026-07-12): continuing into `WEBGPU-92`/`99` and, time
-> permitting, the 3D backlog (Phases 57–66) per `plan_webgpu.md`'s own active execution order.
+> source-rectangle/partial-alpha-blend are pixel-asserted; sampler address-mode still is not.
+> **Recommended next step**: `plan_webgpu.md`'s Phase 57 section now has a concrete, investigated
+> (not yet implemented) entry point — `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`,
+> reusing Vulkan's exact `FillExtPushConst()` 128-byte UBO layout, no NDC Y-flip needed (unlike
+> Vulkan), plus a real vertex-buffer-lifetime hazard to design around (read that section first).
+> This was an autonomous long session (started 2026-07-12) that stopped here deliberately rather
+> than half-build unverified 3D infrastructure — see §9.
 > Still treat browser/Emscripten support as unstarted, and 3D/effects/render-targets/MRT as not yet
 > implemented until their own tasks close. mobile-eggbert commit `dcdb648` (WEBGPU-130) remains
 > **local, not pushed** — see §3.
@@ -393,6 +397,14 @@ directly without the env vars above already set).
 
 - **Do not overstate WebGPU parity**: its initial native 2D baseline is active, but the open tasks
   in `plan_webgpu.md` still cover 3D, effects, render targets, readback, conformance and WASM.
+- **Why Phase 57 (WebGPU 3D UBO system) was investigated but not implemented this session
+  (2026-07-12)**: a real vertical slice (`DrawColoredPrimitives`) touches a new UBO layout, a new
+  WGSL shader, a new pipeline cache, a real vertex-buffer-lifetime hazard, and a new pixel test all
+  at once — genuinely new, unverified-until-built architecture, not a small bounded fix. Rather
+  than half-build and under-test that under session-length pressure, the concrete entry point and
+  every non-obvious finding (exact UBO byte layout to reuse, no Y-flip needed, the lifetime hazard)
+  were written up in `plan_webgpu.md`'s Phase 57 section instead, so the next session can implement
+  it directly rather than re-deriving the same research. Do not skip reading that section first.
 - **Do not start Phase 78's sample-porting tasks (943/944/946/947) in `../cna-samples`** without
   explicit direction — the project owner confirmed most of Phase 78 is out of `cna_graphics` scope
   and chose to stop before entering it (2026-07-10).
